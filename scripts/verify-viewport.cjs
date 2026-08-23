@@ -106,6 +106,59 @@ const POINTS = [
     JSON.stringify(bad[0]))
 }
 
+// 6. Hit-testing: topmost wins, edges are left/top inclusive and
+// right/bottom exclusive, misses and empty lists return null.
+{
+  const rects = [
+    { id: 'back', x: 0, y: 0, w: 100, h: 100 },
+    { id: 'front', x: 50, y: 50, w: 100, h: 100 }
+  ]
+  const cases = [
+    [{ x: 25, y: 25 }, 'back', 'inside back only'],
+    [{ x: 75, y: 75 }, 'front', 'overlap picks topmost'],
+    [{ x: 120, y: 120 }, 'front', 'inside front only'],
+    [{ x: 0, y: 0 }, 'back', 'top-left edge is inclusive'],
+    [{ x: 100, y: 50 }, 'front', 'back right edge exclusive, front claims it'],
+    [{ x: 150, y: 150 }, null, 'past both'],
+    [{ x: -1, y: -1 }, null, 'before both']
+  ]
+  const bad = cases.filter(([p, want]) => V.hitTest(rects, p) !== want)
+  ok('6 hitTest picks topmost and honours edges', bad.length === 0,
+    bad.length ? bad.map(([, , why]) => why).join('; ') : `${cases.length} cases`)
+  ok('6b hitTest on an empty list is a miss', V.hitTest([], { x: 0, y: 0 }) === null)
+}
+
+// 7. Zoom-to-fit centres the bounding box and never exceeds the clamp.
+{
+  const rects = [
+    { id: 'a', x: 0, y: 0, w: 400, h: 300 },
+    { id: 'b', x: 600, y: 500, w: 400, h: 300 }
+  ]
+  const size = { width: 1000, height: 800 }
+  const vp = V.fitTo(rects, size, 50)
+
+  // The bounding box centre must land at the canvas centre.
+  const centre = V.worldToScreen({ x: 500, y: 400 }, vp)
+  const centred = near(centre.x, 500) && near(centre.y, 400)
+
+  // Both corners must be inside the canvas.
+  const tl = V.worldToScreen({ x: 0, y: 0 }, vp)
+  const br = V.worldToScreen({ x: 1000, y: 800 }, vp)
+  const inside = tl.x >= 0 && tl.y >= 0 && br.x <= size.width && br.y <= size.height
+
+  ok('7 fitTo centres the bounding box inside the canvas', centred && inside,
+    `centre ${centre.x},${centre.y} tl ${tl.x.toFixed(1)},${tl.y.toFixed(1)} br ${br.x.toFixed(1)},${br.y.toFixed(1)}`)
+
+  // A single tiny rect would fit at a huge scale; the clamp must hold.
+  const tiny = V.fitTo([{ id: 't', x: 0, y: 0, w: 10, h: 10 }], size, 50)
+  ok('7b fitTo respects MAX_SCALE', tiny.scale <= V.MAX_SCALE, `scale ${tiny.scale}`)
+
+  // No panels: equivalent to a reset.
+  const empty = V.fitTo([], size, 50)
+  ok('7c fitTo with no panels resets to 100%',
+    empty.x === 0 && empty.y === 0 && empty.scale === 1, JSON.stringify(empty))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

@@ -68,3 +68,53 @@ export function zoomAt(vp: Viewport, anchor: Point, factor: number): Viewport {
 export function panBy(vp: Viewport, dx: number, dy: number): Viewport {
   return { ...vp, x: vp.x + dx, y: vp.y + dy }
 }
+
+/**
+ * The topmost rect containing the point, or null. Iterates in reverse so paint
+ * order and pick order agree. Left/top edges are inclusive, right/bottom
+ * exclusive, so adjacent rects never both claim a shared edge.
+ */
+export function hitTest(rects: WorldRect[], world: Point): string | null {
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i]
+    if (!r) continue
+    if (world.x >= r.x && world.x < r.x + r.w && world.y >= r.y && world.y < r.y + r.h) {
+      return r.id
+    }
+  }
+  return null
+}
+
+/** Largest clamped scale at which every rect fits with a margin, centred. */
+export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
+  if (rects.length === 0) return { x: 0, y: 0, scale: 1 }
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const r of rects) {
+    minX = Math.min(minX, r.x)
+    minY = Math.min(minY, r.y)
+    maxX = Math.max(maxX, r.x + r.w)
+    maxY = Math.max(maxY, r.y + r.h)
+  }
+
+  const boxW = maxX - minX
+  const boxH = maxY - minY
+  const availW = size.width - margin * 2
+  const availH = size.height - margin * 2
+
+  // A degenerate box or a canvas smaller than its own margins would divide by
+  // zero or go negative; fall back to 100% rather than emitting NaN.
+  const fits = boxW > 0 && boxH > 0 && availW > 0 && availH > 0
+  const scale = fits ? clampScale(Math.min(availW / boxW, availH / boxH)) : 1
+
+  const centreX = (minX + maxX) / 2
+  const centreY = (minY + maxY) / 2
+  return {
+    scale,
+    x: size.width / 2 - centreX * scale,
+    y: size.height / 2 - centreY * scale
+  }
+}
