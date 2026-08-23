@@ -151,6 +151,11 @@ export function createRegistry(deps: RegistryDeps): Registry {
     },
 
     get: (id) => sessions.get(id),
+    // Allocates a fresh array every call — fine for one-off reads, but never
+    // pass this directly as a useSyncExternalStore getSnapshot: a new
+    // reference every render looks like a change on every render and loops
+    // forever. version() is the stable scalar for that; snapshot the array
+    // only when version() has actually advanced.
     all: () => [...sessions.values()],
 
     applyTiers(tiers) {
@@ -190,6 +195,9 @@ export function createRegistry(deps: RegistryDeps): Registry {
       bump()
     },
 
+    // Same caveat as all(): a fresh object every call, so it is not a safe
+    // useSyncExternalStore getSnapshot on its own — gate a re-read on
+    // version() having changed, the same as the panel list.
     lastFocusedAt() {
       const stamps: Record<PanelId, number> = {}
       for (const session of sessions.values()) stamps[session.id] = session.lastFocusedAt

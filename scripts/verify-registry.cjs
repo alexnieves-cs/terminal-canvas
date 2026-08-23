@@ -103,16 +103,35 @@ const tick = () => new Promise((r) => setImmediate(r))
     ok(2, bridge.calls.create.length === 0, `create calls=${bridge.calls.create.length}`)
   }
 
-  // 3. Going live attaches, then spawns with the fitted size.
+  // 3. Going live attaches, then spawns with the fitted size — read from each
+  //    session's own terminal, never invented. Both fakes are set to sizes
+  //    that are distinct from each other AND from the common 80x24 default,
+  //    so a spawn() that hardcoded a default (or shared one session's size
+  //    across both) could not pass this by accident.
   {
     const { bridge, factory, registry } = setup()
     registry.ensure('p1', SPEC)
-    registry.applyTiers({ p1: 'live' })
+    registry.ensure('p2', { ...SPEC, panelId: 'p2' })
+    Object.assign(factory.made.get('p1'), { cols: 137, rows: 41 })
+    Object.assign(factory.made.get('p2'), { cols: 62, rows: 19 })
+    registry.applyTiers({ p1: 'live', p2: 'live' })
     registry.attachSlot('p1') // the view calls this once the host is mounted
+    registry.attachSlot('p2')
     await tick()
-    const spawned = bridge.calls.create[0]
-    ok(3, factory.made.get('p1').attached && spawned && spawned.cols === 80 && spawned.rows === 24,
-      JSON.stringify(spawned))
+    const spawnedP1 = bridge.calls.create.find((c) => c.panelId === 'p1')
+    const spawnedP2 = bridge.calls.create.find((c) => c.panelId === 'p2')
+    ok(3, factory.made.get('p1').attached && spawnedP1 && spawnedP1.cols === 137 && spawnedP1.rows === 41,
+      JSON.stringify(spawnedP1))
+    ok('3b', spawnedP2 && spawnedP2.cols === 62 && spawnedP2.rows === 19,
+      JSON.stringify(spawnedP2))
+
+    // The keystroke path: onInput must be wired so typing reaches the PTY
+    // with the right panel id and bytes. A registry that never wired
+    // onInput would still show a live, spawned, correctly-sized panel that
+    // silently accepts no input.
+    factory.made.get('p1').inputListener('x')
+    ok('3c', bridge.calls.write.some((w) => w.panelId === 'p1' && w.data === 'x'),
+      JSON.stringify(bridge.calls.write))
   }
 
   // 4. Chunks route to the right session and nowhere else.
@@ -160,7 +179,8 @@ const tick = () => new Promise((r) => setImmediate(r))
       JSON.stringify(factory.made.get('p1').written))
   }
 
-  // 7. Re-promotion re-attaches and does NOT spawn a second PTY.
+  // 7. Re-promotion re-attaches, resizes to the current fitted size (the
+  //    grid may have changed while carded), and does NOT spawn a second PTY.
   {
     const { bridge, factory, registry } = setup()
     registry.ensure('p1', SPEC)
@@ -169,11 +189,14 @@ const tick = () => new Promise((r) => setImmediate(r))
     await tick()
     registry.applyTiers({ p1: 'card' })
     registry.detachSlot('p1')
+    Object.assign(factory.made.get('p1'), { cols: 100, rows: 30 })
     registry.applyTiers({ p1: 'live' })
     registry.attachSlot('p1')
     await tick()
-    ok(7, bridge.calls.create.length === 1 && factory.made.get('p1').attached,
-      `create calls=${bridge.calls.create.length}`)
+    const resized = bridge.calls.resize[0]
+    ok(7, bridge.calls.create.length === 1 && factory.made.get('p1').attached &&
+          resized && resized.panelId === 'p1' && resized.cols === 100 && resized.rows === 30,
+      `create calls=${bridge.calls.create.length} resize=${JSON.stringify(resized)}`)
   }
 
   // 8. Exit updates status and leaves the session in place to be read.
@@ -203,15 +226,19 @@ const tick = () => new Promise((r) => setImmediate(r))
     ok(9, status.kind === 'error' && status.message.includes('nope'), JSON.stringify(status))
   }
 
-  // 10. Focus records a timestamp, which is what eviction orders by.
+  // 10. Focus records a timestamp, which is what eviction orders by, and —
+  //     for a live-tier panel — calls handle.focus() so the keyboard
+  //     actually lands in the terminal, not just in the bookkeeping.
   {
-    const { registry } = setup()
+    const { factory, registry } = setup()
     registry.ensure('p1', SPEC)
     registry.ensure('p2', { ...SPEC, panelId: 'p2' })
+    registry.applyTiers({ p1: 'live' })
     registry.focus('p1')
     registry.focus('p2')
     const stamps = registry.lastFocusedAt()
-    ok(10, stamps.p2 > stamps.p1, JSON.stringify(stamps))
+    ok(10, stamps.p2 > stamps.p1 && factory.made.get('p1').focused,
+      JSON.stringify({ stamps, focused: factory.made.get('p1').focused }))
   }
 
   // 11. Subscribers are notified on status change, and version() advances so
