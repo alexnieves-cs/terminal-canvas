@@ -1,20 +1,14 @@
 import type { JSX } from 'react'
 import { Canvas } from './canvas/Canvas'
-import { PLACEHOLDER_PANELS } from './canvas/placeholder-panels'
 
 /**
- * M2 scope: the canvas and its coordinate math, with dumb rectangles instead
- * of terminals.
- *
- * TerminalPanel is intentionally not mounted for this milestone. M1 proved the
- * PTY path with no transform math so a blank panel had one possible cause;
- * this is the mirror image. M3 reunites them, and verify:pty* remains the
- * proof that the PTY layer still works meanwhile.
+ * M3: real terminals on the canvas. The M2 regression — placeholder rectangles
+ * instead of a live terminal — ends here; Canvas owns the panels now.
  */
 export function App(): JSX.Element {
   return (
     <div className="app">
-      <Canvas rects={PLACEHOLDER_PANELS} />
+      <Canvas />
     </div>
   )
 }

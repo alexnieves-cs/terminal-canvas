@@ -36,12 +36,21 @@ const theme: ITheme = {
 export interface TerminalHandles {
   term: Terminal
   fitAddon: FitAddon
-  /** Which renderer we actually ended up with; surfaced for the status bar. */
+  webgl: WebglAddon | null
   rendererKind: 'webgl' | 'dom'
-  dispose(): void
+  /** open() has been called once; it must never be called again. */
+  opened: boolean
+  /** Set when a context loss makes WebGL untrustworthy for this terminal. */
+  webglDisabled: boolean
 }
 
-export function createTerminal(container: HTMLElement): TerminalHandles {
+/**
+ * Constructs a Terminal WITHOUT opening it. Attachment is separate because
+ * open() measures font metrics against a laid-out node, so it cannot run while
+ * the host is out of the document — and a panel that has never been on screen
+ * has no size to be measured.
+ */
+export function createTerminal(): TerminalHandles {
   const term = new Terminal({
     theme,
     fontFamily: '"SF Mono", "JetBrains Mono", Menlo, Monaco, monospace',
@@ -58,37 +67,58 @@ export function createTerminal(container: HTMLElement): TerminalHandles {
 
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
-  term.open(container)
+  return { term, fitAddon, webgl: null, rendererKind: 'dom', opened: false, webglDisabled: false }
+}
 
-  let rendererKind: TerminalHandles['rendererKind'] = 'dom'
-  let webgl: WebglAddon | null = null
-
-  // Browsers cap live WebGL contexts near 16. In M1 there is exactly one panel,
-  // but the fallback path is wired now so M3's context pooling is a swap rather
-  // than a rewrite.
-  try {
-    webgl = new WebglAddon()
-    webgl.onContextLoss(() => {
-      // A lost context leaves the canvas blank. Drop the addon and let xterm
-      // fall back to DOM rendering rather than showing an empty panel.
-      webgl?.dispose()
-      webgl = null
-      rendererKind = 'dom'
-    })
-    term.loadAddon(webgl)
-    rendererKind = 'webgl'
-  } catch (error) {
-    console.warn('[terminal] WebGL renderer unavailable, using DOM renderer', error)
-    webgl = null
+/**
+ * Puts a terminal on screen: open once, take a WebGL context, fit.
+ * The host must already be in the document.
+ */
+export function attachTerminal(handles: TerminalHandles, host: HTMLElement): void {
+  if (!handles.opened) {
+    handles.term.open(host)
+    handles.opened = true
   }
 
-  return {
-    term,
-    fitAddon,
-    rendererKind,
-    dispose() {
-      webgl?.dispose()
-      term.dispose()
+  if (!handles.webglDisabled && !handles.webgl) {
+    // Browsers cap live WebGL contexts near 16. In M1 there is exactly one panel,
+    // but the fallback path is wired now so M3's context pooling is a swap rather
+    // than a rewrite.
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => {
+        // A lost context leaves the canvas blank. Drop it, and do not ask for
+        // another on the next promotion — a terminal that has lost one context
+        // tends to lose the next, and the DOM renderer at least draws.
+        handles.webgl?.dispose()
+        handles.webgl = null
+        handles.webglDisabled = true
+        handles.rendererKind = 'dom'
+      })
+      handles.term.loadAddon(webgl)
+      handles.webgl = webgl
+      handles.rendererKind = 'webgl'
+    } catch (error) {
+      console.warn('[terminal] WebGL renderer unavailable, using DOM renderer', error)
+      handles.webglDisabled = true
+      handles.rendererKind = 'dom'
     }
   }
+
+  handles.fitAddon.fit()
+  // Task 1 (spike) proved this is load-bearing: under WebGL a fresh context on
+  // re-attach does not repaint on its own. Do not "optimise" this away.
+  handles.term.refresh(0, handles.term.rows - 1)
+}
+
+/** Frees the WebGL context. The Terminal and its buffer survive untouched. */
+export function detachTerminal(handles: TerminalHandles): void {
+  handles.webgl?.dispose()
+  handles.webgl = null
+  handles.rendererKind = 'dom'
+}
+
+export function disposeTerminal(handles: TerminalHandles): void {
+  handles.webgl?.dispose()
+  handles.term.dispose()
 }

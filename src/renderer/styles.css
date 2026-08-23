@@ -53,44 +53,19 @@ body {
   will-change: transform;
 }
 
-.placeholder-panel {
+/* A panel is positioned once in WORLD pixels. Only .world's transform moves. */
+.panel {
   position: absolute;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  user-select: none;
-}
-
-.placeholder-panel--selected {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 1px var(--blue);
-}
-
-.placeholder-panel__label {
-  font-size: 28px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-
-/* A panel owns its own box. From M3 this same markup gets absolutely
-   positioned in canvas space and wrapped in a scale transform, so its
-   internal layout must not depend on being a flex child of the window. */
-.panel {
-  /* flex: 1 assumes a flex parent; .app no longer sets display: flex here.
-     M3 must provide a flex (or otherwise sizing) parent when it mounts
-     TerminalPanel inside a canvas panel. */
-  flex: 1;
-  display: flex;
   flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid #262a3d;
+  border-radius: 10px;
+  background: #12131a;
+}
+
+.panel--selected {
+  border-color: #7aa2f7;
 }
 
 .panel__chrome {
@@ -110,21 +85,44 @@ body {
   letter-spacing: 0.01em;
 }
 
-.panel__terminal {
+/* The terminal's retained host is appended here; it must fill the slot so
+   fit() computes the same grid every time the panel is promoted. */
+.panel__slot {
   flex: 1;
   min-height: 0;
-  padding: 8px 4px 8px 10px;
 }
 
 /* xterm sizes itself in cols/rows against this box; it must fill it exactly. */
-.panel__terminal .xterm,
-.panel__terminal .xterm-viewport,
-.panel__terminal .xterm-screen {
+.panel__slot .xterm,
+.panel__slot .xterm-viewport,
+.panel__slot .xterm-screen {
   height: 100%;
 }
 
-.panel__terminal .xterm-viewport {
+.panel__slot .xterm-viewport {
   scrollbar-width: thin;
+}
+
+.panel__card {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #6f7690;
+}
+
+.panel__card-line {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel__card-idle {
+  color: #4a4f66;
+  font-style: italic;
 }
 
 .badge {

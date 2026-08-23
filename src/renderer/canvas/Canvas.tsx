@@ -1,33 +1,104 @@
-import { useRef, useState, type JSX, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
-import { PlaceholderPanel } from './PlaceholderPanel'
 import { useViewport } from './useViewport'
-import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
+import { assignTiers } from './lod'
+import { hitTest, screenToWorld, type Point } from './viewport'
+import { TerminalPanel } from '@renderer/components/TerminalPanel'
+import { createRegistry } from '@renderer/session/session-registry'
+import { useRegistryVersion } from '@renderer/session/useRegistry'
+import { createSessionFactory } from '@renderer/terminal/session-factory'
+import { makePanel, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
-export interface CanvasProps {
-  rects: WorldRect[]
-}
+/** Clicks reach xterm only near 1:1; see the spec's "Focus and input". */
+const INTERACT_MIN_SCALE = 0.9
+const INTERACT_MAX_SCALE = 1.1
+/** Promote immediately, demote late: the other half of the anti-thrash story. */
+const DEMOTE_DELAY_MS = 250
 
-export function Canvas({ rects }: CanvasProps): JSX.Element {
+const registry = createRegistry({
+  bridge: window.canvas,
+  factory: createSessionFactory()
+})
+
+// A renderer teardown that skips React cleanup (Cmd+R, Cmd+W) is handled
+// main-side by window-lifecycle.ts; this covers the orderly path.
+window.addEventListener('beforeunload', () => registry.disposeAll())
+
+export function Canvas(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
-  const viewport = useViewport(hostRef, rects)
+  const [panels, setPanels] = useState<Panel[]>(SEED_PANELS)
+  const rects = useMemo(() => panels.map((p) => p.rect), [panels])
+  // Declared before useViewport (which takes it as an argument) rather than
+  // grouped with the other callbacks below: a const used before its
+  // declaration is a TDZ error, not just a style preference.
+  const onSpawn = useCallback(
+    (centre: Point) =>
+      setPanels((current) => [...current, makePanel(`n${current.length + 1}`, centre)]),
+    []
+  )
+  const viewport = useViewport(hostRef, rects, onSpawn)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [focusedId, setFocusedId] = useState<string | null>(null)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+  const version = useRegistryVersion(registry)
 
-  /** The one place client coordinates become canvas-local coordinates. */
+  // Sessions exist for every panel; only their tier changes. In a memo rather
+  // than loose in the render body so it re-runs only when the panel list does.
+  useMemo(() => {
+    for (const panel of panels) registry.ensure(panel.rect.id, panel.spec)
+  }, [panels])
+
+  // Stable identities: these go into TerminalPanel's effect deps, and a fresh
+  // arrow each render would tear the terminal down and reopen it every frame.
+  const onSlotMount = useCallback((id: string) => registry.attachSlot(id), [])
+  const onSlotUnmount = useCallback((id: string) => registry.detachSlot(id), [])
+  const onFocusPanel = useCallback((id: string) => {
+    setSelectedId(id)
+    setFocusedId(id)
+    registry.focus(id)
+  }, [])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const tiers = assignTiers({
+      rects,
+      viewport,
+      size: { width: bounds.width, height: bounds.height },
+      focusedId,
+      lastFocusedAt: registry.lastFocusedAt()
+    })
+
+    // Promotion is immediate so a panel is live by the time you look at it.
+    // Demotion waits, so panning along an edge does not destroy and recreate a
+    // WebGL context every frame. Held-back demotions keep their current tier.
+    const immediate: Record<string, 'live' | 'card'> = {}
+    let hasDemotion = false
+    for (const [id, tier] of Object.entries(tiers)) {
+      const current = registry.get(id)?.tier ?? 'card'
+      const demoting = tier === 'card' && current === 'live'
+      immediate[id] = demoting ? 'live' : tier
+      if (demoting) hasDemotion = true
+    }
+    registry.applyTiers(immediate)
+
+    if (!hasDemotion) return
+    const timer = setTimeout(() => registry.applyTiers(tiers), DEMOTE_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [rects, viewport, focusedId, version])
+
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
     const host = hostRef.current
     if (!host) return null
     const bounds = host.getBoundingClientRect()
-    return screenToWorld(
-      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
-      viewport
-    )
+    return screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewport)
   }
 
-  const onClick = (event: MouseEvent<HTMLDivElement>): void => {
+  const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
+    // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
-    if (world) setSelectedId(hitTest(rects, world))
+    setSelectedId(world ? hitTest(rects, world) : null)
   }
 
   const onMouseMove = (event: MouseEvent<HTMLDivElement>): void => {
@@ -35,17 +106,32 @@ export function Canvas({ rects }: CanvasProps): JSX.Element {
     if (world) setCursor(world)
   }
 
+  const interactive =
+    viewport.scale >= INTERACT_MIN_SCALE && viewport.scale <= INTERACT_MAX_SCALE
+
   return (
-    <div className="canvas" ref={hostRef} onClick={onClick} onMouseMove={onMouseMove}>
+    <div className="canvas" ref={hostRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       <div
         className="world"
-        style={{
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`
-        }}
+        style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
       >
-        {rects.map((rect) => (
-          <PlaceholderPanel key={rect.id} rect={rect} selected={rect.id === selectedId} />
-        ))}
+        {panels.map((panel) => {
+          const session = registry.get(panel.rect.id)
+          if (!session) return null
+          return (
+            <TerminalPanel
+              key={panel.rect.id}
+              session={session}
+              rect={panel.rect}
+              selected={panel.rect.id === selectedId}
+              interactive={interactive}
+              onSelect={setSelectedId}
+              onSlotMount={onSlotMount}
+              onSlotUnmount={onSlotUnmount}
+              onFocus={onFocusPanel}
+            />
+          )
+        })}
       </div>
       <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} />
     </div>

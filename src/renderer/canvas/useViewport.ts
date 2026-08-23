@@ -1,6 +1,6 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { normalizeWheel } from './canvas-input'
-import { fitTo, panBy, zoomAt, type Viewport, type WorldRect } from './viewport'
+import { fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
 
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
 const KEYBOARD_ZOOM_STEP = 1.2
@@ -12,9 +12,12 @@ const KEYBOARD_ZOOM_STEP = 1.2
  */
 export function useViewport(
   hostRef: RefObject<HTMLElement | null>,
-  rects: WorldRect[]
+  rects: WorldRect[],
+  onSpawn?: (worldCentre: Point) => void
 ): Viewport {
   const [viewport, setViewport] = useState<Viewport>(INITIAL)
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
 
   useEffect(() => {
     const host = hostRef.current
@@ -74,6 +77,12 @@ export function useViewport(
           event.preventDefault()
           setViewport((vp) => zoomAt(vp, centre, 1 / KEYBOARD_ZOOM_STEP))
           break
+        case 'n':
+          // Cmd+N spawns at the viewport centre in WORLD coordinates, so a
+          // panel appears where you are looking at any zoom.
+          event.preventDefault()
+          onSpawn?.(screenToWorld(centre, viewportRef.current))
+          break
         default:
           break
       }
@@ -81,7 +90,7 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, rects])
+  }, [hostRef, rects, onSpawn])
 
   return viewport
 }

@@ -1,172 +1,116 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { JSX } from 'react'
-import { createTerminal, type TerminalHandles } from '../terminal/create-terminal'
+import { memo, useEffect, useRef, type JSX } from 'react'
+import type { PanelSession, PanelStatus } from '@renderer/session/panel-session'
+import type { WorldRect } from '@renderer/canvas/viewport'
 
 export interface TerminalPanelProps {
-  panelId: string
-  cwd: string
-  command: string
-  args?: string[]
-  title?: string
+  session: PanelSession
+  rect: WorldRect
+  selected: boolean
+  interactive: boolean
+  onSelect: (id: string) => void
+  onFocus: (id: string) => void
+  /** Called once the retained host is in the document, so it can be opened. */
+  onSlotMount: (id: string) => void
+  /** Called before the host leaves the document, so its context can be freed. */
+  onSlotUnmount: (id: string) => void
 }
 
-type Status =
-  | { kind: 'starting' }
-  | { kind: 'running'; pid: number; renderer: string }
-  | { kind: 'exited'; code: number }
-  | { kind: 'error'; message: string }
+const CARD_LINES = 6
 
-const RESIZE_DEBOUNCE_MS = 50
-
-export function TerminalPanel({
-  panelId,
-  cwd,
-  command,
-  args = [],
-  title
+function TerminalPanelImpl({
+  session, rect, selected, interactive, onSelect, onFocus, onSlotMount, onSlotUnmount
 }: TerminalPanelProps): JSX.Element {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [status, setStatus] = useState<Status>({ kind: 'starting' })
-
-  // `args = []` creates a fresh array every render. Depending on it directly
-  // would re-run the effect forever, tearing down and respawning the PTY on
-  // each pass. Key the effect on its serialised value instead.
-  const argsKey = JSON.stringify(args)
-  const stableArgs = useMemo<string[]>(() => JSON.parse(argsKey) as string[], [argsKey])
+  const slotRef = useRef<HTMLDivElement>(null)
+  const live = session.tier === 'live'
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+    const slot = slotRef.current
+    if (!slot || !live) return
 
-    let handles: TerminalHandles | null = null
-    let disposed = false
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null
-    const unsubscribes: Array<() => void> = []
+    // Order matters: the host must be IN the document before the registry
+    // opens a terminal against it, because open() measures a laid-out node.
+    slot.appendChild(session.handle.host)
+    onSlotMount(session.id)
 
-    const boot = async (): Promise<void> => {
-      handles = createTerminal(container)
-      const { term, fitAddon } = handles
-
-      // Fit BEFORE creating the PTY so the shell's very first TIOCGWINSZ
-      // returns the real size. Spawn at 80x24 and resize after, and an agent
-      // TUI draws its frame twice and can leave artifacts behind.
-      fitAddon.fit()
-
-      unsubscribes.push(
-        window.canvas.pty.onData((chunk) => {
-          if (chunk.panelId !== panelId) return
-          term.write(chunk.data)
-        })
-      )
-
-      unsubscribes.push(
-        window.canvas.pty.onExit((info) => {
-          if (info.panelId !== panelId) return
-          setStatus({ kind: 'exited', code: info.exitCode })
-          term.write(`\r\n\x1b[38;5;244m[process exited with code ${info.exitCode}]\x1b[0m\r\n`)
-        })
-      )
-
-      // Keystrokes go straight to the PTY. Notably this includes Ctrl+C, which
-      // must arrive as a real SIGINT rather than being intercepted as "copy".
-      term.onData((data) => {
-        void window.canvas.pty.write({ panelId, data })
-      })
-
-      // Menu-driven clipboard. xterm's selection is not a DOM selection under
-      // the WebGL renderer, so we ask xterm for it explicitly.
-      unsubscribes.push(
-        window.canvas.edit.onCopy(() => {
-          const selection = term.getSelection()
-          if (selection) void navigator.clipboard.writeText(selection)
-        })
-      )
-      unsubscribes.push(
-        window.canvas.edit.onPaste((text) => {
-          // term.paste, not a raw pty.write: xterm wraps the payload in
-          // bracketed-paste markers when the app has enabled them, and
-          // normalises CRLF/LF to CR. Writing raw makes every newline in a
-          // multi-line prompt submit as a separate Enter, so pasting a prompt
-          // into `claude` fires off several partial prompts instead of one.
-          if (text) term.paste(text)
-        })
-      )
-
-      try {
-        const result = await window.canvas.pty.create({
-          panelId,
-          cwd,
-          command,
-          args: stableArgs,
-          cols: term.cols,
-          rows: term.rows
-        })
-        if (disposed) {
-          // Teardown beat the spawn. Kill the process we just created,
-          // otherwise it outlives the panel that asked for it.
-          void window.canvas.pty.kill(panelId)
-          return
-        }
-        setStatus({ kind: 'running', pid: result.pid, renderer: handles.rendererKind })
-        term.focus()
-      } catch (error) {
-        if (disposed) return
-        setStatus({ kind: 'error', message: String(error) })
-      }
-    }
-
-    // Refit on container size change, never on zoom - that distinction becomes
-    // load-bearing in M3, where the panel is inside a CSS scale transform.
-    const observer = new ResizeObserver(() => {
-      if (resizeTimer) clearTimeout(resizeTimer)
-      resizeTimer = setTimeout(() => {
-        if (!handles) return
-        handles.fitAddon.fit()
-        void window.canvas.pty.resize({
-          panelId,
-          cols: handles.term.cols,
-          rows: handles.term.rows
-        })
-      }, RESIZE_DEBOUNCE_MS)
-    })
-    observer.observe(container)
-
-    void boot()
-
+    // Cleanup frees the WebGL context and removes the node. It does NOT kill
+    // or dispose anything: this component unmounting means the panel scrolled
+    // off screen, not that the panel is going away.
     return () => {
-      disposed = true
-      observer.disconnect()
-      if (resizeTimer) clearTimeout(resizeTimer)
-      for (const off of unsubscribes) off()
-      handles?.dispose()
-      void window.canvas.pty.kill(panelId)
+      onSlotUnmount(session.id)
+      if (session.handle.host.parentNode === slot) slot.removeChild(session.handle.host)
     }
-  }, [panelId, cwd, command, stableArgs])
+  }, [live, session.id, session.handle.host, onSlotMount, onSlotUnmount])
 
   return (
-    <div className="panel">
-      <header className="panel__chrome">
-        <span className="panel__title">{title ?? command}</span>
-        <StatusBadge status={status} />
+    <div
+      className={`panel${selected ? ' panel--selected' : ''}`}
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+    >
+      <header
+        className="panel__chrome"
+        onMouseDown={(event) => {
+          // Chrome selects; body passes through. stopPropagation keeps the
+          // canvas from reading this as a background click and deselecting.
+          event.stopPropagation()
+          onSelect(session.id)
+        }}
+      >
+        <span className="panel__title">{session.spec.command}</span>
+        <StatusBadge status={session.status} />
       </header>
-      <div className="panel__terminal" ref={containerRef} />
+
+      {live ? (
+        <div
+          className="panel__slot"
+          ref={slotRef}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            onFocus(session.id)
+            // Outside the interaction band xterm's own coordinate math is off
+            // by a factor of the zoom, so the click would land on the wrong
+            // cell. Focus the panel and stop; typing still works, and the
+            // correction lands in M4 with drag and resize.
+            if (!interactive) event.preventDefault()
+          }}
+        />
+      ) : (
+        <PanelCard session={session} />
+      )}
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: Status }): JSX.Element {
+function PanelCard({ session }: { session: PanelSession }): JSX.Element {
+  const lines = session.spawned ? session.handle.tail(CARD_LINES) : []
+  return (
+    <div className="panel__card">
+      {session.spawned ? (
+        lines.map((line, i) => (
+          <div className="panel__card-line" key={i}>{line}</div>
+        ))
+      ) : (
+        <div className="panel__card-idle">not started</div>
+      )}
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: PanelStatus }): JSX.Element {
   switch (status.kind) {
+    case 'idle':
+      return <span className="badge badge--pending">idle</span>
     case 'starting':
       return <span className="badge badge--pending">starting…</span>
     case 'running':
-      return (
-        <span className="badge badge--running">
-          pid {status.pid} · {status.renderer}
-        </span>
-      )
+      return <span className="badge badge--running">pid {status.pid}</span>
     case 'exited':
       return <span className="badge badge--exited">exited {status.code}</span>
     case 'error':
       return <span className="badge badge--error">{status.message}</span>
   }
 }
+
+// Memoized for the reason PlaceholderPanel already documented: Canvas
+// re-renders on every mousemove for the HUD cursor, and a 60Hz cascade into
+// panels backed by WebGL contexts is a frame-rate cliff.
+export const TerminalPanel = memo(TerminalPanelImpl)
