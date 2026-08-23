@@ -22,10 +22,22 @@ Tauri would mean `portable-pty` and hand-rolled plumbing.
 ## Getting started
 
 ```sh
-npm install      # postinstall runs electron-rebuild for node-pty
+npm install       # postinstall runs electron-rebuild for node-pty
 npm run dev
 npm run typecheck
+npm run verify:pty   # headless PTY-layer checks, run under Electron's ABI
 ```
+
+### If `npm run dev` misbehaves
+
+**`Error: Electron uninstall`** — the `electron` package installed but its binary
+download did not run. Fix: `node node_modules/electron/install.js`.
+
+**`TypeError: Cannot read properties of undefined (reading 'whenReady')`** — you
+are in a shell that exports `ELECTRON_RUN_AS_NODE=1`, which VS Code's extension
+host does. That flag makes the Electron binary boot as plain Node, so
+`require('electron')` has no `app`. The `dev` and `start` scripts already
+`unset` it; you will only see this if you invoke `electron-vite` directly.
 
 ## Architecture
 
@@ -49,13 +61,15 @@ for every PTY.
 
 **Output batching.** `pty:data` is flushed on a ~16ms timer rather than per
 read. An agent TUI repainting its frame emits thousands of reads per second;
-unbatched, that floods the renderer's event loop and the UI locks up.
+unbatched, that floods the renderer's event loop and the UI locks up. Measured
+on 16.4 MB of `find` output: 33,198 PTY reads collapse to 105 IPC messages, a
+316x reduction.
 
 ## Milestones
 
 | | Scope | Status |
 |---|---|---|
-| M1 | Electron shell, one hardcoded xterm panel on a real PTY | in review |
+| M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ in review |
 | M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | |
 | M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | |
 | M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |
