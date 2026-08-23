@@ -96,5 +96,44 @@ window.__probe = (async () => {
   out.domTextAfterReattach = (host.querySelector('.xterm-rows')?.textContent || '').trim()
   out.canvasesAfterReattach = readCanvasSignal(host)
 
+  // Control: the WebGL path can't prove repaint via DOM text (it's empty
+  // even when healthy — see domTextWhileAttached above), and a WebGL canvas
+  // readback would need `preserveDrawingBuffer`, which the addon does not
+  // expose, so a readback would be blank-or-flaky rather than trustworthy.
+  // Instead, run a second, independent Terminal through the identical
+  // detach/write/reattach lifecycle with NO WebglAddon at all. Its DOM
+  // renderer *does* paint into `.xterm-rows`, so this is the surface that
+  // can actually prove or disprove "does the buffer repaint after reattach."
+  out.control = {}
+  const host2 = document.createElement('div')
+  host2.style.cssText = 'width: 640px; height: 400px;'
+  document.body.appendChild(host2)
+
+  const term2 = new Terminal({ fontSize: 13, scrollback: 1000, allowProposedApi: true })
+  const fit2 = new FitAddon()
+  term2.loadAddon(fit2)
+  term2.open(host2)
+  fit2.fit()
+
+  term2.write('BEFORE-DETACH\r\n')
+  await new Promise((r) => setTimeout(r, 200))
+  // Baseline: if this is empty, DOM text is not a valid signal even without
+  // WebGL, and the control is inconclusive — the check reading this must
+  // fail rather than pass on an empty/undefined value.
+  out.control.domTextWhileAttached = (host2.querySelector('.xterm-rows')?.textContent || '').trim()
+
+  host2.remove()
+  await new Promise((r) => setTimeout(r, 100))
+  term2.write('WHILE-DETACHED\r\n')
+  await new Promise((r) => setTimeout(r, 200))
+
+  document.body.appendChild(host2)
+  fit2.fit()
+  term2.refresh(0, term2.rows - 1)
+  await new Promise((r) => setTimeout(r, 300))
+
+  out.control.domTextAfterReattach = (host2.querySelector('.xterm-rows')?.textContent || '').trim()
+  term2.dispose()
+
   return out
 })()
