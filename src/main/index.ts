@@ -39,6 +39,13 @@ function createWindow(): void {
   // pty:create throw "already has a live PTY" and the panel is unrecoverable.
   attachPtyLifecycle(mainWindow, () => ptyManager.killAll())
 
+  // Belt and braces against Chromium's own pinch-to-zoom. The renderer already
+  // preventDefaults ctrl+wheel, but a missed path must not be able to zoom the
+  // whole UI, which would silently break every coordinate the canvas computes.
+  mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch((error: unknown) => {
+    console.warn('[window] could not pin visual zoom', error)
+  })
+
   // Never let a link navigate the shell window itself.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)

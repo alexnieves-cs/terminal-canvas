@@ -19,7 +19,8 @@
     "verify:window": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-window-lifecycle.cjs",
     "verify:ipc": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-ipc-surface.cjs",
     "verify:viewport": "node scripts/verify-viewport.cjs",
-    "verify": "npm run verify:viewport && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc"
+    "verify:canvas": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-canvas.cjs",
+    "verify": "npm run verify:viewport && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas"
   },
   "dependencies": {
     "node-pty": "1.1.0"
