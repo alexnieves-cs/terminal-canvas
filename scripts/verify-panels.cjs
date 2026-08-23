@@ -55,6 +55,26 @@ const cardCount = (wc) =>
 // not a number that a kill-and-respawn could still satisfy.
 const listSessions = (wc) => wc.executeJavaScript(`window.canvas.pty.list()`)
 const sessionMap = async (wc) => new Map((await listSessions(wc)).map((s) => [s.panelId, s.pid]))
+/**
+ * Waits until pty:list has the SAME length on two consecutive reads before
+ * returning it. Snapshotting after the first live terminal appears is not
+ * enough: seed panels spawn concurrently, so `sessionsBefore` could hold one
+ * of four sessions and a later kill of the other three would pass check 4
+ * silently — the exact failure this suite's central check exists to catch.
+ */
+const settledSessionMap = async (wc, timeoutMs = 10000, intervalMs = 200) => {
+  const start = Date.now()
+  let previous = -1
+  let map = await sessionMap(wc)
+  while (Date.now() - start < timeoutMs) {
+    if (map.size > 0 && map.size === previous) return map
+    previous = map.size
+    await sleep(intervalMs)
+    map = await sessionMap(wc)
+  }
+  return map
+}
+
 const zoomTo = (wc, key) =>
   wc.executeJavaScript(
     `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
@@ -130,7 +150,7 @@ app.whenReady().then(async () => {
 
     const live = await liveCount(wc)
     const cards = await cardCount(wc)
-    const sessionsBefore = await sessionMap(wc)
+    const sessionsBefore = await settledSessionMap(wc)
     ok('1 on-screen panels are live terminals with off-screen panels carded',
       live > 0 && cards > 0, `live=${live} cards=${cards}`)
 
@@ -237,6 +257,116 @@ app.whenReady().then(async () => {
       `reachedXterm: 100%=${at100.reachedXterm} gated=${zoomedOut.reachedXterm} — ` +
         `activeElement: 100%="${at100.active}" gated="${zoomedOut.active}"`)
 
+    // 7. Cmd+N. An explicit spec scope item ("a panel whose rect is centred on
+    // the current viewport in world coordinates") with no coverage anywhere
+    // else: without this check the shortcut could do nothing at all, or place
+    // panels in screen coordinates, and every other suite would still pass.
+    // Run at the ~0.69 scale check 6 left behind on purpose — at scale 1 with
+    // no translation, screen and world coordinates coincide and the conversion
+    // this asserts would be untestable.
+    const panelCount = (w) => w.executeJavaScript(`document.querySelectorAll('.panel').length`)
+    // Both expectations are read back out of the live DOM — the canvas host's
+    // own bounds and the world layer's own transform — rather than duplicating
+    // INITIAL/PANEL_W constants out of the source, which would make this pass
+    // whenever the test and the code shared a wrong assumption.
+    const viewCentreInWorld = (w) => w.executeJavaScript(`(() => {
+      const host = document.querySelector('.canvas')
+      const world = document.querySelector('.world')
+      const b = host.getBoundingClientRect()
+      const m = new DOMMatrixReadOnly(getComputedStyle(world).transform)
+      return { x: (b.width / 2 - m.e) / m.a, y: (b.height / 2 - m.f) / m.a }
+    })()`)
+    const lastPanelCentreInWorld = (w) => w.executeJavaScript(`(() => {
+      const all = document.querySelectorAll('.panel')
+      const el = all[all.length - 1]
+      if (!el) return null
+      return { x: parseFloat(el.style.left) + parseFloat(el.style.width) / 2,
+               y: parseFloat(el.style.top) + parseFloat(el.style.height) / 2 }
+    })()`)
+
+    const panelsBeforeSpawn = await panelCount(wc)
+    const expectedCentre = await viewCentreInWorld(wc)
+    await zoomTo(wc, 'n')
+    const panelsAfterSpawn = await waitUntil(
+      async () => {
+        const n = await panelCount(wc)
+        return n > panelsBeforeSpawn ? n : false
+      },
+      3000
+    )
+    const spawnedCentre = await lastPanelCentreInWorld(wc)
+    // 1px: both sides come from the same getBoundingClientRect and the same
+    // computed transform, so the only slack is float rounding in the matrix
+    // string and sub-pixel layout. Anything larger is the centring math being
+    // wrong, not measurement noise.
+    const CENTRE_TOLERANCE_PX = 1
+    const centred =
+      spawnedCentre &&
+      Math.abs(spawnedCentre.x - expectedCentre.x) <= CENTRE_TOLERANCE_PX &&
+      Math.abs(spawnedCentre.y - expectedCentre.y) <= CENTRE_TOLERANCE_PX
+    ok('7 Cmd+N adds a panel centred on the view in world coordinates',
+      panelsAfterSpawn === panelsBeforeSpawn + 1 && centred,
+      `panels ${panelsBeforeSpawn} -> ${panelsAfterSpawn}, ` +
+        `centre ${JSON.stringify(spawnedCentre)} expected ${JSON.stringify(expectedCentre)}`)
+
+    // 8. Typing reaches the focused panel's PTY. The whole input path through
+    // the real SessionHandle (term.onData -> registry -> pty:write -> shell ->
+    // pty:data -> term.write) is otherwise unexercised: wire onInput to the
+    // wrong session, or not at all, and every panel becomes a read-only
+    // terminal while every other check still passes.
+    const MARKER = 'qzxv'
+    const backgroundPoint = (w) => w.executeJavaScript(`(() => {
+      const host = document.querySelector('.canvas')
+      const b = host.getBoundingClientRect()
+      for (let dy = 4; dy < b.height; dy += 20) {
+        for (let dx = 4; dx < b.width; dx += 20) {
+          const x = Math.round(b.left + dx), y = Math.round(b.top + dy)
+          const el = document.elementFromPoint(x, y)
+          if (el && host.contains(el) && !el.closest('.panel') && !el.closest('.canvas-hud')) {
+            return { x, y }
+          }
+        }
+      }
+      return null
+    })()`)
+    const cardTexts = (w) =>
+      w.executeJavaScript(
+        `Array.from(document.querySelectorAll('.panel__card')).map((el) => el.textContent || '')`
+      )
+
+    await zoomTo(wc, '0') // back inside the interaction band so the click reaches xterm
+    await waitUntil(async () => (await liveCount(wc)) > 0, 3000)
+    const focused = await clickPanelBody('.panel__slot')
+    for (const ch of MARKER) {
+      // A real key event through Chromium's input pipeline, not a synthetic
+      // KeyboardEvent: xterm reads typed text off its hidden textarea's input
+      // event, which only a real one produces.
+      wc.sendInputEvent({ type: 'keyDown', keyCode: ch })
+      wc.sendInputEvent({ type: 'char', keyCode: ch })
+      wc.sendInputEvent({ type: 'keyUp', keyCode: ch })
+    }
+
+    // The observation. A live panel renders through WebGL, so its text is in a
+    // canvas and unreadable from the DOM; the card tier renders the SAME
+    // terminal's buffer as text via handle.tail(). So: release focus (a
+    // background click, which is also the only way an unconditionally-pinned
+    // focused panel can ever demote), zoom out below LIVE_MIN_SCALE, and read
+    // the echo back out of the card.
+    const bg = await backgroundPoint(wc)
+    if (!bg) throw new Error('typing check: found no background point on the canvas')
+    wc.sendInputEvent({ type: 'mouseDown', x: bg.x, y: bg.y, button: 'left', clickCount: 1 })
+    wc.sendInputEvent({ type: 'mouseUp', x: bg.x, y: bg.y, button: 'left', clickCount: 1 })
+    await zoomTo(wc, '1')
+    const echoed = await waitUntil(
+      async () => (await cardTexts(wc)).find((text) => text.includes(MARKER)) ?? false,
+      6000
+    )
+    ok('8 keystrokes reach the focused panel\'s PTY and echo back into its buffer',
+      echoed !== false,
+      echoed !== false
+        ? `card shows ${JSON.stringify(echoed.slice(-60))}`
+        : `no card contained ${MARKER} (focused activeElement was "${focused.active}")`)
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
@@ -245,15 +375,26 @@ app.whenReady().then(async () => {
     console.error('\nFAIL  infrastructure error: ' + (error && error.stack ? error.stack : error))
     results.push({ n: 'infrastructure', pass: false, detail: String(error) })
   } finally {
-    clearTimeout(watchdog)
     if (!watchdogFired) {
       console.log('\n' + '='.repeat(60))
       const failed = results.filter((r) => !r.pass)
       console.log(`${results.length - failed.length}/${results.length} passed`)
       if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
-      ptyManager.killAll() // the seed panels' shells would otherwise outlive this process
+      try {
+        ptyManager.killAll() // the seed panels' shells would otherwise outlive this process
+      } catch (error) {
+        console.error('FAIL  teardown: killAll threw', error)
+        results.push({ n: 'teardown', pass: false, detail: String(error) })
+      }
+      // Disarmed only once teardown is past everything that can throw. Clearing
+      // it first meant a throwing killAll() left the run hung with no exit code
+      // and the watchdog already disabled — the exact failure class this file's
+      // watchdog exists to prevent.
+      clearTimeout(watchdog)
       await sleep(300) // let node-pty's native teardown land before app.exit() tears down the process
-      app.exit(failed.length ? 1 : 0)
+      app.exit(results.some((r) => !r.pass) ? 1 : 0)
+    } else {
+      clearTimeout(watchdog)
     }
   }
 })

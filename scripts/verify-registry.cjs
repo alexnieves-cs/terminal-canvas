@@ -199,6 +199,54 @@ const tick = () => new Promise((r) => setImmediate(r))
     ok(7, bridge.calls.create.length === 1 && factory.made.get('p1').attached &&
           resized && resized.panelId === 'p1' && resized.cols === 100 && resized.rows === 30,
       `create calls=${bridge.calls.create.length} resize=${JSON.stringify(resized)}`)
+
+    // ...and a promotion that changes NOTHING sends nothing. resize is a
+    // SIGWINCH, which makes a full-screen agent TUI repaint; doing that on
+    // every promotion is invisible in a screenshot and obvious in a running
+    // agent. The spec's tier-transition table says "only if cols/rows changed".
+    const resizesAfterFirst = bridge.calls.resize.length
+    registry.applyTiers({ p1: 'card' })
+    registry.detachSlot('p1')
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1') // same 100x30 grid as the resize above
+    await tick()
+    ok('7b', bridge.calls.resize.length === resizesAfterFirst,
+      `resize calls ${resizesAfterFirst} -> ${bridge.calls.resize.length}: ` +
+        JSON.stringify(bridge.calls.resize))
+  }
+
+  // 7c. The FIRST spawn also records the grid it sent, so an immediate
+  //     card/live round trip at an unchanged size resizes nothing either.
+  //     Without that, the very first promotion after spawn would SIGWINCH a
+  //     process that was spawned at exactly those dimensions moments earlier.
+  {
+    const { bridge, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    registry.applyTiers({ p1: 'card' })
+    registry.detachSlot('p1')
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    ok('7c', bridge.calls.resize.length === 0, JSON.stringify(bridge.calls.resize))
+  }
+
+  // 7d. A spec with no command is forwarded with command undefined, NOT with a
+  //     renderer-invented default. The renderer physically cannot see the login
+  //     shell (electron-vite compiles process.env to {} there), so main resolves
+  //     it; a default substituted here would be that bug moved, not fixed.
+  {
+    const { bridge, registry } = setup()
+    const { command: _dropped, ...noCommand } = SPEC
+    registry.ensure('p1', noCommand)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const spawnedSpec = bridge.calls.create[0]
+    ok('7d', spawnedSpec && spawnedSpec.command === undefined && 'cwd' in spawnedSpec,
+      JSON.stringify(spawnedSpec))
   }
 
   // 8. Exit updates status and leaves the session in place to be read.
