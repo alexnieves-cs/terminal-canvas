@@ -491,7 +491,7 @@ export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `npm run verify:viewport`
-Expected: `9/9 passed`
+Expected: `10/10 passed`
 
 - [ ] **Step 6: Typecheck and commit**
 
@@ -653,7 +653,7 @@ export function normalizeWheel(e: WheelLike): WheelIntent {
 - [ ] **Step 6: Run the test to verify it passes**
 
 Run: `npm run verify:viewport`
-Expected: `16/16 passed`
+Expected: `17/17 passed`
 
 - [ ] **Step 7: Typecheck and commit**
 
