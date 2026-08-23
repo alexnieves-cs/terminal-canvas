@@ -16,6 +16,21 @@ const readRows = (term) => {
   return lines
 }
 
+// Under the WebGL addon, xterm paints glyphs into a <canvas> and the
+// `.xterm-rows` DOM layer is used for accessibility/selection text only — it
+// can legitimately be empty even while the terminal renders perfectly. Read
+// both surfaces so a later empty DOM read can be told apart from "genuinely
+// did not repaint" vs. "this renderer never populates DOM text."
+const readCanvasSignal = (host) => {
+  const canvases = host.querySelectorAll('canvas')
+  const first = canvases[0]
+  return {
+    count: canvases.length,
+    width: first ? first.width : 0,
+    height: first ? first.height : 0
+  }
+}
+
 window.__probe = (async () => {
   const out = {}
 
@@ -36,6 +51,13 @@ window.__probe = (async () => {
   await new Promise((r) => setTimeout(r, 200))
   out.colsWhileAttached = term.cols
   out.rowsWhileAttached = term.rows
+
+  // Baseline: the SAME measurements check 4 takes after reattachment, but
+  // taken here while attached and known-healthy. This is what tells apart
+  // "reattach failed to repaint" from "this measurement is never populated
+  // under WebGL, attached or not."
+  out.domTextWhileAttached = (host.querySelector('.xterm-rows')?.textContent || '').trim()
+  out.canvasesWhileAttached = readCanvasSignal(host)
 
   // 2. Evict: drop the WebGL context and take the host out of the document.
   webgl.dispose()
@@ -72,7 +94,7 @@ window.__probe = (async () => {
   out.colsAfterReattach = term.cols
   out.rowsAfterReattach = term.rows
   out.domTextAfterReattach = (host.querySelector('.xterm-rows')?.textContent || '').trim()
-  out.canvasCount = host.querySelectorAll('canvas').length
+  out.canvasesAfterReattach = readCanvasSignal(host)
 
   return out
 })()
