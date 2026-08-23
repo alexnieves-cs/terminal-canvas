@@ -18,7 +18,8 @@
     "verify:pty-manager": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty-manager.cjs",
     "verify:window": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-window-lifecycle.cjs",
     "verify:ipc": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-ipc-surface.cjs",
-    "verify": "npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc"
+    "verify:viewport": "node scripts/verify-viewport.cjs",
+    "verify": "npm run verify:viewport && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc"
   },
   "dependencies": {
     "node-pty": "1.1.0"
