@@ -141,10 +141,15 @@ const POINTS = [
   const centre = V.worldToScreen({ x: 500, y: 400 }, vp)
   const centred = near(centre.x, 500) && near(centre.y, 400)
 
-  // Both corners must be inside the canvas.
+  // Both corners must clear the MARGIN, not merely the canvas edge. Asserting
+  // only "inside the canvas" would pass for a fitTo that never subtracted the
+  // margin at all, since a scale-1 fit of this fixture lands flush with the
+  // edges and is still centred.
   const tl = V.worldToScreen({ x: 0, y: 0 }, vp)
   const br = V.worldToScreen({ x: 1000, y: 800 }, vp)
-  const inside = tl.x >= 0 && tl.y >= 0 && br.x <= size.width && br.y <= size.height
+  const inside =
+    tl.x >= 50 - EPS && tl.y >= 50 - EPS &&
+    br.x <= size.width - 50 + EPS && br.y <= size.height - 50 + EPS
 
   ok('7 fitTo centres the bounding box inside the canvas', centred && inside,
     `centre ${centre.x},${centre.y} tl ${tl.x.toFixed(1)},${tl.y.toFixed(1)} br ${br.x.toFixed(1)},${br.y.toFixed(1)}`)
