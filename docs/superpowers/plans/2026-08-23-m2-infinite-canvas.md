@@ -1238,8 +1238,13 @@ app.whenReady().then(async () => {
     `scale ${before?.scale} -> ${panned?.scale}, y ${before?.y} -> ${panned?.y}`)
 
   // A pinch: ctrl held. Must scale the canvas, and must NOT page-zoom.
+  //
+  // deltaY is POSITIVE here on purpose. sendInputEvent inverts the sign:
+  // sending +120 makes the renderer's WheelEvent report deltaY -120, which the
+  // exponential zoom turns into a zoom IN. Verified empirically against this
+  // Electron build — sending -120 zooms out and would fail the assertion below.
   wc.sendInputEvent({
-    type: 'mouseWheel', x: 600, y: 400, deltaX: 0, deltaY: -120,
+    type: 'mouseWheel', x: 600, y: 400, deltaX: 0, deltaY: 120,
     modifiers: ['control'], canScroll: true
   })
   await sleep(400)
@@ -1248,9 +1253,10 @@ app.whenReady().then(async () => {
     zoomed && zoomed.scale > panned.scale,
     `scale ${panned?.scale} -> ${zoomed?.scale}`)
 
-  const pageZoom = await wc.executeJavaScript(
-    `require('electron').webFrame.getZoomLevel()`
-  ).catch(() => 'unavailable')
+  // webContents exposes the page zoom directly in main; no need to reach for
+  // renderer-side webFrame through executeJavaScript, which contextIsolation
+  // would block anyway.
+  const pageZoom = wc.getZoomLevel()
   ok('4 Chromium page zoom is untouched by the pinch', pageZoom === 0, `zoomLevel ${pageZoom}`)
 
   console.log('\n' + '='.repeat(60))
@@ -1261,7 +1267,9 @@ app.whenReady().then(async () => {
 })
 ```
 
-Note on check 4: `webFrame` is renderer-side, so it must be read through `executeJavaScript`, not called from main. If `contextIsolation` blocks the `require`, replace the expression with `window.devicePixelRatio` captured before and after and assert it is unchanged — the point is only that the page itself did not zoom.
+Note on check 3's sign: `sendInputEvent` inverts `deltaY` relative to the DOM `WheelEvent` the renderer receives. This was verified empirically against this Electron build — sending `deltaY: +120` makes the renderer see `-120`, which zooms in. Do not "correct" the sign to match intuition; if you change it, check 3 will fail because the canvas will zoom out.
+
+Note on check 4: read the page zoom from main with `wc.getZoomLevel()`. Do not reach for renderer-side `webFrame` through `executeJavaScript` — `contextIsolation: true` blocks the `require` in the page.
 
 - [ ] **Step 3: Add the npm script**
 
