@@ -1,0 +1,62 @@
+# Terminal Canvas
+
+An infinite-canvas workspace for macOS where every node is a live terminal panel
+running a coding-agent CLI (`claude`, `codex`, or any shell command).
+Think Figma, but the objects are terminals.
+
+## Stack
+
+- **Electron + TypeScript + React + Vite** (via `electron-vite`)
+- **node-pty** for PTYs — owned exclusively by the main process
+- **xterm.js** (+ fit & WebGL addons) for rendering
+- **electron-builder** for the `.app` (M5)
+
+Electron rather than Tauri: `node-pty` + `xterm` is the only mature PTY path.
+Tauri would mean `portable-pty` and hand-rolled plumbing.
+
+## Prerequisites
+
+- macOS, Node 20+, Xcode Command Line Tools (`node-pty` builds natively)
+- `tmux` — required from M4 for session persistence: `brew install tmux`
+
+## Getting started
+
+```sh
+npm install      # postinstall runs electron-rebuild for node-pty
+npm run dev
+npm run typecheck
+```
+
+## Architecture
+
+The main process owns every PTY; the renderer never spawns a process.
+
+```
+renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill  -->  main
+renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
+```
+
+`src/shared/ipc-contract.ts` is the single source of truth for that surface and
+is imported by all three processes.
+
+### Two things that are non-obvious
+
+**Login-shell PATH.** macOS GUI apps are launched by launchd, so they inherit a
+bare PATH and none of your dotfile exports — `claude` and `codex` work in
+Terminal but come back "command not found" in the app. `src/main/shell-env.ts`
+resolves the real environment once at startup via `$SHELL -ilc env` and uses it
+for every PTY.
+
+**Output batching.** `pty:data` is flushed on a ~16ms timer rather than per
+read. An agent TUI repainting its frame emits thousands of reads per second;
+unbatched, that floods the renderer's event loop and the UI locks up.
+
+## Milestones
+
+| | Scope | Status |
+|---|---|---|
+| M1 | Electron shell, one hardcoded xterm panel on a real PTY | in review |
+| M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | |
+| M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | |
+| M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |
+| M5 | Presets, command palette, electron-builder packaging | |

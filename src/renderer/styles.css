@@ -1,0 +1,117 @@
+:root {
+  --bg: #0b0c11;
+  --panel-bg: #12131a;
+  --chrome-bg: #191b25;
+  --border: #262a38;
+  --text: #d8dae5;
+  --muted: #767d95;
+  --green: #9ece6a;
+  --red: #f7768e;
+  --blue: #7aa2f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.app {
+  height: 100%;
+  padding: 38px 16px 16px; /* clears the hiddenInset traffic lights */
+  display: flex;
+}
+
+/* A panel owns its own box. From M3 this same markup gets absolutely
+   positioned in canvas space and wrapped in a scale transform, so its
+   internal layout must not depend on being a flex child of the window. */
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.panel__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  background: var(--chrome-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  user-select: none;
+}
+
+.panel__title {
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+.panel__terminal {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 4px 8px 10px;
+}
+
+/* xterm sizes itself in cols/rows against this box; it must fill it exactly. */
+.panel__terminal .xterm,
+.panel__terminal .xterm-viewport,
+.panel__terminal .xterm-screen {
+  height: 100%;
+}
+
+.panel__terminal .xterm-viewport {
+  scrollbar-width: thin;
+}
+
+.badge {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.badge--pending {
+  color: var(--muted);
+}
+.badge--running {
+  color: var(--green);
+}
+.badge--exited {
+  color: var(--muted);
+}
+.badge--error {
+  color: var(--red);
+}

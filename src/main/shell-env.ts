@@ -1,0 +1,140 @@
+import { execFile } from 'node:child_process'
+import { accessSync, constants } from 'node:fs'
+import { userInfo } from 'node:os'
+
+/**
+ * macOS GUI apps are launched by launchd, not by a login shell, so they inherit
+ * a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin) and none of the user's dotfile
+ * exports. That is why `claude` and `codex` resolve fine in Terminal.app but
+ * come back "command not found" inside an Electron app.
+ *
+ * Fix: ask the real login shell what its environment looks like, once, at
+ * startup, and use that for every PTY we spawn.
+ */
+
+const DELIMITER = '__TERMINAL_CANVAS_ENV__'
+const TIMEOUT_MS = 5000
+
+let cached: Record<string, string> | null = null
+
+/** Vars that describe the probe shell itself and would mislead a child process. */
+const DROP = new Set(['_', 'SHLVL', 'PWD', 'OLDPWD', 'TMPDIR__PROBE'])
+
+function parseEnvBlock(stdout: string): Record<string, string> {
+  const start = stdout.indexOf(DELIMITER)
+  const end = stdout.lastIndexOf(DELIMITER)
+  if (start === -1 || end === -1 || start === end) return {}
+
+  const block = stdout.slice(start + DELIMITER.length, end)
+  const env: Record<string, string> = {}
+  let currentKey: string | null = null
+
+  // `env` output is KEY=VALUE per line, but values may themselves contain
+  // newlines. Any line without a leading KEY= is a continuation of the previous.
+  for (const line of block.split('\n')) {
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line)
+    if (match) {
+      currentKey = match[1]
+      env[currentKey] = match[2]
+    } else if (currentKey !== null) {
+      env[currentKey] += `\n${line}`
+    }
+  }
+
+  for (const key of DROP) delete env[key]
+  return env
+}
+
+function runLoginShell(shell: string): Promise<Record<string, string>> {
+  return new Promise((resolve, reject) => {
+    // -i (interactive) is what makes zsh read .zshrc, where most PATH edits live.
+    // -l (login) picks up .zprofile / .zlogin. -c runs our probe and exits.
+    const command = `echo ${DELIMITER}; env; echo ${DELIMITER}`
+
+    execFile(
+      shell,
+      ['-ilc', command],
+      {
+        timeout: TIMEOUT_MS,
+        maxBuffer: 1024 * 1024,
+        env: {
+          ...process.env,
+          // Stop oh-my-zsh / nvm style startup prompts from blocking the probe.
+          DISABLE_AUTO_UPDATE: 'true',
+          TERM: 'dumb'
+        }
+      },
+      (error, stdout) => {
+        const parsed = parseEnvBlock(stdout)
+        // A non-zero exit is common (a noisy rc file), but if we still got a
+        // valid delimited block with a PATH, the probe succeeded.
+        if (parsed.PATH) return resolve(parsed)
+        reject(error ?? new Error('login shell produced no PATH'))
+      }
+    )
+  })
+}
+
+/**
+ * Resolve the login-shell environment once and cache it.
+ * Safe to await repeatedly; only the first call spawns a shell.
+ */
+export async function resolveShellEnv(): Promise<Record<string, string>> {
+  if (cached) return cached
+
+  const shell = process.env.SHELL || userInfo().shell || '/bin/zsh'
+
+  try {
+    const resolved = await runLoginShell(shell)
+    cached = resolved
+    console.log(
+      `[shell-env] resolved from ${shell}: ${Object.keys(resolved).length} vars, ` +
+        `PATH has ${resolved.PATH.split(':').length} entries`
+    )
+  } catch (error) {
+    // Loud on purpose. A silent fallback here is exactly how you end up
+    // debugging "claude: command not found" for an hour.
+    console.error(
+      `[shell-env] FAILED to resolve login environment from ${shell}. ` +
+        `CLIs installed via dotfile PATH edits (claude, codex, nvm shims) will ` +
+        `NOT be found. Falling back to process.env.`,
+      error
+    )
+    cached = { ...process.env } as Record<string, string>
+  }
+
+  return cached
+}
+
+/**
+ * Build the env for a specific PTY: login shell env, then our terminal
+ * declarations, then any per-panel overrides.
+ */
+export function buildPtyEnv(
+  base: Record<string, string>,
+  overrides: Record<string, string> = {}
+): Record<string, string> {
+  return {
+    ...base,
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    ...overrides
+  }
+}
+
+/** Diagnostic used by the startup log to prove the PATH fix worked. */
+export function whichFromEnv(binary: string, env: Record<string, string>): string | null {
+  const path = env.PATH
+  if (!path) return null
+  for (const dir of path.split(':')) {
+    if (!dir) continue
+    const candidate = `${dir}/${binary}`
+    try {
+      accessSync(candidate, constants.X_OK)
+      return candidate
+    } catch {
+      /* keep looking */
+    }
+  }
+  return null
+}

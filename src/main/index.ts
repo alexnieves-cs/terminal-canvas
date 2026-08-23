@@ -1,0 +1,72 @@
+import { join } from 'node:path'
+import { BrowserWindow, app, shell } from 'electron'
+import { registerIpcHandlers } from './ipc'
+import { buildAppMenu } from './menu'
+import { PtyManager } from './pty-manager'
+import { resolveShellEnv, whichFromEnv } from './shell-env'
+
+let mainWindow: BrowserWindow | null = null
+
+// The manager needs a way to reach the live renderer; a getter rather than a
+// captured reference keeps it correct across window reloads.
+const ptyManager = new PtyManager(() => mainWindow?.webContents ?? null)
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    show: false,
+    backgroundColor: '#12131a',
+    titleBarStyle: 'hiddenInset',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      // node-pty lives in main, but the preload still needs `require('electron')`
+      // to reach contextBridge/ipcRenderer.
+      sandbox: false
+    }
+  })
+
+  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
+  // Never let a link navigate the shell window itself.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+  if (devServerUrl) {
+    void mainWindow.loadURL(devServerUrl)
+  } else {
+    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+app.whenReady().then(async () => {
+  // Resolve the login-shell environment before the first PTY can be requested,
+  // so no panel ever spawns with the bare launchd PATH.
+  const env = await resolveShellEnv()
+  for (const binary of ['claude', 'codex', 'git']) {
+    const found = whichFromEnv(binary, env)
+    console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
+  }
+
+  buildAppMenu()
+  registerIpcHandlers(ptyManager)
+  createWindow()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('before-quit', () => ptyManager.killAll())
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
