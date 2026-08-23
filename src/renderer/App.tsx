@@ -1,25 +1,20 @@
 import type { JSX } from 'react'
-import { TerminalPanel } from './components/TerminalPanel'
+import { Canvas } from './canvas/Canvas'
+import { PLACEHOLDER_PANELS } from './canvas/placeholder-panels'
 
 /**
- * M1 scope: exactly one hardcoded panel. No canvas, no panel list, no
- * persistence. The point is to prove the PTY path end to end before any
- * transform math exists to confuse the diagnosis.
+ * M2 scope: the canvas and its coordinate math, with dumb rectangles instead
+ * of terminals.
+ *
+ * TerminalPanel is intentionally not mounted for this milestone. M1 proved the
+ * PTY path with no transform math so a blank panel had one possible cause;
+ * this is the mirror image. M3 reunites them, and verify:pty* remains the
+ * proof that the PTY layer still works meanwhile.
  */
 export function App(): JSX.Element {
   return (
     <div className="app">
-      <TerminalPanel
-        panelId="m1-panel"
-        cwd="~"
-        command={SHELL_COMMAND}
-        args={[]}
-        title="shell"
-      />
+      <Canvas rects={PLACEHOLDER_PANELS} />
     </div>
   )
 }
-
-// $SHELL itself, not tmux. tmux backing arrives in M4; keeping it out of M1
-// means a PTY bug cannot hide behind a tmux bug.
-const SHELL_COMMAND = '/bin/zsh'

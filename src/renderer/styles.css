@@ -30,8 +30,49 @@ body {
 
 .app {
   height: 100%;
-  padding: 38px 16px 16px; /* clears the hiddenInset traffic lights */
+  padding: 38px 0 0; /* clears the hiddenInset traffic lights */
+}
+
+/* The fixed viewport. Clips the world and catches every canvas event. */
+.canvas {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 1px 1px, #1c2030 1px, transparent 0) 0 0 / 32px 32px;
+  cursor: default;
+}
+
+/* The single transformed layer. transform-origin 0 0 is load-bearing: it is
+   what makes world point w land at x + k*w, matching viewport.ts. */
+.world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.placeholder-panel {
+  position: absolute;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  user-select: none;
+}
+
+.placeholder-panel--selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+
+.placeholder-panel__label {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 
 /* A panel owns its own box. From M3 this same markup gets absolutely
