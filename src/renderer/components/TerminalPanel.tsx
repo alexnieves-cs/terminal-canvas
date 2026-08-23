@@ -80,6 +80,17 @@ function TerminalPanelImpl({
           onMouseDown={(event) => {
             event.stopPropagation()
             onFocus(session.id)
+            // The interaction gate is two complementary halves (see the
+            // matching comment on .panel__slot--blocked in styles.css): CSS
+            // pointer-events:none stops xterm's own mousedown listener from
+            // ever seeing this click, and this preventDefault() stops the
+            // browser's own default mousedown action from clearing focus
+            // back to <body> once our handler above already focused the
+            // panel via onFocus. Removing either half breaks the gate in a
+            // different direction: drop pointer-events and xterm's listener
+            // focuses the wrong cell; drop preventDefault and a gated click
+            // focuses nothing, so typing has nowhere to go.
+            if (!interactive) event.preventDefault()
           }}
         />
       ) : (
