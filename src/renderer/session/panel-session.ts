@@ -37,6 +37,10 @@ export interface SessionHandle {
   tail(lines: number): string[]
   focus(): void
   onInput(listener: (data: string) => void): void
+  /** The current selection, or '' if there is none. Backs menu-driven Cmd+C. */
+  getSelection(): string
+  /** Backs menu-driven Cmd+V. Not a raw pty.write: see session-factory.ts. */
+  paste(data: string): void
   dispose(): void
 }
 

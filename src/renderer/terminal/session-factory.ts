@@ -63,6 +63,17 @@ function createHandle(id: PanelId): SessionHandle {
     onInput(listener) {
       ensure().term.onData(listener)
     },
+    getSelection() {
+      return handles?.term.getSelection() ?? ''
+    },
+    paste(data) {
+      // term.paste, not a raw pty.write: xterm wraps the payload in
+      // bracketed-paste markers when the app has enabled them, and
+      // normalises CRLF/LF to CR. Writing raw makes every newline in a
+      // multi-line prompt submit as a separate Enter, so pasting a prompt
+      // into `claude` fires off several partial prompts instead of one.
+      ensure().term.paste(data)
+    },
     dispose() {
       if (handles) disposeTerminal(handles)
       handles = null

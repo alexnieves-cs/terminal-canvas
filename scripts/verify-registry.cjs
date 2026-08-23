@@ -68,6 +68,8 @@ function fakeFactory() {
         tail() { return state.written.slice(-3) },
         focus() { state.focused = true },
         onInput(listener) { state.inputListener = listener },
+        getSelection() { return state.selection ?? '' },
+        paste(data) { state.pasted = data },
         dispose() { state.disposed = true }
       }
     }

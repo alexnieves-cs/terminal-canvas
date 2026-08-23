@@ -43,10 +43,45 @@ export function Canvas(): JSX.Element {
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
-  // than loose in the render body so it re-runs only when the panel list does.
+  // than an effect: ensure() runs synchronously during render (so a session
+  // exists by the time this same render tries to look one up below) and
+  // deliberately never calls bump() — notifying a useSyncExternalStore
+  // subscriber mid-render is what React's "update while rendering another
+  // component" warning is about. The panel list living in React state is
+  // already what triggers this render, so nothing is lost by not bumping.
   useMemo(() => {
     for (const panel of panels) registry.ensure(panel.rect.id, panel.spec)
   }, [panels])
+
+  // Menu-driven clipboard. The old per-panel TerminalPanel used to own this
+  // subscription directly against xterm; now that TerminalPanel is a dumb
+  // view, ONE subscription here routes to whichever session is focused,
+  // rather than each panel subscribing and every panel but one discarding
+  // the event. focusedIdRef mirrors state into a ref (the same pattern as
+  // useViewport's viewportRef) so the listener reads the current focus
+  // without resubscribing. (Cmd+C/Cmd+V arrive as main-side menu
+  // accelerators via edit:copy/edit:paste, not as a canvas keydown, so
+  // they are unrelated to useViewport's "every shortcut requires Cmd" rule
+  // for bare keys reaching the PTY.)
+  const focusedIdRef = useRef(focusedId)
+  focusedIdRef.current = focusedId
+  useEffect(() => {
+    const offCopy = window.canvas.edit.onCopy(() => {
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      const selection = session?.handle.getSelection()
+      if (selection) void navigator.clipboard.writeText(selection)
+    })
+    const offPaste = window.canvas.edit.onPaste((text) => {
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      if (text) session?.handle.paste(text)
+    })
+    return () => {
+      offCopy()
+      offPaste()
+    }
+  }, [])
 
   // Stable identities: these go into TerminalPanel's effect deps, and a fresh
   // arrow each render would tear the terminal down and reopen it every frame.
@@ -122,6 +157,7 @@ export function Canvas(): JSX.Element {
             <TerminalPanel
               key={panel.rect.id}
               session={session}
+              version={version}
               rect={panel.rect}
               selected={panel.rect.id === selectedId}
               interactive={interactive}

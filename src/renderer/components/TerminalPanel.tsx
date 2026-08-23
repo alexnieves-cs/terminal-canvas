@@ -4,6 +4,20 @@ import type { WorldRect } from '@renderer/canvas/viewport'
 
 export interface TerminalPanelProps {
   session: PanelSession
+  /**
+   * The registry's version counter, unused directly in this component's body.
+   * It exists purely so `memo`'s shallow prop comparison can see that the
+   * session changed: the registry mutates `session` (and everything it owns)
+   * IN PLACE and `registry.get(id)` returns the same object reference
+   * forever, so `session` alone is always "equal" to memo, no matter how
+   * many times its tier/status/spawned flags flip underneath it. Passing the
+   * version scalar down forces a re-render exactly when one of those fields
+   * actually changed — and no more often, since version only bumps on
+   * status/tier/focus/exit events (never on 16ms-batched PTY data, never on
+   * pointer moves), which is what keeps the memo doing its job of blocking
+   * the 60Hz pan/zoom cascade.
+   */
+  version: number
   rect: WorldRect
   selected: boolean
   interactive: boolean
@@ -112,5 +126,10 @@ function StatusBadge({ status }: { status: PanelStatus }): JSX.Element {
 
 // Memoized for the reason PlaceholderPanel already documented: Canvas
 // re-renders on every mousemove for the HUD cursor, and a 60Hz cascade into
-// panels backed by WebGL contexts is a frame-rate cliff.
+// panels backed by WebGL contexts is a frame-rate cliff. The default shallow
+// comparator is sound specifically because `version` is in the props object
+// (see the doc comment on TerminalPanelProps.version above) even though the
+// component body never reads it — without it every prop here is identity- or
+// value-stable across a registry mutation, and memo would never let a tier
+// or status change through.
 export const TerminalPanel = memo(TerminalPanelImpl)

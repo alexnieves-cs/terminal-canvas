@@ -59,13 +59,15 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #262a3d;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #12131a;
+  background: var(--panel-bg);
+  user-select: none;
 }
 
 .panel--selected {
-  border-color: #7aa2f7;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
 }
 
 .panel__chrome {
@@ -85,9 +87,22 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* The terminal's retained host is appended here; it must fill the slot so
-   fit() computes the same grid every time the panel is promoted. */
+/* The terminal's retained host (.panel__terminal, created once in
+   session-factory.ts and reused forever) is appended into this slot; the
+   slot must give it a real height so fit() computes the same grid every
+   time the panel is promoted. flex here, not just min-height:0 on the slot
+   itself: a percentage height on a descendant only resolves against an
+   ancestor with an explicit (not auto) height, so the host also needs to be
+   a flex ITEM of this box, not merely a block child of it — otherwise the
+   host's height is auto, FitAddon measures its own auto-sized parent, and
+   fit() is circular and returns roughly the row count it already had. */
 .panel__slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.panel__slot > .panel__terminal {
   flex: 1;
   min-height: 0;
 }
@@ -111,7 +126,7 @@ body {
   font-family: "SF Mono", Menlo, monospace;
   font-size: 13px;
   line-height: 1.35;
-  color: #6f7690;
+  color: var(--muted);
 }
 
 .panel__card-line {
@@ -121,7 +136,7 @@ body {
 }
 
 .panel__card-idle {
-  color: #4a4f66;
+  color: var(--muted);
   font-style: italic;
 }
 
