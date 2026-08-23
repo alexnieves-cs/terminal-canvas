@@ -164,6 +164,50 @@ const POINTS = [
     empty.x === 0 && empty.y === 0 && empty.scale === 1, JSON.stringify(empty))
 }
 
+// A wheel event with defaults, so each case states only what it varies.
+const wheel = (over) => ({
+  deltaX: 0, deltaY: 0, deltaMode: 0,
+  ctrlKey: false, metaKey: false, shiftKey: false, ...over
+})
+
+// 8. Gesture disambiguation. On macOS a pinch arrives as a wheel event with a
+// synthetic ctrlKey — no key is actually held — and it is the only signal
+// separating pinch from two-finger scroll.
+{
+  const pinch = V.normalizeWheel(wheel({ deltaY: -30, ctrlKey: true }))
+  const cmd = V.normalizeWheel(wheel({ deltaY: -30, metaKey: true }))
+  const scroll = V.normalizeWheel(wheel({ deltaX: 12, deltaY: -30 }))
+  const shift = V.normalizeWheel(wheel({ deltaY: -30, shiftKey: true }))
+
+  ok('8 ctrlKey wheel is a zoom', pinch.kind === 'zoom' && pinch.factor > 1, JSON.stringify(pinch))
+  ok('8b metaKey wheel is a zoom', cmd.kind === 'zoom' && cmd.factor > 1, JSON.stringify(cmd))
+  ok('8c bare wheel pans opposite the delta',
+    scroll.kind === 'pan' && scroll.dx === -12 && scroll.dy === 30, JSON.stringify(scroll))
+  ok('8d shift wheel pans horizontally',
+    shift.kind === 'pan' && shift.dx === 30 && shift.dy === 0, JSON.stringify(shift))
+}
+
+// 9. deltaMode normalization. A mouse wheel reports lines, not pixels; without
+// the multiplier a mouse user gets a canvas that barely moves.
+{
+  const lines = V.normalizeWheel(wheel({ deltaY: 3, deltaMode: 1 }))
+  const pages = V.normalizeWheel(wheel({ deltaY: 1, deltaMode: 2 }))
+  ok('9 deltaMode 1 (lines) scales to pixels',
+    lines.kind === 'pan' && lines.dy === -3 * V.LINE_HEIGHT_PX, JSON.stringify(lines))
+  ok('9b deltaMode 2 (pages) scales to pixels',
+    pages.kind === 'pan' && pages.dy === -V.PAGE_HEIGHT_PX, JSON.stringify(pages))
+}
+
+// 10. Zoom must be exponential so gestures compose: momentum scrolling
+// delivers a long tail of shrinking deltas, and a linear factor would land at
+// a different zoom than the same gesture without inertia.
+{
+  const half = V.normalizeWheel(wheel({ deltaY: -25, ctrlKey: true })).factor
+  const whole = V.normalizeWheel(wheel({ deltaY: -50, ctrlKey: true })).factor
+  ok('10 two half-pinches compose to one whole pinch',
+    near(half * half, whole), `${half} * ${half} vs ${whole}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
