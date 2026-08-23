@@ -30,6 +30,8 @@ npm run verify:pty           # node-pty behaviour, under Electron's ABI
 npm run verify:pty-manager   # the real PtyManager: session lifecycle, batching
 npm run verify:window        # renderer teardown reaches the PTY layer
 npm run verify:ipc           # every contract channel has a handler
+npm run verify:viewport      # canvas coordinate math, plain node
+npm run verify:canvas        # real input into the built renderer
 ```
 
 `node-pty` is a native module built for Electron's ABI, so the checks run under
@@ -60,7 +62,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
 `src/shared/ipc-contract.ts` is the single source of truth for that surface and
 is imported by all three processes.
 
-### Three things that are non-obvious
+### Four things that are non-obvious
 
 **Login-shell PATH.** macOS GUI apps are launched by launchd, so they inherit a
 bare PATH and none of your dotfile exports — `claude` and `codex` work in
@@ -82,12 +84,27 @@ kills a window's sessions on navigation or close. Surviving a reload instead of
 dying is M4's job, once tmux backs the session; `pty:list` is the channel a
 fresh renderer will reconcile against.
 
+**One transform, not N layouts.** The canvas is a single `.world` element
+carrying `transform: translate(...) scale(...)`; panels are positioned once in
+world coordinates and never recomputed. This is not only a performance choice.
+A CSS `scale()` on an ancestor is invisible to `getComputedStyle` and
+`ResizeObserver` — which are exactly what xterm's `FitAddon` consults — so
+zooming cannot change a panel's cols/rows. The alternative, computing each
+panel's pixel size per frame, would reflow the running shell on every zoom
+gesture.
+
+The same transform-blindness is why pointer coordinates need explicit
+correction: `getBoundingClientRect()` is transform-aware while
+`dimensions.css.cell.width` is not. `screenToWorld` in
+`src/renderer/canvas/viewport.ts` is the function that corrects them, and M3
+feeds its output to xterm.
+
 ## Milestones
 
 | | Scope | Status |
 |---|---|---|
 | M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ reviewed |
-| M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | |
+| M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | ✅ in review |
 | M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | |
 | M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |
 | M5 | Presets, command palette, electron-builder packaging | |
