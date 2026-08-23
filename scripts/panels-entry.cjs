@@ -5,5 +5,6 @@
    have no handler and every renderer call against window.canvas.pty rejects. */
 module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
-  PtyManager: require('../src/main/pty-manager').PtyManager
+  PtyManager: require('../src/main/pty-manager').PtyManager,
+  resolveShellEnv: require('../src/main/shell-env').resolveShellEnv
 }
