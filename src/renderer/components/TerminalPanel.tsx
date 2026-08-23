@@ -83,7 +83,12 @@ export function TerminalPanel({
       )
       unsubscribes.push(
         window.canvas.edit.onPaste((text) => {
-          if (text) void window.canvas.pty.write({ panelId, data: text })
+          // term.paste, not a raw pty.write: xterm wraps the payload in
+          // bracketed-paste markers when the app has enabled them, and
+          // normalises CRLF/LF to CR. Writing raw makes every newline in a
+          // multi-line prompt submit as a separate Enter, so pasting a prompt
+          // into `claude` fires off several partial prompts instead of one.
+          if (text) term.paste(text)
         })
       )
 

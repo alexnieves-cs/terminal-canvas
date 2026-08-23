@@ -23,4 +23,6 @@ export function registerIpcHandlers(ptyManager: PtyManager): void {
   ipcMain.handle(IPC.PTY_KILL, (_event, panelId: PanelId) => {
     ptyManager.kill(panelId)
   })
+
+  ipcMain.handle(IPC.PTY_LIST, () => ptyManager.list())
 }

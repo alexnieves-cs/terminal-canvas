@@ -14,7 +14,11 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-rebuild -f -w node-pty",
-    "verify:pty": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty.cjs"
+    "verify:pty": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty.cjs",
+    "verify:pty-manager": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty-manager.cjs",
+    "verify:window": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-window-lifecycle.cjs",
+    "verify:ipc": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-ipc-surface.cjs",
+    "verify": "npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc"
   },
   "dependencies": {
     "node-pty": "1.1.0"

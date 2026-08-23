@@ -3,6 +3,7 @@ import { BrowserWindow, app, shell } from 'electron'
 import { registerIpcHandlers } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
+import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 
 let mainWindow: BrowserWindow | null = null
@@ -32,6 +33,11 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Cmd+R and Cmd+W destroy the renderer without running React cleanup, so no
+  // pty:kill is ever sent. Without this the surviving PTY makes the next
+  // pty:create throw "already has a live PTY" and the panel is unrecoverable.
+  attachPtyLifecycle(mainWindow, () => ptyManager.killAll())
 
   // Never let a link navigate the shell window itself.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

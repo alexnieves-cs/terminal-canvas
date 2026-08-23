@@ -37,8 +37,8 @@ interface Session {
   /** Pending output chunks awaiting the next flush. */
   buffer: string[]
   flushTimer: NodeJS.Timeout | null
-  /** Set once exit has been reported, to guard against double-delivery. */
-  exited: boolean
+  /** Set by kill(), so the resulting exit is not reported as news. */
+  killed: boolean
   command: string
   cwd: string
 }
@@ -74,7 +74,7 @@ export class PtyManager {
       proc,
       buffer: [],
       flushTimer: null,
-      exited: false,
+      killed: false,
       command: spec.command,
       cwd
     }
@@ -85,9 +85,13 @@ export class PtyManager {
       // Flush whatever is pending BEFORE announcing exit, otherwise the last
       // lines of output (often the error that explains the exit) are dropped.
       this.flush(session)
-      if (session.exited) return
-      session.exited = true
-      this.sessions.delete(spec.panelId)
+      // The OS process exits some milliseconds after kill() returned, by which
+      // time this panelId may already have been recreated. Evicting by key
+      // alone would unhook that new session and orphan its PTY, so only remove
+      // the entry if it is still this exact session.
+      if (this.sessions.get(spec.panelId) === session) this.sessions.delete(spec.panelId)
+      // An exit we asked for is not news the panel needs to paint.
+      if (session.killed) return
       this.send(IPC_EVENTS.PTY_EXIT, { panelId: spec.panelId, exitCode, signal })
     })
 
@@ -99,8 +103,25 @@ export class PtyManager {
     return { panelId: spec.panelId, pid: proc.pid, command: spec.command, cwd }
   }
 
-  write(panelId: PanelId, data: string): void {
-    this.sessions.get(panelId)?.proc.write(data)
+  /**
+   * Every live session. The renderer uses this to reconcile after a reload
+   * rather than blindly creating a panel that may already exist.
+   */
+  list(): PtyCreateResult[] {
+    return [...this.sessions.values()].map((s) => ({
+      panelId: s.panelId,
+      pid: s.proc.pid,
+      command: s.command,
+      cwd: s.cwd
+    }))
+  }
+
+  /** Returns false when no live session owns this panelId. */
+  write(panelId: PanelId, data: string): boolean {
+    const session = this.sessions.get(panelId)
+    if (!session) return false
+    session.proc.write(data)
+    return true
   }
 
   resize(panelId: PanelId, cols: number, rows: number): void {
@@ -119,6 +140,7 @@ export class PtyManager {
   kill(panelId: PanelId): void {
     const session = this.sessions.get(panelId)
     if (!session) return
+    session.killed = true
     if (session.flushTimer) clearTimeout(session.flushTimer)
     try {
       session.proc.kill()

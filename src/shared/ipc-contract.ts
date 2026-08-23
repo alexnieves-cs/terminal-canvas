@@ -19,7 +19,9 @@ export const IPC = {
   PTY_CREATE: 'pty:create',
   PTY_WRITE: 'pty:write',
   PTY_RESIZE: 'pty:resize',
-  PTY_KILL: 'pty:kill'
+  PTY_KILL: 'pty:kill',
+  /** Live sessions, so a fresh renderer can reconcile instead of guessing. */
+  PTY_LIST: 'pty:list'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -38,6 +40,12 @@ export interface CanvasBridge {
     write(req: PtyWriteRequest): Promise<void>
     resize(req: PtyResizeRequest): Promise<void>
     kill(panelId: PanelId): Promise<void>
+    /**
+     * Sessions that survived whatever destroyed the previous renderer. A page
+     * reload does not run React cleanup, so the renderer cannot assume its
+     * panels are fresh.
+     */
+    list(): Promise<PtyCreateResult[]>
     /** Each subscribe returns its own unsubscribe, so React effects clean up. */
     onData(listener: (chunk: PtyDataChunk) => void): () => void
     onExit(listener: (info: PtyExitInfo) => void): () => void

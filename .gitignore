@@ -7,3 +7,6 @@ release/
 .vite/
 .env
 .env.local
+
+# TypeScript incremental build state, not source.
+*.tsbuildinfo

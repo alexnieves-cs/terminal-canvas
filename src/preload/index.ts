@@ -26,6 +26,7 @@ const bridge: CanvasBridge = {
     write: (req: PtyWriteRequest) => ipcRenderer.invoke(IPC.PTY_WRITE, req),
     resize: (req: PtyResizeRequest) => ipcRenderer.invoke(IPC.PTY_RESIZE, req),
     kill: (panelId: PanelId) => ipcRenderer.invoke(IPC.PTY_KILL, panelId),
+    list: () => ipcRenderer.invoke(IPC.PTY_LIST),
     onData: (listener) => subscribe<PtyDataChunk>(IPC_EVENTS.PTY_DATA, listener),
     onExit: (listener) => subscribe<PtyExitInfo>(IPC_EVENTS.PTY_EXIT, listener)
   },

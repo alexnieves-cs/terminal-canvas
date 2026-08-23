@@ -25,8 +25,16 @@ Tauri would mean `portable-pty` and hand-rolled plumbing.
 npm install       # postinstall runs electron-rebuild for node-pty
 npm run dev
 npm run typecheck
-npm run verify:pty   # headless PTY-layer checks, run under Electron's ABI
+npm run verify       # every check below
+npm run verify:pty           # node-pty behaviour, under Electron's ABI
+npm run verify:pty-manager   # the real PtyManager: session lifecycle, batching
+npm run verify:window        # renderer teardown reaches the PTY layer
+npm run verify:ipc           # every contract channel has a handler
 ```
+
+`node-pty` is a native module built for Electron's ABI, so the checks run under
+the Electron binary rather than plain `node`. They need no display: the two
+that require a real Electron runtime open a window with `show: false`.
 
 ### If `npm run dev` misbehaves
 
@@ -45,13 +53,14 @@ The main process owns every PTY; the renderer never spawns a process.
 
 ```
 renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill  -->  main
+                       pty:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
 ```
 
 `src/shared/ipc-contract.ts` is the single source of truth for that surface and
 is imported by all three processes.
 
-### Two things that are non-obvious
+### Three things that are non-obvious
 
 **Login-shell PATH.** macOS GUI apps are launched by launchd, so they inherit a
 bare PATH and none of your dotfile exports — `claude` and `codex` work in
@@ -65,11 +74,19 @@ unbatched, that floods the renderer's event loop and the UI locks up. Measured
 on 16.4 MB of `find` output: 33,198 PTY reads collapse to 105 IPC messages, a
 316x reduction.
 
+**Sessions die with their renderer.** Cmd+R and Cmd+W destroy the page without
+running React cleanup, so the renderer never sends `pty:kill`. Left alone, the
+old PTY survives and the next `pty:create` throws "already has a live PTY" — a
+dead panel with no recovery short of quitting. `src/main/window-lifecycle.ts`
+kills a window's sessions on navigation or close. Surviving a reload instead of
+dying is M4's job, once tmux backs the session; `pty:list` is the channel a
+fresh renderer will reconcile against.
+
 ## Milestones
 
 | | Scope | Status |
 |---|---|---|
-| M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ in review |
+| M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ reviewed |
 | M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | |
 | M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | |
 | M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |

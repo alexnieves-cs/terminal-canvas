@@ -1,0 +1,87 @@
+/* Verifies that a renderer teardown actually reaches the PTY layer.
+   Run with: npm run verify:window
+
+   Runs under real Electron (not ELECTRON_RUN_AS_NODE) because the whole point
+   is which webContents/window events Electron genuinely fires. The window is
+   never shown. */
+const { buildSync } = require('esbuild')
+const { join } = require('node:path')
+const { app, BrowserWindow } = require('electron')
+
+const OUT = join(__dirname, '..', 'out', 'verify', 'window-lifecycle.cjs')
+buildSync({
+  entryPoints: [join(__dirname, '..', 'src', 'main', 'window-lifecycle.ts')],
+  outfile: OUT,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['electron']
+})
+const { attachPtyLifecycle } = require(OUT)
+
+const results = []
+const ok = (n, pass, detail) => {
+  results.push({ n, pass, detail })
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// A real file, not a data: URL — reloading a data: URL fails with ERR_FAILED.
+const PAGE = join(__dirname, '..', 'out', 'verify', 'probe.html')
+require('node:fs').mkdirSync(join(__dirname, '..', 'out', 'verify'), { recursive: true })
+require('node:fs').writeFileSync(PAGE, '<!doctype html><title>probe</title><p>probe')
+
+const finish = () => {
+  console.log('\n' + '='.repeat(60))
+  const failed = results.filter((r) => !r.pass)
+  console.log(`${results.length - failed.length}/${results.length} passed`)
+  if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
+  app.exit(failed.length ? 1 : 0)
+}
+
+// Electron's default window-all-closed handler quits the app; test 2 closes
+// its window on purpose, so suppress that and control exit ourselves.
+app.on('window-all-closed', () => {})
+
+app.whenReady().then(async () => {
+  // 1. Cmd+R destroys the renderer without running React cleanup, so no
+  // pty:kill is ever sent. The PTY layer must hear about it some other way.
+  {
+    let calls = 0
+    const win = new BrowserWindow({ show: false })
+    attachPtyLifecycle(win, () => calls++)
+    await win.loadFile(PAGE).catch(() => {})
+    calls = 0
+    win.webContents.reload()
+    await sleep(1200)
+    ok('1 reload notifies the pty layer', calls > 0, `${calls} call(s)`)
+    win.destroy()
+  }
+
+  // 2. Cmd+W then dock-icon reopen: the closed window's sessions must die,
+  // otherwise the next window cannot recreate the same panelId.
+  {
+    let calls = 0
+    const win = new BrowserWindow({ show: false })
+    attachPtyLifecycle(win, () => calls++)
+    await win.loadFile(PAGE).catch(() => {})
+    calls = 0
+    win.close()
+    await sleep(800)
+    ok('2 window close notifies the pty layer', calls > 0, `${calls} call(s)`)
+  }
+
+  // 3. Guard against a handler that fires so eagerly it kills sessions the
+  // live page just created: a settled page must produce no notifications.
+  {
+    let calls = 0
+    const win = new BrowserWindow({ show: false })
+    attachPtyLifecycle(win, () => calls++)
+    await win.loadFile(PAGE).catch(() => {})
+    calls = 0
+    await sleep(1200)
+    ok('3 an idle settled page notifies nothing', calls === 0, `${calls} call(s)`)
+    win.destroy()
+  }
+
+  finish()
+})
