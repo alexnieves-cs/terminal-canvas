@@ -48,6 +48,7 @@ export function useViewport(
       // Cmd is required for every canvas shortcut. Agent TUIs claim essentially
       // every bare key, so from M3 a bare keystroke must always reach the PTY.
       if (!event.metaKey) return
+      if (event.ctrlKey || event.altKey) return
 
       const host = hostRef.current
       if (!host) return
@@ -58,7 +59,7 @@ export function useViewport(
       switch (event.key) {
         case '0':
           event.preventDefault()
-          setViewport({ x: 0, y: 0, scale: 1 })
+          setViewport(INITIAL)
           break
         case '1':
           event.preventDefault()

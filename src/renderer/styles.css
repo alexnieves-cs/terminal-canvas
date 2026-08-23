@@ -79,6 +79,9 @@ body {
    positioned in canvas space and wrapped in a scale transform, so its
    internal layout must not depend on being a flex child of the window. */
 .panel {
+  /* flex: 1 assumes a flex parent; .app no longer sets display: flex here.
+     M3 must provide a flex (or otherwise sizing) parent when it mounts
+     TerminalPanel inside a canvas panel. */
   flex: 1;
   display: flex;
   flex-direction: column;

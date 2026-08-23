@@ -77,7 +77,6 @@ export function panBy(vp: Viewport, dx: number, dy: number): Viewport {
 export function hitTest(rects: WorldRect[], world: Point): string | null {
   for (let i = rects.length - 1; i >= 0; i--) {
     const r = rects[i]
-    if (!r) continue
     if (world.x >= r.x && world.x < r.x + r.w && world.y >= r.y && world.y < r.y + r.h) {
       return r.id
     }

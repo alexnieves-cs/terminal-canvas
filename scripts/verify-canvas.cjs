@@ -28,6 +28,15 @@ const readTransform = (wc) =>
     `getComputedStyle(document.querySelector('.world')).transform`
   ).then(parseMatrix)
 
+// The .canvas host is not flush with the window: .app carries a top padding
+// to clear the hiddenInset traffic lights, so sendInputEvent's window-space
+// x/y is not the same point as the local canvas coordinates zoomAt actually
+// anchors on. Read the host's real offset instead of assuming zero.
+const readCanvasOffset = (wc) =>
+  wc.executeJavaScript(
+    `(() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return { left: r.left, top: r.top } })()`
+  )
+
 app.on('window-all-closed', () => {})
 
 app.whenReady().then(async () => {
@@ -54,7 +63,7 @@ app.whenReady().then(async () => {
   await sleep(400)
   const panned = await readTransform(wc)
   ok('2 a bare wheel pans without scaling',
-    panned && panned.scale === before.scale && panned.y !== before.y,
+    panned && panned.scale === before?.scale && panned.y !== before?.y,
     `scale ${before?.scale} -> ${panned?.scale}, y ${before?.y} -> ${panned?.y}`)
 
   // A pinch: ctrl held. Must scale the canvas, and must NOT page-zoom.
@@ -73,11 +82,27 @@ app.whenReady().then(async () => {
     zoomed && zoomed.scale > panned.scale,
     `scale ${panned?.scale} -> ${zoomed?.scale}`)
 
-  // webContents exposes the page zoom directly in main; no need to reach for
-  // renderer-side webFrame through executeJavaScript, which contextIsolation
-  // would block anyway.
-  const pageZoom = wc.getZoomLevel()
-  ok('4 Chromium page zoom is untouched by the pinch', pageZoom === 0, `zoomLevel ${pageZoom}`)
+  // The world point under the anchor must not move. This is the property
+  // zoomAt exists to guarantee, and the one that silently walks the canvas
+  // somewhere unexpected when it is wrong. Electron does not page-zoom on a
+  // synthetic ctrl+wheel at all, so asserting getZoomLevel() === 0 here would
+  // pass no matter what the renderer did.
+  // (600, 400) is the sendInputEvent point in window coordinates; convert to
+  // local canvas coordinates via the host's actual on-screen offset before
+  // comparing against the CSS-transform matrices, which are already local.
+  const offset = await readCanvasOffset(wc)
+  const ANCHOR = { x: 600 - offset.left, y: 400 - offset.top }
+  const worldBefore = {
+    x: (ANCHOR.x - panned.x) / panned.scale,
+    y: (ANCHOR.y - panned.y) / panned.scale
+  }
+  const worldAfter = {
+    x: (ANCHOR.x - zoomed.x) / zoomed.scale,
+    y: (ANCHOR.y - zoomed.y) / zoomed.scale
+  }
+  const drift = Math.max(Math.abs(worldAfter.x - worldBefore.x), Math.abs(worldAfter.y - worldBefore.y))
+  ok('4 the world point under the zoom anchor does not move', drift < 0.5,
+    `drift ${drift.toFixed(4)}px at world ${worldBefore.x.toFixed(1)},${worldBefore.y.toFixed(1)}`)
 
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)

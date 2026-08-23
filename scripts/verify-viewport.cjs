@@ -202,10 +202,24 @@ const wheel = (over) => ({
 // delivers a long tail of shrinking deltas, and a linear factor would land at
 // a different zoom than the same gesture without inertia.
 {
-  const half = V.normalizeWheel(wheel({ deltaY: -25, ctrlKey: true })).factor
-  const whole = V.normalizeWheel(wheel({ deltaY: -50, ctrlKey: true })).factor
+  const half = V.normalizeWheel(wheel({ deltaY: -10, ctrlKey: true })).factor
+  const whole = V.normalizeWheel(wheel({ deltaY: -20, ctrlKey: true })).factor
   ok('10 two half-pinches compose to one whole pinch',
     near(half * half, whole), `${half} * ${half} vs ${whole}`)
+}
+
+// 11. A single mouse-wheel notch (~120px) must not slam into the scale limit.
+// Trackpad pinches are 1-5px per event; unclamped, one notch is a 3.3x jump.
+{
+  const notch = V.normalizeWheel(wheel({ deltaY: -120, ctrlKey: true }))
+  const ceiling = Math.exp(V.MAX_ZOOM_DELTA * V.ZOOM_SENSITIVITY)
+  const pinch = V.normalizeWheel(wheel({ deltaY: -3, ctrlKey: true }))
+  ok('11 a mouse-wheel notch is clamped to a usable step',
+    notch.kind === 'zoom' && notch.factor > 1 && notch.factor <= ceiling + EPS,
+    `notch factor ${notch.factor.toFixed(4)} vs ceiling ${ceiling.toFixed(4)}`)
+  ok('11b a trackpad pinch delta is left untouched by the clamp',
+    pinch.kind === 'zoom' && near(pinch.factor, Math.exp(3 * V.ZOOM_SENSITIVITY)),
+    `pinch factor ${pinch.factor}`)
 }
 
 console.log('\n' + '='.repeat(60))

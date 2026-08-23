@@ -10,3 +10,6 @@ release/
 
 # TypeScript incremental build state, not source.
 *.tsbuildinfo
+
+# Stray backup files left by patch tools.
+*.orig

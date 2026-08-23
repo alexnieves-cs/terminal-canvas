@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { memo, type JSX } from 'react'
 import type { WorldRect } from './viewport'
 
 export interface PlaceholderPanelProps {
@@ -11,7 +11,7 @@ export interface PlaceholderPanelProps {
  * once in world coordinates and never recomputed: pan and zoom only rewrite
  * the parent .world transform.
  */
-export function PlaceholderPanel({ rect, selected }: PlaceholderPanelProps): JSX.Element {
+function PlaceholderPanelImpl({ rect, selected }: PlaceholderPanelProps): JSX.Element {
   return (
     <div
       className={`placeholder-panel${selected ? ' placeholder-panel--selected' : ''}`}
@@ -21,3 +21,11 @@ export function PlaceholderPanel({ rect, selected }: PlaceholderPanelProps): JSX
     </div>
   )
 }
+
+// Memoized so a parent re-render (e.g. Canvas's cursor state on every
+// mousemove) does not cascade into every panel. Harmless for these dumb
+// divs, but M3 replaces them with xterm-hosting panels backed by WebGL
+// contexts, where a 60Hz re-render cascade becomes a frame-rate cliff.
+// Props are already stable (a module-constant rect plus a boolean), so the
+// default shallow comparison is sound.
+export const PlaceholderPanel = memo(PlaceholderPanelImpl)
