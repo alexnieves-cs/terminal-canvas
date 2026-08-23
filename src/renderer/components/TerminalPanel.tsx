@@ -75,16 +75,11 @@ function TerminalPanelImpl({
 
       {live ? (
         <div
-          className="panel__slot"
+          className={`panel__slot${interactive ? '' : ' panel__slot--blocked'}`}
           ref={slotRef}
           onMouseDown={(event) => {
             event.stopPropagation()
             onFocus(session.id)
-            // Outside the interaction band xterm's own coordinate math is off
-            // by a factor of the zoom, so the click would land on the wrong
-            // cell. Focus the panel and stop; typing still works, and the
-            // correction lands in M4 with drag and resize.
-            if (!interactive) event.preventDefault()
           }}
         />
       ) : (

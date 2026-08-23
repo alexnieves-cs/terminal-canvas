@@ -107,6 +107,21 @@ body {
   min-height: 0;
 }
 
+/* Outside the interaction band (see Canvas.tsx's INTERACT_MIN_SCALE/MAX_SCALE)
+   xterm's own coordinate math is off by a factor of the zoom, so a click
+   should focus the panel without reaching xterm's input layer.
+   preventDefault() cannot do that: xterm binds its own mousedown listener
+   directly on this descendant and imperatively focuses its hidden textarea
+   as part of handling it, and that inner listener runs and completes before
+   this ancestor's onMouseDown ever fires, let alone calls preventDefault().
+   pointer-events:none stops the event from reaching xterm's listener at all,
+   so it never gets the chance to steal focus; the mousedown still lands on
+   .panel__slot itself, which still runs onFocus and lets the canvas select
+   the panel. Do not replace this with preventDefault() again. */
+.panel__slot--blocked .panel__terminal {
+  pointer-events: none;
+}
+
 /* xterm sizes itself in cols/rows against this box; it must fill it exactly. */
 .panel__slot .xterm,
 .panel__slot .xterm-viewport,
