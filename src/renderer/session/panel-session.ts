@@ -55,5 +55,12 @@ export interface PanelSession {
   status: PanelStatus
   tier: Tier
   spawned: boolean
+  /**
+   * The cols/rows last sent to the PTY, so a promotion that changes nothing
+   * sends nothing. A SIGWINCH makes a full-screen agent TUI repaint, and a
+   * panel that was carded and promoted back at the same size has nothing to
+   * tell the process.
+   */
+  sentGrid: { cols: number; rows: number } | null
   lastFocusedAt: number
 }

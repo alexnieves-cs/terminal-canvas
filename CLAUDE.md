@@ -154,6 +154,16 @@ they inherit a bare PATH and no dotfile exports — `claude`/`codex` work in Ter
 makes zsh read `.zshrc`) and use that env for every PTY. A non-zero exit from the probe is
 normal; success is judged by whether a `PATH` came back. The fallback logs loudly on purpose.
 
+**The renderer has no `process.env` (`shared/types.ts`, `main/pty-manager.ts`,
+`renderer/panels/panels.ts`).** electron-vite compiles `process.env` in the renderer bundle
+down to a literal `{}`, so `process.env.SHELL ?? '/bin/zsh'` there is not a lookup with a
+fallback — the fallback is the *only* branch that ever runs, and a bash or fish user silently
+gets zsh while the code reads as though it asked. `PanelSpec.command` is therefore **optional**:
+absent means "the user's login shell", and main resolves it from the env it already probed
+(`resolveCommand`, same fallback chain as `shell-env.ts`). `panels.ts` omits it; anything in
+the renderer that displays `spec.command` needs a label for the absent case, because only main
+knows the answer. Never reintroduce a `process.env` read on the renderer side.
+
 **Output batching (`pty-manager.ts`, `FLUSH_INTERVAL_MS = 16`).** One IPC message per PTY
 read floods the renderer's event loop and locks the UI — an agent TUI repainting emits
 thousands of reads/sec. Measured: 33,198 reads → 105 messages. The pending buffer is flushed
@@ -189,14 +199,34 @@ error anywhere. **A tier change must never call `pty.kill`** — only `disposeAl
 at startup. "Fit before spawn" (below) needs real cols/rows, which needs an attached, laid-out
 node — so a panel that has never been on screen has no size to spawn at. It also stops a
 twelve-panel canvas launching twelve agents on boot: `SEED_PANELS` in `panels/panels.ts` has
-twelve entries and only `LIVE_BUDGET` (8) of them are ever live at once.
+twelve entries and `LIVE_BUDGET` (8) caps how many are live at once. The cap is
+enforced in two places and holds at every moment, not just when the canvas is at rest:
+`assignTiers` never promotes more than the budget, and `Canvas.tsx` re-checks it when it
+applies the map, because a held-back demotion (below) is a live panel `assignTiers` did not
+count. Without the second check, panning past twelve panels left all twelve live for the
+duration of the gesture — twelve WebGL contexts against a browser cap near sixteen, and a
+dropped context is permanent for the run (`create-terminal.ts` sets `webglDisabled`).
 
 **Promote now, demote later (`Canvas.tsx`, `DEMOTE_DELAY_MS = 250`).** Promotion to `live` is
 applied immediately; a demotion to `card` is held for `DEMOTE_DELAY_MS` and re-applied only if
 still true after the delay. Together with `lod.ts`'s `CULL_MARGIN_PX` this makes promotion and
 demotion happen at different boundaries. Without it, a panel sitting at the viewport edge
 destroys and recreates a WebGL context every frame while you pan, and the symptom only shows
-up mid-gesture, not in a static screenshot.
+up mid-gesture, not in a static screenshot. Two details keep the hold from becoming the bug it
+prevents. The release timer is armed against a **ref**, never re-armed in an effect cleanup:
+the tiering effect depends on `viewport`, which changes on every wheel event, so a cleanup
+that cleared the timer let a continuous trackpad pan restart the 250ms clock forever and
+nothing ever demoted. And the hold yields to the budget — when live-plus-held would exceed
+`LIVE_BUDGET`, the oldest holds are released immediately, since they have already had most of
+the grace period they exist to provide.
+
+**Focus is released on a background click (`Canvas.tsx`).** `assignTiers` pins the focused
+panel live unconditionally, so `focusedId` is not just a highlight: an id that is never
+cleared holds a WebGL context and a budget slot for the rest of the run, and keeps routing
+`Cmd+C` to a panel whose textarea the browser blurred long ago. Background `onMouseDown`
+clears `focusedId` alongside `selectedId`. This is also what lets a panel the user typed into
+ever demote — `verify:panels` check 8 depends on it to read the terminal's buffer back out of
+its card.
 
 **Clicks are gated near 1:1 (`Canvas.tsx`, `INTERACT_MIN_SCALE`/`INTERACT_MAX_SCALE` =
 0.9/1.1).** xterm's `getCoords` divides a transform-aware pixel offset by an unscaled cell
@@ -234,11 +264,14 @@ to `getComputedStyle` and `ResizeObserver` — exactly what xterm's `FitAddon` c
 zooming *cannot* change a panel's cols/rows. The rejected alternative, sizing each panel in
 screen pixels per frame, would reflow the running shell on every zoom gesture.
 
-**...which is why pointer coordinates need correcting.** The same blindness means
-`getBoundingClientRect()` is transform-aware while `dimensions.css.cell.width` is not, so
-under `scale(k)` every click lands on a cell off by a factor of `k`. `screenToWorld` in
-`viewport.ts` is the correction, and M3 feeds its output to xterm. If it is wrong, every
-click in every terminal is wrong.
+**...which is why pointer coordinates are gated rather than corrected.** The same blindness
+means `getBoundingClientRect()` is transform-aware while `dimensions.css.cell.width` is not,
+so under `scale(k)` every click lands on a cell off by a factor of `k`. M3 does **not**
+correct this and does not feed `screenToWorld` output to xterm: it gates body clicks to
+`[INTERACT_MIN_SCALE, INTERACT_MAX_SCALE]` (see "Clicks are gated near 1:1" above), where the
+error is small enough not to matter. Full correction — intercepting and re-dispatching mouse
+events, tracking drag-selection out to the document, handling mouse-reporting TUIs — is M4's,
+alongside the drag and resize work that needs pointer math anyway.
 
 **`passive: false` on the wheel listener (`useViewport.ts`).** Chromium treats ctrl+wheel as
 its own page-zoom gesture; without `preventDefault()` a pinch zooms the whole UI and every

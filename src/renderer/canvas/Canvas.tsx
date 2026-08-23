@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { useViewport } from './useViewport'
-import { assignTiers } from './lod'
+import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point } from './viewport'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
@@ -93,6 +93,27 @@ export function Canvas(): JSX.Element {
     registry.focus(id)
   }, [])
 
+  // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
+  // epoch ms at which the hold started. Refs, not state: the hold is bookkeeping
+  // for a timer, and putting it in state would make every hold trigger the very
+  // re-render that used to restart the timer.
+  const heldSinceRef = useRef(new Map<string, number>())
+  const demoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The most recent unheld assignment, read by the timer when it fires. A held
+  // demotion is released against the LATEST tiering, not the one that was
+  // current when the hold started — so a panel that came back into view during
+  // the delay stays live instead of being demoted by a stale decision.
+  const tiersRef = useRef<Record<string, Tier>>({})
+
+  // The timer belongs to the component, not to this effect's dependency list:
+  // arming it inside an effect whose cleanup clears it meant any change to
+  // [rects, viewport, focusedId, version] restarted the 250ms clock. `viewport`
+  // changes on every wheel event, so a continuous trackpad pan plus its
+  // momentum restarted it indefinitely and nothing ever demoted.
+  useEffect(() => () => {
+    if (demoteTimerRef.current !== null) clearTimeout(demoteTimerRef.current)
+  }, [])
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -104,23 +125,60 @@ export function Canvas(): JSX.Element {
       focusedId,
       lastFocusedAt: registry.lastFocusedAt()
     })
+    tiersRef.current = tiers
 
     // Promotion is immediate so a panel is live by the time you look at it.
     // Demotion waits, so panning along an edge does not destroy and recreate a
     // WebGL context every frame. Held-back demotions keep their current tier.
-    const immediate: Record<string, 'live' | 'card'> = {}
-    let hasDemotion = false
+    const held = heldSinceRef.current
+    const now = Date.now()
+    const applied: Record<string, Tier> = {}
+    const holding: string[] = []
+    let liveCount = 0
     for (const [id, tier] of Object.entries(tiers)) {
       const current = registry.get(id)?.tier ?? 'card'
-      const demoting = tier === 'card' && current === 'live'
-      immediate[id] = demoting ? 'live' : tier
-      if (demoting) hasDemotion = true
+      if (tier === 'card' && current === 'live') {
+        if (!held.has(id)) held.set(id, now)
+        holding.push(id)
+        applied[id] = 'live'
+      } else {
+        held.delete(id)
+        applied[id] = tier
+        if (tier === 'live') liveCount += 1
+      }
     }
-    registry.applyTiers(immediate)
+    // Drop stale holds for panels that no longer exist, so the map cannot grow
+    // without bound across a run.
+    for (const id of [...held.keys()]) if (tiers[id] === undefined) held.delete(id)
 
-    if (!hasDemotion) return
-    const timer = setTimeout(() => registry.applyTiers(tiers), DEMOTE_DELAY_MS)
-    return () => clearTimeout(timer)
+    // INVARIANT: the tier map applied here never contains more than LIVE_BUDGET
+    // live panels — hold-backs included. assignTiers already caps its own
+    // promotions, but a hold-back is a live panel it did not count, so without
+    // this every panel visited during a pan would stay live for the whole
+    // gesture and blow through the WebGL context budget. Oldest holds go first:
+    // they are the ones that have already had most of the anti-flicker grace
+    // period the hold exists to provide.
+    holding.sort((a, b) => (held.get(a) ?? 0) - (held.get(b) ?? 0))
+    const allowedHolds = Math.max(0, LIVE_BUDGET - liveCount)
+    for (const id of holding.slice(0, Math.max(0, holding.length - allowedHolds))) {
+      applied[id] = 'card'
+      held.delete(id)
+    }
+
+    registry.applyTiers(applied)
+
+    // Arm the release timer only when one is not already running. Re-arming on
+    // every render is what made the delay unreachable during a gesture.
+    if (held.size === 0 || demoteTimerRef.current !== null) return
+    demoteTimerRef.current = setTimeout(() => {
+      demoteTimerRef.current = null
+      // Release every hold at once against the latest tiering. A hold armed
+      // late in the window gets slightly less than the full delay, which is
+      // fine: the point is to bound the destroy/recreate RATE of WebGL
+      // contexts, not to give each panel an exact grace period.
+      heldSinceRef.current.clear()
+      registry.applyTiers(tiersRef.current)
+    }, DEMOTE_DELAY_MS)
   }, [rects, viewport, focusedId, version])
 
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
@@ -134,6 +192,15 @@ export function Canvas(): JSX.Element {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
     setSelectedId(world ? hitTest(rects, world) : null)
+    // Focus is released together with selection. assignTiers pins the focused
+    // panel live unconditionally — off screen, below the scale threshold,
+    // budget full — so a focusedId that is never cleared holds a WebGL context
+    // and a budget slot for the rest of the run, however far you pan away. It
+    // also keeps React's idea of focus in step with the DOM's: clicking away
+    // blurs xterm's textarea, and a stale focusedId would keep routing Cmd+C
+    // to the panel the user just left. Releasing focus is all this does; the
+    // chrome-selects / body-passes-through split is untouched.
+    setFocusedId(null)
   }
 
   const onMouseMove = (event: MouseEvent<HTMLDivElement>): void => {

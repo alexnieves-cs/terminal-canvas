@@ -81,9 +81,10 @@ export function attachTerminal(handles: TerminalHandles, host: HTMLElement): voi
   }
 
   if (!handles.webglDisabled && !handles.webgl) {
-    // Browsers cap live WebGL contexts near 16. In M1 there is exactly one panel,
-    // but the fallback path is wired now so M3's context pooling is a swap rather
-    // than a rewrite.
+    // Browsers cap live WebGL contexts near 16, which is why lod.ts budgets
+    // live panels at 8 and detachTerminal() gives the context back the moment a
+    // panel is demoted. This DOM fallback is the last line of defence for the
+    // case where a context is refused or lost anyway.
     try {
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => {

@@ -15,10 +15,17 @@ export interface Panel {
 export const PANEL_W = 720
 export const PANEL_H = 460
 
+/**
+ * `command` is deliberately omitted, not defaulted here. The renderer cannot
+ * see the login shell: electron-vite compiles `process.env` in the renderer
+ * bundle down to `{}`, so `process.env.SHELL` is always `undefined` and any
+ * fallback beside it becomes the only branch that ever runs — a bash or fish
+ * user would silently get zsh. An absent command means "the login shell", and
+ * main fills it in from the environment it already probed. See PanelSpec.
+ */
 const shell = (panelId: string, cwd = '~'): PanelSpecTemplate => ({
   panelId,
   cwd,
-  command: process.env.SHELL ?? '/bin/zsh',
   args: ['-l']
 })
 

@@ -69,7 +69,11 @@ function TerminalPanelImpl({
           onSelect(session.id)
         }}
       >
-        <span className="panel__title">{session.spec.command}</span>
+        {/* A spec with no command runs the login shell, which only main can
+            name — rendering the raw value would print "undefined" for every
+            default panel. Once main reports what it actually spawned (M4 can
+            surface result.command here), this label is the honest stand-in. */}
+        <span className="panel__title">{session.spec.command ?? 'login shell'}</span>
         <StatusBadge status={session.status} />
       </header>
 
@@ -130,9 +134,9 @@ function StatusBadge({ status }: { status: PanelStatus }): JSX.Element {
   }
 }
 
-// Memoized for the reason PlaceholderPanel already documented: Canvas
-// re-renders on every mousemove for the HUD cursor, and a 60Hz cascade into
-// panels backed by WebGL contexts is a frame-rate cliff. The default shallow
+// Memoized because Canvas re-renders far more often than a panel changes:
+// it re-renders on every mousemove for the HUD cursor, and a 60Hz cascade
+// into panels backed by WebGL contexts is a frame-rate cliff. The default shallow
 // comparator is sound specifically because `version` is in the props object
 // (see the doc comment on TerminalPanelProps.version above) even though the
 // component body never reads it — without it every prop here is identity- or

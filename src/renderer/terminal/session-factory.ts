@@ -42,8 +42,14 @@ function createHandle(id: PanelId): SessionHandle {
       ensure().term.write(data)
     },
     size() {
-      const h = ensure()
-      return { cols: h.term.cols, rows: h.term.rows }
+      // Deliberately NOT ensure(): a Terminal that has been constructed but
+      // never opened reports xterm's 80x24 default, and this number is handed
+      // straight to pty.create. That is exactly the fabricated grid "fit before
+      // spawn" exists to prevent — and it would be silent, since 80x24 is a
+      // perfectly plausible answer. Only attachSlot() calls this, and only
+      // after attach(); anything else is a caller bug, so say so loudly.
+      if (!handles) throw new Error(`panel ${id}: size() called before attach()`)
+      return { cols: handles.term.cols, rows: handles.term.rows }
     },
     tail(lines) {
       if (!handles) return []

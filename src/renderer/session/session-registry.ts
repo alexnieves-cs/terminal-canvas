@@ -15,7 +15,8 @@ export interface Bridge {
     create(spec: {
       panelId: PanelId
       cwd: string
-      command: string
+      /** Absent means "the login shell"; main resolves it. See PanelSpec. */
+      command?: string
       args: string[]
       cols: number
       rows: number
@@ -90,6 +91,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
     // first TIOCGWINSZ is correct. Spawning at 80x24 and resizing after makes
     // agent TUIs draw their frame twice.
     const { cols, rows } = session.handle.size()
+    session.sentGrid = { cols, rows }
     session.spawned = true
     session.status = { kind: 'starting' }
     bump()
@@ -140,6 +142,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
         status: { kind: 'idle' },
         tier: 'card',
         spawned: false,
+        sentGrid: null,
         lastFocusedAt: 0
       }
       sessions.set(id, session)
@@ -174,8 +177,15 @@ export function createRegistry(deps: RegistryDeps): Registry {
         spawn(session)
         return
       }
-      // Already running: the grid may have changed while it was carded.
+      // Already running: the grid MAY have changed while it was carded — but
+      // usually it has not, and an unconditional resize sends a SIGWINCH that
+      // makes a full-screen agent TUI repaint for nothing. The spec's
+      // tier-transition table says "pty.resize only if cols/rows changed", so
+      // compare against what was last sent.
       const { cols, rows } = session.handle.size()
+      const sent = session.sentGrid
+      if (sent && sent.cols === cols && sent.rows === rows) return
+      session.sentGrid = { cols, rows }
       void bridge.pty.resize({ panelId: session.id, cols, rows })
     },
 
