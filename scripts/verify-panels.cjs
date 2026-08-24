@@ -1243,6 +1243,84 @@ app.whenReady().then(async () => {
         `id=${closed && closed.id} ${countBefore} -> ${countClosed} -> ${countRestored} card="${restored}"`)
     }
 
+    // ---------------------------------------------------------------------
+    // 22. Undo of a spawn kills the PTY it created. applyHistory used to only
+    //     touch React state (setPanels/setDormantIds/setSelectedId/
+    //     setFocusedId) and never called registry.dispose — Cmd+N followed by
+    //     Cmd+Z removed the panel from the DOM while its real child process
+    //     kept running with no panel left to click a close button on, and the
+    //     next action clears `future` so redo cannot resurrect it either.
+    //     Modelled on check 7's Cmd+N spawn and check 20's undo, but read
+    //     through pty:list (sessionMap) rather than the DOM: a leaked PTY is
+    //     by construction invisible in the DOM, which is the whole bug.
+    // ---------------------------------------------------------------------
+    {
+      // By this point in the suite, checks 1-21 have already spawned enough
+      // panels that LIVE_BUDGET (8) is at or near capacity, and assignTiers
+      // breaks ties among equally-never-focused eligible panels by
+      // declaration order — a brand-new panel is always LAST in that order,
+      // so it can lose the budget race to panels already on screen and never
+      // go live at all, which would make this check about promotion timing
+      // instead of about the leak. Reset zoom, then pan somewhere far outside
+      // every existing panel's coordinates (SEED_PANELS/drags/prior spawns
+      // all stay within roughly -1000..5000 on both axes) so the new panel is
+      // the ONLY eligible one when it spawns and wins the budget trivially.
+      await zoomTo(wc, '0')
+      await wc.executeJavaScript(`
+        document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+          deltaX: -200000, deltaY: -200000, deltaMode: 0
+        }))
+        true
+      `)
+      const idsBefore = new Set(
+        await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
+        )
+      )
+      const sessionsBeforeSpawn = await sessionMap(wc)
+      await zoomTo(wc, 'n')
+      const idsAfter = await waitUntil(async () => {
+        const ids = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
+        )
+        return ids.length > idsBefore.size ? ids : false
+      }, 3000)
+      const newId = idsAfter ? idsAfter.find((id) => !idsBefore.has(id)) : undefined
+
+      // Cmd+N's panel is centred on the current view, so it is on-screen and
+      // therefore live — but the PTY spawns once tiering promotes and attaches
+      // it, not synchronously with the keypress, so wait for it to actually
+      // reach pty:list before asserting anything about undo.
+      const sessionsAfterSpawn = newId
+        ? await waitUntil(async () => {
+            const map = await sessionMap(wc)
+            return map.has(newId) ? map : false
+          }, 3000)
+        : null
+      const newPid = sessionsAfterSpawn ? sessionsAfterSpawn.get(newId) : undefined
+
+      await wc.executeJavaScript(`window.__m4bUndo()`)
+      // waitUntil returns whatever the poll function last produced, which on
+      // a timeout is the boolean `false` it returns while still waiting — not
+      // a Map — so the wait itself only yields a boolean and the final map is
+      // read separately for reporting/size comparison.
+      const undoRemovedInTime = newId
+        ? Boolean(
+            await waitUntil(async () => !(await sessionMap(wc)).has(newId), 3000)
+          )
+        : false
+      const sessionsAfterUndo = await sessionMap(wc)
+
+      ok('22 undo of a spawn kills the leaked pty',
+        newId !== undefined &&
+          sessionsAfterSpawn !== null && typeof newPid === 'number' &&
+          undoRemovedInTime &&
+          sessionsAfterUndo.size === sessionsBeforeSpawn.size,
+        `newId=${newId} pid=${newPid} sessionsBeforeSpawn=${sessionsBeforeSpawn.size} ` +
+        `afterSpawn=${sessionsAfterSpawn && sessionsAfterSpawn.size} afterUndo=${sessionsAfterUndo.size}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

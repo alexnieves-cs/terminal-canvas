@@ -89,6 +89,22 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   // setSelectedId/setFocusedId/setDormantIds, which are not declared until
   // further down, so it is defined after them. commitHistory has no such
   // dependency and can be pushed up here instead of forward-declaring onSpawn.
+  //
+  // A note on a pattern used throughout this file's history plumbing: onSpawn,
+  // onClosePanel, and onSelectPanel below all call commitHistory (which itself
+  // calls setHistory) from INSIDE a setPanels(current => ...) updater, and the
+  // undo/redo paths (the effect above and __m4bUndo) call applyHistory (which
+  // calls four more setters) from inside a setHistory updater. React's
+  // documented contract is that updater functions are pure — no side effects.
+  // This is safe ONLY because this app deliberately runs without StrictMode
+  // (see src/renderer/main.tsx and CLAUDE.md's "No StrictMode" note): under
+  // StrictMode, React double-invokes updaters in development to surface
+  // exactly this kind of impurity, and every operation here (pushHistory,
+  // registry.dispose, the setState calls in applyHistory) is idempotent under
+  // a second invocation with the same arguments, but the DOUBLE-INVOCATION
+  // itself — two dispose() calls, two history pushes — is not something this
+  // code has been proven against. If StrictMode is ever turned back on, this
+  // whole call chain needs re-auditing before trusting it again.
   const commitHistory = useCallback((next: Panel[]) => {
     setHistory((h) => pushHistory(h, next))
   }, [])
@@ -120,6 +136,21 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   // true for it is what turns that into a card instead of a fresh spawn.
   const applyHistory = useCallback((next: History<Panel[]>) => {
     const ids = new Set(next.present.map((p) => p.rect.id))
+    // Undo of a spawn (or redo of a close) removes a panel from `present`
+    // without ever routing through onClosePanel — dispose(id) otherwise has
+    // exactly one call site (onClosePanel), so without this a panel undone
+    // out of existence keeps a live PTY forever: no panel remains to render
+    // a close button for it, and the NEXT action clears `future`, so redo
+    // cannot bring it back either. This is a legitimate third caller of
+    // dispose, not a violation of "tiering must never reach dispose" — undo
+    // of a spawn IS an explicit panel removal, the same act the close button
+    // performs, just driven by Cmd+Z instead of a click. Deriving the
+    // departing set from the registry (rather than tracking it separately)
+    // is self-healing: the registry and `present` stay in step by
+    // construction after this call, no matter which direction history moved.
+    for (const session of registry.all()) {
+      if (!ids.has(session.id)) registry.dispose(session.id)
+    }
     setPanels(next.present)
     setDormantIds((current) => {
       const merged = new Set([...current].filter((id) => ids.has(id)))
@@ -364,6 +395,20 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const onSelectPanel = useCallback((id: string) => {
     setSelectedId(id)
     setPanels((current) => {
+      // Skip the raise (and the history push it would trigger) when `id` is
+      // already topmost. onFocusPanel calls this on every click into a panel
+      // to type — without this guard, an ordinary editing session fills
+      // HISTORY_LIMIT with z-order noise, and a user's first several Cmd+Z
+      // presses undo clicking rather than the edit they meant. This decision
+      // belongs here, not in history.ts: that module's docstring deliberately
+      // declines to define equality for pushHistory ("no equality check...
+      // deciding otherwise needs a notion of equality this module has no
+      // business defining") — recognizing a no-op RAISE is a panels.ts/Canvas
+      // concept (topmost z), not a general state-equality one, so it stays a
+      // caller-side decision instead of smuggling one into the primitive.
+      const panel = current.find((p) => p.rect.id === id)
+      const alreadyTop = panel !== undefined && current.every((p) => p.z <= panel.z)
+      if (alreadyTop) return current
       const next = raisePanel(current, id)
       commitHistory(next)
       return next
