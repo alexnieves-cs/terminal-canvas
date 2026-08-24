@@ -6,5 +6,6 @@
 module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
-  resolveShellEnv: require('../src/main/shell-env').resolveShellEnv
+  resolveShellEnv: require('../src/main/shell-env').resolveShellEnv,
+  createLayoutStore: require('../src/main/layout-store').createLayoutStore
 }

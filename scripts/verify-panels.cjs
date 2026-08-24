@@ -6,6 +6,8 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
+const { mkdtempSync } = require('node:fs')
+const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
 
 // This script is its own Electron entry point (not out/main/index.js), so
@@ -22,7 +24,7 @@ buildSync({
   format: 'cjs',
   external: ['node-pty', 'electron']
 })
-const { registerIpcHandlers, PtyManager, resolveShellEnv } = require(ENTRY_OUT)
+const { registerIpcHandlers, PtyManager, resolveShellEnv, createLayoutStore } = require(ENTRY_OUT)
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -125,7 +127,20 @@ app.whenReady().then(async () => {
   // this window's webContents, registered against the pty:* channels the
   // renderer's window.canvas.pty bridge calls.
   const ptyManager = new PtyManager(() => win.webContents)
-  registerIpcHandlers(ptyManager)
+
+  // A real store, not a stub: after a later task the built renderer calls
+  // and awaits window.canvas.layout.load() before React mounts, so an
+  // unhandled channel here would leave every check failing against a blank
+  // canvas with a symptom that looks nothing like its cause. Pointed at a
+  // tmpdir, never app.getPath('userData'), so the result never depends on
+  // whatever canvas the developer running this happens to have saved for
+  // real. Left unseeded (empty) — this task's job is only to wire the
+  // channel; a later task adds a fixture and panels still come from
+  // SEED_PANELS here.
+  const layoutStore = createLayoutStore({
+    filePath: join(mkdtempSync(join(tmpdir(), 'tc-panels-')), 'layout.json')
+  })
+  registerIpcHandlers(ptyManager, layoutStore)
 
   // A hung infrastructure call (e.g. a renderer crash mid-executeJavaScript)
   // must fail the run, not hang it forever — which is exactly what happened

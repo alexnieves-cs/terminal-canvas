@@ -51,7 +51,18 @@ app.whenReady().then(() => {
     list: () => [],
     killAll: () => {}
   }
-  registerIpcHandlers(stub)
+  // Minimal LayoutStore shape — this suite only needs the handlers to
+  // register, not real persistence behaviour (that's verify:layout's job).
+  const layoutStoreStub = {
+    load: () => {},
+    initial: () => ({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }),
+    save: () => {},
+    settings: () => ({ layout: true, camera: true, focus: true }),
+    setSetting: () => {},
+    reset: () => {},
+    flushSync: () => {}
+  }
+  registerIpcHandlers(stub, layoutStoreStub)
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))

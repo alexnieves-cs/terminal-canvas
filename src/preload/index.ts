@@ -8,6 +8,7 @@ import type {
   PtyResizeRequest,
   PtyWriteRequest
 } from '../shared/types'
+import type { CanvasState } from '../shared/layout-schema'
 
 /**
  * Every subscribe helper returns its own unsubscribe function. Without this,
@@ -33,6 +34,10 @@ const bridge: CanvasBridge = {
   edit: {
     onCopy: (listener) => subscribe<void>(IPC_EVENTS.EDIT_COPY, listener),
     onPaste: (listener) => subscribe<string>(IPC_EVENTS.EDIT_PASTE, listener)
+  },
+  layout: {
+    load: () => ipcRenderer.invoke(IPC.LAYOUT_LOAD),
+    save: (state: CanvasState) => ipcRenderer.invoke(IPC.LAYOUT_SAVE, state)
   },
   platform: process.platform
 }

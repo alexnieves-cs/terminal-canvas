@@ -5,12 +5,19 @@ import { buildAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
+import { createLayoutStore } from './layout-store'
 
 let mainWindow: BrowserWindow | null = null
 
 // The manager needs a way to reach the live renderer; a getter rather than a
 // captured reference keeps it correct across window reloads.
 const ptyManager = new PtyManager(() => mainWindow?.webContents ?? null)
+
+// userData is the standard per-user application directory; app.getPath is only
+// valid once the app module is loaded, which it is by the time this module runs.
+const layoutStore = createLayoutStore({
+  filePath: join(app.getPath('userData'), 'layout.json')
+})
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -78,8 +85,13 @@ app.whenReady().then(async () => {
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
 
+  // Load before the menu and window exist: Task 10 gives the menu the restore
+  // settings, and the renderer's first act is layout:load, which needs a
+  // resolved store to answer from.
+  layoutStore.load()
+
   buildAppMenu()
-  registerIpcHandlers(ptyManager)
+  registerIpcHandlers(ptyManager, layoutStore)
   createWindow()
 
   app.on('activate', () => {
@@ -87,7 +99,13 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', () => ptyManager.killAll())
+app.on('before-quit', () => {
+  // Flush BEFORE killing the PTYs. killAll can take time and this must not be
+  // racing a process teardown; the store already holds the newest snapshot, so
+  // this is a synchronous write with nothing to wait for.
+  layoutStore.flushSync()
+  ptyManager.killAll()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

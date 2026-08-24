@@ -13,6 +13,7 @@ import type {
   PtyResizeRequest,
   PtyWriteRequest
 } from './types'
+import type { CanvasState } from './layout-schema'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -21,7 +22,14 @@ export const IPC = {
   PTY_RESIZE: 'pty:resize',
   PTY_KILL: 'pty:kill',
   /** Live sessions, so a fresh renderer can reconcile instead of guessing. */
-  PTY_LIST: 'pty:list'
+  PTY_LIST: 'pty:list',
+  /**
+   * The resolved starting canvas. Main applies the restore settings before
+   * answering, so the renderer never learns those settings exist.
+   */
+  LAYOUT_LOAD: 'layout:load',
+  /** A full snapshot on every change; main coalesces and decides when to write. */
+  LAYOUT_SAVE: 'layout:save'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -53,6 +61,11 @@ export interface CanvasBridge {
   edit: {
     onCopy(listener: () => void): () => void
     onPaste(listener: (text: string) => void): () => void
+  }
+  layout: {
+    /** Called ONCE, before React mounts. See renderer/main.tsx. */
+    load(): Promise<CanvasState>
+    save(state: CanvasState): Promise<void>
   }
   platform: NodeJS.Platform
 }
