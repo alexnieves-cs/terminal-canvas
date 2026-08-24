@@ -182,7 +182,7 @@ are dropped.
 **Sessions die with their renderer (`window-lifecycle.ts`).** Cmd+R and Cmd+W destroy the
 page without running React cleanup, so the renderer never sends `pty:kill`. Left alone the
 old PTY survives and the next `pty:create` throws "already has a live PTY" — a dead panel
-with no recovery short of quitting. Surviving a reload instead of dying is M4's job, once
+with no recovery short of quitting. Surviving a reload instead of dying is M4c's job, once
 tmux backs the session; `pty:list` is the channel a fresh renderer will reconcile against.
 
 **Cmd+C / Cmd+V (`src/main/menu.ts`).** The stock `'copy'`/`'paste'` menu roles drive
@@ -412,7 +412,7 @@ the double-handling defect it was written to fix.
 Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then an
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
-M2 and M3 are both worked examples of this. Follow it when starting M4.
+M2 and M3 are both worked examples of this. Follow it when starting M4b, the next unstarted milestone.
 
 ## Conventions
 
