@@ -32,6 +32,11 @@ export interface TierInput {
   budget?: number
   /** Epoch ms per panel id. Missing means never focused. */
   lastFocusedAt: Record<string, number>
+  /**
+   * Panels restored from disk that have not been clicked yet. A dormant panel
+   * is NEVER promoted — see the precedence note in assignTiers.
+   */
+  dormantIds?: ReadonlySet<string>
 }
 
 function intersectsViewport(rect: WorldRect, vp: Viewport, size: Size): boolean {
@@ -53,6 +58,7 @@ function intersectsViewport(rect: WorldRect, vp: Viewport, size: Size): boolean 
 export function assignTiers(input: TierInput): Record<string, Tier> {
   const { rects, viewport, size, focusedId, lastFocusedAt } = input
   const budget = input.budget ?? LIVE_BUDGET
+  const dormant = input.dormantIds ?? new Set<string>()
 
   const tiers: Record<string, Tier> = {}
   for (const rect of rects) tiers[rect.id] = 'card'
@@ -60,6 +66,7 @@ export function assignTiers(input: TierInput): Record<string, Tier> {
   const eligible = rects.filter(
     (rect) =>
       rect.id !== focusedId &&
+      !dormant.has(rect.id) &&
       viewport.scale >= LIVE_MIN_SCALE &&
       intersectsViewport(rect, viewport, size)
   )
@@ -72,8 +79,14 @@ export function assignTiers(input: TierInput): Record<string, Tier> {
   // scale threshold, budget full, any of it. It therefore consumes a slot and
   // can evict a panel that is fully visible. That is correct and surprising:
   // keystrokes must never land in a card.
+  //
+  // Dormancy OUTRANKS focus, and the ordering is the whole point. Restoring
+  // focus onto a panel that came back from disk would otherwise pin it live at
+  // boot, spawn its PTY, and contradict "dormant until clicked" on the very
+  // first frame. Restored focus therefore comes back as a highlight and a
+  // Cmd+C routing target only.
   let slots = budget
-  if (focusedId && tiers[focusedId] !== undefined) {
+  if (focusedId && tiers[focusedId] !== undefined && !dormant.has(focusedId)) {
     tiers[focusedId] = 'live'
     slots -= 1
   }

@@ -182,6 +182,27 @@ app.whenReady().then(async () => {
     await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
     const wc = win.webContents
 
+    // SEED_PANELS is loaded through the layout store exactly like a real
+    // restored canvas, so as of M4b every one of these twelve boots dormant
+    // (see lod.ts/session-registry.ts) — none of them would ever promote no
+    // matter how long this waited. This suite predates dormancy and uses
+    // SEED_PANELS purely as tiering/promotion/budget fixture data (checks
+    // 1-6), not as a dormancy test — lod.ts and verify:registry already cover
+    // dormancy itself. Click every title bar once, the same affordance a
+    // real user has, to wake them all before any tiering assertion runs.
+    await wc.executeJavaScript(`
+      Array.from(document.querySelectorAll('.panel__chrome')).forEach((chrome) => {
+        const r = chrome.getBoundingClientRect()
+        const opts = {
+          bubbles: true, button: 0, buttons: 1,
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
+        }
+        chrome.dispatchEvent(new MouseEvent('mousedown', opts))
+        document.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }))
+      })
+      true
+    `)
+
     // Shells must actually spawn; wait for the first live terminal rather
     // than guessing how long that takes.
     await waitUntil(async () => (await liveCount(wc)) > 0, 6000)

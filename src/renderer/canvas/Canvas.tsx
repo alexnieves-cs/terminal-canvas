@@ -77,6 +77,13 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
 
+  // Panels that came from disk start dormant; first-run panels do not. The
+  // renderer is what generates first-run panels, so it is also what knows
+  // which panels were restored — no flag has to cross the IPC boundary.
+  const [dormantIds, setDormantIds] = useState<ReadonlySet<string>>(
+    () => new Set(initial.panels.map((p) => p.id))
+  )
+
   // Mirrors focusedId into a ref so shouldYieldWheel (below) can read the
   // current focus without being redefined on every focus change — it must
   // stay referentially stable (useCallback with an empty dep list) so
@@ -106,8 +113,10 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   // component" warning is about. The panel list living in React state is
   // already what triggers this render, so nothing is lost by not bumping.
   useMemo(() => {
-    for (const panel of panels) registry.ensure(panel.rect.id, panel.spec)
-  }, [panels])
+    for (const panel of panels) {
+      registry.ensure(panel.rect.id, panel.spec, { dormant: dormantIds.has(panel.rect.id) })
+    }
+  }, [panels, dormantIds])
 
   // Menu-driven clipboard. The old per-panel TerminalPanel used to own this
   // subscription directly against xterm; now that TerminalPanel is a dumb
@@ -269,6 +278,18 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const onSelectPanel = useCallback((id: string) => {
     setSelectedId(id)
     setPanels((current) => raisePanel(current, id))
+    // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
+    // and so no focus handler of its own — its click falls through to the
+    // canvas background, which hit-tests and selects. Hooking onFocusPanel
+    // would leave a dormant panel unwakeable by clicking the very card that
+    // says "click to start".
+    setDormantIds((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
+    registry.wake(id)
   }, [])
   const onFocusPanel = useCallback((id: string) => {
     onSelectPanel(id)
@@ -306,7 +327,8 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       viewport,
       size: { width: bounds.width, height: bounds.height },
       focusedId,
-      lastFocusedAt: registry.lastFocusedAt()
+      lastFocusedAt: registry.lastFocusedAt(),
+      dormantIds
     })
     tiersRef.current = tiers
 
@@ -362,7 +384,7 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       heldSinceRef.current.clear()
       registry.applyTiers(tiersRef.current)
     }, DEMOTE_DELAY_MS)
-  }, [rects, viewport, focusedId, version])
+  }, [rects, viewport, focusedId, version, dormantIds])
 
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
     const host = hostRef.current

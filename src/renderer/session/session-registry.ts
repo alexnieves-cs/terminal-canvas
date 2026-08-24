@@ -30,7 +30,7 @@ export interface Bridge {
 }
 
 export interface Registry {
-  ensure(id: PanelId, spec: PanelSpecTemplate): PanelSession
+  ensure(id: PanelId, spec: PanelSpecTemplate, options?: { dormant?: boolean }): PanelSession
   get(id: PanelId): PanelSession | undefined
   all(): PanelSession[]
   applyTiers(tiers: Record<PanelId, Tier>): void
@@ -42,6 +42,12 @@ export interface Registry {
   refit(id: PanelId): void
   focus(id: PanelId): void
   lastFocusedAt(): Record<PanelId, number>
+  /**
+   * Clear dormancy and, if the slot is already attached, spawn. Called when
+   * the user clicks a restored panel — via onSelectPanel, not onFocusPanel: a
+   * carded panel has no .panel__slot and therefore no focus handler at all.
+   */
+  wake(id: PanelId): void
   version(): number
   subscribe(listener: () => void): () => void
   /**
@@ -140,7 +146,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
   }
 
   return {
-    ensure(id, spec) {
+    ensure(id, spec, options) {
       const existing = sessions.get(id)
       if (existing) return existing
       const session: PanelSession = {
@@ -151,7 +157,8 @@ export function createRegistry(deps: RegistryDeps): Registry {
         tier: 'card',
         spawned: false,
         sentGrid: null,
-        lastFocusedAt: 0
+        lastFocusedAt: 0,
+        dormant: options?.dormant ?? false
       }
       sessions.set(id, session)
       // Deliberately no bump(): ensure() is called while Canvas renders, and
@@ -182,6 +189,10 @@ export function createRegistry(deps: RegistryDeps): Registry {
       // The host is in the document now, so open() can measure it.
       session.handle.attach()
       if (!session.spawned) {
+        // A dormant panel gets its terminal but not its process. Under the
+        // tiering rule it should never be live at all; this second guard means
+        // "no process starts by itself" does not rest on lod.ts alone.
+        if (session.dormant) return
         spawn(session)
         return
       }
@@ -241,6 +252,18 @@ export function createRegistry(deps: RegistryDeps): Registry {
       const stamps: Record<PanelId, number> = {}
       for (const session of sessions.values()) stamps[session.id] = session.lastFocusedAt
       return stamps
+    },
+
+    wake(id) {
+      const session = sessions.get(id)
+      if (!session || !session.dormant) return
+      session.dormant = false
+      // Only spawn if the host is actually attached: spawn() reads
+      // handle.size(), which needs a fitted terminal. If the panel is still
+      // carded, clearing the flag is enough — tiering will promote it and
+      // attachSlot will spawn on the way in.
+      if (session.tier === 'live' && !session.spawned) spawn(session)
+      else bump()
     },
 
     version: () => version,

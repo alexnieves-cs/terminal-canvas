@@ -194,7 +194,12 @@ function PanelCard({ session }: { session: PanelSession }): JSX.Element {
           <div className="panel__card-line" key={i}>{line}</div>
         ))
       ) : (
-        <div className="panel__card-idle">not started</div>
+        // A dormant panel is a restored one waiting for permission, not an
+        // unvisited one waiting for the camera. Saying "not started" for both
+        // would hide the only affordance the restored canvas has.
+        <div className="panel__card-idle">
+          {session.dormant ? 'click to start' : 'not started'}
+        </div>
       )}
     </div>
   )

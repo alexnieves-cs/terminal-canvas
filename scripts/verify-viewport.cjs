@@ -606,6 +606,30 @@ const SLOT = { left: 300, top: 200 }
     V.canUndo(h) === true && h.past.length === 1, `past=${h.past.length}`)
 }
 
+// 46. A dormant panel is never promoted, even sitting in the middle of the
+//     viewport. This is what makes panning a restored canvas spawn nothing.
+{
+  const rects = [{ id: 'a', x: 0, y: 0, w: 400, h: 300 }, { id: 'b', x: 500, y: 0, w: 400, h: 300 }]
+  const base = { rects, viewport: { x: 0, y: 0, scale: 1 }, size: { width: 1600, height: 900 }, focusedId: null, lastFocusedAt: {} }
+  const plain = V.assignTiers(base)
+  const withDormant = V.assignTiers({ ...base, dormantIds: new Set(['a']) })
+  ok('46 a dormant panel is not promoted even when fully visible',
+    plain.a === 'live' && withDormant.a === 'card' && withDormant.b === 'live',
+    `plain.a=${plain.a} dormant.a=${withDormant.a} b=${withDormant.b}`)
+}
+
+// 47. THE PRECEDENCE RULE. assignTiers pins the focused panel live
+//     unconditionally, so restoring focus onto a restored panel would spawn a
+//     process at boot — contradicting "dormant until clicked". Dormancy wins.
+{
+  const rects = [{ id: 'a', x: 0, y: 0, w: 400, h: 300 }]
+  const tiers = V.assignTiers({
+    rects, viewport: { x: 0, y: 0, scale: 1 }, size: { width: 1600, height: 900 },
+    focusedId: 'a', lastFocusedAt: {}, dormantIds: new Set(['a'])
+  })
+  ok('47 dormancy outranks focus', tiers.a === 'card', `a=${tiers.a}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

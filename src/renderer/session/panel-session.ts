@@ -85,4 +85,18 @@ export interface PanelSession {
    */
   sentGrid: { cols: number; rows: number } | null
   lastFocusedAt: number
+  /**
+   * True for a panel restored from disk that has not been clicked this run.
+   *
+   * A restored panel is one the user asked for LAST run; spawning it because
+   * the camera drifted over it is a decision the app would be making on their
+   * behalf, and on a twelve-panel canvas that is twelve agent CLIs launched by
+   * panning. lod.ts never promotes a dormant panel (dormancy outranks even
+   * focus), and attachSlot refuses to spawn one, so both layers have to agree
+   * before a process starts.
+   *
+   * In M4c this becomes the seam where waking means RECONNECT to a surviving
+   * tmux session rather than spawn a fresh process.
+   */
+  dormant: boolean
 }

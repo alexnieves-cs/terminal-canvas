@@ -395,6 +395,38 @@ const tick = () => new Promise((r) => setImmediate(r))
       `killed=${JSON.stringify(bridge.calls.kill)}`)
   }
 
+  // ---------------------------------------------------------------------------
+  // M4b: dormancy (16-17)
+  // ---------------------------------------------------------------------------
+
+  // 16. A dormant session does not spawn when its slot attaches. Belt and
+  //     braces under the tiering rule: dormant panels should never reach
+  //     'live' at all, but a registry that spawns on attach regardless would
+  //     make the whole feature depend on lod.ts alone being right.
+  {
+    const { bridge, registry } = setup()
+    registry.ensure('d1', SPEC, { dormant: true })
+    registry.applyTiers({ d1: 'live' })
+    registry.attachSlot('d1')
+    ok('16 attaching a dormant session spawns no pty',
+      bridge.calls.create.length === 0 && registry.get('d1').spawned === false,
+      `created=${bridge.calls.create.length}`)
+  }
+
+  // 17. wake() clears dormancy and spawns exactly once, and a second wake is a
+  //     no-op rather than a second process.
+  {
+    const { bridge, registry } = setup()
+    registry.ensure('d1', SPEC, { dormant: true })
+    registry.applyTiers({ d1: 'live' })
+    registry.attachSlot('d1')
+    registry.wake('d1')
+    registry.wake('d1')
+    ok('17 wake spawns once and is idempotent',
+      bridge.calls.create.length === 1 && registry.get('d1').dormant === false,
+      `created=${bridge.calls.create.length}`)
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
