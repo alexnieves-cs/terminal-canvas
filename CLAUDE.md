@@ -96,9 +96,16 @@ spawns a process.**
 
 ```
 renderer --invoke--> pty:create / pty:write / pty:resize / pty:kill / pty:list --> main
+renderer --invoke--> layout:load / layout:save                                 --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
-main     --send-->   edit:copy / edit:paste                                    --> renderer
+main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
+main     --send-->   canvas:counts / canvas:reset                              --> renderer
 ```
+
+`canvas:counts` reverses the usual direction: main sends it and the renderer replies, on an
+ephemeral `canvas:counts:reply:<timestamp>` channel invented per call in `main/ipc.ts` and
+never declared in `ipc-contract.ts` — which is why `verify:ipc`'s "every channel has a handler"
+check does not, and should not, cover it.
 
 - `src/shared/ipc-contract.ts` — single source of truth for channels and the
   `window.canvas` bridge type. Imported by all three processes; add a channel here first.
@@ -204,10 +211,14 @@ panels open.
 React. The React panel (`TerminalPanel.tsx`) is mounted and unmounted freely by tiering and
 owns nothing. In M1 "this component is unmounting" and "this panel is going away" were the
 same statement; culling makes them different, and confusing them kills a running agent with no
-error anywhere. `pty.kill` now has two legitimate callers — `disposeAll` (renderer teardown)
-and `dispose(id)` (explicit panel close, called from `Canvas.tsx` at both the close button and
-undo/redo removing a panel) — but **a tier change must never reach either one.** Four checks
-exist for exactly that property: `verify:registry` 5 and 15, and `verify:panels` 4 and 15.
+error anywhere. `pty.kill` has exactly two callers, both inside `session-registry.ts` —
+`disposeAll` (renderer teardown) and `dispose(id)` — but **a tier change must never reach
+either one.** Four checks exist for exactly that property: `verify:registry` 5 and 15, and
+`verify:panels` 4 and 15. `dispose(id)` itself now has three call sites in `Canvas.tsx` — the
+close button, undo/redo removing a panel, and the reset handler — and every one of them keeps
+the `pty.kill` count at two precisely because it routes through `dispose(id)` instead of
+calling `pty.kill` directly; see "Undo removing a panel must dispose its session" below for the
+call-site history.
 
 **Lazy spawn (`session-registry.ts`).** A PTY is created when its panel first goes live, not
 at startup. "Fit before spawn" (below) needs real cols/rows, which needs an attached, laid-out
@@ -403,11 +414,16 @@ sixty times as the pointer moves; pushing an undo entry there makes one drag tak
 `Cmd+Z` presses to unwind, while every check that only asserts final state still passes.
 History is pushed once, on commit, not per intermediate update.
 
-**Undo removing a panel must dispose its session.** `registry.dispose` now has **two call
-sites in `Canvas.tsx`** — the close button and undo/redo removing a panel. This did **not**
-add a third caller of `pty.kill`: `dispose(id)` and `disposeAll()` remain the only two inside
-`session-registry.ts`, and routing both callers through `dispose` is exactly what keeps that
-true. Without it, `Cmd+N` then `Cmd+Z` leaked a live process with no panel left to close it.
+**Undo removing a panel must dispose its session.** `registry.dispose` has **three call sites
+in `Canvas.tsx`** — the close button (`onClosePanel`), undo/redo removing a panel
+(`applyHistory`), and the reset handler (`onReset`, dropping every panel at once). This is a
+count worth re-deriving from the code rather than trusting a stale number: it was two until
+the reset handler arrived in a later task and this line did not get updated alongside it — the
+exact failure this note exists to prevent happening again. None of the three adds a caller of
+`pty.kill`: `dispose(id)` and `disposeAll()` remain the only two inside `session-registry.ts`,
+and routing all three through `dispose()` rather than calling `pty.kill` directly is exactly
+what keeps that count true. Without the undo/redo call site, `Cmd+N` then `Cmd+Z` leaked a live
+process with no panel left to close it.
 
 **`Cmd+Z` is claimed, `Ctrl+Z` is not (`src/main/menu.ts`).** The same split the file already
 draws between `Cmd+C` (copy) and `Ctrl+C` (SIGINT). The stock `'undo'`/`'redo'` menu roles are

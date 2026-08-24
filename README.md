@@ -59,9 +59,15 @@ The main process owns every PTY; the renderer never spawns a process.
 
 ```
 renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill  -->  main
-                       pty:list
+                       pty:list / layout:load / layout:save
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
+main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo  -->  renderer
+                       canvas:counts / canvas:reset
 ```
+
+`canvas:counts` is the one event that runs the other way: main sends it and the renderer
+replies on an ephemeral `canvas:counts:reply:<timestamp>` channel that is invented per call
+and deliberately not part of the declared contract below.
 
 `src/shared/ipc-contract.ts` is the single source of truth for that surface and
 is imported by all three processes.

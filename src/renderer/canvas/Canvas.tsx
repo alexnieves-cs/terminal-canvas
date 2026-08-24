@@ -137,16 +137,15 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const applyHistory = useCallback((next: History<Panel[]>) => {
     const ids = new Set(next.present.map((p) => p.rect.id))
     // Undo of a spawn (or redo of a close) removes a panel from `present`
-    // without ever routing through onClosePanel — dispose(id) otherwise had
-    // exactly one call site (onClosePanel), so without this a panel undone
-    // out of existence keeps a live PTY forever: no panel remains to render
-    // a close button for it, and the NEXT action clears `future`, so redo
-    // cannot bring it back either. This loop is a legitimate SECOND call
-    // site for registry.dispose, not a violation of "tiering must never
-    // reach dispose" — undo of a spawn IS an explicit panel removal, the
-    // same act the close button performs, just driven by Cmd+Z instead of a
-    // click. It does not add a third caller of pty.kill: dispose(id) and
-    // disposeAll() remain the only two (see session-registry.ts), and
+    // without ever routing through onClosePanel, so without this loop a
+    // panel undone out of existence keeps a live PTY forever: no panel
+    // remains to render a close button for it, and the NEXT action clears
+    // `future`, so redo cannot bring it back either. Calling registry.dispose
+    // here is legitimate, not a violation of "tiering must never reach
+    // dispose" — undo of a spawn IS an explicit panel removal, the same act
+    // the close button and the reset handler perform, just driven by Cmd+Z
+    // instead of a click. It does not add a caller of pty.kill: dispose(id)
+    // and disposeAll() remain the only two (see session-registry.ts), and
     // routing through dispose() rather than calling pty.kill directly is
     // exactly what keeps that count true. Deriving the departing set from
     // the registry (rather than tracking it separately) is self-healing:
@@ -263,8 +262,12 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       }).length
     }))
     const offReset = window.canvas.canvas.onReset(() => {
-      // dispose, not just drop: reset kills every process, and dispose is one
-      // of the two legitimate callers of pty.kill in the renderer.
+      // dispose, not just drop: reset kills every process. registry.dispose
+      // is one of three call sites in this file (the others are the close
+      // button and undo/redo removing a panel); pty.kill itself still has
+      // only its two callers inside session-registry.ts, because every one
+      // of these three routes through dispose() rather than calling
+      // pty.kill directly.
       for (const panel of panelsRef.current) registry.dispose(panel.rect.id)
       const fresh = firstRunPanels()
       setPanels(fresh)
