@@ -3,5 +3,7 @@
 module.exports = {
   ...require('../src/renderer/canvas/viewport'),
   ...require('../src/renderer/canvas/canvas-input'),
-  ...require('../src/renderer/canvas/lod')
+  ...require('../src/renderer/canvas/lod'),
+  ...require('../src/renderer/canvas/panel-interaction'),
+  ...require('../src/renderer/panels/panels')
 }

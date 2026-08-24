@@ -7,7 +7,7 @@ import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
-import { makePanel, SEED_PANELS, type Panel } from '@renderer/panels/panels'
+import { makePanel, nextZ, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
 /** Clicks reach xterm only near 1:1; see the spec's "Focus and input". */
 const INTERACT_MIN_SCALE = 0.9
@@ -33,7 +33,10 @@ export function Canvas(): JSX.Element {
   // declaration is a TDZ error, not just a style preference.
   const onSpawn = useCallback(
     (centre: Point) =>
-      setPanels((current) => [...current, makePanel(`n${current.length + 1}`, centre)]),
+      setPanels((current) => [
+        ...current,
+        makePanel(`n${current.length + 1}`, centre, nextZ(current))
+      ]),
     []
   )
   const viewport = useViewport(hostRef, rects, onSpawn)

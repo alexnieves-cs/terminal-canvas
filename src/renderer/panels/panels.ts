@@ -2,14 +2,25 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 
 /**
- * A panel is its geometry plus its spec. cols/rows are deliberately absent
- * from the spec: they are not known until the panel is attached and fitted,
- * and inventing them here would reintroduce the spawn-at-80x24 problem lazy
- * spawning exists to avoid.
+ * A panel is its geometry, its spec, and its paint order. cols/rows are
+ * deliberately absent from the spec: they are not known until the panel is
+ * attached and fitted, and inventing them here would reintroduce the
+ * spawn-at-80x24 problem lazy spawning exists to avoid.
  */
 export interface Panel {
   rect: WorldRect
   spec: PanelSpecTemplate
+  /**
+   * Paint order, rendered as style.zIndex. Stacking is NOT the array's order:
+   * React reconciles a reordered keyed list by MOVING DOM nodes, and a move is
+   * remove-then-insert, which would momentarily detach the subtree holding a
+   * live terminal's host and its WebGL context. M3's eviction proves a
+   * deliberate detach is survivable — dispose the addon, refresh on the way
+   * back — but an incidental detach triggered by clicking an unrelated panel
+   * does none of that. Keeping array order stable means React never moves
+   * those nodes at all.
+   */
+  z: number
 }
 
 export const PANEL_W = 720
@@ -35,24 +46,49 @@ const shell = (panelId: string, cwd = '~'): PanelSpecTemplate => ({
  * something to cull.
  */
 export const SEED_PANELS: Panel[] = [
-  { rect: { id: 's01', x: 0, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s01') },
-  { rect: { id: 's02', x: 800, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s02') },
-  { rect: { id: 's03', x: 1600, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s03') },
-  { rect: { id: 's04', x: 0, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s04') },
-  { rect: { id: 's05', x: 800, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s05') },
-  { rect: { id: 's06', x: 1600, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s06') },
-  { rect: { id: 's07', x: -900, y: 270, w: PANEL_W, h: PANEL_H }, spec: shell('s07') },
-  { rect: { id: 's08', x: -900, y: 810, w: PANEL_W, h: PANEL_H }, spec: shell('s08') },
-  { rect: { id: 's09', x: 2500, y: 270, w: PANEL_W, h: PANEL_H }, spec: shell('s09') },
-  { rect: { id: 's10', x: 400, y: 1100, w: PANEL_W, h: PANEL_H }, spec: shell('s10') },
-  { rect: { id: 's11', x: 1200, y: 1100, w: PANEL_W, h: PANEL_H }, spec: shell('s11') },
-  { rect: { id: 's12', x: 400, y: -640, w: PANEL_W, h: PANEL_H }, spec: shell('s12') }
+  { rect: { id: 's01', x: 0, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s01'), z: 1 },
+  { rect: { id: 's02', x: 800, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s02'), z: 2 },
+  { rect: { id: 's03', x: 1600, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s03'), z: 3 },
+  { rect: { id: 's04', x: 0, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s04'), z: 4 },
+  { rect: { id: 's05', x: 800, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s05'), z: 5 },
+  { rect: { id: 's06', x: 1600, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s06'), z: 6 },
+  { rect: { id: 's07', x: -900, y: 270, w: PANEL_W, h: PANEL_H }, spec: shell('s07'), z: 7 },
+  { rect: { id: 's08', x: -900, y: 810, w: PANEL_W, h: PANEL_H }, spec: shell('s08'), z: 8 },
+  { rect: { id: 's09', x: 2500, y: 270, w: PANEL_W, h: PANEL_H }, spec: shell('s09'), z: 9 },
+  { rect: { id: 's10', x: 400, y: 1100, w: PANEL_W, h: PANEL_H }, spec: shell('s10'), z: 10 },
+  { rect: { id: 's11', x: 1200, y: 1100, w: PANEL_W, h: PANEL_H }, spec: shell('s11'), z: 11 },
+  { rect: { id: 's12', x: 400, y: -640, w: PANEL_W, h: PANEL_H }, spec: shell('s12'), z: 12 }
 ]
 
-/** Cmd+N: a panel centred on wherever the camera is looking. */
-export function makePanel(id: string, centre: Point): Panel {
+/** Cmd+N: a panel centred on wherever the camera is looking, on top. */
+export function makePanel(id: string, centre: Point, z: number): Panel {
   return {
     rect: { id, x: centre.x - PANEL_W / 2, y: centre.y - PANEL_H / 2, w: PANEL_W, h: PANEL_H },
-    spec: shell(id)
+    spec: shell(id),
+    z
   }
+}
+
+/** One above the highest current z, so a raised or new panel is on top. */
+export function nextZ(panels: Panel[]): number {
+  return panels.reduce((max, p) => Math.max(max, p.z), 0) + 1
+}
+
+/**
+ * Replace one panel's rect. Serves both move and resize: applyDrag has already
+ * decided what the rect is, and the move/resize distinction lives in DragMode
+ * where it actually matters (it decides whether a pty:resize commit fires).
+ */
+export function setPanelRect(panels: Panel[], id: string, rect: WorldRect): Panel[] {
+  return panels.map((p) => (p.rect.id === id ? { ...p, rect } : p))
+}
+
+export function removePanel(panels: Panel[], id: string): Panel[] {
+  return panels.filter((p) => p.rect.id !== id)
+}
+
+/** Raise by z, never by array position — see the note on Panel.z. */
+export function raisePanel(panels: Panel[], id: string): Panel[] {
+  const top = nextZ(panels)
+  return panels.map((p) => (p.rect.id === id ? { ...p, z: top } : p))
 }
