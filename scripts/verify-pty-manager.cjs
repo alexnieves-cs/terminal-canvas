@@ -8,6 +8,17 @@
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
 const os = require('node:os')
+const { execFileSync } = require('node:child_process')
+const { mkdtempSync, writeFileSync, existsSync, mkdirSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+
+/** Absolute path or null. A GUI app has a bare PATH, so never rely on the name. */
+function findTmux() {
+  for (const p of ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux']) {
+    if (existsSync(p)) return p
+  }
+  return null
+}
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'pty-manager.cjs')
 buildSync({
@@ -30,8 +41,18 @@ buildSync({
   format: 'cjs',
   external: ['node-pty', 'electron']
 })
-const { createDirectBackend } = require(OUT_BACKEND)
+const { createDirectBackend, createTmuxBackend } = require(OUT_BACKEND)
 const DIRECT = createDirectBackend('verify: direct by default')
+
+const OUT_TMUX_ARGS = join(__dirname, '..', 'out', 'verify', 'tmux-args.cjs')
+buildSync({
+  entryPoints: [join(__dirname, '..', 'src', 'main', 'tmux-args.ts')],
+  outfile: OUT_TMUX_ARGS,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['node-pty', 'electron']
+})
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -166,6 +187,103 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     ok('10 list falls back to the manager map when the backend has no view',
       listed.length === 1 && listed[0] === 'd1', JSON.stringify(listed))
     h.manager.kill('d1')
+  }
+
+  // 11-15 need a real tmux. Skipping is reported, never silent: a suite that
+  // quietly covers nothing is worse than one that says it covered nothing.
+  const TMUX = findTmux()
+  if (!TMUX) {
+    ok('11-15 tmux backend (SKIPPED — no tmux binary found)', true, 'install tmux to cover these')
+  } else {
+    const dir = mkdtempSync(join(tmpdir(), 'tc-verify-'))
+    const exitDir = join(dir, 'exits')
+    mkdirSync(exitDir, { recursive: true })
+    const confPath = join(dir, 'tmux.conf')
+    const T = require(OUT_TMUX_ARGS)
+    writeFileSync(confPath, T.buildTmuxConf(exitDir))
+    const tmuxBackend = createTmuxBackend({ tmuxPath: TMUX, exitDir, confPath, reason: 'verify' })
+    const tmuxCli = (args) => {
+      try { return execFileSync(TMUX, args, { encoding: 'utf8' }) } catch { return '' }
+    }
+
+    // h1 is deliberately hoisted out of check 11's block: check 12 must detach
+    // THE MANAGER THAT OWNS THE SESSION. Calling detachAll() on a freshly made
+    // harness would walk an empty map, do nothing, and pass for the wrong
+    // reason — the session would survive because nothing ever touched it.
+    let h1 = null
+
+    // 11. A session created through the backend is visible to tmux itself on
+    // OUR socket — and therefore invisible on the user's default socket.
+    {
+      h1 = makeHarness(tmuxBackend)
+      await h1.manager.create(spec('t1'))
+      await sleep(700)
+      const listed = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      ok('11 a panel becomes a tmux session on the private socket',
+        listed.includes('t1'), JSON.stringify(listed.trim()))
+    }
+
+    // 12. THE MILESTONE. Detach the client the way a renderer teardown does;
+    // the session must survive, and a fresh create with the same panelId must
+    // reattach rather than start a second process. Comparing the PID is what
+    // separates "reattached" from "silently respawned" — a check that only
+    // asserted the panel works again would pass for both. h2 is a SEPARATE
+    // harness from h1 (an empty session map of its own) so a successful
+    // reattach can only be explained by tmux itself, not by h1 still holding
+    // the panelId in its map.
+    {
+      const before = tmuxCli(['-L', T.TMUX_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+      const beforePid = (/t1 (\d+)/.exec(before) ?? [])[1]
+      h1.manager.detachAll()
+      await sleep(500)
+      const survived = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const h2 = makeHarness(tmuxBackend)
+      await h2.manager.create(spec('t1'))
+      await sleep(700)
+      const after = tmuxCli(['-L', T.TMUX_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+      const afterPid = (/t1 (\d+)/.exec(after) ?? [])[1]
+      ok('12 detaching leaves the session alive and create reattaches to the SAME process',
+        survived.includes('t1') && beforePid && beforePid === afterPid,
+        `pid ${beforePid} -> ${afterPid}`)
+    }
+
+    // 13. list() reports sessions the manager's own map has never heard of.
+    // This is what makes boot reconciliation possible after a reload.
+    {
+      const fresh = makeHarness(tmuxBackend)
+      const listed = fresh.manager.list().map((r) => r.panelId)
+      ok('13 a manager with an empty map still sees the live tmux session',
+        listed.includes('t1'), JSON.stringify(listed))
+    }
+
+    // 14. EXIT FIDELITY. The tmux client's own exit code is always 1, so a
+    // naive port would report every exit as code 1. The pane-died hook's file
+    // is what carries the truth.
+    {
+      const h = makeHarness(tmuxBackend)
+      await h.manager.create(spec('t2', '/bin/sh', ['-c', 'exit 7']))
+      await sleep(1500)
+      const exits = h.exits()
+      const code = exits.length ? exits[exits.length - 1].payload.exitCode : null
+      ok('14 a command exiting 7 is reported as 7, not the client\'s 1',
+        code === 7, `reported=${code} events=${exits.length}`)
+    }
+
+    // 15. destroy() ends the session, and shutdown() takes the server with it.
+    {
+      const h = makeHarness(tmuxBackend)
+      await h.manager.create(spec('t3'))
+      await sleep(700)
+      h.manager.kill('t3')
+      await sleep(500)
+      const afterKill = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      tmuxBackend.shutdown()
+      await sleep(500)
+      const afterShutdown = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      ok('15 closing a panel ends its session and shutdown ends the server',
+        !afterKill.includes('t3') && afterShutdown.trim() === '',
+        `afterKill=${JSON.stringify(afterKill.trim())} afterShutdown=${JSON.stringify(afterShutdown.trim())}`)
+    }
   }
 
   console.log('\n' + '='.repeat(60))

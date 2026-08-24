@@ -185,6 +185,25 @@ export class PtyManager {
     for (const panelId of [...this.sessions.keys()]) this.kill(panelId)
   }
 
+  /**
+   * The renderer is gone but its processes must not be. Kills the local handle
+   * — which, on the tmux backend, is a CLIENT — and forgets the session
+   * WITHOUT calling backend.destroy(). That omission is the entire milestone:
+   * kill() ends the session, detachAll() lets it keep running.
+   */
+  detachAll(): void {
+    for (const session of [...this.sessions.values()]) {
+      session.killed = true
+      if (session.flushTimer) clearTimeout(session.flushTimer)
+      try {
+        session.proc.kill()
+      } catch (error) {
+        console.warn(`[pty] detach failed for ${session.panelId}`, error)
+      }
+      this.sessions.delete(session.panelId)
+    }
+  }
+
   private enqueue(session: Session, data: string): void {
     session.buffer.push(data)
     if (session.flushTimer) return

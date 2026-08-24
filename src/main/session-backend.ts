@@ -1,5 +1,15 @@
+import { execFileSync } from 'node:child_process'
+import { readFileSync, rmSync, unlinkSync } from 'node:fs'
 import * as pty from 'node-pty'
 import type { PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
+import {
+  buildKillServerArgs,
+  buildKillSessionArgs,
+  buildListArgs,
+  buildTmuxArgs,
+  exitFilePath,
+  parseListOutput
+} from './tmux-args'
 
 /**
  * How a panel's process comes into existence, and who can answer questions
@@ -77,5 +87,105 @@ export function createDirectBackend(reason: string): SessionBackend {
     // story and there is nothing extra to destroy or shut down.
     destroy: () => {},
     shutdown: () => {}
+  }
+}
+
+/**
+ * Sessions that outlive the renderer.
+ *
+ * The whole feature is one flag: `new-session -A` attaches if the session
+ * exists and creates it if it does not, so create and reattach are the same
+ * call. pty:create keeps its exact meaning and session-registry.ts never
+ * learns reattachment exists.
+ */
+export function createTmuxBackend(o: {
+  tmuxPath: string
+  exitDir: string
+  confPath: string
+  reason: string
+}): SessionBackend {
+  /**
+   * Every tmux invocation that is NOT the panel's own client. Failure is
+   * routine rather than exceptional — `list-panes` with no server running exits
+   * non-zero, and that is the normal first-run state — so this returns '' and
+   * lets the caller decide, instead of throwing into a quit handler.
+   */
+  const cli = (args: string[]): string => {
+    try {
+      return execFileSync(o.tmuxPath, args, { encoding: 'utf8', timeout: 5000 })
+    } catch {
+      return ''
+    }
+  }
+
+  return {
+    kind: 'tmux',
+    reason: o.reason,
+
+    spawn(spec, command, cwd, env) {
+      // node-pty still owns the transport; what it spawns is a tmux CLIENT
+      // rather than the command itself. That is what preserves the entire
+      // existing data path — raw bytes, the 16ms batcher, resize, pointer
+      // correction — unchanged from M3.
+      return pty.spawn(
+        o.tmuxPath,
+        buildTmuxArgs({
+          confPath: o.confPath,
+          panelId: spec.panelId,
+          cols: spec.cols,
+          rows: spec.rows,
+          command,
+          args: spec.args
+        }),
+        {
+          name: 'xterm-256color',
+          cols: spec.cols,
+          rows: spec.rows,
+          cwd,
+          env
+        }
+      )
+    },
+
+    list(): PtyCreateResult[] {
+      // parseListOutput drops dead panes. See its comment: under
+      // remain-on-exit on, a finished session still exists until the hook
+      // kills it, and reporting it live would attach a client to a corpse.
+      return parseListOutput(cli(buildListArgs())).map((e) => ({
+        panelId: e.panelId,
+        pid: e.pid,
+        command: e.command,
+        cwd: e.cwd
+      }))
+    },
+
+    exitCodeFor(panelId: PanelId): number | null {
+      // Written by the pane-died hook BEFORE it killed the session, so by the
+      // time node-pty's onExit brought us here the file is already on disk.
+      const path = exitFilePath(o.exitDir, panelId)
+      try {
+        const code = Number(readFileSync(path, 'utf8').trim())
+        unlinkSync(path)
+        return Number.isInteger(code) ? code : null
+      } catch {
+        // Missing or unreadable: fall back to the client's code via `?? `.
+        // A wrong-but-present number beats a crash in an exit handler.
+        return null
+      }
+    },
+
+    destroy(panelId: PanelId): void {
+      cli(buildKillSessionArgs(panelId))
+    },
+
+    shutdown(): void {
+      cli(buildKillServerArgs())
+      // Per-run directory; nothing in it outlives the app.
+      try {
+        rmSync(o.exitDir, { recursive: true, force: true })
+      } catch {
+        /* a leftover temp dir is not worth failing a quit over */
+      }
+    }
   }
 }
