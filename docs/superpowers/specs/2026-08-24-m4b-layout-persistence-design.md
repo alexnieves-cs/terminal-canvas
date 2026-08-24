@@ -37,7 +37,15 @@ Out, and deliberately so:
   it does not reconnect to the one that was running last session.
 - **Scrollback contents.** Replaying a dead process's output into a live
   terminal shows stale text as though it were current.
-- **Multiple named workspaces / layout files.** One canvas, one file.
+- **The workspace *feature*.** No switching, no creating, no naming UI, no
+  merged all-in-one view. M4b ships exactly one canvas.
+
+  The **format**, however, anticipates workspaces — see `docs/ideas-backlog.md`
+  item 2, which flags this as a decide-before-M4b item. A file written as one
+  flat record of panels makes named workspaces a migration; written as a keyed
+  collection it makes them nearly free. The whole dimension stays main-side and
+  the renderer never learns it exists (below), so this costs the format a
+  wrapper and costs the feature set nothing.
 - **Migration machinery.** `LAYOUT_VERSION` is 1 and there is nothing to
   migrate from. A future version falls back and preserves the old file
   (below); it does not transform it.
@@ -114,6 +122,13 @@ change: renderer --invoke--> layout:save(snapshot)        --> main coalesces,
 quit:   app 'before-quit' --> store.flushSync()              (main already holds it)
 ```
 
+**Workspaces are resolved main-side, like settings.** `layout:load` picks the
+workspace named by `activeWorkspaceId` (falling back to the first, then to a
+fresh default) and returns a *flat* starting state; `layout:save` writes the
+renderer's flat snapshot back into that workspace. The renderer's types contain
+no `Workspace` at all. When the feature ships, it is a main-side change plus a
+switcher — not a rewrite of the canvas.
+
 The settings need **no** channel of their own. They affect boot and nothing
 else; no renderer code reads them at runtime. Main applies them itself before
 returning — if `camera` is off, `layout:load` returns the default camera. The
@@ -146,14 +161,32 @@ export interface PersistedPanel {
   /** Absent means "the user's login shell" — see PanelSpec. */
   command?: string
   args: string[]
+  /**
+   * User-set panel name. Nothing in M4b writes this — no UI sets a title yet.
+   * It is reserved here because ideas-backlog item 6 puts titles in `Panel`
+   * and says "persisted by M4b", and an optional field costs a line now
+   * versus a format change later. Readers must tolerate its absence.
+   */
+  title?: string
 }
 
-export interface LayoutSnapshot {
-  version: number
+/**
+ * One canvas. M4b always has exactly one of these and never surfaces the
+ * concept to the renderer — see the Scope note on the workspace format.
+ */
+export interface Workspace {
+  id: string
+  name: string
   panels: PersistedPanel[]
   camera: { x: number; y: number; scale: number }
   selectedId: string | null
   focusedId: string | null
+}
+
+export interface LayoutSnapshot {
+  version: number
+  activeWorkspaceId: string
+  workspaces: Workspace[]
   settings: RestoreSettings
 }
 
@@ -282,6 +315,7 @@ bar for a guard being worth writing.
 | `NaN` or missing `x`/`y` | Panel renders at `left: NaN` — invisible, unclickable, still holding a session |
 | `w`/`h` below `MIN_PANEL_W`/`MIN_PANEL_H` | A panel too small to hold a terminal and too small to grab a resize handle on |
 | **Duplicate ids** | `registry.ensure` returns the *existing* session, so two panels render one `handle.host`, which can only live in one slot. This is exactly the bug M4a's `nextIdRef` was introduced to kill; a hand-edited file reintroduces it through a different door |
+| `workspaces: []`, or an `activeWorkspaceId` naming none | No canvas to open. Falls back to the first workspace, then to a fresh default one |
 | `version` greater than `LAYOUT_VERSION` | Fields we cannot interpret. Fall back — but `rename` the file to `layout.json.bak` **first**, or the fallback's next write destroys a layout authored by a newer build |
 | `userData` unwritable (permissions, disk full) | Must log loudly and keep running from memory. `flushSync` must never throw at `before-quit`, where an exception can wedge the quit itself |
 | Id containing `.` or `:` | Silent in M4b; breaks M4c, because tmux rejects those in a session name |
@@ -433,7 +467,7 @@ test's requirement, not a product decision.
 
 | Suite | Runtime | Gains |
 |---|---|---|
-| `verify:layout` *(new)* | plain node | Every failure-mode row above; `toPanels`/`fromPanels` round-trip; id validation; coalescing (N saves → 1 write); atomic rename; `flushSync` writing the newest snapshot; a write into an unwritable path not throwing; settings preserved across a renderer merge; settings applied by `initial()` |
+| `verify:layout` *(new)* | plain node | Every failure-mode row above; `toPanels`/`fromPanels` round-trip; id validation; coalescing (N saves → 1 write); atomic rename; `flushSync` writing the newest snapshot; a write into an unwritable path not throwing; settings preserved across a renderer merge; settings applied by `initial()`; an unknown `activeWorkspaceId` falling back to the first workspace; an empty `workspaces` array yielding a default; `title` surviving a round-trip and its absence being tolerated |
 | `verify:viewport` | plain node | Dormancy in `assignTiers`: a dormant panel is not promoted, and specifically is not promoted when it is the focused panel |
 | `verify:ipc` | real Electron | Free — it already asserts every contract channel has a handler, so `layout:load`/`layout:save` are covered the moment they are declared |
 | `verify:viewport` *(again)* | plain node | `history.ts` itself, bundled into the same plain-node target as `panels.ts`: push/undo/redo: push/undo/redo, the 50-entry cap, redo cleared by a new action after an undo, undo past the beginning and redo past the end both no-ops |
