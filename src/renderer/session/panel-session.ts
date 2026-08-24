@@ -41,6 +41,10 @@ export interface SessionHandle {
   getSelection(): string
   /** Backs menu-driven Cmd+V. Not a raw pty.write: see session-factory.ts. */
   paste(data: string): void
+  /** Buffer position of the first occurrence of `word`, or null. */
+  locate(word: string): { col: number; row: number } | null
+  /** Cell metrics in CSS pixels — transform-blind, like xterm's own. */
+  cellSize(): { width: number; height: number }
   dispose(): void
 }
 

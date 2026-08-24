@@ -367,6 +367,81 @@ app.whenReady().then(async () => {
         ? `card shows ${JSON.stringify(echoed.slice(-60))}`
         : `no card contained ${MARKER} (focused activeElement was "${focused.active}")`)
 
+    // ---------------------------------------------------------------------
+    // 9. Pointer correction. Deliberately runs WHILE .panel__slot--blocked
+    //    still exists: the gate is temporarily lifted for this one panel so
+    //    the corrector is what is being measured. Removing the gate first
+    //    would make a broken corrector silent instead of loud.
+    //
+    //    The assertion is about xterm's own hit-testing: at scale 0.5 an
+    //    UNCORRECTED click reports a column at twice the true offset, so a
+    //    double-click lands on the wrong word (or past end-of-line, selecting
+    //    nothing). Writing three well-separated words and double-clicking the
+    //    middle one turns "the column is off by a factor of k" into a string
+    //    comparison.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0') // back to 100% before setting up
+
+      const selection = await wc.executeJavaScript(`(async () => {
+        const slot = document.querySelector('.panel__slot')
+        if (!slot) return { error: 'no live panel' }
+
+        // Focus this panel FIRST. assignTiers pins the focused panel live
+        // unconditionally, which is what keeps it from being demoted to a
+        // card when the zoom drops below LIVE_MIN_SCALE below — without this
+        // there is no .panel__slot left to click by the time we need one.
+        slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+
+        // Known content at known columns. Written through the session handle
+        // rather than the PTY so no shell prompt or echo can shift it.
+        window.__m4aWrite('\\r\\nalpha beta gamma\\r\\n')
+        await new Promise((r) => setTimeout(r, 300))
+
+        // Zoom to 50% via the canvas's own path, so the real transform is
+        // what the corrector sees.
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        await new Promise((r) => setTimeout(r, 300))
+
+        // Lift the gate — AFTER the zoom, not before. TerminalPanel derives
+        // .panel__slot--blocked from the current scale on every render, so a
+        // class removed before zooming is put straight back by the re-render
+        // the zoom triggers. Task 4 deletes the class entirely; until then
+        // this is what lets the click through, and it only holds because
+        // nothing re-renders this panel between here and the clicks below.
+        slot.classList.remove('panel__slot--blocked')
+
+        const scale = window.__m4aScale()
+        const screen = window.__m4aCellToScreen('beta')
+        if (!screen) return { error: 'could not locate the word', scale }
+
+        const opts = {
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: screen.x, clientY: screen.y, button: 0, buttons: 1
+        }
+        const target = document.elementFromPoint(screen.x, screen.y) || slot
+        target.dispatchEvent(new MouseEvent('mousedown', { ...opts, detail: 1 }))
+        target.dispatchEvent(new MouseEvent('mouseup', { ...opts, detail: 1, buttons: 0 }))
+        target.dispatchEvent(new MouseEvent('mousedown', { ...opts, detail: 2 }))
+        target.dispatchEvent(new MouseEvent('mouseup', { ...opts, detail: 2, buttons: 0 }))
+        await new Promise((r) => setTimeout(r, 200))
+
+        return { scale, text: window.__m4aSelection() }
+      })()`)
+
+      ok('9 a double-click selects the right word at 50% zoom',
+        selection && selection.text === 'beta',
+        `scale=${selection && selection.scale} selection=${JSON.stringify(
+          selection && (selection.text ?? selection.error)
+        )}`)
+
+      await zoomTo(wc, '0')
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

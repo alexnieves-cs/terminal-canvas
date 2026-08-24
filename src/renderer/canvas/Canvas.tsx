@@ -7,6 +7,7 @@ import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
+import { installPointerCorrection } from '@renderer/components/xterm-pointer'
 import { makePanel, nextZ, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
 /** Clicks reach xterm only near 1:1; see the spec's "Focus and input". */
@@ -83,6 +84,53 @@ export function Canvas(): JSX.Element {
     return () => {
       offCopy()
       offPaste()
+    }
+  }, [])
+
+  // Same mirror-into-a-ref pattern, for the listeners below that need the
+  // current scale but must not resubscribe: `viewport` changes on every wheel
+  // event, and a document-level listener reinstalled at 60Hz mid-gesture would
+  // drop the drag state it is holding.
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
+
+  // Corrects xterm's coordinates for the world transform. Reads the scale
+  // through a ref so the listener is installed once and never resubscribes —
+  // viewport changes on every wheel event.
+  useEffect(() => installPointerCorrection(() => viewportRef.current.scale), [])
+
+  // Test hooks for verify:panels. The registry is a module-level closure with
+  // no global handle by design, and executeJavaScript has no other route into
+  // it. Kept to four narrow reads/writes rather than exposing the registry
+  // itself, so the suite cannot quietly start depending on internals.
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    w.__m4aScale = (): number => viewportRef.current.scale
+    w.__m4aWrite = (data: string): void => {
+      const id = focusedIdRef.current
+      if (id) registry.get(id)?.handle.write(data)
+    }
+    w.__m4aSelection = (): string => {
+      const id = focusedIdRef.current
+      return registry.get(id ?? '')?.handle.getSelection() ?? ''
+    }
+    /** Screen-space centre of the first cell of `word` in the focused panel. */
+    w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      if (!session) return null
+      const found = session.handle.locate(word)
+      if (!found) return null
+      const rect = session.handle.host.getBoundingClientRect()
+      const cell = session.handle.cellSize()
+      const scale = viewportRef.current.scale
+      // rect is transform-aware (screen px); cell is CSS px. Multiplying the
+      // cell offset by the scale is the INVERSE of correctForScale, which is
+      // how a caller turns a buffer position back into a real screen point.
+      return {
+        x: rect.left + (found.col + 0.5) * cell.width * scale,
+        y: rect.top + (found.row + 0.5) * cell.height * scale
+      }
     }
   }, [])
 
