@@ -458,6 +458,53 @@ const MOVE = { kind: 'move' }
     `nextZ=${V.nextZ(panels)} raisedZ=${raised.find((p) => p.rect.id === 'a').z}`)
 }
 
+// ---------------------------------------------------------------------------
+// M4a: pointer correction (35-37)
+// ---------------------------------------------------------------------------
+
+// The panel slot as the browser reports it: getBoundingClientRect is
+// transform-aware, so `left` is already a SCREEN pixel coordinate.
+const SLOT = { left: 300, top: 200 }
+
+// 35. At scale 1 the point is returned untouched. This is the common case and
+//     it must cost nothing and change nothing.
+{
+  const p = { x: 512, y: 377 }
+  const out = V.correctForScale(p, SLOT, 1)
+  ok('35 correctForScale is identity at scale 1',
+    out.x === p.x && out.y === p.y, JSON.stringify(out))
+}
+
+// 36. The offset from the slot's origin is divided by the scale, while the
+//     origin itself is preserved. That combination is the whole fix: xterm
+//     computes `clientX - rect.left` and divides by an UNSCALED cell width,
+//     so the offset must arrive already in CSS pixels.
+{
+  const out = V.correctForScale({ x: 300 + 400, y: 200 + 100 }, SLOT, 2)
+  ok('36 correctForScale halves the offset at scale 2',
+    near(out.x - SLOT.left, 200) && near(out.y - SLOT.top, 50),
+    `offset ${out.x - SLOT.left}, ${out.y - SLOT.top}`)
+}
+
+// 37. Below 1:1 the offset grows. Checked across a spread, and expressed as
+//     the property rather than as four hardcoded numbers: corrected offset
+//     times scale must return the original screen offset, at every scale.
+{
+  let worst = 0
+  for (const scale of [0.1, 0.25, 0.5, 0.9, 1.1, 2, 3]) {
+    for (const p of [{ x: 300, y: 200 }, { x: 640, y: 480 }, { x: 12, y: 999 }]) {
+      const out = V.correctForScale(p, SLOT, scale)
+      worst = Math.max(
+        worst,
+        Math.abs((out.x - SLOT.left) * scale - (p.x - SLOT.left)),
+        Math.abs((out.y - SLOT.top) * scale - (p.y - SLOT.top))
+      )
+    }
+  }
+  ok('37 correcting then rescaling round-trips at every scale', worst < EPS,
+    `worst drift ${worst}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
