@@ -14,9 +14,11 @@ export function useViewport(
   hostRef: RefObject<HTMLElement | null>,
   rects: WorldRect[],
   onSpawn?: (worldCentre: Point) => void,
-  shouldYieldWheel?: (event: WheelEvent) => boolean
+  shouldYieldWheel?: (event: WheelEvent) => boolean,
+  /** The restored camera. Cmd+0 still returns to INITIAL, not to this. */
+  initialViewport?: Viewport
 ): Viewport {
-  const [viewport, setViewport] = useState<Viewport>(INITIAL)
+  const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
 

@@ -60,6 +60,21 @@ export const SEED_PANELS: Panel[] = [
   { rect: { id: 's12', x: 400, y: -640, w: PANEL_W, h: PANEL_H }, spec: shell('s12'), z: 12 }
 ]
 
+/** The id the single first-run panel gets. Kept out of the `n` sequence Cmd+N uses. */
+export const FIRST_RUN_ID = 'p1'
+
+/**
+ * What a fresh install — or a canvas that was reset — opens with.
+ *
+ * One panel at the world origin, deliberately a placeholder: the new-canvas
+ * wizard milestone (count control, per-panel working directory, CLI picker)
+ * replaces this. SEED_PANELS' twelve scattered entries stay put as verify
+ * fixture data, which is what they have always actually been.
+ */
+export function firstRunPanels(): Panel[] {
+  return [{ rect: { id: FIRST_RUN_ID, x: -PANEL_W / 2, y: -PANEL_H / 2, w: PANEL_W, h: PANEL_H }, spec: shell(FIRST_RUN_ID), z: 1 }]
+}
+
 /** Cmd+N: a panel centred on wherever the camera is looking, on top. */
 export function makePanel(id: string, centre: Point, z: number): Panel {
   return {

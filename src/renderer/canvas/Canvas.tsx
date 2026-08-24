@@ -10,7 +10,9 @@ import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
-import { makePanel, nextZ, raisePanel, removePanel, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
+import type { CanvasState } from '@shared/layout-schema'
+import { toPanels } from '@renderer/panels/layout-adapt'
+import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -24,9 +26,17 @@ const registry = createRegistry({
 // main-side by window-lifecycle.ts; this covers the orderly path.
 window.addEventListener('beforeunload', () => registry.disposeAll())
 
-export function Canvas(): JSX.Element {
+export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
-  const [panels, setPanels] = useState<Panel[]>(SEED_PANELS)
+
+  // An empty panel list means first run (or a reset canvas): the store returns
+  // no panels and the renderer decides what "nothing" opens with. That also
+  // makes closing every panel and relaunching give back one fresh panel rather
+  // than a blank canvas — intended, since a canvas with nothing on it and no
+  // visible affordance is the outcome this design already rejected.
+  const [panels, setPanels] = useState<Panel[]>(() =>
+    initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
+  )
   const rects = useMemo(() => panels.map((p) => p.rect), [panels])
   // hitTest returns the LAST match, so paint order and pick order agree only
   // if the array it receives is in paint order. Paint order is z now, not
@@ -47,13 +57,24 @@ export function Canvas(): JSX.Element {
   // setPanelRect/removePanel then act on both entries at once. The counter is a
   // ref rather than state because nothing renders it. `n` keeps it clear of the
   // seed panels' `s` ids.
-  const nextIdRef = useRef(1)
+  //
+  // Seeded from the RESTORED ids, never from a constant. `1` on every run was
+  // sound while the array always started empty; persistence breaks that.
+  // Restore a canvas holding n5, press Cmd+N five times, and the fifth panel is
+  // n5 too — the same duplicate-id defect the comment above describes,
+  // resurrected through a different door.
+  const nextIdRef = useRef(
+    initial.panels.reduce((max, p) => {
+      const match = /^n(\d+)$/.exec(p.id)
+      return match ? Math.max(max, Number(match[1]) + 1) : max
+    }, 1)
+  )
   const onSpawn = useCallback((centre: Point) => {
     const id = `n${nextIdRef.current++}`
     setPanels((current) => [...current, makePanel(id, centre, nextZ(current))])
   }, [])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId)
+  const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
 
   // Mirrors focusedId into a ref so shouldYieldWheel (below) can read the
@@ -74,7 +95,7 @@ export function Canvas(): JSX.Element {
     return panel?.getAttribute('data-panel-id') === id
   }, [])
 
-  const viewport = useViewport(hostRef, rects, onSpawn, shouldYieldWheel)
+  const viewport = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather

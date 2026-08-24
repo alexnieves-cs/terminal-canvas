@@ -24,7 +24,15 @@ buildSync({
   format: 'cjs',
   external: ['node-pty', 'electron']
 })
-const { registerIpcHandlers, PtyManager, resolveShellEnv, createLayoutStore } = require(ENTRY_OUT)
+const {
+  registerIpcHandlers,
+  PtyManager,
+  resolveShellEnv,
+  createLayoutStore,
+  fromPanels,
+  SEED_PANELS,
+  DEFAULT_CAMERA
+} = require(ENTRY_OUT)
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -128,18 +136,33 @@ app.whenReady().then(async () => {
   // renderer's window.canvas.pty bridge calls.
   const ptyManager = new PtyManager(() => win.webContents)
 
-  // A real store, not a stub: after a later task the built renderer calls
-  // and awaits window.canvas.layout.load() before React mounts, so an
-  // unhandled channel here would leave every check failing against a blank
-  // canvas with a symptom that looks nothing like its cause. Pointed at a
-  // tmpdir, never app.getPath('userData'), so the result never depends on
-  // whatever canvas the developer running this happens to have saved for
-  // real. Left unseeded (empty) — this task's job is only to wire the
-  // channel; a later task adds a fixture and panels still come from
-  // SEED_PANELS here.
+  // A real store, not a stub: the built renderer now calls and awaits
+  // window.canvas.layout.load() before React mounts, so an unhandled channel
+  // here would leave every check failing against a blank canvas with a
+  // symptom that looks nothing like its cause. Pointed at a tmpdir, never
+  // app.getPath('userData'), so the result never depends on whatever canvas
+  // the developer running this happens to have saved for real.
   const layoutStore = createLayoutStore({
     filePath: join(mkdtempSync(join(tmpdir(), 'tc-panels-')), 'layout.json')
   })
+
+  // Seed the store with the twelve-panel fixture BEFORE the window loads.
+  // Without this, layout:load returns no panels, Canvas boots the one-panel
+  // first-run canvas (firstRunPanels()), and every check that needs several
+  // off-screen panels against LIVE_BUDGET (1, 3, 15) hard-fails with "need
+  // two live panels" — SEED_PANELS was always fixture data; persistence just
+  // makes that explicit instead of implicit. save()+flushSync() go through
+  // the real store API (the same path a real quit takes) rather than hand-
+  // writing layout.json, so this seed can never silently drift out of sync
+  // with what parseLayout actually accepts.
+  layoutStore.save({
+    panels: fromPanels(SEED_PANELS),
+    camera: { ...DEFAULT_CAMERA },
+    selectedId: null,
+    focusedId: null
+  })
+  layoutStore.flushSync()
+
   registerIpcHandlers(ptyManager, layoutStore)
 
   // A hung infrastructure call (e.g. a renderer crash mid-executeJavaScript)

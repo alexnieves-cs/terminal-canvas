@@ -6,7 +6,30 @@
    and whether Chromium page-zoomed instead of the canvas. The window is never
    shown. */
 const { join } = require('node:path')
+const { mkdtempSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { buildSync } = require('esbuild')
 const { app, BrowserWindow } = require('electron')
+
+// M4b: main.tsx now awaits window.canvas.layout.load() before React ever
+// mounts, so a window with no ipcMain handler for it does not just fail one
+// check — the renderer's boot() promise rejects, .world never renders, and
+// EVERY check in this file (which all read the rendered DOM) fails for a
+// reason that has nothing to do with wheel/zoom/drop-guard behaviour. This
+// suite doesn't assert anything about panels or PTYs, so an unseeded store
+// (first-run canvas) is enough — reusing panels-entry.cjs's bundle, the same
+// wiring verify-panels.cjs and verify-window-lifecycle.cjs already use for
+// this exact "nothing registers ipcMain handlers here" problem.
+const ENTRY_OUT = join(__dirname, '..', 'out', 'verify', 'canvas-entry.cjs')
+buildSync({
+  entryPoints: [join(__dirname, 'panels-entry.cjs')],
+  outfile: ENTRY_OUT,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['node-pty', 'electron']
+})
+const { registerIpcHandlers, PtyManager, resolveShellEnv, createLayoutStore } = require(ENTRY_OUT)
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -51,6 +74,17 @@ app.whenReady().then(async () => {
       sandbox: false
     }
   })
+  // Same wiring main/index.ts does at real startup, and the same reason
+  // panels-entry.cjs's consumers need it: pty:create is what a first-run
+  // panel triggers, and an uncached probe per concurrent create is not a
+  // path the real app ever takes.
+  await resolveShellEnv()
+  const ptyManager = new PtyManager(() => win.webContents)
+  const layoutStore = createLayoutStore({
+    filePath: join(mkdtempSync(join(tmpdir(), 'tc-canvas-')), 'layout.json')
+  })
+  registerIpcHandlers(ptyManager, layoutStore)
+
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
   await sleep(800)
 

@@ -1,14 +1,15 @@
 import type { JSX } from 'react'
+import type { CanvasState } from '@shared/layout-schema'
 import { Canvas } from './canvas/Canvas'
 
 /**
- * M3: real terminals on the canvas. The M2 regression — placeholder rectangles
- * instead of a live terminal — ends here; Canvas owns the panels now.
+ * M4b: the starting canvas arrives from main rather than from a constant.
+ * App stays a pass-through — it exists to own the outer layout, not state.
  */
-export function App(): JSX.Element {
+export function App({ initial }: { initial: CanvasState }): JSX.Element {
   return (
     <div className="app">
-      <Canvas />
+      <Canvas initial={initial} />
     </div>
   )
 }
