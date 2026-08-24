@@ -137,11 +137,14 @@ const ok = (n, pass, detail) => {
 
 // 9. Every subcommand targets the private socket. A missing -L here reaches
 // the user's real tmux server, and kill-server would destroy their work.
+// This includes the embedded tmux invocation in the pane-died hook.
 {
   const all = [T.buildListArgs(), T.buildKillSessionArgs('p1'), T.buildKillServerArgs()]
   const bad = all.filter((a) => !(a[0] === '-L' && a[1] === T.TMUX_SOCKET))
-  ok('9 list, kill-session and kill-server all target the private socket',
-    bad.length === 0, `offenders=${JSON.stringify(bad)}`)
+  const conf = T.buildTmuxConf('/tmp/exits')
+  const hookHasSocket = conf.includes(`tmux -L ${T.TMUX_SOCKET} kill-session`)
+  ok('9 list, kill-session, kill-server, and the hook all target the private socket',
+    bad.length === 0 && hookHasSocket, `${bad.length ? 'offenders=' + JSON.stringify(bad) : ''} ${hookHasSocket ? 'hook-ok' : 'hook-missing-L'}`)
 }
 
 // 10. list parsing keeps live panes and DROPS dead ones. Under

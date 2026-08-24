@@ -98,7 +98,9 @@ export function buildTmuxConf(exitDir: string): string {
     // which is the callback PtyManager already uses to send pty:exit. Main
     // therefore reads the file in a handler it already has: no watcher, no
     // polling, no new IPC. Reversing these two is a race.
-    `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > ${exitDir}/#{session_name}.exit; tmux kill-session -t #{session_name}"'`,
+    // The run-shell child inherits $TMUX so -L is redundant, but the cost of
+    // being wrong is silently killing the user's own sessions. Keep it anyway.
+    `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > ${exitDir}/#{session_name}.exit; tmux -L terminal-canvas kill-session -t #{session_name}"'`,
     // NOTE: `mouse` is deliberately absent, i.e. left off. `mouse on` makes
     // TMUX capture mouse reporting instead of passing it to the application,
     // which would silently defeat all of M4a's pointer correction from one
