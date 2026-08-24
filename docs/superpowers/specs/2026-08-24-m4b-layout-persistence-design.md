@@ -22,6 +22,7 @@ In:
 - Restored panels are **dormant**: they spawn no process until clicked.
 - A `layout.json` in `userData`, owned by the main process, written atomically.
 - First run (and a reset canvas) opens one centred panel.
+- **Undo/redo** over panel actions, via `Cmd+Z` / `Cmd+Shift+Z`.
 
 Out, and deliberately so:
 
@@ -323,11 +324,89 @@ at the next launch — nothing in the running session changes, because nothing i
 the running session reads them.
 
 `Reset canvas…` clears the stored layout and returns the canvas to its first-run
-state. It confirms first, via `dialog.showMessageBox`: unlike closing a single
-panel, this is not recoverable by re-doing one action.
+state.
+
+**It always confirms, and the confirmation names what is about to be lost.** Not
+a generic "Are you sure?" — the renderer supplies the current counts, and the
+dialog reads:
+
+> **Reset this canvas?**
+> 7 panels will be closed, including 3 running processes. This cannot be undone.
+> *[ Cancel ]  [ Reset Canvas ]*
+
+Three details are deliberate. `Cancel` is `defaultId`, so `Return` dismisses
+rather than destroys. `Reset Canvas` is `cancelId`'s opposite and is marked
+destructive. And the running-process count comes from the live session statuses,
+not from the panel count — closing seven idle panels and closing seven running
+agents are very different acts, and the sentence should not read the same for
+both.
+
+This is the only action in the app that `Cmd+Z` cannot take back (see below),
+which is exactly why it is the only one that asks.
 
 `buildAppMenu()` gains parameters (the current settings and a toggle callback),
 so it is built after `store.load()` in `app.whenReady`.
+
+## Undo
+
+Panel actions are undoable with `Cmd+Z`, redoable with `Cmd+Shift+Z`.
+
+This is close to free, and the reason is worth recording: the undo stack and the
+persistence snapshot are the same data. M4b already serializes `Panel[]` on
+every change to feed `layout:save`. An undo history is that same sequence of
+snapshots kept in memory rather than written to disk.
+
+### What is undoable
+
+Everything that changes `Panel[]`, one entry per completed gesture:
+
+| Action | Undo restores |
+|---|---|
+| Move a panel | Its previous rect |
+| Resize a panel | Its previous rect, and `registry.refit` re-commits the old grid |
+| Raise (select) a panel | Its previous `z` |
+| Close a panel | The panel, **dormant** |
+| New panel (`Cmd+N`) | Removes it, disposing its session |
+
+A gesture pushes **one** entry, on release — the same boundary `onCommit`
+already uses for `pty:resize`. Pushing per frame would make a single drag take
+sixty `Cmd+Z` presses to undo.
+
+### What is not undoable, and why
+
+- **A killed process.** Undoing a close brings the panel back, but its PTY was
+  killed on the click that closed it and there is nothing to revive. It returns
+  dormant, so clicking it starts a fresh process. This is honest rather than
+  ideal, and it is the reason the close button already confirms before killing
+  something running. (In M4c, where tmux outlives the renderer, undo-close can
+  become a genuine reconnect.)
+- **Camera moves.** Pan and zoom are continuous and self-evidently reversible by
+  doing the opposite; putting them on the undo stack means `Cmd+Z` usually
+  rewinds a scroll instead of the edit the user meant.
+- **Terminal input.** What was typed into a shell is the process's business.
+- **Settings toggles and `Reset canvas…`.** Both are deliberate,
+  confirmed-or-inconsequential acts outside the panel-edit model.
+
+### Mechanics
+
+The stack is capped at 50 entries and lives in memory only — it is **not**
+persisted. A relaunch starts with an empty history. Persisting undo across runs
+would mean the file also had to store sessions that no longer exist, which is
+the same trap scrollback persistence was rejected for.
+
+Delivery reuses the path that already exists for the clipboard: `menu.ts` owns
+the accelerators and forwards `edit:undo` / `edit:redo` to the renderer, exactly
+as it does `edit:copy` / `edit:paste`. Two new entries in `IPC_EVENTS`, no new
+mechanism.
+
+`Cmd+Z` is claimed unconditionally, including while a terminal is focused. This
+is safe and it is the established rule: agent TUIs claim essentially every bare
+key, so the canvas requires `Cmd` for every shortcut and takes nothing without
+it. **`Ctrl+Z` is untouched and still reaches the PTY as SIGTSTP** — the same
+split the codebase already draws between `Cmd+C` (copy) and `Ctrl+C` (SIGINT).
+
+Undoing pushes new state through the same `setPanels` path as any other change,
+so a save follows automatically. Undo needs no persistence code of its own.
 
 ## First run
 
@@ -357,7 +436,11 @@ test's requirement, not a product decision.
 | `verify:layout` *(new)* | plain node | Every failure-mode row above; `toPanels`/`fromPanels` round-trip; id validation; coalescing (N saves → 1 write); atomic rename; `flushSync` writing the newest snapshot; a write into an unwritable path not throwing; settings preserved across a renderer merge; settings applied by `initial()` |
 | `verify:viewport` | plain node | Dormancy in `assignTiers`: a dormant panel is not promoted, and specifically is not promoted when it is the focused panel |
 | `verify:ipc` | real Electron | Free — it already asserts every contract channel has a handler, so `layout:load`/`layout:save` are covered the moment they are declared |
-| `verify:panels` | real Electron | Mount `Canvas` with a known initial state: panels land at their persisted rects and `z`; a dormant panel stays carded with the camera sitting on it; clicking it wakes and spawns it; `Cmd+N` after a restore does not collide with a restored id |
+| `verify:viewport` *(again)* | plain node | `history.ts` itself, bundled into the same plain-node target as `panels.ts`: push/undo/redo: push/undo/redo, the 50-entry cap, redo cleared by a new action after an undo, undo past the beginning and redo past the end both no-ops |
+| `verify:panels` | real Electron | Undo restores a dragged panel’s rect and a closed panel (dormant); one drag gesture is one undo. Mount `Canvas` with a known initial state: panels land at their persisted rects and `z`; a dormant panel stays carded with the camera sitting on it; clicking it wakes and spawns it; `Cmd+N` after a restore does not collide with a restored id |
+
+`history.ts` is added to `viewport-entry.cjs`'s bundle, alongside `panels.ts`
+and `panel-interaction.ts`; it needs no suite of its own.
 
 `verify:layout` needs a new `scripts/verify-layout.cjs` plus a bundle entry
 alongside `viewport-entry.cjs`, and a `verify:layout` script wired into
@@ -391,12 +474,15 @@ as a known gap.
 - `src/main/index.ts` — construct the store, `load()` before `buildAppMenu`,
   flush on `before-quit`.
 - `src/main/ipc.ts` — the two handlers.
-- `src/main/menu.ts` — the "Restore on launch" submenu and `Reset canvas…`.
+- `src/main/menu.ts` — the "Restore on launch" submenu, `Reset canvas…`, and
+  the Undo/Redo accelerators.
 - `src/preload/index.ts` — expose `window.canvas.layout`.
 - `src/renderer/main.tsx` — await the load before rendering.
 - `src/renderer/canvas/Canvas.tsx` — initial state as a prop; save effect;
   `nextIdRef` seeding; wake-on-click.
 - `src/renderer/canvas/lod.ts` — dormancy outranks focus.
+- `src/renderer/panels/history.ts` *(new)* — the pure undo stack: `push`,
+  `undo`, `redo`, the cap. No React, no DOM.
 - `src/renderer/session/session-registry.ts` — the dormant flag; suppress
   spawn-on-promote; `wake(id)`.
 - `src/renderer/session/panel-session.ts` — `dormant` on `PanelSession`.
@@ -418,4 +504,11 @@ as a known gap.
 6. Corrupt `layout.json` by truncating it: the app opens on a working canvas and
    logs why.
 7. `Cmd+R`: the layout survives the reload.
-8. `npm run verify` is green, including the new `verify:layout`.
+8. Drag a panel, then `Cmd+Z`: it returns to where it was, in one press, not
+   sixty. `Cmd+Shift+Z` puts it back.
+9. Close a running panel, then `Cmd+Z`: the panel returns dormant and clicking
+   it starts a fresh process.
+10. `Ctrl+Z` in a focused terminal still suspends the foreground process.
+11. `Reset canvas…` names the panel and running-process counts, and `Return`
+    cancels rather than resets.
+12. `npm run verify` is green, including the new `verify:layout`.
