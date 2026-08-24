@@ -166,7 +166,18 @@ export class PtyManager {
 
   kill(panelId: PanelId): void {
     const session = this.sessions.get(panelId)
-    if (!session) return
+    // No LOCAL session is not the same as no session. Under tmux a panel can
+    // be reattachable — its session survived a reload — while this manager has
+    // never spawned a client for it, because the panel was off-screen or held
+    // back by LIVE_BUDGET and never went live. Returning here would leave that
+    // session running an agent with nothing left able to reach, close, or type
+    // into it for the rest of the run. destroy() is keyed by panel id and is a
+    // no-op on the direct backend, so this costs nothing when there is
+    // genuinely nothing there.
+    if (!session) {
+      this.getBackend().destroy(panelId)
+      return
+    }
     session.killed = true
     if (session.flushTimer) clearTimeout(session.flushTimer)
     try {

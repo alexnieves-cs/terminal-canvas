@@ -277,21 +277,28 @@ export function createRegistry(deps: RegistryDeps): Registry {
       const session = sessions.get(id)
       if (!session) return
       session.handle.dispose()
-      // Guarded on spawned purely to skip a pointless IPC round trip: main's
-      // PtyManager.kill early-returns on an id it has no session for, so an
-      // unguarded call would be harmless — just wasted. Do not reason about
-      // this as though main throws; it does not.
-      if (session.spawned) void bridge.pty.kill(id)
+      // Unconditional since M4c, and the `spawned` guard that used to stand
+      // here was a real leak rather than an optimisation. Under node-pty a
+      // never-spawned panel genuinely had no process. Under tmux it may own a
+      // SURVIVING session — reattachable after a reload but never promoted to
+      // live, because it was off-screen or held back by LIVE_BUDGET — and
+      // skipping the kill leaves that agent running with no panel able to
+      // reach it for the rest of the run. main's PtyManager.kill now reaches
+      // backend.destroy() even for an id it has no local session for, which is
+      // the other half of the same fix. The cost when there really is nothing
+      // is one wasted IPC round trip.
+      void bridge.pty.kill(id)
       sessions.delete(id)
       bump()
     },
 
     disposeAll() {
       // One of two places a PTY is killed; dispose(id) is the other. Tiering
-      // is neither, and must never become either.
+      // is neither, and must never become either. Unguarded on `spawned` for
+      // the same reason dispose() is — see there.
       for (const session of sessions.values()) {
         session.handle.dispose()
-        if (session.spawned) void bridge.pty.kill(session.id)
+        void bridge.pty.kill(session.id)
       }
       sessions.clear()
       bump()

@@ -8,7 +8,9 @@ import {
   buildListArgs,
   buildTmuxArgs,
   exitFilePath,
-  parseListOutput
+  parseListOutput,
+  TMUX_SOCKET,
+  type TmuxSocket
 } from './tmux-args'
 
 /**
@@ -96,14 +98,22 @@ export function createDirectBackend(reason: string): SessionBackend {
  * The whole feature is one flag: `new-session -A` attaches if the session
  * exists and creates it if it does not, so create and reattach are the same
  * call. pty:create keeps its exact meaning and session-registry.ts never
- * learns reattachment exists.
+ * learns reattachment exists — it did, however, have to stop skipping
+ * pty:kill for a never-spawned panel, which under tmux can still own a live
+ * session. See kill() in pty-manager.ts.
+ *
+ * `socket` defaults to the production socket and exists so a verify suite can
+ * run the real backend — shutdown() and all — against a throwaway server
+ * instead of the one a running app is using.
  */
 export function createTmuxBackend(o: {
   tmuxPath: string
   exitDir: string
   confPath: string
   reason: string
+  socket?: TmuxSocket
 }): SessionBackend {
+  const socket = o.socket ?? TMUX_SOCKET
   /**
    * Every tmux invocation that is NOT the panel's own client. Failure is
    * routine rather than exceptional — `list-panes` with no server running exits
@@ -135,7 +145,8 @@ export function createTmuxBackend(o: {
           cols: spec.cols,
           rows: spec.rows,
           command,
-          args: spec.args
+          args: spec.args,
+          socket
         }),
         {
           name: 'xterm-256color',
@@ -151,7 +162,7 @@ export function createTmuxBackend(o: {
       // parseListOutput drops dead panes. See its comment: under
       // remain-on-exit on, a finished session still exists until the hook
       // kills it, and reporting it live would attach a client to a corpse.
-      return parseListOutput(cli(buildListArgs())).map((e) => ({
+      return parseListOutput(cli(buildListArgs(socket))).map((e) => ({
         panelId: e.panelId,
         pid: e.pid,
         command: e.command,
@@ -194,11 +205,11 @@ export function createTmuxBackend(o: {
     },
 
     destroy(panelId: PanelId): void {
-      cli(buildKillSessionArgs(panelId))
+      cli(buildKillSessionArgs(panelId, socket))
     },
 
     shutdown(): void {
-      cli(buildKillServerArgs())
+      cli(buildKillServerArgs(socket))
       // Per-run directory; nothing in it outlives the app.
       try {
         rmSync(o.exitDir, { recursive: true, force: true })

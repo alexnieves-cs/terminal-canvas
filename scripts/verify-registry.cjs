@@ -449,6 +449,28 @@ const tick = () => new Promise((r) => setImmediate(r))
       `spawnedImmediately=${spawnedImmediately} dormantAfterWake=${dormantAfterWake} createdAfterPromote=${bridge.calls.create.length}`)
   }
 
+  // ---------------------------------------------------------------------------
+  // M4c: closing a panel that never spawned (19)
+  // ---------------------------------------------------------------------------
+
+  // 19. dispose() must ask main to kill even a session this renderer never
+  // spawned. Under node-pty that call was pure waste and dispose() guarded it
+  // on `spawned`; under tmux the session can be alive and REATTACHABLE — it
+  // survived a reload but was off-screen or held back by LIVE_BUDGET, so it
+  // never went live — and skipping the kill leaves an agent running with no
+  // panel left able to reach it. Nothing else in the renderer can observe the
+  // difference, which is why this needs its own check rather than falling out
+  // of an existing one.
+  {
+    const { bridge, registry } = setup()
+    registry.ensure('never', SPEC)
+    const spawnedBefore = registry.get('never').spawned
+    registry.dispose('never')
+    ok('19 closing a never-spawned panel still asks main to kill its session',
+      spawnedBefore === false && bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'never',
+      `spawned=${spawnedBefore} kills=${JSON.stringify(bridge.calls.kill)}`)
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
