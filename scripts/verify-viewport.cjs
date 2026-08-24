@@ -505,6 +505,18 @@ const SLOT = { left: 300, top: 200 }
     `worst drift ${worst}`)
 }
 
+// 38. Below 1:1 is where the uncorrected error was largest and where the gate
+//     used to refuse input entirely. A concrete sub-1 scale pin that the offset
+//     doubles (opposite of check 36). At scale 0.5, input point (500, 300) with
+//     slot (300, 200): offset is (200, 100) screen pixels; divided by 0.5 gives
+//     (400, 200) CSS pixels; corrected point is (300+400, 200+200) = (700, 400).
+{
+  const out = V.correctForScale({ x: 500, y: 300 }, SLOT, 0.5)
+  ok('38 correctForScale doubles the offset at scale 0.5',
+    near(out.x - SLOT.left, 400) && near(out.y - SLOT.top, 200),
+    `offset ${out.x - SLOT.left}, ${out.y - SLOT.top}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
