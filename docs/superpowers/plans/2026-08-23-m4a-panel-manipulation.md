@@ -631,18 +631,16 @@ a check of the corrector rather than a check of the gate.
       const selection = await wc.executeJavaScript(`(async () => {
         const slot = document.querySelector('.panel__slot')
         if (!slot) return { error: 'no live panel' }
-        const panel = slot.closest('.panel')
 
-        // Focus this panel so tiering pins it live for the whole check.
+        // Focus this panel FIRST. assignTiers pins the focused panel live
+        // unconditionally, which is what keeps it from being demoted to a
+        // card when the zoom drops below LIVE_MIN_SCALE below — without this
+        // there is no .panel__slot left to click by the time we need one.
         slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-
-        // Lift the gate for this panel only. Task 4 deletes the class
-        // entirely; until then this is what lets the click through.
-        slot.classList.remove('panel__slot--blocked')
+        await new Promise((r) => setTimeout(r, 150))
 
         // Known content at known columns. Written through the session handle
         // rather than the PTY so no shell prompt or echo can shift it.
-        const id = panel.querySelector('.panel__title') ? panel : null
         window.__m4aWrite('\\r\\nalpha beta gamma\\r\\n')
         await new Promise((r) => setTimeout(r, 300))
 
@@ -653,6 +651,14 @@ a check of the corrector rather than a check of the gate.
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         await new Promise((r) => setTimeout(r, 300))
+
+        // Lift the gate — AFTER the zoom, not before. TerminalPanel derives
+        // .panel__slot--blocked from the current scale on every render, so a
+        // class removed before zooming is put straight back by the re-render
+        // the zoom triggers. Task 4 deletes the class entirely; until then
+        // this is what lets the click through, and it only holds because
+        // nothing re-renders this panel between here and the clicks below.
+        slot.classList.remove('panel__slot--blocked')
 
         const scale = window.__m4aScale()
         const screen = window.__m4aCellToScreen('beta')
@@ -1054,7 +1060,9 @@ The gate no longer exists, so delete this line from check 9's script:
         slot.classList.remove('panel__slot--blocked')
 ```
 
-and the two comment lines above it that explain the temporary lift.
+and the six-line comment block above it that explains the temporary lift.
+Everything else in check 9 stays: the focus click, the write, the zoom, and
+the four dispatched mouse events are all still what the check needs.
 
 - [ ] **Step 7: Run everything**
 
