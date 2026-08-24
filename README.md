@@ -126,3 +126,6 @@ TUIs are corrected by the same change.
 | M4b | Layout persistence: panels survive a relaunch | |
 | M4c | tmux backing: sessions survive the renderer | |
 | M5 | Presets, command palette, electron-builder packaging | |
+
+Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
+each recorded next to the load-bearing invariant it would have to survive.
