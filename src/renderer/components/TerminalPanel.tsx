@@ -20,7 +20,6 @@ export interface TerminalPanelProps {
   version: number
   rect: WorldRect
   selected: boolean
-  interactive: boolean
   onSelect: (id: string) => void
   onFocus: (id: string) => void
   /** Called once the retained host is in the document, so it can be opened. */
@@ -32,7 +31,7 @@ export interface TerminalPanelProps {
 const CARD_LINES = 6
 
 function TerminalPanelImpl({
-  session, rect, selected, interactive, onSelect, onFocus, onSlotMount, onSlotUnmount
+  session, rect, selected, onSelect, onFocus, onSlotMount, onSlotUnmount
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -79,22 +78,16 @@ function TerminalPanelImpl({
 
       {live ? (
         <div
-          className={`panel__slot${interactive ? '' : ' panel__slot--blocked'}`}
+          className="panel__slot"
           ref={slotRef}
           onMouseDown={(event) => {
+            // Chrome selects; body focuses and falls through to xterm. No
+            // preventDefault: M3 needed it because pointer-events:none stopped
+            // xterm from focusing itself, so the browser's default action
+            // would have cleared focus to <body>. With correction, xterm
+            // receives the (corrected) event and manages its own focus.
             event.stopPropagation()
             onFocus(session.id)
-            // The interaction gate is two complementary halves (see the
-            // matching comment on .panel__slot--blocked in styles.css): CSS
-            // pointer-events:none stops xterm's own mousedown listener from
-            // ever seeing this click, and this preventDefault() stops the
-            // browser's own default mousedown action from clearing focus
-            // back to <body> once our handler above already focused the
-            // panel via onFocus. Removing either half breaks the gate in a
-            // different direction: drop pointer-events and xterm's listener
-            // focuses the wrong cell; drop preventDefault and a gated click
-            // focuses nothing, so typing has nowhere to go.
-            if (!interactive) event.preventDefault()
           }}
         />
       ) : (

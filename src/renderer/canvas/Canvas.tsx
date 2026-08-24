@@ -10,9 +10,6 @@ import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection } from '@renderer/components/xterm-pointer'
 import { makePanel, nextZ, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
-/** Clicks reach xterm only near 1:1; see the spec's "Focus and input". */
-const INTERACT_MIN_SCALE = 0.9
-const INTERACT_MAX_SCALE = 1.1
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
 
@@ -259,9 +256,6 @@ export function Canvas(): JSX.Element {
     if (world) setCursor(world)
   }
 
-  const interactive =
-    viewport.scale >= INTERACT_MIN_SCALE && viewport.scale <= INTERACT_MAX_SCALE
-
   return (
     <div className="canvas" ref={hostRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       <div
@@ -278,7 +272,6 @@ export function Canvas(): JSX.Element {
               version={version}
               rect={panel.rect}
               selected={panel.rect.id === selectedId}
-              interactive={interactive}
               onSelect={setSelectedId}
               onSlotMount={onSlotMount}
               onSlotUnmount={onSlotUnmount}

@@ -198,13 +198,48 @@ app.whenReady().then(async () => {
         ? `${sessionsBefore.size} original session(s) all reused, ${sessionsAfterZoomIn.size} total live=${await liveCount(wc)}`
         : `pid mismatch: ${changedAfterZoomIn.join('; ')}`)
 
-    // The interaction gate. Spec: outside [INTERACT_MIN_SCALE, MAX_SCALE] a
-    // body click "focuses the panel and nothing more" — it must NOT reach
-    // xterm's mouse layer (wrong cell math at this zoom), but it must NOT
-    // steal focus away from the terminal either, or keyboard input has
-    // nowhere to go. Two different observables prove the two different
-    // halves: elementFromPoint proves whether the click reached xterm's DOM
-    // at all; activeElement proves focus survived regardless.
+    // 6. A body click focuses the panel and reaches xterm at any zoom.
+    //    This replaces M3's gate check: correction means there is no longer a
+    //    band inside which mouse input is allowed and outside which it is
+    //    suppressed. The focus half is unchanged and still load-bearing —
+    //    typing must have somewhere to go after a click.
+    {
+      const probe = async () => {
+        const slot = `document.querySelector('.panel__slot')`
+        return wc.executeJavaScript(`(async () => {
+          const slot = ${slot}
+          if (!slot) return { error: 'no live panel' }
+          const r = slot.getBoundingClientRect()
+          const opts = {
+            bubbles: true, cancelable: true, composed: true, view: window,
+            clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+            button: 0, buttons: 1, detail: 1
+          }
+          slot.dispatchEvent(new MouseEvent('mousedown', opts))
+          await new Promise((res) => setTimeout(res, 150))
+          return {
+            active: document.activeElement && document.activeElement.className,
+            blocked: document.querySelectorAll('.panel__slot--blocked').length
+          }
+        })()`)
+      }
+
+      await zoomTo(wc, '0')
+      const atOne = await probe()
+      await zoomTo(wc, '1')
+      const zoomedOut = await probe()
+      await zoomTo(wc, '0')
+
+      const focused = (r) => r && String(r.active || '').includes('xterm-helper-textarea')
+      ok('6 a body click focuses the panel at any zoom, with no gate left',
+        focused(atOne) && focused(zoomedOut) &&
+          atOne.blocked === 0 && zoomedOut.blocked === 0,
+        `1:1 active=${atOne && atOne.active} zoomed active=${zoomedOut && zoomedOut.active} ` +
+        `blocked=${atOne && atOne.blocked}/${zoomedOut && zoomedOut.blocked}`)
+    }
+
+    // Used by check 8 below to focus a panel via a real OS-level click
+    // (rather than a dispatched DOM event) before typing into it.
     const clickPanelBody = async (selector) => {
       const box = await wc.executeJavaScript(
         `(() => { const s = document.querySelector(${JSON.stringify(selector)});
@@ -212,9 +247,6 @@ app.whenReady().then(async () => {
                   const r = s.getBoundingClientRect();
                   return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`
       )
-      // A missing target is an infrastructure failure, not "the click was
-      // gated" — silently treating them the same let the negative half of
-      // this check pass vacuously whenever the selector matched nothing.
       if (!box) throw new Error(`clickPanelBody: no element matched ${selector}`)
       wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
       wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
@@ -228,34 +260,6 @@ app.whenReady().then(async () => {
       ])
       return { reachedXterm, active }
     }
-
-    // First click: nothing selected yet, any live panel does. It becomes
-    // both the focused panel (onFocus) and the React-selected one
-    // (.panel--selected), so the second click can target that SAME panel by
-    // selection rather than hoping querySelector still returns it first.
-    const at100 = await clickPanelBody('.panel__slot')
-    // Two Cmd+- steps from 1.0 land at ~0.69, below INTERACT_MIN_SCALE.
-    await zoomTo(wc, '-')
-    await zoomTo(wc, '-')
-    await sleep(600) // no discrete condition to poll here: a zoom keydown's viewport update is synchronous, this only covers the render/paint settling
-    const zoomedOut = await clickPanelBody('.panel--selected .panel__slot')
-
-    // Both halves of the spec must be able to fail independently:
-    //   - the mouse layer must be reached at 1:1 and NOT reached gated
-    //     (elementFromPoint resolves inside .xterm only when the click was
-    //     allowed through to xterm's own DOM)
-    //   - focus must survive BOTH clicks (activeElement stays the xterm
-    //     textarea) — this is the "focuses the panel and nothing more"
-    //     half: a gated click must not blur the terminal the user was
-    //     already typing into.
-    const reachedXtermCorrectly = at100.reachedXterm === true && zoomedOut.reachedXterm === false
-    const focusSurvivedBoth =
-      String(at100.active).includes('xterm-helper-textarea') &&
-      String(zoomedOut.active).includes('xterm-helper-textarea')
-    ok('6 body clicks reach xterm at 1:1, are mouse-gated when zoomed out, and never lose focus',
-      reachedXtermCorrectly && focusSurvivedBoth,
-      `reachedXterm: 100%=${at100.reachedXterm} gated=${zoomedOut.reachedXterm} — ` +
-        `activeElement: 100%="${at100.active}" gated="${zoomedOut.active}"`)
 
     // 7. Cmd+N. An explicit spec scope item ("a panel whose rect is centred on
     // the current viewport in world coordinates") with no coverage anywhere
@@ -406,14 +410,6 @@ app.whenReady().then(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         await new Promise((r) => setTimeout(r, 300))
-
-        // Lift the gate — AFTER the zoom, not before. TerminalPanel derives
-        // .panel__slot--blocked from the current scale on every render, so a
-        // class removed before zooming is put straight back by the re-render
-        // the zoom triggers. Task 4 deletes the class entirely; until then
-        // this is what lets the click through, and it only holds because
-        // nothing re-renders this panel between here and the clicks below.
-        slot.classList.remove('panel__slot--blocked')
 
         const scale = window.__m4aScale()
         const screen = window.__m4aCellToScreen('beta')

@@ -107,28 +107,10 @@ body {
   min-height: 0;
 }
 
-/* Outside the interaction band (see Canvas.tsx's INTERACT_MIN_SCALE/MAX_SCALE)
-   xterm's own coordinate math is off by a factor of the zoom, so a click must
-   reach neither xterm's mouse layer NOR clear focus away from it — the spec
-   is "a body click focuses the panel and nothing more": typing must still
-   work at gated zoom, so any focus the terminal already holds must survive.
-   This needs BOTH halves below; each blocks a different way the gate breaks:
-     - pointer-events:none (here) stops xterm's own mousedown listener from
-       ever seeing the click, so it can't hit-test the wrong cell or move
-       focus on its own. xterm binds that listener directly on this
-       descendant and it would otherwise run and complete before the
-       ancestor .panel__slot's onMouseDown even starts.
-     - event.preventDefault() in TerminalPanel.tsx's .panel__slot onMouseDown
-       stops the browser's OWN default mousedown action, which (since
-       .panel__slot itself isn't focusable) would otherwise clear focus to
-       <body> and silently kill keyboard input to a terminal the user was
-       already typing into.
-   Removing pointer-events lets xterm hit-test the wrong cell again; removing
-   preventDefault lets a gated click blur the terminal instead of just
-   failing to refocus it. Do not remove either half. */
-.panel__slot--blocked .panel__terminal {
-  pointer-events: none;
-}
+/* M3's .panel__slot--blocked gate is gone: xterm now receives corrected
+   coordinates at every zoom (see components/xterm-pointer.ts), so there is no
+   longer a band inside which mouse input is trusted and outside which it is
+   suppressed. */
 
 /* xterm sizes itself in cols/rows against this box; it must fill it exactly. */
 .panel__slot .xterm,
