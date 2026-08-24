@@ -33,6 +33,7 @@ npm run verify:ipc           # every contract channel has a handler
 npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/pointer math, plain node
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
+npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
@@ -96,13 +97,15 @@ unbatched, that floods the renderer's event loop and the UI locks up. Measured
 on 16.4 MB of `find` output: 33,198 PTY reads collapse to 105 IPC messages, a
 316x reduction.
 
-**Sessions die with their renderer.** Cmd+R and Cmd+W destroy the page without
-running React cleanup, so the renderer never sends `pty:kill`. Left alone, the
-old PTY survives and the next `pty:create` throws "already has a live PTY" — a
-dead panel with no recovery short of quitting. `src/main/window-lifecycle.ts`
-kills a window's sessions on navigation or close. Surviving a reload instead of
-dying is M4c's job, once tmux backs the session; `pty:list` is the channel a
-fresh renderer will reconcile against.
+**Sessions survive their renderer, but not the app.** `Cmd+R` and `Cmd+W`
+destroy the page without running React cleanup, so the renderer never sends
+`pty:kill`. Since M4c each panel's process lives in a tmux session on a private
+socket (`-L terminal-canvas`) and what `node-pty` holds is a tmux *client*, so a
+renderer teardown detaches rather than kills and the next page's `pty:create`
+hits `new-session -A` and lands back in the running agent. Quitting the app
+still tears everything down — agents never outlive the app. With no tmux
+installed the app falls back to spawning directly, says so in the HUD, and
+behaves exactly as it did before M4c.
 
 **One transform, not N layouts.** The canvas is a single `.world` element
 carrying `transform: translate(...) scale(...)`; panels are positioned once in
@@ -140,7 +143,7 @@ you quit.
 | M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | ✅ done |
 | M4a | Panel manipulation: drag, resize, close, pointer correction | ✅ done |
 | M4b | Layout persistence: panels survive a relaunch | ✅ done |
-| M4c | tmux backing: sessions survive the renderer | |
+| M4c | tmux backing: sessions survive the renderer | ✅ done |
 | M5 | Presets, command palette, electron-builder packaging | |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),

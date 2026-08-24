@@ -35,6 +35,11 @@ const {
   DEFAULT_CAMERA
 } = require(ENTRY_OUT)
 
+/** Panels seeded with a live session before the window loads, so check 24 has
+ * both cases to assert against each other: s01 (below) genuinely comes back
+ * through pty:list, everything else in SEED_PANELS does not. */
+const LIVE_AT_BOOT = ['s01']
+
 const results = []
 const ok = (n, pass, detail) => {
   results.push({ n, pass, detail })
@@ -176,6 +181,13 @@ app.whenReady().then(async () => {
     return { kind: b.kind, reason: b.reason }
   })
 
+  // Check 24 needs boot reconciliation exercised end to end, not stubbed: a
+  // real PTY for s01 exists BEFORE the window ever loads, so when the
+  // renderer boots and calls window.canvas.pty.list() it genuinely finds
+  // s01 already running and the other eleven seed panels genuinely absent —
+  // the same asymmetry a real relaunch after a Cmd+R would produce.
+  await ptyManager.create({ panelId: 's01', cwd: '~' })
+
   // A hung infrastructure call (e.g. a renderer crash mid-executeJavaScript)
   // must fail the run, not hang it forever — which is exactly what happened
   // in this file's own RED run, when a rejected pty:list left the async body
@@ -195,16 +207,33 @@ app.whenReady().then(async () => {
 
     // ---------------------------------------------------------------------
     // 18. THE HEADLINE PROMISE of M4b's dormancy work: relaunch a restored
-    // canvas, pan across all of it, zero processes spawn. Numbered 18 (after
-    // every other check in this file) but it has to RUN here, before the
-    // wake-everything step immediately below — checks 1-17 predate dormancy
-    // and need every fixture panel already awake (see the comment on that
-    // step), so this is the only place in the file where the fixture is
-    // still genuinely dormant. Execution order and numbering diverge here on
-    // purpose; do not "tidy" this block down next to its number, that would
-    // silently delete the only real-renderer coverage of dormancy itself.
+    // canvas, pan across all of it, zero NEW processes spawn beyond what
+    // boot reconciliation already reattached. Numbered 18 (after every other
+    // check in this file) but it has to RUN here, before the wake-everything
+    // step immediately below — checks 1-17 predate dormancy and need every
+    // fixture panel already awake (see the comment on that step), so this is
+    // the only place in the file where the fixture is still genuinely
+    // dormant. Execution order and numbering diverge here on purpose; do not
+    // "tidy" this block down next to its number, that would silently delete
+    // the only real-renderer coverage of dormancy itself.
+    //
+    // As of M4c, s01 already has a live tmux session (seeded via
+    // ptyManager.create() before the window loaded, above), so boot
+    // reconciliation reattaches it — LIVE_AT_BOOT.length live sessions and a
+    // live terminal at boot, not zero. "Waking one panel" below now targets
+    // s02, a genuinely still-dormant on-screen panel, so this check keeps
+    // proving what it always proved: nothing spawns beyond what the user (or
+    // an existing session) actually asked for.
     // ---------------------------------------------------------------------
     {
+      // registry.ensure() runs synchronously during the initial render (a
+      // useMemo), so a session with dormant:false exists immediately — but
+      // ATTACHING it (mounting the xterm host, the DOM this reads) happens in
+      // TerminalPanel's mount effect, which React runs after the first paint.
+      // Reading the DOM before that effect has run is a race with the boot
+      // reattach itself, not a check of it — wait for it to settle instead of
+      // assuming a synchronous read.
+      await waitUntil(async () => (await liveCount(wc)) >= LIVE_AT_BOOT.length, 3000)
       const liveAtBoot = await liveCount(wc)
       const sessionsAtBoot = await listSessions(wc)
 
@@ -213,15 +242,42 @@ app.whenReady().then(async () => {
           .some((el) => el.textContent === 'click to start')`
       )
 
-      // Wake exactly one panel (its title bar — the real affordance), while
-      // the camera is still at its boot position so the clicked panel (DOM
-      // order matches SEED_PANELS, so this is s01 at world 0,0 — on screen
-      // under DEFAULT_CAMERA) is actually eligible to promote. Waking only
-      // clears dormancy; assignTiers still has to find the panel on screen
-      // before it promotes and attachSlot spawns it, exactly like a real
-      // click would require the panel to be visible.
+      // 24. Boot reconcile: the two restore states asserted AGAINST EACH
+      // OTHER, because it is their distinction that is new. A panel with a
+      // live session (s01, seeded via ptyManager.create() before the window
+      // ever loaded, above) must come back attached; one without must come
+      // back dormant. Checking only the first half would pass for an
+      // implementation that reattaches everything and re-spawns the whole
+      // canvas on launch — exactly the behaviour M4b's dormancy work exists
+      // to prevent. Must run HERE, at genuine boot state, before the "wake
+      // one" step below clears s02's dormancy and the "wake every panel"
+      // step further down clears the rest — either would erase the very
+      // distinction this check exists to catch.
+      {
+        const state = await wc.executeJavaScript(`(() => {
+          const sessions = window.__m4aSessions ? window.__m4aSessions() : []
+          return JSON.stringify(sessions)
+        })()`)
+        const sessions = JSON.parse(state)
+        const withLive = sessions.filter((s) => LIVE_AT_BOOT.includes(s.id))
+        const without = sessions.filter((s) => !LIVE_AT_BOOT.includes(s.id))
+        ok('24 a panel with a live session restores non-dormant while one without stays dormant',
+          withLive.length > 0 && withLive.every((s) => s.dormant === false) &&
+            without.length > 0 && without.every((s) => s.dormant === true),
+          `live=${JSON.stringify(withLive)} rest=${without.length} dormant=${without.filter((s) => s.dormant).length}`)
+      }
+
+      // Wake exactly one still-dormant panel (its title bar — the real
+      // affordance), while the camera is still at its boot position so the
+      // clicked panel (s02, at world (800,0) — on screen under
+      // DEFAULT_CAMERA same as s01) is actually eligible to promote. Waking
+      // only clears dormancy; assignTiers still has to find the panel on
+      // screen before it promotes and attachSlot spawns it, exactly like a
+      // real click would require the panel to be visible. s01 is
+      // deliberately NOT the target here — it is already live at boot (see
+      // above), so clicking it would be a dormancy no-op and prove nothing.
       await wc.executeJavaScript(`
-        const chrome18 = document.querySelector('.panel__chrome')
+        const chrome18 = document.querySelector('[data-panel-id="s02"] .panel__chrome')
         const r18 = chrome18.getBoundingClientRect()
         const opts18 = {
           bubbles: true, button: 0, buttons: 1,
@@ -231,17 +287,19 @@ app.whenReady().then(async () => {
         document.dispatchEvent(new MouseEvent('mouseup', { ...opts18, buttons: 0 }))
         true
       `)
+      const bootCount = sessionsAtBoot.length
       const sessionsAfterWakeOne = await waitUntil(async () => {
         const list = await listSessions(wc)
-        return list.length > 0 ? list : false
+        return list.length > bootCount ? list : false
       }, 4000)
 
       // Now pan the camera across the whole fixture — SEED_PANELS spans
       // roughly x: -900..3300, y: -640..1740 — the same background wheel-pan
       // check 12 already uses below, just larger and in both directions. The
-      // eleven still-dormant panels drift through the viewport during this;
-      // if the dormancy guard in assignTiers regressed, THIS is what would
-      // catch it — a process count that grows past the one panel woken above.
+      // ten still-dormant panels drift through the viewport during this; if
+      // the dormancy guard in assignTiers regressed, THIS is what would
+      // catch it — a process count that grows past the two live so far
+      // (s01 reattached at boot, s02 woken above).
       // The final dispatch's deltas are chosen so the four sum to zero on
       // each axis: panBy is unclamped (only scale clamps), so the net
       // translation is zero and the camera ends back where checks 1-6 below
@@ -262,11 +320,11 @@ app.whenReady().then(async () => {
       await sleep(400)
       const sessionsAfterPan = await listSessions(wc)
 
-      ok('18 a restored boot spawns nothing, waking one panel spawns exactly one, and panning past the rest spawns nothing more',
-        liveAtBoot === 0 && sessionsAtBoot.length === 0 &&
+      ok('18 a restored boot reattaches exactly the panels with live sessions, waking one more dormant panel spawns exactly one, and panning past the rest spawns nothing more',
+        liveAtBoot === LIVE_AT_BOOT.length && sessionsAtBoot.length === LIVE_AT_BOOT.length &&
           hasClickToStart === true &&
-          Array.isArray(sessionsAfterWakeOne) && sessionsAfterWakeOne.length === 1 &&
-          sessionsAfterPan.length === 1,
+          Array.isArray(sessionsAfterWakeOne) && sessionsAfterWakeOne.length === LIVE_AT_BOOT.length + 1 &&
+          sessionsAfterPan.length === LIVE_AT_BOOT.length + 1,
         `liveAtBoot=${liveAtBoot} sessionsAtBoot=${sessionsAtBoot.length} clickToStart=${hasClickToStart} ` +
           `sessionsAfterWakeOne=${JSON.stringify(sessionsAfterWakeOne)} sessionsAfterPan=${sessionsAfterPan.length}`)
     }

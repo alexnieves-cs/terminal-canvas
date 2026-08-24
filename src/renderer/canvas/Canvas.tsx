@@ -422,6 +422,14 @@ export function Canvas({
       return session ? session.handle.scrollPosition() : null
     }
     /**
+     * Every session's boot-reconcile state, by id. Answers whether dormancy
+     * came out right at launch: a panel reattached to a live tmux session
+     * must be non-dormant, and one with nothing to reattach to must stay
+     * dormant — see CLAUDE.md's "Dormancy is about spawning, not attaching".
+     */
+    w.__m4aSessions = (): Array<{ id: string; dormant: boolean; spawned: boolean }> =>
+      registry.all().map((s) => ({ id: s.id, dormant: s.dormant, spawned: s.spawned }))
+    /**
      * Drives the same undo path Cmd+Z does. executeJavaScript has no way to
      * dispatch a real main-process menu accelerator, so this is the narrow
      * verb verify:panels needs to exercise undo without one.

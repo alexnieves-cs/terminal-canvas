@@ -33,13 +33,14 @@ work is done. Individual suites:
 | `verify:viewport` | plain node | 47 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), and dormancy outranking focus in `lod.ts` (46–47) |
 | `verify:registry` | plain node | 23 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–15 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15) and dormant attach/wake (16–18) |
 | `verify:layout` | plain node | 25 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution |
+| `verify:tmux` | plain node | 17 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), and `tmux-probe.ts`'s pure backend selection (14–17) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 8 checks: the real `PtyManager` |
 | `verify:window` | real Electron | 3 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 22 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), and undo/redo (20–22) |
+| `verify:panels` | real Electron | 24 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), and boot reconcile (24) |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -50,13 +51,16 @@ Electron's ABI by the `postinstall` `electron-rebuild`, so it will not load unde
 Node. `verify:pty` and `verify:pty-manager` therefore run under Electron with
 `ELECTRON_RUN_AS_NODE=1`; `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, and
 `verify:panels` need the real app lifecycle and `unset` it instead. `verify:viewport`,
-`verify:registry`, and `verify:layout` are plain node, because `viewport.ts`, `lod.ts`,
-`session-registry.ts`, `shared/layout-schema.ts`, and `main/layout-store.ts` have no native
-dependency, no DOM, and no direct `window`/`document` use — `session-registry.ts` gets there
-by taking its IPC bridge and its terminal factory as injected dependencies, so
-`verify:registry` can drive the whole session lifecycle against fakes instead of a real PTY
-or a real xterm, and `layout-store.ts` gets there by taking the filesystem paths it reads and
-writes as constructor arguments instead of resolving `app.getPath('userData')` itself.
+`verify:registry`, `verify:layout`, and `verify:tmux` are plain node, because `viewport.ts`,
+`lod.ts`, `session-registry.ts`, `shared/layout-schema.ts`, `main/layout-store.ts`, and
+`main/tmux-args.ts` have no native dependency, no DOM, and no direct `window`/`document` use —
+`session-registry.ts` gets there by taking its IPC bridge and its terminal factory as injected
+dependencies, so `verify:registry` can drive the whole session lifecycle against fakes instead
+of a real PTY or a real xterm, `layout-store.ts` gets there by taking the filesystem paths it
+reads and writes as constructor arguments instead of resolving `app.getPath('userData')`
+itself, and `tmux-args.ts` gets there by being pure argv/config/parsing builders that never
+import `node-pty` — the module that actually spawns a tmux client, `session-backend.ts`,
+deliberately stays out of this file's reach so `verify:tmux` can run under plain node at all.
 
 **`verify:pty` duplicates production code on purpose.** It re-implements `shell-env.ts`'s
 probe and `pty-manager.ts`'s batching by hand so it can test them without Electron's app
@@ -73,9 +77,9 @@ startup; `scripts/panels-entry.cjs` hand-wires `resolveShellEnv` + `registerIpcH
 `verify-window-lifecycle.cjs` use. The other Electron suites esbuild their own entry from
 source into `out/verify/`, so they are always current without a build step.
 
-**`verify:panels` reaches the registry through seven narrow `window.__m4a*` hooks
+**`verify:panels` reaches the registry through eight narrow `window.__m4a*` hooks
 (`__m4aScale`, `__m4aWrite`, `__m4aSelection`, `__m4aCellToScreen`, `__m4aGrid`,
-`__m4aViewport`, `__m4aScrollY`) installed by `Canvas.tsx`.** The registry is a module-level
+`__m4aViewport`, `__m4aScrollY`, `__m4aSessions`) installed by `Canvas.tsx`.** The registry is a module-level
 closure by design (see "Two lifetimes, not one" below), and `executeJavaScript` has no other
 route into it. Keep the set narrow and named by what each one answers — the alternative is
 exposing the registry itself and letting the suite drift into testing internals instead of
@@ -97,6 +101,7 @@ spawns a process.**
 ```
 renderer --invoke--> pty:create / pty:write / pty:resize / pty:kill / pty:list --> main
 renderer --invoke--> layout:load / layout:save                                 --> main
+renderer --invoke--> session:backend                                          --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:reset                              --> renderer
@@ -111,8 +116,8 @@ check does not, and should not, cover it.
   `window.canvas` bridge type. Imported by all three processes; add a channel here first.
   `verify:ipc` fails if a channel there has no main-process handler.
 - `src/main/pty-manager.ts` — owns the `Map<PanelId, Session>`. All PTY lifecycle.
-- `src/main/window-lifecycle.ts` — kills a window's sessions when its renderer navigates
-  or closes.
+- `src/main/window-lifecycle.ts` — detaches (not kills) a window's sessions when its renderer
+  navigates or closes, so their tmux sessions survive; see "One operation became three" below.
 - `src/preload/index.ts` — `contextBridge` exposes `window.canvas`. Every `on*` subscribe
   returns its own unsubscribe so React effects can clean up without stacking listeners.
 - `src/renderer/session/session-registry.ts` — owns every panel's **session** (its xterm
@@ -446,6 +451,58 @@ settings exist as a distinct concept; main applies them in `LayoutStore.initial(
 the renderer an already-resolved starting state. A future settings surface should reach for
 the same mechanism — one file, behind `LayoutStore` — rather than inventing a second store for
 a fourth toggle.
+
+**One operation became three (`window-lifecycle.ts`, `pty-manager.ts`,
+`main/index.ts`).** Before M4c a single `killAll()` served every teardown path,
+because under `node-pty` those paths genuinely meant the same thing. Under tmux
+they do not: a renderer teardown calls **`detachAll()`** (local handles die, tmux
+sessions live), closing a panel calls **`kill(id)`** which also calls
+`backend.destroy(id)` (the session dies), and `before-quit` calls
+**`shutdown()`** (`kill-server` on our private socket). Reverting
+`attachPtyLifecycle`'s callback to `killAll` keeps every check in
+`verify:window` green while silently restoring the M3 behaviour M4c exists to
+remove — which is why `verify:pty-manager` check 12 asserts the reattached pid
+is the *same* pid.
+
+**The tmux client's exit code is always 1 (`session-backend.ts`,
+`tmux-args.ts`).** Measured: an inner command exiting 0 and one exiting 42 both
+produce client exit 1. `remain-on-exit on` plus a `pane-died` hook recovers the
+real `#{pane_dead_status}`; the hook writes the file *before* `kill-session`, and
+killing the session is what makes the client exit, so by the time `node-pty`'s
+`onExit` fires the file is already on disk and main reads it in the handler it
+already had. No watcher, no polling, no new IPC. Reversing those two hook
+commands is a race that reports the wrong code intermittently.
+
+**`parseListOutput` must filter `#{pane_dead}`.** The one place `remain-on-exit
+on` leaks outside the exit path: a session whose command has exited still
+*exists* until the hook kills it, so an unfiltered list reports a finished
+process as live, boot reconciliation restores that panel non-dormant, and the
+user gets a panel attached to a corpse that can never produce another byte.
+
+**tmux is resolved by absolute path from the login env (`tmux-probe.ts`).** The
+same defect `shell-env.ts` exists for: launchd gives a GUI app a bare PATH, so
+`/opt/homebrew/bin/tmux` is not on it and spawning `tmux` by name fails exactly
+the way `claude` does. `whichFromEnv('tmux', env)` is the fix, and it must run
+*after* `resolveShellEnv()`.
+
+**Dormancy is about spawning, not attaching (`renderer/main.tsx`).** A panel
+with a live tmux session has nothing to spawn, so M4b's "restored panels are
+dormant" rule does not apply to it — it reattaches like any M3 panel and
+`LIVE_BUDGET` still caps how many at once. A panel with no live session still
+restores dormant. `lod.ts` is untouched: a reattachable panel is not dormant and
+never consults "dormancy outranks focus". A failed `pty:list` degrades to the
+empty set, which restores everything dormant — the safe direction, because it
+spawns nothing.
+
+**The bundled tmux config is generated, not shipped (`tmux-args.ts`'s
+`buildTmuxConf`).** The `pane-died` hook embeds `exitDir`, a per-run path under
+`userData` that is unknowable until the app is running. Every line in it fails
+*silently*: `prefix None` is what keeps `Ctrl+B` reaching the agent (the same
+split as `Ctrl+C` and `Ctrl+Z`), `terminal-features ",xterm-256color:RGB"` is
+what stops 24-bit agent output being downsampled to 256, and `mouse` must stay
+**off** — `mouse on` makes tmux capture mouse reporting instead of passing it
+through, silently defeating all of M4a's pointer correction from one process
+further down.
 
 ## Gotchas
 
