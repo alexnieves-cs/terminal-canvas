@@ -414,6 +414,68 @@ Obsidian note, an Xcode file, a browser tab.
   user was typing. Even the simplest version needs a stance — "reload unless the panel is
   dirty, then warn" is a fine one, but it has to be chosen rather than defaulted into.
 
+## 15. An annotation layer — ink, highlights, sticky notes on the canvas
+
+Let the user write and draw directly on the canvas and on panels: freehand ink,
+highlights, arrows, sticky notes, text labels. The point is to make the canvas feel like
+an open creative workspace rather than a grid of terminals — somewhere thinking happens
+alongside the work, not only in the terminals.
+
+- **This is the entry that most argues the canvas is a canvas.** Every other idea in this
+  file adds something *to* the surface; this one is about the surface itself. A sticky
+  note reading "this one's the flaky test hunt — don't kill it" pinned beside a running
+  agent is the sort of thing that only works when the workspace is spatial. It is also
+  the cheapest idea here to make feel good, because none of it involves a process, an
+  API, or a token.
+- **Almost all of it is free from the architecture already in place.** Annotations are
+  world-space objects; the `.world` layer already carries one transform, so ink drawn at
+  world coordinates pans, zooms, and clips correctly with zero additional math. That is
+  the same property that made panels cheap. `screenToWorld` converts the pointer to the
+  coordinates a stroke should be stored in, and it is already tested.
+- **Use SVG, not a bitmap `<canvas>`.** An SVG child of `.world` scales as vector — sharp
+  at 400%, sharp at 10%. A 2D bitmap canvas would be rasterised once and then visibly
+  blurred by the CSS transform at any scale above the one it was drawn at, and
+  re-rasterising per zoom level defeats the point of the single transform. Related: a
+  stroke's *width* should be chosen deliberately — `vector-effect="non-scaling-stroke"`
+  keeps ink one screen pixel at every zoom, while a plain width makes ink a physical
+  property of the world that gets thinner as you zoom out. The second is almost certainly
+  the right feel for annotation, but it is a choice, not a default.
+- **The hard part is input arbitration, not rendering.** Right now every pointer gesture
+  on the canvas already means something: drag pans, drag on a panel chrome moves it, drag
+  in a terminal selects text, wheel scrolls or zooms depending on focus. Drawing needs to
+  claim the drag gesture without stealing any of those. Options:
+  1. **An explicit mode** (a toolbar, `Cmd`-gated shortcut to enter/leave). Unambiguous,
+     conventional, and it composes with #11's settings surface. Almost certainly correct
+     for v1.
+  2. **A modifier-held gesture** — draw only while a key is down. Cheap, but the modifier
+     has to be `Cmd`-family, since bare keys belong to the agent TUI, and `Cmd`+drag is
+     then unavailable for anything else.
+  3. **Tool-by-target** — ink on the background, never over a panel. Simplest to reason
+     about, but it gives up annotating *on* a panel, which is half the value.
+- **Two kinds of annotation, and the difference matters for storage.**
+  - **World-anchored** — a note that lives at a spot on the canvas. Stored in world
+    coordinates. Simple.
+  - **Panel-anchored** — a highlight or label attached to a specific panel, which must
+    move when that panel is dragged and vanish when it is closed. Stored *relative to the
+    panel*, with the panel's id. This is the one that makes the feature feel intelligent
+    rather than like a transparency sheet taped over the screen, and it costs almost
+    nothing extra if the coordinate space is chosen correctly the first time.
+- **Constraint:** annotations must be cheap and outside `LIVE_BUDGET`. They are DOM/SVG,
+  no PTY, no WebGL context, and no reason to participate in tiering — though very large
+  ink collections will eventually want their own culling, and `viewport.ts`'s existing
+  bounds math is the right tool when that day comes.
+- **Constraint:** z-order. Panels stack by `Panel.z`, never by array order, because a
+  React reorder would detach a live terminal's WebGL host. Annotations join the same
+  ordering scheme rather than inventing a second one — and "always on top" vs "behind the
+  panels" is worth being able to toggle, since both are legitimately useful.
+- **Constraint:** persistence. Annotations are exactly the kind of thing a user would be
+  upset to lose on relaunch, so they belong in M4b's saved layout — another reason that
+  file format wants to be extensible rather than a fixed record of panels.
+- **Worth noting for #4:** annotations are the single best multiplayer feature in this
+  file. Shared ink and sticky notes on a team canvas is a well-understood, genuinely
+  useful collaboration primitive, and it needs none of the hard PTY-sharing work — it is
+  small objects with ids, which is the easy case for sync.
+
 ---
 
 ## Rough sequencing, if these were ever scheduled
@@ -431,32 +493,36 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    PTY-idleness detection and improve from there.
 4. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
 5. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
-6. **#11 settings surface** — schedule it at the point there are three or four toggles,
+6. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
+   feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
+   API, or token is involved. Ink and panel-anchored annotations follow once the mode
+   arbitration is settled.
+7. **#11 settings surface** — schedule it at the point there are three or four toggles,
    not before and not after. Built off a declarative schema, it makes every later toggle
    cheap and gives the search bar for almost nothing.
-7. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
+8. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
    across the registry plus a readable light ANSI palette.
-8. **#13 image drop/paste, Finder + clipboard cases** — small once the guard exists;
+9. **#13 image drop/paste, Finder + clipboard cases** — small once the guard exists;
    the terminal path is "write a file path into the PTY", which needs no new channel.
-9. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
+10. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
-10. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
-11. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
+11. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
+12. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
-12. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
-13. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
-14. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
-15. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
-16. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-17. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
+13. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
+14. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
+15. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
+16. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
+17. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
+18. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
 ## The one structural decision underneath all of this
 
-Six separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
-#12 Jira boards, #14 live document panels) all need the same thing: **a canvas node that
-is not a terminal.** Today `Panel` means
+Seven separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
+#12 Jira boards, #14 live document panels, #15 annotations) all need the same thing:
+**a canvas node that is not a terminal.** Today `Panel` means
 "a PTY behind an xterm", and `LIVE_BUDGET`, `fit()`-before-spawn, the pointer
 correction, and the WebGL accounting all assume it.
 
