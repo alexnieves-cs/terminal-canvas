@@ -20,10 +20,11 @@
     "verify:ipc": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-ipc-surface.cjs",
     "verify:viewport": "node scripts/verify-viewport.cjs",
     "verify:registry": "node scripts/verify-registry.cjs",
+    "verify:layout": "node scripts/verify-layout.cjs",
     "verify:canvas": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-canvas.cjs",
     "verify:xterm": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-xterm-detach.cjs",
     "verify:panels": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels.cjs",
-    "verify": "npm run verify:viewport && npm run verify:registry && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
+    "verify": "npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
   },
   "dependencies": {
     "node-pty": "1.1.0"

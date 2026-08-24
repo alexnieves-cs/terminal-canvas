@@ -1,4 +1,5 @@
 import type { Point, WorldRect } from './viewport'
+import { MIN_PANEL_H, MIN_PANEL_W } from '@shared/panel-geometry'
 
 /**
  * Panel geometry under a pointer gesture. Pure, like viewport.ts and lod.ts:
@@ -29,8 +30,9 @@ export interface DragState {
  * columns, PANEL_H 460 fits 23 rows, so a cell is about 7.7 x 15 world units)
  * this is roughly 26 columns by 5 rows once the chrome bar is subtracted.
  */
-export const MIN_PANEL_W = 200
-export const MIN_PANEL_H = 160
+// Re-exported rather than moved outright: applyDrag's callers import them from
+// here, and shared/ is where the layout validator needs them.
+export { MIN_PANEL_W, MIN_PANEL_H }
 
 /**
  * The rect this gesture implies, given where the cursor is NOW in world space.

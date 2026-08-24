@@ -12,7 +12,12 @@ buildSync({
   outfile: OUT,
   bundle: true,
   platform: 'node',
-  format: 'cjs'
+  format: 'cjs',
+  // The verify bundles resolved no aliases until M4b, and got away with it
+  // because every cross-boundary import was `import type` (erased by esbuild).
+  // panel-interaction.ts now imports a real VALUE from @shared, so the alias
+  // has to exist or the bundle fails with "Could not resolve".
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
 })
 const V = require(OUT)
 
