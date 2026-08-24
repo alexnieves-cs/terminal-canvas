@@ -54,6 +54,9 @@ const bridge: CanvasBridge = {
     },
     onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener)
   },
+  session: {
+    info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)
+  },
   platform: process.platform
 }
 

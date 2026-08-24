@@ -29,7 +29,13 @@ export const IPC = {
    */
   LAYOUT_LOAD: 'layout:load',
   /** A full snapshot on every change; main coalesces and decides when to write. */
-  LAYOUT_SAVE: 'layout:save'
+  LAYOUT_SAVE: 'layout:save',
+  /**
+   * Which backend spawns panels, and why. The renderer shows this only when it
+   * is 'direct', so the user is never told their sessions are durable when
+   * they are not.
+   */
+  SESSION_BACKEND: 'session:backend'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -56,6 +62,12 @@ export const IPC_EVENTS = {
   /** Confirmed reset: drop every panel and return to the first-run canvas. */
   CANVAS_RESET: 'canvas:reset'
 } as const
+
+export interface SessionBackendInfo {
+  kind: 'tmux' | 'direct'
+  /** Human-readable cause, shown in the HUD when kind is 'direct'. */
+  reason: string
+}
 
 /** Shape of the bridge the preload exposes on window.canvas. */
 export interface CanvasBridge {
@@ -89,6 +101,9 @@ export interface CanvasBridge {
     /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
     onCounts(provide: () => { panels: number; running: number }): () => void
     onReset(listener: () => void): () => void
+  }
+  session: {
+    info(): Promise<SessionBackendInfo>
   }
   platform: NodeJS.Platform
 }

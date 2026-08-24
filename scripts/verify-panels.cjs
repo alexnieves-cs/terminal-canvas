@@ -168,7 +168,13 @@ app.whenReady().then(async () => {
   })
   layoutStore.flushSync()
 
-  registerIpcHandlers(ptyManager, layoutStore)
+  // ipcMain.handle's return value crosses IPC via structured clone, so this
+  // must be a plain { kind, reason } object, not the SessionBackend itself —
+  // that carries a spawn() function, which structured clone cannot carry.
+  registerIpcHandlers(ptyManager, layoutStore, () => {
+    const b = createDirectBackend('verify: direct')
+    return { kind: b.kind, reason: b.reason }
+  })
 
   // A hung infrastructure call (e.g. a renderer crash mid-executeJavaScript)
   // must fail the run, not hang it forever — which is exactly what happened

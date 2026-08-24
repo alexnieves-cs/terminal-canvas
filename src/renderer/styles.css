@@ -271,3 +271,9 @@ body {
   cursor: nwse-resize;
   z-index: 3;
 }
+
+/* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
+   the alternative is a user who believes their sessions are durable. */
+.canvas-hud__warn {
+  color: #f0b429;
+}

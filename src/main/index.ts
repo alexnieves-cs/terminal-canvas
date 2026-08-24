@@ -151,7 +151,10 @@ app.whenReady().then(async () => {
       void confirmReset()
     }
   })
-  registerIpcHandlers(ptyManager, layoutStore)
+  registerIpcHandlers(ptyManager, layoutStore, () => ({
+    kind: backend.kind,
+    reason: backend.reason
+  }))
   createWindow()
 
   app.on('activate', () => {

@@ -11,6 +11,7 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
+import type { SessionBackendInfo } from '@shared/ipc-contract'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
@@ -120,6 +121,25 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId)
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+
+  // One shot: the backend cannot change during a run, so this is not a
+  // subscription. A failure leaves it null and the HUD simply says nothing,
+  // which is the correct silent case — we only ever speak up for bad news.
+  const [backendInfo, setBackendInfo] = useState<SessionBackendInfo | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void window.canvas.session
+      .info()
+      .then((info) => {
+        if (!cancelled) setBackendInfo(info)
+      })
+      .catch((error: unknown) => {
+        console.warn('[backend] could not read the session backend', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Panels that came from disk start dormant; first-run panels do not. The
   // renderer is what generates first-run panels, so it is also what knows
@@ -696,7 +716,7 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
           )
         })}
       </div>
-      <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} />
+      <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
     </div>
   )
 }

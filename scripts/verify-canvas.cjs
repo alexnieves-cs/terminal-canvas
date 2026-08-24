@@ -84,7 +84,13 @@ app.whenReady().then(async () => {
   const layoutStore = createLayoutStore({
     filePath: join(mkdtempSync(join(tmpdir(), 'tc-canvas-')), 'layout.json')
   })
-  registerIpcHandlers(ptyManager, layoutStore)
+  // ipcMain.handle's return value crosses IPC via structured clone, so this
+  // must be a plain { kind, reason } object, not the SessionBackend itself —
+  // that carries a spawn() function, which structured clone cannot carry.
+  registerIpcHandlers(ptyManager, layoutStore, () => {
+    const b = createDirectBackend('verify: direct')
+    return { kind: b.kind, reason: b.reason }
+  })
 
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
   await sleep(800)

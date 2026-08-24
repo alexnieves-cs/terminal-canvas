@@ -1,18 +1,25 @@
 import type { JSX } from 'react'
+import type { SessionBackendInfo } from '@shared/ipc-contract'
 import type { Point, Viewport } from './viewport'
 
 export interface CanvasHudProps {
   viewport: Viewport
   cursor: Point
   selectedId: string | null
+  /** null until the one-shot probe answers. */
+  backend: SessionBackendInfo | null
 }
 
 /**
- * Zoom, world-space cursor position, and current selection. This is the
- * fastest way to see the coordinate math misbehaving: if the world coordinates
- * do not stay put under a stationary cursor while zooming, zoomAt is wrong.
+ * Zoom, world-space cursor position, current selection, and — only when it is
+ * bad news — which backend is spawning panels.
+ *
+ * This is a STATUS, not a toggle, which is why it lives here rather than in a
+ * settings surface: ideas-backlog item 11's "anything a user can toggle goes
+ * in one organised settings surface" rule does not claim it. It renders
+ * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ viewport, cursor, selectedId }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ viewport, cursor, selectedId, backend }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       <span>{Math.round(viewport.scale * 100)}%</span>
@@ -20,6 +27,11 @@ export function CanvasHud({ viewport, cursor, selectedId }: CanvasHudProps): JSX
         {Math.round(cursor.x)}, {Math.round(cursor.y)}
       </span>
       <span>{selectedId ?? '—'}</span>
+      {backend?.kind === 'direct' && (
+        <span className="canvas-hud__warn" title={backend.reason}>
+          no tmux — sessions end on reload
+        </span>
+      )}
     </div>
   )
 }

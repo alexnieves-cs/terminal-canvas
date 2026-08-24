@@ -62,7 +62,7 @@ app.whenReady().then(() => {
     reset: () => {},
     flushSync: () => {}
   }
-  registerIpcHandlers(stub, layoutStoreStub)
+  registerIpcHandlers(stub, layoutStoreStub, () => ({ kind: 'direct', reason: 'verify: direct' }))
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
