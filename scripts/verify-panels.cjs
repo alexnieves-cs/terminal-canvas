@@ -687,19 +687,42 @@ app.whenReady().then(async () => {
         const overUnfocused = read()
         const scrollAfter = window.__m4aScrollY(idB)
 
-        return { before, overFocused, overBackground, overUnfocused, scrollBefore, scrollAfter }
+        // Cmd+wheel over the FOCUSED panel. canvas-input.ts reads metaKey as a
+        // zoom intent exactly as it reads a trackpad pinch's synthetic ctrlKey,
+        // and the spec makes a zoom gesture always the camera's — otherwise a
+        // mouse user who had clicked into a panel could not zoom the canvas
+        // while the cursor was over it, and Cmd, the modifier every other
+        // canvas shortcut requires, would be ignored in the one place it is
+        // the canvas's own claim. Dispatched LAST, after every measurement
+        // above: it changes the scale, and the pan assertions above compare
+        // transforms taken at a fixed one.
+        const beforeMeta = read()
+        slotA.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, metaKey: true,
+          clientX: rA.left + rA.width / 2, clientY: rA.top + rA.height / 2,
+          deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const afterMeta = read()
+
+        return {
+          before, overFocused, overBackground, overUnfocused,
+          scrollBefore, scrollAfter, beforeMeta, afterMeta
+        }
       })()`)
 
-      ok('12 a wheel over the focused terminal does not move the camera; every other wheel pans and does not scroll an unfocused terminal',
+      ok('12 a wheel over the focused terminal does not move the camera; Cmd+wheel there still zooms; every other wheel pans and does not scroll an unfocused terminal',
         result && !result.error &&
           result.overFocused === result.before &&
           result.overBackground !== result.before &&
           result.overUnfocused !== result.overBackground &&
           typeof result.scrollBefore === 'number' && result.scrollBefore > 0 &&
-          result.scrollBefore === result.scrollAfter,
+          result.scrollBefore === result.scrollAfter &&
+          result.afterMeta !== result.beforeMeta,
         `before=${result && result.before} focused=${result && result.overFocused} ` +
         `background=${result && result.overBackground} unfocused=${result && result.overUnfocused} ` +
-        `scrollBefore=${result && result.scrollBefore} scrollAfter=${result && result.scrollAfter}`)
+        `scrollBefore=${result && result.scrollBefore} scrollAfter=${result && result.scrollAfter} ` +
+        `metaKey over focused: ${result && result.beforeMeta} -> ${result && result.afterMeta}`)
     }
 
     // ---------------------------------------------------------------------
@@ -707,9 +730,50 @@ app.whenReady().then(async () => {
     // panel needs two. 15. Closing one panel does not disturb any other,
     // including a demoted one — check 4's invariant re-asserted against the
     // new dispose(id) path.
+    //
+    // The setup below is what makes 15 a real NEGATIVE check rather than a
+    // restatement of 13/14. dispose(id) is the second caller of pty.kill in
+    // the renderer, and the failure it could introduce is killing a session
+    // whose React component is not currently mounted as a live slot — exactly
+    // the state a carded panel is in. So one panel is focused (assignTiers
+    // pins the focused panel live unconditionally, which keeps a running panel
+    // available for 14) and the camera is then zoomed out to fit, which drops
+    // every other panel below LIVE_MIN_SCALE and cards it WITHOUT disposing
+    // its session. Only then is the pid snapshot taken. Without this, every
+    // spawned session is live when the closes happen and nothing in the block
+    // requires a carded one to survive.
     // ---------------------------------------------------------------------
     {
       await zoomTo(wc, '0')
+      await waitUntil(async () => (await liveCount(wc)) > 0, 6000)
+      await wc.executeJavaScript(`(() => {
+        const slot = document.querySelector('.panel__slot')
+        if (!slot) return false
+        slot.dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+        return true
+      })()`)
+      await sleep(200)
+      // The ids that are LIVE right now. The demotion assertion below is
+      // anchored to this set rather than to "some carded session survived":
+      // panels the camera has never visited are carded from the start, and at
+      // any given moment one of them has usually spawned at some point, so an
+      // unanchored version passes by accident whether or not this block ever
+      // demotes anything. Requiring a survivor that was live HERE and is a
+      // card THERE is what ties the assertion to the zoom-out below.
+      const liveBefore = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')]` +
+        `.filter((p) => p.querySelector('.panel__slot'))` +
+        `.map((p) => p.getAttribute('data-panel-id'))`
+      )
+      await zoomTo(wc, '1')
+      // Wait on the demotion itself, not a clock: DEMOTE_DELAY_MS holds every
+      // demotion back by 250ms, so a fixed sleep here would either be a guess
+      // or would snapshot the pre-demotion state.
+      await waitUntil(
+        async () => (await cardCount(wc)) > 0 && (await liveCount(wc)) <= 1,
+        6000
+      )
       const before = await settledSessionMap(wc)
 
       const result = await wc.executeJavaScript(`(async () => {
@@ -770,14 +834,29 @@ app.whenReady().then(async () => {
       const after = await sessionMap(wc)
       const survivors = new Map([...before].filter(([id]) => id !== runningId))
       const { ok: preserved, changed } = pidsPreserved(survivors, after)
+      // The ids currently rendering a card. Intersected with `liveBefore` and
+      // with `survivors` (which comes from pty:list) this can only name a panel
+      // that was a live terminal before the zoom-out, is a card now, and still
+      // holds its original pid after a sibling was closed — the negative check
+      // the spec asks for. A never-started panel cards too, but has no session
+      // to lose, and `survivors` excludes it.
+      const cardedIds = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')]` +
+        `.filter((p) => p.querySelector('.panel__card'))` +
+        `.map((p) => p.getAttribute('data-panel-id'))`
+      )
+      const cardedSurvivor = cardedIds.find(
+        (id) => liveBefore.includes(id) && survivors.has(id) && after.has(id)
+      )
       // The result/size guards matter: without them an in-page `{ error }`
       // leaves runningId null, `survivors` holds everything, nothing was
       // killed — and this check reports PASS having tested nothing.
-      ok('15 closing one panel kills only that panel\'s pty',
+      ok('15 closing one panel kills only that panel\'s pty, demoted siblings included',
         result && !result.error && survivors.size > 0 &&
-          preserved && !after.has(runningId),
+          preserved && !after.has(runningId) && cardedSurvivor !== undefined,
         preserved
-          ? `${survivors.size} session(s) unchanged, ${runningId} gone`
+          ? `${survivors.size} session(s) unchanged (carded survivor: ${cardedSurvivor ?? 'NONE'}), ` +
+            `${runningId} gone`
           : `pid mismatch: ${changed.join('; ')}`)
     }
 
@@ -822,6 +901,38 @@ app.whenReady().then(async () => {
         `z ${result && result.zBefore} -> ${result && result.zAfter} ` +
         `(max was ${result && result.maxBefore}); dom stable=${
           result && result.domBefore === result.domAfter}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 17. Ids stay unique once panels can be REMOVED. A length-derived id
+    //     (`n${panels.length + 1}`) was sound while the array only grew;
+    //     removePanel breaks it, and every consequence is silent —
+    //     registry.ensure returns the EXISTING session for a repeated id, so
+    //     the second panel renders the first one's handle.host (which can only
+    //     live in one slot), React logs a duplicate-key warning, and
+    //     setPanelRect/removePanel then act on both entries at once. Checks
+    //     13/14 have already closed two panels by this point, which is exactly
+    //     the state that makes the length counter run back over ids it has
+    //     already handed out. Three spawns, because with a length counter the
+    //     first one lands in the gap the closes opened and only the ones after
+    //     it collide.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const countBefore = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel').length`
+      )
+      for (let i = 0; i < 3; i++) {
+        await zoomTo(wc, 'n')
+        await sleep(250)
+      }
+      const ids = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
+      )
+      const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i)
+      ok('17 spawning after a close never reuses a panel id',
+        ids.length === countBefore + 3 && duplicates.length === 0,
+        `${countBefore} -> ${ids.length} panels, duplicates=[${duplicates.join(', ')}]`)
     }
 
   } catch (error) {

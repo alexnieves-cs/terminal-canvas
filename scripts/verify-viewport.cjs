@@ -517,6 +517,24 @@ const SLOT = { left: 300, top: 200 }
     `offset ${out.x - SLOT.left}, ${out.y - SLOT.top}`)
 }
 
+// 39. The non-finite / non-positive guard. A corrupted viewport is the only
+//     way to get here, but the consequence of not guarding is specific: the
+//     division would emit NaN or Infinity, and xterm-pointer.ts copies the
+//     result straight into a synthetic MouseEvent's clientX/clientY. Returning
+//     the input unchanged leaves the click merely uncorrected instead. Checked
+//     against a POINT OFFSET FROM THE SLOT — an input equal to the slot origin
+//     is a fixed point of the real arithmetic and would pass without a guard.
+{
+  const p = { x: SLOT.left + 400, y: SLOT.top + 100 }
+  const same = (scale) => {
+    const out = V.correctForScale(p, SLOT, scale)
+    return out.x === p.x && out.y === p.y
+  }
+  ok('39 correctForScale returns the point unchanged for a corrupt scale',
+    same(0) && same(NaN) && same(-2) && same(Infinity),
+    `0=${same(0)} NaN=${same(NaN)} -2=${same(-2)} Infinity=${same(Infinity)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

@@ -322,8 +322,10 @@ const tick = () => new Promise((r) => setImmediate(r))
 
   // ---------------------------------------------------------------------------
   // M4a: explicit close (13-15)
-  // NOTE: this suite numbers 1-12 with lettered sub-checks (3b, 7c, ...),
-  // so 17 assertions run today and 13 is the next free NUMBER.
+  // NOTE: this suite numbers 1-15 with lettered sub-checks (3b, 7c, ...), so
+  // 20 assertions run today and 16 is the next free NUMBER. (13 was the next
+  // free number when this block was written; it now holds the first of the
+  // three checks below.)
   // ---------------------------------------------------------------------------
 
   // 13. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
