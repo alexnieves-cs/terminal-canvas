@@ -426,8 +426,18 @@ Run: `npm run verify:viewport && npm run typecheck`
 Expected: `34/34 passed`, then a clean typecheck.
 
 If check 27 fails with all three distances equal, `applyDrag` is being fed a
-screen delta rather than two world points — the bug the check exists for.
-If check 28 fails, the implementation is accumulating rather than recomputing.
+screen delta rather than two world points. If check 28 fails, `applyDrag` is
+holding state somewhere outside its arguments.
+
+**What checks 27 and 28 cannot catch.** `applyDrag(state, world)` receives two
+already-resolved *world* points, so neither the delta trap nor an
+accumulate-deltas implementation is reachable from inside it — both are
+caller-side bugs. These two checks pin real properties (drag distance scales as
+`1/k`; the function is stateless, so frame count cannot matter), but they are
+**not** the discriminators for those bugs. **Task 5's check 10 is**: it drives a
+real drag through `usePanelDrag`'s own conversion at a non-1 scale and asserts
+the panel moved `screenDelta / scale`. Do not treat 27 and 28 as covering the
+call site.
 
 - [ ] **Step 8: Commit**
 
