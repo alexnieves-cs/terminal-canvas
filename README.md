@@ -105,18 +105,20 @@ zooming cannot change a panel's cols/rows. The alternative, computing each
 panel's pixel size per frame, would reflow the running shell on every zoom
 gesture.
 
-The same transform-blindness is why pointer coordinates need explicit
-correction: `getBoundingClientRect()` is transform-aware while
-`dimensions.css.cell.width` is not. `screenToWorld` in
-`src/renderer/canvas/viewport.ts` is the function that corrects them, and M3
-feeds its output to xterm.
+The same transform-blindness is why pointer coordinates are wrong under zoom:
+`getBoundingClientRect()` is transform-aware while `dimensions.css.cell.width`
+is not, so under `scale(k)` xterm hit-tests a column `k` times the true one. M3
+does **not** correct this — it gates body clicks to a band near 1:1
+(`INTERACT_MIN_SCALE`/`INTERACT_MAX_SCALE` in `Canvas.tsx`), where the error is
+too small to matter. Full correction is M4's, alongside drag and resize, which
+need pointer math on panel geometry anyway.
 
 ## Milestones
 
 | | Scope | Status |
 |---|---|---|
-| M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ reviewed |
-| M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | ✅ in review |
-| M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | ✅ in review |
+| M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ done |
+| M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | ✅ done |
+| M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | ✅ done |
 | M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |
 | M5 | Presets, command palette, electron-builder packaging | |
