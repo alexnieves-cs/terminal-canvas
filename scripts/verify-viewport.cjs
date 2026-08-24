@@ -222,6 +222,91 @@ const wheel = (over) => ({
     `pinch factor ${pinch.factor}`)
 }
 
+// --- lod.ts -------------------------------------------------------------
+
+const SIZE = { width: 1000, height: 800 }
+const AT_ORIGIN = { x: 0, y: 0, scale: 1 }
+const panelAt = (id, x, y) => ({ id, x, y, w: 520, h: 340 })
+
+// 20. On screen is live; far off screen is a card.
+{
+  const rects = [panelAt('near', 100, 100), panelAt('far', 90000, 90000)]
+  const tiers = V.assignTiers({
+    rects, viewport: AT_ORIGIN, size: SIZE, focusedId: null, lastFocusedAt: {}
+  })
+  ok('20 on screen is live, far off screen is a card',
+    tiers.near === 'live' && tiers.far === 'card',
+    `near=${tiers.near} far=${tiers.far}`)
+}
+
+// 21. The margin band: a panel just outside the viewport is still live, so
+//     panning does not thrash a WebGL context at the edge.
+{
+  const justOutside = panelAt('edge', SIZE.width + 100, 100) // 100px past the edge
+  const tiers = V.assignTiers({
+    rects: [justOutside], viewport: AT_ORIGIN, size: SIZE,
+    focusedId: null, lastFocusedAt: {}
+  })
+  const wayOutside = panelAt('gone', SIZE.width + 5000, 100)
+  const tiers2 = V.assignTiers({
+    rects: [wayOutside], viewport: AT_ORIGIN, size: SIZE,
+    focusedId: null, lastFocusedAt: {}
+  })
+  ok('21 margin band protects from edge thrash',
+    tiers.edge === 'live' && tiers2.gone === 'card',
+    `edge=${tiers.edge} gone=${tiers2.gone}`)
+}
+
+// 22. Below LIVE_MIN_SCALE nothing unfocused is live, however on-screen.
+{
+  const rects = [panelAt('a', 0, 0), panelAt('b', 600, 0)]
+  const tiers = V.assignTiers({
+    rects, viewport: { x: 0, y: 0, scale: 0.3 }, size: SIZE,
+    focusedId: null, lastFocusedAt: {}
+  })
+  ok('22 below LIVE_MIN_SCALE all unfocused panels are cards',
+    tiers.a === 'card' && tiers.b === 'card', JSON.stringify(tiers))
+}
+
+// 23. The budget caps live panels no matter how many are on screen.
+{
+  const rects = []
+  for (let i = 0; i < 20; i++) {
+    rects.push(panelAt('p' + i, (i % 5) * 40, Math.floor(i / 5) * 40))
+  }
+  const tiers = V.assignTiers({
+    rects, viewport: AT_ORIGIN, size: SIZE, focusedId: null,
+    budget: 3, lastFocusedAt: {}
+  })
+  const live = Object.values(tiers).filter((t) => t === 'live').length
+  ok('23 budget caps live panels', live === 3, `live=${live} of ${rects.length}`)
+}
+
+// 24. The focused panel is live off screen, below threshold, and over budget.
+//     Typing must never land in a card.
+{
+  const rects = [panelAt('focused', 90000, 90000)]
+  for (let i = 0; i < 20; i++) rects.push(panelAt('p' + i, (i % 5) * 40, 0))
+  const tiers = V.assignTiers({
+    rects, viewport: { x: 0, y: 0, scale: 0.2 }, size: SIZE,
+    focusedId: 'focused', budget: 2, lastFocusedAt: {}
+  })
+  ok('24 focused panel is always live',
+    tiers.focused === 'live', JSON.stringify(tiers.focused))
+}
+
+// 25. Eviction drops the least-recently-focused panel first.
+{
+  const rects = [panelAt('old', 0, 0), panelAt('recent', 40, 0), panelAt('newest', 80, 0)]
+  const tiers = V.assignTiers({
+    rects, viewport: AT_ORIGIN, size: SIZE, focusedId: null, budget: 2,
+    lastFocusedAt: { old: 1000, recent: 2000, newest: 3000 }
+  })
+  ok('25 eviction drops least-recently-focused first',
+    tiers.old === 'card' && tiers.recent === 'live' && tiers.newest === 'live',
+    JSON.stringify(tiers))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

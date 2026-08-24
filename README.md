@@ -30,13 +30,16 @@ npm run verify:pty           # node-pty behaviour, under Electron's ABI
 npm run verify:pty-manager   # the real PtyManager: session lifecycle, batching
 npm run verify:window        # renderer teardown reaches the PTY layer
 npm run verify:ipc           # every contract channel has a handler
-npm run verify:viewport      # canvas coordinate math, plain node
+npm run verify:viewport      # canvas coordinate math + LOD tiering, plain node
+npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:canvas        # real input into the built renderer
+npm run verify:xterm         # an xterm Terminal survives its host being detached
+npm run verify:panels        # terminals on the canvas: LOD tiering, culling never kills a PTY
 ```
 
-`node-pty` is a native module built for Electron's ABI, so the checks run under
-the Electron binary rather than plain `node`. They need no display: the two
-that require a real Electron runtime open a window with `show: false`.
+`node-pty` is a native module built for Electron's ABI, so the checks that touch it run under
+the Electron binary rather than plain `node`. None need a display: the ones that require a
+real Electron runtime open a window with `show: false`.
 
 ### If `npm run dev` misbehaves
 
@@ -62,7 +65,16 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
 `src/shared/ipc-contract.ts` is the single source of truth for that surface and
 is imported by all three processes.
 
-### Four things that are non-obvious
+On the renderer side, a panel has two separate lifetimes. A **session** — the xterm
+`Terminal` and the PTY behind it — is created once and disposed once, in a module-level
+registry (`src/renderer/session/session-registry.ts`) that lives outside React. The React
+**view** (`src/renderer/components/TerminalPanel.tsx`) is mounted and unmounted freely as
+panels scroll on and off screen, and owns nothing. A pure function
+(`src/renderer/canvas/lod.ts`) decides which panels are worth a live terminal versus a cheap
+card, based on viewport, focus, and a fixed budget of live WebGL contexts — culling a panel
+never kills its process, only the registry's `disposeAll` does that.
+
+### Things that are non-obvious
 
 **Login-shell PATH.** macOS GUI apps are launched by launchd, so they inherit a
 bare PATH and none of your dotfile exports — `claude` and `codex` work in
@@ -105,6 +117,6 @@ feeds its output to xterm.
 |---|---|---|
 | M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ reviewed |
 | M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | ✅ in review |
-| M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | |
+| M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | ✅ in review |
 | M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |
 | M5 | Presets, command palette, electron-builder packaging | |

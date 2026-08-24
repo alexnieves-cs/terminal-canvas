@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, userInfo } from 'node:os'
 import { resolve } from 'node:path'
 import type { WebContents } from 'electron'
 import * as pty from 'node-pty'
@@ -31,6 +31,19 @@ function resolveCwd(raw: string): string {
   return homedir()
 }
 
+/**
+ * A panel with no explicit command runs the user's login shell. Only main can
+ * know what that is: the renderer's `process.env` is compiled away to `{}`, so
+ * a shell lookup there resolves to `undefined` and every panel silently gets
+ * the hardcoded fallback instead. Prefer the SHELL reported by the login-shell
+ * probe, then this process's own view of it, mirroring shell-env.ts's own
+ * fallback chain so the two cannot disagree about what "the login shell" is.
+ */
+function resolveCommand(spec: PanelSpec, loginEnv: Record<string, string>): string {
+  if (spec.command) return spec.command
+  return loginEnv.SHELL || process.env.SHELL || userInfo().shell || '/bin/zsh'
+}
+
 interface Session {
   panelId: PanelId
   proc: pty.IPty
@@ -57,8 +70,9 @@ export class PtyManager {
     const env = buildPtyEnv(loginEnv, spec.env)
 
     const cwd = resolveCwd(spec.cwd)
+    const command = resolveCommand(spec, loginEnv)
 
-    const proc = pty.spawn(spec.command, spec.args, {
+    const proc = pty.spawn(command, spec.args, {
       name: 'xterm-256color',
       // Spawn at the size the renderer already fitted to. Spawning at the
       // 80x24 default and resizing afterwards makes agent TUIs draw their
@@ -75,7 +89,7 @@ export class PtyManager {
       buffer: [],
       flushTimer: null,
       killed: false,
-      command: spec.command,
+      command,
       cwd
     }
     this.sessions.set(spec.panelId, session)
@@ -96,11 +110,11 @@ export class PtyManager {
     })
 
     console.log(
-      `[pty] spawned ${spec.command} pid=${proc.pid} panel=${spec.panelId} ` +
+      `[pty] spawned ${command} pid=${proc.pid} panel=${spec.panelId} ` +
         `${spec.cols}x${spec.rows} cwd=${cwd}`
     )
 
-    return { panelId: spec.panelId, pid: proc.pid, command: spec.command, cwd }
+    return { panelId: spec.panelId, pid: proc.pid, command, cwd }
   }
 
   /**

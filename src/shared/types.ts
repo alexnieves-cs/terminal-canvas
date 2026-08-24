@@ -5,7 +5,14 @@ export type PanelId = string
 export interface PanelSpec {
   panelId: PanelId
   cwd: string
-  command: string
+  /**
+   * Optional: absent means "the user's login shell". The renderer cannot
+   * resolve that itself — electron-vite compiles `process.env` in the renderer
+   * bundle to `{}`, so a `process.env.SHELL` read there is always `undefined`
+   * and silently collapses to whatever fallback follows it. Main already
+   * probes the real login environment (see shell-env.ts); it fills this in.
+   */
+  command?: string
   args: string[]
   /** Extra vars layered on top of the resolved login-shell env. */
   env?: Record<string, string>

@@ -1,0 +1,139 @@
+/* Probe: does an xterm Terminal survive having its host detached?
+   Bundled by verify-xterm-detach.cjs and loaded in a hidden window. */
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
+
+const readRows = (term) => {
+  const buf = term.buffer.active
+  const lines = []
+  for (let i = 0; i < buf.length; i++) {
+    const line = buf.getLine(i)
+    if (!line) continue
+    const text = line.translateToString(true)
+    if (text.trim()) lines.push(text.trim())
+  }
+  return lines
+}
+
+// Under the WebGL addon, xterm paints glyphs into a <canvas> and the
+// `.xterm-rows` DOM layer is used for accessibility/selection text only — it
+// can legitimately be empty even while the terminal renders perfectly. Read
+// both surfaces so a later empty DOM read can be told apart from "genuinely
+// did not repaint" vs. "this renderer never populates DOM text."
+const readCanvasSignal = (host) => {
+  const canvases = host.querySelectorAll('canvas')
+  const first = canvases[0]
+  return {
+    count: canvases.length,
+    width: first ? first.width : 0,
+    height: first ? first.height : 0
+  }
+}
+
+window.__probe = (async () => {
+  const out = {}
+
+  // 1. Open against an attached host, as a live panel would.
+  const host = document.createElement('div')
+  host.style.cssText = 'width: 640px; height: 400px;'
+  document.body.appendChild(host)
+
+  const term = new Terminal({ fontSize: 13, scrollback: 1000, allowProposedApi: true })
+  const fit = new FitAddon()
+  term.loadAddon(fit)
+  term.open(host)
+  let webgl = new WebglAddon()
+  term.loadAddon(webgl)
+  fit.fit()
+
+  term.write('BEFORE-DETACH\r\n')
+  await new Promise((r) => setTimeout(r, 200))
+  out.colsWhileAttached = term.cols
+  out.rowsWhileAttached = term.rows
+
+  // Baseline: the SAME measurements check 4 takes after reattachment, but
+  // taken here while attached and known-healthy. This is what tells apart
+  // "reattach failed to repaint" from "this measurement is never populated
+  // under WebGL, attached or not."
+  out.domTextWhileAttached = (host.querySelector('.xterm-rows')?.textContent || '').trim()
+  out.canvasesWhileAttached = readCanvasSignal(host)
+
+  // 2. Evict: drop the WebGL context and take the host out of the document.
+  webgl.dispose()
+  webgl = null
+  host.remove()
+  await new Promise((r) => setTimeout(r, 100))
+
+  // 3. Write while detached. This is the assertion that matters: output
+  //    arriving for an off-screen panel must not be lost.
+  try {
+    term.write('WHILE-DETACHED\r\n')
+    await new Promise((r) => setTimeout(r, 200))
+    out.detachedWriteThrew = false
+  } catch (error) {
+    out.detachedWriteThrew = String(error)
+  }
+  out.bufferWhileDetached = readRows(term)
+
+  // 4. Promote again: re-append the SAME host, take a fresh WebGL context,
+  //    refit. term.open() is deliberately not called a second time.
+  document.body.appendChild(host)
+  try {
+    const again = new WebglAddon()
+    term.loadAddon(again)
+    out.webglReloaded = true
+  } catch (error) {
+    out.webglReloaded = String(error)
+  }
+  fit.fit()
+  term.refresh(0, term.rows - 1)
+  await new Promise((r) => setTimeout(r, 300))
+
+  out.bufferAfterReattach = readRows(term)
+  out.colsAfterReattach = term.cols
+  out.rowsAfterReattach = term.rows
+  out.domTextAfterReattach = (host.querySelector('.xterm-rows')?.textContent || '').trim()
+  out.canvasesAfterReattach = readCanvasSignal(host)
+
+  // Control: the WebGL path can't prove repaint via DOM text (it's empty
+  // even when healthy — see domTextWhileAttached above), and a WebGL canvas
+  // readback would need `preserveDrawingBuffer`, which the addon does not
+  // expose, so a readback would be blank-or-flaky rather than trustworthy.
+  // Instead, run a second, independent Terminal through the identical
+  // detach/write/reattach lifecycle with NO WebglAddon at all. Its DOM
+  // renderer *does* paint into `.xterm-rows`, so this is the surface that
+  // can actually prove or disprove "does the buffer repaint after reattach."
+  out.control = {}
+  const host2 = document.createElement('div')
+  host2.style.cssText = 'width: 640px; height: 400px;'
+  document.body.appendChild(host2)
+
+  const term2 = new Terminal({ fontSize: 13, scrollback: 1000, allowProposedApi: true })
+  const fit2 = new FitAddon()
+  term2.loadAddon(fit2)
+  term2.open(host2)
+  fit2.fit()
+
+  term2.write('BEFORE-DETACH\r\n')
+  await new Promise((r) => setTimeout(r, 200))
+  // Baseline: if this is empty, DOM text is not a valid signal even without
+  // WebGL, and the control is inconclusive — the check reading this must
+  // fail rather than pass on an empty/undefined value.
+  out.control.domTextWhileAttached = (host2.querySelector('.xterm-rows')?.textContent || '').trim()
+
+  host2.remove()
+  await new Promise((r) => setTimeout(r, 100))
+  term2.write('WHILE-DETACHED\r\n')
+  await new Promise((r) => setTimeout(r, 200))
+
+  document.body.appendChild(host2)
+  fit2.fit()
+  term2.refresh(0, term2.rows - 1)
+  await new Promise((r) => setTimeout(r, 300))
+
+  out.control.domTextAfterReattach = (host2.querySelector('.xterm-rows')?.textContent || '').trim()
+  term2.dispose()
+
+  return out
+})()
