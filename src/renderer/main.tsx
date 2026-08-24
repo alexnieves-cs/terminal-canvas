@@ -2,6 +2,12 @@ import { createRoot } from 'react-dom/client'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 import { App } from './App'
+import { installDropGuard } from './drop-guard'
+
+// Installed before React mounts, and never uninstalled: an unhandled file drop
+// navigates the renderer, which kills every PTY in the window. Nothing about
+// that is React's concern, so it does not live in a component's effect.
+installDropGuard()
 
 const container = document.getElementById('root')
 if (!container) throw new Error('#root missing from index.html')

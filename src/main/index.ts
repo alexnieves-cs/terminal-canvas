@@ -46,6 +46,15 @@ function createWindow(): void {
     console.warn('[window] could not pin visual zoom', error)
   })
 
+  // Second line of defence behind the renderer's drop guard. Any navigation
+  // away from the app kills every PTY in this window (attachPtyLifecycle), and
+  // there is no navigation this window is ever supposed to perform after its
+  // initial load — so refuse them all rather than trust one renderer listener.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault()
+    console.warn(`[window] blocked navigation to ${url}`)
+  })
+
   // Never let a link navigate the shell window itself.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
