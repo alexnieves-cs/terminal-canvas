@@ -4,5 +4,6 @@
 module.exports = {
   ...require('../src/shared/layout-schema'),
   ...require('../src/shared/panel-geometry'),
-  ...require('../src/renderer/panels/layout-adapt')
+  ...require('../src/renderer/panels/layout-adapt'),
+  ...require('../src/main/layout-store')
 }

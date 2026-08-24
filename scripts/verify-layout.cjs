@@ -223,6 +223,151 @@ const active = (snap) => snap.workspaces.find((w) => w.id === snap.activeWorkspa
     JSON.stringify(back))
 }
 
+const { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+
+const tmp = () => join(mkdtempSync(join(tmpdir(), 'tc-layout-')), 'layout.json')
+/** A fake scheduler, so the debounce is driven explicitly instead of by a clock. */
+const fakeClock = () => {
+  const pending = []
+  return {
+    schedule: (fn) => { pending.push(fn); return () => { const i = pending.indexOf(fn); if (i >= 0) pending.splice(i, 1) } },
+    fire: () => { const run = pending.splice(0); for (const fn of run) fn() },
+    count: () => pending.length
+  }
+}
+const CANVAS = {
+  panels: [{ id: 'p1', x: 5, y: 6, w: 720, h: 460, z: 2, cwd: '~', args: ['-l'] }],
+  camera: { x: 1, y: 2, scale: 1.5 },
+  selectedId: 'p1',
+  focusedId: null
+}
+
+// 16. A missing file is a first run, not an error.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  const state = store.initial()
+  ok('16 a missing layout file yields an empty canvas',
+    state.panels.length === 0 && state.camera.scale === L.DEFAULT_CAMERA.scale,
+    JSON.stringify(state.camera))
+}
+
+// 17. A saved canvas comes back.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load(); a.save(CANVAS); a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('17 a saved canvas round-trips through the file',
+    JSON.stringify(b.initial()) === JSON.stringify(CANVAS), JSON.stringify(b.initial()))
+}
+
+// 18. COALESCING. Sixty snapshots a second arrive during a drag; they must
+//     collapse to one scheduled write, keeping the newest.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  for (let i = 0; i < 60; i += 1) store.save({ ...CANVAS, camera: { x: i, y: 0, scale: 1 } })
+  const scheduled = clock.count()
+  clock.fire()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  ok('18 sixty saves collapse to one write of the newest state',
+    scheduled === 1 && written.workspaces[0].camera.x === 59,
+    `scheduled=${scheduled} x=${written.workspaces[0].camera.x}`)
+}
+
+// 19. flushSync writes the newest state even with a write still pending, and
+//     cancels the pending one rather than leaving it to fire after quit.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.save(CANVAS)
+  store.flushSync()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  ok('19 flushSync writes immediately and cancels the pending write',
+    written.workspaces[0].panels.length === 1 && clock.count() === 0,
+    `pending=${clock.count()}`)
+}
+
+// 20. flushSync must NEVER throw: it runs inside app.on('before-quit'), where
+//     an exception can wedge the quit itself.
+{
+  const store = L.createLayoutStore({ filePath: '/proc/nonexistent-dir/layout.json' })
+  let threw = null
+  try { store.load(); store.save(CANVAS); store.flushSync() } catch (e) { threw = e.message }
+  ok('20 an unwritable path never throws out of flushSync', threw === null, threw ?? 'ok')
+}
+
+// 21. No .tmp file is left behind. The write is tmp-then-rename so a crash
+//     mid-write cannot truncate the real file.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load(); store.save(CANVAS); store.flushSync()
+  ok('21 the atomic write leaves no .tmp file behind',
+    existsSync(path) && !existsSync(path + '.tmp'))
+}
+
+// 22. Settings are preserved across a renderer merge. The renderer does not
+//     have them and does not send them; main must not lose them.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.setSetting('camera', false)
+  store.save(CANVAS)
+  store.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  ok('22 a renderer save preserves main-side settings',
+    reopened.settings().camera === false && reopened.settings().layout === true,
+    JSON.stringify(reopened.settings()))
+}
+
+// 23. Settings are APPLIED by initial(), so the renderer never learns they
+//     exist. layout off implies no panels, which implies no selection.
+{
+  const path = tmp()
+  const seed = L.createLayoutStore({ filePath: path })
+  seed.load(); seed.save(CANVAS); seed.flushSync()
+
+  const noCamera = L.createLayoutStore({ filePath: path })
+  noCamera.load(); noCamera.setSetting('camera', false)
+  const noLayout = L.createLayoutStore({ filePath: path })
+  noLayout.load(); noLayout.setSetting('layout', false)
+  const noFocus = L.createLayoutStore({ filePath: path })
+  noFocus.load(); noFocus.setSetting('focus', false)
+
+  ok('23 initial() applies each restore setting independently',
+    noCamera.initial().camera.scale === L.DEFAULT_CAMERA.scale &&
+    noCamera.initial().panels.length === 1 &&
+    noLayout.initial().panels.length === 0 &&
+    noLayout.initial().selectedId === null &&
+    noFocus.initial().selectedId === null &&
+    noFocus.initial().panels.length === 1,
+    `cam=${noCamera.initial().camera.scale} lay=${noLayout.initial().panels.length}`)
+}
+
+// 24. A future-version file is BACKED UP before being replaced, or the
+//     fallback's first write destroys a layout a newer build authored.
+{
+  const path = tmp()
+  writeFileSync(path, JSON.stringify({ version: 99, workspaces: [] }))
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.save(CANVAS)
+  store.flushSync()
+  const backup = JSON.parse(readFileSync(path + '.bak', 'utf8'))
+  ok('24 a future-version file is preserved as .bak before being replaced',
+    backup.version === 99 && existsSync(path), `bak.version=${backup.version}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
