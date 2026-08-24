@@ -7,7 +7,10 @@ module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   resolveShellEnv: require('../src/main/shell-env').resolveShellEnv,
-  createLayoutStore: require('../src/main/layout-store').createLayoutStore,
+  // Re-exported whole (not just createLayoutStore) so Task 8's check can build
+  // a store, hand it to registerIpcHandlers, and later call flushSync() on the
+  // SAME instance to force its 500ms-debounced write deterministically.
+  ...require('../src/main/layout-store'),
   // M4b: panels now come from layout:load instead of a hardcoded constant, so
   // this suite has to seed the store's file with SEED_PANELS itself before the
   // window loads, or it boots the one-panel first-run canvas instead of the

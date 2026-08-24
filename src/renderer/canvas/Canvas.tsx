@@ -11,7 +11,7 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
-import { toPanels } from '@renderer/panels/layout-adapt'
+import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
@@ -385,6 +385,25 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       registry.applyTiers(tiersRef.current)
     }, DEMOTE_DELAY_MS)
   }, [rects, viewport, focusedId, version, dormantIds])
+
+  // Persist on every change. Unthrottled on purpose, including the ~60/sec a
+  // drag produces: main coalesces to one write per 500ms and keeps only the
+  // newest, so one process owns the timing — and it is the one that has to
+  // survive the other's death.
+  //
+  // This resembles the flood pty-manager.ts's 16ms batching exists to prevent,
+  // and the difference is worth stating. That was THOUSANDS of messages a
+  // second arriving continuously at the renderer's event loop; this is sixty
+  // small JSON payloads a second reaching an otherwise-idle main process, and
+  // only while a gesture is in progress.
+  useEffect(() => {
+    void window.canvas.layout.save({
+      panels: fromPanels(panels),
+      camera: viewport,
+      selectedId,
+      focusedId
+    })
+  }, [panels, viewport, selectedId, focusedId])
 
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
     const host = hostRef.current

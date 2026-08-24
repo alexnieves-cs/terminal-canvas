@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync } = require('node:fs')
+const { mkdtempSync, existsSync, readFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
 
@@ -142,9 +142,13 @@ app.whenReady().then(async () => {
   // symptom that looks nothing like its cause. Pointed at a tmpdir, never
   // app.getPath('userData'), so the result never depends on whatever canvas
   // the developer running this happens to have saved for real.
-  const layoutStore = createLayoutStore({
-    filePath: join(mkdtempSync(join(tmpdir(), 'tc-panels-')), 'layout.json')
-  })
+  // Named rather than buried inline: check 19 reads this same path back off
+  // disk to prove a renderer change actually landed there, and flushLayoutStore
+  // (below) forces the store's 500ms-debounced write onto the SAME instance
+  // rather than a second one built from a different path.
+  const LAYOUT_PATH = join(mkdtempSync(join(tmpdir(), 'tc-panels-')), 'layout.json')
+  const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
+  const flushLayoutStore = () => layoutStore.flushSync()
 
   // Seed the store with the twelve-panel fixture BEFORE the window loads.
   // Without this, layout:load returns no panels, Canvas boots the one-panel
@@ -1070,6 +1074,80 @@ app.whenReady().then(async () => {
       ok('17 spawning after a close never reuses a panel id',
         ids.length === countBefore + 3 && duplicates.length === 0,
         `${countBefore} -> ${ids.length} panels, duplicates=[${duplicates.join(', ')}]`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 19. A change made in the renderer reaches layout.json. Without this the
+    //     whole milestone can look correct in a single session and persist
+    //     nothing to disk — every check above exercises panels.ts state, none
+    //     of them ever open the file main actually wrote.
+    //
+    //     Modelled on check 10's drag (chrome mousedown, a couple of moves,
+    //     mouseup), but at a fixed zoom rather than across one, since the
+    //     point here is the write path, not applyDrag's mid-gesture math. The
+    //     panel to drag and its rect are both read from the live DOM right
+    //     before the drag, not assumed, because by this point in the file
+    //     checks 1-17 have moved, zoomed, closed, and spawned panels — there
+    //     is no absolute coordinate left that is still safe to hardcode.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const dragged = await wc.executeJavaScript(`(async () => {
+        const chrome = document.querySelector('.panel__chrome')
+        if (!chrome) return { error: 'no panel' }
+        const panel = chrome.closest('.panel')
+        const id = panel.getAttribute('data-panel-id')
+        const before = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        const r = chrome.getBoundingClientRect()
+        const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        const DX = 137, DY = 42
+
+        const opts = (x, y, buttons) => ({
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons, detail: 1
+        })
+        const scale = window.__m4aViewport().scale
+        chrome.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+        document.dispatchEvent(new MouseEvent('mousemove', opts(start.x + DX, start.y + DY, 1)))
+        await new Promise((res) => setTimeout(res, 20))
+        document.dispatchEvent(new MouseEvent('mouseup', opts(start.x + DX, start.y + DY, 0)))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const after = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        return { id, before, after, scale, DX, DY }
+      })()`)
+
+      let moved = null
+      let expectedX = null
+      let expectedY = null
+      if (dragged && !dragged.error) {
+        // No translation term needed: at a fixed scale the viewport's
+        // translation cancels out of a SCREEN DELTA the same way it cancels
+        // in applyDrag itself (see check 10) — only the scale divides it.
+        expectedX = dragged.before.x + dragged.DX / dragged.scale
+        expectedY = dragged.before.y + dragged.DY / dragged.scale
+
+        // The store writes on a 500ms debounce; flushSync is what before-quit
+        // calls. Polled rather than a single flush immediately after the drag
+        // because the renderer's save() effect and the IPC call it makes are
+        // both async relative to the executeJavaScript that already resolved
+        // above — flushing before that IPC lands would read a stale file once
+        // and never retry.
+        moved = await waitUntil(async () => {
+          flushLayoutStore()
+          if (!existsSync(LAYOUT_PATH)) return null
+          const saved = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+          const panel = saved.workspaces[0].panels.find((p) => p.id === dragged.id)
+          return panel ?? null
+        }, 5000)
+      }
+
+      ok('19 a panel dragged in the renderer is written to layout.json',
+        dragged && !dragged.error && moved !== null &&
+          Math.abs(moved.x - expectedX) < 1 && Math.abs(moved.y - expectedY) < 1,
+        dragged && !dragged.error
+          ? `id=${dragged.id} expected=(${expectedX && expectedX.toFixed(1)},${expectedY && expectedY.toFixed(1)}) saved=${JSON.stringify(moved)}`
+          : JSON.stringify(dragged))
     }
 
   } catch (error) {
