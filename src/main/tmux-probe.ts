@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createDirectBackend, createTmuxBackend, type SessionBackend } from './session-backend'
 import { whichFromEnv } from './shell-env'
-import { buildTmuxConf, isSupportedTmuxVersion, parseTmuxVersion } from './tmux-args'
+import { buildTmuxConf, isSupportedTmuxVersion, parseTmuxVersion, TMUX_SOCKET } from './tmux-args'
 
 /**
  * Which backend, and why. The `reason` is user-facing when kind is 'direct' —
@@ -51,7 +51,9 @@ export function chooseBackend(i: {
       tmuxPath: null
     }
   }
-  return { kind: 'tmux', reason: `tmux ${version.raw}`, tmuxPath: i.tmuxPath }
+  // `raw` is the whole `tmux -V` line and already begins with "tmux ", so the
+  // template must not add a second one — the HUD read "tmux tmux 3.7c".
+  return { kind: 'tmux', reason: version.raw, tmuxPath: i.tmuxPath }
 }
 
 function tmuxVersionOutput(tmuxPath: string): Promise<string | null> {
@@ -59,6 +61,37 @@ function tmuxVersionOutput(tmuxPath: string): Promise<string | null> {
     execFile(tmuxPath, ['-V'], { timeout: 5000 }, (error, stdout) => {
       resolve(error && !stdout ? null : stdout)
     })
+  })
+}
+
+/**
+ * Can the server actually START on our socket? Returns null on success, or the
+ * reason it could not.
+ *
+ * `tmux -V` proves only that a binary exists and is new enough. A present,
+ * modern tmux whose SERVER cannot come up — an unwritable TMUX_TMPDIR, socket
+ * directory permissions, a stale socket owned by another user — leaves every
+ * panel spawning a client that dies instantly, with kind still 'tmux' and the
+ * HUD saying nothing. That is precisely the silent degradation the loud
+ * fallback exists to prevent, so the probe has to ask the question the version
+ * string cannot answer.
+ *
+ * One extra exec at startup, and starting the server early costs nothing:
+ * shutdown() kill-servers it anyway, and every panel would have started it a
+ * moment later regardless.
+ */
+function tmuxServerStarts(tmuxPath: string, confPath: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(
+      tmuxPath,
+      ['-L', TMUX_SOCKET, '-f', confPath, 'start-server'],
+      { timeout: 5000 },
+      (error, _stdout, stderr) => {
+        if (!error) return resolve(null)
+        const detail = (stderr || error.message || '').trim().split('\n')[0]
+        resolve(detail || 'unknown error')
+      }
+    )
   })
 }
 
@@ -77,7 +110,35 @@ export async function probeTmux(
 ): Promise<SessionBackend> {
   const found = whichFromEnv('tmux', env)
   const versionOutput = found ? await tmuxVersionOutput(found) : null
-  const choice = chooseBackend({ tmuxPath: found, versionOutput })
+  let choice = chooseBackend({ tmuxPath: found, versionOutput })
+
+  // Config and exit dir come BEFORE the server check, because the check starts
+  // the server with this exact -f and a config tmux cannot read is itself one
+  // of the ways the server fails to come up.
+  let exitDir = ''
+  let confPath = ''
+  if (choice.kind === 'tmux' && choice.tmuxPath) {
+    // Per-run directory: the hook writes exit codes here and nothing in it
+    // outlives the app. Cleared on the way in as well as on shutdown, so a hard
+    // crash cannot leave a stale code to be read as a fresh one.
+    exitDir = join(userDataDir, 'tmux-exits')
+    rmSync(exitDir, { recursive: true, force: true })
+    mkdirSync(exitDir, { recursive: true })
+
+    // Generated rather than shipped: the pane-died hook embeds exitDir, which is
+    // unknowable until app.getPath('userData') can be called.
+    confPath = join(userDataDir, 'tmux.conf')
+    writeFileSync(confPath, buildTmuxConf(exitDir))
+
+    const failure = await tmuxServerStarts(choice.tmuxPath, confPath)
+    if (failure) {
+      choice = {
+        kind: 'direct',
+        reason: `tmux is installed but its server could not start: ${failure}`,
+        tmuxPath: null
+      }
+    }
+  }
 
   if (choice.kind === 'direct' || !choice.tmuxPath) {
     // Loud on purpose, in the same voice shell-env.ts uses for its own
@@ -90,18 +151,6 @@ export async function probeTmux(
     )
     return createDirectBackend(choice.reason)
   }
-
-  // Per-run directory: the hook writes exit codes here and nothing in it
-  // outlives the app. Cleared on the way in as well as on shutdown, so a hard
-  // crash cannot leave a stale code to be read as a fresh one.
-  const exitDir = join(userDataDir, 'tmux-exits')
-  rmSync(exitDir, { recursive: true, force: true })
-  mkdirSync(exitDir, { recursive: true })
-
-  // Generated rather than shipped: the pane-died hook embeds exitDir, which is
-  // unknowable until app.getPath('userData') can be called.
-  const confPath = join(userDataDir, 'tmux.conf')
-  writeFileSync(confPath, buildTmuxConf(exitDir))
 
   console.log(`[tmux] ${choice.reason} at ${choice.tmuxPath}; sessions will survive a reload`)
   return createTmuxBackend({
