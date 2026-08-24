@@ -83,12 +83,15 @@ app.whenReady().then(async () => {
     win.destroy()
   }
 
-  // 4. THE MILESTONE, at the wiring level. A renderer teardown must reach a
-  // handler that DETACHES rather than one that kills. This suite cannot see
-  // tmux, so it asserts the contract that makes tmux survival possible: the
-  // callback main installs is detachAll, and detachAll never destroys a
-  // backend session. A regression to killAll would keep checks 1-3 green while
-  // silently restoring the M3 behaviour M4c exists to remove.
+  // 4. The teardown callback fires on reload, and fires ONLY as itself.
+  //
+  // Read the scope honestly: this installs its own lambda, so it proves that
+  // attachPtyLifecycle still delivers exactly one teardown notification per
+  // renderer destruction and never invents a second one. It does NOT prove
+  // that src/main/index.ts passes detachAll rather than killAll — swap those
+  // in index.ts and this check stays green. What actually pins tmux survival
+  // is verify:pty-manager check 12, which detaches a real manager and asserts
+  // the pane pid is unchanged afterwards; keep that one honest, not this one.
   {
     const calls = []
     const win = new BrowserWindow({ show: false })
@@ -98,7 +101,7 @@ app.whenReady().then(async () => {
     calls.length = 0
     win.webContents.reload()
     await sleep(1200)
-    ok('4 renderer teardown calls the detach path, never the kill path',
+    ok('4 renderer teardown fires the installed callback exactly as installed',
       calls.length > 0 && calls.every((c) => c === 'detach'),
       JSON.stringify(calls))
     win.destroy()
