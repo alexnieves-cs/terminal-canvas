@@ -1,0 +1,197 @@
+/* Verifies the pure tmux core: argv construction, config text, version
+   parsing, and list parsing.
+   Run with: npm run verify:tmux
+
+   Plain node, no tmux server, no Electron. Every check here guards a failure
+   that is SILENT in a running app: a missing config line that degrades colour
+   or steals Ctrl+B, or a list that reports a dead pane as live. */
+const { buildSync } = require('esbuild')
+const { join } = require('node:path')
+const { mkdirSync } = require('node:fs')
+
+const OUT = join(__dirname, '..', 'out', 'verify', 'tmux.cjs')
+mkdirSync(join(__dirname, '..', 'out', 'verify'), { recursive: true })
+buildSync({
+  entryPoints: [join(__dirname, 'tmux-entry.cjs')],
+  outfile: OUT,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['electron'],
+  // Same alias the other plain-node bundles gained in M4b. A value import from
+  // @shared fails to resolve without it, and type-only imports hide the gap.
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+})
+const T = require(OUT)
+
+const results = []
+const ok = (n, pass, detail) => {
+  results.push({ n, pass, detail })
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
+}
+
+// 1. Version strings tmux actually emits, including suffixed and prefixed forms.
+{
+  const cases = [
+    ['tmux 3.7c', 3, 7],
+    ['tmux 3.0', 3, 0],
+    ['tmux 2.9a', 2, 9],
+    ['tmux next-3.4', 3, 4],
+    ['tmux 3.5\n', 3, 5]
+  ]
+  let bad = null
+  for (const [raw, major, minor] of cases) {
+    const v = T.parseTmuxVersion(raw)
+    if (!v || v.major !== major || v.minor !== minor) bad = `${raw} -> ${JSON.stringify(v)}`
+  }
+  ok('1 real tmux version strings parse', bad === null, bad ?? 'all 5 parsed')
+}
+
+// 2. Unparseable input yields null rather than a wrong number. A version we
+// cannot read must send us to the fallback, never to an optimistic guess.
+{
+  const bad = ['', 'tmux', 'not a version', 'tmux abc'].filter((r) => T.parseTmuxVersion(r) !== null)
+  ok('2 unreadable version output is null, not a guess', bad.length === 0, `leaked=${JSON.stringify(bad)}`)
+}
+
+// 3. The >= 3.0 gate, including the null case.
+{
+  const v = (major, minor) => ({ major, minor, raw: 'x' })
+  const pass =
+    T.isSupportedTmuxVersion(v(3, 0)) === true &&
+    T.isSupportedTmuxVersion(v(3, 7)) === true &&
+    T.isSupportedTmuxVersion(v(4, 0)) === true &&
+    T.isSupportedTmuxVersion(v(2, 9)) === false &&
+    T.isSupportedTmuxVersion(null) === false
+  ok('3 the >= 3.0 gate accepts 3.0+ and rejects 2.9 and null', pass)
+}
+
+// 4. Every load-bearing config line is present. Each of these fails SILENTLY:
+// a missing prefix line steals Ctrl+B from the agent, a missing :RGB line
+// downsamples 24-bit colour, a missing hook hangs the panel on exit.
+{
+  const conf = T.buildTmuxConf('/tmp/exits')
+  const required = [
+    'status off',
+    'prefix None',
+    'default-terminal "xterm-256color"',
+    'terminal-features ",xterm-256color:RGB"',
+    'remain-on-exit on',
+    'pane-died'
+  ]
+  const missing = required.filter((line) => !conf.includes(line))
+  ok('4 the generated config carries every load-bearing line', missing.length === 0,
+    `missing=${JSON.stringify(missing)}`)
+}
+
+// 5. mouse must stay OFF. `mouse on` makes tmux capture mouse reporting
+// instead of passing it to the application, which would silently defeat all of
+// M4a's pointer correction from one process further down.
+{
+  const conf = T.buildTmuxConf('/tmp/exits')
+  ok('5 the config never enables tmux mouse capture', !/mouse\s+on/.test(conf),
+    JSON.stringify(conf.match(/.*mouse.*/g) ?? []))
+}
+
+// 6. The hook writes the exit file BEFORE killing the session. That ordering is
+// what lets main read the real exit code inside the onExit handler it already
+// has, with no watcher and no polling. Reverse them and the file is racing.
+{
+  const conf = T.buildTmuxConf('/tmp/exits')
+  const hook = (conf.match(/set-hook -g pane-died .*/) ?? [''])[0]
+  const writeAt = hook.indexOf('pane_dead_status')
+  const killAt = hook.indexOf('kill-session')
+  ok('6 the pane-died hook writes the exit file before killing the session',
+    writeAt !== -1 && killAt !== -1 && writeAt < killAt,
+    `write@${writeAt} kill@${killAt}`)
+}
+
+// 7. The spawn argv: private socket, create-or-attach, explicit size, and the
+// command after `--`.
+{
+  const args = T.buildTmuxArgs({
+    confPath: '/tmp/tc.conf', panelId: 'n5', cols: 100, rows: 30,
+    command: '/bin/zsh', args: ['-l']
+  })
+  const j = args.join(' ')
+  const pass =
+    j.includes('-L terminal-canvas') &&
+    j.includes('-f /tmp/tc.conf') &&
+    j.includes('new-session -A -s n5') &&
+    j.includes('-x 100') && j.includes('-y 30') &&
+    args[args.indexOf('--') + 1] === '/bin/zsh' &&
+    args[args.indexOf('--') + 2] === '-l'
+  ok('7 the spawn argv creates-or-attaches on the private socket at a real size', pass, j)
+}
+
+// 8. `--` must precede the command, or a command starting with `-` is eaten as
+// a tmux flag rather than run.
+{
+  const args = T.buildTmuxArgs({
+    confPath: '/tmp/tc.conf', panelId: 'p1', cols: 80, rows: 24,
+    command: '-weird', args: []
+  })
+  ok('8 a command starting with a dash survives as the command', args[args.indexOf('--') + 1] === '-weird',
+    args.join(' '))
+}
+
+// 9. Every subcommand targets the private socket. A missing -L here reaches
+// the user's real tmux server, and kill-server would destroy their work.
+{
+  const all = [T.buildListArgs(), T.buildKillSessionArgs('p1'), T.buildKillServerArgs()]
+  const bad = all.filter((a) => !(a[0] === '-L' && a[1] === T.TMUX_SOCKET))
+  ok('9 list, kill-session and kill-server all target the private socket',
+    bad.length === 0, `offenders=${JSON.stringify(bad)}`)
+}
+
+// 10. list parsing keeps live panes and DROPS dead ones. Under
+// remain-on-exit on, a session whose command has exited still EXISTS until the
+// hook kills it; reporting it live would restore that panel non-dormant and
+// attach a client to a corpse.
+{
+  const stdout = [
+    'alpha\t0\t111\t/bin/zsh\t/Users/x',
+    'beta\t1\t222\t/bin/zsh\t/Users/y',
+    'gamma\t0\t333\tclaude\t/Users/z'
+  ].join('\n')
+  const entries = T.parseListOutput(stdout)
+  const ids = entries.map((e) => e.panelId)
+  ok('10 a dead pane is not reported as a live session',
+    ids.length === 2 && ids.includes('alpha') && ids.includes('gamma') && !ids.includes('beta'),
+    JSON.stringify(ids))
+}
+
+// 11. Parsed fields land in the right place, and pid is a number rather than a
+// string — PtyCreateResult.pid is typed number and the renderer prints it.
+{
+  const entries = T.parseListOutput('alpha\t0\t4242\tclaude\t/Users/x/proj')
+  const e = entries[0]
+  ok('11 list fields map to PtyCreateResult shape with a numeric pid',
+    e.panelId === 'alpha' && e.pid === 4242 && e.command === 'claude' && e.cwd === '/Users/x/proj',
+    JSON.stringify(e))
+}
+
+// 12. Empty and ragged output never throws. tmux prints nothing at all when no
+// server is running, and that is the NORMAL first-run case, not an error.
+{
+  let threw = null
+  for (const raw of ['', '\n', 'garbage', 'a\tb']) {
+    try { T.parseListOutput(raw) } catch (e) { threw = `${raw}: ${e.message}` }
+  }
+  ok('12 empty or ragged list output yields no sessions and never throws',
+    threw === null && T.parseListOutput('').length === 0, threw ?? 'ok')
+}
+
+// 13. The exit-file path is derived from the panel id, which ID_PATTERN
+// already constrains to [A-Za-z0-9_-]+ — so it can never escape exitDir.
+{
+  const p = T.exitFilePath('/tmp/exits', 'n5')
+  ok('13 the exit file lives under exitDir, named by panel id',
+    p === '/tmp/exits/n5.exit', p)
+}
+
+console.log('\n' + '='.repeat(60))
+const failed = results.filter((r) => !r.pass)
+console.log(`${results.length - failed.length}/${results.length} passed`)
+if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
+process.exit(failed.length ? 1 : 0)
