@@ -17,7 +17,7 @@ Tauri would mean `portable-pty` and hand-rolled plumbing.
 ## Prerequisites
 
 - macOS, Node 20+, Xcode Command Line Tools (`node-pty` builds natively)
-- `tmux` — required from M4 for session persistence: `brew install tmux`
+- `tmux` — required from M4c for session persistence: `brew install tmux`
 
 ## Getting started
 
@@ -30,11 +30,11 @@ npm run verify:pty           # node-pty behaviour, under Electron's ABI
 npm run verify:pty-manager   # the real PtyManager: session lifecycle, batching
 npm run verify:window        # renderer teardown reaches the PTY layer
 npm run verify:ipc           # every contract channel has a handler
-npm run verify:viewport      # canvas coordinate math + LOD tiering, plain node
+npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/pointer math, plain node
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
-npm run verify:panels        # terminals on the canvas: LOD tiering, culling never kills a PTY
+npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
 ```
 
 `node-pty` is a native module built for Electron's ABI, so the checks that touch it run under
@@ -72,7 +72,8 @@ registry (`src/renderer/session/session-registry.ts`) that lives outside React. 
 panels scroll on and off screen, and owns nothing. A pure function
 (`src/renderer/canvas/lod.ts`) decides which panels are worth a live terminal versus a cheap
 card, based on viewport, focus, and a fixed budget of live WebGL contexts — culling a panel
-never kills its process, only the registry's `disposeAll` does that.
+never kills its process; only the registry's `disposeAll` (renderer teardown) and `dispose(id)`
+(explicit panel close) do that.
 
 ### Things that are non-obvious
 
@@ -93,7 +94,7 @@ running React cleanup, so the renderer never sends `pty:kill`. Left alone, the
 old PTY survives and the next `pty:create` throws "already has a live PTY" — a
 dead panel with no recovery short of quitting. `src/main/window-lifecycle.ts`
 kills a window's sessions on navigation or close. Surviving a reload instead of
-dying is M4's job, once tmux backs the session; `pty:list` is the channel a
+dying is M4c's job, once tmux backs the session; `pty:list` is the channel a
 fresh renderer will reconcile against.
 
 **One transform, not N layouts.** The canvas is a single `.world` element
@@ -107,11 +108,12 @@ gesture.
 
 The same transform-blindness is why pointer coordinates are wrong under zoom:
 `getBoundingClientRect()` is transform-aware while `dimensions.css.cell.width`
-is not, so under `scale(k)` xterm hit-tests a column `k` times the true one. M3
-does **not** correct this — it gates body clicks to a band near 1:1
-(`INTERACT_MIN_SCALE`/`INTERACT_MAX_SCALE` in `Canvas.tsx`), where the error is
-too small to matter. Full correction is M4's, alongside drag and resize, which
-need pointer math on panel geometry anyway.
+is not, so under `scale(k)` xterm hit-tests a column `k` times the true one.
+M4a corrects this at the source: `src/renderer/components/xterm-pointer.ts`
+intercepts mouse events on `document` in the capture phase and re-dispatches
+them with `clientX`/`clientY` rewritten so the offset xterm computes is already
+in CSS pixels. `getMouseReportCoords` shares that helper, so mouse-reporting
+TUIs are corrected by the same change.
 
 ## Milestones
 
@@ -120,5 +122,7 @@ need pointer math on panel geometry anyway.
 | M1 | Electron shell, one hardcoded xterm panel on a real PTY | ✅ done |
 | M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | ✅ done |
 | M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | ✅ done |
-| M4 | Multi-panel: spawn/close/drag/resize, persistence, tmux backing | |
+| M4a | Panel manipulation: drag, resize, close, pointer correction | ✅ done |
+| M4b | Layout persistence: panels survive a relaunch | |
+| M4c | tmux backing: sessions survive the renderer | |
 | M5 | Presets, command palette, electron-builder packaging | |
