@@ -831,6 +831,138 @@ and a "tidy" command.
   canvas was carrying. "Compact without reordering" is a harder algorithm and probably the
   correct one.
 
+## 26. The agent's toolbox — skills, MCP servers, plugins, subagents, hooks
+
+One surface to see, manage, add, and update everything that extends the agent CLIs the
+canvas runs: skills, MCP servers, plugins, custom subagents, slash commands, hooks, and
+permission settings. Which of them exist, which are active *here*, what each one does, and
+an obvious way to change any of it.
+
+- **Why the canvas is an unusually good home for this, and it is not "because it's a nice
+  UI".** These extensions resolve **per project**. The same `claude` binary in two panels
+  has two different sets of skills and MCP servers active, because one panel's cwd has a
+  `.claude/` and the other's does not. Every existing tool for managing this shows you
+  *one* scope at a time — you are in a directory, you see that directory's config. A
+  canvas holds twelve panels in twelve directories at once, **and each panel already knows
+  its cwd**, so it is the only place where "which of these agents can actually do X" is a
+  question the UI can answer. That is the differentiating claim, and it is worth building
+  toward rather than shipping a generic config editor that happens to live in this app.
+- **The cost is far lower than it looks, and this is the important estimate.** This reads
+  like a big integration feature — five subsystems, several vendors — and it is not. All
+  of it is **files on disk in known locations**, in two scopes:
+  - user-global: `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/hooks/`,
+    `~/.claude/plugins/`, `~/.claude/settings.json`, and `~/.claude.json` for MCP servers;
+    `~/.codex/` for the other vendor.
+  - project-local: the `.claude/` directory beside the panel's cwd, which is also where
+    `CLAUDE.md`, `.mcp.json`, and project settings live.
+  So this is **#9's tier 1** — "local files with an open format" — not tier 2. No OAuth, no
+  token storage, no HTTP client, no new trust boundary. It is a watched directory, a
+  schema per file type, and a renderer. That is the same machinery as #3's file tree and
+  #14's watched local-file panel, which is a strong argument for building it *after* one
+  of those exists rather than in parallel with it.
+- **Read first, write second, and the line between them is sharper here than usual.**
+  Listing what is installed and what is active is inert. Editing it is not: hooks are
+  arbitrary code that runs on tool calls, permission settings decide what an agent may do
+  without asking, and an MCP server is a process with its own reach. The app is not
+  introducing that risk — an agent with shell access can already rewrite any of these files
+  — but a one-click toggle in a UI is a very different affordance from a file an agent had
+  to deliberately edit. Ship the browser, then decide about the editor.
+- **Constraint: an MCP server is a process, and #18 should count it.** MCP servers are
+  spawned by the CLI, not by `PtyManager`, so they are grandchildren of the panel's PTY
+  rather than anything main owns. A per-panel cost readout that samples only the pid and
+  misses its children will under-report a panel running four MCP servers by most of its
+  actual cost — which is exactly why #18 specifies sampling *the pid and its children*.
+  A toolbox that shows "this panel has 4 MCP servers active" alongside "this panel is
+  using 2.1 GB" is the pairing that makes both entries worth more than either alone.
+- **Constraint: config is read at CLI startup, so changing it mid-session mostly does
+  nothing.** A UI that lets a user enable a skill and then silently fails to apply it to
+  the running agent is worse than no UI. This needs an honest stance — show which panels
+  are running with stale config, and offer to restart them — and **the app has no
+  restart-in-place path today**: `dispose(id)` is the only way out of a session and it
+  burns the panel id. Adding one means a third legitimate caller into `pty.kill`, which is
+  precisely what "two lifetimes, not one" exists to police. Do not let a config UI be the
+  feature that quietly introduces it.
+- **Constraint: model the concepts vendor-neutrally.** A skill, an MCP server, and a plugin
+  are different things, but the *inventory* is the same shape: id, kind, scope
+  (user/project), source path, enabled, description. Keep that neutral with a thin adapter
+  per vendor — the same argument #12 makes for tickets and #19 makes for usage — and do not
+  build the abstraction until Codex or another CLI actually wants it.
+- **Constraint: chrome or panel kind, and it is worth deciding rather than drifting.** A
+  global inventory is chrome, like #3's sidebar and #11's pane, and lives outside the
+  `.world` transform. But "the toolbox for *this* panel" is panel-scoped information and
+  is much more natural as a panel kind sitting next to the agent it describes — which makes
+  it a good second consumer of #14's union rather than a reason to invent a third pattern.
+  Probably both, sharing one inventory model.
+- **Open question: does this overlap #11 or is it separate?** Both are "a searchable
+  surface for configuration". The honest split is that #11 owns *the canvas app's own*
+  settings, and this owns *the agents' capabilities* — different data, different owner,
+  different blast radius. They should share the search behaviour and the schema-driven
+  rendering approach, and share nothing else. Deciding otherwise means one pane where
+  turning something off changes a window colour and turning the next thing off grants an
+  agent filesystem write access, which is a bad pane.
+- **Open question: does the canvas ever *author* these, or only manage them?** "Turn this
+  panel's last hour into a skill" is a genuinely interesting feature and a much larger one.
+  Note it and move on.
+
+## 27. A prompt library — the text you keep retyping
+
+Save prompts, instructions, and snippets you use constantly, and insert one into any panel
+with a couple of keystrokes. "Review this diff for the things our team always gets wrong."
+"Run the verify suite and fix only what fails." The paragraph of project context you paste
+into every new session.
+
+- **Why it fits, and why it is arguably the highest frequency-of-use item in this file.**
+  The unit of interaction with this app is *typing a prompt into an agent*. Everything else
+  here changes what you can see or what a panel is; this one attacks the thing you do a
+  hundred times a day. It also gets multiplicatively better with #21: a saved prompt
+  broadcast to four panels running four different models is a one-keystroke comparison, and
+  neither feature suggests that on its own.
+- **It is the cheapest real feature in this document.** Text, a store, and an existing
+  channel. No new panel kind, no watcher, no auth, no process, no WebGL accounting, nothing
+  to detect. The entire feature is a list, a picker, and an insert.
+- **The load-bearing detail is that it must use `paste()`, not `write()`.** `SessionHandle`
+  exposes both, and `session-factory.ts` notes explicitly that `paste` is *not* a raw
+  `pty.write` — it goes through xterm, which brackets the paste. That difference is the
+  whole feature working or not: a five-line saved prompt written raw into an agent TUI is
+  five newlines, which is five submissions of four incomplete fragments. Bracketed paste is
+  what makes a multi-line snippet arrive as one block the TUI can hold in its input.
+  The codebase has already learned this once: the comment above `paste()` in
+  `session-factory.ts` spells out the exact failure — "pasting a prompt into `claude` fires
+  off several partial prompts instead of one" — discovered for `Cmd+V`. A prompt library is
+  the second feature to depend on it, and the first where every single use is multi-line.
+- **Placeholders are where it stops being a clipboard manager.** `{{cwd}}`, `{{branch}}`,
+  `{{selection}}`, `{{panel}}` — the values are already in reach: the panel owns its cwd,
+  `getSelection()` already backs `Cmd+C`, and the branch is a cheap poll of the same cwd
+  #4's git-status badge wants. A prompt that expands "review {{selection}} in {{cwd}}" is
+  a meaningfully different tool from one that pastes fixed text.
+- **The strongest question this raises: should it invent a store at all, or write real
+  slash commands?** The CLIs already have a format for reusable prompts — a markdown file
+  in `.claude/commands/`, invoked as `/name`, resolving per project exactly as #26
+  describes. A prompt library that *writes that format* gets three things a private store
+  cannot: the snippets work when the user is in a plain terminal outside this app, they
+  version-control with the project and reach the whole team, and #26's inventory renders
+  them for free because they are already part of the toolbox it browses. The cost is being
+  bound to a vendor's file layout for something the app could own outright. **Interop is
+  probably the right call**, with the app's own store reserved for whatever does not map —
+  but it is a real fork and it should be chosen deliberately, before there is a store to
+  migrate.
+- **Constraint: storage shares with #11 and M4b, not a third mechanism.** Whatever the
+  settings surface and the layout store settle on is where this goes. Three independent
+  "state that survives a relaunch" implementations is how this app would end up with three
+  different bugs about atomic writes.
+- **Constraint: `Cmd`-gated, like every canvas shortcut, since bare keys belong to the TUI.**
+- **Where it surfaces: M5's command palette is the natural home**, and this is a real
+  argument for the palette's shape. A palette that only runs app commands is a menu with
+  fewer clicks; one that also inserts your prompts into the focused panel is the fastest
+  path between a thought and an agent, which is the app's actual job.
+- **Open question: global, per-project, or both?** "Review this diff" is global; the
+  paragraph of project context is emphatically not, and pasting the wrong project's context
+  into an agent is a quiet way to waste an hour. If the slash-command route above is taken
+  this answers itself, since that format already has both scopes.
+- **Worth resisting:** automatic capture ("you have typed this five times — save it?").
+  It sounds clever, it requires retaining everything the user types in order to notice, and
+  the user's typing includes credentials. Let people save things on purpose.
+
 ---
 
 ## Rough sequencing, if these were ever scheduled
@@ -846,68 +978,74 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 2. **#23, the zoom-to-fit half only** — a camera animation to a panel's rect. Pure
    `viewport.ts`, no session state touched. Cheapest useful thing on this list, and
    building it first is what surfaces the surprise the rest of #23 is about.
-3. **#8, part 1 only** — effort/permission/model selectable at spawn for the CLI already
+3. **#27 prompt library** — text, a store, and `paste()`. The cheapest real feature in
+   this file and the highest-frequency one; decide the slash-command interop question
+   before there is a private store to migrate.
+4. **#8, part 1 only** — effort/permission/model selectable at spawn for the CLI already
    running. Flags on a process the panel owns; no architecture at risk.
-4. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
+5. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
    It is what makes the zoomed-out view worth having, which #1 and #17 both assume.
-5. **#5 agent-state glow** — the feature the canvas premise most needs; start with
+6. **#5 agent-state glow** — the feature the canvas premise most needs; start with
    PTY-idleness detection and improve from there.
-6. **#17 attention routing** — immediately after #5, because a status colour on a panel
+7. **#17 attention routing** — immediately after #5, because a status colour on a panel
    nobody is looking at is not a status system. Same detection, different surface.
-7. **#25 placement, snapping, tidy** — three small pieces of world-space arithmetic in
+8. **#25 placement, snapping, tidy** — three small pieces of world-space arithmetic in
    code that already exists (`applyDrag`, `viewport.ts`), and the best available test of
    M4b's undo stack.
-8. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
-9. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
-10. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
+9. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
+10. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
+11. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
    with #2, build it once) and the safety story around a mode you can forget you are in.
-11. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
+12. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
    feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
    API, or token is involved. Ink and panel-anchored annotations follow once the mode
    arbitration is settled.
-12. **#24 edges, decorative flavour only** — same SVG-in-`.world` machinery as #15 and
+13. **#24 edges, decorative flavour only** — same SVG-in-`.world` machinery as #15 and
    arguably a feature of it. The functional flavour is much later and much more dangerous.
-13. **#11 settings surface** — schedule it at the point there are three or four toggles,
+14. **#11 settings surface** — schedule it at the point there are three or four toggles,
    not before and not after. Built off a declarative schema, it makes every later toggle
    cheap and gives the search bar for almost nothing.
-14. **#18 machine cost readout** — the pid is already in `PanelStatus`; the work is
+15. **#18 machine cost readout** — the pid is already in `PanelStatus`; the work is
    main-side sampling on a slow timer. Worth having before #11 exposes any WebGL-budget
    knob, since it is what makes such a knob mean something.
-15. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
+16. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
    across the registry plus a readable light ANSI palette.
-16. **#13 image drop/paste, Finder + clipboard cases** — small now that the guard exists;
+17. **#13 image drop/paste, Finder + clipboard cases** — small now that the guard exists;
    the terminal path is "write a file path into the PTY", which needs no new channel.
-17. **#23, the actually-maximise half** — a layout mutation with a restore rect, a
+18. **#23, the actually-maximise half** — a layout mutation with a restore rect, a
    SIGWINCH on entry and exit, and a decision about whether focus mode pins the budget.
-18. **#19 token and dollar accounting** — gated on the transcript watcher, which is the
+19. **#19 token and dollar accounting** — gated on the transcript watcher, which is the
    same machinery #7 needs. Build the watcher once, deliberately, for whichever of the
    two is scheduled first.
-19. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
+20. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
-20. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
-21. **#16 canvas-wide search** — the search itself is small; it is gated on durable
+21. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
+22. **#26 agent toolbox, read-only inventory** — after #3 or #14 tier 1, because it is
+   the same watched-directory machinery and should not invent a second copy of it. The
+   editing half is a separate, later decision.
+23. **#16 canvas-wide search** — the search itself is small; it is gated on durable
    scrollback, which is a bigger question than search (retention, size caps, and secrets
    in agent output) and should be costed on its own before this is scheduled.
-22. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
+24. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
-23. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
-24. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
-25. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
-26. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
+25. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
+26. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
+27. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
+28. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
    (one live panel in two windows) waits for M4c for the same reason #4 does.
-27. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
-28. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-29. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
+29. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
+30. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
+31. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
    Only after there is somewhere to audit automations that is not the canvas itself.
-30. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
+32. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
 ## The structural decision underneath all of this
 
-Eight separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
-#12 Jira boards, #14 live document panels, #15 annotations, #24 edges) all need the same
-thing:
+Nine separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
+#12 Jira boards, #14 live document panels, #15 annotations, #24 edges, #26 the agent
+toolbox) all need the same thing:
 **a canvas node that is not a terminal.** Today `Panel` means
 "a PTY behind an xterm", and `LIVE_BUDGET`, `fit()`-before-spawn, the pointer
 correction, and the WebGL accounting all assume it.
