@@ -66,7 +66,8 @@ export function installPointerCorrection(getScale: () => number): () => void {
     // and replaced by a clone corrected against a rect no gesture is using. React's
     // root listener never sees the original, so the HUD's world-space cursor (and
     // any other document-level move handler) silently reads shifted coordinates
-    // until the next mousedown happens to re-pin.
+    // until the next mousedown happens to re-pin. usePanelDrag's move listener
+    // carries the same guard for the same reason; fix one and check the other.
     if (event.type === 'mousemove' && event.buttons === 0) {
       activeSlot = null
       return

@@ -8,7 +8,7 @@ export interface PanelDragDeps {
   viewportRef: RefObject<Viewport>
   /** Called on every move with the rect this gesture implies. */
   onDrag(panelId: string, rect: WorldRect): void
-  /** Called once on release, so a resize can send exactly one pty:resize. */
+  /** Called once on release, so a resize sends at most one pty:resize. */
   onCommit(panelId: string, mode: DragMode): void
 }
 
@@ -47,22 +47,34 @@ export function usePanelDrag(deps: PanelDragDeps): (state: DragState) => void {
       )
     }
 
+    const onUp = (): void => {
+      const state = dragRef.current
+      if (!state) return
+      dragRef.current = null
+      depsRef.current.onCommit(state.panelId, state.mode)
+    }
+
     const onMove = (event: MouseEvent): void => {
       const state = dragRef.current
       if (!state) return
+      // A move with no button held cannot be part of a drag, so treat it as
+      // the release the mouseup should have been. Electron does not reliably
+      // deliver mouseup when the button goes up outside the window (another
+      // app, a system dialog stealing focus), and a gesture that outlives its
+      // mouseup would silently resume on the next bare hover — the panel
+      // teleporting under a cursor with no button down. This is the same
+      // defect class, and the same guard, as xterm-pointer.ts's pin release;
+      // the two belong together.
+      if (event.buttons === 0) {
+        onUp()
+        return
+      }
       const world = toWorld(event)
       if (!world) return
       // applyDrag is handed the UNCHANGED state every frame, so the rect is
       // derived from the mousedown origin rather than from the previous
       // frame's result — see the note on applyDrag.
       depsRef.current.onDrag(state.panelId, applyDrag(state, world))
-    }
-
-    const onUp = (): void => {
-      const state = dragRef.current
-      if (!state) return
-      dragRef.current = null
-      depsRef.current.onCommit(state.panelId, state.mode)
     }
 
     document.addEventListener('mousemove', onMove)

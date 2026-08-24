@@ -206,7 +206,10 @@ export function createRegistry(deps: RegistryDeps): Registry {
       if (!session || session.tier !== 'live') return
       session.handle.refit()
       if (!session.spawned) return
-      // A process that has already exited has nothing to signal.
+      // A process that has already exited has nothing to signal. attachSlot
+      // deliberately does NOT carry this guard: its behaviour is M3-proven and
+      // a pty:resize for a dead session is a main-side no-op, so the asymmetry
+      // is harmless — noted here so it does not read as an oversight.
       if (session.status.kind === 'exited') return
       // At most one pty:resize, and none at all when the new box happens to
       // fit the same grid — the same SIGWINCH economy attachSlot practises.

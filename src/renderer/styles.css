@@ -71,6 +71,9 @@ body {
 }
 
 .panel__chrome {
+  /* The drag surface for a move gesture — see TerminalPanel's chrome
+     onMouseDown. */
+  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -198,7 +201,12 @@ body {
 /* Resize handles. East, south, south-east only — see panel-interaction.ts.
    Positioned INSIDE the panel's border box so they scale with .world's
    transform like everything else; a handle in screen pixels would drift away
-   from its own panel as you zoom. */
+   from its own panel as you zoom.
+
+   Flush with the edge rather than overhanging it: .panel sets overflow:hidden,
+   which clips hit-testing as well as painting, so a handle straddling the edge
+   would declare a width it does not actually have. Every pixel below is
+   grabbable. */
 .panel__resize {
   position: absolute;
   z-index: 2;
@@ -206,7 +214,7 @@ body {
 
 .panel__resize--e {
   top: 0;
-  right: -3px;
+  right: 0;
   width: 8px;
   height: 100%;
   cursor: ew-resize;
@@ -214,7 +222,7 @@ body {
 
 .panel__resize--s {
   left: 0;
-  bottom: -3px;
+  bottom: 0;
   width: 100%;
   height: 8px;
   cursor: ns-resize;
@@ -223,14 +231,10 @@ body {
 /* Last in source order and given a higher z-index so the corner wins over the
    two edges it overlaps. */
 .panel__resize--se {
-  right: -3px;
-  bottom: -3px;
+  right: 0;
+  bottom: 0;
   width: 16px;
   height: 16px;
   cursor: nwse-resize;
   z-index: 3;
-}
-
-.panel__chrome {
-  cursor: grab;
 }

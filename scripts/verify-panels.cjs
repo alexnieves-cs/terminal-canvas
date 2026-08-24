@@ -446,14 +446,35 @@ app.whenReady().then(async () => {
 
     // ---------------------------------------------------------------------
     // 10. Dragging a panel by its chrome moves it by the WORLD delta, not the
-    //     screen delta. Run at a zoom other than 1 on purpose: at 1:1 the two
-    //     are identical and a wrong implementation passes.
+    //     screen delta, INCLUDING across a zoom that happens mid-gesture.
+    //
+    //     Run at a zoom other than 1 on purpose: at 1:1 a screen delta and a
+    //     world delta are identical and a screen-delta implementation passes.
+    //
+    //     The zoom between the second and third move is what discriminates the
+    //     accumulate-deltas implementation applyDrag's docstring warns about —
+    //     the one that adds (p_i - p_i-1) / scale each frame. Its early
+    //     increments were divided by the OLD scale, so once the transform
+    //     changes its total no longer matches the origin-derived answer. It is
+    //     also the only integration-level coverage of the spec's claim that a
+    //     mid-drag zoom is correct by construction, so do not remove the zoom
+    //     as incidental.
+    //
+    //     The expectation is re-derived here from the viewport read back at
+    //     each end ((p - t) / s, applied to the two POINTS, never to their
+    //     difference) rather than borrowed from screenToWorld, so the check
+    //     does not assert production math against itself.
+    //
+    //     Known limit: a variant that advances BOTH originRect and originWorld
+    //     every frame telescopes to exactly the same total — w(p_n) - w(p_0) —
+    //     and no black-box assertion on the final rect can separate it from
+    //     recompute-from-origin. It differs only in accumulated rounding.
     // ---------------------------------------------------------------------
     {
       await zoomTo(wc, '0')
-      // Cmd+- four times lands near 0.48; the exact value does not matter
-      // because the assertion is expressed against the scale that is read
-      // back, not against a hardcoded number.
+      // Cmd+- four times lands near 0.48, and the mid-drag Cmd+- below takes
+      // it lower still; neither number is hardcoded, because the assertion is
+      // expressed against the viewports that are read back.
       for (let i = 0; i < 4; i++) await zoomTo(wc, '-')
       await sleep(200)
 
@@ -461,6 +482,10 @@ app.whenReady().then(async () => {
         const chrome = document.querySelector('.panel__chrome')
         if (!chrome) return { error: 'no panel' }
         const panel = chrome.closest('.panel')
+        // Copied field by field: a DOMRect's properties are non-enumerable
+        // getters and would cross executeJavaScript as an empty object.
+        const hostRect = document.querySelector('.canvas').getBoundingClientRect()
+        const host = { left: hostRect.left, top: hostRect.top }
         const before = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
         const r = chrome.getBoundingClientRect()
         const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
@@ -470,6 +495,7 @@ app.whenReady().then(async () => {
           bubbles: true, cancelable: true, composed: true, view: window,
           clientX: x, clientY: y, button: 0, buttons, detail: 1
         })
+        const vpDown = window.__m4aViewport()
         chrome.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
         // Several intermediate moves: a recompute-from-origin implementation
         // and an accumulate-deltas one differ only across multiple frames.
@@ -477,23 +503,46 @@ app.whenReady().then(async () => {
           document.dispatchEvent(new MouseEvent('mousemove',
             opts(start.x + (SCREEN_DX * i) / 4, start.y + (SCREEN_DY * i) / 4, 1)))
           await new Promise((res) => setTimeout(res, 20))
+          // Zoom out once, mid-gesture, with the button still down.
+          if (i === 2) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+            await new Promise((res) => setTimeout(res, 120))
+          }
         }
         document.dispatchEvent(new MouseEvent('mouseup',
           opts(start.x + SCREEN_DX, start.y + SCREEN_DY, 0)))
         await new Promise((res) => setTimeout(res, 150))
 
         const after = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
-        return { before, after, scale: window.__m4aScale(), SCREEN_DX, SCREEN_DY }
+        return {
+          before, after, host, start, SCREEN_DX, SCREEN_DY,
+          vpDown, vpUp: window.__m4aViewport()
+        }
       })()`)
 
-      const expectedX = result && result.SCREEN_DX / result.scale
-      const expectedY = result && result.SCREEN_DY / result.scale
-      const gotX = result && result.after.x - result.before.x
-      const gotY = result && result.after.y - result.before.y
-      ok('10 a chrome drag moves the panel by the world delta',
-        result && !result.error &&
+      // (p - t) / s on each endpoint under ITS OWN viewport, then subtract.
+      const toWorld = (p, vp, host) => ({
+        x: (p.x - host.left - vp.x) / vp.scale,
+        y: (p.y - host.top - vp.y) / vp.scale
+      })
+      let expectedX = null, expectedY = null, gotX = null, gotY = null, zoomed = false
+      if (result && !result.error) {
+        const from = toWorld(result.start, result.vpDown, result.host)
+        const to = toWorld(
+          { x: result.start.x + result.SCREEN_DX, y: result.start.y + result.SCREEN_DY },
+          result.vpUp, result.host)
+        expectedX = to.x - from.x
+        expectedY = to.y - from.y
+        gotX = result.after.x - result.before.x
+        gotY = result.after.y - result.before.y
+        zoomed = result.vpDown.scale !== result.vpUp.scale
+      }
+      ok('10 a chrome drag moves the panel by the world delta, across a mid-drag zoom',
+        result && !result.error && zoomed &&
           Math.abs(gotX - expectedX) < 1 && Math.abs(gotY - expectedY) < 1,
-        `scale=${result && result.scale} moved ${gotX},${gotY} expected ${expectedX},${expectedY}`)
+        `scale ${result && result.vpDown && result.vpDown.scale} -> ` +
+        `${result && result.vpUp && result.vpUp.scale} ` +
+        `moved ${gotX},${gotY} expected ${expectedX},${expectedY}`)
 
       await zoomTo(wc, '0')
     }
@@ -507,11 +556,15 @@ app.whenReady().then(async () => {
     {
       await zoomTo(wc, '0')
       const result = await wc.executeJavaScript(`(async () => {
-        const handle = document.querySelector('.panel__resize--se')
-        if (!handle) return { error: 'no resize handle' }
-        const panel = handle.closest('.panel')
+        // Pick a panel that IS live rather than whichever one happens to be
+        // first: check 10 leaves its target displaced by a couple of hundred
+        // world units, and inheriting that displacement would make this check
+        // fail as 'panel is not live' the day the drag distance changes.
+        const panel = [...document.querySelectorAll('.panel')]
+          .find((p) => p.querySelector('.panel__slot') && p.querySelector('.panel__resize--se'))
+        if (!panel) return { error: 'no live panel with a resize handle' }
+        const handle = panel.querySelector('.panel__resize--se')
         const slot = panel.querySelector('.panel__slot')
-        if (!slot) return { error: 'panel is not live' }
         slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         await new Promise((res) => setTimeout(res, 150))
 

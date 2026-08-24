@@ -100,7 +100,7 @@ export function Canvas(): JSX.Element {
 
   // Test hooks for verify:panels. The registry is a module-level closure with
   // no global handle by design, and executeJavaScript has no other route into
-  // it. Kept to five narrow reads/writes rather than exposing the registry
+  // it. Kept to six narrow reads/writes rather than exposing the registry
   // itself, so the suite cannot quietly start depending on internals.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
@@ -116,8 +116,20 @@ export function Canvas(): JSX.Element {
     w.__m4aGrid = (): { cols: number; rows: number } | null => {
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
-      return session ? session.handle.size() : null
+      // Guarded on the tier, because size() throws by design for a session
+      // that was never attached (see session-factory). There is a window
+      // between focusedId being set and attachSlot landing, and an unguarded
+      // read there would reject executeJavaScript and surface as an
+      // infrastructure error for the whole suite rather than a null.
+      return session && session.tier === 'live' ? session.handle.size() : null
     }
+    /**
+     * The full viewport, so a check can re-derive screenToWorld itself rather
+     * than assert against the production conversion it is testing.
+     */
+    w.__m4aViewport = (): { x: number; y: number; scale: number } => ({
+      ...viewportRef.current
+    })
     /** Screen-space centre of the first cell of `word` in the focused panel. */
     w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
       const id = focusedIdRef.current
