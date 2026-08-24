@@ -13,7 +13,7 @@ a feature that ignores one of them fails silently rather than loudly.
 **The north star these are pointing at (#9): an agentic super app** — a canvas where the
 unit is "a thing an agent can work in", not "a terminal". That reframing is what connects
 otherwise-unrelated entries here, and it has one concrete structural consequence, recorded
-at the bottom of this file.
+at the bottom of this file — alongside a second one that M4b's dormancy work introduced.
 
 **A standing rule for everything below (#11): anything a user can toggle goes in one
 organised settings surface, with a search bar** — not scattered across menus, context
@@ -476,52 +476,438 @@ alongside the work, not only in the terminals.
   useful collaboration primitive, and it needs none of the hard PTY-sharing work — it is
   small objects with ids, which is the easy case for sync.
 
+## 16. Search across every panel
+
+`Cmd+F` on the canvas: type a string, get every panel that contains it, jump the camera
+to the match. The wall-of-shells problem stated as a retrieval problem — "which of these
+twelve was the one that printed the stack trace?"
+
+- **Why it fits:** the canvas's premise is more panels than you can read. Naming them
+  (#6) tells you what a panel is *for*; search tells you what a panel has *said*, which
+  is the question you actually have at the moment you go looking. A hit resolving to a
+  camera move is also the first real consumer of `zoomAt`/`screenToWorld` for something
+  other than a gesture.
+- **Do not confuse it with #11's settings search.** That one searches a static schema of
+  toggles. This one searches live, growing, per-session text. They share a keystroke
+  convention and nothing else — resist the urge to build one surface for both.
+- **The load-bearing problem is where the index comes from, and it is not xterm.** xterm
+  ships a `SearchAddon`, and it searches exactly one `Terminal`'s buffer. That is fine
+  for the focused panel and useless for the other eleven, because of what M4b just made
+  true: a panel restored from disk is **dormant** — `lod.ts` never promotes it and
+  `attachSlot` refuses to spawn it, so its `SessionHandle` has never been attached and
+  its buffer is empty. `scrollPosition()` already documents the same fact for its own
+  case ("0 for a session that has never been attached"). So on a freshly relaunched
+  canvas, an xterm-backed search finds nothing anywhere, and it does so silently.
+- **Which means this entry has a hard prerequisite it does not currently have:
+  scrollback that outlives the process.** M4b persists *where the panels are*, not *what
+  they said*. Until some record of a session's output exists on disk, canvas-wide search
+  can only ever cover the handful of panels that happen to be live this run. That
+  prerequisite is worth costing before this entry is scheduled, not during — and it is
+  a bigger question than search itself (retention, size caps, and the fact that agent
+  output routinely contains secrets that a plaintext history on disk would preserve).
+- **Constraint:** results must render outside the `.world` transform. A result list is
+  chrome, like #3's sidebar and #11's pane; put it inside the world layer and it scales
+  with zoom.
+- **Constraint:** the shortcut is `Cmd`-gated, and `Cmd+F` specifically is worth checking
+  against the agent CLIs — a TUI that wants `Cmd+F` for its own search would be fighting
+  the canvas for it, and the canvas should win only because bare keys already belong to
+  the TUI.
+- **Open question:** does a hit scroll the panel's terminal to the match, or only move
+  the camera to the panel? Scrolling a live terminal to a scrollback offset is a real
+  side effect on a running session, and `scrollPosition()` exists precisely because
+  "did this terminal scroll when it shouldn't have" is already a property worth asserting.
+- **Depends on:** durable scrollback. Everything else here is small.
+
+## 17. Attention routing for agents you cannot see
+
+An agent finishes, or asks a question, while its panel is off screen. Today nothing tells
+you. This is edge-of-viewport indicators, a native notification, and a "jump to whatever
+wants me" key.
+
+- **Why it fits, and why it is the other half of #5.** The border glow answers "what is
+  this panel doing" for a panel you are looking at. On an infinite canvas the common case
+  is that you are not looking at it — the whole point of the surface is that it is bigger
+  than the screen. A status colour nobody sees is not a status system. These two should be
+  designed together and built in that order: detection (#5), then routing (this).
+- **Three surfaces, increasing cost:** an arrow or pip on the viewport edge pointing at
+  the off-screen panel that changed state; a queue of "N agents waiting" you can cycle
+  with a `Cmd`-gated key that flies the camera to each; and an OS notification via
+  Electron's `Notification` for the case where the app is not focused at all.
+- **Constraint:** the edge indicators are chrome — outside `.world` — but their *positions*
+  are world-space facts. Direction-to-an-off-screen-rect is exactly the kind of arithmetic
+  `viewport.ts` exists to hold, and it belongs there (pure, plain-node testable) rather
+  than in a component.
+- **Constraint:** this cannot ride `registry.version()`. That counter deliberately ignores
+  16ms-batched PTY data so a chatty agent does not re-render the canvas at 60Hz, and
+  attention state changes at human speed. Same rule #5 records: its own subscription, or
+  throttled hard.
+- **Constraint:** a *dormant* panel has no PTY and cannot want anything. The indicator set
+  must be derived from sessions that are actually running, or a restored canvas will draw
+  twelve arrows for twelve processes that do not exist.
+- **Open question:** what counts as "wants me"? "Finished" and "asked a question" deserve
+  a notification; "printed some output" does not. That distinction is #5's detection
+  problem again, and it is the reason this cannot be built first.
+- **Worth pairing with:** a badge on the app's dock icon for the count. Cheap, and it is
+  the one indicator that works when the window is behind something else.
+
+## 18. What the canvas costs the machine
+
+A per-panel readout of CPU and memory, and a canvas-wide total. Twelve agents is twelve
+process trees, each of which may be running a compiler.
+
+- **Why it fits:** `LIVE_BUDGET` is the only resource ceiling in the app, and it rations
+  exactly one resource — WebGL contexts — because that is the one with a hard cliff near
+  16 and a permanent failure mode (`create-terminal.ts` sets `webglDisabled` after a
+  dropped context). Nothing rations, or even reports, the resource the user actually runs
+  out of first. A canvas that invites twenty agents should be able to say what twenty
+  agents cost.
+- **The handle already exists.** `PanelStatus` carries `{ kind: 'running'; pid: number }`,
+  so the renderer already knows every panel's process id. The work is main-side sampling
+  of that pid *and its children* — an agent CLI's cost is mostly its subprocesses, not
+  itself — on a slow timer, over a new IPC channel. Anything sampled per-frame here is
+  a bug, not a feature.
+- **Constraint:** a new channel means a new entry in `shared/ipc-contract.ts` and a
+  handler in main, or `verify:ipc` fails. That is the intended pressure; do not route it
+  through an existing channel to avoid the check.
+- **Constraint:** the readout must not bump `registry.version()` — same rule as #5 and
+  #17. A number that changes every two seconds must not be a reason to re-render every
+  panel.
+- **Constraint:** it must render on the **card**, not just the live panel, for the same
+  reason #5's glow must: the tier you are looking at when you have many panels is the
+  card tier.
+- **Open question, and it is a product question:** does this stay a readout, or does it
+  become a *governor*? "Do not promote a panel while the machine is already saturated"
+  is a coherent rule and a genuinely different feature — it would make `assignTiers`
+  depend on a runtime measurement, which today it deliberately does not (it is pure, and
+  `verify:viewport` runs it under plain node). Keeping the measurement out of the tiering
+  function and applying any governor at the `Canvas.tsx` apply step — where the budget
+  re-check already lives — is the shape that preserves that.
+- **Related:** #11 lists `LIVE_BUDGET`, `DEMOTE_DELAY_MS` and `CULL_MARGIN_PX` as
+  tuning constants a settings pane might expose, and warns that a performance knob invites
+  a user to break the app. A cost readout is the honest companion to any such knob: it is
+  what makes a number the user is turning mean something.
+
+## 19. Token and dollar accounting per panel
+
+What each agent has spent — tokens, and the money they represent — per panel, per
+workspace, and in total.
+
+- **Why it fits:** this is the cost of the canvas in the currency the user actually cares
+  about, and it is the one number that scales linearly with the thing the product
+  encourages (more agents at once). "Twelve agents running" is a very different sentence
+  depending on whether it is two dollars or two hundred.
+- **The mechanism is a file watcher, not output parsing, and that is the whole point.**
+  Agent CLIs write structured session transcripts to disk — Claude Code writes JSONL.
+  Totalling usage from those files needs no scraping of rendered TUI output, survives a
+  CLI's cosmetic redesign, and works for a panel at card tier that is not rendering
+  anything. **This is the same side-channel #7 identifies for subagent detection**, and it
+  is a strong argument for building that watcher once, deliberately, as shared machinery
+  rather than twice for two features.
+- **Constraint:** main-side, like every other filesystem access in this app (#3, #14). The
+  renderer has no `fs` and should keep not having it.
+- **Constraint:** correlating a transcript file to a *panel* is the unsolved part. The
+  session file is keyed by the CLI's own session id, which the panel does not know. The
+  honest routes are the panel's cwd plus start time, or launching the CLI with a flag that
+  pins its session id where the panel can see it — the second is much more robust and is
+  a per-vendor detail, so it belongs beside #8's per-model configuration.
+- **Constraint:** vendor-specific by nature. Keep the accounting model neutral (panel id,
+  tokens in, tokens out, model, cost) with a thin adapter per CLI, exactly as #12 argues
+  for tickets — and do not build the abstraction until a second CLI actually wants it.
+- **Open question:** is this a live readout, a history, or both? A number on a card is
+  cheap; "what did this canvas cost me last week" is a data-retention feature with its own
+  storage question, and it should share whatever #11 and M4b settle on rather than
+  inventing a third store.
+
+## 20. Two windows, one canvas
+
+Open the canvas in more than one window — a second monitor showing a different region of
+the same world, or a different workspace (#2) entirely.
+
+- **Why it fits:** spatial workspaces and multiple monitors are a natural pair, and it is
+  one of the few genuinely common desktop expectations this app currently has no answer
+  for. It is listed here mostly because **the current architecture has a specific answer
+  and it is not obvious**, so it should be written down before someone assumes otherwise.
+- **What is true today, stated plainly.** The session registry is a **module-level
+  singleton per renderer** — that is the "two lifetimes" design, and it is scoped to the
+  page, not the app. `window-lifecycle.ts` kills a window's sessions when *its* renderer
+  navigates or closes. So a second window is a second registry, a second set of PTYs, and
+  a second independent `LIVE_BUDGET`. Two windows showing "the same" canvas would be two
+  canvases that happen to have been loaded from the same file, and the second one to save
+  would silently win.
+- **Which makes this three separable features, in rising cost:**
+  1. **A second window on a different workspace** — nearly free once #2 exists, because
+     the two windows genuinely share nothing but the app.
+  2. **A second window on the same workspace, read-only or panel-disjoint** — needs the
+     layout store to stop being last-write-wins, and needs an owner for each panel's
+     session so two windows do not both try to spawn `s01`.
+  3. **A second view of the same live panel in both windows** — the hard one. A PTY has
+     one master and an xterm `Terminal` has one host; showing it twice is the same
+     multiplexing problem #4 identifies for multiplayer, and it has the same answer:
+     wait for M4c, because tmux already solves attaching two clients to one session.
+- **Constraint:** `LIVE_BUDGET` is per renderer, but the WebGL context limit is per
+  *browser process*. Two windows at eight live panels each is sixteen contexts against a
+  cliff at roughly sixteen. Whatever tier 2 or 3 becomes, the budget has to become an app
+  fact rather than a page fact, and that is a main-process question.
+- **Open question:** does the camera sync? Two windows on one workspace could show
+  different regions (useful) or mirror each other (rarely). Different regions is almost
+  certainly right, which means the viewport is per-window state and must *not* go in the
+  shared saved layout as a single value — a detail M4b's format should be checked against
+  now, while it is cheap.
+
+## 21. Broadcast input to a selection
+
+Select several panels and type once — the keystrokes go to all of them. `git pull` in six
+repos; the same prompt to four agents to compare how they answer it.
+
+- **Why it fits:** it is tmux's `synchronize-panes`, and it is one of the few features
+  where the spatial layout is *the selection UI*. "These four, the ones in this cluster"
+  is a gesture on a canvas and a config file anywhere else. Sending one prompt to four
+  different models side by side is also the cheapest possible version of #8's
+  multi-model ambition — no API, no key, no new panel kind, just four CLIs and one
+  keystroke.
+- **Almost all the machinery exists.** `pty:write` already takes a panel id, so broadcast
+  is a loop, not a channel. What is missing is **multi-selection**, which the canvas does
+  not have today: `Canvas.tsx` tracks a single `selectedId` and a single `focusedId`.
+  #2 already wants a rubber-band select for "move these to a new workspace", so the
+  selection model is shared work — build it once, for both.
+- **Constraint, and it is the dangerous one:** input routing today is *unambiguous* —
+  keystrokes go to the focused session, and exactly one panel is focused. Broadcast makes
+  the destination of a keystroke a mode, and a mode you can forget you are in. Typing
+  `rm -rf build` into six shells you did not mean to select is a real, unrecoverable
+  outcome. This wants a loud, permanent indicator while it is active, an obvious exit, and
+  probably a confirmation the first time — not a quiet toggle in a menu.
+- **Constraint:** `Cmd`-gated to enter and leave, like every other canvas shortcut, since
+  bare keys belong to the TUI.
+- **Constraint:** broadcast must never wake a **dormant** panel. A dormant panel has no
+  PTY; "send this to all six" where two of them are dormant either spawns two agents the
+  user did not ask for — the exact decision dormancy exists to avoid making on their
+  behalf — or silently drops the input. Skip-and-say is the honest answer.
+- **Open question:** does broadcast go to the PTY (raw bytes, so a TUI sees keystrokes) or
+  is it a higher-level "submit this prompt" action? For shells the first is right; for
+  agent CLIs the second is what the user means, and the two differ by whether a trailing
+  newline is sent. Probably per-panel, decided by whatever #8's per-model configuration
+  knows about the CLI.
+
+## 22. Semantic zoom — a card that changes with distance
+
+A card at 45% zoom and a card at 8% zoom render the same thing today: a text tail. At 8%
+that text is a grey smear. The card should become *less* as you zoom out — tail, then
+title and status, then a coloured block.
+
+- **Why it fits:** it is the missing half of an idea the codebase already committed to.
+  `LIVE_MIN_SCALE` exists because "below this, terminal text is unreadable anyway and a
+  card is honest" — the exact same argument applies one rung further down, where the
+  card's own text is unreadable and a card is no longer honest. The zoomed-way-out view is
+  the one where you are looking at the whole canvas at once, and it is currently the least
+  informative view in the app rather than the most.
+- **This is cheap and it is a rendering change, not an architecture change.** No new panel
+  kind, no new IPC, no session lifecycle involvement. The tier a panel gets is already a
+  pure function of the viewport; deciding *how* a card draws itself from the same scale is
+  a component-level decision below tiering.
+- **Constraint, and it is a real fork in the design:** do not conflate the **render tier**
+  with the **session tier**. `assignTiers` decides who holds a WebGL context and a PTY,
+  and it is deliberately pure and plain-node tested. "How does a card draw" has no
+  resource consequence at all and must not become a fourth state in that function, or the
+  file that rations contexts starts making typography decisions. Two separate questions
+  reading the same `viewport.scale`.
+- **Constraint:** whatever the far tier shows must be available for a **dormant** panel,
+  which has never been attached and has no buffer to `tail()`. That points the far tier at
+  facts the `Panel` itself holds — title (#6), agent state (#5), cost (#19) — rather than
+  terminal output, which is probably the right answer anyway.
+- **Related:** this is what makes #1's navigation grid and #17's attention arrows legible.
+  All three are about the same view: the one where you can see everything and read nothing.
+- **Open question:** where are the thresholds, and do they hysteresis? A card flipping
+  between two renderings at a boundary while the user pinches is the same class of thrash
+  `DEMOTE_DELAY_MS` and `CULL_MARGIN_PX` exist to prevent — cheaper here, since nothing is
+  destroyed, but still visibly bad.
+
+## 23. Focus mode — and the surprise underneath it
+
+A `Cmd`-gated key that makes one panel fill the screen, and the same key to come back.
+The universal "maximise this" gesture.
+
+- **The surprise is worth the entry on its own, because the obvious implementation does
+  not do what the user wants.** Because of "one transform, not N layouts", zooming the
+  camera so a panel fills the viewport gives the shell **no additional columns**. A CSS
+  `scale()` on an ancestor is invisible to `getComputedStyle` and `ResizeObserver`, which
+  is exactly what xterm's `FitAddon` consults — that blindness is deliberate and it is
+  what stops a zoom gesture from reflowing every running agent. So a camera-based focus
+  mode produces the same 80×24 terminal, drawn large and soft. The user asked for more
+  terminal; they got a magnifying glass.
+- **Which makes this two different features that look identical in a screenshot:**
+  1. **Zoom to fit** — a camera animation to the panel's rect. Pure `viewport.ts` work,
+     costs nothing, changes no session state, and is genuinely useful for "let me look at
+     this one". It just is not a maximise.
+  2. **Actually maximise** — resize the `Panel`'s world rect to fill the viewport at the
+     current scale, which fires the existing resize path: `refit()`, `pty:resize`, a
+     SIGWINCH, and a full TUI repaint. Real more-columns. It is a layout mutation, so it
+     is undoable (the history stack M4b built), persisted, and it has to remember the
+     previous rect to restore.
+  Build both, name them differently, and do not let one silently stand in for the other.
+- **Constraint:** the maximise variant must commit on the way in and the way out, not
+  continuously — the same reason resize commits on release rather than live. Two SIGWINCHes
+  total, not sixty.
+- **Constraint:** `Cmd`-gated. And the restore path needs to survive the panel having been
+  dragged or resized while focused, which argues for storing the pre-focus rect on the
+  panel rather than in ephemeral component state.
+- **Open question:** does focus mode imply *only* this panel is live? Pinning the budget to
+  one panel while focused would free seven contexts, but demoting seven running agents
+  because the user zoomed in on one is exactly the kind of decision-on-their-behalf that
+  dormancy exists to avoid. Probably not — but it should be a decision, not a default.
+
+## 24. Edges between panels
+
+Draw a line from one panel to another and have it mean something: this agent's output is
+input to that one; these three are the same ticket; this shell is the server the panel
+beside it is testing against.
+
+- **Why it fits, and why it belongs on a canvas specifically.** Relationships between
+  concurrent work are invisible in every tabbed terminal, because a tab list has one
+  dimension and relationships need two. This is the second thing (after #7) that an
+  infinite canvas can show which a multiplexer structurally cannot.
+- **#7 already needs edges, for one specific case** — parent agent to its subagents. That
+  is a good reason to build the edge *primitive* generally rather than as a private detail
+  of subagent visualisation: same renderer, same z-order question, same persistence.
+- **The rendering is nearly free and the reason is the same as #15's.** An edge is a world-
+  space object; `.world` carries one transform, so an SVG path between two panel rects
+  pans, zooms, and clips correctly with no additional math. Anchor points are a function of
+  two rects, which is `panel-interaction.ts`-shaped arithmetic — pure, and testable under
+  plain node.
+- **Two flavours, and they should not be built at once:**
+  1. **Decorative** — the edge means whatever the user says it means, like a line on a
+     whiteboard. Costs a data model, a drag gesture, and persistence. Composes naturally
+     with #15's annotation layer and is arguably a feature *of* it.
+  2. **Functional** — the edge does something: pipe this panel's output into that one's
+     input, or "restart this one when that one exits". Genuinely powerful and genuinely
+     dangerous, because it means the canvas is now writing to PTYs on its own initiative.
+     Everything #21 says about a mode you can forget you are in applies double to a rule
+     that fires without you present.
+- **Constraint:** edges join `Panel.z`'s ordering rather than inventing a second scheme —
+  same rule #15 records — and they must not participate in `LIVE_BUDGET`. They are SVG.
+- **Constraint:** an edge references two panel ids, so it needs a stance on a panel being
+  closed. Dangling edges are the standard failure of every graph UI that stored ids without
+  deciding this.
+- **Open question:** if the functional flavour ever happens, is the edge the *only* place
+  that behaviour is expressed? A rule you can only see by finding the line on the canvas is
+  hard to audit. This may be the point at which the canvas needs a plain list view of its
+  own automations.
+
+## 25. Where a new panel goes — placement, snapping, and tidy
+
+Today panel positions come from `SEED_PANELS`, a hand-authored grid. Once panels are
+created and destroyed at will, something has to decide where a new one lands, and the
+canvas should help keep the result legible: alignment guides while dragging, snapping,
+and a "tidy" command.
+
+- **Why it fits:** an infinite canvas's characteristic failure is entropy. Twenty panels
+  placed by twenty individual decisions become an unnavigable sprawl, and the feature that
+  prevents it is not a new capability but a small amount of arithmetic applied at the right
+  moments. This is the difference between a canvas that feels designed and one that feels
+  like a desktop full of overlapping windows.
+- **Three separable pieces, all small, all in code that already exists:**
+  1. **Spawn placement** — a new panel should appear somewhere sensible: in view, not
+     overlapping an existing one, near the panel it was spawned from. A first-fit scan
+     over the existing rects in world space; `viewport.ts` already knows what is in view.
+  2. **Snapping and alignment guides** — while dragging, snap edges and centres to nearby
+     panels and show the guide lines. `applyDrag` in `panel-interaction.ts` is already the
+     single place a drag resolves to a rect, and it is already pure — snapping is a
+     function applied to its output, which keeps it plain-node testable.
+  3. **Tidy** — a command that arranges the selection (or everything) onto a grid. Pure
+     rect math over `Panel[]`.
+- **Constraint:** all of it is *world-space* arithmetic, and the snap threshold is the
+  place that gets it wrong. A snap distance in world units becomes visually huge when
+  zoomed out and invisible when zoomed in; it should be specified in **screen** pixels and
+  divided by `viewport.scale` — the same 1/k relationship `applyDrag` already embodies and
+  `verify:viewport` check 27 already pins.
+- **Constraint:** snapping must not fight `MIN_PANEL_W`/`MIN_PANEL_H` during a resize, and
+  tidy must not produce a rect smaller than them — the shared layout validator rejects such
+  a panel outright, so a tidy that violated them would produce a canvas that cannot be
+  saved.
+- **Constraint:** tidy is a layout mutation across many panels at once, which makes it the
+  best possible test of M4b's undo stack — and a strong argument that it must be a single
+  undoable step rather than twenty.
+- **Open question:** does tidy preserve spatial meaning? If a user has grouped panels by
+  project, a tidy that sorts them into a grid by id destroys exactly the information the
+  canvas was carrying. "Compact without reordering" is a harder algorithm and probably the
+  correct one.
+
 ---
 
 ## Rough sequencing, if these were ever scheduled
 
 Ordered by (value × confidence) ÷ effort, not by preference:
 
-0. **The file-drop guard from #13** — not a feature, a latent bug. An unhandled file
-   drop navigates the renderer and `window-lifecycle.ts` then kills every PTY in the
-   window. Worth a `preventDefault()` on `dragover`/`drop` regardless of whether the
-   drag-and-drop feature is ever built.
+0. ~~**The file-drop guard from #13**~~ — **done.** It was never a feature, it was a
+   latent bug: an unhandled file drop navigates the renderer and `window-lifecycle.ts`
+   then kills every PTY in the window. `src/renderer/drop-guard.ts` now `preventDefault()`s
+   `dragover`/`drop` at the document level, independently of whether the drag-and-drop
+   feature is ever built.
 1. **#6 panel names** — hours, unblocks others, no new invariants.
-2. **#8, part 1 only** — effort/permission/model selectable at spawn for the CLI already
+2. **#23, the zoom-to-fit half only** — a camera animation to a panel's rect. Pure
+   `viewport.ts`, no session state touched. Cheapest useful thing on this list, and
+   building it first is what surfaces the surprise the rest of #23 is about.
+3. **#8, part 1 only** — effort/permission/model selectable at spawn for the CLI already
    running. Flags on a process the panel owns; no architecture at risk.
-3. **#5 agent-state glow** — the feature the canvas premise most needs; start with
+4. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
+   It is what makes the zoomed-out view worth having, which #1 and #17 both assume.
+5. **#5 agent-state glow** — the feature the canvas premise most needs; start with
    PTY-idleness detection and improve from there.
-4. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
-5. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
-6. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
+6. **#17 attention routing** — immediately after #5, because a status colour on a panel
+   nobody is looking at is not a status system. Same detection, different surface.
+7. **#25 placement, snapping, tidy** — three small pieces of world-space arithmetic in
+   code that already exists (`applyDrag`, `viewport.ts`), and the best available test of
+   M4b's undo stack.
+8. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
+9. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
+10. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
+   with #2, build it once) and the safety story around a mode you can forget you are in.
+11. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
    feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
    API, or token is involved. Ink and panel-anchored annotations follow once the mode
    arbitration is settled.
-7. **#11 settings surface** — schedule it at the point there are three or four toggles,
+12. **#24 edges, decorative flavour only** — same SVG-in-`.world` machinery as #15 and
+   arguably a feature of it. The functional flavour is much later and much more dangerous.
+13. **#11 settings surface** — schedule it at the point there are three or four toggles,
    not before and not after. Built off a declarative schema, it makes every later toggle
    cheap and gives the search bar for almost nothing.
-8. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
+14. **#18 machine cost readout** — the pid is already in `PanelStatus`; the work is
+   main-side sampling on a slow timer. Worth having before #11 exposes any WebGL-budget
+   knob, since it is what makes such a knob mean something.
+15. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
    across the registry plus a readable light ANSI palette.
-9. **#13 image drop/paste, Finder + clipboard cases** — small once the guard exists;
+16. **#13 image drop/paste, Finder + clipboard cases** — small now that the guard exists;
    the terminal path is "write a file path into the PTY", which needs no new channel.
-10. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
+17. **#23, the actually-maximise half** — a layout mutation with a restore rect, a
+   SIGWINCH on entry and exit, and a decision about whether focus mode pins the budget.
+18. **#19 token and dollar accounting** — gated on the transcript watcher, which is the
+   same machinery #7 needs. Build the watcher once, deliberately, for whichever of the
+   two is scheduled first.
+19. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
-11. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
-12. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
+20. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
+21. **#16 canvas-wide search** — the search itself is small; it is gated on durable
+   scrollback, which is a bigger question than search (retention, size caps, and secrets
+   in agent output) and should be costed on its own before this is scheduled.
+22. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
-13. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
-14. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
-15. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
-16. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
-17. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-18. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
+23. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
+24. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
+25. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
+26. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
+   (one live panel in two windows) waits for M4c for the same reason #4 does.
+27. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
+28. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
+29. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
+   Only after there is somewhere to audit automations that is not the canvas itself.
+30. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
-## The one structural decision underneath all of this
+## The structural decision underneath all of this
 
-Seven separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
-#12 Jira boards, #14 live document panels, #15 annotations) all need the same thing:
+Eight separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
+#12 Jira boards, #14 live document panels, #15 annotations, #24 edges) all need the same
+thing:
 **a canvas node that is not a terminal.** Today `Panel` means
 "a PTY behind an xterm", and `LIVE_BUDGET`, `fit()`-before-spawn, the pointer
 correction, and the WebGL accounting all assume it.
@@ -537,3 +923,35 @@ union three features later.
 A watched local-file panel is small, obviously useful, and shares almost nothing with the
 terminal path — so it is a good first variant precisely because it cannot be faked as a
 special case of one. If the union gets built for anything, build it for that.
+
+## The second one, newer: a panel's lifetime now has more than two states
+
+"Two lifetimes, not one" — the session outlives the React component — is the split M3
+established and `CLAUDE.md` documents at length. M4b's dormancy work splits it again, and
+several entries above depend on the result without saying so.
+
+Three facts about a panel that used to move together have come apart:
+
+- **It has a `PanelSession`** — true for every panel, including one restored from disk.
+- **Its `SessionHandle` has ever been attached** — false for a dormant panel, which means
+  its xterm buffer is empty, `tail()` has nothing to return, and `scrollPosition()`
+  already documents its own version of this ("0 for a session that has never been
+  attached").
+- **It has a live PTY** — false for a dormant panel and for an exited one.
+
+Note what dormancy is *not*: it is not a third `Tier`. `Tier` is still `'live' | 'card'`.
+Dormancy is a flag on `PanelSession` plus a set passed into `assignTiers`, and it
+**outranks focus** — a restored focused panel comes back as a highlight and a `Cmd+C`
+routing target, not as a spawned process.
+
+The consequence for this file: **anything that reads a panel's terminal content is
+reading nothing at all on a freshly relaunched canvas.** #16's search is the entry where
+this is fatal rather than cosmetic — an xterm-backed index over a restored canvas finds
+nothing, silently. #5's glow, #22's far-zoom card, and #17's attention arrows are all
+better off derived from facts the `Panel` itself holds — title, status, cost — than from
+terminal output, and that is a design constraint rather than a preference.
+
+The general rule, worth applying to every entry above: **ask which of the three facts a
+feature needs, and what it does when the answer is "none of them yet".** A feature that
+assumes a buffer exists will work perfectly for the whole session in which it was written
+and be blank the first time the app is relaunched.
