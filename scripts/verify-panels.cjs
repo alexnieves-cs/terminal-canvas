@@ -601,24 +601,48 @@ app.whenReady().then(async () => {
 
     // ---------------------------------------------------------------------
     // 12. Wheel ownership. A wheel over the FOCUSED panel scrolls that
-    //     terminal and must not move the camera; a wheel anywhere else pans.
-    //     Without this, both handlers run on one gesture: useViewport's
-    //     listener is on the canvas host and xterm's bubbles up into it.
+    //     terminal and must not move the camera; a wheel anywhere else
+    //     (background OR an unfocused panel) pans and must not scroll that
+    //     panel's scrollback. Without this, both handlers run on one
+    //     gesture: useViewport's listener is on the canvas host and xterm's
+    //     bubbles up into it — and a bubble-phase guard narrowed to "only the
+    //     focused panel yields" still double-handles every OTHER panel
+    //     (camera pans while its scrollback silently moves too), which is
+    //     why the guard has to run in capture and stopPropagation before
+    //     xterm's own target-phase handler ever sees the event.
     // ---------------------------------------------------------------------
     {
       await zoomTo(wc, '0')
       const result = await wc.executeJavaScript(`(async () => {
         const read = () => getComputedStyle(document.querySelector('.world')).transform
-        const slot = document.querySelector('.panel__slot')
-        if (!slot) return { error: 'no live panel' }
-        slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        const panels = [...document.querySelectorAll('.panel')].filter((p) => p.querySelector('.panel__slot'))
+        if (panels.length < 2) return { error: 'need two live panels' }
+        const [panelA, panelB] = panels
+        const slotA = panelA.querySelector('.panel__slot')
+        const slotB = panelB.querySelector('.panel__slot')
+        const idB = panelB.getAttribute('data-panel-id')
+
+        // Give panel B enough scrollback that a wheel over it would actually
+        // move its viewport if xterm's handler ran — otherwise "scrollY
+        // unchanged" would pass trivially on a panel with nothing to scroll.
+        // __m4aWrite feeds xterm's parser directly (as pty:data would), so
+        // this is 200 real buffer lines, not a shell command — no PTY round
+        // trip needed to build scrollback deep enough to matter.
+        slotB.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((res) => setTimeout(res, 150))
+        const lines = Array.from({ length: 200 }, (_, i) => 'line-' + i).join('\\r\\n') + '\\r\\n'
+        window.__m4aWrite(lines)
+        await new Promise((res) => setTimeout(res, 300))
+
+        // Now focus panel A for the focused/background halves of the check.
+        slotA.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         await new Promise((res) => setTimeout(res, 150))
 
-        const r = slot.getBoundingClientRect()
+        const rA = slotA.getBoundingClientRect()
         const before = read()
-        slot.dispatchEvent(new WheelEvent('wheel', {
+        slotA.dispatchEvent(new WheelEvent('wheel', {
           bubbles: true, cancelable: true,
-          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+          clientX: rA.left + rA.width / 2, clientY: rA.top + rA.height / 2,
           deltaY: 120, deltaMode: 0
         }))
         await new Promise((res) => setTimeout(res, 200))
@@ -631,15 +655,51 @@ app.whenReady().then(async () => {
           clientX: 5, clientY: 5, deltaY: 120, deltaMode: 0
         }))
         await new Promise((res) => setTimeout(res, 200))
-        return { before, overFocused, overBackground: read() }
+        const overBackground = read()
+
+        // Now an UNFOCUSED panel (B): must pan the camera AND must not move
+        // that panel's own scrollback.
+        //
+        // xterm's own wheel listener is bound to '.xterm' (a descendant of
+        // .panel__slot, which only wraps the host div). Dispatching on the
+        // slot itself would make slot the event's target, and a descendant's
+        // listener is never on the propagation path for its own ancestor's
+        // target — so "scrollY unchanged" would pass vacuously whether or
+        // not the guard actually stops it. Dispatching on '.xterm-screen'
+        // (a real descendant of '.xterm') puts xterm's listener on the path,
+        // the same way a real cursor position over the rendered terminal
+        // would.
+        const scrollBefore = window.__m4aScrollY(idB)
+        const screenB = slotB.querySelector('.xterm-screen')
+        if (!screenB) return { error: 'no .xterm-screen on unfocused panel' }
+        const rB = screenB.getBoundingClientRect()
+        // Negative deltaY (scroll UP): panel B is scrolled to the bottom of
+        // 200 lines of scrollback, so a scroll-down gesture would be a no-op
+        // there regardless of who owns the wheel. Scrolling up is the only
+        // direction that actually moves viewportY, which is what makes
+        // "unchanged" a meaningful assertion rather than a vacuous one.
+        screenB.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true,
+          clientX: rB.left + rB.width / 2, clientY: rB.top + rB.height / 2,
+          deltaY: -120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const overUnfocused = read()
+        const scrollAfter = window.__m4aScrollY(idB)
+
+        return { before, overFocused, overBackground, overUnfocused, scrollBefore, scrollAfter }
       })()`)
 
-      ok('12 a wheel over the focused terminal does not move the camera',
+      ok('12 a wheel over the focused terminal does not move the camera; every other wheel pans and does not scroll an unfocused terminal',
         result && !result.error &&
           result.overFocused === result.before &&
-          result.overBackground !== result.before,
+          result.overBackground !== result.before &&
+          result.overUnfocused !== result.overBackground &&
+          typeof result.scrollBefore === 'number' && result.scrollBefore > 0 &&
+          result.scrollBefore === result.scrollAfter,
         `before=${result && result.before} focused=${result && result.overFocused} ` +
-        `background=${result && result.overBackground}`)
+        `background=${result && result.overBackground} unfocused=${result && result.overUnfocused} ` +
+        `scrollBefore=${result && result.scrollBefore} scrollAfter=${result && result.scrollAfter}`)
     }
 
   } catch (error) {

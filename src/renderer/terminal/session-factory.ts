@@ -115,6 +115,9 @@ function createHandle(id: PanelId): SessionHandle {
         height: screen.offsetHeight / (term.rows || 1)
       }
     },
+    scrollPosition() {
+      return handles?.term.buffer.active.viewportY ?? 0
+    },
     dispose() {
       if (handles) disposeTerminal(handles)
       handles = null

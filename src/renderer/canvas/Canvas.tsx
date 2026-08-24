@@ -117,7 +117,7 @@ export function Canvas(): JSX.Element {
 
   // Test hooks for verify:panels. The registry is a module-level closure with
   // no global handle by design, and executeJavaScript has no other route into
-  // it. Kept to six narrow reads/writes rather than exposing the registry
+  // it. Kept to seven narrow reads/writes rather than exposing the registry
   // itself, so the suite cannot quietly start depending on internals.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
@@ -164,6 +164,11 @@ export function Canvas(): JSX.Element {
         x: rect.left + (found.col + 0.5) * cell.width * scale,
         y: rect.top + (found.row + 0.5) * cell.height * scale
       }
+    }
+    /** A panel's xterm scrollback offset, by id — not just the focused one. */
+    w.__m4aScrollY = (id: string): number | null => {
+      const session = registry.get(id)
+      return session ? session.handle.scrollPosition() : null
     }
   }, [])
 

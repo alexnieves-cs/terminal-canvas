@@ -24,20 +24,35 @@ export function useViewport(
     const host = hostRef.current
     if (!host) return
 
+    // Wheel ownership needs the CAPTURE phase, not bubble. xterm's own wheel
+    // handler is bound to a descendant panel and runs in the target phase —
+    // by the time a bubble-phase listener on the host sees the event, xterm
+    // has already scrolled. A bubble-phase guard can only ask "should the
+    // camera ALSO react", which double-handles every unfocused panel's
+    // scroll (the camera pans while that panel's scrollback silently moves
+    // too). Capture runs first, so it can decide ownership before either
+    // side acts: yield to the focused panel by doing nothing and letting the
+    // event continue downward, or claim it for the camera by stopping it
+    // from ever reaching xterm.
     const onWheel = (event: WheelEvent): void => {
-      // Wheel ownership. A wheel over the focused panel belongs to that
-      // terminal's scrollback; every other wheel belongs to the camera.
-      //
-      // Returning WITHOUT preventDefault is deliberate: xterm's own handler is
-      // bound to a descendant and has already run in the target phase by the
-      // time this bubbles up, so all this has to do is decline. Calling
-      // preventDefault here would suppress nothing useful and would fight the
-      // scroll xterm just performed.
-      //
-      // ctrlKey is exempt unconditionally: a trackpad pinch arrives as a wheel
-      // with ctrlKey true, and a pinch is always a camera zoom no matter what
-      // is under the cursor.
-      if (!event.ctrlKey && shouldYieldWheel?.(event)) return
+      // A trackpad pinch (ctrlKey true) is always a camera zoom, never a
+      // terminal scroll, regardless of what is under the cursor — so it is
+      // stopped here unconditionally, same as the focus check below.
+      const overFocused = !event.ctrlKey && shouldYieldWheel?.(event)
+
+      if (overFocused) {
+        // Let the event fall through to the target/bubble phases undisturbed
+        // so xterm's own handler scrolls that terminal. No preventDefault,
+        // no stopPropagation — this is the one case where the terminal wins.
+        return
+      }
+
+      // Everything else (background, or a wheel over a panel that is not
+      // focused) belongs to the camera. stopPropagation here, in capture,
+      // is what stops xterm's target-phase handler from ever running —
+      // without it an unfocused panel would scroll its scrollback AND the
+      // canvas would pan on the same gesture.
+      event.stopPropagation()
 
       // Chromium treats ctrl+wheel as its own page-zoom gesture. Without this
       // a pinch zooms the entire UI instead of the canvas. React's onWheel
@@ -57,8 +72,13 @@ export function useViewport(
       )
     }
 
-    host.addEventListener('wheel', onWheel, { passive: false })
-    return () => host.removeEventListener('wheel', onWheel)
+    // shouldYieldWheel must stay referentially stable (Canvas.tsx supplies it
+    // via useCallback with an empty dep list) — it is in this effect's dep
+    // array, and a non-memoized function here would tear the listener down
+    // and reinstall it on every render, i.e. at 60Hz during a pan/zoom
+    // gesture that itself triggers re-renders.
+    host.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    return () => host.removeEventListener('wheel', onWheel, { capture: true })
   }, [hostRef, shouldYieldWheel])
 
   useEffect(() => {

@@ -47,6 +47,13 @@ export interface SessionHandle {
   locate(word: string): { col: number; row: number } | null
   /** Cell metrics in CSS pixels — transform-blind, like xterm's own. */
   cellSize(): { width: number; height: number }
+  /**
+   * xterm's buffer.active.viewportY — the scrollback offset. Exists so a
+   * check can assert an unfocused panel's terminal did NOT scroll when a
+   * wheel over it was claimed by the camera (see useViewport's capture-phase
+   * wheel guard). 0 for a session that has never been attached.
+   */
+  scrollPosition(): number
   dispose(): void
 }
 
