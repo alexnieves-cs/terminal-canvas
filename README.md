@@ -32,6 +32,7 @@ npm run verify:window        # renderer teardown reaches the PTY layer
 npm run verify:ipc           # every contract channel has a handler
 npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/pointer math, plain node
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
+npm run verify:layout        # on-disk layout format + the store that owns it, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
@@ -115,6 +116,15 @@ them with `clientX`/`clientY` rewritten so the offset xterm computes is already
 in CSS pixels. `getMouseReportCoords` shares that helper, so mouse-reporting
 TUIs are corrected by the same change.
 
+**Restored panels are dormant.** A relaunch reads `layout.json` and puts every
+panel's geometry and stacking back, but a restored panel is a card reading
+"click to start" until you click it — no PTY is spawned and no WebGL context
+is created for it just because it is on screen. Panning across a fully
+restored twelve-panel canvas spawns zero processes; clicking one card wakes
+that panel and it behaves exactly like a fresh one from then on. This is what
+stops a relaunch from re-launching every agent that happened to be open when
+you quit.
+
 ## Milestones
 
 | | Scope | Status |
@@ -123,7 +133,7 @@ TUIs are corrected by the same change.
 | M2 | Infinite canvas: pan/zoom, dumb rectangles, coordinate math | ✅ done |
 | M3 | Merge M1+M2: real terminals as panels, LOD + viewport culling | ✅ done |
 | M4a | Panel manipulation: drag, resize, close, pointer correction | ✅ done |
-| M4b | Layout persistence: panels survive a relaunch | |
+| M4b | Layout persistence: panels survive a relaunch | ✅ done |
 | M4c | tmux backing: sessions survive the renderer | |
 | M5 | Presets, command palette, electron-builder packaging | |
 

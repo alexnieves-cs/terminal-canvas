@@ -30,15 +30,16 @@ work is done. Individual suites:
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:viewport` | plain node | 39 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39) |
-| `verify:registry` | plain node | 20 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–15 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15) |
+| `verify:viewport` | plain node | 47 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), and dormancy outranking focus in `lod.ts` (46–47) |
+| `verify:registry` | plain node | 23 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–15 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15) and dormant attach/wake (16–18) |
+| `verify:layout` | plain node | 25 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 8 checks: the real `PtyManager` |
 | `verify:window` | real Electron | 3 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
-| `verify:canvas` | real Electron | 4 checks: real input into the built renderer |
+| `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 17 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness |
+| `verify:panels` | real Electron | 22 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), and undo/redo (20–22) |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -48,12 +49,14 @@ To add a check, append an `ok(...)` assertion in the IIFE.
 Electron's ABI by the `postinstall` `electron-rebuild`, so it will not load under system
 Node. `verify:pty` and `verify:pty-manager` therefore run under Electron with
 `ELECTRON_RUN_AS_NODE=1`; `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, and
-`verify:panels` need the real app lifecycle and `unset` it instead. `verify:viewport` and
-`verify:registry` are plain node, because `viewport.ts`, `lod.ts`, and `session-registry.ts`
-have no native dependency, no DOM, and no direct `window`/`document` use — `session-registry.ts`
-gets there by taking its IPC bridge and its terminal factory as injected dependencies, so
+`verify:panels` need the real app lifecycle and `unset` it instead. `verify:viewport`,
+`verify:registry`, and `verify:layout` are plain node, because `viewport.ts`, `lod.ts`,
+`session-registry.ts`, `shared/layout-schema.ts`, and `main/layout-store.ts` have no native
+dependency, no DOM, and no direct `window`/`document` use — `session-registry.ts` gets there
+by taking its IPC bridge and its terminal factory as injected dependencies, so
 `verify:registry` can drive the whole session lifecycle against fakes instead of a real PTY
-or a real xterm.
+or a real xterm, and `layout-store.ts` gets there by taking the filesystem paths it reads and
+writes as constructor arguments instead of resolving `app.getPath('userData')` itself.
 
 **`verify:pty` duplicates production code on purpose.** It re-implements `shell-env.ts`'s
 probe and `pty-manager.ts`'s batching by hand so it can test them without Electron's app
@@ -202,15 +205,18 @@ React. The React panel (`TerminalPanel.tsx`) is mounted and unmounted freely by 
 owns nothing. In M1 "this component is unmounting" and "this panel is going away" were the
 same statement; culling makes them different, and confusing them kills a running agent with no
 error anywhere. `pty.kill` now has two legitimate callers — `disposeAll` (renderer teardown)
-and `dispose(id)` (M4a's explicit panel close) — but **a tier change must never reach either
-one.** Four checks exist for exactly that property: `verify:registry` 5 and 15, and
-`verify:panels` 4 and 15.
+and `dispose(id)` (explicit panel close, called from `Canvas.tsx` at both the close button and
+undo/redo removing a panel) — but **a tier change must never reach either one.** Four checks
+exist for exactly that property: `verify:registry` 5 and 15, and `verify:panels` 4 and 15.
 
 **Lazy spawn (`session-registry.ts`).** A PTY is created when its panel first goes live, not
 at startup. "Fit before spawn" (below) needs real cols/rows, which needs an attached, laid-out
 node — so a panel that has never been on screen has no size to spawn at. It also stops a
-twelve-panel canvas launching twelve agents on boot: `SEED_PANELS` in `panels/panels.ts` has
-twelve entries and `LIVE_BUDGET` (8) caps how many are live at once. The cap is
+twelve-panel canvas launching twelve agents on boot: `LIVE_BUDGET` (8) caps how many are live
+at once, whatever the panel count. As of M4b, a fresh install's actual boot data is
+`firstRunPanels()` — one centred placeholder — not `SEED_PANELS`; `SEED_PANELS`'
+twelve scattered entries in `panels/panels.ts` stay put purely as `verify:panels` fixture
+data, which is what they were always actually exercising. The cap is
 enforced in two places and holds at every moment, not just when the canvas is at rest:
 `assignTiers` never promotes more than the budget, and `Canvas.tsx` re-checks it when it
 applies the map, because a held-back demotion (below) is a live panel `assignTiers` did not
@@ -368,6 +374,63 @@ same focused panel *does* move the camera, and an unfocused terminal does not sc
 camera does. Reverting this to a bubble-phase listener reintroduces
 the double-handling defect it was written to fix.
 
+**Dormancy outranks focus (`lod.ts`).** `assignTiers` pins the focused panel live
+unconditionally, so restoring focus onto a restored panel would spawn a process at boot and
+contradict "dormant until clicked" before the user ever touches the canvas. `attachSlot`
+carries a second, deliberate dormancy guard on top of the tiering rule, so "no process starts
+by itself" does not rest entirely on one pure function being right — `verify:viewport` 46–47
+and `verify:registry` 16 cover the two layers separately.
+
+**The store is main's because the quit flush cannot ask a dead renderer
+(`main/layout-store.ts`).** `app.on('before-quit')` is main-side; if the renderer owned the
+debounce, main would have to ask a renderer that `Cmd+R`/`Cmd+W` may already have destroyed —
+the same failure `window-lifecycle.ts` exists to handle. `flushSync` must never throw, because
+an exception there can wedge the quit before the window is allowed to close.
+
+**`parseLayout` never throws and drops entries individually (`shared/layout-schema.ts`).** One
+malformed panel costs that panel, not the whole file — a canvas that was mostly fine on disk
+still opens mostly fine. **Duplicate ids are the one failure with no visible symptom**:
+`registry.ensure` returns the existing session for a repeated id, so two panels in `layout.json`
+silently render as one, because `handle.host` can live in exactly one DOM slot.
+
+**`nextIdRef` seeds from the restored ids (`Canvas.tsx`).** Initialising it to `1` collides
+with a restored `n5` after five `Cmd+N` presses on the previous run — the same id-collision
+defect M4a fixed by replacing length-derived ids, resurrected through a different door if the
+counter doesn't take the restored state into account.
+
+**One history entry per committed gesture (`Canvas.tsx`).** A drag calls `setPanels` roughly
+sixty times as the pointer moves; pushing an undo entry there makes one drag take sixty
+`Cmd+Z` presses to unwind, while every check that only asserts final state still passes.
+History is pushed once, on commit, not per intermediate update.
+
+**Undo removing a panel must dispose its session.** `registry.dispose` now has **two call
+sites in `Canvas.tsx`** — the close button and undo/redo removing a panel. This did **not**
+add a third caller of `pty.kill`: `dispose(id)` and `disposeAll()` remain the only two inside
+`session-registry.ts`, and routing both callers through `dispose` is exactly what keeps that
+true. Without it, `Cmd+N` then `Cmd+Z` leaked a live process with no panel left to close it.
+
+**`Cmd+Z` is claimed, `Ctrl+Z` is not (`src/main/menu.ts`).** The same split the file already
+draws between `Cmd+C` (copy) and `Ctrl+C` (SIGINT). The stock `'undo'`/`'redo'` menu roles are
+unusable for the same reason `'copy'`/`'paste'` are: they drive `document.execCommand` against
+whatever DOM element happens to be focused, not the canvas's own history stack. `Ctrl+Z`
+reaches the PTY untouched and still suspends the foreground process as SIGTSTP.
+
+**The plain-node verify bundles now configure a `@shared` alias
+(`verify-viewport.cjs`, `verify-registry.cjs`, `verify-layout.cjs`).** Before M4b they
+resolved no path aliases and got away with it because every cross-boundary import from
+`@shared` was `import type`, which esbuild erases before bundling — nothing was ever actually
+resolved. `panel-interaction.ts` now imports a real *value* from `@shared`, and that fails to
+resolve without the alias wired into each esbuild config, the same one
+`electron.vite.config.ts` and the tsconfigs already carry. The real-Electron suites
+(`verify:canvas`, `verify:panels`) need no such alias — they load the already-built
+`out/renderer/index.html`, where electron-vite resolved it long before esbuild ever runs.
+
+**`RestoreSettings` lives in `layout.json`, not a second store.** The renderer never learns the
+settings exist as a distinct concept; main applies them in `LayoutStore.initial()` and hands
+the renderer an already-resolved starting state. A future settings surface should reach for
+the same mechanism — one file, behind `LayoutStore` — rather than inventing a second store for
+a fourth toggle.
+
 ## Gotchas
 
 - **`Cannot read properties of undefined (reading 'whenReady')`** — your shell exports
@@ -420,7 +483,7 @@ the double-handling defect it was written to fix.
 Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then an
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
-M2 and M3 are both worked examples of this. Follow it when starting M4b, the next unstarted milestone.
+M2 and M3 are both worked examples of this. Follow it when starting M4c, the next unstarted milestone.
 
 ## Conventions
 
