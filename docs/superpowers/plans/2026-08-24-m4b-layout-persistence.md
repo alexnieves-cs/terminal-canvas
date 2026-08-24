@@ -24,6 +24,19 @@
 - **Comments explain *why*.** Match the density of the surrounding code; a non-obvious line without a reason attached gets "fixed" by someone later.
 - **`npm run verify` must be green before any task is claimed done.**
 
+## Preconditions
+
+**The working tree had uncommitted drop-guard work in it when this plan was
+written.** `src/renderer/drop-guard.ts` (new), plus edits to
+`src/renderer/main.tsx`, `src/main/index.ts`, and `scripts/verify-canvas.cjs`.
+Three of those four files are also modified by this plan. **Land or stash that
+work before starting Task 1**, and re-read `main.tsx` and `main/index.ts` before
+editing them — the code blocks below were written against the tree as it stood
+and show the M4b changes only.
+
+In particular, `main.tsx` now calls `installDropGuard()` before mounting React.
+Task 6 rewrites that file; the call must survive.
+
 ## File Structure
 
 **Created**
@@ -1616,6 +1629,14 @@ import { createRoot } from 'react-dom/client'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 import { App } from './App'
+import { installDropGuard } from './drop-guard'
+
+// Installed before React mounts, and never uninstalled: an unhandled file drop
+// navigates the renderer, which kills every PTY in the window. Nothing about
+// that is React's concern, so it does not live in a component's effect.
+// PRESERVED FROM THE DROP-GUARD WORK — do not drop this call while rewriting
+// the file for the async boot below.
+installDropGuard()
 
 const container = document.getElementById('root')
 if (!container) throw new Error('#root missing from index.html')
@@ -2627,7 +2648,15 @@ Mark M4b done in the milestone table. Add `npm run verify:layout` to the command
 
 - [ ] **Step 2: Update `CLAUDE.md`**
 
-Add to the verify table: `verify:layout | plain node | 24 checks: the on-disk format's validation and the store's coalescing, atomic write, and settings resolution`. Update the check counts for `verify:viewport` (39 → 47), `verify:registry` (20 → 22), and `verify:panels` (17 → 20).
+Add to the verify table: `verify:layout | plain node | 24 checks: the on-disk
+format's validation and the store's coalescing, atomic write, and settings
+resolution`. Update the check counts for `verify:viewport` (39 → 47),
+`verify:registry` (20 → 22), and `verify:panels` (17 → 20).
+
+**Read the real counts out of each suite's own output rather than trusting these
+numbers.** Concurrent work on the drop guard adds checks to `verify:canvas`,
+and CLAUDE.md carrying a stale count is exactly the kind of small untruth a
+later reader builds on. Run each suite and copy what it prints.
 
 Add these to "Load-bearing details", each with its reason:
 
@@ -2638,12 +2667,21 @@ Add these to "Load-bearing details", each with its reason:
 - **One history entry per committed gesture (`Canvas.tsx`).** Per-frame pushes make one drag sixty `Cmd+Z` presses.
 - **`Cmd+Z` is claimed, `Ctrl+Z` is not.** Same split as `Cmd+C`/`Ctrl+C`.
 - **The verify bundles now configure a `@shared` alias.** Value imports across the boundary fail to resolve without it.
+- **`RestoreSettings` lives in `layout.json`, not a second store.** `docs/ideas-backlog.md` item 11 asks that a future settings surface share M4b's persistence mechanism rather than invent one, and names this as a decision to make when M4b lands. It is made: main owns both, in one file, behind `LayoutStore`. Three booleans do not justify the declarative schema item 11 describes — but a fourth toggle arriving should reach for that schema rather than adding another ad-hoc field here.
 
 Update the "Working on this repo" line to point at M4c — or at the new-canvas wizard, if that is next — rather than M4b.
 
 - [ ] **Step 3: Close out the backlog items M4b consumed**
 
+The backlog grew from seven items to fourteen while this plan was being
+written; re-read it before editing, and touch only the items M4b actually
+consumed.
+
 In `docs/ideas-backlog.md`, item 2's **Action for M4b** is now done: note that the persisted file is a keyed collection of workspaces with an id and a name, so the remaining work is a switcher and a UI, not a migration. Item 6's "Persisted by M4b" is half done: `PersistedPanel.title` exists and round-trips, but nothing writes it and `Panel` has no `title` field yet — say exactly that, so the next reader does not assume more shipped than did.
+
+Item 11's storage constraint is also resolved: record that `RestoreSettings`
+lives in `layout.json` behind `LayoutStore`, so a settings surface inherits that
+mechanism instead of introducing a second one.
 
 - [ ] **Step 4: Final verification**
 
