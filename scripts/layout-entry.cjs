@@ -3,5 +3,6 @@
    what keeps this suite in the cheap plain-node tier. */
 module.exports = {
   ...require('../src/shared/layout-schema'),
-  ...require('../src/shared/panel-geometry')
+  ...require('../src/shared/panel-geometry'),
+  ...require('../src/renderer/panels/layout-adapt')
 }

@@ -190,6 +190,39 @@ const active = (snap) => snap.workspaces.find((w) => w.id === snap.activeWorkspa
     JSON.stringify(junk))
 }
 
+// 13. A round trip must be lossless. Anything dropped here is a user's canvas
+//     quietly degrading a little on every launch.
+{
+  const persisted = [
+    { id: 'a1', x: -40, y: 12.5, w: 720, h: 460, z: 3, cwd: '/tmp', args: ['-l'] },
+    { id: 'b2', x: 900, y: 0, w: 300, h: 200, z: 1, cwd: '~', command: '/bin/bash', args: [] }
+  ]
+  const back = L.fromPanels(L.toPanels(persisted))
+  ok('13 persisted -> Panel -> persisted is lossless',
+    JSON.stringify(back) === JSON.stringify(persisted),
+    JSON.stringify(back))
+}
+
+// 14. The nesting is the point: Panel keeps the id on rect and the command on
+//     spec, and the file must not be shaped by either of those choices.
+{
+  const [p] = L.toPanels([{ id: 'a1', x: 1, y: 2, w: 720, h: 460, z: 7, cwd: '/x', args: ['-l'] }])
+  ok('14 toPanels produces the nested in-memory shape',
+    p.rect.id === 'a1' && p.rect.x === 1 && p.z === 7 &&
+    p.spec.panelId === 'a1' && p.spec.cwd === '/x' && p.spec.command === undefined,
+    JSON.stringify(p))
+}
+
+// 15. An absent command must stay ABSENT, never become the string "undefined"
+//     or a renderer-invented default. Only main can name the login shell.
+{
+  const [p] = L.toPanels([{ id: 'a1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }])
+  const [back] = L.fromPanels([p])
+  ok('15 an absent command survives as absent, not as a default',
+    !('command' in back) && p.spec.command === undefined,
+    JSON.stringify(back))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
