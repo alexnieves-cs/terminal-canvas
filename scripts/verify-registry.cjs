@@ -427,6 +427,28 @@ const tick = () => new Promise((r) => setImmediate(r))
       `created=${bridge.calls.create.length}`)
   }
 
+  // 18. wake() while the panel is STILL CARDED — the branch a real click
+  // actually takes, since the tiering effect has not re-run yet at the
+  // moment onSelectPanel fires. Checks 16-17 only exercised the "already
+  // live" branch (spawn immediately); this asserts wake() instead takes the
+  // "clear the flag and wait for tiering" path — no spawn until applyTiers
+  // promotes the panel and attachSlot actually runs.
+  {
+    const { bridge, registry } = setup()
+    registry.ensure('d1', { ...SPEC, panelId: 'd1' }, { dormant: true })
+    registry.wake('d1')
+    const spawnedImmediately = bridge.calls.create.length !== 0
+    const dormantAfterWake = registry.get('d1').dormant
+
+    registry.applyTiers({ d1: 'live' })
+    registry.attachSlot('d1')
+    await tick()
+
+    ok('18 waking a still-carded panel clears dormancy but spawns nothing until tiering promotes it',
+      !spawnedImmediately && dormantAfterWake === false && bridge.calls.create.length === 1,
+      `spawnedImmediately=${spawnedImmediately} dormantAfterWake=${dormantAfterWake} createdAfterPromote=${bridge.calls.create.length}`)
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
