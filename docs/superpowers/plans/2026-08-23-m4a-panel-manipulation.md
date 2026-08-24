@@ -40,7 +40,7 @@
 | `src/renderer/styles.css` | **MODIFY.** Handle and close-button styles. Loses `.panel__slot--blocked`. |
 | `scripts/viewport-entry.cjs` | **MODIFY.** Re-export the two new pure modules. |
 | `scripts/verify-viewport.cjs` | **MODIFY.** Checks 26–37. |
-| `scripts/verify-registry.cjs` | **MODIFY.** Checks 15–17. |
+| `scripts/verify-registry.cjs` | **MODIFY.** Checks 13–15. |
 | `scripts/verify-panels.cjs` | **MODIFY.** Checks 9–16; check 6 rewritten. |
 
 ### One deviation from the spec, and why
@@ -584,7 +584,7 @@ export function correctForScale(client: Point, rect: RectOrigin, scale: number):
 - [ ] **Step 5: Run the checks**
 
 Run: `npm run verify:viewport && npm run typecheck`
-Expected: `37/37 passed`, clean typecheck.
+Expected: `38/38 passed`, clean typecheck.
 
 - [ ] **Step 6: Commit**
 
@@ -1670,22 +1670,24 @@ interaction band; removing the gate exposed it everywhere."
 - Modify: `src/renderer/components/TerminalPanel.tsx`
 - Modify: `src/renderer/canvas/Canvas.tsx`
 - Modify: `src/renderer/styles.css`
-- Test: `scripts/verify-registry.cjs` (checks 15–17), `scripts/verify-panels.cjs` (checks 13–15)
+- Test: `scripts/verify-registry.cjs` (checks 13–15), `scripts/verify-panels.cjs` (checks 13–15)
 
 **Interfaces:**
 - Produces: `Registry` gains `dispose(id: PanelId): void`.
 
-- [ ] **Step 1: Write registry checks 15–17, watch them fail**
+- [ ] **Step 1: Write registry checks 13–15, watch them fail**
 
 Append to `scripts/verify-registry.cjs` before its summary block. Follow the
 file's existing fake-bridge pattern.
 
 ```js
 // ---------------------------------------------------------------------------
-// M4a: explicit close (15-17)
+// M4a: explicit close (13-15)
+// NOTE: this suite numbers 1-12 with lettered sub-checks (3b, 7c, ...),
+// so 17 assertions run today and 13 is the next free NUMBER.
 // ---------------------------------------------------------------------------
 
-// 15. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
+// 13. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
 //     of pty.kill in the renderer; disposeAll was the first and, until M4a,
 //     the only one.
 {
@@ -1695,12 +1697,12 @@ file's existing fake-bridge pattern.
   registry.applyTiers({ a: 'live' })
   registry.attachSlot('a')
   registry.dispose('a')
-  ok('15 dispose kills that panel\'s pty',
+  ok('13 dispose kills that panel\'s pty',
     bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a',
     JSON.stringify(bridge.calls.kill))
 }
 
-// 16. dispose(id) touches nothing else. The panel next to the one you closed
+// 14. dispose(id) touches nothing else. The panel next to the one you closed
 //     must not lose its agent — the same class of silent failure check 5
 //     exists for, arriving through the new code path.
 {
@@ -1712,14 +1714,14 @@ file's existing fake-bridge pattern.
   registry.applyTiers({ a: 'live', b: 'live', c: 'live' })
   for (const id of ['a', 'b', 'c']) registry.attachSlot(id)
   registry.dispose('b')
-  ok('16 dispose leaves every other session alone',
+  ok('14 dispose leaves every other session alone',
     bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'b' &&
       registry.get('a') !== undefined && registry.get('c') !== undefined &&
       registry.get('b') === undefined,
     `killed=${JSON.stringify(bridge.calls.kill)} a=${!!registry.get('a')} c=${!!registry.get('c')}`)
 }
 
-// 17. Demotion STILL never kills, now that a kill path other than disposeAll
+// 15. Demotion STILL never kills, now that a kill path other than disposeAll
 //     exists. This is check 5's invariant re-asserted against the new code:
 //     the danger was never that kill is called, it was that kill becomes
 //     reachable from a tier change.
@@ -1735,7 +1737,7 @@ file's existing fake-bridge pattern.
   registry.dispose('a')
   registry.applyTiers({ b: 'card' })
   registry.detachSlot('b')
-  ok('17 demotion never kills, even alongside an explicit close',
+  ok('15 demotion never kills, even alongside an explicit close',
     bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a' &&
       registry.get('b') !== undefined,
     `killed=${JSON.stringify(bridge.calls.kill)}`)
@@ -1789,7 +1791,7 @@ killed":
 - [ ] **Step 4: Run the registry checks**
 
 Run: `npm run verify:registry`
-Expected: `17/17 passed`.
+Expected: `20/20 passed` (17 pre-existing assertions plus the 3 new).
 
 - [ ] **Step 5: Write panels checks 13–15, watch them fail**
 
@@ -1971,7 +1973,7 @@ ones.
 - [ ] **Step 10: Run everything**
 
 Run: `npm run verify`
-Expected: green; `17/17` registry, `15/15` panels.
+Expected: green; `20/20` registry, `15/15` panels.
 
 - [ ] **Step 11: Commit**
 
@@ -2148,8 +2150,8 @@ TUIs are corrected by the same change.
 - [ ] **Step 3: Update the verify table in `CLAUDE.md`**
 
 ```markdown
-| `verify:viewport` | plain node | 37 checks: `viewport.ts` (1–11b), `lod.ts` (20–25), `panel-interaction.ts` + `panels.ts` (26–34), `pointer-correct.ts` (35–37) |
-| `verify:registry` | plain node | 17 checks: lifecycle against fakes, including explicit close (15–17) |
+| `verify:viewport` | plain node | 38 checks: `viewport.ts` (1–11b), `lod.ts` (20–25), `panel-interaction.ts` + `panels.ts` (26–34), `pointer-correct.ts` (35–38) |
+| `verify:registry` | plain node | 20 assertions: lifecycle against fakes, including explicit close (13–15). Numbered 1–15 with lettered sub-checks. |
 | `verify:panels` | real Electron | 16 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order |
 ```
 
@@ -2258,7 +2260,7 @@ focus. Each entry says what fails silently if it is undone."
 
 ## Definition of Done
 
-- [ ] `npm run verify` is green: `37/37` viewport, `17/17` registry, `16/16` panels, plus the unchanged pty/window/ipc/canvas/xterm suites.
+- [ ] `npm run verify` is green: `38/38` viewport, `20/20` registry, `16/16` panels, plus the unchanged pty/window/ipc/canvas/xterm suites.
 - [ ] `INTERACT_MIN_SCALE`, `INTERACT_MAX_SCALE`, and `.panel__slot--blocked` appear nowhere in the codebase.
 - [ ] `grep -rn "pty.kill\|pty\.kill" src/renderer` returns exactly two call sites, both in `session-registry.ts`: `disposeAll` and `dispose`.
 - [ ] `grep -rn "process.env" src/renderer` returns nothing.
