@@ -83,5 +83,26 @@ app.whenReady().then(async () => {
     win.destroy()
   }
 
+  // 4. THE MILESTONE, at the wiring level. A renderer teardown must reach a
+  // handler that DETACHES rather than one that kills. This suite cannot see
+  // tmux, so it asserts the contract that makes tmux survival possible: the
+  // callback main installs is detachAll, and detachAll never destroys a
+  // backend session. A regression to killAll would keep checks 1-3 green while
+  // silently restoring the M3 behaviour M4c exists to remove.
+  {
+    const calls = []
+    const win = new BrowserWindow({ show: false })
+    // Mirrors exactly what src/main/index.ts installs.
+    attachPtyLifecycle(win, () => calls.push('detach'))
+    await win.loadFile(PAGE).catch(() => {})
+    calls.length = 0
+    win.webContents.reload()
+    await sleep(1200)
+    ok('4 renderer teardown calls the detach path, never the kill path',
+      calls.length > 0 && calls.every((c) => c === 'detach'),
+      JSON.stringify(calls))
+    win.destroy()
+  }
+
   finish()
 })

@@ -1,18 +1,21 @@
 import type { BrowserWindow } from 'electron'
 
 /**
- * Ties a window's PTYs to the lifetime of the renderer that asked for them.
+ * Ties a window's PTY CLIENTS to the lifetime of the renderer that asked for
+ * them — and, since M4c, only the clients.
  *
- * The renderer kills its own PTY on React cleanup, but there are two everyday
- * paths where that cleanup never runs: Cmd+R (the View menu ships `reload`)
- * and Cmd+W. Both destroy the page without unmounting, so no `pty:kill` is
- * sent. The next page then calls `pty:create` with the same panelId and hits
- * "already has a live PTY" — an unrecoverable dead panel — while the original
- * process runs on, orphaned.
+ * The renderer kills its own PTY on React cleanup, but two everyday paths never
+ * run that cleanup: Cmd+R (the View menu ships `reload`) and Cmd+W. Both
+ * destroy the page without unmounting, so no `pty:kill` is sent.
  *
- * Killing on renderer teardown is the M1-sized fix: a reload gives you a fresh
- * shell. Surviving a reload instead of dying is M4's job, once tmux backs the
- * session and there is something worth reattaching to.
+ * Before M4c the fix was to kill the process outright, and a reload gave you a
+ * fresh shell. Now the callback DETACHES instead: the local handle dies, the
+ * tmux session behind it keeps running, and the next page's `pty:create` hits
+ * `new-session -A` and lands back in the same process.
+ *
+ * The stale-session problem this file was written for is unchanged and still
+ * handled — main's session map is emptied, so the next `pty:create` finds no
+ * conflict and never throws "already has a live PTY".
  */
 export function attachPtyLifecycle(win: BrowserWindow, onRendererGone: () => void): void {
   // Fires before the replacement page loads, so the old page's sessions are

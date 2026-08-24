@@ -89,9 +89,12 @@ function createWindow(): void {
   })
 
   // Cmd+R and Cmd+W destroy the renderer without running React cleanup, so no
-  // pty:kill is ever sent. Without this the surviving PTY makes the next
-  // pty:create throw "already has a live PTY" and the panel is unrecoverable.
-  attachPtyLifecycle(mainWindow, () => ptyManager.killAll())
+  // pty:kill is ever sent. detachAll — not killAll — frees the local handles
+  // and empties the session map while leaving the tmux sessions running, so
+  // the next page reattaches instead of getting a fresh shell. On the direct
+  // backend there is no session behind the handle and this is exactly the old
+  // behaviour.
+  attachPtyLifecycle(mainWindow, () => ptyManager.detachAll())
 
   // Belt and braces against Chromium's own pinch-to-zoom. The renderer already
   // preventDefaults ctrl+wheel, but a missed path must not be able to zoom the
