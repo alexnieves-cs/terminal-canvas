@@ -306,7 +306,9 @@ const tick = () => new Promise((r) => setImmediate(r))
       `notifications=${notifications} version ${before} -> ${registry.version()}`)
   }
 
-  // 12. disposeAll is the ONLY path that kills.
+  // 12. disposeAll kills every spawned session. Until M4a it was the only
+  //     path in the renderer that killed anything; dispose(id) (13-15) is now
+  //     the second and last.
   {
     const { bridge, factory, registry } = setup()
     registry.ensure('p1', SPEC)
@@ -316,6 +318,68 @@ const tick = () => new Promise((r) => setImmediate(r))
     registry.disposeAll()
     ok(12, bridge.calls.kill.length === 1 && factory.made.get('p1').disposed,
       `kills=${JSON.stringify(bridge.calls.kill)}`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // M4a: explicit close (13-15)
+  // NOTE: this suite numbers 1-12 with lettered sub-checks (3b, 7c, ...),
+  // so 17 assertions run today and 13 is the next free NUMBER.
+  // ---------------------------------------------------------------------------
+
+  // 13. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
+  //     of pty.kill in the renderer; disposeAll was the first and, until M4a,
+  //     the only one.
+  {
+    const bridge = fakeBridge()
+    const registry = createRegistry({ bridge, factory: fakeFactory() })
+    registry.ensure('a', { panelId: 'a', cwd: '~', args: [] })
+    registry.applyTiers({ a: 'live' })
+    registry.attachSlot('a')
+    registry.dispose('a')
+    ok('13 dispose kills that panel\'s pty',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a',
+      JSON.stringify(bridge.calls.kill))
+  }
+
+  // 14. dispose(id) touches nothing else. The panel next to the one you closed
+  //     must not lose its agent — the same class of silent failure check 5
+  //     exists for, arriving through the new code path.
+  {
+    const bridge = fakeBridge()
+    const registry = createRegistry({ bridge, factory: fakeFactory() })
+    for (const id of ['a', 'b', 'c']) {
+      registry.ensure(id, { panelId: id, cwd: '~', args: [] })
+    }
+    registry.applyTiers({ a: 'live', b: 'live', c: 'live' })
+    for (const id of ['a', 'b', 'c']) registry.attachSlot(id)
+    registry.dispose('b')
+    ok('14 dispose leaves every other session alone',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'b' &&
+        registry.get('a') !== undefined && registry.get('c') !== undefined &&
+        registry.get('b') === undefined,
+      `killed=${JSON.stringify(bridge.calls.kill)} a=${!!registry.get('a')} c=${!!registry.get('c')}`)
+  }
+
+  // 15. Demotion STILL never kills, now that a kill path other than disposeAll
+  //     exists. This is check 5's invariant re-asserted against the new code:
+  //     the danger was never that kill is called, it was that kill becomes
+  //     reachable from a tier change.
+  {
+    const bridge = fakeBridge()
+    const registry = createRegistry({ bridge, factory: fakeFactory() })
+    for (const id of ['a', 'b']) {
+      registry.ensure(id, { panelId: id, cwd: '~', args: [] })
+    }
+    registry.applyTiers({ a: 'live', b: 'live' })
+    registry.attachSlot('a')
+    registry.attachSlot('b')
+    registry.dispose('a')
+    registry.applyTiers({ b: 'card' })
+    registry.detachSlot('b')
+    ok('15 demotion never kills, even alongside an explicit close',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a' &&
+        registry.get('b') !== undefined,
+      `killed=${JSON.stringify(bridge.calls.kill)}`)
   }
 
   console.log('\n' + '='.repeat(60))

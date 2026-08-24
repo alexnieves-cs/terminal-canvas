@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type JSX } from 'react'
+import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { PanelSession, PanelStatus } from '@renderer/session/panel-session'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
@@ -33,15 +33,48 @@ export interface TerminalPanelProps {
   onSlotMount: (id: string) => void
   /** Called before the host leaves the document, so its context can be freed. */
   onSlotUnmount: (id: string) => void
+  /** Close this panel for good: the canvas disposes its session and drops it. */
+  onClose: (id: string) => void
 }
 
 const CARD_LINES = 6
 
+/** How long a close stays armed before it forgets it was ever asked. */
+const CONFIRM_CLOSE_MS = 3000
+
 function TerminalPanelImpl({
-  session, rect, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount
+  session, rect, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
+
+  const [arming, setArming] = useState(false)
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Cleared on unmount, and this component unmounts on every demotion — a
+  // timer left running would call setArming on a gone component.
+  useEffect(() => () => {
+    if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+  }, [])
+
+  const running = session.status.kind === 'running' || session.status.kind === 'starting'
+
+  const handleClose = (event: ReactMouseEvent): void => {
+    event.stopPropagation()
+    event.preventDefault()
+    // Idle and exited panels have nothing to lose, so they close outright.
+    // A live process asks once — but only once, and without a modal: a dialog
+    // on every close trains you to click through the one that mattered.
+    if (!running || arming) {
+      if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+      onClose(session.id)
+      return
+    }
+    setArming(true)
+    armTimerRef.current = setTimeout(() => {
+      armTimerRef.current = null
+      setArming(false)
+    }, CONFIRM_CLOSE_MS)
+  }
 
   useEffect(() => {
     const slot = slotRef.current
@@ -89,6 +122,18 @@ function TerminalPanelImpl({
             surface result.command here), this label is the honest stand-in. */}
         <span className="panel__title">{session.spec.command ?? 'login shell'}</span>
         <StatusBadge status={session.status} />
+        {/* onMouseDown rather than onClick, so it runs in the same phase as
+            every other panel interaction and beats the chrome's own drag
+            start — a mousedown on the chrome begins a move, and a close that
+            waited for mouseup would fire after a gesture had already begun. */}
+        <button
+          type="button"
+          className={`panel__close${arming ? ' panel__close--arming' : ''}`}
+          onMouseDown={handleClose}
+          title={arming ? 'Click again to kill this process' : 'Close panel'}
+        >
+          {arming ? 'kill?' : '×'}
+        </button>
       </header>
 
       {live ? (

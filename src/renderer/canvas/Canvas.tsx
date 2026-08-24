@@ -10,7 +10,7 @@ import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection } from '@renderer/components/xterm-pointer'
-import { makePanel, nextZ, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
+import { makePanel, nextZ, removePanel, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -218,6 +218,15 @@ export function Canvas(): JSX.Element {
   // arrow each render would tear the terminal down and reopen it every frame.
   const onSlotMount = useCallback((id: string) => registry.attachSlot(id), [])
   const onSlotUnmount = useCallback((id: string) => registry.detachSlot(id), [])
+  const onClosePanel = useCallback((id: string) => {
+    // Order matters: dispose first, so the session is gone before React
+    // unmounts the view. The reverse order runs TerminalPanel's cleanup —
+    // which calls detachSlot — against a session that no longer exists.
+    registry.dispose(id)
+    setPanels((current) => removePanel(current, id))
+    setSelectedId((current) => (current === id ? null : current))
+    setFocusedId((current) => (current === id ? null : current))
+  }, [])
   const onFocusPanel = useCallback((id: string) => {
     setSelectedId(id)
     setFocusedId(id)
@@ -360,6 +369,7 @@ export function Canvas(): JSX.Element {
               onSlotUnmount={onSlotUnmount}
               onFocus={onFocusPanel}
               onBeginDrag={onBeginDrag}
+              onClose={onClosePanel}
             />
           )
         })}

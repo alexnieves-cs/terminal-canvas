@@ -702,6 +702,73 @@ app.whenReady().then(async () => {
         `scrollBefore=${result && result.scrollBefore} scrollAfter=${result && result.scrollAfter}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 13. An idle or exited panel closes on the first click. 14. A running
+    // panel needs two. 15. Closing one panel does not disturb any other,
+    // including a demoted one — check 4's invariant re-asserted against the
+    // new dispose(id) path.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const before = await settledSessionMap(wc)
+
+      const result = await wc.executeJavaScript(`(async () => {
+        const panels = [...document.querySelectorAll('.panel')]
+        // A panel that never spawned: its card says "not started".
+        const idle = panels.find((p) => p.querySelector('.panel__card-idle'))
+        // A panel with a running pty: its badge shows a pid.
+        const running = panels.find((p) => /pid /.test(p.textContent || ''))
+        if (!idle || !running) return { error: 'need one idle and one running panel' }
+
+        const idleId = idle.getAttribute('data-panel-id')
+        const runningId = running.getAttribute('data-panel-id')
+        const click = (el) => el.dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+
+        const countBefore = document.querySelectorAll('.panel').length
+        click(idle.querySelector('.panel__close'))
+        await new Promise((r) => setTimeout(r, 200))
+        const afterIdleClose = document.querySelectorAll('.panel').length
+
+        const runningClose = running.querySelector('.panel__close')
+        click(runningClose)
+        await new Promise((r) => setTimeout(r, 200))
+        const armedText = (runningClose.textContent || '').trim()
+        const afterFirstClick = document.querySelectorAll('.panel').length
+        click(runningClose)
+        await new Promise((r) => setTimeout(r, 300))
+        const afterSecondClick = document.querySelectorAll('.panel').length
+
+        return {
+          idleId, runningId, countBefore, afterIdleClose,
+          armedText, afterFirstClick, afterSecondClick
+        }
+      })()`)
+
+      ok('13 an idle panel closes on the first click',
+        result && !result.error && result.afterIdleClose === result.countBefore - 1,
+        `${result && result.countBefore} -> ${result && result.afterIdleClose}`)
+
+      ok('14 a running panel arms first and closes on the second click',
+        result && !result.error &&
+          result.afterFirstClick === result.afterIdleClose &&
+          /kill/i.test(result.armedText || '') &&
+          result.afterSecondClick === result.afterIdleClose - 1,
+        `armed="${result && result.armedText}" ` +
+        `${result && result.afterFirstClick} -> ${result && result.afterSecondClick}`)
+
+      const after = await sessionMap(wc)
+      const survivors = new Map(
+        [...before].filter(([id]) => id !== (result && result.runningId))
+      )
+      const { ok: preserved, changed } = pidsPreserved(survivors, after)
+      ok('15 closing one panel kills only that panel\'s pty',
+        preserved && !after.has(result && result.runningId),
+        preserved
+          ? `${survivors.size} session(s) unchanged, ${result && result.runningId} gone`
+          : `pid mismatch: ${changed.join('; ')}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

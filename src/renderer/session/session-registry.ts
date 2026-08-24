@@ -44,6 +44,12 @@ export interface Registry {
   lastFocusedAt(): Record<PanelId, number>
   version(): number
   subscribe(listener: () => void): () => void
+  /**
+   * Close one panel: free its terminal and kill its process. One of exactly
+   * TWO places pty.kill is called in the renderer, the other being disposeAll.
+   * Tiering must never reach either.
+   */
+  dispose(id: PanelId): void
   disposeAll(): void
 }
 
@@ -244,8 +250,19 @@ export function createRegistry(deps: RegistryDeps): Registry {
       return () => listeners.delete(listener)
     },
 
+    dispose(id) {
+      const session = sessions.get(id)
+      if (!session) return
+      session.handle.dispose()
+      // Only if it ever spawned: killing an id main has never heard of throws.
+      if (session.spawned) void bridge.pty.kill(id)
+      sessions.delete(id)
+      bump()
+    },
+
     disposeAll() {
-      // The only place a PTY is killed.
+      // One of two places a PTY is killed; dispose(id) is the other. Tiering
+      // is neither, and must never become either.
       for (const session of sessions.values()) {
         session.handle.dispose()
         if (session.spawned) void bridge.pty.kill(session.id)

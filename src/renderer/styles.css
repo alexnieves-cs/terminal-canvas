@@ -90,6 +90,31 @@ body {
   letter-spacing: 0.01em;
 }
 
+.panel__close {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.panel__close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* Armed: a running process is one click from dying, so it stops looking like
+   a neutral control. */
+.panel__close--arming {
+  border-color: var(--red);
+  color: var(--red);
+  font-size: 11px;
+}
+
 /* The terminal's retained host (.panel__terminal, created once in
    session-factory.ts and reused forever) is appended into this slot; the
    slot must give it a real height so fit() computes the same grid every
