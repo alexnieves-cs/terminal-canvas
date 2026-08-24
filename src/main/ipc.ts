@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron'
-import { IPC } from '../shared/ipc-contract'
+import { ipcMain, type WebContents } from 'electron'
+import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
 import type {
   PanelId,
   PanelSpec,
@@ -32,5 +32,28 @@ export function registerIpcHandlers(ptyManager: PtyManager, layoutStore: LayoutS
 
   ipcMain.handle(IPC.LAYOUT_SAVE, (_event, state: CanvasState) => {
     layoutStore.save(state)
+  })
+}
+
+/**
+ * Asks the renderer for the panel and running-process counts, so the reset
+ * confirmation can name what it is about to destroy. Resolves to zeroes if the
+ * renderer does not answer within the timeout — a dialog that never opens is a
+ * worse failure than one that undercounts.
+ */
+export function requestCanvasCounts(
+  webContents: WebContents
+): Promise<{ panels: number; running: number }> {
+  return new Promise((resolve) => {
+    const replyChannel = `canvas:counts:reply:${Date.now()}`
+    const timer = setTimeout(() => {
+      ipcMain.removeAllListeners(replyChannel)
+      resolve({ panels: 0, running: 0 })
+    }, 1000)
+    ipcMain.once(replyChannel, (_event, counts: { panels: number; running: number }) => {
+      clearTimeout(timer)
+      resolve(counts)
+    })
+    webContents.send(IPC_EVENTS.CANVAS_COUNTS, replyChannel)
   })
 }

@@ -1,11 +1,12 @@
 import { join } from 'node:path'
-import { BrowserWindow, app, shell } from 'electron'
-import { registerIpcHandlers } from './ipc'
+import { BrowserWindow, app, dialog, shell } from 'electron'
+import { registerIpcHandlers, requestCanvasCounts } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
+import { IPC_EVENTS } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -18,6 +19,38 @@ const ptyManager = new PtyManager(() => mainWindow?.webContents ?? null)
 const layoutStore = createLayoutStore({
   filePath: join(app.getPath('userData'), 'layout.json')
 })
+
+/**
+ * Reset is the only action in the app Cmd+Z cannot take back, which is exactly
+ * why it is the only one that asks. The message NAMES what is about to be lost
+ * — a generic "Are you sure?" trains people to click through the one that
+ * mattered, and closing seven idle panels is not the same act as closing seven
+ * running agents.
+ */
+async function confirmReset(): Promise<void> {
+  const window = mainWindow
+  if (!window) return
+  const { panels, running } = await requestCanvasCounts(window.webContents)
+  const detail =
+    running > 0
+      ? `${panels} panel${panels === 1 ? '' : 's'} will be closed, including ${running} running process${running === 1 ? '' : 'es'}. This cannot be undone.`
+      : `${panels} panel${panels === 1 ? '' : 's'} will be closed. This cannot be undone.`
+
+  const { response } = await dialog.showMessageBox(window, {
+    type: 'warning',
+    message: 'Reset this canvas?',
+    detail,
+    buttons: ['Cancel', 'Reset Canvas'],
+    // Cancel is the default, so Return dismisses rather than destroys.
+    defaultId: 0,
+    cancelId: 0
+  })
+  if (response !== 1) return
+
+  layoutStore.reset()
+  layoutStore.flushSync()
+  window.webContents.send(IPC_EVENTS.CANVAS_RESET)
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -90,7 +123,13 @@ app.whenReady().then(async () => {
   // resolved store to answer from.
   layoutStore.load()
 
-  buildAppMenu()
+  buildAppMenu({
+    settings: layoutStore.settings(),
+    onToggle: (key, value) => layoutStore.setSetting(key, value),
+    onReset: () => {
+      void confirmReset()
+    }
+  })
   registerIpcHandlers(ptyManager, layoutStore)
   createWindow()
 

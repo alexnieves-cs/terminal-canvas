@@ -1,5 +1,12 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
+import type { RestoreSettings } from '../shared/layout-schema'
+
+export interface AppMenuOptions {
+  settings: RestoreSettings
+  onToggle(key: keyof RestoreSettings, value: boolean): void
+  onReset(): void
+}
 
 /**
  * Cmd+C / Cmd+V need to reach xterm, not the app menu's default handlers.
@@ -16,7 +23,7 @@ import { IPC_EVENTS } from '../shared/ipc-contract'
  * Ctrl+C is deliberately untouched and flows through to the PTY as SIGINT -
  * which is what you want when an agent is mid-run.
  */
-export function buildAppMenu(): void {
+export function buildAppMenu(options: AppMenuOptions): void {
   const focused = (): BrowserWindow | null => BrowserWindow.getFocusedWindow()
 
   const template: MenuItemConstructorOptions[] = [
@@ -24,6 +31,28 @@ export function buildAppMenu(): void {
       label: app.name,
       submenu: [
         { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Restore on launch',
+          submenu: (
+            [
+              ['layout', 'Panel layout'],
+              ['camera', 'Camera position'],
+              ['focus', 'Selection & focus']
+            ] as [keyof RestoreSettings, string][]
+          ).map(([key, label]) => ({
+            label,
+            type: 'checkbox' as const,
+            checked: options.settings[key],
+            // Nothing in the running session changes: these affect boot only,
+            // which is exactly why they need no IPC event of their own.
+            click: (item) => options.onToggle(key, item.checked)
+          }))
+        },
+        {
+          label: 'Reset canvas…',
+          click: () => options.onReset()
+        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },

@@ -174,6 +174,11 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const focusedIdRef = useRef(focusedId)
   focusedIdRef.current = focusedId
 
+  // Same mirror-into-a-ref pattern, for the reset listener below: it must
+  // install once, but panels changes on every frame of a drag.
+  const panelsRef = useRef(panels)
+  panelsRef.current = panels
+
   // A wheel belongs to a terminal only when it is over the FOCUSED panel.
   // Focus is explicit — the user clicked in — which makes the rule
   // predictable without having to be explained.
@@ -246,6 +251,33 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       offRedo()
     }
   }, [applyHistory])
+
+  // Main owns the reset dialog but only the renderer knows the live statuses,
+  // so it supplies the counts the confirmation names.
+  useEffect(() => {
+    const offCounts = window.canvas.canvas.onCounts(() => ({
+      panels: panelsRef.current.length,
+      running: panelsRef.current.filter((p) => {
+        const kind = registry.get(p.rect.id)?.status.kind
+        return kind === 'running' || kind === 'starting'
+      }).length
+    }))
+    const offReset = window.canvas.canvas.onReset(() => {
+      // dispose, not just drop: reset kills every process, and dispose is one
+      // of the two legitimate callers of pty.kill in the renderer.
+      for (const panel of panelsRef.current) registry.dispose(panel.rect.id)
+      const fresh = firstRunPanels()
+      setPanels(fresh)
+      setDormantIds(new Set())
+      setSelectedId(null)
+      setFocusedId(null)
+      setHistory(createHistory(fresh))
+    })
+    return () => {
+      offCounts()
+      offReset()
+    }
+  }, [])
 
   // Same mirror-into-a-ref pattern, for the listeners below that need the
   // current scale but must not resubscribe: `viewport` changes on every wheel

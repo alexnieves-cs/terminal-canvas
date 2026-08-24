@@ -45,7 +45,16 @@ export const IPC_EVENTS = {
    * PTY as SIGTSTP — the same split as Cmd+C (copy) versus Ctrl+C (SIGINT).
    */
   EDIT_UNDO: 'edit:undo',
-  EDIT_REDO: 'edit:redo'
+  EDIT_REDO: 'edit:redo',
+  /**
+   * What a Reset canvas… confirmation has to name. Main owns the dialog but
+   * only the renderer knows the live session statuses, so it asks over this
+   * channel — a main->renderer request/reply, not a handled invoke, which is
+   * why it lives here and not in IPC (verify:ipc only walks IPC).
+   */
+  CANVAS_COUNTS: 'canvas:counts',
+  /** Confirmed reset: drop every panel and return to the first-run canvas. */
+  CANVAS_RESET: 'canvas:reset'
 } as const
 
 /** Shape of the bridge the preload exposes on window.canvas. */
@@ -75,6 +84,11 @@ export interface CanvasBridge {
     /** Called ONCE, before React mounts. See renderer/main.tsx. */
     load(): Promise<CanvasState>
     save(state: CanvasState): Promise<void>
+  }
+  canvas: {
+    /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
+    onCounts(provide: () => { panels: number; running: number }): () => void
+    onReset(listener: () => void): () => void
   }
   platform: NodeJS.Platform
 }
