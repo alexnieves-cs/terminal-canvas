@@ -540,6 +540,72 @@ const SLOT = { left: 300, top: 200 }
     `0=${same(0)} NaN=${same(NaN)} -2=${same(-2)} Infinity=${same(Infinity)}`)
 }
 
+// 40. push/undo/redo is the basic contract.
+{
+  let h = V.createHistory('a')
+  h = V.pushHistory(h, 'b')
+  h = V.pushHistory(h, 'c')
+  const u1 = V.undoHistory(h)
+  const u2 = V.undoHistory(u1)
+  const r1 = V.redoHistory(u2)
+  ok('40 push then undo then redo walks the states',
+    h.present === 'c' && u1.present === 'b' && u2.present === 'a' && r1.present === 'b',
+    `${h.present} ${u1.present} ${u2.present} ${r1.present}`)
+}
+
+// 41. Undoing past the start and redoing past the end are no-ops, not throws
+//     and not undefined. Cmd+Z on a fresh canvas must do nothing quietly.
+{
+  const fresh = V.createHistory('a')
+  const back = V.undoHistory(fresh)
+  const fwd = V.redoHistory(fresh)
+  ok('41 undo past the beginning and redo past the end are no-ops',
+    back.present === 'a' && fwd.present === 'a' &&
+    V.canUndo(fresh) === false && V.canRedo(fresh) === false,
+    `${back.present} ${fwd.present}`)
+}
+
+// 42. A new action after an undo drops the redo branch. Keeping it would let
+//     Cmd+Shift+Z jump to a state that never followed the current one.
+{
+  let h = V.pushHistory(V.createHistory('a'), 'b')
+  h = V.undoHistory(h)
+  h = V.pushHistory(h, 'c')
+  ok('42 a new action after an undo clears the redo branch',
+    h.present === 'c' && V.canRedo(h) === false && h.future.length === 0,
+    `present=${h.present} future=${h.future.length}`)
+}
+
+// 43. The cap bounds memory across a long session. The OLDEST entry is the one
+//     dropped — dropping the newest would make the most recent edit unundoable.
+{
+  let h = V.createHistory(0)
+  for (let i = 1; i <= V.HISTORY_LIMIT + 10; i += 1) h = V.pushHistory(h, i)
+  ok('43 the past is capped and drops the oldest entry',
+    h.past.length === V.HISTORY_LIMIT && h.past[0] === 10,
+    `len=${h.past.length} oldest=${h.past[0]}`)
+}
+
+// 44. Pure: no input is mutated. Canvas holds these in React state, and a
+//     mutated "previous" object is a re-render that never happens.
+{
+  const h = V.pushHistory(V.createHistory('a'), 'b')
+  const before = JSON.stringify(h)
+  V.undoHistory(h)
+  V.pushHistory(h, 'z')
+  ok('44 history operations never mutate their input', JSON.stringify(h) === before)
+}
+
+// 45. Pushing the SAME state is still a distinct entry. Canvas pushes on
+//     gesture commit, and a drag that ends where it started is a real (if
+//     pointless) edit; collapsing it here would need value equality this
+//     module has no business defining.
+{
+  const h = V.pushHistory(V.createHistory('a'), 'a')
+  ok('45 pushing an equal state still records an entry',
+    V.canUndo(h) === true && h.past.length === 1, `past=${h.past.length}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
