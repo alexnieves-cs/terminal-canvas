@@ -231,7 +231,15 @@ body {
    Flush with the edge rather than overhanging it: .panel sets overflow:hidden,
    which clips hit-testing as well as painting, so a handle straddling the edge
    would declare a width it does not actually have. Every pixel below is
-   grabbable. */
+   grabbable.
+
+   The sizes below are therefore WORLD units, and riding the transform costs
+   grabbability when zoomed out: an 8px handle is 8 screen px at 1:1 but ~2.4 at
+   scale 0.3, which is a hard target for a mouse and roughly the floor at which
+   resizing stays usable. Widening these would only trade that back for a fat
+   band at 1:1. A handle sized in screen pixels — one that grew as you zoomed
+   out — has to be positioned outside .world's transform and kept in step with
+   its panel by hand, which is a different design, not a bigger number here. */
 .panel__resize {
   position: absolute;
   z-index: 2;

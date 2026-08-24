@@ -18,8 +18,12 @@ import type { Point } from './viewport'
  *
  * Rewriting the event's client coordinates so that `clientX - rect.left` is
  * already a CSS-pixel offset fixes it at the source. getMouseReportCoords —
- * the path feeding mouse-reporting TUIs — calls the same helper, so selection
- * and mouse reporting are both corrected by this one function.
+ * the path feeding mouse-reporting TUIs — calls the same helper, so this one
+ * piece of arithmetic serves both selection and mouse reporting. What it
+ * corrects in practice is decided by which events xterm-pointer.ts intercepts,
+ * and that is mousedown/mousemove/mouseup only: see the NOT-covered list there
+ * for the two paths (button-less hover, and wheel) that still reach xterm
+ * uncorrected.
  *
  * Deliberately free of DOM types: `RectOrigin` is declared structurally rather
  * than importing DOMRect, so this module has no DOM dependency and runs under

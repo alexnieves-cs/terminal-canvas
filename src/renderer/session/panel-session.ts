@@ -21,9 +21,18 @@ export type PanelStatus =
 export type PanelSpecTemplate = Omit<PanelSpec, 'cols' | 'rows'>
 
 /**
- * Everything the registry needs from a terminal, and nothing about xterm.
- * The registry is testable under plain node because this interface is all it
- * sees; the real implementation lives in terminal/session-factory.ts.
+ * What a panel's terminal exposes to the rest of the renderer, expressed
+ * without naming xterm. Keeping it xterm-free is what lets verify:registry
+ * drive the whole session lifecycle against a fake under plain node; the real
+ * implementation lives in terminal/session-factory.ts.
+ *
+ * It is NOT, however, only what the registry needs — it has grown a second
+ * audience. The registry calls none of `locate`, `cellSize` or
+ * `scrollPosition`: those exist for Canvas.tsx's `__m4a*` test hooks, so
+ * verify:panels can read a terminal's buffer, cell metrics and scrollback
+ * offset back out of the running app. Splitting the probe members into their
+ * own interface is M4b's; until then, adding a member here means deciding
+ * which of the two audiences it is for.
  */
 export interface SessionHandle {
   readonly host: HTMLElement

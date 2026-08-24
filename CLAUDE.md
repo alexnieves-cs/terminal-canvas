@@ -30,7 +30,7 @@ work is done. Individual suites:
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:viewport` | plain node | 38 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–38) |
+| `verify:viewport` | plain node | 39 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39) |
 | `verify:registry` | plain node | 20 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–15 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 8 checks: the real `PtyManager` |
@@ -38,7 +38,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
 | `verify:canvas` | real Electron | 4 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 16 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order |
+| `verify:panels` | real Electron | 17 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -346,8 +346,12 @@ is stable across a raise.
 
 **Wheel ownership is decided by focus, in the capture phase (`useViewport.ts`,
 `Canvas.tsx`'s `shouldYieldWheel`).** A wheel over the *focused* panel scrolls that terminal;
-every other wheel — background, an unfocused panel, or any `ctrlKey` pinch — pans or zooms the
-camera. The listener is installed on the canvas host with `{ capture: true, passive: false }`,
+every other wheel — background, an unfocused panel, or any zoom gesture (a `ctrlKey` trackpad
+pinch or a `metaKey` mouse wheel, the two spellings `canvas-input.ts` reads as zoom) — pans or
+zooms the camera. The zoom exemption is unconditional and covers the focused panel too: `Cmd`
+is the modifier every other canvas shortcut requires, so it cannot be the one input where the
+canvas defers, and without the `metaKey` half a mouse user who had clicked into a panel could
+not zoom while the cursor was over it. The listener is installed on the canvas host with `{ capture: true, passive: false }`,
 not the bubble phase, and that is forced rather than chosen: xterm's own wheel handler is
 bound on a descendant and runs first in the target phase, so by the time a bubble-phase
 listener saw the event xterm had already scrolled. The first M4a implementation used bubble
@@ -358,9 +362,10 @@ smaller trigger. The shipped capture-phase listener asks the opposite question a
 time: over the focused panel it returns with no `preventDefault`/`stopPropagation`, so the
 event is untouched by the time it reaches xterm in the target phase; for everything else it
 calls `stopPropagation()` first so xterm's target-phase listener never runs at all, then
-`preventDefault()` and handles the pan/zoom itself. `verify:panels` check 12 asserts both
-halves: the focused terminal scrolls and the camera does not move, and an unfocused terminal
-does not scroll while the camera does. Reverting this to a bubble-phase listener reintroduces
+`preventDefault()` and handles the pan/zoom itself. `verify:panels` check 12 asserts all three
+halves: the focused terminal scrolls and the camera does not move, a `metaKey` wheel over that
+same focused panel *does* move the camera, and an unfocused terminal does not scroll while the
+camera does. Reverting this to a bubble-phase listener reintroduces
 the double-handling defect it was written to fix.
 
 ## Gotchas
@@ -399,13 +404,16 @@ the double-handling defect it was written to fix.
   implementation and cannot be told apart by any assertion on the final rect — check 10's own
   header records that limit; don't rediscover it by trying to tighten the check.
 - **A dispatched event on `.panel__slot` never reaches xterm's listeners.** `.panel__slot`
-  only wraps the terminal's host div; xterm's own mousedown/wheel listeners are bound deeper,
-  on `.xterm-screen`. Capture-toward-target traversal does not visit a target's own
-  descendants, so an `executeJavaScript` check that dispatches on `.panel__slot` (or anything
-  above `.xterm-screen`) to verify "does xterm see this" will pass or fail for the wrong
-  reason no matter what the guard under test actually does. Dispatch on `.xterm-screen`
-  itself when a check needs to know whether xterm received an event. This cost two fix rounds
-  in `verify-panels.cjs` during M4a.
+  only wraps the terminal's host div; xterm binds both its selection mousedown
+  (`addDisposableDomListener(this.element, "mousedown", ...)`) and its mouse-reporting
+  handlers (`bindMouse()`: `const t = this.element`) on `.xterm` — one level *below* the slot,
+  not on `.xterm-screen`, which supplies only the rect the coordinates are measured against.
+  Capture-toward-target traversal does not visit a target's own descendants, so an
+  `executeJavaScript` check that dispatches on `.panel__slot` to verify "does xterm see this"
+  will pass or fail for the wrong reason no matter what the guard under test actually does.
+  Dispatch on `.xterm-screen` — a descendant of `.xterm`, so `.xterm`'s listeners are on its
+  propagation path, and the same node a real cursor over the rendered terminal would be over.
+  This cost two fix rounds in `verify-panels.cjs` during M4a.
 
 ## Working on this repo
 
