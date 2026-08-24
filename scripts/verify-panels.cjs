@@ -372,10 +372,16 @@ app.whenReady().then(async () => {
         : `no card contained ${MARKER} (focused activeElement was "${focused.active}")`)
 
     // ---------------------------------------------------------------------
-    // 9. Pointer correction. Deliberately runs WHILE .panel__slot--blocked
-    //    still exists: the gate is temporarily lifted for this one panel so
-    //    the corrector is what is being measured. Removing the gate first
-    //    would make a broken corrector silent instead of loud.
+    // 9. Pointer correction. Proves the corrector (Task 3's
+    //    installPointerCorrection / xterm-pointer.ts) puts a click on the
+    //    right cell at a zoom far from 1:1 — the exact case the deleted
+    //    interaction gate used to avoid entirely by suppressing the click.
+    //    This check was made green BEFORE the gate was removed (Task 4),
+    //    deliberately: if this check had come after deletion, a broken
+    //    corrector would have produced a wrong cell instead of a visible
+    //    failure. Now that the gate is gone, this check runs with nothing
+    //    masking it, and is the one proof that removal did not just hide a
+    //    broken corrector.
     //
     //    The assertion is about xterm's own hit-testing: at scale 0.5 an
     //    UNCORRECTED click reports a column at twice the true offset, so a
