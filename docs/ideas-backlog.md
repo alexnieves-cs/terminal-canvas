@@ -20,6 +20,11 @@ organised settings surface, with a search bar** — not scattered across menus, 
 menus, and undiscoverable shortcuts. Whichever of these ships first, its on/off switch
 should be built as a settings entry rather than a bespoke home of its own.
 
+**A second standing rule (#31): any feature that moves terminal bytes out of the panel —
+to disk, to an index, to an export, to a server — is a disclosure surface, because agents
+print secrets.** Six entries here do exactly that. Each of them owes an answer before it
+ships, not after.
+
 ---
 
 ## 1. Cmd-held navigation grid
@@ -965,6 +970,545 @@ into every new session.
 
 ---
 
+## 28. Accounts — sign in with Google or an emailed code, and data that follows the user
+
+Sign in with a Google account, *or* type an email address → receive a six-digit code →
+set a password. From then on the user's data — layouts, workspaces, settings, prompt
+library — is associated with the account and restored on any machine they sign in on.
+
+- **The cost review, because it was the condition on capturing this at all: yes, the
+  whole flow can be built and run for $0**, at hobby-to-small-team scale. Every piece has
+  a free tier that covers it, and none of them require a card on file:
+  - **Google sign-in is free, with no paid tier at all.** For a desktop app you register a
+    "Desktop app" OAuth client and use the **loopback + PKCE** flow through the system
+    browser (Google has long refused the embedded-webview flow). No client secret ships in
+    the app. The `openid email profile` scopes are *non-sensitive*, so this avoids both the
+    OAuth verification queue and the third-party security assessment that only *restricted*
+    scopes (Gmail/Drive contents) trigger — that assessment is the one real five-figure
+    line item in this space, and this idea never goes near it.
+  - **The identity backend is free.** Supabase's free plan includes social OAuth providers,
+    email OTP, and custom SMTP; Firebase Auth's free tier covers the same at a far higher
+    MAU ceiling than this app will see. Either gives "email → six-digit code → set a
+    password" as two existing calls rather than a system to build.
+  - **The email that carries the code is the only place a cost can sneak in.** Supabase's
+    *built-in* SMTP is capped at **2 auth emails per hour** — fine for development, useless
+    the moment two people sign up in the same hour — so a real deployment must attach an
+    SMTP provider. Resend's free tier is 3,000/month but its one free custom domain implies
+    **owning a domain (~$12/yr)**. The genuinely-zero routes are a provider that allows
+    single-sender verification instead of domain verification, or plain Gmail SMTP with an
+    app password. **This is the detail to decide before starting, not after** — it is the
+    difference between $0 and a recurring bill, and it is invisible until the first hour
+    two users sign up.
+  - **Storing the data is free.** A layout file is kilobytes; the free database and object
+    tiers are sized in hundreds of megabytes. What *isn't* free is the free plan's dormancy
+    behaviour — Supabase pauses inactive free projects — so the app has to treat "the
+    backend didn't answer" as an ordinary state, not an error.
+  - **Explicitly excluded as costed:** *Sign in with Apple* requires a $99/yr Apple
+    Developer membership. It is the natural third button on macOS and it is the one that
+    is not free. Leave it out, and note that the same $99 is already implied by signing
+    and notarising the app for distribution — so if that bill ever exists for other
+    reasons, this becomes free too.
+- **The honest architectural cost, which is larger than the dollar cost.** Today this
+  app's entire security posture is "the renderer has no network and no fs, and main owns
+  everything." Accounts break that in the same way #9's integrations do: a token exists,
+  it lives somewhere on disk, and every panel on the canvas is an agent that can run
+  arbitrary commands and read arbitrary files. **This shares #9's trust-boundary design
+  pass and should not get its own** — a session token in `~/.config` next to a canvas full
+  of coding agents is exactly the case that pass exists to think about. macOS Keychain via
+  Electron's `safeStorage` is the obvious floor, not the ceiling.
+- **Constraint — the OAuth callback must not touch the window (`window-lifecycle.ts`).**
+  Sessions die with their renderer on purpose: a navigation or reload kills every PTY. An
+  OAuth flow that navigates the main window, or that returns by redirecting it, would
+  therefore destroy every running agent to sign someone in. The loopback flow avoids this
+  by construction — main opens the system browser and listens on `127.0.0.1`, and the
+  renderer never navigates — but this is the failure mode to watch for, and it fails
+  loudly enough to be found immediately, which is the good case.
+- **Constraint — what "their data" actually means depends on M4b's format.** The thing
+  worth syncing is the persisted layout, and #2 already argues that file should be a keyed
+  collection of named workspaces rather than one record. Accounts is the second reason for
+  that same decision: syncing one implicit blob per machine is not a feature, and "which
+  canvas do I get on my laptop" is unanswerable without names. **This does not add a new
+  requirement to M4b — it adds weight to #2's existing one.**
+- **The question that decides whether this is worth building at all: what is sync's
+  conflict story?** A layout edited on two machines is a merge problem, and a panel is not
+  a document — its position and size merge fine, but "this panel is running `claude` in
+  `~/work/api`" does not, because the process only exists on one machine. The defensible
+  first version is **the account owns layouts and settings; the machine owns processes**.
+  A restored panel on a second machine is a dormant panel (which M4b already built), not a
+  spawned one. Anything more than that is M4c's tmux question wearing different clothes.
+- **Sign-in must be skippable, and the local path must stay first-class.** This is a
+  terminal on a canvas; requiring an account to open one would be a strictly worse product
+  for the person it is being built for. Accounts are for carrying data between machines,
+  which is a thing some users want sometimes — the app has to work fully having never
+  seen a network. That also keeps the free tier free: nobody signed in is nobody's MAU.
+- **Where the UI goes:** the standing rule (#11) applies — this is a settings entry with
+  an account section, not a launch-time modal and not a new home of its own.
+
+## 29. Restart a panel in place — the primitive three other entries assume
+
+A panel whose process has exited, or whose config has gone stale, can be restarted
+*without* becoming a different panel: same id, same box, same title, same place in the
+saved layout. Today there is no such path.
+
+- **This is the missing primitive #26 named and did not build.** Its config-staleness
+  problem ("enable a skill, and the running agent never sees it") has no honest answer
+  without a restart, and #34's templates and #2's workspaces both quietly assume one.
+  It is small, it is load-bearing, and it is the kind of thing that gets bolted on badly
+  under pressure from a bigger feature if it is not built deliberately first.
+- **The reason it is not free: `pty.kill` has exactly two legitimate callers.** "Two
+  lifetimes, not one" is enforced by four checks (`verify:registry` 5 and 15,
+  `verify:panels` 4 and 15) whose entire purpose is that a tier change never reaches a
+  kill. A restart is a **third** caller, and the only safe place for it is inside
+  `session-registry.ts` beside `dispose` — never in a component, never behind a prop, and
+  never as "close then create", which is what makes it a *different* panel.
+- **Constraint: the id is now durable, and losing it costs more than it used to.**
+  `layout-schema.ts` constrains `PanelId` to `ID_PATTERN` precisely because it becomes a
+  tmux session name in M4c. Close-and-recreate mints a new id, which orphans the panel's
+  persisted rect, its title (#6, whose field is already reserved in the format), and
+  whatever #19 has accumulated against it. Restart-in-place is the only operation that
+  keeps all of those attached.
+- **Constraint: `sentGrid` must be cleared, or the new process never learns its size.**
+  `PanelSession.sentGrid` exists so "a promotion that changes nothing sends nothing" — a
+  correct optimisation that becomes a bug the instant the process on the other end is a
+  different process. A restart that leaves `sentGrid` populated hands the fresh PTY the
+  default 80x24 and never corrects it, and the symptom is an agent TUI drawing to the
+  wrong width with nothing in the logs. `spawned` and `status` have the same requirement
+  and are more obvious; `sentGrid` is the one that will be forgotten.
+- **The cheap version already exists in M4b's dormancy, and should be reused rather than
+  paralleled.** A dormant panel is exactly "a panel with a session, no PTY, and a
+  deliberate user gesture standing between it and a process". Restart is: kill, return the
+  session to dormant, and let the existing wake path do the rest. That gets the "don't
+  silently relaunch twelve agents" property for free, because it is the same property
+  dormancy was built for.
+- **Open question: does an exited panel offer this, or does it happen automatically?**
+  Today an exit renders as a badge plus a grey `[process exited with code N]` line written
+  into the buffer, and there is no way forward from it but close. Offering *restart* on
+  that state is the obvious answer; **auto-restart is not** — a command that fails
+  immediately would spin, and an agent CLI that exited because it finished would be
+  relaunched for having succeeded.
+- **Open question: does restart clear the terminal?** Keeping the old buffer above the new
+  process is the more useful behaviour and the one a real terminal gives you. It also
+  means the buffer no longer corresponds to one process, which matters to #30 and #39.
+
+## 30. Durable scrollback — the thing #16 is actually gated on
+
+Terminal output that survives the panel being restarted, the app being relaunched, and the
+renderer being reloaded. A per-panel log on disk, and a way to look back through it.
+
+- **#16 already says search is "gated on durable scrollback, a bigger question than search
+  itself". This is that question, costed on its own** — which is what that entry asked for
+  and what nothing here currently provides.
+- **The problem is sharper than "we would like history", because of dormancy.** The
+  closing section of this file states it: a restored panel's xterm buffer is empty, so
+  `tail()` returns nothing and anything reading terminal content reads nothing at all on a
+  freshly relaunched canvas. Every panel on the canvas is in that state the moment the app
+  starts. Durable scrollback is the only thing that makes a restored canvas show what it
+  showed yesterday, and without it #22's far-zoom card, #16's index, and #39's export are
+  all blank on exactly the run where the user most wants them.
+- **Where it gets written is already decided, and it is not the renderer.** `pty-manager.ts`
+  already coalesces thousands of reads/sec into a flush every `FLUSH_INTERVAL_MS`. The log
+  write belongs *in that flush* — one append per flush, main-side, next to the IPC send.
+  Writing per read is the same flood the batching exists to prevent, and writing from the
+  renderer means the bytes cross IPC before being written back down to the same disk.
+- **Constraint: this is an append stream, not `layout-store.ts`'s pattern.** The layout
+  store's write-temp-then-`renameSync` is exactly right for a few kilobytes of state
+  written twice a minute, and exactly wrong for a byte stream from twelve processes. Copying
+  it here rewrites the whole log every 16ms. Different data, different mechanism — and this
+  is the third "state that survives a relaunch" in the app, so #27's warning about three
+  independent implementations of atomic writes applies in reverse: **this one is
+  legitimately different and should say so where someone will read it.**
+- **Constraint: retention and caps are the feature, not a footnote.** An agent building a
+  project can emit hundreds of megabytes in an afternoon, and twelve panels do it in
+  parallel. A ring buffer per panel with a byte cap, plus an age cap, plus a visible total
+  in #18's cost readout, is the shippable shape. Unbounded is not a v1 with a to-do; it is
+  a disk-full bug with a delay fuse.
+- **Constraint: this is where #31 stops being theoretical.** Everything an agent prints,
+  including whatever it echoed from a `.env`, becomes a file on disk that outlives the
+  session. Redaction and an explicit retention setting are part of shipping this, not a
+  follow-up.
+- **Two different logs are being conflated across this file, and it is worth separating
+  them now.** Raw PTY bytes (this entry) are what a terminal showed. The agent CLI's own
+  transcript — the JSON the vendors already write — is what the agent *did*, and it is what
+  #7's subagent visualisation and #19's token accounting actually want. They are different
+  sources with different fidelity and different vendor coupling. Build the byte log for
+  display and search; build the transcript watcher, once, for structure.
+- **Open question: is there a timeline UI, or only search?** Scrubbing a panel back through
+  its own history — "show me this panel twenty minutes ago" — is the thing an infinite
+  canvas could do that a terminal cannot. It is also much more than a log file, since
+  replaying bytes into a terminal to reconstruct a past frame is a real emulator problem.
+  Note the ceiling; ship the log.
+
+## 31. Secrets in agent output — a standing rule, like #11
+
+**Cross-cutting.** Agents print API keys. They `cat` a `.env` to check it, echo a token in
+a curl command, or paste an error containing a session cookie. Today that text lives in one
+xterm buffer in one process and dies with the window. Six entries in this file move it
+somewhere else, and each does so silently.
+
+- **The rule, stated once so every entry inherits it: any feature that takes terminal bytes
+  out of the panel is a disclosure surface and must say what it does about it.** #30 writes
+  them to disk, #16 indexes them, #39 exports them, #28 syncs them to a server, #19 and #7
+  read a vendor's transcript, and a crash report would attach whatever was on screen. None
+  of those is wrong; all of them need an answer, and the answer must exist before the
+  feature ships rather than after the first user pastes a log into a bug report.
+- **Why it belongs in this file rather than in a security doc:** the app's current posture
+  is genuinely narrow — the renderer has no fs and no network, main owns every process, and
+  the CSP forbids remote anything. That narrowness is doing a lot of work, and it makes the
+  first feature that widens it disproportionately expensive. Recording the rule beside the
+  ideas is what stops it being rediscovered by the one that widens it.
+- **The precedent already set, and worth generalising:** #27 refuses automatic prompt
+  capture specifically because "the user's typing includes credentials". That is this rule
+  applied to input. This entry is the same rule applied to output, where the volume is
+  thousands of times larger and the user never chose to type any of it.
+- **Constraint: detection is heuristic and must fail toward the user, not toward silence.**
+  Regexes for the well-known key shapes catch a lot and will never catch everything.
+  Redaction that silently drops a line an agent needed is its own failure. The honest
+  shapes are: redact in anything that *leaves the machine*, mark-and-warn in anything that
+  stays local, and never redact the live terminal itself, which is the user's own screen.
+- **Constraint: the login-shell probe is a second copy of the same problem.**
+  `shell-env.ts` captures the user's entire environment once at startup so every PTY
+  inherits it — which is correct, and means the app holds a process-wide object full of
+  exported tokens. Anything that serialises app state for diagnostics must know not to
+  include it.
+- **Where the UI goes:** a settings entry under #11 with three honest states — off, warn,
+  redact-on-export — and a plain-language sentence about what each does. Not a security
+  dashboard.
+
+## 32. A keyboard-first canvas — and the accessibility that comes with it
+
+Move between panels, place them, and drive the camera without the mouse — and make the
+result usable by someone who cannot use a trackpad, cannot see the glow in #5, or needs the
+motion in #23 to stop.
+
+- **Why this is not the same idea as #1's nav grid.** #1 is a hold-to-reveal jump to a
+  *region*. This is the ordinary case: the focused panel is here, the next one is to its
+  right, `Cmd`+arrow should go there. The math is pure `viewport.ts` work over rects the
+  app already holds — pick the nearest panel in a direction cone — and belongs in the
+  plain-node verify bundle beside the rest of it.
+- **The trap, and it is a good one: keyboard traversal must move *selection*, not focus.**
+  `assignTiers` pins the focused panel live unconditionally. So arrowing across a
+  twelve-panel canvas with focus attached to the cursor promotes twelve panels, spawns
+  twelve PTYs on a restored canvas, and blows through `LIVE_BUDGET` on the way. This is the
+  exact argument M4b's dormancy makes — "spawning because the camera drifted over it is a
+  decision the app would be making on the user's behalf" — restated for the keyboard.
+  Traversal highlights; a second, deliberate key focuses.
+- **Constraint: bare keys belong to the TUI, and that constrains this more than anything
+  else.** Every canvas shortcut is `Cmd`-gated because agent TUIs claim every bare key —
+  including `Tab`, which is autocomplete in every one of them, and `Escape`, which is how
+  you interrupt an agent. So the conventional accessibility answer (tab through the
+  controls) is unavailable *inside* a focused panel, and the app has to be honest about
+  where the boundary is: chrome is tabbable, a focused terminal is not, and there must be
+  one obvious `Cmd`-gated key that gets you out.
+- **Constraint: screen readers and xterm are a real cost, not a checkbox.** xterm has an
+  accessibility mode that maintains a live DOM mirror of the buffer, and it is expensive
+  precisely because everything else in this app avoids DOM text under WebGL. It should be
+  a setting (#11), off by default, on for people who need it — and it interacts with
+  tiering, since a carded panel has no mirror to read.
+- **Constraint: `prefers-reduced-motion` applies to the camera, and nothing else in this
+  file has claimed it.** #23's zoom-to-fit animation, #17's attention jumps, and any future
+  tidy transition (#25) all move the entire world. For a motion-sensitive user that is the
+  worst possible thing to animate. Honour the media query by cutting rather than easing.
+- **Cheap and immediately worth it:** every panel's own zoom-to-fit already being planned
+  in #23 means "focus the next panel and frame it" is two existing pieces, not a new one.
+
+## 33. A minimap — knowing where you are without zooming out
+
+A small always-visible map of the whole world in a **top corner** — left or right, the
+user's choice — showing every panel as a rectangle and the current viewport as a moving
+frame, with click or drag to go there. **Toggleable on and off in settings**, like
+everything else the user can turn on.
+
+- **Why it fits:** the canvas is infinite and there is currently exactly one way to find
+  out what is on it, which is to fly around looking. `CanvasHud.tsx` already establishes
+  that a small piece of chrome telling you where the camera is earns its space.
+- **It is close to free, because the data is already state.** Panel rects, `z`, and the
+  viewport are the whole input. The map is a second projection of the same world with its
+  own scale — `viewport.ts`'s math with a different `k` — so it is pure, testable under
+  plain node, and needs no IPC, no process, and no WebGL budget.
+- **The corner is a top corner because the bottom-right is taken.** `.canvas-hud` is
+  `position: absolute; right: 12px; bottom: 12px`, so top-left and top-right are the two
+  free corners and either works. Making it a preference rather than a hardcoded corner is
+  cheap — it is one CSS class swap on an absolutely-positioned box — and it matters more
+  than it sounds, because #3's file tree is a **left** rail and #11's settings pane is a
+  panel of chrome that has to live somewhere too. Whichever corner the minimap claims, it
+  claims against those, so let the user resolve the collision rather than guessing.
+- **The toggle is a settings entry, per the standing rule (#11), and this is a good early
+  test of it.** It is the ordinary shape that rule was written for: a boolean, a default,
+  a label, and a place in a searchable list — no bespoke menu item, no undiscoverable
+  shortcut as its only home. Its persisted value goes where M4b's layout state goes, not
+  into a new store (same argument as #27 and #34). **Default it off**: a new user has a
+  handful of panels and no navigation problem yet, and the minimap costs screen area from
+  the moment it exists.
+- **Constraint: it is the first chrome that competes for the pointer, and the wheel
+  listener is the thing to get right.** The HUD is `pointer-events: none`, so it has never
+  had to think about this; a minimap you can click and drag emphatically cannot be. The
+  wheel handler is installed on the canvas host in the **capture** phase with
+  `passive: false`, which means a wheel over the minimap reaches the camera *before* the
+  minimap sees it — so scrolling over the map pans the world underneath, which is not what
+  the user meant. Whatever `shouldYieldWheel` grows into has to know about chrome as well
+  as panels, and this is the entry that forces the question.
+- **Constraint: dragging the viewport frame is camera movement, and the camera setter is
+  private on purpose.** `useViewport.ts` keeps its setter private precisely so nothing
+  outside can move the camera. A minimap is a legitimate second driver of the camera and
+  therefore needs an intentional, named intent (`panTo`/`centerOn`) alongside the existing
+  ones — not an exported setter, which is the shortcut that would quietly end that rule.
+- **Constraint: it is chrome and lives outside `.world`.** Same rule #3's sidebar and #11's
+  pane follow. A minimap inside the transformed layer would scale with the camera, which is
+  the one thing a minimap must never do.
+- **Constraint: render it from `Panel` facts, never from terminal content.** The closing
+  dormancy rule in this file, applied directly: a thumbnail of what a panel is *showing* is
+  blank for every panel on a freshly relaunched canvas. Title (#6), status, and colour (#5)
+  are facts the `Panel` holds and survive a restart; the buffer is not and does not.
+- **The honest question, worth asking before building it: does #22 make this redundant?**
+  Semantic zoom exists to make the zoomed-out view legible. If it succeeds, "zoom out" *is*
+  the overview and a minimap is a second, smaller copy of it. The counter-argument is that
+  a minimap is visible *while you work*, at working zoom, which zooming out is not — and
+  that is the version of this worth building: a persistent locator, not an overview mode.
+- **Open question: does it show groups (#35) and annotations (#15), or only panels?** A map
+  that shows only terminals on a canvas that has become an agentic workspace is a map of
+  the wrong thing.
+
+## 34. Panel templates — the spawn you keep repeating
+
+A saved, named panel definition: a working directory, a command and its flags, an
+environment, a default size, a title. Pick one and get that panel — on this canvas, or in a
+new workspace.
+
+- **Why it fits, and where it comes from:** every panel today is either a `SEED_PANELS`
+  entry or a spawn with defaults. The moment #8 part 1 lands (model, effort, and permission
+  mode selectable at spawn) the number of decisions to make when creating a panel goes from
+  one to five, and re-making them by hand every time is exactly the friction #27 attacks for
+  prompts. This is #27 for processes.
+- **The type already exists, which is a strong hint the shape is right.**
+  `PanelSpecTemplate` is `Omit<PanelSpec, 'cols' | 'rows'>` — "everything about a panel that
+  is known before it has a size", written that way because of fit-before-spawn. A template
+  is that type plus a name and a default box, and nothing else.
+- **Constraint: `command` stays optional, and the renderer still must not resolve it.**
+  Absent means "the user's login shell", and only main knows what that is — the renderer's
+  `process.env` is compiled to `{}`. A template UI that offers a command field must show
+  the absent case as a label ("login shell"), not as a prefilled `/bin/zsh` that silently
+  overrides a fish user's actual shell. This is the single most likely place for that bug
+  to reappear, because a form wants a default value.
+- **Constraint: per-panel env belongs to main, layered on the probe.** `shell-env.ts`
+  resolves one environment at startup for every PTY. Per-template overrides are a merge on
+  top of it, computed main-side at `pty:create`, and the renderer only ever ships the
+  overrides — which also keeps #31's "main holds the environment" boundary intact.
+- **Constraint: storage is M4b's, not a fourth store.** Same argument as #27 and #11. The
+  layout format is already versioned and already tolerant of unknown fields; a template list
+  is a sibling key, not a new file with a new atomic-write bug.
+- **Where it pays off most: workspaces (#2).** "New workspace from template set" — three
+  panels, three directories, three agents, one gesture — is the version of this that changes
+  how the app is used rather than saving a few keystrokes. It also gives #25's placement
+  logic something to do that is not "put it near the last one".
+- **Open question: does a template capture a running panel?** "Save this panel as a
+  template" is the natural gesture and mostly free, since the spec is already on the
+  session. The part that is not free is the environment — capturing a running panel's env
+  captures its secrets, which is #31.
+
+## 35. Groups — a labelled region that owns what is inside it
+
+Draw a box around several panels, name it, and have it behave as one thing: drag the group
+and its panels come with it, collapse it and they card, colour it and the canvas gets
+regions that mean something.
+
+- **Why it fits:** this is the middle scale the app is missing. A panel is one process; a
+  workspace (#2) is a whole canvas. "These four panels are the auth refactor" is neither,
+  and it is the unit people actually think in. It is also the cheapest way to make a
+  twelve-panel canvas legible, because the labelling is spatial rather than a list.
+- **Constraint: dragging a group is `applyDrag` N times, and the caller-side rule applies N
+  times.** The gotcha is already written down — recompute every frame from the gesture's
+  **origin** rects, never from the previous frame's result, or the group shears apart at
+  low zoom and breaks outright if the user zooms mid-drag. One panel makes that mistake
+  survivable; four make it visible.
+- **Constraint: a group must not touch array order.** Stacking is `Panel.z`, never array
+  order, because React reconciles a reordered keyed list by moving DOM nodes and a move
+  detaches a live terminal's host. "Bring group to front" is therefore a `z` rewrite across
+  its members, exactly like `raisePanel`, and the temptation to model a group as a nested
+  array of panels is the temptation to reintroduce that bug structurally.
+- **Constraint: collapsing is a tier hint, never a kill.** A collapsed group should card its
+  members — which is what tiering already does, and is free — and must not reach `dispose`.
+  This is "two lifetimes" again, arriving through a new door. The interesting variant is
+  whether a collapsed group should be allowed to *hold* panels below the live budget
+  deliberately, as a user-facing way to say "these are running but I am not watching them".
+- **This is the second-cleanest candidate for the panel-kind union**, after #14: a group is
+  a canvas node that is not a terminal, costs nothing against `LIVE_BUDGET`, and has no
+  session at all. If #14 is not scheduled first, this is the entry that will otherwise get
+  faked as a special case.
+- **Open question: is a group a workspace you can see?** If groups exist, #2's "move
+  selection to a new workspace" becomes "promote this group", and the two features start
+  looking like one feature at two zoom levels. Worth deciding rather than discovering.
+
+## 36. Panel typography — font size, and why it is a resize wearing a hat
+
+Let the user set the terminal font size and family, per panel or globally. The most
+requested setting in the history of terminal emulators, and in this app it is not a
+cosmetic one.
+
+- **The load-bearing fact: changing font size changes `cols`/`rows`.** The `FitAddon`
+  divides the host box by the cell metrics; bigger cells mean fewer columns, which means a
+  `pty:resize`, which means a SIGWINCH, which means a full-screen agent TUI repaints its
+  entire frame. So this is governed by the same rule as dragging a resize handle: **commit
+  on release, not live.** A slider that refits on every tick is sixty full repaints a second
+  through a 16ms-batched channel, which is precisely what `onCommit`/`registry.refit` exist
+  to avoid.
+- **The invariant most likely to be broken by this feature: zoom is not font size.** "One
+  transform, not N layouts" means a CSS `scale()` is invisible to `getComputedStyle` and
+  `ResizeObserver`, so zooming *cannot* change a panel's grid — deliberately, because the
+  alternative reflows every running shell on every pinch. An implementation of "make the
+  text bigger" that reaches for the camera, or that makes zoom adjust font size to
+  compensate, converts a working invariant into a reflow storm. They are different
+  operations that happen to look similar on screen, and the comment explaining that belongs
+  in the code the first time someone adds this.
+- **Constraint: `cellSize()` feeds the pointer corrector.** `pointer-correct.ts` divides by
+  transform-blind cell metrics to rewrite click coordinates. It reads them live, so a font
+  change is safe *as long as nothing caches them* — and a per-panel font setting is a strong
+  incentive to cache. `verify:panels`' `__m4aCellToScreen` hook is the check that would
+  catch a stale cache, and it should be run against a resized font before this ships.
+- **Constraint: persisted, and the format already shows how.** `PersistedPanel.title` is
+  reserved as an optional field with a note that readers must tolerate its absence. A font
+  override is the same move: one optional field now, no migration later.
+- **Open question: global default with per-panel override, or per-panel only?** Global is
+  what people expect; per-panel is what a canvas is *for* — a panel you are watching from
+  across the room at 12pt is legitimately different from the one you are typing in. Both,
+  with the global as the fallback, is probably right and costs one extra resolution step.
+- **Related and nearly free:** the same plumbing carries #10's theme into xterm, since both
+  are `Terminal` options fanned across every session in the registry. Whichever ships first
+  should build the fan-out, not a one-off.
+
+## 37. Sound — the channel that works when you are not looking
+
+Short distinct sounds for the state changes #5 detects: an agent finished, an agent is
+asking a question, a command failed. Optional, off by default, and immediately the highest
+value-per-byte feature in this file for the one case that matters most.
+
+- **Why it fits, and why it is not a gimmick:** #17 exists because an agent finishing while
+  its panel is off screen tells you nothing. Sound is the only channel that also works when
+  the *window* is behind another app — which is the actual situation, since the user went to
+  do something else precisely because the agent was going to take four minutes. Edge
+  indicators require looking at the canvas; a notification requires the OS to be in the
+  mood; a sound does not.
+- **It is nearly free once #5 exists**, and it is genuinely free before that, because
+  **the bell is already arriving.** Agent CLIs ring the terminal bell when they want
+  attention, xterm surfaces that as an event, and nothing in the app listens today. That is
+  a real completion signal, emitted by the vendor, needing no heuristics and no transcript
+  watching — the cheapest honest version of #5's detection, available now, and worth wiring
+  before any inference-based approach.
+- **Constraint: it must be per-panel-attributable, or it is noise.** "Something finished"
+  across twelve panels is worse than silence. The sound has to arrive with a visual — the
+  panel flashing, an edge indicator pointing at it (#17) — so the ear says *when* and the
+  eye says *which*.
+- **Constraint: mute, do-not-disturb, and a per-panel opt-out are part of v1.** A panel
+  running a build that rings twelve times is a feature the user turns off permanently after
+  one afternoon. Under #11, with a global mute reachable in one gesture.
+- **The second half, and it is a different feature wearing the same word: speech into a
+  panel.** Dictating a prompt is plausible and the canvas is a good place for it (long
+  prompts, hands on nothing). It must arrive through `paste()`, not `write()` — the same
+  bracketed-paste requirement #27 documents, and for the same reason: a dictated paragraph
+  written raw is several partial submissions. Note it; it is a much larger feature and
+  should not be smuggled in beside earcons.
+
+## 38. First run — what an empty infinite canvas teaches
+
+M4b made the canvas restore what was there last time. The corollary nobody has designed
+yet: on a first launch there is nothing there, and an empty infinite canvas is
+indistinguishable from a broken one.
+
+- **Why this is worth an entry rather than a to-do:** `SEED_PANELS` is twelve hand-authored
+  panels, and it is scaffolding — it exists so there is something to render, and every
+  argument in this file about placement (#25), templates (#34), and dormancy assumes it goes
+  away. The moment it does, the first thing a new user sees is a grey field with a zoom
+  percentage in the corner and no affordance whatsoever, because **every canvas shortcut is
+  `Cmd`-gated by design and therefore undiscoverable by design.** That trade was made for a
+  good reason (bare keys belong to the TUI) and it hands the entire discovery burden to the
+  first-run experience.
+- **The right shape is almost certainly not a tour.** A modal walkthrough of an app whose
+  whole pitch is "it is a canvas, put things on it" is a contradiction. The candidates worth
+  weighing are: a canvas that starts with *one* panel and a nearby annotation (#15) saying
+  what the gestures are; a persistent hint layer that fades once each gesture has been used
+  once; or a template picker (#34) as the empty state, so the first action is "make a
+  workspace" rather than "make a shell".
+- **Constraint: the first panel must be created through the real path.** A hardcoded
+  first-run panel is `SEED_PANELS` again with a nicer name, and it will diverge from
+  whatever #25 decides about placement and whatever #34 decides about specs. Whatever the
+  empty state offers, it should call the same create path a user's own gesture calls.
+- **Constraint: it interacts with dormancy in a way that is easy to get backwards.** A
+  restored canvas is *not* a first run, but it looks like one until panels are woken — no
+  output, no processes. The empty state must key off "there are no panels", never off
+  "nothing is running", or it appears on top of a perfectly good restored workspace.
+- **Adjacent and cheap: an honest failure state for the shell probe.** `shell-env.ts` logs
+  loudly when the login-shell probe fails, and the user-visible consequence is "command not
+  found" in every panel with no explanation. First run is where that lands, and a one-line
+  banner naming the actual cause is worth more than most of this entry.
+
+## 39. Export and share — a screenshot, a transcript, a receipt
+
+Take what is on the canvas out of the app: an image of a region, a panel's output as text,
+a summary of what an agent did. The unglamorous half of "the canvas is where work happens"
+is that work has to leave.
+
+- **Why it fits:** every current path out of this app is a manual selection and `Cmd+C` from
+  one panel. The canvas's own artifacts — the arrangement, the annotations (#15), the edges
+  (#24), which agents ran where — have no representation anywhere else, which means none of
+  the thinking the canvas holds can be sent to anyone.
+- **The silent failure to know about before starting: a naive DOM-to-image capture renders
+  every terminal blank.** The panels are WebGL-backed, and a WebGL canvas does not appear in
+  a DOM serialisation; even a direct `toDataURL` on it comes back empty unless the context
+  was created with `preserveDrawingBuffer`, which the app does not do and should not start
+  doing (it costs memory on every context, and there are up to `LIVE_BUDGET` of them). The
+  working route is Electron's main-side page capture, which composites the real
+  frame — so **screenshotting is a main-process feature and a new IPC channel**, not a
+  renderer utility, and it fails in exactly the "looks implemented, produces blank
+  rectangles" way this file catalogues.
+- **Constraint: a carded panel has no live terminal to capture, and a dormant one has no
+  buffer at all.** A region export is therefore a composite of live pixels and card
+  renderings, and it must not silently promote panels to make itself prettier — that is a
+  budget violation and a spawn the user did not ask for. Export what the canvas *is*.
+- **Constraint: text export depends on #30 and is bounded by it.** Without durable
+  scrollback, "export this panel's output" means "export whatever xterm still holds", which
+  is a truncation the user cannot see. With it, the cap is explicit and can be stated.
+- **Constraint: #31, and this is the entry where it bites hardest**, because export is the
+  one operation whose entire purpose is to move terminal bytes to another human.
+- **Open question: is there a canvas-native artifact, or only images and text?** A shareable
+  file that another instance of the app can open as a read-only canvas — panels, positions,
+  titles, annotations, no processes — is a genuinely different thing from a PNG, and it is
+  most of #4's data model without any of its transport. It is also nearly free once #2's
+  format is a keyed collection of workspaces, since that file *is* the artifact minus the
+  running state.
+
+## 40. The canvas from somewhere else — a read-only view on a phone
+
+See what your canvas is doing when you are not at the machine: which agents are running,
+which finished, which is asking a question. Not a remote desktop, not a way to type into an
+agent from a train.
+
+- **Why it belongs in this file even though it is far out:** it is the natural end of #17's
+  argument. Attention routing exists because an agent finishing while you are not looking
+  tells you nothing; the strongest version of "not looking" is "not there". Agents that run
+  for tens of minutes make this the question the app will eventually be asked.
+- **It is gated on M4c, and honestly rather than nominally.** Sessions die with their
+  renderer today, so "what is happening while the app is closed" has no answer at all. Once
+  tmux backs the session and the process survives the window, this becomes a reporting
+  problem instead of an architectural one — which is the same reason #4 and #20's third tier
+  wait for it.
+- **Constraint: report from `Panel` facts, not from a buffer.** Titles, statuses, exit
+  codes, and costs (#19) are small, structured, and meaningful off-machine. Streaming
+  terminal bytes to a phone is a different and much worse product: it is unreadable at that
+  size, it is the largest possible #31 exposure, and it makes the transport expensive for
+  the least useful payload.
+- **Constraint: read-only is a design position, not a v1 shortcut.** The moment a remote
+  surface can send input, every argument in #24's "functional edges" entry applies with the
+  authorisation question multiplied — something typing into an agent with shell access from
+  off-machine needs an audit trail that does not live on the machine being typed into.
+  Approving a permission prompt remotely is the one write worth considering, and it should
+  be considered separately and later.
+- **The identity for it already has an entry: #28.** If accounts exist, this is the second
+  thing they are for, and it is a better argument for them than sync is — a canvas that can
+  tell you it finished is worth signing in for in a way that a synced window position is
+  not.
+- **Worth resisting:** rebuilding the canvas on a small screen. The value is a list, sorted
+  by "wants me", with a notification. The canvas is a desktop idea and does not need to
+  travel.
+
 ## Rough sequencing, if these were ever scheduled
 
 Ordered by (value × confidence) ÷ effort, not by preference:
@@ -975,77 +1519,118 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    `dragover`/`drop` at the document level, independently of whether the drag-and-drop
    feature is ever built.
 1. **#6 panel names** — hours, unblocks others, no new invariants.
-2. **#23, the zoom-to-fit half only** — a camera animation to a panel's rect. Pure
+2. **#37, the bell half only** — agent CLIs already ring the terminal bell and nothing
+   listens. One xterm event, one sound, one setting. It is the cheapest completion signal
+   in this file and it exists before #5 does any detection at all.
+3. **#23, the zoom-to-fit half only** — a camera animation to a panel's rect. Pure
    `viewport.ts`, no session state touched. Cheapest useful thing on this list, and
    building it first is what surfaces the surprise the rest of #23 is about.
-3. **#27 prompt library** — text, a store, and `paste()`. The cheapest real feature in
+4. **#27 prompt library** — text, a store, and `paste()`. The cheapest real feature in
    this file and the highest-frequency one; decide the slash-command interop question
    before there is a private store to migrate.
-4. **#8, part 1 only** — effort/permission/model selectable at spawn for the CLI already
+5. **#8, part 1 only** — effort/permission/model selectable at spawn for the CLI already
    running. Flags on a process the panel owns; no architecture at risk.
-5. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
+6. **#29 restart a panel in place** — small, and it is the primitive #26, #34, and every
+   exited panel already assume. It adds the third caller into `pty.kill`, so it should be
+   built deliberately with its own check rather than arriving inside a larger feature.
+7. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
    It is what makes the zoomed-out view worth having, which #1 and #17 both assume.
-6. **#5 agent-state glow** — the feature the canvas premise most needs; start with
+8. **#33 minimap** — pure `viewport.ts` at a second scale over rects the app already holds,
+   in a top corner (the bottom-right is the HUD's), on a settings toggle that defaults off.
+   Schedule it *after* #22, because #22 is what decides whether a persistent locator is
+   still worth having — and note it is a plausible *first* customer for #11, since a
+   toggle plus a corner preference is two settings arriving at once.
+9. **#5 agent-state glow** — the feature the canvas premise most needs; start with
    PTY-idleness detection and improve from there.
-7. **#17 attention routing** — immediately after #5, because a status colour on a panel
+10. **#17 attention routing** — immediately after #5, because a status colour on a panel
    nobody is looking at is not a status system. Same detection, different surface.
-8. **#25 placement, snapping, tidy** — three small pieces of world-space arithmetic in
+11. **#25 placement, snapping, tidy** — three small pieces of world-space arithmetic in
    code that already exists (`applyDrag`, `viewport.ts`), and the best available test of
    M4b's undo stack.
-9. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
-10. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
-11. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
+12. **#32 keyboard-first navigation** — nearest-panel-in-a-direction is plain-node math over
+   the same rects. The design work is the rule that traversal moves *selection*, not focus,
+   so arrowing across a canvas does not spawn everything it passes.
+13. **#2 workspaces** — mostly free *if* M4b's format anticipates it. Decide before M4b.
+14. **#34 panel templates** — `PanelSpecTemplate` already exists; a template is that plus a
+   name and a box. Worth the most immediately after #2, where "new workspace from a
+   template set" is one gesture instead of five decisions.
+15. **#38 first run** — schedule it whenever `SEED_PANELS` goes away, and not a day later:
+   an empty infinite canvas with only `Cmd`-gated shortcuts has no discoverable
+   affordances at all.
+16. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
+17. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
    with #2, build it once) and the safety story around a mode you can forget you are in.
-12. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
+18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
    feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
    API, or token is involved. Ink and panel-anchored annotations follow once the mode
    arbitration is settled.
-13. **#24 edges, decorative flavour only** — same SVG-in-`.world` machinery as #15 and
+19. **#24 edges, decorative flavour only** — same SVG-in-`.world` machinery as #15 and
    arguably a feature of it. The functional flavour is much later and much more dangerous.
-14. **#11 settings surface** — schedule it at the point there are three or four toggles,
+20. **#35 groups** — world-space rects plus membership, and the second-cleanest candidate
+   for the panel-kind union after #14. Its two real constraints (recompute drags from the
+   origin rects; never touch array order) are both already written down.
+21. **#11 settings surface** — schedule it at the point there are three or four toggles,
    not before and not after. Built off a declarative schema, it makes every later toggle
    cheap and gives the search bar for almost nothing.
-15. **#18 machine cost readout** — the pid is already in `PanelStatus`; the work is
+22. **#31 secrets — the standing rule** — costs nothing to state and must be stated before
+   #30, #16, #39, or #28 move a single byte of terminal output off the panel. Write it
+   down here; implement it inside whichever of those ships first.
+23. **#18 machine cost readout** — the pid is already in `PanelStatus`; the work is
    main-side sampling on a slow timer. Worth having before #11 exposes any WebGL-budget
    knob, since it is what makes such a knob mean something.
-16. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
+24. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
    across the registry plus a readable light ANSI palette.
-17. **#13 image drop/paste, Finder + clipboard cases** — small now that the guard exists;
+25. **#36 panel typography** — commit-on-release like a resize, because a font change is a
+   grid change is a SIGWINCH. Pair it with #10: both are `Terminal` options fanned across
+   the registry, and whichever lands first should build the fan-out.
+26. **#13 image drop/paste, Finder + clipboard cases** — small now that the guard exists;
    the terminal path is "write a file path into the PTY", which needs no new channel.
-18. **#23, the actually-maximise half** — a layout mutation with a restore rect, a
+27. **#23, the actually-maximise half** — a layout mutation with a restore rect, a
    SIGWINCH on entry and exit, and a decision about whether focus mode pins the budget.
-19. **#19 token and dollar accounting** — gated on the transcript watcher, which is the
+28. **#19 token and dollar accounting** — gated on the transcript watcher, which is the
    same machinery #7 needs. Build the watcher once, deliberately, for whichever of the
    two is scheduled first.
-20. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
+29. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
-21. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
-22. **#26 agent toolbox, read-only inventory** — after #3 or #14 tier 1, because it is
+30. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
+31. **#26 agent toolbox, read-only inventory** — after #3 or #14 tier 1, because it is
    the same watched-directory machinery and should not invent a second copy of it. The
    editing half is a separate, later decision.
-23. **#16 canvas-wide search** — the search itself is small; it is gated on durable
+32. **#30 durable scrollback** — schedule it *before* #16 rather than alongside it: it is the
+   larger question (retention, byte caps, and #31) and it is what makes a restored canvas
+   show anything at all. Write it from `pty-manager`'s existing flush, as an append stream
+   and emphatically not with `layout-store`'s rewrite-the-file pattern.
+33. **#16 canvas-wide search** — the search itself is small; it is gated on durable
    scrollback, which is a bigger question than search (retention, size caps, and secrets
    in agent output) and should be costed on its own before this is scheduled.
-24. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
+34. **#39 export and share** — main-side page capture, because a WebGL-backed panel comes out
+   blank of any renderer-side DOM capture. Bounded by #30 for the text half.
+35. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
-25. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
-26. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
-27. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
-28. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
+36. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
+37. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
+38. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
+39. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
    (one live panel in two windows) waits for M4c for the same reason #4 does.
-29. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
-30. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-31. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
+40. **#28 accounts** — free to run, but only *after* #9's trust-boundary pass, and only
+   once #2 has given the persisted format names worth syncing. Google sign-in and the
+   email-code flow are the small half; deciding the machine-owns-processes rule is the
+   half that makes it either shippable or M4c in disguise.
+41. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
+42. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
+   argument for #28's accounts than sync is.
+43. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
+44. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
    Only after there is somewhere to audit automations that is not the canvas itself.
-32. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
+45. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
 ## The structural decision underneath all of this
 
-Nine separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
+Ten separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
 #12 Jira boards, #14 live document panels, #15 annotations, #24 edges, #26 the agent
-toolbox) all need the same thing:
+toolbox, #35 groups) all need the same thing:
 **a canvas node that is not a terminal.** Today `Panel` means
 "a PTY behind an xterm", and `LIVE_BUDGET`, `fit()`-before-spawn, the pointer
 correction, and the WebGL accounting all assume it.
@@ -1056,6 +1641,12 @@ super-app direction. It is not urgent, and it should *not* be done speculatively
 is the thing to build deliberately the first time a second panel kind is genuinely
 needed, rather than bolting a special case onto the terminal path and discovering the
 union three features later.
+
+**#35 is the entry most likely to force it first, and #14 is the cleanest place to make
+it.** A group is a canvas node with no session, no PTY, and no claim on `LIVE_BUDGET` —
+so if groups are built before the union exists, they will be built as a special case
+bolted onto the terminal path, which is precisely the outcome this section exists to
+avoid. Whichever of the two is scheduled first is the one that should pay for the union.
 
 **#14 is the entry most likely to force the decision, and the cleanest place to make it.**
 A watched local-file panel is small, obviously useful, and shares almost nothing with the
@@ -1088,6 +1679,14 @@ this is fatal rather than cosmetic — an xterm-backed index over a restored can
 nothing, silently. #5's glow, #22's far-zoom card, and #17's attention arrows are all
 better off derived from facts the `Panel` itself holds — title, status, cost — than from
 terminal output, and that is a design constraint rather than a preference.
+
+Two entries added later answer this directly rather than working around it. **#30 durable
+scrollback is the only thing that makes fact two recoverable** — a log on disk is what a
+restored panel can show when its xterm buffer has never held a byte — which is why it is
+sequenced ahead of #16 rather than beside it. **#29 restart-in-place is the operation that
+moves a panel backwards through these states on purpose**, and it is the reason the states
+need naming: killing a process while keeping the session and the id is a transition the
+app currently has no word for.
 
 The general rule, worth applying to every entry above: **ask which of the three facts a
 feature needs, and what it does when the answer is "none of them yet".** A feature that
