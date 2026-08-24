@@ -17,6 +17,17 @@
 export const TMUX_SOCKET = 'terminal-canvas'
 
 /**
+ * Every argv builder and the config take the socket as a defaulted parameter
+ * rather than closing over the constant, so a test suite can point the whole
+ * backend at a throwaway server. The default is what production uses and must
+ * stay that way: shutdown() calls kill-server, so a socket that ever resolved
+ * to the user's default would destroy their real work. Before this parameter
+ * existed verify:pty-manager ran against TMUX_SOCKET itself and its check 15
+ * kill-server'd the live app's sessions out from under it.
+ */
+export type TmuxSocket = string
+
+/**
  * set-hook and #{pane_dead_status} both predate 3.0 comfortably; 3.0 is the
  * floor because it is old enough to be everywhere and new enough that we are
  * not guessing about behaviour we never tested.
@@ -71,7 +82,7 @@ export function exitFilePath(exitDir: string, panelId: string): string {
  *
  * Every line here fails SILENTLY if dropped. Do not trim this.
  */
-export function buildTmuxConf(exitDir: string): string {
+export function buildTmuxConf(exitDir: string, socket: TmuxSocket = TMUX_SOCKET): string {
   return [
     // The canvas draws its own panel chrome; a tmux status line would eat a
     // row and read as a rendering bug.
@@ -100,7 +111,18 @@ export function buildTmuxConf(exitDir: string): string {
     // polling, no new IPC. Reversing these two is a race.
     // The run-shell child inherits $TMUX so -L is redundant, but the cost of
     // being wrong is silently killing the user's own sessions. Keep it anyway.
-    `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > ${exitDir}/#{session_name}.exit; tmux -L terminal-canvas kill-session -t #{session_name}"'`,
+    // The redirect target is QUOTED (\" inside tmux's own double-quoted
+    // run-shell argument) because the production exitDir is under
+    // app.getPath('userData'), i.e. ~/Library/Application Support/... — it
+    // ALWAYS contains a space on macOS. Unquoted, the shell splits it: the
+    // exit code lands in a junk file named ~/Library/Application and
+    // exitCodeFor() finds nothing, so `real ?? exitCode` falls through to the
+    // tmux client's own code and EVERY panel reports "exited with code 1"
+    // whatever the process really returned. The `; tmux kill-session` half
+    // still runs, so the session dies and the panel looks normal — the
+    // failure is completely silent. Every fixture used a space-free path,
+    // which is why it survived to a whole-branch review.
+    `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > \\"${exitDir}/#{session_name}.exit\\"; tmux -L ${socket} kill-session -t #{session_name}"'`,
     // NOTE: `mouse` is deliberately absent, i.e. left off. `mouse on` makes
     // TMUX capture mouse reporting instead of passing it to the application,
     // which would silently defeat all of M4a's pointer correction from one
@@ -112,8 +134,14 @@ export function buildTmuxConf(exitDir: string): string {
 /**
  * The spawn argv. `new-session -A` attaches if the session exists and creates
  * it if it does not — which is the entire reload-survival feature, and why
- * pty:create keeps its exact current meaning and session-registry.ts needs no
- * change at all.
+ * pty:create keeps its exact current meaning and lod.ts needs no change at all.
+ *
+ * session-registry.ts needed exactly ONE change, and it is worth naming so the
+ * "no renderer changes" claim is not repeated as though it were whole:
+ * dispose()/disposeAll() used to skip pty:kill for a panel that never spawned,
+ * because under node-pty a never-spawned panel had no process. Under tmux it
+ * may have a SURVIVING session that this renderer never attached to, so the
+ * skip leaked it.
  */
 export function buildTmuxArgs(o: {
   confPath: string
@@ -122,9 +150,10 @@ export function buildTmuxArgs(o: {
   rows: number
   command: string
   args: string[]
+  socket?: TmuxSocket
 }): string[] {
   return [
-    '-L', TMUX_SOCKET,
+    '-L', o.socket ?? TMUX_SOCKET,
     '-f', o.confPath,
     'new-session',
     '-A',
@@ -146,16 +175,16 @@ export function buildTmuxArgs(o: {
 const LIST_FORMAT =
   '#{session_name}\t#{pane_dead}\t#{pane_pid}\t#{pane_start_command}\t#{pane_current_path}'
 
-export function buildListArgs(): string[] {
-  return ['-L', TMUX_SOCKET, 'list-panes', '-a', '-F', LIST_FORMAT]
+export function buildListArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {
+  return ['-L', socket, 'list-panes', '-a', '-F', LIST_FORMAT]
 }
 
-export function buildKillSessionArgs(panelId: string): string[] {
-  return ['-L', TMUX_SOCKET, 'kill-session', '-t', panelId]
+export function buildKillSessionArgs(panelId: string, socket: TmuxSocket = TMUX_SOCKET): string[] {
+  return ['-L', socket, 'kill-session', '-t', panelId]
 }
 
-export function buildKillServerArgs(): string[] {
-  return ['-L', TMUX_SOCKET, 'kill-server']
+export function buildKillServerArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {
+  return ['-L', socket, 'kill-server']
 }
 
 /**

@@ -32,6 +32,18 @@ buildSync({
 })
 const T = require(OUT)
 
+/* Deliberately contains a SPACE. The production exitDir is
+   app.getPath('userData') + '/tmux-exits', i.e.
+   ~/Library/Application Support/terminal-canvas/tmux-exits — a space is not an
+   edge case there, it is the only shape that ever ships. Every fixture in this
+   suite used '/tmp/exits' until a whole-branch review found the pane-died
+   hook's redirect target unquoted: the shell split the path, the exit code
+   landed in a junk file named ~/Library/Application, exitCodeFor() found
+   nothing, and every panel reported "exited with code 1". A check that asserts
+   the right property against an input that never resembles production is how
+   that survived eight task reviews. */
+const EXIT_DIR = '/tmp/tc verify/exits'
+
 const results = []
 const ok = (n, pass, detail) => {
   results.push({ n, pass, detail })
@@ -78,7 +90,7 @@ const ok = (n, pass, detail) => {
 // a missing prefix line steals Ctrl+B from the agent, a missing :RGB line
 // downsamples 24-bit colour, a missing hook hangs the panel on exit.
 {
-  const conf = T.buildTmuxConf('/tmp/exits')
+  const conf = T.buildTmuxConf(EXIT_DIR)
   const required = [
     'status off',
     'prefix None',
@@ -96,7 +108,7 @@ const ok = (n, pass, detail) => {
 // instead of passing it to the application, which would silently defeat all of
 // M4a's pointer correction from one process further down.
 {
-  const conf = T.buildTmuxConf('/tmp/exits')
+  const conf = T.buildTmuxConf(EXIT_DIR)
   ok('5 the config never enables tmux mouse capture', !/mouse\s+on/.test(conf),
     JSON.stringify(conf.match(/.*mouse.*/g) ?? []))
 }
@@ -105,7 +117,7 @@ const ok = (n, pass, detail) => {
 // what lets main read the real exit code inside the onExit handler it already
 // has, with no watcher and no polling. Reverse them and the file is racing.
 {
-  const conf = T.buildTmuxConf('/tmp/exits')
+  const conf = T.buildTmuxConf(EXIT_DIR)
   const hook = (conf.match(/set-hook -g pane-died .*/) ?? [''])[0]
   const writeAt = hook.indexOf('pane_dead_status')
   const killAt = hook.indexOf('kill-session')
@@ -149,7 +161,7 @@ const ok = (n, pass, detail) => {
 {
   const all = [T.buildListArgs(), T.buildKillSessionArgs('p1'), T.buildKillServerArgs()]
   const bad = all.filter((a) => !(a[0] === '-L' && a[1] === T.TMUX_SOCKET))
-  const conf = T.buildTmuxConf('/tmp/exits')
+  const conf = T.buildTmuxConf(EXIT_DIR)
   const hookHasSocket = conf.includes(`tmux -L ${T.TMUX_SOCKET} kill-session`)
   ok('9 list, kill-session, kill-server, and the hook all target the private socket',
     bad.length === 0 && hookHasSocket, `${bad.length ? 'offenders=' + JSON.stringify(bad) : ''} ${hookHasSocket ? 'hook-ok' : 'hook-missing-L'}`)
@@ -196,9 +208,9 @@ const ok = (n, pass, detail) => {
 // 13. The exit-file path is derived from the panel id, which ID_PATTERN
 // already constrains to [A-Za-z0-9_-]+ — so it can never escape exitDir.
 {
-  const p = T.exitFilePath('/tmp/exits', 'n5')
+  const p = T.exitFilePath(EXIT_DIR, 'n5')
   ok('13 the exit file lives under exitDir, named by panel id',
-    p === '/tmp/exits/n5.exit', p)
+    p === `${EXIT_DIR}/n5.exit`, p)
 }
 
 // 14. No tmux on the resolved PATH -> direct, with a reason that names the
@@ -232,6 +244,26 @@ const ok = (n, pass, detail) => {
   const c = T.chooseBackend({ tmuxPath: '/opt/homebrew/bin/tmux', versionOutput: 'tmux 3.7c' })
   ok('17 a supported tmux is chosen by absolute path',
     c.kind === 'tmux' && c.tmuxPath === '/opt/homebrew/bin/tmux', JSON.stringify(c))
+
+  // 17b. `-V` output already begins with "tmux ", so a reason built as
+  // `tmux ${version.raw}` rendered "tmux tmux 3.7c" in the HUD. The reason
+  // string is user-facing; nothing else would have caught this.
+  ok('17b the success reason names the version once, not twice',
+    c.reason === 'tmux 3.7c', JSON.stringify(c.reason))
+}
+
+// 18. THE REDIRECT TARGET IS QUOTED. This is the one line in the config whose
+// correctness depends on the SHAPE of exitDir rather than on the line itself,
+// and the production shape always has a space in it (see EXIT_DIR above).
+// Unquoted, `echo N > /a b/p1.exit` writes to "/a" and passes "b/p1.exit" as a
+// second argument to echo, so no exit file is ever written — while the
+// `; tmux kill-session` half still runs, so the session dies and the panel
+// looks completely normal while reporting the wrong code forever.
+{
+  const conf = T.buildTmuxConf(EXIT_DIR)
+  const hook = (conf.match(/set-hook -g pane-died .*/) ?? [''])[0]
+  ok('18 the pane-died redirect target is quoted, so a spaced exitDir survives',
+    hook.includes(`> \\"${EXIT_DIR}/#{session_name}.exit\\"`), hook)
 }
 
 console.log('\n' + '='.repeat(60))
