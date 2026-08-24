@@ -28,7 +28,14 @@ const registry = createRegistry({
 // main-side by window-lifecycle.ts; this covers the orderly path.
 window.addEventListener('beforeunload', () => registry.disposeAll())
 
-export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
+export function Canvas({
+  initial,
+  liveSessionIds
+}: {
+  initial: CanvasState
+  /** Panels that already have a process; see renderer/main.tsx for the rule. */
+  liveSessionIds: Set<string>
+}): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
 
   // An empty panel list means first run (or a reset canvas): the store returns
@@ -144,8 +151,12 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   // Panels that came from disk start dormant; first-run panels do not. The
   // renderer is what generates first-run panels, so it is also what knows
   // which panels were restored — no flag has to cross the IPC boundary.
+  //
+  // A restored panel with a live tmux session is subtracted out here: it has
+  // no process to spawn, so M4b's dormancy rule does not apply to it — see
+  // renderer/main.tsx for the full rule this settles.
   const [dormantIds, setDormantIds] = useState<ReadonlySet<string>>(
-    () => new Set(initial.panels.map((p) => p.id))
+    () => new Set(initial.panels.map((p) => p.id).filter((id) => !liveSessionIds.has(id)))
   )
 
   // Applying a history state has to reach the registry too: an undone close

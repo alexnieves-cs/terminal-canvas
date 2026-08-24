@@ -41,10 +41,33 @@ async function boot(): Promise<void> {
     // of inventing a second "what does no data look like" decision.
     initial = { panels: [], camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null }
   }
+  // Which panels already have a process behind them.
+  //
+  // THE RULE THIS SETTLES: dormancy is about SPAWNING, not attaching. A panel
+  // with a live tmux session has nothing to spawn, so M4b's "restored panels
+  // are dormant" rule does not apply to it — it reattaches when tiering makes
+  // it live, exactly as an M3 panel does, and LIVE_BUDGET still caps how many
+  // at once. A panel with no live session restores dormant exactly as before.
+  //
+  //   dormant       — has no process yet; a click is what creates one.
+  //   reattachable  — has a process; it only needs a client.
+  //
+  // This does not disturb lod.ts's "dormancy outranks focus" rule, because a
+  // reattachable panel is not dormant and never consults that precedence.
+  let liveSessionIds = new Set<string>()
+  try {
+    const sessions = await window.canvas.pty.list()
+    liveSessionIds = new Set(sessions.map((s) => s.panelId))
+  } catch (error: unknown) {
+    // An empty set means "everything restores dormant" — the M4b behaviour,
+    // which is the safe direction to fail in: it spawns nothing.
+    console.warn('[boot] could not list live sessions; restoring every panel dormant', error)
+  }
+
   // Deliberately NOT wrapped in StrictMode. StrictMode double-invokes effects
   // in development, which for a terminal means spawning a PTY, killing it, and
   // spawning it again on every mount.
-  createRoot(container!).render(<App initial={initial} />)
+  createRoot(container!).render(<App initial={initial} liveSessionIds={liveSessionIds} />)
 }
 
 void boot()

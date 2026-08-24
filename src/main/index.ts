@@ -144,6 +144,27 @@ app.whenReady().then(async () => {
   // resolved store to answer from.
   layoutStore.load()
 
+  // A tmux session with no panel to reach it is worse than no session: it
+  // holds a process and a shell the user cannot see, close, or type into.
+  // Possible if a crash landed between a spawn and the store's coalesced save.
+  //
+  // Killed rather than adopted on purpose. Adopting would mint geometry the
+  // user never chose, which is placement work belonging to ideas-backlog item
+  // 25. This is a deliberate trade, not an oversight.
+  {
+    const known = new Set(
+      layoutStore.initial().panels.map((p) => p.id)
+    )
+    for (const session of ptyManager.list()) {
+      if (known.has(session.panelId)) continue
+      console.warn(
+        `[tmux] orphan session ${session.panelId} (pid ${session.pid}) has no saved ` +
+          `panel; killing it. A session with no panel cannot be reached, closed, or typed into.`
+      )
+      backend.destroy(session.panelId)
+    }
+  }
+
   buildAppMenu({
     settings: layoutStore.settings(),
     onToggle: (key, value) => layoutStore.setSetting(key, value),
