@@ -162,13 +162,26 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
 
     save(incoming) {
       const w = activeWorkspace()
-      // Only the four fields the renderer owns. `settings`, `id`, and `name`
-      // are main's and must survive every merge — the renderer does not have
-      // them and cannot send them back.
-      w.panels = incoming.panels.map((p) => ({ ...p }))
-      w.camera = { ...incoming.camera }
-      w.selectedId = incoming.selectedId
-      w.focusedId = incoming.focusedId
+      const { layout, camera, focus } = snapshot.settings
+      // Symmetric with initial(): a restore setting that is OFF means "start
+      // fresh each launch", not "discard on launch". initial() already hands
+      // the renderer nothing for that field, so the renderer's snapshot never
+      // reflects the stored value — writing it back unconditionally would let
+      // an unrelated save (any panel move, any camera pan) overwrite real data
+      // with whatever the fresh-start renderer invented instead. Leaving the
+      // field untouched freezes the stored value at whatever it was when the
+      // setting was last on; re-checking the box gives it back. Preserving is
+      // strictly better than destroying, and it is the only reading under
+      // which "restore on launch" is not secretly "discard on launch".
+      if (layout) w.panels = incoming.panels.map((p) => ({ ...p }))
+      // selectedId/focusedId name panels, so they ride with `layout` (whether
+      // there is anything to select) as well as `focus` (whether selection
+      // itself restores) — either OFF is a reason to leave them alone.
+      if (layout && focus) {
+        w.selectedId = incoming.selectedId
+        w.focusedId = incoming.focusedId
+      }
+      if (camera) w.camera = { ...incoming.camera }
       scheduleWrite()
     },
 

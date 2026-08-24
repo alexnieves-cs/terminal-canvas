@@ -44,6 +44,11 @@ export interface PersistedPanel {
   /** Absent means "the user's login shell" — main resolves it. See PanelSpec. */
   command?: string
   args: string[]
+  // PanelSpec.env has NO counterpart here — deliberate, not an oversight.
+  // Nothing sets spec.env today, so nothing is lost by the omission yet; but
+  // it is a SILENT exclusion, and a later feature that starts setting env
+  // (per-panel environment overrides, say) would have those values vanish on
+  // every restore with no warning anywhere in this file.
   /**
    * User-set panel name. NOTHING in M4b writes this — no UI sets a title yet.
    * Reserved because ideas-backlog item 6 puts titles on Panel and says

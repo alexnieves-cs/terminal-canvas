@@ -1321,6 +1321,55 @@ app.whenReady().then(async () => {
         `afterSpawn=${sessionsAfterSpawn && sessionsAfterSpawn.size} afterUndo=${sessionsAfterUndo.size}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 23. Reset must never leave a blank canvas. layoutStore.reset() only
+    //     clears the STORED camera; before this check existed, nothing
+    //     exercised the renderer's reset handler at all (the confirmation
+    //     dialog cannot be driven headlessly), so a whole-branch review is
+    //     what caught it, not a suite. Pan far from the origin first — the
+    //     failure mode is exactly a distant camera left behind while
+    //     firstRunPanels() places its one panel at world (0,0) — then reset
+    //     and assert the camera actually came back, alongside the other two
+    //     properties a reset promises: exactly one panel, and every PTY that
+    //     existed before the reset is gone.
+    //
+    //     "No orphaned PTYs" is checked as "none of the PRE-reset session ids
+    //     survive", not as "pty:list is empty" — firstRunPanels()'s one panel
+    //     is deliberately NOT dormant (see panels-persistence's "Panels that
+    //     came from disk start dormant; first-run panels do not"), so once
+    //     the camera reset above lands it on screen, it legitimately spawns
+    //     its own fresh shell, same as a real first launch. Asserting zero
+    //     sessions would fail on that correct behaviour, not catch a bug.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      await wc.executeJavaScript(`
+        document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+          deltaX: 5000, deltaY: 3000, deltaMode: 0
+        }))
+        true
+      `)
+      const vpBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
+      const sessionsBeforeReset = await sessionMap(wc)
+
+      await wc.executeJavaScript(`window.__m4bReset()`)
+      await sleep(300) // pty.kill/pty.create are async IPC; let pty:list catch up
+
+      const countAfter = await panelCount(wc)
+      const vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+      const sessionsAfter = await sessionMap(wc)
+      const survivors = [...sessionsBeforeReset.keys()].filter((id) => sessionsAfter.has(id))
+
+      ok('23 reset returns exactly one panel, the camera to INITIAL, and kills every pre-reset PTY',
+        countAfter === 1 &&
+          vpAfter.x === DEFAULT_CAMERA.x && vpAfter.y === DEFAULT_CAMERA.y &&
+          vpAfter.scale === DEFAULT_CAMERA.scale &&
+          survivors.length === 0,
+        `vpBefore=${JSON.stringify(vpBefore)} vpAfter=${JSON.stringify(vpAfter)} ` +
+        `panels=${countAfter} preResetSessions=${sessionsBeforeReset.size} survivors=${survivors.length}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

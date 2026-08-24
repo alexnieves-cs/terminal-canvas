@@ -5,10 +5,27 @@ import { fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type Wo
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
 const KEYBOARD_ZOOM_STEP = 1.2
 
+export interface ViewportControls {
+  viewport: Viewport
+  /**
+   * Returns the camera to INITIAL — the same target Cmd+0 uses. Narrow and
+   * explicitly named on purpose: the general setter stays private (nothing
+   * outside this hook has a reason to move the camera arbitrarily), but
+   * Canvas.tsx's reset handler needs SOMETHING to call, because
+   * layoutStore.reset() only clears the STORED camera. Leaving the live one
+   * alone would strand the view whatever pan/zoom the user was at when they
+   * asked for a reset — off in the distance from a first-run panel placed at
+   * the world origin, i.e. a canvas that renders empty and then persists
+   * that emptiness on the very next save.
+   */
+  resetViewport: () => void
+}
+
 /**
- * Returns the current viewport. The setter stays private: nothing outside this
- * hook has a reason to move the camera, and exporting it would invite panel
- * code to reach past the gesture layer.
+ * Returns the current viewport plus the one reset verb Canvas.tsx needs. The
+ * general setter stays private: nothing outside this hook has a reason to
+ * move the camera, and exporting it would invite panel code to reach past
+ * the gesture layer.
  */
 export function useViewport(
   hostRef: RefObject<HTMLElement | null>,
@@ -17,7 +34,7 @@ export function useViewport(
   shouldYieldWheel?: (event: WheelEvent) => boolean,
   /** The restored camera. Cmd+0 still returns to INITIAL, not to this. */
   initialViewport?: Viewport
-): Viewport {
+): ViewportControls {
   const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
@@ -144,5 +161,5 @@ export function useViewport(
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [hostRef, onSpawn])
 
-  return viewport
+  return { viewport, resetViewport: () => setViewport(INITIAL) }
 }

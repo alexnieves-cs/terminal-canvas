@@ -397,6 +397,46 @@ const CANVAS = {
     JSON.stringify({ panels: w.panels.length, id: w.id, camera: written.settings.camera }))
 }
 
+// 26. THE CRITICAL ONE. Unchecking "Panel layout" must never destroy the
+//     panels it declined to restore. save() used to overwrite w.panels
+//     unconditionally: initial() hands the renderer nothing when layout is
+//     off, the renderer boots its one first-run panel, and the very next
+//     save (fired by the mount effect) replaced the stored twelve-panel
+//     canvas with that lone panel — permanently, since the debounced write
+//     lands with nothing to undo it. save() must leave w.panels untouched
+//     whenever `layout` is off, exactly mirroring what initial() withheld.
+{
+  const path = tmp()
+  const TWELVE = {
+    panels: Array.from({ length: 12 }, (_, i) => ({
+      id: `p${i + 1}`, x: i * 10, y: 0, w: 720, h: 460, z: i + 1, cwd: '~', args: []
+    })),
+    camera: { x: 1, y: 2, scale: 1 },
+    selectedId: 'p1',
+    focusedId: 'p1'
+  }
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.save(TWELVE)
+  store.flushSync()
+
+  store.setSetting('layout', false)
+  // The renderer's fresh-start save after unchecking the box: one panel, no
+  // selection — the shape firstRunPanels() + the mount effect actually send.
+  store.save({
+    panels: [{ id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }],
+    camera: { x: 0, y: 0, scale: 1 },
+    selectedId: null,
+    focusedId: null
+  })
+  store.flushSync()
+
+  const onDisk = JSON.parse(readFileSync(path, 'utf8')).workspaces[0]
+  ok('26 unchecking layout restore preserves the panels it declined to restore',
+    onDisk.panels.length === 12 && onDisk.panels[0].id === 'p1',
+    `panels=${onDisk.panels.length}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

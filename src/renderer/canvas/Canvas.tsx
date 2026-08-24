@@ -158,7 +158,25 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
     setDormantIds((current) => {
       const merged = new Set([...current].filter((id) => ids.has(id)))
       for (const panel of next.present) {
-        if (!registry.get(panel.rect.id)?.spawned) merged.add(panel.rect.id)
+        const session = registry.get(panel.rect.id)
+        // Read the registry's OWN dormant flag, not `!spawned`. registry.wake
+        // clears session.dormant but does not spawn (a woken panel still has
+        // to be promoted to live before attachSlot spawns it) — so a panel
+        // woken while zoomed out below LIVE_MIN_SCALE stays unspawned with
+        // dormant already false. Re-deriving from `!spawned` would put it
+        // back in dormantIds on the next undo even though registry.ensure
+        // (in the tiering memo) returns that SAME session untouched, leaving
+        // its card reading "not started" instead of "click to start" until
+        // another click. Keying off session.dormant means the two can never
+        // diverge for a panel whose session already exists.
+        //
+        // A session of `undefined` is the OTHER case this loop has to cover:
+        // undoing a close deletes the session entirely (registry.dispose),
+        // so it does not exist yet here and the memo below recreates it from
+        // scratch once `panels` re-renders. That recreation is what must
+        // come back dormant (its PTY is gone with nothing to revive), so a
+        // missing session counts as dormant too.
+        if (!session || session.dormant) merged.add(panel.rect.id)
       }
       return merged
     })
@@ -186,10 +204,19 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
     if (!id) return false
     const target = event.target as HTMLElement | null
     const panel = target?.closest?.('.panel')
-    return panel?.getAttribute('data-panel-id') === id
+    if (panel?.getAttribute('data-panel-id') !== id) return false
+    // A restored focusedId can name a panel lod.ts still refuses to promote
+    // (dormant beats even focus) — that panel is a CARD, not a live slot, and
+    // a card has no xterm underneath to hand the wheel event to. Yielding
+    // anyway means the event reaches nothing: it doesn't scroll (no
+    // terminal) and doesn't pan (the camera deferred), so the app reads as
+    // frozen until the user clicks elsewhere. Requiring the slot is what lets
+    // the camera claim the wheel over a card the way it does over any other
+    // non-live panel.
+    return panel.querySelector('.panel__slot') !== null
   }, [])
 
-  const viewport = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
+  const { viewport, resetViewport } = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
@@ -251,6 +278,34 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
     }
   }, [applyHistory])
 
+  // Pulled out of the onReset listener below so verify:panels' __m4bReset
+  // hook (see the test-hook effect further down) can drive the exact same
+  // path a confirmed main-process reset does — executeJavaScript has no way
+  // to trigger the native confirmation dialog that guards the real trigger,
+  // so this is the narrow verb the suite calls instead.
+  const resetCanvas = useCallback(() => {
+    // dispose, not just drop: reset kills every process. registry.dispose
+    // is one of three call sites in this file (the others are the close
+    // button and undo/redo removing a panel); pty.kill itself still has
+    // only its two callers inside session-registry.ts, because every one
+    // of these three routes through dispose() rather than calling
+    // pty.kill directly.
+    for (const panel of panelsRef.current) registry.dispose(panel.rect.id)
+    const fresh = firstRunPanels()
+    setPanels(fresh)
+    setDormantIds(new Set())
+    setSelectedId(null)
+    setFocusedId(null)
+    setHistory(createHistory(fresh))
+    // firstRunPanels() places its panel at the world origin. Without
+    // returning the camera too, reset from anywhere but the origin leaves
+    // that panel off screen — an empty canvas, exactly what "First run"
+    // is not supposed to allow — and the save effect below immediately
+    // persists the still-distant camera over the one layoutStore.reset()
+    // just cleared, so the blank view survives a relaunch.
+    resetViewport()
+  }, [resetViewport])
+
   // Main owns the reset dialog but only the renderer knows the live statuses,
   // so it supplies the counts the confirmation names.
   useEffect(() => {
@@ -261,26 +316,12 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
         return kind === 'running' || kind === 'starting'
       }).length
     }))
-    const offReset = window.canvas.canvas.onReset(() => {
-      // dispose, not just drop: reset kills every process. registry.dispose
-      // is one of three call sites in this file (the others are the close
-      // button and undo/redo removing a panel); pty.kill itself still has
-      // only its two callers inside session-registry.ts, because every one
-      // of these three routes through dispose() rather than calling
-      // pty.kill directly.
-      for (const panel of panelsRef.current) registry.dispose(panel.rect.id)
-      const fresh = firstRunPanels()
-      setPanels(fresh)
-      setDormantIds(new Set())
-      setSelectedId(null)
-      setFocusedId(null)
-      setHistory(createHistory(fresh))
-    })
+    const offReset = window.canvas.canvas.onReset(resetCanvas)
     return () => {
       offCounts()
       offReset()
     }
-  }, [])
+  }, [resetCanvas])
 
   // Same mirror-into-a-ref pattern, for the listeners below that need the
   // current scale but must not resubscribe: `viewport` changes on every wheel
@@ -356,7 +397,16 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
      */
     w.__m4bUndo = (): void =>
       setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
-  }, [applyHistory])
+    /**
+     * Drives the same reset path the confirmed "Reset canvas…" menu item
+     * does, minus the native dialog executeJavaScript cannot reach. Exists
+     * so verify:panels can cover the reset handler at all — until this hook,
+     * no suite exercised it, which is how the camera-left-behind and
+     * panels-still-imply-workspace-loss defects both survived to a
+     * whole-branch review.
+     */
+    w.__m4bReset = (): void => resetCanvas()
+  }, [applyHistory, resetCanvas])
 
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
