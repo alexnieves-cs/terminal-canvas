@@ -186,6 +186,17 @@ app.whenReady().then(async () => {
   // renderer boots and calls window.canvas.pty.list() it genuinely finds
   // s01 already running and the other eleven seed panels genuinely absent —
   // the same asymmetry a real relaunch after a Cmd+R would produce.
+  //
+  // EXPECTED STDERR, not a bug: this run prints
+  //   Error occurred in handler for 'pty:create': Error: panel s01 already has
+  //   a live PTY
+  // once, right after the window loads. The seeded session below is never
+  // torn down, so when the renderer promotes s01 it asks main to create a PTY
+  // that already exists. Production never reaches that state — a real reload
+  // runs detachAll() first, which empties the manager's map while the tmux
+  // session survives, so the renderer's create reattaches instead of
+  // colliding. The rejection is handled (the panel goes on using the live
+  // session), so the line is noise from a fixture shortcut, not a defect.
   await ptyManager.create({ panelId: 's01', cwd: '~' })
 
   // A hung infrastructure call (e.g. a renderer crash mid-executeJavaScript)
@@ -1433,6 +1444,24 @@ app.whenReady().then(async () => {
           survivors.length === 0,
         `vpBefore=${JSON.stringify(vpBefore)} vpAfter=${JSON.stringify(vpAfter)} ` +
         `panels=${countAfter} preResetSessions=${sessionsBeforeReset.size} survivors=${survivors.length}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 25. session:backend, invoked END TO END through the real bridge.
+    //     verify:ipc only asserts that a handler is REGISTERED for every
+    //     contract channel; it never calls one. That gap is how a structured
+    //     clone failure reached runtime during M4c — the handler returned the
+    //     SessionBackend itself, whose spawn() function electron cannot clone,
+    //     so the channel threw for every caller while verify:ipc stayed green.
+    //     Asserting the SHAPE that comes back is what closes it: a value that
+    //     survived the clone and carries the two fields the HUD reads.
+    // ---------------------------------------------------------------------
+    {
+      const info = await wc.executeJavaScript(`window.canvas.session.info()`)
+      ok('25 session:backend returns a cloneable { kind, reason } over the real bridge',
+        !!info && (info.kind === 'tmux' || info.kind === 'direct') &&
+          typeof info.reason === 'string' && info.reason.length > 0,
+        JSON.stringify(info))
     }
 
   } catch (error) {
