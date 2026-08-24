@@ -223,17 +223,26 @@ const active = (snap) => snap.workspaces.find((w) => w.id === snap.activeWorkspa
     JSON.stringify(back))
 }
 
-const { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, readFileSync, existsSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), 'tc-layout-')), 'layout.json')
 /** A fake scheduler, so the debounce is driven explicitly instead of by a clock. */
 const fakeClock = () => {
   const pending = []
+  let total = 0
   return {
-    schedule: (fn) => { pending.push(fn); return () => { const i = pending.indexOf(fn); if (i >= 0) pending.splice(i, 1) } },
+    schedule: (fn) => {
+      total += 1
+      pending.push(fn)
+      return () => { const i = pending.indexOf(fn); if (i >= 0) pending.splice(i, 1) }
+    },
     fire: () => { const run = pending.splice(0); for (const fn of run) fn() },
-    count: () => pending.length
+    count: () => pending.length,
+    // Total ever scheduled, NOT decremented by cancellation — count() alone
+    // cannot distinguish "returned early" from "cancelled the old one and
+    // re-armed", since both leave pending.length at 1 after 60 saves.
+    scheduled: () => total
   }
 }
 const CANVAS = {
@@ -272,7 +281,7 @@ const CANVAS = {
   const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
   store.load()
   for (let i = 0; i < 60; i += 1) store.save({ ...CANVAS, camera: { x: i, y: 0, scale: 1 } })
-  const scheduled = clock.count()
+  const scheduled = clock.scheduled()
   clock.fire()
   const written = JSON.parse(readFileSync(path, 'utf8'))
   ok('18 sixty saves collapse to one write of the newest state',
@@ -366,6 +375,26 @@ const CANVAS = {
   const backup = JSON.parse(readFileSync(path + '.bak', 'utf8'))
   ok('24 a future-version file is preserved as .bak before being replaced',
     backup.version === 99 && existsSync(path), `bak.version=${backup.version}`)
+}
+
+// 25. reset() empties the active workspace but keeps the settings and the
+//     workspace identity — a reset is "clear this canvas", not "forget my
+//     preferences", and the menu item that calls it is one click away from
+//     the checkboxes it must not touch.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.setSetting('camera', false)
+  store.save(CANVAS)
+  store.reset()
+  store.flushSync()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  const w = written.workspaces[0]
+  ok('25 reset empties the canvas but preserves settings and workspace identity',
+    w.panels.length === 0 && w.selectedId === null && w.focusedId === null &&
+    w.id === L.DEFAULT_WORKSPACE_ID && written.settings.camera === false,
+    JSON.stringify({ panels: w.panels.length, id: w.id, camera: written.settings.camera }))
 }
 
 console.log('\n' + '='.repeat(60))
