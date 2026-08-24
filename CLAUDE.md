@@ -30,15 +30,15 @@ work is done. Individual suites:
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:viewport` | plain node | 25 checks: `viewport.ts`'s pure canvas math (1–11b) plus `lod.ts`'s pure tiering (20–25) |
-| `verify:registry` | plain node | 14 checks: `session-registry.ts`'s lifecycle against a fake bridge and fake terminal factory |
+| `verify:viewport` | plain node | 39 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39) |
+| `verify:registry` | plain node | 20 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–15 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 8 checks: the real `PtyManager` |
 | `verify:window` | real Electron | 3 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
 | `verify:canvas` | real Electron | 4 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 6 checks: terminals on the canvas — live/card split, budget, demotion doesn't kill, promotion reuses the session, the click gate |
+| `verify:panels` | real Electron | 17 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -70,6 +70,14 @@ startup; `scripts/panels-entry.cjs` hand-wires `resolveShellEnv` + `registerIpcH
 `verify-window-lifecycle.cjs` use. The other Electron suites esbuild their own entry from
 source into `out/verify/`, so they are always current without a build step.
 
+**`verify:panels` reaches the registry through seven narrow `window.__m4a*` hooks
+(`__m4aScale`, `__m4aWrite`, `__m4aSelection`, `__m4aCellToScreen`, `__m4aGrid`,
+`__m4aViewport`, `__m4aScrollY`) installed by `Canvas.tsx`.** The registry is a module-level
+closure by design (see "Two lifetimes, not one" below), and `executeJavaScript` has no other
+route into it. Keep the set narrow and named by what each one answers — the alternative is
+exposing the registry itself and letting the suite drift into testing internals instead of
+behaviour.
+
 **`verify:xterm` is a spike, not a regression suite for a module.** It exists to prove the
 assumption the whole M3 eviction design rests on: that an xterm `Terminal` keeps accepting
 writes while its host `div` is out of the document, and repaints once the host returns. It
@@ -99,8 +107,9 @@ main     --send-->   edit:copy / edit:paste                                    -
   returns its own unsubscribe so React effects can clean up without stacking listeners.
 - `src/renderer/session/session-registry.ts` — owns every panel's **session** (its xterm
   `Terminal` and its PTY) for the lifetime of the renderer, in a module-level registry outside
-  React. Created once, disposed once. `pty.kill` is called in exactly one place in the
-  renderer: `disposeAll`.
+  React. Created once, disposed once. `pty.kill` has exactly two callers in the renderer —
+  `disposeAll` (renderer teardown) and `dispose(id)` (explicit panel close) — and a tier
+  change must never reach either.
 - `src/renderer/components/TerminalPanel.tsx` — the **view**: one panel's React component,
   mounted and unmounted freely by tiering, owning nothing. It renders whichever `SessionHandle`
   the registry hands it and calls back into the registry (`attachSlot`/`detachSlot`) around its
@@ -173,7 +182,7 @@ are dropped.
 **Sessions die with their renderer (`window-lifecycle.ts`).** Cmd+R and Cmd+W destroy the
 page without running React cleanup, so the renderer never sends `pty:kill`. Left alone the
 old PTY survives and the next `pty:create` throws "already has a live PTY" — a dead panel
-with no recovery short of quitting. Surviving a reload instead of dying is M4's job, once
+with no recovery short of quitting. Surviving a reload instead of dying is M4c's job, once
 tmux backs the session; `pty:list` is the channel a fresh renderer will reconcile against.
 
 **Cmd+C / Cmd+V (`src/main/menu.ts`).** The stock `'copy'`/`'paste'` menu roles drive
@@ -192,8 +201,10 @@ panels open.
 React. The React panel (`TerminalPanel.tsx`) is mounted and unmounted freely by tiering and
 owns nothing. In M1 "this component is unmounting" and "this panel is going away" were the
 same statement; culling makes them different, and confusing them kills a running agent with no
-error anywhere. **A tier change must never call `pty.kill`** — only `disposeAll` does.
-`verify:registry` check 5 and `verify:panels` check 4 both exist to catch a regression here.
+error anywhere. `pty.kill` now has two legitimate callers — `disposeAll` (renderer teardown)
+and `dispose(id)` (M4a's explicit panel close) — but **a tier change must never reach either
+one.** Four checks exist for exactly that property: `verify:registry` 5 and 15, and
+`verify:panels` 4 and 15.
 
 **Lazy spawn (`session-registry.ts`).** A PTY is created when its panel first goes live, not
 at startup. "Fit before spawn" (below) needs real cols/rows, which needs an attached, laid-out
@@ -228,23 +239,29 @@ clears `focusedId` alongside `selectedId`. This is also what lets a panel the us
 ever demote — `verify:panels` check 8 depends on it to read the terminal's buffer back out of
 its card.
 
-**Clicks are gated near 1:1 (`Canvas.tsx`, `INTERACT_MIN_SCALE`/`INTERACT_MAX_SCALE` =
-0.9/1.1).** xterm's `getCoords` divides a transform-aware pixel offset by an unscaled cell
-width, so under `scale(k)` it reports `k` times the true column. Rather than feeding xterm
-corrected coordinates, M3 only lets body clicks reach xterm between 0.9 and 1.1 scale; outside
-that band the terminal renders but does not receive mouse input. Full correction is M4's,
-alongside drag and resize.
-
-**The gate needs two complementary mechanisms, not one (`TerminalPanel.tsx` +
-`styles.css`).** Outside the interactive scale band, `.panel__slot--blocked` sets
-`pointer-events: none` on the terminal host, which stops xterm's own mousedown listener from
-ever seeing the click — and `TerminalPanel`'s own mousedown handler calls `preventDefault()`,
-which stops the browser's default mousedown action from clearing focus back to `<body>` after
-`onFocus` has already focused the panel. Removing either half breaks the gate in a different
-direction: drop `pointer-events` and xterm hit-tests the wrong cell again; drop
-`preventDefault()` and a gated click focuses nothing, so typing has nowhere to go. The spec
-requires that a gated click still focuses the panel so typing keeps working — `verify:panels`
-check 6 asserts both halves at once.
+**Pointer coordinates are corrected, not gated (`components/xterm-pointer.ts`,
+`canvas/pointer-correct.ts`).** xterm computes a cell as
+`(clientX - rect.left) / dimensions.css.cell.width`. `rect.left` is transform-aware and in
+screen pixels; `cell.width` is transform-blind and in CSS pixels, so under `scale(k)` xterm
+reports a column `k` times the true one. M3's answer was to gate body clicks to
+`[0.9, 1.1]` and leave the error uncorrected everywhere else; M4a removes the gate and
+rewrites the event instead. `installPointerCorrection` is a **capture-phase listener on
+`document`**, not on the panel — xterm binds its own drag listeners
+(`mousemove`/`mouseup`) to the document once a gesture starts, so a panel-scoped listener
+would correct the mousedown and then miss every move that follows, and drag-selection would
+stop partway through. It pins the target slot at mousedown and holds that pin until mouseup,
+because mid-drag the cursor spends most of the gesture outside the slot's DOM bounds. Three
+fields on the synthetic `MouseEvent` are load-bearing and each fails silently if dropped:
+`detail` (click count — drop it and double/triple-click word/line select stop working),
+`buttons` (drop it and every corrected move reads as a hover, so selection never extends),
+and the modifier flags. A `WeakSet` marks synthetic events; without it the clone re-enters
+the same capture listener and recurses until the stack overflows. At `scale === 1` the
+interceptor returns before doing any work, so the common case pays nothing. **Known limit,
+not yet covered:** correction is anchored to the slot pinned at mousedown, so a hover
+`mousemove` with no prior in-slot mousedown returns early uncorrected — a mouse-reporting TUI
+still sees `k`-times-wrong coordinates via `getMouseReportCoords` on hover. That is recorded
+in `xterm-pointer.ts` itself and left to a later milestone; do not read the file as though
+hover were already handled.
 
 **`version` exists only so `memo` can see a mutation (`TerminalPanel.tsx`,
 `session-registry.ts`).** `TerminalPanel` is wrapped in `memo`, and the registry mutates a
@@ -264,14 +281,12 @@ to `getComputedStyle` and `ResizeObserver` — exactly what xterm's `FitAddon` c
 zooming *cannot* change a panel's cols/rows. The rejected alternative, sizing each panel in
 screen pixels per frame, would reflow the running shell on every zoom gesture.
 
-**...which is why pointer coordinates are gated rather than corrected.** The same blindness
-means `getBoundingClientRect()` is transform-aware while `dimensions.css.cell.width` is not,
-so under `scale(k)` every click lands on a cell off by a factor of `k`. M3 does **not**
-correct this and does not feed `screenToWorld` output to xterm: it gates body clicks to
-`[INTERACT_MIN_SCALE, INTERACT_MAX_SCALE]` (see "Clicks are gated near 1:1" above), where the
-error is small enough not to matter. Full correction — intercepting and re-dispatching mouse
-events, tracking drag-selection out to the document, handling mouse-reporting TUIs — is M4's,
-alongside the drag and resize work that needs pointer math anyway.
+**...which is why pointer coordinates needed correcting, not just gating.** The same
+blindness means `getBoundingClientRect()` is transform-aware while
+`dimensions.css.cell.width` is not, so under `scale(k)` every click lands on a cell off by a
+factor of `k`. M3 gated body clicks to a band near 1:1 rather than fix the arithmetic; M4a
+fixes it instead (see "Pointer coordinates are corrected, not gated" above) by intercepting
+and re-dispatching mouse events with rewritten `clientX`/`clientY` before they reach xterm.
 
 **`passive: false` on the wheel listener (`useViewport.ts`).** Chromium treats ctrl+wheel as
 its own page-zoom gesture; without `preventDefault()` a pinch zooms the whole UI and every
@@ -311,6 +326,48 @@ re-attach loads a fresh `WebglAddon`, fits, and calls `term.refresh(0, rows - 1)
 proved a fresh WebGL context does not repaint on its own after re-attach, so that refresh call
 is load-bearing, not a defensive extra.
 
+**Resize commits on release, not live (`Canvas.tsx`'s `onCommit`, `registry.refit`).** The
+panel's box follows the cursor every frame during a resize drag, but `refit()` — which fits
+the terminal and fires `pty:resize` — runs exactly once, on mouseup. A full-screen agent TUI
+repaints its entire frame on every SIGWINCH; resizing live would mean roughly sixty full
+repaints a second, through a 16ms-batched channel, at intermediate sizes the user never meant
+to keep. `verify:panels` check 11 asserts the grid (`__m4aGrid()`) is unchanged mid-drag and
+only changes after mouseup.
+
+**Stacking is `Panel.z`, never array order (`panels/panels.ts`, `Canvas.tsx`).** React
+reconciles a reordered keyed list by moving DOM nodes, and a move is remove-then-insert —
+which would momentarily detach the subtree holding a live terminal's host and its WebGL
+context. M3's eviction proves a *deliberate* detach is survivable (dispose the addon,
+`refresh()` on the way back); an incidental one triggered by clicking an unrelated panel does
+none of that. `raisePanel` (`panels.ts`) only ever changes `z`; `Panel.z` renders as
+`zIndex`, and `Canvas.tsx` sorts by `z` before calling `hitTest`, which returns the last
+match — so paint order and pick order still agree. `verify:panels` check 16 asserts DOM order
+is stable across a raise.
+
+**Wheel ownership is decided by focus, in the capture phase (`useViewport.ts`,
+`Canvas.tsx`'s `shouldYieldWheel`).** A wheel over the *focused* panel scrolls that terminal;
+every other wheel — background, an unfocused panel, or any zoom gesture (a `ctrlKey` trackpad
+pinch or a `metaKey` mouse wheel, the two spellings `canvas-input.ts` reads as zoom) — pans or
+zooms the camera. The zoom exemption is unconditional and covers the focused panel too: `Cmd`
+is the modifier every other canvas shortcut requires, so it cannot be the one input where the
+canvas defers, and without the `metaKey` half a mouse user who had clicked into a panel could
+not zoom while the cursor was over it. The listener is installed on the canvas host with `{ capture: true, passive: false }`,
+not the bubble phase, and that is forced rather than chosen: xterm's own wheel handler is
+bound on a descendant and runs first in the target phase, so by the time a bubble-phase
+listener saw the event xterm had already scrolled. The first M4a implementation used bubble
+phase and returned early without `preventDefault`, which fixed the easy case but not the real
+one — a wheel over an *unfocused* panel still reached xterm on the way up and scrolled it
+while the canvas also panned underneath, the same double-handling bug merely narrowed to a
+smaller trigger. The shipped capture-phase listener asks the opposite question at the right
+time: over the focused panel it returns with no `preventDefault`/`stopPropagation`, so the
+event is untouched by the time it reaches xterm in the target phase; for everything else it
+calls `stopPropagation()` first so xterm's target-phase listener never runs at all, then
+`preventDefault()` and handles the pan/zoom itself. `verify:panels` check 12 asserts all three
+halves: the focused terminal scrolls and the camera does not move, a `metaKey` wheel over that
+same focused panel *does* move the camera, and an unfocused terminal does not scroll while the
+camera does. Reverting this to a bubble-phase listener reintroduces
+the double-handling defect it was written to fix.
+
 ## Gotchas
 
 - **`Cannot read properties of undefined (reading 'whenReady')`** — your shell exports
@@ -327,13 +384,43 @@ is load-bearing, not a defensive extra.
   WebKit convention Chromium adopted, and it is the only signal separating pinch from scroll.
 - `deltaMode` is not always pixels: trackpads report `0`, mouse wheels report lines (`1`) and
   need roughly a 16x multiplier before the deltas are comparable.
+- **A drag delta is `screenToWorld(p₂) − screenToWorld(p₁)`, never
+  `screenToWorld(p₂ − p₁)`.** `screenToWorld` subtracts the viewport translation before
+  dividing by scale; applying it to a delta subtracts a translation that should have
+  cancelled, so the panel drifts off the cursor as soon as the viewport isn't at the origin.
+  `verify:viewport` check 27 exists for this.
+- **`applyDrag` (`panel-interaction.ts`) recomputes from the gesture's origin rect every
+  frame, never from the previous frame's result.** Accumulating per-frame deltas drifts (each
+  frame rounds, and at `scale: 0.1` one rounding is worth ten world units) and breaks outright
+  if the user zooms mid-drag, since earlier deltas were measured under a transform that no
+  longer applies. `applyDrag` itself only ever receives two already-resolved *world* points,
+  so neither bug is reachable from inside the function — both are caller-side mistakes.
+  `verify:viewport` checks 27 and 28 pin real properties of `applyDrag` (drag distance scales
+  as `1/k`; the function is stateless) but are not what would catch either regression; the
+  actual discriminator is `verify:panels` check 10, which dispatches a zoom mid-drag
+  specifically to separate a correct recompute-from-origin implementation from one that
+  accumulates screen-space deltas. A variant that instead advances *both* the drag state's
+  origin fields together every frame is mathematically identical to the origin-based
+  implementation and cannot be told apart by any assertion on the final rect — check 10's own
+  header records that limit; don't rediscover it by trying to tighten the check.
+- **A dispatched event on `.panel__slot` never reaches xterm's listeners.** `.panel__slot`
+  only wraps the terminal's host div; xterm binds both its selection mousedown
+  (`addDisposableDomListener(this.element, "mousedown", ...)`) and its mouse-reporting
+  handlers (`bindMouse()`: `const t = this.element`) on `.xterm` — one level *below* the slot,
+  not on `.xterm-screen`, which supplies only the rect the coordinates are measured against.
+  Capture-toward-target traversal does not visit a target's own descendants, so an
+  `executeJavaScript` check that dispatches on `.panel__slot` to verify "does xterm see this"
+  will pass or fail for the wrong reason no matter what the guard under test actually does.
+  Dispatch on `.xterm-screen` — a descendant of `.xterm`, so `.xterm`'s listeners are on its
+  propagation path, and the same node a real cursor over the rendered terminal would be over.
+  This cost two fix rounds in `verify-panels.cjs` during M4a.
 
 ## Working on this repo
 
 Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then an
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
-M2 and M3 are both worked examples of this. Follow it when starting M4.
+M2 and M3 are both worked examples of this. Follow it when starting M4b, the next unstarted milestone.
 
 ## Conventions
 

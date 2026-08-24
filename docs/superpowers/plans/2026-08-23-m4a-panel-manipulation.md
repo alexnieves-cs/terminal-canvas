@@ -40,7 +40,7 @@
 | `src/renderer/styles.css` | **MODIFY.** Handle and close-button styles. Loses `.panel__slot--blocked`. |
 | `scripts/viewport-entry.cjs` | **MODIFY.** Re-export the two new pure modules. |
 | `scripts/verify-viewport.cjs` | **MODIFY.** Checks 26–37. |
-| `scripts/verify-registry.cjs` | **MODIFY.** Checks 15–17. |
+| `scripts/verify-registry.cjs` | **MODIFY.** Checks 13–15. |
 | `scripts/verify-panels.cjs` | **MODIFY.** Checks 9–16; check 6 rewritten. |
 
 ### One deviation from the spec, and why
@@ -426,8 +426,18 @@ Run: `npm run verify:viewport && npm run typecheck`
 Expected: `34/34 passed`, then a clean typecheck.
 
 If check 27 fails with all three distances equal, `applyDrag` is being fed a
-screen delta rather than two world points — the bug the check exists for.
-If check 28 fails, the implementation is accumulating rather than recomputing.
+screen delta rather than two world points. If check 28 fails, `applyDrag` is
+holding state somewhere outside its arguments.
+
+**What checks 27 and 28 cannot catch.** `applyDrag(state, world)` receives two
+already-resolved *world* points, so neither the delta trap nor an
+accumulate-deltas implementation is reachable from inside it — both are
+caller-side bugs. These two checks pin real properties (drag distance scales as
+`1/k`; the function is stateless, so frame count cannot matter), but they are
+**not** the discriminators for those bugs. **Task 5's check 10 is**: it drives a
+real drag through `usePanelDrag`'s own conversion at a non-1 scale and asserts
+the panel moved `screenDelta / scale`. Do not treat 27 and 28 as covering the
+call site.
 
 - [ ] **Step 8: Commit**
 
@@ -574,7 +584,7 @@ export function correctForScale(client: Point, rect: RectOrigin, scale: number):
 - [ ] **Step 5: Run the checks**
 
 Run: `npm run verify:viewport && npm run typecheck`
-Expected: `37/37 passed`, clean typecheck.
+Expected: `38/38 passed`, clean typecheck.
 
 - [ ] **Step 6: Commit**
 
@@ -631,18 +641,16 @@ a check of the corrector rather than a check of the gate.
       const selection = await wc.executeJavaScript(`(async () => {
         const slot = document.querySelector('.panel__slot')
         if (!slot) return { error: 'no live panel' }
-        const panel = slot.closest('.panel')
 
-        // Focus this panel so tiering pins it live for the whole check.
+        // Focus this panel FIRST. assignTiers pins the focused panel live
+        // unconditionally, which is what keeps it from being demoted to a
+        // card when the zoom drops below LIVE_MIN_SCALE below — without this
+        // there is no .panel__slot left to click by the time we need one.
         slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-
-        // Lift the gate for this panel only. Task 4 deletes the class
-        // entirely; until then this is what lets the click through.
-        slot.classList.remove('panel__slot--blocked')
+        await new Promise((r) => setTimeout(r, 150))
 
         // Known content at known columns. Written through the session handle
         // rather than the PTY so no shell prompt or echo can shift it.
-        const id = panel.querySelector('.panel__title') ? panel : null
         window.__m4aWrite('\\r\\nalpha beta gamma\\r\\n')
         await new Promise((r) => setTimeout(r, 300))
 
@@ -653,6 +661,14 @@ a check of the corrector rather than a check of the gate.
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
         await new Promise((r) => setTimeout(r, 300))
+
+        // Lift the gate — AFTER the zoom, not before. TerminalPanel derives
+        // .panel__slot--blocked from the current scale on every render, so a
+        // class removed before zooming is put straight back by the re-render
+        // the zoom triggers. Task 4 deletes the class entirely; until then
+        // this is what lets the click through, and it only holds because
+        // nothing re-renders this panel between here and the clicks below.
+        slot.classList.remove('panel__slot--blocked')
 
         const scale = window.__m4aScale()
         const screen = window.__m4aCellToScreen('beta')
@@ -1054,7 +1070,9 @@ The gate no longer exists, so delete this line from check 9's script:
         slot.classList.remove('panel__slot--blocked')
 ```
 
-and the two comment lines above it that explain the temporary lift.
+and the six-line comment block above it that explains the temporary lift.
+Everything else in check 9 stays: the focus click, the write, the zoom, and
+the four dispatched mouse events are all still what the check needs.
 
 - [ ] **Step 7: Run everything**
 
@@ -1652,22 +1670,24 @@ interaction band; removing the gate exposed it everywhere."
 - Modify: `src/renderer/components/TerminalPanel.tsx`
 - Modify: `src/renderer/canvas/Canvas.tsx`
 - Modify: `src/renderer/styles.css`
-- Test: `scripts/verify-registry.cjs` (checks 15–17), `scripts/verify-panels.cjs` (checks 13–15)
+- Test: `scripts/verify-registry.cjs` (checks 13–15), `scripts/verify-panels.cjs` (checks 13–15)
 
 **Interfaces:**
 - Produces: `Registry` gains `dispose(id: PanelId): void`.
 
-- [ ] **Step 1: Write registry checks 15–17, watch them fail**
+- [ ] **Step 1: Write registry checks 13–15, watch them fail**
 
 Append to `scripts/verify-registry.cjs` before its summary block. Follow the
 file's existing fake-bridge pattern.
 
 ```js
 // ---------------------------------------------------------------------------
-// M4a: explicit close (15-17)
+// M4a: explicit close (13-15)
+// NOTE: this suite numbers 1-12 with lettered sub-checks (3b, 7c, ...),
+// so 17 assertions run today and 13 is the next free NUMBER.
 // ---------------------------------------------------------------------------
 
-// 15. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
+// 13. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
 //     of pty.kill in the renderer; disposeAll was the first and, until M4a,
 //     the only one.
 {
@@ -1677,12 +1697,12 @@ file's existing fake-bridge pattern.
   registry.applyTiers({ a: 'live' })
   registry.attachSlot('a')
   registry.dispose('a')
-  ok('15 dispose kills that panel\'s pty',
+  ok('13 dispose kills that panel\'s pty',
     bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a',
     JSON.stringify(bridge.calls.kill))
 }
 
-// 16. dispose(id) touches nothing else. The panel next to the one you closed
+// 14. dispose(id) touches nothing else. The panel next to the one you closed
 //     must not lose its agent — the same class of silent failure check 5
 //     exists for, arriving through the new code path.
 {
@@ -1694,14 +1714,14 @@ file's existing fake-bridge pattern.
   registry.applyTiers({ a: 'live', b: 'live', c: 'live' })
   for (const id of ['a', 'b', 'c']) registry.attachSlot(id)
   registry.dispose('b')
-  ok('16 dispose leaves every other session alone',
+  ok('14 dispose leaves every other session alone',
     bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'b' &&
       registry.get('a') !== undefined && registry.get('c') !== undefined &&
       registry.get('b') === undefined,
     `killed=${JSON.stringify(bridge.calls.kill)} a=${!!registry.get('a')} c=${!!registry.get('c')}`)
 }
 
-// 17. Demotion STILL never kills, now that a kill path other than disposeAll
+// 15. Demotion STILL never kills, now that a kill path other than disposeAll
 //     exists. This is check 5's invariant re-asserted against the new code:
 //     the danger was never that kill is called, it was that kill becomes
 //     reachable from a tier change.
@@ -1717,7 +1737,7 @@ file's existing fake-bridge pattern.
   registry.dispose('a')
   registry.applyTiers({ b: 'card' })
   registry.detachSlot('b')
-  ok('17 demotion never kills, even alongside an explicit close',
+  ok('15 demotion never kills, even alongside an explicit close',
     bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a' &&
       registry.get('b') !== undefined,
     `killed=${JSON.stringify(bridge.calls.kill)}`)
@@ -1771,7 +1791,7 @@ killed":
 - [ ] **Step 4: Run the registry checks**
 
 Run: `npm run verify:registry`
-Expected: `17/17 passed`.
+Expected: `20/20 passed` (17 pre-existing assertions plus the 3 new).
 
 - [ ] **Step 5: Write panels checks 13–15, watch them fail**
 
@@ -1953,7 +1973,7 @@ ones.
 - [ ] **Step 10: Run everything**
 
 Run: `npm run verify`
-Expected: green; `17/17` registry, `15/15` panels.
+Expected: green; `20/20` registry, `15/15` panels.
 
 - [ ] **Step 11: Commit**
 
@@ -2130,8 +2150,8 @@ TUIs are corrected by the same change.
 - [ ] **Step 3: Update the verify table in `CLAUDE.md`**
 
 ```markdown
-| `verify:viewport` | plain node | 37 checks: `viewport.ts` (1–11b), `lod.ts` (20–25), `panel-interaction.ts` + `panels.ts` (26–34), `pointer-correct.ts` (35–37) |
-| `verify:registry` | plain node | 17 checks: lifecycle against fakes, including explicit close (15–17) |
+| `verify:viewport` | plain node | 38 checks: `viewport.ts` (1–11b), `lod.ts` (20–25), `panel-interaction.ts` + `panels.ts` (26–34), `pointer-correct.ts` (35–38) |
+| `verify:registry` | plain node | 20 assertions: lifecycle against fakes, including explicit close (13–15). Numbered 1–15 with lettered sub-checks. |
 | `verify:panels` | real Electron | 16 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order |
 ```
 
@@ -2240,7 +2260,7 @@ focus. Each entry says what fails silently if it is undone."
 
 ## Definition of Done
 
-- [ ] `npm run verify` is green: `37/37` viewport, `17/17` registry, `16/16` panels, plus the unchanged pty/window/ipc/canvas/xterm suites.
+- [ ] `npm run verify` is green: `38/38` viewport, `20/20` registry, `16/16` panels, plus the unchanged pty/window/ipc/canvas/xterm suites.
 - [ ] `INTERACT_MIN_SCALE`, `INTERACT_MAX_SCALE`, and `.panel__slot--blocked` appear nowhere in the codebase.
 - [ ] `grep -rn "pty.kill\|pty\.kill" src/renderer` returns exactly two call sites, both in `session-registry.ts`: `disposeAll` and `dispose`.
 - [ ] `grep -rn "process.env" src/renderer` returns nothing.

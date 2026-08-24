@@ -38,10 +38,18 @@ export interface Registry {
   attachSlot(id: PanelId): void
   /** Called by the view's cleanup, before the host leaves the document. */
   detachSlot(id: PanelId): void
+  /** Re-fit after the panel's box changed, and send at most one pty:resize. */
+  refit(id: PanelId): void
   focus(id: PanelId): void
   lastFocusedAt(): Record<PanelId, number>
   version(): number
   subscribe(listener: () => void): () => void
+  /**
+   * Close one panel: free its terminal and kill its process. One of exactly
+   * TWO places pty.kill is called in the renderer, the other being disposeAll.
+   * Tiering must never reach either.
+   */
+  dispose(id: PanelId): void
   disposeAll(): void
 }
 
@@ -197,6 +205,27 @@ export function createRegistry(deps: RegistryDeps): Registry {
       session.handle.detach()
     },
 
+    refit(id) {
+      const session = sessions.get(id)
+      // A carded panel has no attached host to measure; its grid is settled on
+      // the next attachSlot, which already compares against sentGrid.
+      if (!session || session.tier !== 'live') return
+      session.handle.refit()
+      if (!session.spawned) return
+      // A process that has already exited has nothing to signal. attachSlot
+      // deliberately does NOT carry this guard: its behaviour is M3-proven and
+      // a pty:resize for a dead session is a main-side no-op, so the asymmetry
+      // is harmless — noted here so it does not read as an oversight.
+      if (session.status.kind === 'exited') return
+      // At most one pty:resize, and none at all when the new box happens to
+      // fit the same grid — the same SIGWINCH economy attachSlot practises.
+      const { cols, rows } = session.handle.size()
+      const sent = session.sentGrid
+      if (sent && sent.cols === cols && sent.rows === rows) return
+      session.sentGrid = { cols, rows }
+      void bridge.pty.resize({ panelId: id, cols, rows })
+    },
+
     focus(id) {
       const session = sessions.get(id)
       if (!session) return
@@ -221,8 +250,22 @@ export function createRegistry(deps: RegistryDeps): Registry {
       return () => listeners.delete(listener)
     },
 
+    dispose(id) {
+      const session = sessions.get(id)
+      if (!session) return
+      session.handle.dispose()
+      // Guarded on spawned purely to skip a pointless IPC round trip: main's
+      // PtyManager.kill early-returns on an id it has no session for, so an
+      // unguarded call would be harmless — just wasted. Do not reason about
+      // this as though main throws; it does not.
+      if (session.spawned) void bridge.pty.kill(id)
+      sessions.delete(id)
+      bump()
+    },
+
     disposeAll() {
-      // The only place a PTY is killed.
+      // One of two places a PTY is killed; dispose(id) is the other. Tiering
+      // is neither, and must never become either.
       for (const session of sessions.values()) {
         session.handle.dispose()
         if (session.spawned) void bridge.pty.kill(session.id)

@@ -21,9 +21,18 @@ export type PanelStatus =
 export type PanelSpecTemplate = Omit<PanelSpec, 'cols' | 'rows'>
 
 /**
- * Everything the registry needs from a terminal, and nothing about xterm.
- * The registry is testable under plain node because this interface is all it
- * sees; the real implementation lives in terminal/session-factory.ts.
+ * What a panel's terminal exposes to the rest of the renderer, expressed
+ * without naming xterm. Keeping it xterm-free is what lets verify:registry
+ * drive the whole session lifecycle against a fake under plain node; the real
+ * implementation lives in terminal/session-factory.ts.
+ *
+ * It is NOT, however, only what the registry needs — it has grown a second
+ * audience. The registry calls none of `locate`, `cellSize` or
+ * `scrollPosition`: those exist for Canvas.tsx's `__m4a*` test hooks, so
+ * verify:panels can read a terminal's buffer, cell metrics and scrollback
+ * offset back out of the running app. Splitting the probe members into their
+ * own interface is M4b's; until then, adding a member here means deciding
+ * which of the two audiences it is for.
  */
 export interface SessionHandle {
   readonly host: HTMLElement
@@ -33,6 +42,8 @@ export interface SessionHandle {
   detach(): void
   write(data: string): void
   size(): { cols: number; rows: number }
+  /** Re-fit to the host's current box, after the panel's rect changed. */
+  refit(): void
   /** Last N non-empty buffer lines, for the card tier. */
   tail(lines: number): string[]
   focus(): void
@@ -41,6 +52,17 @@ export interface SessionHandle {
   getSelection(): string
   /** Backs menu-driven Cmd+V. Not a raw pty.write: see session-factory.ts. */
   paste(data: string): void
+  /** Buffer position of the first occurrence of `word`, or null. */
+  locate(word: string): { col: number; row: number } | null
+  /** Cell metrics in CSS pixels — transform-blind, like xterm's own. */
+  cellSize(): { width: number; height: number }
+  /**
+   * xterm's buffer.active.viewportY — the scrollback offset. Exists so a
+   * check can assert an unfocused panel's terminal did NOT scroll when a
+   * wheel over it was claimed by the camera (see useViewport's capture-phase
+   * wheel guard). 0 for a session that has never been attached.
+   */
+  scrollPosition(): number
   dispose(): void
 }
 

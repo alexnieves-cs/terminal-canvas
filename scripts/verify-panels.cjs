@@ -198,13 +198,48 @@ app.whenReady().then(async () => {
         ? `${sessionsBefore.size} original session(s) all reused, ${sessionsAfterZoomIn.size} total live=${await liveCount(wc)}`
         : `pid mismatch: ${changedAfterZoomIn.join('; ')}`)
 
-    // The interaction gate. Spec: outside [INTERACT_MIN_SCALE, MAX_SCALE] a
-    // body click "focuses the panel and nothing more" — it must NOT reach
-    // xterm's mouse layer (wrong cell math at this zoom), but it must NOT
-    // steal focus away from the terminal either, or keyboard input has
-    // nowhere to go. Two different observables prove the two different
-    // halves: elementFromPoint proves whether the click reached xterm's DOM
-    // at all; activeElement proves focus survived regardless.
+    // 6. A body click focuses the panel and reaches xterm at any zoom.
+    //    This replaces M3's gate check: correction means there is no longer a
+    //    band inside which mouse input is allowed and outside which it is
+    //    suppressed. The focus half is unchanged and still load-bearing —
+    //    typing must have somewhere to go after a click.
+    {
+      const probe = async () => {
+        const slot = `document.querySelector('.panel__slot')`
+        return wc.executeJavaScript(`(async () => {
+          const slot = ${slot}
+          if (!slot) return { error: 'no live panel' }
+          const r = slot.getBoundingClientRect()
+          const opts = {
+            bubbles: true, cancelable: true, composed: true, view: window,
+            clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+            button: 0, buttons: 1, detail: 1
+          }
+          slot.dispatchEvent(new MouseEvent('mousedown', opts))
+          await new Promise((res) => setTimeout(res, 150))
+          return {
+            active: document.activeElement && document.activeElement.className,
+            blocked: document.querySelectorAll('.panel__slot--blocked').length
+          }
+        })()`)
+      }
+
+      await zoomTo(wc, '0')
+      const atOne = await probe()
+      await zoomTo(wc, '1')
+      const zoomedOut = await probe()
+      await zoomTo(wc, '0')
+
+      const focused = (r) => r && String(r.active || '').includes('xterm-helper-textarea')
+      ok('6 a body click focuses the panel at any zoom, with no gate left',
+        focused(atOne) && focused(zoomedOut) &&
+          atOne.blocked === 0 && zoomedOut.blocked === 0,
+        `1:1 active=${atOne && atOne.active} zoomed active=${zoomedOut && zoomedOut.active} ` +
+        `blocked=${atOne && atOne.blocked}/${zoomedOut && zoomedOut.blocked}`)
+    }
+
+    // Used by check 8 below to focus a panel via a real OS-level click
+    // (rather than a dispatched DOM event) before typing into it.
     const clickPanelBody = async (selector) => {
       const box = await wc.executeJavaScript(
         `(() => { const s = document.querySelector(${JSON.stringify(selector)});
@@ -212,9 +247,6 @@ app.whenReady().then(async () => {
                   const r = s.getBoundingClientRect();
                   return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`
       )
-      // A missing target is an infrastructure failure, not "the click was
-      // gated" — silently treating them the same let the negative half of
-      // this check pass vacuously whenever the selector matched nothing.
       if (!box) throw new Error(`clickPanelBody: no element matched ${selector}`)
       wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
       wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
@@ -228,34 +260,6 @@ app.whenReady().then(async () => {
       ])
       return { reachedXterm, active }
     }
-
-    // First click: nothing selected yet, any live panel does. It becomes
-    // both the focused panel (onFocus) and the React-selected one
-    // (.panel--selected), so the second click can target that SAME panel by
-    // selection rather than hoping querySelector still returns it first.
-    const at100 = await clickPanelBody('.panel__slot')
-    // Two Cmd+- steps from 1.0 land at ~0.69, below INTERACT_MIN_SCALE.
-    await zoomTo(wc, '-')
-    await zoomTo(wc, '-')
-    await sleep(600) // no discrete condition to poll here: a zoom keydown's viewport update is synchronous, this only covers the render/paint settling
-    const zoomedOut = await clickPanelBody('.panel--selected .panel__slot')
-
-    // Both halves of the spec must be able to fail independently:
-    //   - the mouse layer must be reached at 1:1 and NOT reached gated
-    //     (elementFromPoint resolves inside .xterm only when the click was
-    //     allowed through to xterm's own DOM)
-    //   - focus must survive BOTH clicks (activeElement stays the xterm
-    //     textarea) — this is the "focuses the panel and nothing more"
-    //     half: a gated click must not blur the terminal the user was
-    //     already typing into.
-    const reachedXtermCorrectly = at100.reachedXterm === true && zoomedOut.reachedXterm === false
-    const focusSurvivedBoth =
-      String(at100.active).includes('xterm-helper-textarea') &&
-      String(zoomedOut.active).includes('xterm-helper-textarea')
-    ok('6 body clicks reach xterm at 1:1, are mouse-gated when zoomed out, and never lose focus',
-      reachedXtermCorrectly && focusSurvivedBoth,
-      `reachedXterm: 100%=${at100.reachedXterm} gated=${zoomedOut.reachedXterm} — ` +
-        `activeElement: 100%="${at100.active}" gated="${zoomedOut.active}"`)
 
     // 7. Cmd+N. An explicit spec scope item ("a panel whose rect is centred on
     // the current viewport in world coordinates") with no coverage anywhere
@@ -366,6 +370,570 @@ app.whenReady().then(async () => {
       echoed !== false
         ? `card shows ${JSON.stringify(echoed.slice(-60))}`
         : `no card contained ${MARKER} (focused activeElement was "${focused.active}")`)
+
+    // ---------------------------------------------------------------------
+    // 9. Pointer correction. Proves the corrector (Task 3's
+    //    installPointerCorrection / xterm-pointer.ts) puts a click on the
+    //    right cell at a zoom far from 1:1 — the exact case the deleted
+    //    interaction gate used to avoid entirely by suppressing the click.
+    //    This check was made green BEFORE the gate was removed (Task 4),
+    //    deliberately: if this check had come after deletion, a broken
+    //    corrector would have produced a wrong cell instead of a visible
+    //    failure. Now that the gate is gone, this check runs with nothing
+    //    masking it, and is the one proof that removal did not just hide a
+    //    broken corrector.
+    //
+    //    The assertion is about xterm's own hit-testing: at scale 0.5 an
+    //    UNCORRECTED click reports a column at twice the true offset, so a
+    //    double-click lands on the wrong word (or past end-of-line, selecting
+    //    nothing). Writing three well-separated words and double-clicking the
+    //    middle one turns "the column is off by a factor of k" into a string
+    //    comparison.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0') // back to 100% before setting up
+
+      const selection = await wc.executeJavaScript(`(async () => {
+        const slot = document.querySelector('.panel__slot')
+        if (!slot) return { error: 'no live panel' }
+
+        // Focus this panel FIRST. assignTiers pins the focused panel live
+        // unconditionally, which is what keeps it from being demoted to a
+        // card when the zoom drops below LIVE_MIN_SCALE below — without this
+        // there is no .panel__slot left to click by the time we need one.
+        slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+
+        // Known content at known columns. Written through the session handle
+        // rather than the PTY so no shell prompt or echo can shift it.
+        window.__m4aWrite('\\r\\nalpha beta gamma\\r\\n')
+        await new Promise((r) => setTimeout(r, 300))
+
+        // Zoom to 50% via the canvas's own path, so the real transform is
+        // what the corrector sees.
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+        await new Promise((r) => setTimeout(r, 300))
+
+        const scale = window.__m4aScale()
+        const screen = window.__m4aCellToScreen('beta')
+        if (!screen) return { error: 'could not locate the word', scale }
+
+        const opts = {
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: screen.x, clientY: screen.y, button: 0, buttons: 1
+        }
+        const target = document.elementFromPoint(screen.x, screen.y) || slot
+        target.dispatchEvent(new MouseEvent('mousedown', { ...opts, detail: 1 }))
+        target.dispatchEvent(new MouseEvent('mouseup', { ...opts, detail: 1, buttons: 0 }))
+        target.dispatchEvent(new MouseEvent('mousedown', { ...opts, detail: 2 }))
+        target.dispatchEvent(new MouseEvent('mouseup', { ...opts, detail: 2, buttons: 0 }))
+        await new Promise((r) => setTimeout(r, 200))
+
+        return { scale, text: window.__m4aSelection() }
+      })()`)
+
+      ok('9 a double-click selects the right word at 50% zoom',
+        selection && selection.text === 'beta',
+        `scale=${selection && selection.scale} selection=${JSON.stringify(
+          selection && (selection.text ?? selection.error)
+        )}`)
+
+      await zoomTo(wc, '0')
+    }
+
+    // ---------------------------------------------------------------------
+    // 10. Dragging a panel by its chrome moves it by the WORLD delta, not the
+    //     screen delta, INCLUDING across a zoom that happens mid-gesture.
+    //
+    //     Run at a zoom other than 1 on purpose: at 1:1 a screen delta and a
+    //     world delta are identical and a screen-delta implementation passes.
+    //
+    //     The zoom between the second and third move is what discriminates the
+    //     accumulate-deltas implementation applyDrag's docstring warns about —
+    //     the one that adds (p_i - p_i-1) / scale each frame. Its early
+    //     increments were divided by the OLD scale, so once the transform
+    //     changes its total no longer matches the origin-derived answer. It is
+    //     also the only integration-level coverage of the spec's claim that a
+    //     mid-drag zoom is correct by construction, so do not remove the zoom
+    //     as incidental.
+    //
+    //     The expectation is re-derived here from the viewport read back at
+    //     each end ((p - t) / s, applied to the two POINTS, never to their
+    //     difference) rather than borrowed from screenToWorld, so the check
+    //     does not assert production math against itself.
+    //
+    //     Known limit: a variant that advances BOTH originRect and originWorld
+    //     every frame telescopes to exactly the same total — w(p_n) - w(p_0) —
+    //     and no black-box assertion on the final rect can separate it from
+    //     recompute-from-origin. It differs only in accumulated rounding.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      // Cmd+- four times lands near 0.48, and the mid-drag Cmd+- below takes
+      // it lower still; neither number is hardcoded, because the assertion is
+      // expressed against the viewports that are read back.
+      for (let i = 0; i < 4; i++) await zoomTo(wc, '-')
+      await sleep(200)
+
+      const result = await wc.executeJavaScript(`(async () => {
+        const chrome = document.querySelector('.panel__chrome')
+        if (!chrome) return { error: 'no panel' }
+        const panel = chrome.closest('.panel')
+        // Copied field by field: a DOMRect's properties are non-enumerable
+        // getters and would cross executeJavaScript as an empty object.
+        const hostRect = document.querySelector('.canvas').getBoundingClientRect()
+        const host = { left: hostRect.left, top: hostRect.top }
+        const before = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        const r = chrome.getBoundingClientRect()
+        const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        const SCREEN_DX = 120, SCREEN_DY = 60
+
+        const opts = (x, y, buttons) => ({
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons, detail: 1
+        })
+        const vpDown = window.__m4aViewport()
+        chrome.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+        // Several intermediate moves: a recompute-from-origin implementation
+        // and an accumulate-deltas one differ only across multiple frames.
+        for (let i = 1; i <= 4; i++) {
+          document.dispatchEvent(new MouseEvent('mousemove',
+            opts(start.x + (SCREEN_DX * i) / 4, start.y + (SCREEN_DY * i) / 4, 1)))
+          await new Promise((res) => setTimeout(res, 20))
+          // Zoom out once, mid-gesture, with the button still down.
+          if (i === 2) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))
+            await new Promise((res) => setTimeout(res, 120))
+          }
+        }
+        document.dispatchEvent(new MouseEvent('mouseup',
+          opts(start.x + SCREEN_DX, start.y + SCREEN_DY, 0)))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const after = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        return {
+          before, after, host, start, SCREEN_DX, SCREEN_DY,
+          vpDown, vpUp: window.__m4aViewport()
+        }
+      })()`)
+
+      // (p - t) / s on each endpoint under ITS OWN viewport, then subtract.
+      const toWorld = (p, vp, host) => ({
+        x: (p.x - host.left - vp.x) / vp.scale,
+        y: (p.y - host.top - vp.y) / vp.scale
+      })
+      let expectedX = null, expectedY = null, gotX = null, gotY = null, zoomed = false
+      if (result && !result.error) {
+        const from = toWorld(result.start, result.vpDown, result.host)
+        const to = toWorld(
+          { x: result.start.x + result.SCREEN_DX, y: result.start.y + result.SCREEN_DY },
+          result.vpUp, result.host)
+        expectedX = to.x - from.x
+        expectedY = to.y - from.y
+        gotX = result.after.x - result.before.x
+        gotY = result.after.y - result.before.y
+        zoomed = result.vpDown.scale !== result.vpUp.scale
+      }
+      ok('10 a chrome drag moves the panel by the world delta, across a mid-drag zoom',
+        result && !result.error && zoomed &&
+          Math.abs(gotX - expectedX) < 1 && Math.abs(gotY - expectedY) < 1,
+        `scale ${result && result.vpDown && result.vpDown.scale} -> ` +
+        `${result && result.vpUp && result.vpUp.scale} ` +
+        `moved ${gotX},${gotY} expected ${expectedX},${expectedY}`)
+
+      await zoomTo(wc, '0')
+    }
+
+    // ---------------------------------------------------------------------
+    // 11. A resize commits exactly once, on release. The grid must be
+    //     UNCHANGED during the drag and changed after it — one SIGWINCH per
+    //     gesture, not one per frame. A full-screen agent TUI repaints on
+    //     every SIGWINCH, so this is about the process, not about the pixels.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const result = await wc.executeJavaScript(`(async () => {
+        // Pick a panel that IS live rather than whichever one happens to be
+        // first: check 10 leaves its target displaced by a couple of hundred
+        // world units, and inheriting that displacement would make this check
+        // fail as 'panel is not live' the day the drag distance changes.
+        const panel = [...document.querySelectorAll('.panel')]
+          .find((p) => p.querySelector('.panel__slot') && p.querySelector('.panel__resize--se'))
+        if (!panel) return { error: 'no live panel with a resize handle' }
+        const handle = panel.querySelector('.panel__resize--se')
+        const slot = panel.querySelector('.panel__slot')
+        slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const gridBefore = window.__m4aGrid()
+        const r = handle.getBoundingClientRect()
+        const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        const opts = (x, y, buttons) => ({
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons, detail: 1
+        })
+
+        handle.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+        for (let i = 1; i <= 4; i++) {
+          document.dispatchEvent(new MouseEvent('mousemove',
+            opts(start.x + 60 * i, start.y + 40 * i, 1)))
+          await new Promise((res) => setTimeout(res, 40))
+        }
+        const gridDuring = window.__m4aGrid()
+        document.dispatchEvent(new MouseEvent('mouseup', opts(start.x + 240, start.y + 160, 0)))
+        await new Promise((res) => setTimeout(res, 400))
+        const gridAfter = window.__m4aGrid()
+        return { gridBefore, gridDuring, gridAfter }
+      })()`)
+
+      const same = (a, b) => a && b && a.cols === b.cols && a.rows === b.rows
+      ok('11 a resize commits once, on release',
+        result && !result.error &&
+          same(result.gridBefore, result.gridDuring) &&
+          !same(result.gridBefore, result.gridAfter),
+        `before=${JSON.stringify(result && result.gridBefore)} ` +
+        `during=${JSON.stringify(result && result.gridDuring)} ` +
+        `after=${JSON.stringify(result && result.gridAfter)}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 12. Wheel ownership. A wheel over the FOCUSED panel scrolls that
+    //     terminal and must not move the camera; a wheel anywhere else
+    //     (background OR an unfocused panel) pans and must not scroll that
+    //     panel's scrollback. Without this, both handlers run on one
+    //     gesture: useViewport's listener is on the canvas host and xterm's
+    //     bubbles up into it — and a bubble-phase guard narrowed to "only the
+    //     focused panel yields" still double-handles every OTHER panel
+    //     (camera pans while its scrollback silently moves too), which is
+    //     why the guard has to run in capture and stopPropagation before
+    //     xterm's own target-phase handler ever sees the event.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const result = await wc.executeJavaScript(`(async () => {
+        const read = () => getComputedStyle(document.querySelector('.world')).transform
+        const panels = [...document.querySelectorAll('.panel')].filter((p) => p.querySelector('.panel__slot'))
+        if (panels.length < 2) return { error: 'need two live panels' }
+        const [panelA, panelB] = panels
+        const slotA = panelA.querySelector('.panel__slot')
+        const slotB = panelB.querySelector('.panel__slot')
+        const idB = panelB.getAttribute('data-panel-id')
+
+        // Give panel B enough scrollback that a wheel over it would actually
+        // move its viewport if xterm's handler ran — otherwise "scrollY
+        // unchanged" would pass trivially on a panel with nothing to scroll.
+        // __m4aWrite feeds xterm's parser directly (as pty:data would), so
+        // this is 200 real buffer lines, not a shell command — no PTY round
+        // trip needed to build scrollback deep enough to matter.
+        slotB.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((res) => setTimeout(res, 150))
+        const lines = Array.from({ length: 200 }, (_, i) => 'line-' + i).join('\\r\\n') + '\\r\\n'
+        window.__m4aWrite(lines)
+        await new Promise((res) => setTimeout(res, 300))
+
+        // Now focus panel A for the focused/background halves of the check.
+        slotA.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const rA = slotA.getBoundingClientRect()
+        const before = read()
+        slotA.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true,
+          clientX: rA.left + rA.width / 2, clientY: rA.top + rA.height / 2,
+          deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const overFocused = read()
+
+        // Now the background, which must pan.
+        const canvas = document.querySelector('.canvas')
+        canvas.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true,
+          clientX: 5, clientY: 5, deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const overBackground = read()
+
+        // Now an UNFOCUSED panel (B): must pan the camera AND must not move
+        // that panel's own scrollback.
+        //
+        // xterm's own wheel listener is bound to '.xterm' (a descendant of
+        // .panel__slot, which only wraps the host div). Dispatching on the
+        // slot itself would make slot the event's target, and a descendant's
+        // listener is never on the propagation path for its own ancestor's
+        // target — so "scrollY unchanged" would pass vacuously whether or
+        // not the guard actually stops it. Dispatching on '.xterm-screen'
+        // (a real descendant of '.xterm') puts xterm's listener on the path,
+        // the same way a real cursor position over the rendered terminal
+        // would.
+        const scrollBefore = window.__m4aScrollY(idB)
+        const screenB = slotB.querySelector('.xterm-screen')
+        if (!screenB) return { error: 'no .xterm-screen on unfocused panel' }
+        const rB = screenB.getBoundingClientRect()
+        // Negative deltaY (scroll UP): panel B is scrolled to the bottom of
+        // 200 lines of scrollback, so a scroll-down gesture would be a no-op
+        // there regardless of who owns the wheel. Scrolling up is the only
+        // direction that actually moves viewportY, which is what makes
+        // "unchanged" a meaningful assertion rather than a vacuous one.
+        screenB.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true,
+          clientX: rB.left + rB.width / 2, clientY: rB.top + rB.height / 2,
+          deltaY: -120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const overUnfocused = read()
+        const scrollAfter = window.__m4aScrollY(idB)
+
+        // Cmd+wheel over the FOCUSED panel. canvas-input.ts reads metaKey as a
+        // zoom intent exactly as it reads a trackpad pinch's synthetic ctrlKey,
+        // and the spec makes a zoom gesture always the camera's — otherwise a
+        // mouse user who had clicked into a panel could not zoom the canvas
+        // while the cursor was over it, and Cmd, the modifier every other
+        // canvas shortcut requires, would be ignored in the one place it is
+        // the canvas's own claim. Dispatched LAST, after every measurement
+        // above: it changes the scale, and the pan assertions above compare
+        // transforms taken at a fixed one.
+        const beforeMeta = read()
+        slotA.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, metaKey: true,
+          clientX: rA.left + rA.width / 2, clientY: rA.top + rA.height / 2,
+          deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const afterMeta = read()
+
+        return {
+          before, overFocused, overBackground, overUnfocused,
+          scrollBefore, scrollAfter, beforeMeta, afterMeta
+        }
+      })()`)
+
+      ok('12 a wheel over the focused terminal does not move the camera; Cmd+wheel there still zooms; every other wheel pans and does not scroll an unfocused terminal',
+        result && !result.error &&
+          result.overFocused === result.before &&
+          result.overBackground !== result.before &&
+          result.overUnfocused !== result.overBackground &&
+          typeof result.scrollBefore === 'number' && result.scrollBefore > 0 &&
+          result.scrollBefore === result.scrollAfter &&
+          result.afterMeta !== result.beforeMeta,
+        `before=${result && result.before} focused=${result && result.overFocused} ` +
+        `background=${result && result.overBackground} unfocused=${result && result.overUnfocused} ` +
+        `scrollBefore=${result && result.scrollBefore} scrollAfter=${result && result.scrollAfter} ` +
+        `metaKey over focused: ${result && result.beforeMeta} -> ${result && result.afterMeta}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 13. An idle or exited panel closes on the first click. 14. A running
+    // panel needs two. 15. Closing one panel does not disturb any other,
+    // including a demoted one — check 4's invariant re-asserted against the
+    // new dispose(id) path.
+    //
+    // The setup below is what makes 15 a real NEGATIVE check rather than a
+    // restatement of 13/14. dispose(id) is the second caller of pty.kill in
+    // the renderer, and the failure it could introduce is killing a session
+    // whose React component is not currently mounted as a live slot — exactly
+    // the state a carded panel is in. So one panel is focused (assignTiers
+    // pins the focused panel live unconditionally, which keeps a running panel
+    // available for 14) and the camera is then zoomed out to fit, which drops
+    // every other panel below LIVE_MIN_SCALE and cards it WITHOUT disposing
+    // its session. Only then is the pid snapshot taken. Without this, every
+    // spawned session is live when the closes happen and nothing in the block
+    // requires a carded one to survive.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      await waitUntil(async () => (await liveCount(wc)) > 0, 6000)
+      await wc.executeJavaScript(`(() => {
+        const slot = document.querySelector('.panel__slot')
+        if (!slot) return false
+        slot.dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+        return true
+      })()`)
+      await sleep(200)
+      // The ids that are LIVE right now. The demotion assertion below is
+      // anchored to this set rather than to "some carded session survived":
+      // panels the camera has never visited are carded from the start, and at
+      // any given moment one of them has usually spawned at some point, so an
+      // unanchored version passes by accident whether or not this block ever
+      // demotes anything. Requiring a survivor that was live HERE and is a
+      // card THERE is what ties the assertion to the zoom-out below.
+      const liveBefore = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')]` +
+        `.filter((p) => p.querySelector('.panel__slot'))` +
+        `.map((p) => p.getAttribute('data-panel-id'))`
+      )
+      await zoomTo(wc, '1')
+      // Wait on the demotion itself, not a clock: DEMOTE_DELAY_MS holds every
+      // demotion back by 250ms, so a fixed sleep here would either be a guess
+      // or would snapshot the pre-demotion state.
+      await waitUntil(
+        async () => (await cardCount(wc)) > 0 && (await liveCount(wc)) <= 1,
+        6000
+      )
+      const before = await settledSessionMap(wc)
+
+      const result = await wc.executeJavaScript(`(async () => {
+        const panels = [...document.querySelectorAll('.panel')]
+        // A panel that never spawned: its card says "not started".
+        const idle = panels.find((p) => p.querySelector('.panel__card-idle'))
+        // A panel with a running pty: its badge shows a pid.
+        const running = panels.find((p) => /pid /.test(p.textContent || ''))
+        if (!idle || !running) return { error: 'need one idle and one running panel' }
+
+        const idleId = idle.getAttribute('data-panel-id')
+        const runningId = running.getAttribute('data-panel-id')
+        const click = (el) => el.dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+
+        const countBefore = document.querySelectorAll('.panel').length
+        click(idle.querySelector('.panel__close'))
+        await new Promise((r) => setTimeout(r, 200))
+        const afterIdleClose = document.querySelectorAll('.panel').length
+
+        // Re-queried before each click rather than captured once: React keys
+        // are stable so today the node survives the idle panel's removal and
+        // the re-render, but a click dispatched into a detached node would
+        // fail this check for a reason that has nothing to do with arming.
+        click(running.querySelector('.panel__close'))
+        await new Promise((r) => setTimeout(r, 200))
+        const armedText = (running.querySelector('.panel__close').textContent || '').trim()
+        const afterFirstClick = document.querySelectorAll('.panel').length
+        click(running.querySelector('.panel__close'))
+        await new Promise((r) => setTimeout(r, 300))
+        const afterSecondClick = document.querySelectorAll('.panel').length
+
+        return {
+          idleId, runningId, countBefore, afterIdleClose,
+          armedText, afterFirstClick, afterSecondClick
+        }
+      })()`)
+
+      ok('13 an idle panel closes on the first click',
+        result && !result.error && result.afterIdleClose === result.countBefore - 1,
+        `${result && result.countBefore} -> ${result && result.afterIdleClose}`)
+
+      ok('14 a running panel arms first and closes on the second click',
+        result && !result.error &&
+          result.afterFirstClick === result.afterIdleClose &&
+          /kill/i.test(result.armedText || '') &&
+          result.afterSecondClick === result.afterIdleClose - 1,
+        `armed="${result && result.armedText}" ` +
+        `${result && result.afterFirstClick} -> ${result && result.afterSecondClick}`)
+
+      const runningId = result && !result.error ? result.runningId : null
+      // pty.kill is async IPC, so the close may not have reached pty:list yet.
+      // NOT settledSessionMap: that waits for two equal-size reads and would
+      // happily settle on the PRE-kill state. Waiting on the specific id fails
+      // in the safe direction anyway — an unlanded kill leaves runningId in
+      // `after` and turns this check red, so it can never hide a regression.
+      if (runningId) await waitUntil(async () => !(await sessionMap(wc)).has(runningId), 2000)
+      const after = await sessionMap(wc)
+      const survivors = new Map([...before].filter(([id]) => id !== runningId))
+      const { ok: preserved, changed } = pidsPreserved(survivors, after)
+      // The ids currently rendering a card. Intersected with `liveBefore` and
+      // with `survivors` (which comes from pty:list) this can only name a panel
+      // that was a live terminal before the zoom-out, is a card now, and still
+      // holds its original pid after a sibling was closed — the negative check
+      // the spec asks for. A never-started panel cards too, but has no session
+      // to lose, and `survivors` excludes it.
+      const cardedIds = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')]` +
+        `.filter((p) => p.querySelector('.panel__card'))` +
+        `.map((p) => p.getAttribute('data-panel-id'))`
+      )
+      const cardedSurvivor = cardedIds.find(
+        (id) => liveBefore.includes(id) && survivors.has(id) && after.has(id)
+      )
+      // The result/size guards matter: without them an in-page `{ error }`
+      // leaves runningId null, `survivors` holds everything, nothing was
+      // killed — and this check reports PASS having tested nothing.
+      ok('15 closing one panel kills only that panel\'s pty, demoted siblings included',
+        result && !result.error && survivors.size > 0 &&
+          preserved && !after.has(runningId) && cardedSurvivor !== undefined,
+        preserved
+          ? `${survivors.size} session(s) unchanged (carded survivor: ${cardedSurvivor ?? 'NONE'}), ` +
+            `${runningId} gone`
+          : `pid mismatch: ${changed.join('; ')}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 16. Selecting a panel raises it above its neighbours, and does so via
+    //     zIndex rather than by reordering the DOM. The DOM-order half is the
+    //     real assertion: React reconciles a reordered keyed list by MOVING
+    //     nodes, which would incidentally detach a live terminal's host.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const result = await wc.executeJavaScript(`(async () => {
+        const ids = () => [...document.querySelectorAll('.panel')]
+          .map((p) => p.getAttribute('data-panel-id'))
+        const panels = [...document.querySelectorAll('.panel')]
+        if (panels.length < 2) return { error: 'need two panels' }
+        const zOf = (p) => parseInt(getComputedStyle(p).zIndex || '0', 10)
+        // Pick the panel with the LOWEST z, so raising it is observable.
+        const target = panels.reduce((lo, p) => (zOf(p) < zOf(lo) ? p : lo), panels[0])
+        const id = target.getAttribute('data-panel-id')
+        const domBefore = ids().join(',')
+        const zBefore = zOf(target)
+        const maxBefore = Math.max(...panels.map(zOf))
+
+        target.querySelector('.panel__chrome').dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+        document.dispatchEvent(new MouseEvent('mouseup',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 0 }))
+        await new Promise((r) => setTimeout(r, 200))
+
+        const raised = document.querySelector('[data-panel-id="' + id + '"]')
+        return {
+          id, zBefore, maxBefore, zAfter: zOf(raised),
+          domBefore, domAfter: ids().join(',')
+        }
+      })()`)
+
+      ok('16 selecting raises by z-index without reordering the DOM',
+        result && !result.error &&
+          result.zAfter > result.maxBefore &&
+          result.domBefore === result.domAfter,
+        `z ${result && result.zBefore} -> ${result && result.zAfter} ` +
+        `(max was ${result && result.maxBefore}); dom stable=${
+          result && result.domBefore === result.domAfter}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 17. Ids stay unique once panels can be REMOVED. A length-derived id
+    //     (`n${panels.length + 1}`) was sound while the array only grew;
+    //     removePanel breaks it, and every consequence is silent —
+    //     registry.ensure returns the EXISTING session for a repeated id, so
+    //     the second panel renders the first one's handle.host (which can only
+    //     live in one slot), React logs a duplicate-key warning, and
+    //     setPanelRect/removePanel then act on both entries at once. Checks
+    //     13/14 have already closed two panels by this point, which is exactly
+    //     the state that makes the length counter run back over ids it has
+    //     already handed out. Three spawns, because with a length counter the
+    //     first one lands in the gap the closes opened and only the ones after
+    //     it collide.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const countBefore = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel').length`
+      )
+      for (let i = 0; i < 3; i++) {
+        await zoomTo(wc, 'n')
+        await sleep(250)
+      }
+      const ids = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
+      )
+      const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i)
+      ok('17 spawning after a close never reuses a panel id',
+        ids.length === countBefore + 3 && duplicates.length === 0,
+        `${countBefore} -> ${ids.length} panels, duplicates=[${duplicates.join(', ')}]`)
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

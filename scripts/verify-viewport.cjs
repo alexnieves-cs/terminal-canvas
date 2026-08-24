@@ -307,6 +307,234 @@ const panelAt = (id, x, y) => ({ id, x, y, w: 520, h: 340 })
     JSON.stringify(tiers))
 }
 
+// ---------------------------------------------------------------------------
+// M4a: panel interaction geometry (26-34)
+// ---------------------------------------------------------------------------
+
+/** A drag that starts at the centre of `rect` in world space. */
+const dragFrom = (rect, mode) => ({
+  panelId: rect.id,
+  mode,
+  originRect: rect,
+  originWorld: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
+})
+
+const RECT = { id: 'p', x: 100, y: 50, w: 720, h: 460 }
+const MOVE = { kind: 'move' }
+
+// 26. A move translates by the world delta and changes nothing else.
+{
+  const state = dragFrom(RECT, MOVE)
+  const out = V.applyDrag(state, { x: state.originWorld.x + 30, y: state.originWorld.y - 12 })
+  ok('26 a move translates by the world delta',
+    out.x === 130 && out.y === 38 && out.w === RECT.w && out.h === RECT.h,
+    JSON.stringify(out))
+}
+
+// 27. A fixed SCREEN gesture maps to a world distance proportional to 1/scale
+//     — the linearity of screenToWorld composed with applyDrag. This does NOT
+//     catch the delta trap (screenToWorld(p2 - p1) instead of screenToWorld(p2)
+//     - screenToWorld(p1)): that mistake is made by a CALLER before
+//     applyDrag ever runs, and applyDrag receives only the two already-
+//     resolved world points here, so it cannot commit or reveal that bug.
+//     verify:panels check 10 (Task 5) is what actually catches it: a real
+//     drag gesture at a non-1 scale asserting the panel moved
+//     screenDelta / scale.
+{
+  const SCREEN_FROM = { x: 400, y: 300 }
+  const SCREEN_TO = { x: 500, y: 300 }
+  const distances = {}
+  for (const scale of [0.5, 1, 2]) {
+    const vp = { x: 137, y: -42, scale }
+    const w1 = V.screenToWorld(SCREEN_FROM, vp)
+    const w2 = V.screenToWorld(SCREEN_TO, vp)
+    const state = { panelId: 'p', mode: MOVE, originRect: RECT, originWorld: w1 }
+    distances[scale] = V.applyDrag(state, w2).x - RECT.x
+  }
+  ok('27 a fixed screen drag covers 1/scale world units',
+    near(distances[0.5], 200) && near(distances[1], 100) && near(distances[2], 50),
+    JSON.stringify(distances))
+}
+
+// 28. applyDrag is stateless: its result depends only on its arguments, so
+//     calling it 50 times against the same unmutated state cannot differ from
+//     calling it once with the final point. This does NOT catch a caller that
+//     accumulates per-frame deltas into its OWN state before calling
+//     applyDrag — no stateless function with this signature can fail that
+//     way, since there is no state here to accumulate into. That caller-side
+//     bug is covered by the same Task 5 check as 27, verify:panels check 10.
+{
+  const state = dragFrom(RECT, MOVE)
+  const target = { x: state.originWorld.x + 333, y: state.originWorld.y + 77 }
+  const direct = V.applyDrag(state, target)
+  let stepped = null
+  for (let i = 1; i <= 50; i++) {
+    stepped = V.applyDrag(state, {
+      x: state.originWorld.x + (333 * i) / 50,
+      y: state.originWorld.y + (77 * i) / 50
+    })
+  }
+  ok('28 a drag depends on cursor position, not frame count',
+    near(stepped.x, direct.x) && near(stepped.y, direct.y),
+    `${JSON.stringify(stepped)} vs ${JSON.stringify(direct)}`)
+}
+
+// 29. Zoom changing mid-drag does not corrupt the result. The caller converts
+//     the cursor to world space with the CURRENT viewport; because applyDrag
+//     works from originWorld rather than from the previous frame, the panel
+//     ends up under the cursor either way.
+{
+  const SCREEN_END = { x: 900, y: 640 }
+  const vpStart = { x: 0, y: 0, scale: 1 }
+  const vpEnd = { x: 0, y: 0, scale: 0.25 }
+  const originWorld = V.screenToWorld({ x: 400, y: 300 }, vpStart)
+  const state = { panelId: 'p', mode: MOVE, originRect: RECT, originWorld }
+  const endWorld = V.screenToWorld(SCREEN_END, vpEnd)
+  const out = V.applyDrag(state, endWorld)
+  ok('29 zoom changing mid-drag keeps the panel under the cursor',
+    near(out.x - RECT.x, endWorld.x - originWorld.x) &&
+      near(out.y - RECT.y, endWorld.y - originWorld.y),
+    JSON.stringify(out))
+}
+
+// 30. Resizing east changes width only. x/y must never move: a resize that
+//     drifts the origin is the exact bug that dropping the n/w edges avoids.
+{
+  const state = dragFrom(RECT, { kind: 'resize', edge: 'e' })
+  const out = V.applyDrag(state, { x: state.originWorld.x + 80, y: state.originWorld.y + 80 })
+  ok('30 resize e changes width only',
+    out.w === RECT.w + 80 && out.h === RECT.h && out.x === RECT.x && out.y === RECT.y,
+    JSON.stringify(out))
+}
+
+// 31. Resizing south changes height only.
+{
+  const state = dragFrom(RECT, { kind: 'resize', edge: 's' })
+  const out = V.applyDrag(state, { x: state.originWorld.x + 80, y: state.originWorld.y + 80 })
+  ok('31 resize s changes height only',
+    out.h === RECT.h + 80 && out.w === RECT.w && out.x === RECT.x && out.y === RECT.y,
+    JSON.stringify(out))
+}
+
+// 32. Resizing south-east changes both.
+{
+  const state = dragFrom(RECT, { kind: 'resize', edge: 'se' })
+  const out = V.applyDrag(state, { x: state.originWorld.x - 40, y: state.originWorld.y + 25 })
+  ok('32 resize se changes both dimensions',
+    out.w === RECT.w - 40 && out.h === RECT.h + 25 && out.x === RECT.x && out.y === RECT.y,
+    JSON.stringify(out))
+}
+
+// 33. A resize dragged far past the floor stops AT the floor and never
+//     inverts. A negative width would make xterm's fit() compute a
+//     nonsensical grid rather than throw.
+{
+  const state = dragFrom(RECT, { kind: 'resize', edge: 'se' })
+  const out = V.applyDrag(state, {
+    x: state.originWorld.x - 99999,
+    y: state.originWorld.y - 99999
+  })
+  ok('33 a resize clamps to the minimum size',
+    out.w === V.MIN_PANEL_W && out.h === V.MIN_PANEL_H,
+    JSON.stringify(out))
+}
+
+// 34. The panels helpers are pure: they return new arrays and never mutate.
+{
+  const panels = [
+    { rect: { id: 'a', x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: 'a', cwd: '~', args: [] }, z: 1 },
+    { rect: { id: 'b', x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: 'b', cwd: '~', args: [] }, z: 2 }
+  ]
+  const snapshot = JSON.stringify(panels)
+  const moved = V.setPanelRect(panels, 'a', { id: 'a', x: 99, y: 99, w: 10, h: 10 })
+  const removed = V.removePanel(panels, 'a')
+  const raised = V.raisePanel(panels, 'a')
+  ok('34 panels helpers are pure and correct',
+    JSON.stringify(panels) === snapshot &&
+      moved[0].rect.x === 99 && panels[0].rect.x === 0 &&
+      removed.length === 1 && removed[0].rect.id === 'b' &&
+      raised.find((p) => p.rect.id === 'a').z === 3 &&
+      V.nextZ(panels) === 3,
+    `nextZ=${V.nextZ(panels)} raisedZ=${raised.find((p) => p.rect.id === 'a').z}`)
+}
+
+// ---------------------------------------------------------------------------
+// M4a: pointer correction (35-37)
+// ---------------------------------------------------------------------------
+
+// The panel slot as the browser reports it: getBoundingClientRect is
+// transform-aware, so `left` is already a SCREEN pixel coordinate.
+const SLOT = { left: 300, top: 200 }
+
+// 35. At scale 1 the point is returned untouched. This is the common case and
+//     it must cost nothing and change nothing.
+{
+  const p = { x: 512, y: 377 }
+  const out = V.correctForScale(p, SLOT, 1)
+  ok('35 correctForScale is identity at scale 1',
+    out.x === p.x && out.y === p.y, JSON.stringify(out))
+}
+
+// 36. The offset from the slot's origin is divided by the scale, while the
+//     origin itself is preserved. That combination is the whole fix: xterm
+//     computes `clientX - rect.left` and divides by an UNSCALED cell width,
+//     so the offset must arrive already in CSS pixels.
+{
+  const out = V.correctForScale({ x: 300 + 400, y: 200 + 100 }, SLOT, 2)
+  ok('36 correctForScale halves the offset at scale 2',
+    near(out.x - SLOT.left, 200) && near(out.y - SLOT.top, 50),
+    `offset ${out.x - SLOT.left}, ${out.y - SLOT.top}`)
+}
+
+// 37. Below 1:1 the offset grows. Checked across a spread, and expressed as
+//     the property rather than as four hardcoded numbers: corrected offset
+//     times scale must return the original screen offset, at every scale.
+{
+  let worst = 0
+  for (const scale of [0.1, 0.25, 0.5, 0.9, 1.1, 2, 3]) {
+    for (const p of [{ x: 300, y: 200 }, { x: 640, y: 480 }, { x: 12, y: 999 }]) {
+      const out = V.correctForScale(p, SLOT, scale)
+      worst = Math.max(
+        worst,
+        Math.abs((out.x - SLOT.left) * scale - (p.x - SLOT.left)),
+        Math.abs((out.y - SLOT.top) * scale - (p.y - SLOT.top))
+      )
+    }
+  }
+  ok('37 correcting then rescaling round-trips at every scale', worst < EPS,
+    `worst drift ${worst}`)
+}
+
+// 38. Below 1:1 is where the uncorrected error was largest and where the gate
+//     used to refuse input entirely. A concrete sub-1 scale pin that the offset
+//     doubles (opposite of check 36). At scale 0.5, input point (500, 300) with
+//     slot (300, 200): offset is (200, 100) screen pixels; divided by 0.5 gives
+//     (400, 200) CSS pixels; corrected point is (300+400, 200+200) = (700, 400).
+{
+  const out = V.correctForScale({ x: 500, y: 300 }, SLOT, 0.5)
+  ok('38 correctForScale doubles the offset at scale 0.5',
+    near(out.x - SLOT.left, 400) && near(out.y - SLOT.top, 200),
+    `offset ${out.x - SLOT.left}, ${out.y - SLOT.top}`)
+}
+
+// 39. The non-finite / non-positive guard. A corrupted viewport is the only
+//     way to get here, but the consequence of not guarding is specific: the
+//     division would emit NaN or Infinity, and xterm-pointer.ts copies the
+//     result straight into a synthetic MouseEvent's clientX/clientY. Returning
+//     the input unchanged leaves the click merely uncorrected instead. Checked
+//     against a POINT OFFSET FROM THE SLOT — an input equal to the slot origin
+//     is a fixed point of the real arithmetic and would pass without a guard.
+{
+  const p = { x: SLOT.left + 400, y: SLOT.top + 100 }
+  const same = (scale) => {
+    const out = V.correctForScale(p, SLOT, scale)
+    return out.x === p.x && out.y === p.y
+  }
+  ok('39 correctForScale returns the point unchanged for a corrupt scale',
+    same(0) && same(NaN) && same(-2) && same(Infinity),
+    `0=${same(0)} NaN=${same(NaN)} -2=${same(-2)} Infinity=${same(Infinity)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

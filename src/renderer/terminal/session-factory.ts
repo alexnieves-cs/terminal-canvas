@@ -51,6 +51,12 @@ function createHandle(id: PanelId): SessionHandle {
       if (!handles) throw new Error(`panel ${id}: size() called before attach()`)
       return { cols: handles.term.cols, rows: handles.term.rows }
     },
+    refit() {
+      // Guarded rather than ensure()d, for the same reason size() is: a
+      // Terminal that was never opened has no host box to fit against, and
+      // constructing one here would only produce xterm's 80x24 default.
+      if (handles) handles.fitAddon.fit()
+    },
     tail(lines) {
       if (!handles) return []
       // Read xterm's own parsed grid rather than keeping a second copy of every
@@ -79,6 +85,38 @@ function createHandle(id: PanelId): SessionHandle {
       // multi-line prompt submit as a separate Enter, so pasting a prompt
       // into `claude` fires off several partial prompts instead of one.
       ensure().term.paste(data)
+    },
+    locate(word) {
+      if (!handles) return null
+      const { term } = handles
+      const buffer = term.buffer.active
+      // Search the VISIBLE rows and return a row index relative to the top of
+      // the screen: a screen coordinate needs a screen row, not a buffer row.
+      for (let row = 0; row < term.rows; row++) {
+        const line = buffer.getLine(buffer.viewportY + row)
+        if (!line) continue
+        const col = line.translateToString(true).indexOf(word)
+        if (col !== -1) return { col, row }
+      }
+      return null
+    },
+    cellSize() {
+      if (!handles) return { width: 0, height: 0 }
+      const { term } = handles
+      const screen = term.element?.querySelector('.xterm-screen') as HTMLElement | null
+      if (!screen) return { width: 0, height: 0 }
+      // offsetWidth/offsetHeight are LAYOUT pixels — unaffected by an
+      // ancestor's CSS transform, which is exactly the property needed here
+      // and the same blindness xterm's own dimensions.css.cell.width has.
+      // Deriving from the rendered screen rather than reading a private field
+      // keeps this honest if the font metrics ever change.
+      return {
+        width: screen.offsetWidth / (term.cols || 1),
+        height: screen.offsetHeight / (term.rows || 1)
+      }
+    },
+    scrollPosition() {
+      return handles?.term.buffer.active.viewportY ?? 0
     },
     dispose() {
       if (handles) disposeTerminal(handles)

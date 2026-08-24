@@ -2,16 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type Mouse
 import { CanvasHud } from './CanvasHud'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
-import { hitTest, screenToWorld, type Point } from './viewport'
+import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
+import { usePanelDrag } from './usePanelDrag'
+import type { DragMode, DragState } from './panel-interaction'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
-import { makePanel, SEED_PANELS, type Panel } from '@renderer/panels/panels'
+import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
+import { makePanel, nextZ, raisePanel, removePanel, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
-/** Clicks reach xterm only near 1:1; see the spec's "Focus and input". */
-const INTERACT_MIN_SCALE = 0.9
-const INTERACT_MAX_SCALE = 1.1
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
 
@@ -28,18 +28,53 @@ export function Canvas(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [panels, setPanels] = useState<Panel[]>(SEED_PANELS)
   const rects = useMemo(() => panels.map((p) => p.rect), [panels])
+  // hitTest returns the LAST match, so paint order and pick order agree only
+  // if the array it receives is in paint order. Paint order is z now, not
+  // array position — see the note on Panel.z.
+  const hitOrder = useMemo(
+    () => [...panels].sort((a, b) => a.z - b.z).map((p) => p.rect),
+    [panels]
+  )
   // Declared before useViewport (which takes it as an argument) rather than
   // grouped with the other callbacks below: a const used before its
   // declaration is a TDZ error, not just a style preference.
-  const onSpawn = useCallback(
-    (centre: Point) =>
-      setPanels((current) => [...current, makePanel(`n${current.length + 1}`, centre)]),
-    []
-  )
-  const viewport = useViewport(hostRef, rects, onSpawn)
+  //
+  // The id is a monotonic sequence, NOT the array's length. Length-derived ids
+  // were sound while the array only grew; removePanel breaks that — spawn n13, close any
+  // panel, spawn again, and the second panel is n13 too. Every consequence is
+  // silent: registry.ensure returns the EXISTING session, so the new panel
+  // renders the old one's handle.host (which can only live in one slot), and
+  // setPanelRect/removePanel then act on both entries at once. The counter is a
+  // ref rather than state because nothing renders it. `n` keeps it clear of the
+  // seed panels' `s` ids.
+  const nextIdRef = useRef(1)
+  const onSpawn = useCallback((centre: Point) => {
+    const id = `n${nextIdRef.current++}`
+    setPanels((current) => [...current, makePanel(id, centre, nextZ(current))])
+  }, [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+
+  // Mirrors focusedId into a ref so shouldYieldWheel (below) can read the
+  // current focus without being redefined on every focus change — it must
+  // stay referentially stable (useCallback with an empty dep list) so
+  // useViewport's effect installs the wheel listener exactly once.
+  const focusedIdRef = useRef(focusedId)
+  focusedIdRef.current = focusedId
+
+  // A wheel belongs to a terminal only when it is over the FOCUSED panel.
+  // Focus is explicit — the user clicked in — which makes the rule
+  // predictable without having to be explained.
+  const shouldYieldWheel = useCallback((event: WheelEvent): boolean => {
+    const id = focusedIdRef.current
+    if (!id) return false
+    const target = event.target as HTMLElement | null
+    const panel = target?.closest?.('.panel')
+    return panel?.getAttribute('data-panel-id') === id
+  }, [])
+
+  const viewport = useViewport(hostRef, rects, onSpawn, shouldYieldWheel)
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
@@ -57,14 +92,12 @@ export function Canvas(): JSX.Element {
   // subscription directly against xterm; now that TerminalPanel is a dumb
   // view, ONE subscription here routes to whichever session is focused,
   // rather than each panel subscribing and every panel but one discarding
-  // the event. focusedIdRef mirrors state into a ref (the same pattern as
-  // useViewport's viewportRef) so the listener reads the current focus
-  // without resubscribing. (Cmd+C/Cmd+V arrive as main-side menu
-  // accelerators via edit:copy/edit:paste, not as a canvas keydown, so
-  // they are unrelated to useViewport's "every shortcut requires Cmd" rule
-  // for bare keys reaching the PTY.)
-  const focusedIdRef = useRef(focusedId)
-  focusedIdRef.current = focusedId
+  // the event. focusedIdRef (declared above, alongside shouldYieldWheel)
+  // mirrors state into a ref (the same pattern as useViewport's viewportRef)
+  // so the listener reads the current focus without resubscribing. (Cmd+C/
+  // Cmd+V arrive as main-side menu accelerators via edit:copy/edit:paste,
+  // not as a canvas keydown, so they are unrelated to useViewport's "every
+  // shortcut requires Cmd" rule for bare keys reaching the PTY.)
   useEffect(() => {
     const offCopy = window.canvas.edit.onCopy(() => {
       const id = focusedIdRef.current
@@ -83,15 +116,144 @@ export function Canvas(): JSX.Element {
     }
   }, [])
 
+  // Same mirror-into-a-ref pattern, for the listeners below that need the
+  // current scale but must not resubscribe: `viewport` changes on every wheel
+  // event, and a document-level listener reinstalled at 60Hz mid-gesture would
+  // drop the drag state it is holding.
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
+
+  // Corrects xterm's coordinates for the world transform. Reads the scale
+  // through a ref so the listener is installed once and never resubscribes —
+  // viewport changes on every wheel event.
+  useEffect(() => installPointerCorrection(() => viewportRef.current.scale), [])
+
+  // Test hooks for verify:panels. The registry is a module-level closure with
+  // no global handle by design, and executeJavaScript has no other route into
+  // it. Kept to seven narrow reads/writes rather than exposing the registry
+  // itself, so the suite cannot quietly start depending on internals.
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    w.__m4aScale = (): number => viewportRef.current.scale
+    w.__m4aWrite = (data: string): void => {
+      const id = focusedIdRef.current
+      if (id) registry.get(id)?.handle.write(data)
+    }
+    w.__m4aSelection = (): string => {
+      const id = focusedIdRef.current
+      return registry.get(id ?? '')?.handle.getSelection() ?? ''
+    }
+    w.__m4aGrid = (): { cols: number; rows: number } | null => {
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      // Guarded on the tier, because size() throws by design for a session
+      // that was never attached (see session-factory). There is a window
+      // between focusedId being set and attachSlot landing, and an unguarded
+      // read there would reject executeJavaScript and surface as an
+      // infrastructure error for the whole suite rather than a null.
+      return session && session.tier === 'live' ? session.handle.size() : null
+    }
+    /**
+     * The full viewport, so a check can re-derive screenToWorld itself rather
+     * than assert against the production conversion it is testing.
+     */
+    w.__m4aViewport = (): { x: number; y: number; scale: number } => ({
+      ...viewportRef.current
+    })
+    /** Screen-space centre of the first cell of `word` in the focused panel. */
+    w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      if (!session) return null
+      const found = session.handle.locate(word)
+      if (!found) return null
+      const rect = session.handle.host.getBoundingClientRect()
+      const cell = session.handle.cellSize()
+      const scale = viewportRef.current.scale
+      // rect is transform-aware (screen px); cell is CSS px. Multiplying the
+      // cell offset by the scale is the INVERSE of correctForScale, which is
+      // how a caller turns a buffer position back into a real screen point.
+      return {
+        x: rect.left + (found.col + 0.5) * cell.width * scale,
+        y: rect.top + (found.row + 0.5) * cell.height * scale
+      }
+    }
+    /** A panel's xterm scrollback offset, by id — not just the focused one. */
+    w.__m4aScrollY = (id: string): number | null => {
+      const session = registry.get(id)
+      return session ? session.handle.scrollPosition() : null
+    }
+  }, [])
+
+  // One gesture at a time, driven by document listeners installed once. Moves
+  // rewrite the rect on every frame; only a resize commits anything to the PTY,
+  // and only on release.
+  const beginDrag = usePanelDrag({
+    hostRef,
+    viewportRef,
+    onDrag: useCallback(
+      (id: string, rect: WorldRect) => setPanels((current) => setPanelRect(current, id, rect)),
+      []
+    ),
+    onCommit: useCallback((id: string, mode: DragMode) => {
+      // A move changes no terminal dimension, so it has nothing to commit.
+      if (mode.kind !== 'resize') return
+      // One commit per gesture, never one per frame: a full-screen agent TUI
+      // repaints its whole frame on every SIGWINCH, and resizing live would
+      // mean sixty of those a second at sizes the user never meant to keep.
+      // refit sends at most one pty:resize, and none if the grid is unchanged.
+      registry.refit(id)
+    }, [])
+  })
+
+  const onBeginDrag = useCallback(
+    (state: DragState) => {
+      const host = hostRef.current
+      if (!host) return
+      const bounds = host.getBoundingClientRect()
+      // The panel supplies CLIENT coordinates; only the canvas knows the
+      // viewport, so the conversion belongs here. Converting the POINT (not a
+      // delta) is what makes the gesture move by screenDelta / scale:
+      // usePanelDrag converts each move the same way, and the two translations
+      // cancel in the subtraction applyDrag does.
+      beginDrag({
+        ...state,
+        originWorld: screenToWorld(
+          { x: state.originWorld.x - bounds.left, y: state.originWorld.y - bounds.top },
+          viewportRef.current
+        )
+      })
+    },
+    [beginDrag]
+  )
+
   // Stable identities: these go into TerminalPanel's effect deps, and a fresh
   // arrow each render would tear the terminal down and reopen it every frame.
   const onSlotMount = useCallback((id: string) => registry.attachSlot(id), [])
   const onSlotUnmount = useCallback((id: string) => registry.detachSlot(id), [])
-  const onFocusPanel = useCallback((id: string) => {
+  const onClosePanel = useCallback((id: string) => {
+    // What actually matters is that dispose runs SYNCHRONOUSLY inside this
+    // handler, killing the pty on the click that asked for it. The ordering
+    // against setPanels is not load-bearing: this is a React synthetic
+    // onMouseDown, so setPanels is batched and the unmount happens after the
+    // handler returns either way. TerminalPanel's cleanup then runs against an
+    // already-disposed session, which is fine by construction — detachSlot
+    // early-returns on a missing id, and the cleanup's removeChild is guarded
+    // on host.parentNode === slot.
+    registry.dispose(id)
+    setPanels((current) => removePanel(current, id))
+    setSelectedId((current) => (current === id ? null : current))
+    setFocusedId((current) => (current === id ? null : current))
+  }, [])
+  const onSelectPanel = useCallback((id: string) => {
     setSelectedId(id)
+    setPanels((current) => raisePanel(current, id))
+  }, [])
+  const onFocusPanel = useCallback((id: string) => {
+    onSelectPanel(id)
     setFocusedId(id)
     registry.focus(id)
-  }, [])
+  }, [onSelectPanel])
 
   // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
   // epoch ms at which the hold started. Refs, not state: the hold is bookkeeping
@@ -191,7 +353,13 @@ export function Canvas(): JSX.Element {
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
-    setSelectedId(world ? hitTest(rects, world) : null)
+    const hit = world ? hitTest(hitOrder, world) : null
+    // Through onSelectPanel, not setSelectedId: selecting raises. A live
+    // panel's own chrome handler already does that, but a CARDED panel has no
+    // handler of its own — its click falls through to the background path, and
+    // calling setSelectedId here directly would select it without raising it.
+    if (hit) onSelectPanel(hit)
+    else setSelectedId(null)
     // Focus is released together with selection. assignTiers pins the focused
     // panel live unconditionally — off screen, below the scale threshold,
     // budget full — so a focusedId that is never cleared holds a WebGL context
@@ -204,12 +372,16 @@ export function Canvas(): JSX.Element {
   }
 
   const onMouseMove = (event: MouseEvent<HTMLDivElement>): void => {
+    // Ignore the corrected clones xterm-pointer dispatches during a selection
+    // drag. Those carry CSS-pixel client coordinates measured against the
+    // panel's slot — right for xterm, wrong for anything that converts a real
+    // screen point to world space. They bubble through .canvas like any other
+    // event, so without this the HUD's world cursor jumps for the whole drag,
+    // by (1 - 1/scale) times the offset into the panel.
+    if (isCorrectedEvent(event.nativeEvent)) return
     const world = toWorld(event)
     if (world) setCursor(world)
   }
-
-  const interactive =
-    viewport.scale >= INTERACT_MIN_SCALE && viewport.scale <= INTERACT_MAX_SCALE
 
   return (
     <div className="canvas" ref={hostRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
@@ -226,12 +398,14 @@ export function Canvas(): JSX.Element {
               session={session}
               version={version}
               rect={panel.rect}
+              z={panel.z}
               selected={panel.rect.id === selectedId}
-              interactive={interactive}
-              onSelect={setSelectedId}
+              onSelect={onSelectPanel}
               onSlotMount={onSlotMount}
               onSlotUnmount={onSlotUnmount}
               onFocus={onFocusPanel}
+              onBeginDrag={onBeginDrag}
+              onClose={onClosePanel}
             />
           )
         })}

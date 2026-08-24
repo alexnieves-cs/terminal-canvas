@@ -306,7 +306,9 @@ const tick = () => new Promise((r) => setImmediate(r))
       `notifications=${notifications} version ${before} -> ${registry.version()}`)
   }
 
-  // 12. disposeAll is the ONLY path that kills.
+  // 12. disposeAll kills every spawned session. Until M4a it was the only
+  //     path in the renderer that killed anything; dispose(id) (13-15) is now
+  //     the second and last.
   {
     const { bridge, factory, registry } = setup()
     registry.ensure('p1', SPEC)
@@ -316,6 +318,76 @@ const tick = () => new Promise((r) => setImmediate(r))
     registry.disposeAll()
     ok(12, bridge.calls.kill.length === 1 && factory.made.get('p1').disposed,
       `kills=${JSON.stringify(bridge.calls.kill)}`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // M4a: explicit close (13-15)
+  // NOTE: this suite numbers 1-15 with lettered sub-checks (3b, 7c, ...), so
+  // 20 assertions run today and 16 is the next free NUMBER. (13 was the next
+  // free number when this block was written; it now holds the first of the
+  // three checks below.)
+  // ---------------------------------------------------------------------------
+
+  // 13. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
+  //     of pty.kill in the renderer; disposeAll was the first and, until M4a,
+  //     the only one.
+  //     The handle is asserted too: a dispose that killed the PTY but leaked
+  //     the Terminal would leak a WebGL context per close, and the context
+  //     budget is finite for the run (create-terminal sets webglDisabled once
+  //     one is lost).
+  {
+    const bridge = fakeBridge()
+    const factory = fakeFactory()
+    const registry = createRegistry({ bridge, factory })
+    registry.ensure('a', { panelId: 'a', cwd: '~', args: [] })
+    registry.applyTiers({ a: 'live' })
+    registry.attachSlot('a')
+    registry.dispose('a')
+    ok('13 dispose kills that panel\'s pty and disposes its terminal',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a' &&
+        factory.made.get('a').disposed,
+      `${JSON.stringify(bridge.calls.kill)} disposed=${factory.made.get('a').disposed}`)
+  }
+
+  // 14. dispose(id) touches nothing else. The panel next to the one you closed
+  //     must not lose its agent — the same class of silent failure check 5
+  //     exists for, arriving through the new code path.
+  {
+    const bridge = fakeBridge()
+    const registry = createRegistry({ bridge, factory: fakeFactory() })
+    for (const id of ['a', 'b', 'c']) {
+      registry.ensure(id, { panelId: id, cwd: '~', args: [] })
+    }
+    registry.applyTiers({ a: 'live', b: 'live', c: 'live' })
+    for (const id of ['a', 'b', 'c']) registry.attachSlot(id)
+    registry.dispose('b')
+    ok('14 dispose leaves every other session alone',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'b' &&
+        registry.get('a') !== undefined && registry.get('c') !== undefined &&
+        registry.get('b') === undefined,
+      `killed=${JSON.stringify(bridge.calls.kill)} a=${!!registry.get('a')} c=${!!registry.get('c')}`)
+  }
+
+  // 15. Demotion STILL never kills, now that a kill path other than disposeAll
+  //     exists. This is check 5's invariant re-asserted against the new code:
+  //     the danger was never that kill is called, it was that kill becomes
+  //     reachable from a tier change.
+  {
+    const bridge = fakeBridge()
+    const registry = createRegistry({ bridge, factory: fakeFactory() })
+    for (const id of ['a', 'b']) {
+      registry.ensure(id, { panelId: id, cwd: '~', args: [] })
+    }
+    registry.applyTiers({ a: 'live', b: 'live' })
+    registry.attachSlot('a')
+    registry.attachSlot('b')
+    registry.dispose('a')
+    registry.applyTiers({ b: 'card' })
+    registry.detachSlot('b')
+    ok('15 demotion never kills, even alongside an explicit close',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a' &&
+        registry.get('b') !== undefined,
+      `killed=${JSON.stringify(bridge.calls.kill)}`)
   }
 
   console.log('\n' + '='.repeat(60))

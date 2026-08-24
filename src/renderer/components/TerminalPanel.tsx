@@ -1,5 +1,6 @@
-import { memo, useEffect, useRef, type JSX } from 'react'
+import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { PanelSession, PanelStatus } from '@renderer/session/panel-session'
+import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 
 export interface TerminalPanelProps {
@@ -19,23 +20,68 @@ export interface TerminalPanelProps {
    */
   version: number
   rect: WorldRect
+  /** Paint order, rendered as style.zIndex — see the note on Panel.z. */
+  z: number
   selected: boolean
-  interactive: boolean
   onSelect: (id: string) => void
   onFocus: (id: string) => void
+  /**
+   * Starts a move or resize gesture. `originWorld` is handed up in CLIENT
+   * coordinates: only the canvas knows the viewport, so it does the
+   * conversion to world space before the gesture begins.
+   */
+  onBeginDrag: (state: DragState) => void
   /** Called once the retained host is in the document, so it can be opened. */
   onSlotMount: (id: string) => void
   /** Called before the host leaves the document, so its context can be freed. */
   onSlotUnmount: (id: string) => void
+  /** Close this panel for good: the canvas disposes its session and drops it. */
+  onClose: (id: string) => void
 }
 
 const CARD_LINES = 6
 
+/** How long a close stays armed before it forgets it was ever asked. */
+const CONFIRM_CLOSE_MS = 3000
+
 function TerminalPanelImpl({
-  session, rect, selected, interactive, onSelect, onFocus, onSlotMount, onSlotUnmount
+  session, rect, z, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
+
+  // Arming lives in the view, not the session, so a panel that arms and is
+  // then demoted (scrolled off screen) unmounts and forgets. That is the
+  // intended reading: the confirmation is about the click you just made, not a
+  // state the panel carries around.
+  const [arming, setArming] = useState(false)
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Cleared on unmount, and this component unmounts on every demotion — a
+  // timer left running would call setArming on a gone component.
+  useEffect(() => () => {
+    if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+  }, [])
+
+  const running = session.status.kind === 'running' || session.status.kind === 'starting'
+
+  const handleClose = (event: ReactMouseEvent): void => {
+    event.stopPropagation()
+    event.preventDefault()
+    // Idle and exited panels have nothing to lose, so they close outright.
+    // A live process asks once — but only once, and without a modal: a dialog
+    // on every close trains you to click through the one that mattered.
+    if (!running || arming) {
+      if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+      armTimerRef.current = null
+      onClose(session.id)
+      return
+    }
+    setArming(true)
+    armTimerRef.current = setTimeout(() => {
+      armTimerRef.current = null
+      setArming(false)
+    }, CONFIRM_CLOSE_MS)
+  }
 
   useEffect(() => {
     const slot = slotRef.current
@@ -58,15 +104,23 @@ function TerminalPanelImpl({
   return (
     <div
       className={`panel${selected ? ' panel--selected' : ''}`}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+      data-panel-id={session.id}
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header
         className="panel__chrome"
         onMouseDown={(event) => {
-          // Chrome selects; body passes through. stopPropagation keeps the
+          // Chrome selects, and starts a move. stopPropagation keeps the
           // canvas from reading this as a background click and deselecting.
           event.stopPropagation()
+          event.preventDefault() // suppress the native text-drag of the title
           onSelect(session.id)
+          onBeginDrag({
+            panelId: session.id,
+            mode: { kind: 'move' },
+            originRect: rect,
+            originWorld: { x: event.clientX, y: event.clientY }
+          })
         }}
       >
         {/* A spec with no command runs the login shell, which only main can
@@ -75,31 +129,58 @@ function TerminalPanelImpl({
             surface result.command here), this label is the honest stand-in. */}
         <span className="panel__title">{session.spec.command ?? 'login shell'}</span>
         <StatusBadge status={session.status} />
+        {/* onMouseDown rather than onClick, so it runs in the same phase as
+            every other panel interaction and beats the chrome's own drag
+            start — a mousedown on the chrome begins a move, and a close that
+            waited for mouseup would fire after a gesture had already begun. */}
+        <button
+          type="button"
+          className={`panel__close${arming ? ' panel__close--arming' : ''}`}
+          onMouseDown={handleClose}
+          title={arming ? 'Click again to kill this process' : 'Close panel'}
+        >
+          {arming ? 'kill?' : '×'}
+        </button>
       </header>
 
       {live ? (
         <div
-          className={`panel__slot${interactive ? '' : ' panel__slot--blocked'}`}
+          className="panel__slot"
           ref={slotRef}
           onMouseDown={(event) => {
+            // Chrome selects; body focuses and falls through to xterm. No
+            // preventDefault: M3 needed it because pointer-events:none stopped
+            // xterm from focusing itself, so the browser's default action
+            // would have cleared focus to <body>. With correction, xterm
+            // receives the (corrected) event and manages its own focus.
             event.stopPropagation()
             onFocus(session.id)
-            // The interaction gate is two complementary halves (see the
-            // matching comment on .panel__slot--blocked in styles.css): CSS
-            // pointer-events:none stops xterm's own mousedown listener from
-            // ever seeing this click, and this preventDefault() stops the
-            // browser's own default mousedown action from clearing focus
-            // back to <body> once our handler above already focused the
-            // panel via onFocus. Removing either half breaks the gate in a
-            // different direction: drop pointer-events and xterm's listener
-            // focuses the wrong cell; drop preventDefault and a gated click
-            // focuses nothing, so typing has nowhere to go.
-            if (!interactive) event.preventDefault()
           }}
         />
       ) : (
         <PanelCard session={session} />
       )}
+
+      {/* East, south and south-east only — see ResizeEdge. Each handle is a
+          child of .panel, so it rides .world's transform with the rest of the
+          panel instead of sitting in screen pixels and drifting on zoom. */}
+      {(['e', 's', 'se'] as const).map((edge) => (
+        <div
+          key={edge}
+          className={`panel__resize panel__resize--${edge}`}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            event.preventDefault()
+            onSelect(session.id)
+            onBeginDrag({
+              panelId: session.id,
+              mode: { kind: 'resize', edge },
+              originRect: rect,
+              originWorld: { x: event.clientX, y: event.clientY }
+            })
+          }}
+        />
+      ))}
     </div>
   )
 }
