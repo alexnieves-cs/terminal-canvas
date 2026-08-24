@@ -4,6 +4,7 @@ import { registerIpcHandlers, requestCanvasCounts } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
 import { createDirectBackend, type SessionBackend } from './session-backend'
+import { probeTmux } from './tmux-probe'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
@@ -131,6 +132,10 @@ app.whenReady().then(async () => {
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
 
+  // After the env probe, because tmux must be resolved from the LOGIN PATH:
+  // launchd gives a GUI app a bare PATH and /opt/homebrew/bin is not on it.
+  backend = await probeTmux(env, app.getPath('userData'))
+
   // Load before the menu and window exist: Task 10 gives the menu the restore
   // settings, and the renderer's first act is layout:load, which needs a
   // resolved store to answer from.
@@ -152,11 +157,22 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
-  // Flush BEFORE killing the PTYs. killAll can take time and this must not be
-  // racing a process teardown; the store already holds the newest snapshot, so
-  // this is a synchronous write with nothing to wait for.
+  // Flush BEFORE tearing anything down. killAll can take time and this must
+  // not be racing a process teardown; the store already holds the newest
+  // snapshot, so this is a synchronous write with nothing to wait for.
   layoutStore.flushSync()
   ptyManager.killAll()
+  // Quit is the one teardown where sessions are NOT meant to survive. M4c's
+  // scope is reload survival: agents never outlive the app, so there is no
+  // process left burning tokens behind a closed window.
+  try {
+    backend.shutdown()
+  } catch (error) {
+    // Never throw here. An exception in before-quit can wedge the quit before
+    // the window is allowed to close — the same rule layoutStore.flushSync
+    // follows.
+    console.warn('[tmux] shutdown failed', error)
+  }
 })
 
 app.on('window-all-closed', () => {

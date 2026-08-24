@@ -17,7 +17,15 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  external: ['electron'],
+  // node-pty joined this bundle's dependency graph once tmux-probe.ts pulled in
+  // session-backend.ts (Task 4). It must stay external: node-pty resolves its
+  // native binding by a path relative to ITS OWN file, and bundling that file
+  // into out/verify/ moves it somewhere the relative lookup no longer finds
+  // pty.node. External keeps the require pointed at the real node_modules
+  // package, whose prebuilt binary this suite proved loads fine under plain
+  // node (unlike the Electron-only suites, which externalize it for the
+  // opposite reason: node-pty there is rebuilt against Electron's ABI).
+  external: ['electron', 'node-pty'],
   // Same alias the other plain-node bundles gained in M4b. A value import from
   // @shared fails to resolve without it, and type-only imports hide the gap.
   alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
@@ -191,6 +199,39 @@ const ok = (n, pass, detail) => {
   const p = T.exitFilePath('/tmp/exits', 'n5')
   ok('13 the exit file lives under exitDir, named by panel id',
     p === '/tmp/exits/n5.exit', p)
+}
+
+// 14. No tmux on the resolved PATH -> direct, with a reason that names the
+// cause. The reason string is shown to the user, so "unknown" is a bug.
+{
+  const c = T.chooseBackend({ tmuxPath: null, versionOutput: null })
+  ok('14 a missing tmux chooses the direct backend and says why',
+    c.kind === 'direct' && /not found/i.test(c.reason), JSON.stringify(c))
+}
+
+// 15. Too old -> direct. 2.9 is below the floor even though it is a real,
+// working tmux, because we never tested the hook behaviour there.
+{
+  const c = T.chooseBackend({ tmuxPath: '/usr/bin/tmux', versionOutput: 'tmux 2.9a' })
+  ok('15 a tmux below 3.0 chooses the direct backend and names the version',
+    c.kind === 'direct' && c.reason.includes('2.9'), JSON.stringify(c))
+}
+
+// 16. A version we cannot read is treated as unusable, NOT as good enough.
+{
+  const c = T.chooseBackend({ tmuxPath: '/usr/bin/tmux', versionOutput: 'weird output' })
+  ok('16 an unreadable version falls back rather than guessing',
+    c.kind === 'direct', JSON.stringify(c))
+}
+
+// 17. A supported tmux is chosen, and the ABSOLUTE path is carried forward.
+// A GUI app launched by launchd has a bare PATH; spawning "tmux" by name would
+// fail exactly the way `claude` does, which is the defect shell-env.ts exists
+// for.
+{
+  const c = T.chooseBackend({ tmuxPath: '/opt/homebrew/bin/tmux', versionOutput: 'tmux 3.7c' })
+  ok('17 a supported tmux is chosen by absolute path',
+    c.kind === 'tmux' && c.tmuxPath === '/opt/homebrew/bin/tmux', JSON.stringify(c))
 }
 
 console.log('\n' + '='.repeat(60))
