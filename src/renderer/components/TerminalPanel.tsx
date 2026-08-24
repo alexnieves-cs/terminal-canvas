@@ -20,6 +20,8 @@ export interface TerminalPanelProps {
    */
   version: number
   rect: WorldRect
+  /** Paint order, rendered as style.zIndex — see the note on Panel.z. */
+  z: number
   selected: boolean
   onSelect: (id: string) => void
   onFocus: (id: string) => void
@@ -43,7 +45,7 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose
+  session, rect, z, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -103,7 +105,7 @@ function TerminalPanelImpl({
     <div
       className={`panel${selected ? ' panel--selected' : ''}`}
       data-panel-id={session.id}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header
         className="panel__chrome"

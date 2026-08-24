@@ -10,7 +10,7 @@ import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection } from '@renderer/components/xterm-pointer'
-import { makePanel, nextZ, removePanel, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
+import { makePanel, nextZ, raisePanel, removePanel, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -28,6 +28,13 @@ export function Canvas(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [panels, setPanels] = useState<Panel[]>(SEED_PANELS)
   const rects = useMemo(() => panels.map((p) => p.rect), [panels])
+  // hitTest returns the LAST match, so paint order and pick order agree only
+  // if the array it receives is in paint order. Paint order is z now, not
+  // array position — see the note on Panel.z.
+  const hitOrder = useMemo(
+    () => [...panels].sort((a, b) => a.z - b.z).map((p) => p.rect),
+    [panels]
+  )
   // Declared before useViewport (which takes it as an argument) rather than
   // grouped with the other callbacks below: a const used before its
   // declaration is a TDZ error, not just a style preference.
@@ -232,11 +239,15 @@ export function Canvas(): JSX.Element {
     setSelectedId((current) => (current === id ? null : current))
     setFocusedId((current) => (current === id ? null : current))
   }, [])
-  const onFocusPanel = useCallback((id: string) => {
+  const onSelectPanel = useCallback((id: string) => {
     setSelectedId(id)
+    setPanels((current) => raisePanel(current, id))
+  }, [])
+  const onFocusPanel = useCallback((id: string) => {
+    onSelectPanel(id)
     setFocusedId(id)
     registry.focus(id)
-  }, [])
+  }, [onSelectPanel])
 
   // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
   // epoch ms at which the hold started. Refs, not state: the hold is bookkeeping
@@ -336,7 +347,7 @@ export function Canvas(): JSX.Element {
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
-    setSelectedId(world ? hitTest(rects, world) : null)
+    setSelectedId(world ? hitTest(hitOrder, world) : null)
     // Focus is released together with selection. assignTiers pins the focused
     // panel live unconditionally — off screen, below the scale threshold,
     // budget full — so a focusedId that is never cleared holds a WebGL context
@@ -368,8 +379,9 @@ export function Canvas(): JSX.Element {
               session={session}
               version={version}
               rect={panel.rect}
+              z={panel.z}
               selected={panel.rect.id === selectedId}
-              onSelect={setSelectedId}
+              onSelect={onSelectPanel}
               onSlotMount={onSlotMount}
               onSlotUnmount={onSlotUnmount}
               onFocus={onFocusPanel}

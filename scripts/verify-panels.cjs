@@ -781,6 +781,49 @@ app.whenReady().then(async () => {
           : `pid mismatch: ${changed.join('; ')}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 16. Selecting a panel raises it above its neighbours, and does so via
+    //     zIndex rather than by reordering the DOM. The DOM-order half is the
+    //     real assertion: React reconciles a reordered keyed list by MOVING
+    //     nodes, which would incidentally detach a live terminal's host.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const result = await wc.executeJavaScript(`(async () => {
+        const ids = () => [...document.querySelectorAll('.panel')]
+          .map((p) => p.getAttribute('data-panel-id'))
+        const panels = [...document.querySelectorAll('.panel')]
+        if (panels.length < 2) return { error: 'need two panels' }
+        const zOf = (p) => parseInt(getComputedStyle(p).zIndex || '0', 10)
+        // Pick the panel with the LOWEST z, so raising it is observable.
+        const target = panels.reduce((lo, p) => (zOf(p) < zOf(lo) ? p : lo), panels[0])
+        const id = target.getAttribute('data-panel-id')
+        const domBefore = ids().join(',')
+        const zBefore = zOf(target)
+        const maxBefore = Math.max(...panels.map(zOf))
+
+        target.querySelector('.panel__chrome').dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+        document.dispatchEvent(new MouseEvent('mouseup',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 0 }))
+        await new Promise((r) => setTimeout(r, 200))
+
+        const raised = document.querySelector('[data-panel-id="' + id + '"]')
+        return {
+          id, zBefore, maxBefore, zAfter: zOf(raised),
+          domBefore, domAfter: ids().join(',')
+        }
+      })()`)
+
+      ok('16 selecting raises by z-index without reordering the DOM',
+        result && !result.error &&
+          result.zAfter > result.maxBefore &&
+          result.domBefore === result.domAfter,
+        `z ${result && result.zBefore} -> ${result && result.zAfter} ` +
+        `(max was ${result && result.maxBefore}); dom stable=${
+          result && result.domBefore === result.domAfter}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
