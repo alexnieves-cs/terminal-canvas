@@ -331,11 +331,15 @@ const MOVE = { kind: 'move' }
     JSON.stringify(out))
 }
 
-// 27. The SAME screen gesture must cover different world distances at
-//     different zooms. This is the delta trap: screenToWorld(p2) -
-//     screenToWorld(p1), never screenToWorld(p2 - p1). Computing the world
-//     points through the real viewport transform is the point of the check —
-//     hand-computing the delta here would test nothing.
+// 27. A fixed SCREEN gesture maps to a world distance proportional to 1/scale
+//     — the linearity of screenToWorld composed with applyDrag. This does NOT
+//     catch the delta trap (screenToWorld(p2 - p1) instead of screenToWorld(p2)
+//     - screenToWorld(p1)): that mistake is made by a CALLER before
+//     applyDrag ever runs, and applyDrag receives only the two already-
+//     resolved world points here, so it cannot commit or reveal that bug.
+//     verify:panels check 10 (Task 5) is what actually catches it: a real
+//     drag gesture at a non-1 scale asserting the panel moved
+//     screenDelta / scale.
 {
   const SCREEN_FROM = { x: 400, y: 300 }
   const SCREEN_TO = { x: 500, y: 300 }
@@ -352,10 +356,13 @@ const MOVE = { kind: 'move' }
     JSON.stringify(distances))
 }
 
-// 28. Recompute-from-origin: the result depends only on where the cursor IS,
-//     never on how many frames it took to get there. A naive implementation
-//     that accumulates per-frame deltas passes checks 26 and 27 and fails
-//     this one.
+// 28. applyDrag is stateless: its result depends only on its arguments, so
+//     calling it 50 times against the same unmutated state cannot differ from
+//     calling it once with the final point. This does NOT catch a caller that
+//     accumulates per-frame deltas into its OWN state before calling
+//     applyDrag — no stateless function with this signature can fail that
+//     way, since there is no state here to accumulate into. That caller-side
+//     bug is covered by the same Task 5 check as 27, verify:panels check 10.
 {
   const state = dragFrom(RECT, MOVE)
   const target = { x: state.originWorld.x + 333, y: state.originWorld.y + 77 }
