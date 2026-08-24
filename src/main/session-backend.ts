@@ -163,15 +163,34 @@ export function createTmuxBackend(o: {
       // Written by the pane-died hook BEFORE it killed the session, so by the
       // time node-pty's onExit brought us here the file is already on disk.
       const path = exitFilePath(o.exitDir, panelId)
+      let raw: string
       try {
-        const code = Number(readFileSync(path, 'utf8').trim())
-        unlinkSync(path)
-        return Number.isInteger(code) ? code : null
+        raw = readFileSync(path, 'utf8').trim()
       } catch {
         // Missing or unreadable: fall back to the client's code via `?? `.
         // A wrong-but-present number beats a crash in an exit handler.
         return null
       }
+      // Number('') is 0, not NaN. A file that exists but is empty (a
+      // truncated write, a hook that ran the echo but not yet the redirect's
+      // flush) must not be read as a clean exit — `real ?? exitCode` would
+      // then report a crashed process as exit 0, the exact failure this hook
+      // exists to prevent. Reject before Number() ever sees it.
+      if (raw === '') return null
+      const code = Number(raw)
+      if (!Number.isInteger(code)) return null
+      // Unlink is deliberately its own try/catch, separate from the parse
+      // above: if the read succeeded but the unlink throws (a race, a
+      // permission blip), that must not discard the exit code we already
+      // parsed correctly. A leftover file in a per-run temp dir is a
+      // triviality (shutdown() rm -rf's the whole directory anyway); a
+      // discarded real exit code is not.
+      try {
+        unlinkSync(path)
+      } catch {
+        /* leftover file is not worth losing the code we already have */
+      }
+      return code
     },
 
     destroy(panelId: PanelId): void {

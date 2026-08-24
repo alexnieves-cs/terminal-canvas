@@ -225,26 +225,48 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
 
     // 12. THE MILESTONE. Detach the client the way a renderer teardown does;
     // the session must survive, and a fresh create with the same panelId must
-    // reattach rather than start a second process. Comparing the PID is what
-    // separates "reattached" from "silently respawned" — a check that only
-    // asserted the panel works again would pass for both. h2 is a SEPARATE
-    // harness from h1 (an empty session map of its own) so a successful
-    // reattach can only be explained by tmux itself, not by h1 still holding
-    // the panelId in its map.
+    // reattach rather than start a second process.
+    //
+    // Two assertions, catching two different bugs:
+    //   - PID equality rules out a silent RESPAWN: a respawned command runs
+    //     in a brand-new pane with a brand-new pid, so a fresh pid here would
+    //     expose a naive re-implementation that just started a second process.
+    //   - The client-count sequence (1 -> 0 -> 1) rules out detachAll() being
+    //     a no-op. tmux allows MULTIPLE clients on one session at once, and
+    //     attaching a second client never changes the pane's pid — so PID
+    //     equality alone holds whether or not h1 ever actually detached. If a
+    //     future edit dropped `session.proc.kill()` from detachAll(), h1's
+    //     client would linger attached, h2's create would just add a SECOND
+    //     client, and the pid-only version of this check would still print
+    //     green while reload survival was silently broken. The 0 in the
+    //     middle is the only thing that proves the local client actually
+    //     died rather than lingering.
+    //
+    // h2 is a SEPARATE harness from h1 (an empty session map of its own) so a
+    // successful reattach can only be explained by tmux itself, not by h1
+    // still holding the panelId in its map.
     {
+      const clientCount = () => {
+        const out = tmuxCli(['-L', T.TMUX_SOCKET, 'list-clients', '-t', 't1', '-F', '#{client_pid}'])
+        return out.split('\n').filter((l) => l.trim()).length
+      }
       const before = tmuxCli(['-L', T.TMUX_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
       const beforePid = (/t1 (\d+)/.exec(before) ?? [])[1]
+      const clientsBefore = clientCount()
       h1.manager.detachAll()
       await sleep(500)
       const survived = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const clientsAfterDetach = clientCount()
       const h2 = makeHarness(tmuxBackend)
       await h2.manager.create(spec('t1'))
       await sleep(700)
       const after = tmuxCli(['-L', T.TMUX_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
       const afterPid = (/t1 (\d+)/.exec(after) ?? [])[1]
-      ok('12 detaching leaves the session alive and create reattaches to the SAME process',
-        survived.includes('t1') && beforePid && beforePid === afterPid,
-        `pid ${beforePid} -> ${afterPid}`)
+      const clientsAfterReattach = clientCount()
+      ok('12 detaching leaves the session alive, drops its client to zero, and create reattaches the SAME process',
+        survived.includes('t1') && beforePid && beforePid === afterPid &&
+          clientsBefore === 1 && clientsAfterDetach === 0 && clientsAfterReattach === 1,
+        `pid ${beforePid} -> ${afterPid}, clients ${clientsBefore} -> ${clientsAfterDetach} -> ${clientsAfterReattach}`)
     }
 
     // 13. list() reports sessions the manager's own map has never heard of.
@@ -267,6 +289,20 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       const code = exits.length ? exits[exits.length - 1].payload.exitCode : null
       ok('14 a command exiting 7 is reported as 7, not the client\'s 1',
         code === 7, `reported=${code} events=${exits.length}`)
+    }
+
+    // 14b. Number('') is 0, not NaN. A file that exists but is empty (a
+    // truncated write; the hook's echo ran but the redirect had not yet
+    // flushed) must fall back to null — never a fabricated 0, which via
+    // `real ?? exitCode` would report a crashed process as a CLEAN exit, the
+    // exact failure exitCodeFor exists to prevent. Written by hand rather
+    // than through a real hook race, since the race itself is not
+    // reproducible on demand.
+    {
+      writeFileSync(T.exitFilePath(exitDir, 'empty-exit-panel'), '')
+      const code = tmuxBackend.exitCodeFor('empty-exit-panel')
+      ok('14b an empty exit file yields null, never a fabricated 0',
+        code === null, `exitCodeFor returned ${code}`)
     }
 
     // 15. destroy() ends the session, and shutdown() takes the server with it.
