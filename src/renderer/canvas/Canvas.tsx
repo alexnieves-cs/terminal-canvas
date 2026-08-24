@@ -39,10 +39,29 @@ export function Canvas(): JSX.Element {
       ]),
     []
   )
-  const viewport = useViewport(hostRef, rects, onSpawn)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+
+  // Mirrors focusedId into a ref so shouldYieldWheel (below) can read the
+  // current focus without being redefined on every focus change — it must
+  // stay referentially stable (useCallback with an empty dep list) so
+  // useViewport's effect installs the wheel listener exactly once.
+  const focusedIdRef = useRef(focusedId)
+  focusedIdRef.current = focusedId
+
+  // A wheel belongs to a terminal only when it is over the FOCUSED panel.
+  // Focus is explicit — the user clicked in — which makes the rule
+  // predictable without having to be explained.
+  const shouldYieldWheel = useCallback((event: WheelEvent): boolean => {
+    const id = focusedIdRef.current
+    if (!id) return false
+    const target = event.target as HTMLElement | null
+    const panel = target?.closest?.('.panel')
+    return panel?.getAttribute('data-panel-id') === id
+  }, [])
+
+  const viewport = useViewport(hostRef, rects, onSpawn, shouldYieldWheel)
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
@@ -60,14 +79,12 @@ export function Canvas(): JSX.Element {
   // subscription directly against xterm; now that TerminalPanel is a dumb
   // view, ONE subscription here routes to whichever session is focused,
   // rather than each panel subscribing and every panel but one discarding
-  // the event. focusedIdRef mirrors state into a ref (the same pattern as
-  // useViewport's viewportRef) so the listener reads the current focus
-  // without resubscribing. (Cmd+C/Cmd+V arrive as main-side menu
-  // accelerators via edit:copy/edit:paste, not as a canvas keydown, so
-  // they are unrelated to useViewport's "every shortcut requires Cmd" rule
-  // for bare keys reaching the PTY.)
-  const focusedIdRef = useRef(focusedId)
-  focusedIdRef.current = focusedId
+  // the event. focusedIdRef (declared above, alongside shouldYieldWheel)
+  // mirrors state into a ref (the same pattern as useViewport's viewportRef)
+  // so the listener reads the current focus without resubscribing. (Cmd+C/
+  // Cmd+V arrive as main-side menu accelerators via edit:copy/edit:paste,
+  // not as a canvas keydown, so they are unrelated to useViewport's "every
+  // shortcut requires Cmd" rule for bare keys reaching the PTY.)
   useEffect(() => {
     const offCopy = window.canvas.edit.onCopy(() => {
       const id = focusedIdRef.current

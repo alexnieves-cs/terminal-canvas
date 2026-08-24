@@ -599,6 +599,49 @@ app.whenReady().then(async () => {
         `after=${JSON.stringify(result && result.gridAfter)}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 12. Wheel ownership. A wheel over the FOCUSED panel scrolls that
+    //     terminal and must not move the camera; a wheel anywhere else pans.
+    //     Without this, both handlers run on one gesture: useViewport's
+    //     listener is on the canvas host and xterm's bubbles up into it.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const result = await wc.executeJavaScript(`(async () => {
+        const read = () => getComputedStyle(document.querySelector('.world')).transform
+        const slot = document.querySelector('.panel__slot')
+        if (!slot) return { error: 'no live panel' }
+        slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const r = slot.getBoundingClientRect()
+        const before = read()
+        slot.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true,
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+          deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const overFocused = read()
+
+        // Now the background, which must pan.
+        const canvas = document.querySelector('.canvas')
+        canvas.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true,
+          clientX: 5, clientY: 5, deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        return { before, overFocused, overBackground: read() }
+      })()`)
+
+      ok('12 a wheel over the focused terminal does not move the camera',
+        result && !result.error &&
+          result.overFocused === result.before &&
+          result.overBackground !== result.before,
+        `before=${result && result.before} focused=${result && result.overFocused} ` +
+        `background=${result && result.overBackground}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

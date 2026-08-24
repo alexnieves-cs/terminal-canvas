@@ -13,7 +13,8 @@ const KEYBOARD_ZOOM_STEP = 1.2
 export function useViewport(
   hostRef: RefObject<HTMLElement | null>,
   rects: WorldRect[],
-  onSpawn?: (worldCentre: Point) => void
+  onSpawn?: (worldCentre: Point) => void,
+  shouldYieldWheel?: (event: WheelEvent) => boolean
 ): Viewport {
   const [viewport, setViewport] = useState<Viewport>(INITIAL)
   const viewportRef = useRef(viewport)
@@ -24,6 +25,20 @@ export function useViewport(
     if (!host) return
 
     const onWheel = (event: WheelEvent): void => {
+      // Wheel ownership. A wheel over the focused panel belongs to that
+      // terminal's scrollback; every other wheel belongs to the camera.
+      //
+      // Returning WITHOUT preventDefault is deliberate: xterm's own handler is
+      // bound to a descendant and has already run in the target phase by the
+      // time this bubbles up, so all this has to do is decline. Calling
+      // preventDefault here would suppress nothing useful and would fight the
+      // scroll xterm just performed.
+      //
+      // ctrlKey is exempt unconditionally: a trackpad pinch arrives as a wheel
+      // with ctrlKey true, and a pinch is always a camera zoom no matter what
+      // is under the cursor.
+      if (!event.ctrlKey && shouldYieldWheel?.(event)) return
+
       // Chromium treats ctrl+wheel as its own page-zoom gesture. Without this
       // a pinch zooms the entire UI instead of the canvas. React's onWheel
       // prop cannot do this reliably, which is why the listener is attached
@@ -44,7 +59,7 @@ export function useViewport(
 
     host.addEventListener('wheel', onWheel, { passive: false })
     return () => host.removeEventListener('wheel', onWheel)
-  }, [hostRef])
+  }, [hostRef, shouldYieldWheel])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

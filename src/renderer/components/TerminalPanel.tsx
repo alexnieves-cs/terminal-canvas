@@ -64,6 +64,7 @@ function TerminalPanelImpl({
   return (
     <div
       className={`panel${selected ? ' panel--selected' : ''}`}
+      data-panel-id={session.id}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
     >
       <header
