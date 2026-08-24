@@ -254,7 +254,10 @@ export function createRegistry(deps: RegistryDeps): Registry {
       const session = sessions.get(id)
       if (!session) return
       session.handle.dispose()
-      // Only if it ever spawned: killing an id main has never heard of throws.
+      // Guarded on spawned purely to skip a pointless IPC round trip: main's
+      // PtyManager.kill early-returns on an id it has no session for, so an
+      // unguarded call would be harmless — just wasted. Do not reason about
+      // this as though main throws; it does not.
       if (session.spawned) void bridge.pty.kill(id)
       sessions.delete(id)
       bump()

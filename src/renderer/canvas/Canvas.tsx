@@ -219,9 +219,14 @@ export function Canvas(): JSX.Element {
   const onSlotMount = useCallback((id: string) => registry.attachSlot(id), [])
   const onSlotUnmount = useCallback((id: string) => registry.detachSlot(id), [])
   const onClosePanel = useCallback((id: string) => {
-    // Order matters: dispose first, so the session is gone before React
-    // unmounts the view. The reverse order runs TerminalPanel's cleanup —
-    // which calls detachSlot — against a session that no longer exists.
+    // What actually matters is that dispose runs SYNCHRONOUSLY inside this
+    // handler, killing the pty on the click that asked for it. The ordering
+    // against setPanels is not load-bearing: this is a React synthetic
+    // onMouseDown, so setPanels is batched and the unmount happens after the
+    // handler returns either way. TerminalPanel's cleanup then runs against an
+    // already-disposed session, which is fine by construction — detachSlot
+    // early-returns on a missing id, and the cleanup's removeChild is guarded
+    // on host.parentNode === slot.
     registry.dispose(id)
     setPanels((current) => removePanel(current, id))
     setSelectedId((current) => (current === id ? null : current))

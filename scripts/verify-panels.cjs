@@ -730,12 +730,15 @@ app.whenReady().then(async () => {
         await new Promise((r) => setTimeout(r, 200))
         const afterIdleClose = document.querySelectorAll('.panel').length
 
-        const runningClose = running.querySelector('.panel__close')
-        click(runningClose)
+        // Re-queried before each click rather than captured once: React keys
+        // are stable so today the node survives the idle panel's removal and
+        // the re-render, but a click dispatched into a detached node would
+        // fail this check for a reason that has nothing to do with arming.
+        click(running.querySelector('.panel__close'))
         await new Promise((r) => setTimeout(r, 200))
-        const armedText = (runningClose.textContent || '').trim()
+        const armedText = (running.querySelector('.panel__close').textContent || '').trim()
         const afterFirstClick = document.querySelectorAll('.panel').length
-        click(runningClose)
+        click(running.querySelector('.panel__close'))
         await new Promise((r) => setTimeout(r, 300))
         const afterSecondClick = document.querySelectorAll('.panel').length
 
@@ -757,15 +760,24 @@ app.whenReady().then(async () => {
         `armed="${result && result.armedText}" ` +
         `${result && result.afterFirstClick} -> ${result && result.afterSecondClick}`)
 
+      const runningId = result && !result.error ? result.runningId : null
+      // pty.kill is async IPC, so the close may not have reached pty:list yet.
+      // NOT settledSessionMap: that waits for two equal-size reads and would
+      // happily settle on the PRE-kill state. Waiting on the specific id fails
+      // in the safe direction anyway — an unlanded kill leaves runningId in
+      // `after` and turns this check red, so it can never hide a regression.
+      if (runningId) await waitUntil(async () => !(await sessionMap(wc)).has(runningId), 2000)
       const after = await sessionMap(wc)
-      const survivors = new Map(
-        [...before].filter(([id]) => id !== (result && result.runningId))
-      )
+      const survivors = new Map([...before].filter(([id]) => id !== runningId))
       const { ok: preserved, changed } = pidsPreserved(survivors, after)
+      // The result/size guards matter: without them an in-page `{ error }`
+      // leaves runningId null, `survivors` holds everything, nothing was
+      // killed — and this check reports PASS having tested nothing.
       ok('15 closing one panel kills only that panel\'s pty',
-        preserved && !after.has(result && result.runningId),
+        result && !result.error && survivors.size > 0 &&
+          preserved && !after.has(runningId),
         preserved
-          ? `${survivors.size} session(s) unchanged, ${result && result.runningId} gone`
+          ? `${survivors.size} session(s) unchanged, ${runningId} gone`
           : `pid mismatch: ${changed.join('; ')}`)
     }
 

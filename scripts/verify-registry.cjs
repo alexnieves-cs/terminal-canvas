@@ -329,16 +329,22 @@ const tick = () => new Promise((r) => setImmediate(r))
   // 13. dispose(id) kills that panel's PTY. This is the SECOND legitimate caller
   //     of pty.kill in the renderer; disposeAll was the first and, until M4a,
   //     the only one.
+  //     The handle is asserted too: a dispose that killed the PTY but leaked
+  //     the Terminal would leak a WebGL context per close, and the context
+  //     budget is finite for the run (create-terminal sets webglDisabled once
+  //     one is lost).
   {
     const bridge = fakeBridge()
-    const registry = createRegistry({ bridge, factory: fakeFactory() })
+    const factory = fakeFactory()
+    const registry = createRegistry({ bridge, factory })
     registry.ensure('a', { panelId: 'a', cwd: '~', args: [] })
     registry.applyTiers({ a: 'live' })
     registry.attachSlot('a')
     registry.dispose('a')
-    ok('13 dispose kills that panel\'s pty',
-      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a',
-      JSON.stringify(bridge.calls.kill))
+    ok('13 dispose kills that panel\'s pty and disposes its terminal',
+      bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'a' &&
+        factory.made.get('a').disposed,
+      `${JSON.stringify(bridge.calls.kill)} disposed=${factory.made.get('a').disposed}`)
   }
 
   // 14. dispose(id) touches nothing else. The panel next to the one you closed

@@ -48,6 +48,10 @@ function TerminalPanelImpl({
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
 
+  // Arming lives in the view, not the session, so a panel that arms and is
+  // then demoted (scrolled off screen) unmounts and forgets. That is the
+  // intended reading: the confirmation is about the click you just made, not a
+  // state the panel carries around.
   const [arming, setArming] = useState(false)
   const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Cleared on unmount, and this component unmounts on every demotion — a
@@ -66,6 +70,7 @@ function TerminalPanelImpl({
     // on every close trains you to click through the one that mattered.
     if (!running || arming) {
       if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+      armTimerRef.current = null
       onClose(session.id)
       return
     }
