@@ -12,6 +12,15 @@ import { correctForScale } from '@renderer/canvas/pointer-correct'
  *
  * A listener scoped to the panel would correct the mousedown and never see the
  * drag that follows.
+ *
+ * NOT covered yet: a mousemove with no button held. Correction is anchored to a
+ * slot pinned at mousedown (see `activeSlot`), so a hover that never followed an
+ * in-slot mousedown returns early and reaches xterm uncorrected. xterm feeds
+ * motion events to a mouse-reporting TUI through the same getMouseReportCoords
+ * path, so under scale(k) such a TUI still sees a column k times the true one on
+ * hover. Correcting hover means resolving the slot per-event rather than from the
+ * pin, and it is deliberately left to the milestone that takes on mouse-reporting
+ * TUIs — this file should not read as though it were already handled.
  */
 
 /**
@@ -48,12 +57,36 @@ export function installPointerCorrection(getScale: () => number): () => void {
       // continues while the user zooms stays anchored to the right element.
       activeSlot = slot
     }
+    // A move with no button held cannot be part of a drag, so release the pin.
+    // This is the only thing standing between a missed mouseup and a permanently
+    // stale pin: Electron does not reliably deliver mouseup when the button is
+    // released outside the window, and a pin that outlives its gesture does far
+    // worse than leave moves uncorrected — at any scale != 1 it makes EVERY
+    // mousemove in the document, hover included, get stopImmediatePropagation'd
+    // and replaced by a clone corrected against a rect no gesture is using. React's
+    // root listener never sees the original, so the HUD's world-space cursor (and
+    // any other document-level move handler) silently reads shifted coordinates
+    // until the next mousedown happens to re-pin.
+    if (event.type === 'mousemove' && event.buttons === 0) {
+      activeSlot = null
+      return
+    }
     if (!slot) return
     if (event.type === 'mouseup') activeSlot = null
 
     // The common case pays nothing: xterm receives the original event.
     if (scale === 1) return
 
+    // INVARIANT: the slot's origin must equal the origin of the element xterm
+    // measures against (.xterm-screen). The correction re-expresses the click
+    // relative to `rect`, but xterm subtracts its own element's rect, so the two
+    // origins have to coincide or the difference d survives as d * (1 - 1/scale).
+    // It holds today because .panel__slot has no padding or border and
+    // .panel__terminal fills it. Give the slot 8px of padding and every click at
+    // k ~ 0.48 lands about two columns off — and check 9 would NOT report it,
+    // because a two-column shift is still inside the four characters of "beta".
+    // Anything that insets the terminal within its slot needs this rect changed
+    // to the screen element's, and needs a check with a tighter target.
     const rect = slot.getBoundingClientRect()
     const corrected = correctForScale({ x: event.clientX, y: event.clientY }, rect, scale)
 
@@ -72,8 +105,10 @@ export function installPointerCorrection(getScale: () => number): () => void {
       view: window,
       clientX: corrected.x,
       clientY: corrected.y,
-      screenX: corrected.x,
-      screenY: corrected.y,
+      // screenX/screenY are deliberately NOT set. The only corrected values we
+      // have are client-space, and copying them into screen-space fields would
+      // put a coordinate in a frame it does not belong to — in this file, of all
+      // files. xterm reads clientX/clientY only, so nothing needs them.
       button: event.button,
       // buttons distinguishes a drag from a hover. Drop it and xterm treats
       // every corrected mousemove as a hover, so selection never extends.
