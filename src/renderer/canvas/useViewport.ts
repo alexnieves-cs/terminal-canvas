@@ -20,6 +20,14 @@ export function useViewport(
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
 
+  // `rects` is mirrored into a ref for the same reason `viewport` is: it is a
+  // fresh array on every setPanelRect, and setPanelRect now runs on every
+  // frame of a drag or resize. Keeping it in the keydown effect's dep list
+  // would tear the window listener down and reinstall it at 60Hz for the
+  // whole gesture. Only Cmd+1 reads it, and it reads it at keypress time.
+  const rectsRef = useRef(rects)
+  rectsRef.current = rects
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -35,10 +43,17 @@ export function useViewport(
     // event continue downward, or claim it for the camera by stopping it
     // from ever reaching xterm.
     const onWheel = (event: WheelEvent): void => {
-      // A trackpad pinch (ctrlKey true) is always a camera zoom, never a
-      // terminal scroll, regardless of what is under the cursor — so it is
-      // stopped here unconditionally, same as the focus check below.
-      const overFocused = !event.ctrlKey && shouldYieldWheel?.(event)
+      // A zoom gesture is always the camera's, never a terminal scroll,
+      // regardless of what is under the cursor — so it is stopped here
+      // unconditionally, same as the focus check below. Both spellings are
+      // exempt because canvas-input.ts treats both as a zoom intent: a
+      // trackpad pinch arrives as a wheel with ctrlKey true, and Cmd+wheel is
+      // the mouse equivalent. Exempting only ctrlKey would leave a mouse user
+      // who has clicked into a panel unable to zoom the canvas while the
+      // cursor is over it — and would make Cmd, the modifier every other
+      // canvas shortcut requires, the one thing the canvas ignores here.
+      const isZoomGesture = event.ctrlKey || event.metaKey
+      const overFocused = !isZoomGesture && shouldYieldWheel?.(event)
 
       if (overFocused) {
         // Let the event fall through to the target/bubble phases undisturbed
@@ -101,7 +116,7 @@ export function useViewport(
           break
         case '1':
           event.preventDefault()
-          setViewport(fitTo(rects, size))
+          setViewport(fitTo(rectsRef.current, size))
           break
         case '=':
         case '+':
@@ -125,7 +140,7 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, rects, onSpawn])
+  }, [hostRef, onSpawn])
 
   return viewport
 }

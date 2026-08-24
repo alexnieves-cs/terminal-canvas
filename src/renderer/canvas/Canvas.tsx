@@ -9,7 +9,7 @@ import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
-import { installPointerCorrection } from '@renderer/components/xterm-pointer'
+import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import { makePanel, nextZ, raisePanel, removePanel, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
@@ -38,14 +38,20 @@ export function Canvas(): JSX.Element {
   // Declared before useViewport (which takes it as an argument) rather than
   // grouped with the other callbacks below: a const used before its
   // declaration is a TDZ error, not just a style preference.
-  const onSpawn = useCallback(
-    (centre: Point) =>
-      setPanels((current) => [
-        ...current,
-        makePanel(`n${current.length + 1}`, centre, nextZ(current))
-      ]),
-    []
-  )
+  //
+  // The id is a monotonic sequence, NOT the array's length. Length-derived ids
+  // were sound while the array only grew; removePanel breaks that — spawn n13, close any
+  // panel, spawn again, and the second panel is n13 too. Every consequence is
+  // silent: registry.ensure returns the EXISTING session, so the new panel
+  // renders the old one's handle.host (which can only live in one slot), and
+  // setPanelRect/removePanel then act on both entries at once. The counter is a
+  // ref rather than state because nothing renders it. `n` keeps it clear of the
+  // seed panels' `s` ids.
+  const nextIdRef = useRef(1)
+  const onSpawn = useCallback((centre: Point) => {
+    const id = `n${nextIdRef.current++}`
+    setPanels((current) => [...current, makePanel(id, centre, nextZ(current))])
+  }, [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
@@ -347,7 +353,13 @@ export function Canvas(): JSX.Element {
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
-    setSelectedId(world ? hitTest(hitOrder, world) : null)
+    const hit = world ? hitTest(hitOrder, world) : null
+    // Through onSelectPanel, not setSelectedId: selecting raises. A live
+    // panel's own chrome handler already does that, but a CARDED panel has no
+    // handler of its own — its click falls through to the background path, and
+    // calling setSelectedId here directly would select it without raising it.
+    if (hit) onSelectPanel(hit)
+    else setSelectedId(null)
     // Focus is released together with selection. assignTiers pins the focused
     // panel live unconditionally — off screen, below the scale threshold,
     // budget full — so a focusedId that is never cleared holds a WebGL context
@@ -360,6 +372,13 @@ export function Canvas(): JSX.Element {
   }
 
   const onMouseMove = (event: MouseEvent<HTMLDivElement>): void => {
+    // Ignore the corrected clones xterm-pointer dispatches during a selection
+    // drag. Those carry CSS-pixel client coordinates measured against the
+    // panel's slot — right for xterm, wrong for anything that converts a real
+    // screen point to world space. They bubble through .canvas like any other
+    // event, so without this the HUD's world cursor jumps for the whole drag,
+    // by (1 - 1/scale) times the offset into the panel.
+    if (isCorrectedEvent(event.nativeEvent)) return
     const world = toWorld(event)
     if (world) setCursor(world)
   }
