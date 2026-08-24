@@ -13,6 +13,7 @@ import { installPointerCorrection, isCorrectedEvent } from '@renderer/components
 import type { CanvasState } from '@shared/layout-schema'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
+import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -69,10 +70,37 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       return match ? Math.max(max, Number(match[1]) + 1) : max
     }, 1)
   )
+  // The undo stack holds Panel[] — the same array persistence already
+  // serialises. Camera moves are deliberately absent: pan and zoom are
+  // continuous and self-evidently reversible by doing the opposite, and
+  // putting them here would make Cmd+Z usually rewind a scroll instead of the
+  // edit the user meant.
+  //
+  // The `present` half of History is read only through the updater callbacks
+  // below (setHistory((h) => ...)), never off a `history` local — every read
+  // site needs the LATEST past/future, and closing over a render's snapshot
+  // would undo/redo against a stale stack the moment two edits landed in the
+  // same tick. Destructuring only the setter also keeps `noUnusedLocals`
+  // honest instead of manufacturing a read nothing else needs.
+  const [, setHistory] = useState<History<Panel[]>>(() => createHistory(panels))
+
+  // Declared before onSpawn (which uses it) rather than grouped with the
+  // other undo plumbing below applyHistory needs: applyHistory itself needs
+  // setSelectedId/setFocusedId/setDormantIds, which are not declared until
+  // further down, so it is defined after them. commitHistory has no such
+  // dependency and can be pushed up here instead of forward-declaring onSpawn.
+  const commitHistory = useCallback((next: Panel[]) => {
+    setHistory((h) => pushHistory(h, next))
+  }, [])
+
   const onSpawn = useCallback((centre: Point) => {
     const id = `n${nextIdRef.current++}`
-    setPanels((current) => [...current, makePanel(id, centre, nextZ(current))])
-  }, [])
+    setPanels((current) => {
+      const next = [...current, makePanel(id, centre, nextZ(current))]
+      commitHistory(next)
+      return next
+    })
+  }, [commitHistory])
   const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId)
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
@@ -83,6 +111,26 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
   const [dormantIds, setDormantIds] = useState<ReadonlySet<string>>(
     () => new Set(initial.panels.map((p) => p.id))
   )
+
+  // Applying a history state has to reach the registry too: an undone close
+  // must recreate the panel's session, and it comes back DORMANT because its
+  // PTY was killed on the click that closed it and there is nothing to
+  // revive — registry.ensure (in the useMemo below) recreates the session
+  // from scratch once the panel reappears in `panels`, and passing dormant:
+  // true for it is what turns that into a card instead of a fresh spawn.
+  const applyHistory = useCallback((next: History<Panel[]>) => {
+    const ids = new Set(next.present.map((p) => p.rect.id))
+    setPanels(next.present)
+    setDormantIds((current) => {
+      const merged = new Set([...current].filter((id) => ids.has(id)))
+      for (const panel of next.present) {
+        if (!registry.get(panel.rect.id)?.spawned) merged.add(panel.rect.id)
+      }
+      return merged
+    })
+    setSelectedId((id) => (id && ids.has(id) ? id : null))
+    setFocusedId((id) => (id && ids.has(id) ? id : null))
+  }, [])
 
   // Mirrors focusedId into a ref so shouldYieldWheel (below) can read the
   // current focus without being redefined on every focus change — it must
@@ -145,6 +193,24 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       offPaste()
     }
   }, [])
+
+  // Menu-driven undo/redo, delivered the same way as copy/paste — through
+  // main's menu accelerators, never the stock 'undo'/'redo' roles, which
+  // drive document.execCommand against whatever DOM element happens to be
+  // focused (xterm's hidden textarea, most of the time) rather than this
+  // history stack.
+  useEffect(() => {
+    const offUndo = window.canvas.edit.onUndo(() =>
+      setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
+    )
+    const offRedo = window.canvas.edit.onRedo(() =>
+      setHistory((h) => { const next = redoHistory(h); applyHistory(next); return next })
+    )
+    return () => {
+      offUndo()
+      offRedo()
+    }
+  }, [applyHistory])
 
   // Same mirror-into-a-ref pattern, for the listeners below that need the
   // current scale but must not resubscribe: `viewport` changes on every wheel
@@ -213,7 +279,14 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       const session = registry.get(id)
       return session ? session.handle.scrollPosition() : null
     }
-  }, [])
+    /**
+     * Drives the same undo path Cmd+Z does. executeJavaScript has no way to
+     * dispatch a real main-process menu accelerator, so this is the narrow
+     * verb verify:panels needs to exercise undo without one.
+     */
+    w.__m4bUndo = (): void =>
+      setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
+  }, [applyHistory])
 
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
@@ -226,6 +299,15 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       []
     ),
     onCommit: useCallback((id: string, mode: DragMode) => {
+      // One history entry per gesture. onDrag (above) called setPanels ~60
+      // times during the drag; pushing there would make a single drag take
+      // sixty Cmd+Z presses to undo. This runs exactly once, on mouseup,
+      // reading the settled array back out of setPanels's updater rather than
+      // closing over a stale `panels` from render.
+      setPanels((current) => {
+        commitHistory(current)
+        return current
+      })
       // A move changes no terminal dimension, so it has nothing to commit.
       if (mode.kind !== 'resize') return
       // One commit per gesture, never one per frame: a full-screen agent TUI
@@ -233,7 +315,7 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       // mean sixty of those a second at sizes the user never meant to keep.
       // refit sends at most one pty:resize, and none if the grid is unchanged.
       registry.refit(id)
-    }, [])
+    }, [commitHistory])
   })
 
   const onBeginDrag = useCallback(
@@ -271,13 +353,21 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
     // early-returns on a missing id, and the cleanup's removeChild is guarded
     // on host.parentNode === slot.
     registry.dispose(id)
-    setPanels((current) => removePanel(current, id))
+    setPanels((current) => {
+      const next = removePanel(current, id)
+      commitHistory(next)
+      return next
+    })
     setSelectedId((current) => (current === id ? null : current))
     setFocusedId((current) => (current === id ? null : current))
-  }, [])
+  }, [commitHistory])
   const onSelectPanel = useCallback((id: string) => {
     setSelectedId(id)
-    setPanels((current) => raisePanel(current, id))
+    setPanels((current) => {
+      const next = raisePanel(current, id)
+      commitHistory(next)
+      return next
+    })
     // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
     // and so no focus handler of its own — its click falls through to the
     // canvas background, which hit-tests and selects. Hooking onFocusPanel
@@ -290,7 +380,7 @@ export function Canvas({ initial }: { initial: CanvasState }): JSX.Element {
       return next
     })
     registry.wake(id)
-  }, [])
+  }, [commitHistory])
   const onFocusPanel = useCallback((id: string) => {
     onSelectPanel(id)
     setFocusedId(id)

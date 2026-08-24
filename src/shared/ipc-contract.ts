@@ -38,7 +38,14 @@ export const IPC_EVENTS = {
   PTY_EXIT: 'pty:exit',
   /** Menu-driven clipboard actions; the renderer owns xterm's selection. */
   EDIT_COPY: 'edit:copy',
-  EDIT_PASTE: 'edit:paste'
+  EDIT_PASTE: 'edit:paste',
+  /**
+   * Cmd+Z / Cmd+Shift+Z, forwarded from the main-process menu exactly as
+   * EDIT_COPY/EDIT_PASTE are. Ctrl+Z is deliberately untouched and reaches the
+   * PTY as SIGTSTP — the same split as Cmd+C (copy) versus Ctrl+C (SIGINT).
+   */
+  EDIT_UNDO: 'edit:undo',
+  EDIT_REDO: 'edit:redo'
 } as const
 
 /** Shape of the bridge the preload exposes on window.canvas. */
@@ -61,6 +68,8 @@ export interface CanvasBridge {
   edit: {
     onCopy(listener: () => void): () => void
     onPaste(listener: (text: string) => void): () => void
+    onUndo(listener: () => void): () => void
+    onRedo(listener: () => void): () => void
   }
   layout: {
     /** Called ONCE, before React mounts. See renderer/main.tsx. */

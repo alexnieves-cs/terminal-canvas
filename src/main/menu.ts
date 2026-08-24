@@ -36,6 +36,17 @@ export function buildAppMenu(): void {
       label: 'Edit',
       submenu: [
         {
+          label: 'Undo',
+          accelerator: 'CmdOrCtrl+Z',
+          click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_UNDO)
+        },
+        {
+          label: 'Redo',
+          accelerator: 'Shift+CmdOrCtrl+Z',
+          click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_REDO)
+        },
+        { type: 'separator' },
+        {
           label: 'Copy',
           accelerator: 'CmdOrCtrl+C',
           click: () => focused()?.webContents.send(IPC_EVENTS.EDIT_COPY)

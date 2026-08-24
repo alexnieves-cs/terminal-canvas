@@ -33,7 +33,9 @@ const bridge: CanvasBridge = {
   },
   edit: {
     onCopy: (listener) => subscribe<void>(IPC_EVENTS.EDIT_COPY, listener),
-    onPaste: (listener) => subscribe<string>(IPC_EVENTS.EDIT_PASTE, listener)
+    onPaste: (listener) => subscribe<string>(IPC_EVENTS.EDIT_PASTE, listener),
+    onUndo: (listener) => subscribe<void>(IPC_EVENTS.EDIT_UNDO, listener),
+    onRedo: (listener) => subscribe<void>(IPC_EVENTS.EDIT_REDO, listener)
   },
   layout: {
     load: () => ipcRenderer.invoke(IPC.LAYOUT_LOAD),

@@ -1150,6 +1150,99 @@ app.whenReady().then(async () => {
           : JSON.stringify(dragged))
     }
 
+    // ---------------------------------------------------------------------
+    // 20. ONE undo per gesture, not one per frame. A drag emits ~60 setPanels
+    //     calls; if each pushed history, undoing a single drag would take
+    //     sixty Cmd+Z presses and the feature would be unusable without ever
+    //     failing a check. Modelled on check 19's drag (chrome mousedown, a
+    //     move, mouseup) — the panel and its rect are both read from the live
+    //     DOM right before the drag, since by this point checks 1-19 have
+    //     already moved, zoomed, closed, and spawned panels.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const dragged = await wc.executeJavaScript(`(async () => {
+        const chrome = document.querySelector('.panel__chrome')
+        if (!chrome) return { error: 'no panel' }
+        const panel = chrome.closest('.panel')
+        const id = panel.getAttribute('data-panel-id')
+        const before = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        const r = chrome.getBoundingClientRect()
+        const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        const DX = 200, DY = 120
+
+        const opts = (x, y, buttons) => ({
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons, detail: 1
+        })
+        chrome.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+        document.dispatchEvent(new MouseEvent('mousemove', opts(start.x + DX, start.y + DY, 1)))
+        await new Promise((res) => setTimeout(res, 20))
+        document.dispatchEvent(new MouseEvent('mouseup', opts(start.x + DX, start.y + DY, 0)))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const after = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        return { id, before, after }
+      })()`)
+
+      await wc.executeJavaScript(`window.__m4bUndo()`)
+      await sleep(150)
+      const undone = dragged && !dragged.error
+        ? await wc.executeJavaScript(`(() => {
+            const panel = document.querySelector('[data-panel-id="${dragged.id}"]')
+            return panel && { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+          })()`)
+        : null
+
+      ok('20 one drag is one undo',
+        dragged && !dragged.error && undone &&
+          dragged.after.x !== dragged.before.x &&
+          Math.abs(undone.x - dragged.before.x) < 1 &&
+          Math.abs(undone.y - dragged.before.y) < 1,
+        `before=${JSON.stringify(dragged && dragged.before)} ` +
+        `after=${JSON.stringify(dragged && dragged.after)} undone=${JSON.stringify(undone)}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // 21. Undoing a close brings the panel back DORMANT. Its PTY was killed
+    //     on the click that closed it and there is nothing to revive, so the
+    //     honest restoration is the geometry plus a card that asks before
+    //     starting again. Modelled on checks 13-14's close (a mousedown on
+    //     .panel__close), but on an IDLE panel specifically — a running panel
+    //     needs an arm-then-confirm second click before it closes at all,
+    //     which is a different gesture this check is not about.
+    // ---------------------------------------------------------------------
+    {
+      const countBefore = await panelCount(wc)
+      const closed = await wc.executeJavaScript(`(() => {
+        const panels = [...document.querySelectorAll('.panel')]
+        const idle = panels.find((p) => p.querySelector('.panel__card-idle'))
+        if (!idle) return { error: 'no idle panel to close' }
+        const id = idle.getAttribute('data-panel-id')
+        idle.querySelector('.panel__close').dispatchEvent(new MouseEvent('mousedown',
+          { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+        return { id }
+      })()`)
+      await sleep(200)
+      const countClosed = await panelCount(wc)
+
+      await wc.executeJavaScript(`window.__m4bUndo()`)
+      const restored = closed && !closed.error
+        ? await waitUntil(
+            () => wc.executeJavaScript(
+              `(() => { const p = document.querySelector('[data-panel-id="${closed.id}"] .panel__card-idle'); return p && p.textContent })()`
+            ), 2000)
+        : null
+      const countRestored = await panelCount(wc)
+
+      ok('21 undoing a close restores the panel dormant',
+        closed && !closed.error &&
+          countClosed === countBefore - 1 &&
+          countRestored === countBefore &&
+          restored === 'click to start',
+        `id=${closed && closed.id} ${countBefore} -> ${countClosed} -> ${countRestored} card="${restored}"`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
