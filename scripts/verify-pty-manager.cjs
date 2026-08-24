@@ -32,6 +32,15 @@ buildSync({
 })
 const { PtyManager } = require(OUT)
 
+/* This suite's own tmux socket, never the production one.
+   Check 15 calls shutdown(), which is `tmux kill-server`. Run against
+   TMUX_SOCKET — as this suite did until a whole-branch review — and
+   `npm run verify` with the app open destroys every agent the user has
+   running. The socket is a defaulted parameter on every argv builder in
+   tmux-args.ts precisely so this can differ here without weakening the
+   production default; verify-tmux.cjs check 9 still pins that default. */
+const VERIFY_SOCKET = 'terminal-canvas-verify'
+
 const OUT_BACKEND = join(__dirname, '..', 'out', 'verify', 'session-backend.cjs')
 buildSync({
   entryPoints: [join(__dirname, '..', 'src', 'main', 'session-backend.ts')],
@@ -195,13 +204,21 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
   if (!TMUX) {
     ok('11-15 tmux backend (SKIPPED — no tmux binary found)', true, 'install tmux to cover these')
   } else {
-    const dir = mkdtempSync(join(tmpdir(), 'tc-verify-'))
-    const exitDir = join(dir, 'exits')
+    // The space is deliberate and load-bearing. Production's exitDir is
+    // ~/Library/Application Support/terminal-canvas/tmux-exits, so a spaced
+    // path is the only shape that ever ships — and the pane-died hook's
+    // redirect target was unquoted for the whole milestone because every
+    // fixture (this one included, as 'tc-verify-' under /var/folders) was
+    // space-free. Check 14 below is what actually catches it: with an
+    // unquoted redirect no exit file is written, exitCodeFor returns null,
+    // and the client's own code 1 is reported instead of 7.
+    const dir = mkdtempSync(join(tmpdir(), 'tc verify '))
+    const exitDir = join(dir, 'exit codes')
     mkdirSync(exitDir, { recursive: true })
     const confPath = join(dir, 'tmux.conf')
     const T = require(OUT_TMUX_ARGS)
-    writeFileSync(confPath, T.buildTmuxConf(exitDir))
-    const tmuxBackend = createTmuxBackend({ tmuxPath: TMUX, exitDir, confPath, reason: 'verify' })
+    writeFileSync(confPath, T.buildTmuxConf(exitDir, VERIFY_SOCKET))
+    const tmuxBackend = createTmuxBackend({ tmuxPath: TMUX, exitDir, confPath, reason: 'verify', socket: VERIFY_SOCKET })
     const tmuxCli = (args) => {
       try { return execFileSync(TMUX, args, { encoding: 'utf8' }) } catch { return '' }
     }
@@ -213,12 +230,13 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     let h1 = null
 
     // 11. A session created through the backend is visible to tmux itself on
-    // OUR socket — and therefore invisible on the user's default socket.
+    // the socket we asked for — and therefore invisible on both the user's
+    // default socket and the app's production one.
     {
       h1 = makeHarness(tmuxBackend)
       await h1.manager.create(spec('t1'))
       await sleep(700)
-      const listed = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const listed = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       ok('11 a panel becomes a tmux session on the private socket',
         listed.includes('t1'), JSON.stringify(listed.trim()))
     }
@@ -247,20 +265,20 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     // still holding the panelId in its map.
     {
       const clientCount = () => {
-        const out = tmuxCli(['-L', T.TMUX_SOCKET, 'list-clients', '-t', 't1', '-F', '#{client_pid}'])
+        const out = tmuxCli(['-L', VERIFY_SOCKET, 'list-clients', '-t', 't1', '-F', '#{client_pid}'])
         return out.split('\n').filter((l) => l.trim()).length
       }
-      const before = tmuxCli(['-L', T.TMUX_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+      const before = tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
       const beforePid = (/t1 (\d+)/.exec(before) ?? [])[1]
       const clientsBefore = clientCount()
       h1.manager.detachAll()
       await sleep(500)
-      const survived = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const survived = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       const clientsAfterDetach = clientCount()
       const h2 = makeHarness(tmuxBackend)
       await h2.manager.create(spec('t1'))
       await sleep(700)
-      const after = tmuxCli(['-L', T.TMUX_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+      const after = tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
       const afterPid = (/t1 (\d+)/.exec(after) ?? [])[1]
       const clientsAfterReattach = clientCount()
       ok('12 detaching leaves the session alive, drops its client to zero, and create reattaches the SAME process',
@@ -305,6 +323,31 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
         code === null, `exitCodeFor returned ${code}`)
     }
 
+    // 14c. kill() must reach backend.destroy() even for a panelId this manager
+    // has NO local session for. Under node-pty "no session" meant "no process"
+    // and the early return was free; under tmux a panel can be reattachable —
+    // its session survived a reload — while this manager never spawned a
+    // client for it, because the panel was off-screen or held back by
+    // LIVE_BUDGET and never went live. Closing it then left an agent running
+    // with nothing able to reach, close, or type into it for the rest of the
+    // run. Built here by starting a session through one manager and killing it
+    // through a SECOND, empty one, which is exactly the post-reload shape.
+    {
+      const owner = makeHarness(tmuxBackend)
+      await owner.manager.create(spec('t4'))
+      await sleep(700)
+      owner.manager.detachAll()
+      await sleep(400)
+      const stranger = makeHarness(tmuxBackend)
+      const beforeKill = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      stranger.manager.kill('t4')
+      await sleep(500)
+      const afterKill = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      ok('14c killing a panel with no local session still ends its surviving tmux session',
+        beforeKill.includes('t4') && !afterKill.includes('t4'),
+        `before=${JSON.stringify(beforeKill.trim())} after=${JSON.stringify(afterKill.trim())}`)
+    }
+
     // 15. destroy() ends the session, and shutdown() takes the server with it.
     {
       const h = makeHarness(tmuxBackend)
@@ -312,10 +355,10 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       await sleep(700)
       h.manager.kill('t3')
       await sleep(500)
-      const afterKill = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const afterKill = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       tmuxBackend.shutdown()
       await sleep(500)
-      const afterShutdown = tmuxCli(['-L', T.TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const afterShutdown = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       ok('15 closing a panel ends its session and shutdown ends the server',
         !afterKill.includes('t3') && afterShutdown.trim() === '',
         `afterKill=${JSON.stringify(afterKill.trim())} afterShutdown=${JSON.stringify(afterShutdown.trim())}`)
