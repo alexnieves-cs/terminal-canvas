@@ -104,6 +104,27 @@ app.whenReady().then(async () => {
   ok('4 the world point under the zoom anchor does not move', drift < 0.5,
     `drift ${drift.toFixed(4)}px at world ${worldBefore.x.toFixed(1)},${worldBefore.y.toFixed(1)}`)
 
+  // 5-6: the file-drop guard. An unhandled drop navigates the renderer to
+  // file://..., and attachPtyLifecycle kills every PTY in the window when that
+  // happens — so a stray drag from Finder would not "do nothing", it would take
+  // down every running agent and reload the canvas empty. The browser only
+  // treats a drop as a drop target at all if dragover was also cancelled, so
+  // both halves are asserted; cancelling only `drop` leaves the navigation in
+  // place. Reading `defaultPrevented` on a dispatched event is what makes this
+  // falsifiable: remove either preventDefault and the matching check goes red.
+  const dropGuard = await wc.executeJavaScript(`(() => {
+    const fire = (type) => {
+      const e = new DragEvent(type, { bubbles: true, cancelable: true })
+      document.body.dispatchEvent(e)
+      return e.defaultPrevented
+    }
+    return { dragover: fire('dragover'), drop: fire('drop') }
+  })()`)
+  ok('5 a dragover over the app is cancelled', dropGuard.dragover === true,
+    `defaultPrevented=${dropGuard.dragover}`)
+  ok('6 a file drop is cancelled before it can navigate the renderer', dropGuard.drop === true,
+    `defaultPrevented=${dropGuard.drop}`)
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
