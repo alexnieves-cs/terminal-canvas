@@ -21,6 +21,18 @@ buildSync({
 })
 const { PtyManager } = require(OUT)
 
+const OUT_BACKEND = join(__dirname, '..', 'out', 'verify', 'session-backend.cjs')
+buildSync({
+  entryPoints: [join(__dirname, '..', 'src', 'main', 'session-backend.ts')],
+  outfile: OUT_BACKEND,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['node-pty', 'electron']
+})
+const { createDirectBackend } = require(OUT_BACKEND)
+const DIRECT = createDirectBackend('verify: direct by default')
+
 const results = []
 const ok = (n, pass, detail) => {
   results.push({ n, pass, detail })
@@ -29,12 +41,12 @@ const ok = (n, pass, detail) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** Stands in for the real WebContents seam and records what main sent. */
-function makeHarness() {
+function makeHarness(backend) {
   const events = []
-  const manager = new PtyManager(() => ({
-    isDestroyed: () => false,
-    send: (channel, payload) => events.push({ channel, payload })
-  }))
+  const manager = new PtyManager(
+    () => ({ isDestroyed: () => false, send: (channel, payload) => events.push({ channel, payload }) }),
+    () => backend ?? DIRECT
+  )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
 
@@ -132,6 +144,28 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     }
     ok('6b same panelId can be recreated after killAll', recreateError === null, String(recreateError ?? 'no error'))
     manager.killAll()
+  }
+
+  // 9. DirectBackend must report null for both "what do you independently
+  // know" questions. Those two nulls are what make it a RESTORATION of
+  // pre-M4c behaviour rather than a second implementation of it: PtyManager
+  // falls back to its own map and to node-pty's own exit code.
+  {
+    const b = createDirectBackend('test')
+    ok('9 the direct backend knows nothing independently of the manager',
+      b.list() === null && b.exitCodeFor('anything') === null && b.kind === 'direct',
+      `list=${b.list()} exit=${b.exitCodeFor('anything')} kind=${b.kind}`)
+  }
+
+  // 10. With a backend that knows nothing, list() must still return the
+  // manager's own live sessions — i.e. exactly what M3 did.
+  {
+    const h = makeHarness(DIRECT)
+    await h.manager.create(spec('d1'))
+    const listed = h.manager.list().map((r) => r.panelId)
+    ok('10 list falls back to the manager map when the backend has no view',
+      listed.length === 1 && listed[0] === 'd1', JSON.stringify(listed))
+    h.manager.kill('d1')
   }
 
   console.log('\n' + '='.repeat(60))

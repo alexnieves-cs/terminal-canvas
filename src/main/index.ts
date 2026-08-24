@@ -3,6 +3,7 @@ import { BrowserWindow, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
+import { createDirectBackend, type SessionBackend } from './session-backend'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
@@ -10,9 +11,21 @@ import { IPC_EVENTS } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
 
+/**
+ * Which backend spawns panels. Reassigned once by the startup probe; a
+ * DirectBackend is the value until then, so a pty:create that somehow arrives
+ * before the probe finishes still works rather than throwing.
+ */
+let backend: SessionBackend = createDirectBackend('startup: tmux not probed yet')
+
 // The manager needs a way to reach the live renderer; a getter rather than a
-// captured reference keeps it correct across window reloads.
-const ptyManager = new PtyManager(() => mainWindow?.webContents ?? null)
+// captured reference keeps it correct across window reloads. The backend is a
+// getter for the same reason — the probe that chooses it is async and has not
+// run when this module is evaluated.
+const ptyManager = new PtyManager(
+  () => mainWindow?.webContents ?? null,
+  () => backend
+)
 
 // userData is the standard per-user application directory; app.getPath is only
 // valid once the app module is loaded, which it is by the time this module runs.

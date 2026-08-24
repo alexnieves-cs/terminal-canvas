@@ -29,7 +29,8 @@ buildSync({
   format: 'cjs',
   external: ['node-pty', 'electron']
 })
-const { registerIpcHandlers, PtyManager, resolveShellEnv, createLayoutStore } = require(ENTRY_OUT)
+const { registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, createLayoutStore } =
+  require(ENTRY_OUT)
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -79,7 +80,7 @@ app.whenReady().then(async () => {
   // panel triggers, and an uncached probe per concurrent create is not a
   // path the real app ever takes.
   await resolveShellEnv()
-  const ptyManager = new PtyManager(() => win.webContents)
+  const ptyManager = new PtyManager(() => win.webContents, () => createDirectBackend('verify: direct'))
   const layoutStore = createLayoutStore({
     filePath: join(mkdtempSync(join(tmpdir(), 'tc-canvas-')), 'layout.json')
   })

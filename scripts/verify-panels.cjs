@@ -27,6 +27,7 @@ buildSync({
 const {
   registerIpcHandlers,
   PtyManager,
+  createDirectBackend,
   resolveShellEnv,
   createLayoutStore,
   fromPanels,
@@ -134,7 +135,7 @@ app.whenReady().then(async () => {
   // Same wiring main/index.ts does at real startup: a PtyManager that reaches
   // this window's webContents, registered against the pty:* channels the
   // renderer's window.canvas.pty bridge calls.
-  const ptyManager = new PtyManager(() => win.webContents)
+  const ptyManager = new PtyManager(() => win.webContents, () => createDirectBackend('verify: direct'))
 
   // A real store, not a stub: the built renderer now calls and awaits
   // window.canvas.layout.load() before React mounts, so an unhandled channel

@@ -2,9 +2,10 @@ import { existsSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { resolve } from 'node:path'
 import type { WebContents } from 'electron'
-import * as pty from 'node-pty'
+import type * as pty from 'node-pty'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import type { PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
+import type { SessionBackend } from './session-backend'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
 
 /**
@@ -59,7 +60,15 @@ interface Session {
 export class PtyManager {
   private sessions = new Map<PanelId, Session>()
 
-  constructor(private readonly getTarget: () => WebContents | null) {}
+  constructor(
+    private readonly getTarget: () => WebContents | null,
+    /**
+     * A getter, not a captured reference, for the same reason getTarget is one:
+     * the backend is chosen by an async startup probe that has not finished
+     * when this manager is constructed at module scope.
+     */
+    private readonly getBackend: () => SessionBackend
+  ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
     if (this.sessions.has(spec.panelId)) {
@@ -72,16 +81,7 @@ export class PtyManager {
     const cwd = resolveCwd(spec.cwd)
     const command = resolveCommand(spec, loginEnv)
 
-    const proc = pty.spawn(command, spec.args, {
-      name: 'xterm-256color',
-      // Spawn at the size the renderer already fitted to. Spawning at the
-      // 80x24 default and resizing afterwards makes agent TUIs draw their
-      // frame twice and sometimes leave artifacts.
-      cols: spec.cols,
-      rows: spec.rows,
-      cwd,
-      env
-    })
+    const proc = this.getBackend().spawn(spec, command, cwd, env)
 
     const session: Session = {
       panelId: spec.panelId,
@@ -106,7 +106,13 @@ export class PtyManager {
       if (this.sessions.get(spec.panelId) === session) this.sessions.delete(spec.panelId)
       // An exit we asked for is not news the panel needs to paint.
       if (session.killed) return
-      this.send(IPC_EVENTS.PTY_EXIT, { panelId: spec.panelId, exitCode, signal })
+      // The tmux CLIENT's exit code carries no information — an inner command
+      // exiting 0 and one exiting 42 both produce client exit 1 — so a naive
+      // port would make this message present, plausible and wrong. The tmux
+      // backend recovers the real code from the pane-died hook's file; the
+      // direct backend returns null and node-pty's own code stands.
+      const real = this.getBackend().exitCodeFor(spec.panelId)
+      this.send(IPC_EVENTS.PTY_EXIT, { panelId: spec.panelId, exitCode: real ?? exitCode, signal })
     })
 
     console.log(
@@ -120,8 +126,15 @@ export class PtyManager {
   /**
    * Every live session. The renderer uses this to reconcile after a reload
    * rather than blindly creating a panel that may already exist.
+   *
+   * The backend answers first: after a reload this map is EMPTY (navigation
+   * killed the clients) while the tmux sessions live on, so the map alone
+   * would report nothing and every panel would restore dormant. A backend with
+   * no independent view returns null and the map is the answer, as before.
    */
   list(): PtyCreateResult[] {
+    const fromBackend = this.getBackend().list()
+    if (fromBackend) return fromBackend
     return [...this.sessions.values()].map((s) => ({
       panelId: s.panelId,
       pid: s.proc.pid,
@@ -161,6 +174,9 @@ export class PtyManager {
     } catch (error) {
       console.warn(`[pty] kill failed for ${panelId}`, error)
     }
+    // Closing a panel must end the SESSION, not merely detach a client.
+    // Without this the tmux session survives with no panel able to reach it.
+    this.getBackend().destroy(panelId)
     this.sessions.delete(panelId)
   }
 

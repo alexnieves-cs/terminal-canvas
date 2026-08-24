@@ -6,6 +6,7 @@
 module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
+  createDirectBackend: require('../src/main/session-backend').createDirectBackend,
   resolveShellEnv: require('../src/main/shell-env').resolveShellEnv,
   // Re-exported whole (not just createLayoutStore) so Task 8's check can build
   // a store, hand it to registerIpcHandlers, and later call flushSync() on the
