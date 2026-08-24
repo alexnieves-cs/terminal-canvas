@@ -33,6 +33,8 @@ export interface SessionHandle {
   detach(): void
   write(data: string): void
   size(): { cols: number; rows: number }
+  /** Re-fit to the host's current box, after the panel's rect changed. */
+  refit(): void
   /** Last N non-empty buffer lines, for the card tier. */
   tail(lines: number): string[]
   focus(): void

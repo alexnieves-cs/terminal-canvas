@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, type JSX } from 'react'
 import type { PanelSession, PanelStatus } from '@renderer/session/panel-session'
+import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 
 export interface TerminalPanelProps {
@@ -22,6 +23,12 @@ export interface TerminalPanelProps {
   selected: boolean
   onSelect: (id: string) => void
   onFocus: (id: string) => void
+  /**
+   * Starts a move or resize gesture. `originWorld` is handed up in CLIENT
+   * coordinates: only the canvas knows the viewport, so it does the
+   * conversion to world space before the gesture begins.
+   */
+  onBeginDrag: (state: DragState) => void
   /** Called once the retained host is in the document, so it can be opened. */
   onSlotMount: (id: string) => void
   /** Called before the host leaves the document, so its context can be freed. */
@@ -31,7 +38,7 @@ export interface TerminalPanelProps {
 const CARD_LINES = 6
 
 function TerminalPanelImpl({
-  session, rect, selected, onSelect, onFocus, onSlotMount, onSlotUnmount
+  session, rect, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -62,10 +69,17 @@ function TerminalPanelImpl({
       <header
         className="panel__chrome"
         onMouseDown={(event) => {
-          // Chrome selects; body passes through. stopPropagation keeps the
+          // Chrome selects, and starts a move. stopPropagation keeps the
           // canvas from reading this as a background click and deselecting.
           event.stopPropagation()
+          event.preventDefault() // suppress the native text-drag of the title
           onSelect(session.id)
+          onBeginDrag({
+            panelId: session.id,
+            mode: { kind: 'move' },
+            originRect: rect,
+            originWorld: { x: event.clientX, y: event.clientY }
+          })
         }}
       >
         {/* A spec with no command runs the login shell, which only main can
@@ -93,6 +107,27 @@ function TerminalPanelImpl({
       ) : (
         <PanelCard session={session} />
       )}
+
+      {/* East, south and south-east only — see ResizeEdge. Each handle is a
+          child of .panel, so it rides .world's transform with the rest of the
+          panel instead of sitting in screen pixels and drifting on zoom. */}
+      {(['e', 's', 'se'] as const).map((edge) => (
+        <div
+          key={edge}
+          className={`panel__resize panel__resize--${edge}`}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            event.preventDefault()
+            onSelect(session.id)
+            onBeginDrag({
+              panelId: session.id,
+              mode: { kind: 'resize', edge },
+              originRect: rect,
+              originWorld: { x: event.clientX, y: event.clientY }
+            })
+          }}
+        />
+      ))}
     </div>
   )
 }

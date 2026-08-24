@@ -444,6 +444,108 @@ app.whenReady().then(async () => {
       await zoomTo(wc, '0')
     }
 
+    // ---------------------------------------------------------------------
+    // 10. Dragging a panel by its chrome moves it by the WORLD delta, not the
+    //     screen delta. Run at a zoom other than 1 on purpose: at 1:1 the two
+    //     are identical and a wrong implementation passes.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      // Cmd+- four times lands near 0.48; the exact value does not matter
+      // because the assertion is expressed against the scale that is read
+      // back, not against a hardcoded number.
+      for (let i = 0; i < 4; i++) await zoomTo(wc, '-')
+      await sleep(200)
+
+      const result = await wc.executeJavaScript(`(async () => {
+        const chrome = document.querySelector('.panel__chrome')
+        if (!chrome) return { error: 'no panel' }
+        const panel = chrome.closest('.panel')
+        const before = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        const r = chrome.getBoundingClientRect()
+        const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        const SCREEN_DX = 120, SCREEN_DY = 60
+
+        const opts = (x, y, buttons) => ({
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons, detail: 1
+        })
+        chrome.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+        // Several intermediate moves: a recompute-from-origin implementation
+        // and an accumulate-deltas one differ only across multiple frames.
+        for (let i = 1; i <= 4; i++) {
+          document.dispatchEvent(new MouseEvent('mousemove',
+            opts(start.x + (SCREEN_DX * i) / 4, start.y + (SCREEN_DY * i) / 4, 1)))
+          await new Promise((res) => setTimeout(res, 20))
+        }
+        document.dispatchEvent(new MouseEvent('mouseup',
+          opts(start.x + SCREEN_DX, start.y + SCREEN_DY, 0)))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const after = { x: parseFloat(panel.style.left), y: parseFloat(panel.style.top) }
+        return { before, after, scale: window.__m4aScale(), SCREEN_DX, SCREEN_DY }
+      })()`)
+
+      const expectedX = result && result.SCREEN_DX / result.scale
+      const expectedY = result && result.SCREEN_DY / result.scale
+      const gotX = result && result.after.x - result.before.x
+      const gotY = result && result.after.y - result.before.y
+      ok('10 a chrome drag moves the panel by the world delta',
+        result && !result.error &&
+          Math.abs(gotX - expectedX) < 1 && Math.abs(gotY - expectedY) < 1,
+        `scale=${result && result.scale} moved ${gotX},${gotY} expected ${expectedX},${expectedY}`)
+
+      await zoomTo(wc, '0')
+    }
+
+    // ---------------------------------------------------------------------
+    // 11. A resize commits exactly once, on release. The grid must be
+    //     UNCHANGED during the drag and changed after it — one SIGWINCH per
+    //     gesture, not one per frame. A full-screen agent TUI repaints on
+    //     every SIGWINCH, so this is about the process, not about the pixels.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      const result = await wc.executeJavaScript(`(async () => {
+        const handle = document.querySelector('.panel__resize--se')
+        if (!handle) return { error: 'no resize handle' }
+        const panel = handle.closest('.panel')
+        const slot = panel.querySelector('.panel__slot')
+        if (!slot) return { error: 'panel is not live' }
+        slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((res) => setTimeout(res, 150))
+
+        const gridBefore = window.__m4aGrid()
+        const r = handle.getBoundingClientRect()
+        const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        const opts = (x, y, buttons) => ({
+          bubbles: true, cancelable: true, composed: true, view: window,
+          clientX: x, clientY: y, button: 0, buttons, detail: 1
+        })
+
+        handle.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+        for (let i = 1; i <= 4; i++) {
+          document.dispatchEvent(new MouseEvent('mousemove',
+            opts(start.x + 60 * i, start.y + 40 * i, 1)))
+          await new Promise((res) => setTimeout(res, 40))
+        }
+        const gridDuring = window.__m4aGrid()
+        document.dispatchEvent(new MouseEvent('mouseup', opts(start.x + 240, start.y + 160, 0)))
+        await new Promise((res) => setTimeout(res, 400))
+        const gridAfter = window.__m4aGrid()
+        return { gridBefore, gridDuring, gridAfter }
+      })()`)
+
+      const same = (a, b) => a && b && a.cols === b.cols && a.rows === b.rows
+      ok('11 a resize commits once, on release',
+        result && !result.error &&
+          same(result.gridBefore, result.gridDuring) &&
+          !same(result.gridBefore, result.gridAfter),
+        `before=${JSON.stringify(result && result.gridBefore)} ` +
+        `during=${JSON.stringify(result && result.gridDuring)} ` +
+        `after=${JSON.stringify(result && result.gridAfter)}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

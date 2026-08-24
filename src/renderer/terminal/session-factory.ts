@@ -51,6 +51,12 @@ function createHandle(id: PanelId): SessionHandle {
       if (!handles) throw new Error(`panel ${id}: size() called before attach()`)
       return { cols: handles.term.cols, rows: handles.term.rows }
     },
+    refit() {
+      // Guarded rather than ensure()d, for the same reason size() is: a
+      // Terminal that was never opened has no host box to fit against, and
+      // constructing one here would only produce xterm's 80x24 default.
+      if (handles) handles.fitAddon.fit()
+    },
     tail(lines) {
       if (!handles) return []
       // Read xterm's own parsed grid rather than keeping a second copy of every

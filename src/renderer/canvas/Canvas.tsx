@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type Mouse
 import { CanvasHud } from './CanvasHud'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
-import { hitTest, screenToWorld, type Point } from './viewport'
+import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
+import { usePanelDrag } from './usePanelDrag'
+import type { DragMode, DragState } from './panel-interaction'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection } from '@renderer/components/xterm-pointer'
-import { makePanel, nextZ, SEED_PANELS, type Panel } from '@renderer/panels/panels'
+import { makePanel, nextZ, setPanelRect, SEED_PANELS, type Panel } from '@renderer/panels/panels'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -98,7 +100,7 @@ export function Canvas(): JSX.Element {
 
   // Test hooks for verify:panels. The registry is a module-level closure with
   // no global handle by design, and executeJavaScript has no other route into
-  // it. Kept to four narrow reads/writes rather than exposing the registry
+  // it. Kept to five narrow reads/writes rather than exposing the registry
   // itself, so the suite cannot quietly start depending on internals.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
@@ -110,6 +112,11 @@ export function Canvas(): JSX.Element {
     w.__m4aSelection = (): string => {
       const id = focusedIdRef.current
       return registry.get(id ?? '')?.handle.getSelection() ?? ''
+    }
+    w.__m4aGrid = (): { cols: number; rows: number } | null => {
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      return session ? session.handle.size() : null
     }
     /** Screen-space centre of the first cell of `word` in the focused panel. */
     w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
@@ -130,6 +137,48 @@ export function Canvas(): JSX.Element {
       }
     }
   }, [])
+
+  // One gesture at a time, driven by document listeners installed once. Moves
+  // rewrite the rect on every frame; only a resize commits anything to the PTY,
+  // and only on release.
+  const beginDrag = usePanelDrag({
+    hostRef,
+    viewportRef,
+    onDrag: useCallback(
+      (id: string, rect: WorldRect) => setPanels((current) => setPanelRect(current, id, rect)),
+      []
+    ),
+    onCommit: useCallback((id: string, mode: DragMode) => {
+      // A move changes no terminal dimension, so it has nothing to commit.
+      if (mode.kind !== 'resize') return
+      // One commit per gesture, never one per frame: a full-screen agent TUI
+      // repaints its whole frame on every SIGWINCH, and resizing live would
+      // mean sixty of those a second at sizes the user never meant to keep.
+      // refit sends at most one pty:resize, and none if the grid is unchanged.
+      registry.refit(id)
+    }, [])
+  })
+
+  const onBeginDrag = useCallback(
+    (state: DragState) => {
+      const host = hostRef.current
+      if (!host) return
+      const bounds = host.getBoundingClientRect()
+      // The panel supplies CLIENT coordinates; only the canvas knows the
+      // viewport, so the conversion belongs here. Converting the POINT (not a
+      // delta) is what makes the gesture move by screenDelta / scale:
+      // usePanelDrag converts each move the same way, and the two translations
+      // cancel in the subtraction applyDrag does.
+      beginDrag({
+        ...state,
+        originWorld: screenToWorld(
+          { x: state.originWorld.x - bounds.left, y: state.originWorld.y - bounds.top },
+          viewportRef.current
+        )
+      })
+    },
+    [beginDrag]
+  )
 
   // Stable identities: these go into TerminalPanel's effect deps, and a fresh
   // arrow each render would tear the terminal down and reopen it every frame.
@@ -276,6 +325,7 @@ export function Canvas(): JSX.Element {
               onSlotMount={onSlotMount}
               onSlotUnmount={onSlotUnmount}
               onFocus={onFocusPanel}
+              onBeginDrag={onBeginDrag}
             />
           )
         })}

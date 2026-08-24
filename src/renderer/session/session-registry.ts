@@ -38,6 +38,8 @@ export interface Registry {
   attachSlot(id: PanelId): void
   /** Called by the view's cleanup, before the host leaves the document. */
   detachSlot(id: PanelId): void
+  /** Re-fit after the panel's box changed, and send at most one pty:resize. */
+  refit(id: PanelId): void
   focus(id: PanelId): void
   lastFocusedAt(): Record<PanelId, number>
   version(): number
@@ -195,6 +197,24 @@ export function createRegistry(deps: RegistryDeps): Registry {
       // Frees the WebGL context. Never kills: the PTY keeps running and its
       // output keeps arriving, which is the entire reason this registry exists.
       session.handle.detach()
+    },
+
+    refit(id) {
+      const session = sessions.get(id)
+      // A carded panel has no attached host to measure; its grid is settled on
+      // the next attachSlot, which already compares against sentGrid.
+      if (!session || session.tier !== 'live') return
+      session.handle.refit()
+      if (!session.spawned) return
+      // A process that has already exited has nothing to signal.
+      if (session.status.kind === 'exited') return
+      // At most one pty:resize, and none at all when the new box happens to
+      // fit the same grid — the same SIGWINCH economy attachSlot practises.
+      const { cols, rows } = session.handle.size()
+      const sent = session.sentGrid
+      if (sent && sent.cols === cols && sent.rows === rows) return
+      session.sentGrid = { cols, rows }
+      void bridge.pty.resize({ panelId: id, cols, rows })
     },
 
     focus(id) {
