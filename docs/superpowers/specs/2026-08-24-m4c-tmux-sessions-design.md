@@ -59,7 +59,16 @@ Out, and deliberately so:
 if it does not.** Create and reattach are therefore the same call, which means
 `pty:create` keeps its exact current signature and semantics, and
 `session-registry.ts` — the module that would otherwise have to learn a whole
-new concept — needs no change at all.
+new concept — never learns reattachment exists.
+
+**Corrected after the whole-branch review: "no change at all" was one line too
+strong.** The registry needed exactly one change, and it is not about
+reattachment as a concept. `dispose()`/`disposeAll()` skipped `pty.kill` for a
+panel that had never spawned, on the reasoning that main had no session for it.
+Under tmux a never-spawned panel can own a *surviving* session — reattachable
+after a reload, but off-screen or held back by `LIVE_BUDGET`, so it never went
+live — and skipping the kill leaked the agent with no panel able to reach it.
+The guard is gone; `pty.kill` still has exactly those two callers.
 
 The two halves fit together without either being bent. After a reload, main's
 `sessions` map is empty because navigation killed the *clients*, while the tmux
@@ -403,10 +412,15 @@ Changed:
 
 Unchanged, and worth stating because it is the design's main claim:
 
-- `src/renderer/session/session-registry.ts` — no change. `-A` makes create and
-  reattach the same call, so the registry never learns reattachment exists.
-- `src/renderer/canvas/lod.ts` — no change. Reattachable panels are not dormant,
-  so the precedence rule is untouched.
+- `src/renderer/session/session-registry.ts` — **one change**, found by the
+  whole-branch review rather than by any per-task one. `-A` does make create and
+  reattach the same call, so the registry still never learns reattachment
+  exists; but `dispose()`/`disposeAll()` had to stop guarding `pty.kill` on
+  `spawned`. See "The central insight" above for why that guard leaked a
+  session. `pty.kill` still has exactly two callers in the renderer, and a tier
+  change still reaches neither.
+- `src/renderer/canvas/lod.ts` — no change, and this half of the claim held.
+  Reattachable panels are not dormant, so the precedence rule is untouched.
 
 ## Success criteria
 

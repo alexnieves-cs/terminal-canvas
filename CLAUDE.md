@@ -31,16 +31,16 @@ work is done. Individual suites:
 | Script | Runtime | Covers |
 |---|---|---|
 | `verify:viewport` | plain node | 47 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), and dormancy outranking focus in `lod.ts` (46–47) |
-| `verify:registry` | plain node | 23 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–15 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15) and dormant attach/wake (16–18) |
-| `verify:layout` | plain node | 25 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution |
-| `verify:tmux` | plain node | 17 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), and `tmux-probe.ts`'s pure backend selection (14–17) |
+| `verify:registry` | plain node | 24 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19) |
+| `verify:layout` | plain node | 26 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution |
+| `verify:tmux` | plain node | 19 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), and the quoting of the pane-died redirect target against a spaced `exitDir` (18) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
-| `verify:pty-manager` | Electron as node | 8 checks: the real `PtyManager` |
-| `verify:window` | real Electron | 3 checks: renderer teardown reaches the PTY layer |
+| `verify:pty-manager` | Electron as node | 17 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), and destroy/shutdown (15). Skipped loudly, never silently, when no tmux binary is found |
+| `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 24 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), and boot reconcile (24) |
+| `verify:panels` | real Electron | 25 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), and one end-to-end invocation of `session:backend` through the real bridge (25) |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -194,11 +194,15 @@ thousands of reads/sec. Measured: 33,198 reads → 105 messages. The pending buf
 *before* `pty:exit` is announced, or the last lines (usually the error explaining the exit)
 are dropped.
 
-**Sessions die with their renderer (`window-lifecycle.ts`).** Cmd+R and Cmd+W destroy the
-page without running React cleanup, so the renderer never sends `pty:kill`. Left alone the
-old PTY survives and the next `pty:create` throws "already has a live PTY" — a dead panel
-with no recovery short of quitting. Surviving a reload instead of dying is M4c's job, once
-tmux backs the session; `pty:list` is the channel a fresh renderer will reconcile against.
+**Renderers die; sessions do not (`window-lifecycle.ts`).** Cmd+R and Cmd+W destroy the page
+without running React cleanup, so the renderer never sends `pty:kill`. Something main-side
+still has to act, or the abandoned handle survives and the next `pty:create` throws "already
+has a live PTY" — a dead panel with no recovery short of quitting. Since M4c that action is
+`detachAll()`, not `killAll()`: the local handle (a tmux *client*) dies and the tmux
+*session* keeps running the agent. `pty:list` is the channel the fresh renderer reconciles
+against — it asks the backend first, so it sees sessions this run has never spawned and
+restores those panels non-dormant. Without tmux the app degrades to the old behaviour and the
+processes really do die; see "One operation became three".
 
 **Cmd+C / Cmd+V (`src/main/menu.ts`).** The stock `'copy'`/`'paste'` menu roles drive
 `document.execCommand`, but xterm's selection under the WebGL renderer is not a DOM
@@ -219,7 +223,15 @@ same statement; culling makes them different, and confusing them kills a running
 error anywhere. `pty.kill` has exactly two callers, both inside `session-registry.ts` —
 `disposeAll` (renderer teardown) and `dispose(id)` — but **a tier change must never reach
 either one.** Four checks exist for exactly that property: `verify:registry` 5 and 15, and
-`verify:panels` 4 and 15. `dispose(id)` itself now has three call sites in `Canvas.tsx` — the
+`verify:panels` 4 and 15. Neither caller is guarded on `session.spawned` any more, and the
+guard that used to be there is worth knowing about: it skipped `pty.kill` for a panel that had
+never spawned, which was free under `node-pty` and a leak under tmux, where a never-spawned
+panel can still own a surviving session (reattachable after a reload but never promoted,
+because it was off-screen or over `LIVE_BUDGET`). Main's `PtyManager.kill` matches — it reaches
+`backend.destroy(panelId)` even for an id it has no local session for. `verify:registry` 19 and
+`verify:pty-manager` 14c are the two halves. This is the ONE change M4c made to
+`session-registry.ts`, against a spec that claimed it needed none; the claim held for
+`lod.ts`. `dispose(id)` itself now has three call sites in `Canvas.tsx` — the
 close button, undo/redo removing a panel, and the reset handler — and every one of them keeps
 the `pty.kill` count at two precisely because it routes through `dispose(id)` instead of
 calling `pty.kill` directly; see "Undo removing a panel must dispose its session" below for the
@@ -504,6 +516,39 @@ what stops 24-bit agent output being downsampled to 256, and `mouse` must stay
 through, silently defeating all of M4a's pointer correction from one process
 further down.
 
+**The `pane-died` hook's redirect target must stay quoted (`buildTmuxConf`).**
+`exitDir` is `app.getPath('userData') + '/tmux-exits'`, i.e. `~/Library/
+Application Support/terminal-canvas/tmux-exits` — **it always contains a space
+on macOS.** Unquoted, the shell splits it: the exit code lands in a junk file
+named `~/Library/Application`, `exitCodeFor()` finds nothing, `?? exitCode`
+falls through, and *every* panel reports `[process exited with code 1]`
+regardless of what the process returned. The `; tmux kill-session` half still
+runs, so the session dies and the panel looks entirely normal — the failure is
+completely silent. It shipped through eight task reviews because every fixture
+used a space-free path (`/tmp/exits`, `mkdtemp` under `/var/folders`). Both
+suites now use a spaced `exitDir` on purpose (`verify:tmux`'s `EXIT_DIR`,
+`verify:pty-manager`'s `mkdtempSync(join(tmpdir(), 'tc verify '))`), and
+`verify:tmux` 18 plus `verify:pty-manager` 14 are the two that catch it.
+
+**The probe checks that the SERVER starts, not just that a binary exists
+(`tmux-probe.ts`).** `tmux -V` proves a version, not a working server. A
+present, modern tmux whose server cannot come up — unwritable `TMUX_TMPDIR`,
+socket-directory permissions, a stale socket owned by someone else — would leave
+`kind` at `'tmux'`, give every panel a client that dies instantly, and say
+nothing in the HUD, which is exactly the silent degradation the loud fallback
+exists to prevent. `probeTmux` therefore writes the config and then runs
+`start-server -f <conf>` on the private socket; a failure falls back to
+`DirectBackend` with a reason naming the cause. One extra exec at startup, and
+starting the server early is free: `shutdown()` kill-servers it anyway.
+
+**The verify suites must never touch the production socket.** Every argv
+builder in `tmux-args.ts` takes the socket as a *defaulted* parameter for this
+reason alone; `TMUX_SOCKET` stays the production value and `verify:tmux` 9 still
+pins that default. `verify:pty-manager` runs on `terminal-canvas-verify`,
+because its check 15 calls `shutdown()` — `kill-server` — and running
+`npm run verify` with the app open used to destroy every agent in the live
+instance.
+
 ## Gotchas
 
 - **`Cannot read properties of undefined (reading 'whenReady')`** — your shell exports
@@ -556,7 +601,8 @@ further down.
 Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then an
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
-M2 and M3 are both worked examples of this. Follow it when starting M4c, the next unstarted milestone.
+M2 and M3 are both worked examples of this. Follow it when starting M5, the next unstarted
+milestone.
 
 ## Conventions
 

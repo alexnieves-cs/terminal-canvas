@@ -95,8 +95,13 @@ export interface PanelSession {
    * focus), and attachSlot refuses to spawn one, so both layers have to agree
    * before a process starts.
    *
-   * In M4c this becomes the seam where waking means RECONNECT to a surviving
-   * tmux session rather than spawn a fresh process.
+   * M4c landed and deliberately did NOT make this that seam. Dormant and
+   * reattachable stayed separate states: a panel whose tmux session survived
+   * is restored NON-dormant by boot reconciliation (Canvas.tsx reconciles
+   * against pty:list), and waking still means the same "spawn" call it always
+   * did — which `new-session -A` turns into a reattach one process away,
+   * without the registry ever learning the difference. Do not read this field
+   * as though it carried reattachment state; it does not.
    */
   dormant: boolean
 }

@@ -17,7 +17,9 @@ Tauri would mean `portable-pty` and hand-rolled plumbing.
 ## Prerequisites
 
 - macOS, Node 20+, Xcode Command Line Tools (`node-pty` builds natively)
-- `tmux` — required from M4c for session persistence: `brew install tmux`
+- `tmux` 3.0+ — **optional**, and only for session persistence: `brew install tmux`.
+  Without it the app runs exactly as it did before M4c, says why in the HUD, and
+  panels' processes simply do not survive `Cmd+R` / `Cmd+W`.
 
 ## Getting started
 
