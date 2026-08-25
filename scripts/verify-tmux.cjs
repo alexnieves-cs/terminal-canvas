@@ -266,6 +266,23 @@ const ok = (n, pass, detail) => {
     hook.includes(`> \\"${EXIT_DIR}/#{session_name}.exit\\"`), hook)
 }
 
+// 19. EXACT-MATCH TARGETS (`=`). tmux resolves a -t target that is not an
+// exact session name by unique PREFIX, so with only `n10` alive
+// `kill-session -t n1` kills n10 and exits 0. Panel ids are n1..n12, which
+// makes that collision an everyday shape rather than an exotic one. This is
+// the cheap half of the coverage — verify:pty-manager 14d is the half that
+// actually runs tmux and watches n10 survive; a string assertion alone could
+// not tell a working `=` from a decorative one.
+{
+  const args = T.buildKillSessionArgs('n1')
+  const conf = T.buildTmuxConf(EXIT_DIR)
+  const hook = (conf.match(/set-hook -g pane-died .*/) ?? [''])[0]
+  const argOk = args[args.indexOf('-t') + 1] === '=n1'
+  const hookOk = hook.includes('kill-session -t =#{session_name}')
+  ok('19 kill-session targets are exact-match, in the argv builder and in the hook',
+    argOk && hookOk, `argv=${JSON.stringify(args)} hookOk=${hookOk}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

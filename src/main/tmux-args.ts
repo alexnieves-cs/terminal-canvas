@@ -111,6 +111,11 @@ export function buildTmuxConf(exitDir: string, socket: TmuxSocket = TMUX_SOCKET)
     // polling, no new IPC. Reversing these two is a race.
     // The run-shell child inherits $TMUX so -L is redundant, but the cost of
     // being wrong is silently killing the user's own sessions. Keep it anyway.
+    // `-t =#{session_name}` for the same reason buildKillSessionArgs uses `=`:
+    // tmux falls back to unique-PREFIX matching for a non-exact target, so a
+    // hook firing for `n1` would resolve to `n10` the moment n1's own session
+    // had already gone. Exact-match keeps the hook killing its own session and
+    // nothing else.
     // The redirect target is QUOTED (\" inside tmux's own double-quoted
     // run-shell argument) because the production exitDir is under
     // app.getPath('userData'), i.e. ~/Library/Application Support/... — it
@@ -122,7 +127,7 @@ export function buildTmuxConf(exitDir: string, socket: TmuxSocket = TMUX_SOCKET)
     // still runs, so the session dies and the panel looks normal — the
     // failure is completely silent. Every fixture used a space-free path,
     // which is why it survived to a whole-branch review.
-    `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > \\"${exitDir}/#{session_name}.exit\\"; tmux -L ${socket} kill-session -t #{session_name}"'`,
+    `set-hook -g pane-died 'run-shell "echo #{pane_dead_status} > \\"${exitDir}/#{session_name}.exit\\"; tmux -L ${socket} kill-session -t =#{session_name}"'`,
     // NOTE: `mouse` is deliberately absent, i.e. left off. `mouse on` makes
     // TMUX capture mouse reporting instead of passing it to the application,
     // which would silently defeat all of M4a's pointer correction from one
@@ -179,8 +184,17 @@ export function buildListArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {
   return ['-L', socket, 'list-panes', '-a', '-F', LIST_FORMAT]
 }
 
+/**
+ * The `=` is EXACT-MATCH and it is load-bearing. tmux resolves a target that
+ * is not an exact session name by UNIQUE PREFIX: with only `n10` alive,
+ * `kill-session -t n1` kills n10 and exits 0. Panel ids are `n1`…`n12`, so
+ * closing a dormant `n1` — a panel main may hold no session for at all, which
+ * kill() deliberately still forwards to destroy() — would silently destroy the
+ * agent running in n10. `-t =n1` errors "n1 not found" instead, which cli()
+ * already swallows as the routine no-op it is.
+ */
 export function buildKillSessionArgs(panelId: string, socket: TmuxSocket = TMUX_SOCKET): string[] {
-  return ['-L', socket, 'kill-session', '-t', panelId]
+  return ['-L', socket, 'kill-session', '-t', `=${panelId}`]
 }
 
 export function buildKillServerArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {

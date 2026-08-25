@@ -348,6 +348,36 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
         `before=${JSON.stringify(beforeKill.trim())} after=${JSON.stringify(afterKill.trim())}`)
     }
 
+    // 14d. TARGET PREFIX MATCHING, the defect 14c made reachable. tmux
+    // resolves a -t target that is not an exact session name by unique
+    // PREFIX: with only `n10` alive, `kill-session -t n1` kills n10 and exits
+    // 0 (reproduced on tmux 3.7c). Panel ids are n1..n12, so closing a
+    // dormant, never-spawned n1 — which 14c above deliberately routes into
+    // backend.destroy() even with no local session — silently destroyed the
+    // agent running in n10. 14c's own t4/t1 pair cannot collide, so it can
+    // never catch this; a DELIBERATELY colliding pair is the whole point of
+    // this check. The `=` in buildKillSessionArgs is what makes it pass, and
+    // a string assertion on that `=` (verify:tmux 19) is not a substitute for
+    // watching n10 survive a real kill.
+    {
+      const owner = makeHarness(tmuxBackend)
+      await owner.manager.create(spec('n10'))
+      await sleep(700)
+      const before = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      // A manager that has never heard of n1, exactly like the post-reload
+      // shape 14c builds — kill() therefore goes straight to destroy(), and
+      // there is no n1 session on the socket for it to find.
+      const stranger = makeHarness(tmuxBackend)
+      stranger.manager.kill('n1')
+      await sleep(500)
+      const after = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      ok('14d killing n1 while only n10 exists leaves n10 alive',
+        before.includes('n10') && after.includes('n10'),
+        `before=${JSON.stringify(before.trim())} after=${JSON.stringify(after.trim())}`)
+      owner.manager.kill('n10')
+      await sleep(300)
+    }
+
     // 15. destroy() ends the session, and shutdown() takes the server with it.
     {
       const h = makeHarness(tmuxBackend)
