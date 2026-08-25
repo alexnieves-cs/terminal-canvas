@@ -7,6 +7,15 @@ module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
+  // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
+  // reloads the renderer: reload survival is a tmux property, so a direct
+  // backend cannot express it at all.
+  createTmuxBackend: require('../src/main/session-backend').createTmuxBackend,
+  buildTmuxConf: require('../src/main/tmux-args').buildTmuxConf,
+  // The same listener main/index.ts installs. Check 26 needs a renderer
+  // teardown to reach the real detachAll(), not a lambda written here that
+  // could drift from what production does.
+  attachPtyLifecycle: require('../src/main/window-lifecycle').attachPtyLifecycle,
   resolveShellEnv: require('../src/main/shell-env').resolveShellEnv,
   // Re-exported whole (not just createLayoutStore) so Task 8's check can build
   // a store, hand it to registerIpcHandlers, and later call flushSync() on the

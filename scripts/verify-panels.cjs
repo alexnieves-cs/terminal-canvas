@@ -6,7 +6,8 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, existsSync, readFileSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } = require('node:fs')
+const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
 
@@ -28,6 +29,9 @@ const {
   registerIpcHandlers,
   PtyManager,
   createDirectBackend,
+  createTmuxBackend,
+  buildTmuxConf,
+  attachPtyLifecycle,
   resolveShellEnv,
   createLayoutStore,
   fromPanels,
@@ -39,6 +43,21 @@ const {
  * both cases to assert against each other: s01 (below) genuinely comes back
  * through pty:list, everything else in SEED_PANELS does not. */
 const LIVE_AT_BOOT = ['s01']
+
+/* Check 26's own tmux socket, never the production one and never the user's
+   default. It ends the run with kill-server; pointed anywhere else that would
+   destroy real agents. verify:pty-manager owns 'terminal-canvas-verify', and
+   the two suites must not share a server — this one reloads a renderer while
+   that one is killing sessions out from under whatever it finds. */
+const PANELS_SOCKET = 'terminal-canvas-verify-panels'
+
+/** Absolute path or null. A GUI app has a bare PATH, so never rely on the name. */
+function findTmux() {
+  for (const p of ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux']) {
+    if (existsSync(p)) return p
+  }
+  return null
+}
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -140,7 +159,12 @@ app.whenReady().then(async () => {
   // Same wiring main/index.ts does at real startup: a PtyManager that reaches
   // this window's webContents, registered against the pty:* channels the
   // renderer's window.canvas.pty bridge calls.
-  const ptyManager = new PtyManager(() => win.webContents, () => createDirectBackend('verify: direct'))
+  // Mutable rather than a fresh backend per call: check 26 swaps the whole
+  // manager onto a real tmux backend at the very end of the run, which is the
+  // only way a renderer reload can be asked to prove session SURVIVAL — under
+  // the direct backend a detached process is simply a dead one.
+  let backend = createDirectBackend('verify: direct')
+  const ptyManager = new PtyManager(() => win.webContents, () => backend)
 
   // A real store, not a stub: the built renderer now calls and awaits
   // window.canvas.layout.load() before React mounts, so an unhandled channel
@@ -176,10 +200,7 @@ app.whenReady().then(async () => {
   // ipcMain.handle's return value crosses IPC via structured clone, so this
   // must be a plain { kind, reason } object, not the SessionBackend itself —
   // that carries a spawn() function, which structured clone cannot carry.
-  registerIpcHandlers(ptyManager, layoutStore, () => {
-    const b = createDirectBackend('verify: direct')
-    return { kind: b.kind, reason: b.reason }
-  })
+  registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }))
 
   // Check 24 needs boot reconciliation exercised end to end, not stubbed: a
   // real PTY for s01 exists BEFORE the window ever loads, so when the
@@ -204,6 +225,10 @@ app.whenReady().then(async () => {
   // in this file's own RED run, when a rejected pty:list left the async body
   // stuck with no path to app.exit(). This is the backstop for that class of
   // failure, not a substitute for fixing the specific cause when it recurs.
+  // Assigned by check 26 and torn down in the finally below, so a failure
+  // anywhere in between still ends with kill-server on the private socket.
+  let tmuxBackend = null
+
   let watchdogFired = false
   const watchdog = setTimeout(() => {
     watchdogFired = true
@@ -1464,6 +1489,109 @@ app.whenReady().then(async () => {
         JSON.stringify(info))
     }
 
+    // ---------------------------------------------------------------------
+    // 26. THE MILESTONE'S HEADLINE PROMISE, end to end: a real renderer
+    //     teardown must DETACH the tmux client and leave the session running,
+    //     so the next page lands back in the same process.
+    //
+    //     Nothing else in the 165-check suite could catch its loss.
+    //     verify:pty-manager 12 calls detachAll() directly on a manager with
+    //     no renderer anywhere, so a renderer-side teardown listener never
+    //     fires; verify:window 4 installs its own lambda for the same reason.
+    //     The defect this check exists for lived exactly in that gap: a
+    //     `window.addEventListener('beforeunload', () => registry.disposeAll())`
+    //     in Canvas.tsx sent pty:kill for every panel — i.e. `tmux
+    //     kill-session` — and it WON the race, arriving before
+    //     did-start-navigation's detachAll() ever ran. Every unit-level check
+    //     stayed green while Cmd+R destroyed the user's agents.
+    //
+    //     Runs LAST on purpose: it reloads the page, which destroys the DOM
+    //     and every session id the checks above were reasoning about.
+    // ---------------------------------------------------------------------
+    {
+      const TMUX = findTmux()
+      if (!TMUX) {
+        // Reported, never silent: a suite that quietly covers nothing is
+        // worse than one that says so.
+        ok('26 tmux reload survival (SKIPPED — no tmux binary found)', true,
+          'install tmux to cover this')
+      } else {
+        // The space in the directory name is deliberate, matching
+        // verify:pty-manager: production's exitDir lives under
+        // ~/Library/Application Support/..., and a space-free fixture is what
+        // hid the unquoted-redirect defect for a whole milestone.
+        const tmuxDir = mkdtempSync(join(tmpdir(), 'tc panels tmux '))
+        const exitDir = join(tmuxDir, 'exit codes')
+        mkdirSync(exitDir, { recursive: true })
+        const confPath = join(tmuxDir, 'tmux.conf')
+        writeFileSync(confPath, buildTmuxConf(exitDir, PANELS_SOCKET))
+        tmuxBackend = createTmuxBackend({
+          tmuxPath: TMUX, exitDir, confPath, reason: 'verify: tmux', socket: PANELS_SOCKET
+        })
+        const tmuxCli = (args) => {
+          try { return execFileSync(TMUX, args, { encoding: 'utf8' }) } catch { return '' }
+        }
+        /** session_name -> pane pid, straight from tmux rather than from the app. */
+        const socketPanes = () => {
+          const out = tmuxCli(['-L', PANELS_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+          return new Map(out.split('\n').filter((l) => l.trim()).map((l) => {
+            const [name, pid] = l.trim().split(' ')
+            return [name, Number(pid)]
+          }))
+        }
+
+        // Everything spawned before this point used the direct backend; from
+        // here the manager is the real tmux one, so the panel created below
+        // becomes an actual tmux session on PANELS_SOCKET.
+        backend = tmuxBackend
+        // Installed HERE rather than next to the window: attachPtyLifecycle
+        // fires on the FIRST navigation too, and the s01 fixture session is
+        // created before win.loadFile() — wiring it up front would detach
+        // that fixture during the initial load and take checks 18/24 with it.
+        attachPtyLifecycle(win, () => ptyManager.detachAll())
+
+        const idsBefore = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        await zoomTo(wc, 'n')
+        const idsAfter = await waitUntil(async () => {
+          const ids = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return ids.length > idsBefore.size ? ids : false
+        }, 4000)
+        const newId = idsAfter ? idsAfter.find((id) => !idsBefore.has(id)) : undefined
+
+        // Wait for tmux ITSELF to report the session — pty:create resolving
+        // only means the client was spawned, and the assertion below is about
+        // what is on the socket, so that is what has to be observed here too.
+        const panesBefore = newId
+          ? await waitUntil(async () => {
+              const panes = socketPanes()
+              return panes.has(newId) ? panes : false
+            }, 8000)
+          : null
+        const pidBefore = panesBefore ? panesBefore.get(newId) : undefined
+
+        // The real thing: a renderer teardown that skips React cleanup,
+        // exactly like Cmd+R.
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        // beforeunload's pty:kill would already have landed by now (it is
+        // sent before the navigation even starts), but give the kill-session
+        // it turns into time to be observable rather than racing the read.
+        await sleep(1500)
+
+        const panesAfter = socketPanes()
+        const pidAfter = newId ? panesAfter.get(newId) : undefined
+
+        ok('26 a renderer reload detaches the client and leaves the tmux session running the SAME process',
+          newId !== undefined && panesBefore !== null && typeof pidBefore === 'number' &&
+            pidAfter === pidBefore,
+          `newId=${newId} pid ${pidBefore} -> ${pidAfter ?? 'MISSING'} ` +
+          `sessions=${JSON.stringify([...panesAfter.keys()])}`)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
@@ -1479,6 +1607,10 @@ app.whenReady().then(async () => {
       if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
       try {
         ptyManager.killAll() // the seed panels' shells would otherwise outlive this process
+        // kill-server on PANELS_SOCKET only. Check 26's surviving session is
+        // the whole point of that check, so nothing before this teardown may
+        // end it — and nothing after this run may keep it.
+        if (tmuxBackend) tmuxBackend.shutdown()
       } catch (error) {
         console.error('FAIL  teardown: killAll threw', error)
         results.push({ n: 'teardown', pass: false, detail: String(error) })

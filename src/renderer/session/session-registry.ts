@@ -56,6 +56,16 @@ export interface Registry {
    * Tiering must never reach either.
    */
   dispose(id: PanelId): void
+  /**
+   * Kill EVERY panel's process. Since M4c this has no production call site:
+   * renderer teardown used to call it from a `beforeunload` listener, and
+   * that listener is exactly what destroyed every tmux session on Cmd+R (see
+   * Canvas.tsx, where the comment now stands in its place). Teardown is
+   * main's job — window-lifecycle.ts detaches, before-quit kills. Kept
+   * because "kill everything this renderer owns" is still the honest meaning
+   * of the second pty.kill call site, and verify:registry 12 still pins it;
+   * do not wire it back onto unload.
+   */
   disposeAll(): void
 }
 
@@ -296,6 +306,8 @@ export function createRegistry(deps: RegistryDeps): Registry {
       // One of two places a PTY is killed; dispose(id) is the other. Tiering
       // is neither, and must never become either. Unguarded on `spawned` for
       // the same reason dispose() is — see there.
+      // No production caller since M4c: a renderer teardown must DETACH tmux
+      // clients, not kill sessions. See the interface declaration above.
       for (const session of sessions.values()) {
         session.handle.dispose()
         void bridge.pty.kill(session.id)

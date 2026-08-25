@@ -82,8 +82,9 @@ registry (`src/renderer/session/session-registry.ts`) that lives outside React. 
 panels scroll on and off screen, and owns nothing. A pure function
 (`src/renderer/canvas/lod.ts`) decides which panels are worth a live terminal versus a cheap
 card, based on viewport, focus, and a fixed budget of live WebGL contexts — culling a panel
-never kills its process; only the registry's `disposeAll` (renderer teardown) and `dispose(id)`
-(explicit panel close) do that.
+never kills its process; only the registry's `dispose(id)` (explicit panel
+close) and `disposeAll` do that — and since M4c a renderer teardown does neither, because
+it has to leave the tmux session running (see `Canvas.tsx`).
 
 ### Things that are non-obvious
 

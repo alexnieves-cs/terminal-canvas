@@ -24,9 +24,31 @@ const registry = createRegistry({
   factory: createSessionFactory()
 })
 
-// A renderer teardown that skips React cleanup (Cmd+R, Cmd+W) is handled
-// main-side by window-lifecycle.ts; this covers the orderly path.
-window.addEventListener('beforeunload', () => registry.disposeAll())
+// THERE IS DELIBERATELY NO `beforeunload` TEARDOWN HERE, and adding one back
+// silently deletes M4c's headline feature.
+//
+// Until M4c this file called registry.disposeAll() on beforeunload, because
+// "the renderer is going away" and "these processes should die" were the same
+// statement. M4c split them: a teardown detaches the tmux CLIENT while the
+// SESSION keeps running, so the next page's pty:create lands back in the same
+// process. disposeAll() sends pty:kill for every panel, and pty:kill means
+// `tmux kill-session` — the opposite of a detach.
+//
+// It also WINS the race. beforeunload runs before the navigation starts, so on
+// Cmd+R main receives every pty:kill first and window-lifecycle.ts's
+// did-start-navigation detachAll() then walks an already-empty map. Measured
+// under this repo's own Electron: pty:kill(n1) arrived first, detachAll second.
+//
+// Renderer teardown is main's job in all three of its shapes
+// (did-start-navigation, render-process-gone, closed) and quitting is
+// before-quit's (killAll + backend.shutdown()), so nothing here is left
+// unhandled. What this loses is freeing xterm/WebGL from the renderer side on
+// an orderly reload — which costs nothing, since the page is being destroyed
+// and the browser reclaims both anyway.
+//
+// verify:panels check 26 reloads a real renderer against a real PtyManager on
+// a tmux backend and asserts the session survives; that is what fails if this
+// listener comes back.
 
 export function Canvas({
   initial,
