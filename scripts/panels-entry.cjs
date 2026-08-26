@@ -34,9 +34,11 @@ module.exports = {
      inert, which is the defect that check exists for. */
   pushDefaultPreset: require('../src/main/presets').pushDefaultPreset,
   /* Check 38 drives a rename all the way from the palette to the store and
-     back out through preset:list, so its PresetHandlers cannot be the stub
-     the other checks were happy with: list has to answer with the real rows
-     main would build, or the palette has no user preset to rename. */
+     back out through preset:list, so its PaletteHandlers (named
+     PresetHandlers until M5b's prompt channels joined the same interface)
+     cannot be the stub the other checks were happy with: list has to answer
+     with the real rows main would build, or the palette has no user preset
+     to rename. */
   allPresets: require('../src/main/presets').allPresets,
   resolveAvailability: require('../src/main/presets').resolveAvailability,
   presetRows: require('../src/main/presets').presetRows,

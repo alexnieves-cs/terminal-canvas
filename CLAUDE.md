@@ -30,17 +30,18 @@ work is done. Individual suites:
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:viewport` | plain node | 48 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), and `makePanel`'s spec/size arguments (48) |
+| `verify:viewport` | plain node | 50 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), `makePanel`'s spec/size arguments (48), and `centreOn` framing a rect without touching the scale (49–50) |
 | `verify:registry` | plain node | 24 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19) |
-| `verify:layout` | plain node | 41 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41) |
+| `verify:layout` | plain node | 57 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57) |
+| `verify:palette` | plain node | 30 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–30) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list |
 | `verify:tmux` | plain node | 20 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 18 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). Skipped loudly, never silently, when no tmux binary is found |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
+| `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 17 channels as of M5b, nine of them the palette's |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 32 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below |
+| `verify:panels` | real Electron | 43 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), and a mouse-picked row not releasing the focused panel (41). The count is 43 while the last number is 41, because of the lettered sub-checks `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -51,20 +52,27 @@ Electron's ABI by the `postinstall` `electron-rebuild`, so it will not load unde
 Node. `verify:pty` and `verify:pty-manager` therefore run under Electron with
 `ELECTRON_RUN_AS_NODE=1`; `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, and
 `verify:panels` need the real app lifecycle and `unset` it instead. `verify:viewport`,
-`verify:registry`, `verify:layout`, and `verify:tmux` are plain node, because `viewport.ts`,
-`lod.ts`, `session-registry.ts`, `shared/layout-schema.ts`, `main/layout-store.ts`,
-`main/tmux-args.ts`, and `main/presets.ts` have no native dependency, no DOM, and no direct
-`window`/`document` use — `session-registry.ts` gets there by taking its IPC bridge and its
-terminal factory as injected dependencies, so `verify:registry` can drive the whole session
-lifecycle against fakes instead of a real PTY or a real xterm, `layout-store.ts` gets there by
-taking the filesystem paths it reads and writes as constructor arguments instead of resolving
-`app.getPath('userData')` itself, `tmux-args.ts` gets there by being pure argv/config/parsing
-builders that never import `node-pty` — the module that actually spawns a tmux client,
-`session-backend.ts`, deliberately stays out of this file's reach so `verify:tmux` can run
+`verify:registry`, `verify:layout`, `verify:palette`, and `verify:tmux` are plain node, because
+`viewport.ts`, `lod.ts`, `session-registry.ts`, `shared/layout-schema.ts`,
+`main/layout-store.ts`, `main/prompts.ts`, `main/tmux-args.ts`, `main/presets.ts`, and the
+palette's `fuzzy.ts`/`palette-model.ts`/`commands.ts` have no native dependency, no DOM, and
+no direct `window`/`document` use — `session-registry.ts` gets there by taking its IPC bridge
+and its terminal factory as injected dependencies, so `verify:registry` can drive the whole
+session lifecycle against fakes instead of a real PTY or a real xterm, `layout-store.ts` gets
+there by taking the filesystem paths it reads and writes as constructor arguments instead of
+resolving `app.getPath('userData')` itself, `tmux-args.ts` gets there by being pure
+argv/config/parsing builders that never import `node-pty` — the module that actually spawns a
+tmux client, `session-backend.ts`, deliberately stays out of this file's reach so `verify:tmux` can run
 under plain node at all — and `main/presets.ts` gets there the same way `layout-store.ts`
 does: `resolveAvailability` takes `which` as an injected parameter rather than importing
 `shell-env.ts`, so a real PATH probe never has to run for `verify:layout`'s preset checks to
-pass.
+pass. `main/prompts.ts` needs no such treatment and is the reminder of where the line actually
+is: it reads the filesystem directly with `node:fs` and still runs under plain node, because
+what moves a module out of this tier is importing `electron` or `node-pty`, not touching disk.
+The palette's three pure modules are the same story on the renderer side — `commands.ts`
+builds the command list from plain data (preset rows, prompt rows, panel rows, a captured id)
+and holds no reference to the registry, the viewport, or React, which is what lets
+`verify:palette` assert on *disabled reasons* rather than on a rendered DOM.
 
 **`verify:pty` duplicates production code on purpose.** It re-implements `shell-env.ts`'s
 probe and `pty-manager.ts`'s batching by hand so it can test them without Electron's app
@@ -107,10 +115,24 @@ spawns a process.**
 renderer --invoke--> pty:create / pty:write / pty:resize / pty:kill / pty:list --> main
 renderer --invoke--> layout:load / layout:save                                 --> main
 renderer --invoke--> session:backend                                          --> main
+renderer --invoke--> preset:list / preset:rename / preset:delete               --> main
+renderer --invoke--> preset:set-default / preset:spawn-by-id                   --> main
+renderer --invoke--> prompt:list / prompt:save / prompt:delete                 --> main
+renderer --invoke--> canvas:request-reset                                      --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:reset                              --> renderer
+main     --send-->   preset:spawn / preset:default / preset:capture            --> renderer
 ```
+
+The nine invokes M5b added all point the same way, and the direction is the point: M5a's
+preset channels are main -> renderer because the *menu* is main's, while the palette is the
+renderer's, so its mutations are invokes. Two of them exist purely so the palette runs main's
+code rather than a second copy — `preset:spawn-by-id`, because only main can resolve an
+*absent* `command` into the user's login shell (see "An absent `command` must stay absent"
+below), and `canvas:request-reset`, because main owns the confirmation dialog and the counts
+request. A renderer-side reconstruction of either would drift from the menu path silently, and
+the two paths would then disagree only in the cases nobody tests.
 
 `canvas:counts` reverses the usual direction: main sends it and the renderer replies, on an
 ephemeral `canvas:counts:reply:<timestamp>` channel invented per call in `main/ipc.ts` and
@@ -123,6 +145,9 @@ check does not, and should not, cover it.
 - `src/main/pty-manager.ts` — owns the `Map<PanelId, Session>`. All PTY lifecycle.
 - `src/main/window-lifecycle.ts` — detaches (not kills) a window's sessions when its renderer
   navigates or closes, so their tmux sessions survive; see "One operation became three" below.
+- `src/main/prompts.ts` — reads `.claude/commands/*.md` under a panel's cwd and merges them
+  with the saved store. Read-only, capped, and plain-node testable; see "Project prompts are
+  read, never written" below.
 - `src/preload/index.ts` — `contextBridge` exposes `window.canvas`. Every `on*` subscribe
   returns its own unsubscribe so React effects can clean up without stacking listeners.
 - `src/renderer/session/session-registry.ts` — owns every panel's **session** (its xterm
@@ -163,6 +188,17 @@ src/renderer/canvas/
   Canvas.tsx        clipping host + the single transformed world layer; owns the registry,
                     the tier-assignment effect, and the one Cmd+C/Cmd+V subscription
   CanvasHud.tsx     zoom % and world-space cursor — the fastest way to see the math misbehave
+
+src/renderer/palette/
+  fuzzy.ts          pure subsequence match + score + match positions — no DOM, no React
+  palette-model.ts  pure filter/sort and runnable-row stepping over a Command[]
+  commands.ts       pure list construction: rows in, Command[] with disabled reasons out.
+                    Takes preset/prompt/panel rows and a captured id as plain data, so the
+                    whole command surface is testable without mounting anything.
+  usePalette.ts     open/close state, the Cmd+K toggle, and the captured focus id — the
+                    hook that decides who owns the keyboard (see below)
+  Palette.tsx       the overlay: the input, the rows, its own edit:copy/edit:paste
+                    subscriptions, and the mousedown guard that keeps the canvas out
 
 src/renderer/session/
   panel-session.ts      the PanelSession/SessionHandle/SessionFactory interfaces — what the
@@ -450,7 +486,11 @@ exact failure this note exists to prevent happening again. None of the three add
 `pty.kill`: `dispose(id)` and `disposeAll()` remain the only two inside `session-registry.ts`,
 and routing all three through `dispose()` rather than calling `pty.kill` directly is exactly
 what keeps that count true. Without the undo/redo call site, `Cmd+N` then `Cmd+Z` leaked a live
-process with no panel left to close it.
+process with no panel left to close it. Re-derived again at the end of M5b (`grep -n
+"registry.dispose" src/renderer/canvas/Canvas.tsx`): still three. The palette's "Reset canvas…"
+row adds no fourth — it invokes `canvas:request-reset` and main answers with the same
+`canvas:reset` event the menu item sends, so it lands in `onReset`, the call site that already
+existed.
 
 **No `beforeunload` teardown (`Canvas.tsx`).** The renderer deliberately does NOT dispose its
 sessions on unload, and re-adding that listener silently deletes M4c's headline feature. It was
@@ -474,14 +514,17 @@ whatever DOM element happens to be focused, not the canvas's own history stack. 
 reaches the PTY untouched and still suspends the foreground process as SIGTSTP.
 
 **The plain-node verify bundles now configure a `@shared` alias
-(`verify-viewport.cjs`, `verify-registry.cjs`, `verify-layout.cjs`).** Before M4b they
-resolved no path aliases and got away with it because every cross-boundary import from
-`@shared` was `import type`, which esbuild erases before bundling — nothing was ever actually
-resolved. `panel-interaction.ts` now imports a real *value* from `@shared`, and that fails to
-resolve without the alias wired into each esbuild config, the same one
+(`verify-viewport.cjs`, `verify-registry.cjs`, `verify-layout.cjs`, `verify-palette.cjs`).**
+Before M4b they resolved no path aliases and got away with it because every cross-boundary
+import from `@shared` was `import type`, which esbuild erases before bundling — nothing was
+ever actually resolved. `panel-interaction.ts` now imports a real *value* from `@shared`, and
+that fails to resolve without the alias wired into each esbuild config, the same one
 `electron.vite.config.ts` and the tsconfigs already carry. The real-Electron suites
 (`verify:canvas`, `verify:panels`) need no such alias — they load the already-built
 `out/renderer/index.html`, where electron-vite resolved it long before esbuild ever runs.
+`verify-palette.cjs` carries the alias pre-emptively: `commands.ts`'s `@shared` imports are all
+`import type` today, so nothing there needs it *yet* — which is exactly the state
+`verify-viewport.cjs` was in right up until the day it broke.
 
 **`RestoreSettings` lives in `layout.json`, not a second store.** The renderer never learns the
 settings exist as a distinct concept; main applies them in `LayoutStore.initial()` and hands
@@ -624,6 +667,116 @@ launch — a bug with no good explanation, because nothing the user did caused i
 a file `layout-store.ts` rewrites in full on every coalesced save for no benefit, since the
 three built-ins never change at runtime.
 
+**Who owns the keyboard (`palette/usePalette.ts`, `Canvas.tsx`).** The palette is the first
+surface in this app that must *swallow* bare keys, which is the exact inverse of the rule
+everything else obeys ("a bare keystroke must always reach the PTY" — see "Cmd is required for
+every canvas shortcut"). Four rules make that work, and each one fails silently on its own:
+
+1. **Opening focuses the input** (`Palette.tsx`, on mount). xterm reads its own hidden
+   textarea and nothing else, so moving DOM focus is what stops typing reaching the agent.
+   Without it the user types a query into a running agent while watching an empty field.
+2. **DOM focus is not app focus: `focusedId` is CAPTURED, never cleared.** Clearing it would
+   demote the panel — `assignTiers` pins the focused panel live — lose the `Cmd+C` target, and
+   drop the very panel the commands are about to act on. `capturedId` is what every
+   panel-scoped row (prompt insert, save-selection) is aimed at.
+3. **Canvas shortcuts stand down**, via `isOpen()`, which `useViewport`'s keydown listener and
+   the `edit:paste` listener both consult. `useViewport`'s listener is on `window`, so it sees
+   every key regardless of where DOM focus is — rule 1 alone does not stop `Cmd+Z` undoing a
+   drag behind an open palette (`verify:panels` 37) or `Cmd+N` spawning a panel the user cannot
+   see (34). `isOpen` is a `useCallback` reading a ref, not state, precisely so it can sit in
+   those dep arrays without tearing the listeners down on every open and close.
+4. **Closing calls `restoreFocus(capturedId)`**, i.e. `SessionHandle.focus()`. Nothing else
+   gives the keyboard back: the input is unmounting, and an unmounted element's blur leaves
+   focus on `<body>`, where every subsequent keystroke goes nowhere at all
+   (`verify:panels` 36).
+
+**`edit:paste` is guarded, `edit:copy` is redirected, and the palette owns its own
+subscriptions (`Palette.tsx`, `Canvas.tsx`).** `Cmd+C`/`Cmd+V` are main-process menu
+accelerators (`main/menu.ts`), which means the browser never delivers a *native* copy or paste
+to the palette's `<input>` — the accelerator takes it first. So a guard alone is not enough:
+`Canvas.tsx` standing down while the palette is open (which it must, or the text lands
+invisibly in a running agent — `verify:panels` 35) would leave `Cmd+V` in the palette a silent
+no-op, with nobody serving the text field. `Palette.tsx` therefore subscribes to the same two
+events itself and inserts at the caret. The copy half is not symmetric and cannot be: a
+selection inside an `<input>` is **not** part of `window.getSelection()` in Chromium, so the
+canvas's `getSelection()`-based path reads empty there — the palette reads
+`selectionStart`/`selectionEnd` off the input instead. Delete either half and the failure is
+"my clipboard shortcuts do nothing here", with no error anywhere.
+
+**A prompt insert is `paste()`, never `write()` (`Canvas.tsx`'s `insertPrompt`).**
+`session-factory.ts` spells out why: `term.paste` wraps the payload in bracketed-paste markers
+when the application has enabled mode 2004, and normalises LF to CR, so a multi-line prompt
+arrives as ONE input. A raw write submits every newline separately — pasting a five-line prompt
+into `claude` fires four incomplete fragments and then the tail. Every prompt worth saving is
+multi-line, so every use of the feature depends on this one call. `verify:panels` 40 is the only
+check that can tell the two apart, and only because its fixture panel enables bracketed paste
+itself (`printf '\033[?2004h'`) and echoes with `cat -v`: against a plain shell, `paste()` and
+`write()` put byte-identical data on the PTY, and a check written against one would pass either
+implementation.
+
+**Navigating must not wake (`Canvas.tsx`'s `goToPanel`).** Waking hangs off *selection* —
+`onSelectPanel` clears the dormant id and calls `registry.wake` — so the obvious implementation,
+reuse `onSelectPanel`, would spawn an agent as a side effect of NAVIGATING. On a restored
+twelve-panel canvas that is twelve CLIs launched by a keyboard tour, the exact failure M4b's
+dormancy rule exists to prevent. `goToPanel` calls `centreOn` and sets `selectedId` directly:
+the highlight moves, dormancy is left alone, and the card still says "click to start" and still
+means it. `verify:panels` 39.
+
+**The palette swallows its own mousedowns (`Palette.tsx`).** The overlay mounts INSIDE
+`.canvas`, whose `onMouseDown` is the background handler — so without `stopPropagation` on the
+`.palette` root, every mousedown in the overlay, including a click into its own text field to
+place a caret, reads as a click on the canvas background. That handler then does three things,
+all wrong from here: it clears `focusedId` (unpinning the live panel, leaving the menu's
+`Cmd+C`/`Cmd+V` with no target, and disabling every `capturedId`-gated row on the *next*
+`Cmd+K`), it hit-tests the click's **world** point and selects whatever panel happens to lie
+under the overlay, and through `onSelectPanel` it **wakes** that panel — spawning a process
+from a palette click, which is the one thing the dormancy rule exists to prevent. The guard is
+bubble phase (so the rows' own handlers still run) with no `preventDefault` (so the input still
+places its caret). `verify:panels` 41 is the check that fails if it is removed.
+
+**Project prompts are read, never written (`main/prompts.ts`).** `.claude/commands/*.md` under
+a panel's cwd belongs to the *repository*: it version-controls with the project and works in a
+plain terminal outside this app, which is the whole argument for reading Claude Code's format
+rather than inventing a private one. Writing it is deliberately out of scope — authoring a file
+someone will commit is a decision to ask for, not to acquire as a side effect of "save", so
+`prompt:save` always writes the saved store and `prompt:delete` returns false for every project
+id. Four limits, each protecting against a directory this app does not control: at most 100
+files, at most 64KB each (**skipped**, never truncated — half a prompt pasted into an agent
+reads as a complete instruction), one level deep (Claude Code namespaces commands in
+subdirectories; following that means a recursive walk over arbitrary user directories), and a
+missing or unreadable directory is the empty list rather than an error — most cwds have no
+`.claude/commands`, and throwing would take the saved prompts down with it, since both halves
+share one `prompt:list` call. Same-named prompts from the two sources are **never deduped**:
+they stay two rows, each labelled with its source, because pasting the wrong project's context
+into an agent is silent and expensive. `verify:layout` 53–57.
+
+**`centreOn` is the third narrow camera verb (`useViewport.ts`).** The `setViewport` setter
+stays private — nothing outside should move the camera — so anything that needs to asks by
+name: `resetViewport` (Cmd+0's INITIAL), `worldCentre` (a read, for menu-driven spawns), and
+now `centreOn(rect)` for the panel switcher. Exposing the setter instead would make every
+future caller a camera owner, and the coordinate math would stop being something
+`verify:viewport` can pin. `centreOn` deliberately does not change the scale (`verify:viewport`
+49–50): zooming to frame a panel would reflow nothing (the world transform is scale-blind to
+xterm — see "One transform, not N layouts") but would throw away the zoom level the user chose,
+and `Cmd+1` already exists for "fit everything".
+
+**`resetViewport` must stay a `useCallback` (`useViewport.ts`).** Referential stability here is
+load-bearing, not tidiness. A fresh arrow per render propagates straight through `Canvas.tsx`'s
+`useMemo([resetViewport, ...])` for `paletteActions`, into `Palette.tsx`'s `commands` memo,
+whose `[rows]` effect **re-seats the selected row**. `Canvas` re-renders on every mousemove over
+`.canvas` (`setCursor`), so an unstable identity means: arrow down three times, nudge the mouse,
+press Enter — and the wrong command runs. Nothing throws, nothing logs, and the selection looks
+correct in a screenshot. `centreOn` sits in the same dep array for the same reason.
+
+**`verify:panels` check 39 seeds its own dormant panel with its own reload, deliberately
+outside the `if (!TMUX)` branch.** It needs a never-spawned, still-dormant panel alive at the
+end of the run, and nothing in the boot layout can be it (check 23's reset collapses the canvas
+to one fresh panel). The obvious economy — reuse check 26's reload — makes check 39 hard-fail on
+every machine with no tmux binary, because check 26 and its reload skip together there, for a
+reason that has nothing to do with the command palette. A panel with no live session restores
+dormant under either backend ("Dormancy is about spawning, not attaching"), so check 39's reload
+needs nothing check 26 set up and is run unconditionally.
+
 ## Gotchas
 
 - **`Cannot read properties of undefined (reading 'whenReady')`** — your shell exports
@@ -676,8 +829,8 @@ three built-ins never change at runtime.
 Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then an
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
-M2 and M3 are both worked examples of this. Follow it when starting M5, the next unstarted
-milestone.
+M2 and M3 are both worked examples of this. Follow it when starting M5c (electron-builder
+packaging), the next unstarted milestone.
 
 ## Conventions
 
