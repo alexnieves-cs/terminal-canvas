@@ -1509,6 +1509,769 @@ agent from a train.
   by "wants me", with a notification. The canvas is a desktop idea and does not need to
   travel.
 
+## A second capture, 2026-08-26: entries 41–75
+
+Everything above was captured on 2026-08-24 against M4c. **Entries 41–75 were captured on
+2026-08-26**, after M5a's presets and while M5b's palette was on the branch, by reading the
+four layers of the app separately: main's process/persistence layer, the canvas and its
+input, the session/terminal substrate, and the build/verify tooling.
+
+They share a pattern worth stating once, because it is the cheapest heuristic this file has
+found for where the next idea lives: **almost every one of them is a fact the app already
+computes and then discards.** `#{pane_current_path}` is parsed and dropped after boot.
+`intersectsViewport` is recomputed every frame and read by nothing but tiering. The
+`pane_dead_status` recovered through the `pane-died` hook is sent once and forgotten.
+`History<T>` is generic and only ever instantiated at one type. In a codebase with
+invariants this strong, the gaps are rarely missing machinery — they are unconsumed outputs.
+
+Three of these entries are corrections rather than features, and they are marked as such:
+**#41** repairs a false assumption that four earlier entries rest on, and **#49** and **#43**
+are live defects that happen to be shaped like features.
+
+## 41. Live cwd and live command — a correction, not a feature
+
+`parseListOutput` already pulls `#{pane_current_path}` and `#{pane_start_command}` out of
+tmux, and the result is consumed exactly once, at boot reconciliation, and thrown away.
+Adding `#{pane_current_command}` to the format string and polling on a slow timer gives
+every panel its **current** directory and **currently running program**.
+
+- **This exists because four entries above are wrong.** #3's open question, #4's git badge,
+  #19's transcript correlation and #26's per-project config each assert that "each panel
+  already knows its cwd". It does not. It knows its *spawn* cwd, which is stale the moment
+  the user types `cd`, and every one of those four features is silently wrong for a panel
+  that moved. This is the entry that makes the assertion true.
+- **Constraint: the `#{pane_dead}` filter is not optional here either.** `parseListOutput`
+  drops dead panes because `remain-on-exit on` leaves a finished process listed as existing.
+  A poller inherits that requirement exactly — an unfiltered poll reports a corpse's last
+  known directory as a live fact.
+- **Constraint: it must degrade honestly with no tmux.** `SessionBackend.list()` returns
+  `null` by contract on the direct backend, so none of this data exists there. Falling back
+  to the spawn cwd would be worse than reporting nothing, because it is indistinguishable
+  from a correct answer.
+- **Constraint: this must not ride `registry.version()`.** A fact that changes every two
+  seconds is precisely the re-render source that counter exists to exclude — "`version`
+  bumps only on tier/status/focus/exit, never on 16ms-batched PTY data". Same rule #5, #17
+  and #18 each record independently; this is the fourth.
+- **Nearest existing entry: #6 (user-set panel names).** #6 is a string the user types and
+  the layout stores. This is a fact only main can observe, that changes without anyone
+  touching the panel, and its real value is as the missing input to #3, #4, #19 and #26
+  rather than as a label of its own.
+
+## 42. Camera bookmarks — named viewports, saved and jumped to
+
+The camera is a first-class object — `Viewport` is `{x, y, scale}` and is already persisted
+into the layout — yet nobody can *name* one. Save "where I am looking right now" as a named
+view; `Cmd+Shift+1..9` to set, `Cmd+1..9` to recall, plus a Bookmark group in the palette.
+On an infinite canvas the return trip is the expensive gesture, and a bookmark is three
+numbers, which makes this the best value-per-byte item in the canvas layer.
+
+- **Constraint: the viewport setter is private on purpose.** `useViewport` exports
+  `resetViewport` and a read-only `worldCentre()` and deliberately keeps `setViewport` in
+  the hook, because nothing outside should move the camera. Bookmarks need a **third named
+  verb** — `goToViewport(vp)` — not the setter, and it has to be `useCallback`-stable for
+  the reason the file already records: an unstable identity re-seats the palette's selected
+  row on every mousemove.
+- **Constraint: `Cmd+1` is taken.** It is `fitTo` today. The keymap needs deciding rather
+  than assuming, and that is the whole design cost of this entry.
+- **Nearest existing entry: #1 (Cmd-held navigation grid),** which explicitly leaves open
+  "what does a cell *mean*? Nine viewport quadrants, nine saved bookmarks, and nine
+  workspaces are three different features wearing the same UI." This is the saved-bookmark
+  answer built as a data model and a palette group, with no hold-to-reveal overlay at all.
+  #1's hard part is the gesture; this one has none.
+
+## 43. Unicode 11 widths — a silent misalignment nobody has attributed yet
+
+`createTerminal` sets `allowProposedApi: true` but loads no `@xterm/addon-unicode11`, so
+xterm measures character widths against its built-in Unicode 6 table. Modern agent CLIs draw
+box frames, spinners and emoji status glyphs whose widths changed after Unicode 6 — the
+frame drifts one column per wide glyph, and because the shell believes the cursor is
+somewhere the screen does not show it, the corruption compounds down the pane.
+
+- **This is a defect, not a preference.** It is one addon and one
+  `term.unicode.activeVersion = '11'`, in the one place a `Terminal` is constructed. It is
+  in this file rather than fixed on the spot only because it wants a check alongside it.
+- **Constraint: it must be set before `open()`.** `create-terminal.ts` is "the only place a
+  `Terminal` is constructed" for exactly this class of reason. Changing the width table
+  after the fact is a re-measure that would need the same `refresh(0, rows - 1)` treatment
+  `attachTerminal` already carries on re-attach.
+- **Why it is cheap: nothing about the grid changes.** No `pty:resize`, no SIGWINCH, no
+  refit. That is the difference between this and #36.
+- **Nearest existing entry: #36 (panel typography),** which changes font *size* — a grid
+  change wearing a hat, in that entry's own words. This changes nothing about the grid.
+
+## 44. Honest chrome — say what actually spawned
+
+The panel header prints `session.spec.command ?? 'login shell'`, and the comment beside it
+says outright that main knows the resolved answer and this label is the honest stand-in
+until it is surfaced. Widening the `pty:create` result to carry the resolved command, the
+resolved cwd and the backend kind means the chrome stops saying "login shell" to a fish
+user, and a panel that reattached to a surviving tmux session can say so instead of looking
+identical to one that just started.
+
+- **Constraint: the renderer has no `process.env`, and must not derive this itself.** That
+  is the whole reason `PanelSpec.command` is optional and the label is a stand-in. This is a
+  payload change on `pty:create`'s result plus a `PanelStatus` that carries more than `pid`
+  — declared in `ipc-contract.ts` first, which `verify:ipc` polices.
+- **Constraint: do not make this a new reason to bump `version()`.** It changes at spawn and
+  at reattach, which are status changes the counter already covers. Anything finer is the
+  60Hz cascade the memo exists to block.
+- **Nearest existing entry: #6 (user-set panel names).** #6 gives the user a *field*; this
+  fixes the *default*. #6's own "nice follow-on: default it to something inferred" is
+  precisely this — except the honest inference lives in main and needs a channel, not a
+  renderer heuristic. They compose: resolved-command becomes the fallback under a user title.
+
+## 45. Camera undo — a back button for the viewport
+
+`History<T>` is generic and is instantiated at `History<Panel[]>` only, so `Cmd+Z` unwinds
+panel geometry and nothing about where you were looking. The camera is exactly the state a
+user most often wants to revert: a stray pinch, a `Cmd+0`, a jump that lost their place. A
+small separate camera trail on `Cmd+[` / `Cmd+]`, pushed only on *discrete* jumps — fit,
+reset, bookmark, go-to-panel — and never on continuous gestures.
+
+- **Constraint: one history entry per committed gesture, restated.** The wheel handler calls
+  `setViewport` per event, so a camera trail that pushed there would take sixty presses to
+  unwind one pan — the same defect that note already exists to prevent for drags.
+- **Constraint: it must NOT go into the existing `History<Panel[]>`.** `applyHistory` reaches
+  into `registry.dispose`, so folding the camera in would make undoing a pan walk the
+  session-disposal path. Two stacks, one generic module — `history.ts` is already generic for
+  precisely this.
+- **Nearest existing entry: #23 and #33** both move the camera and neither notices it is
+  absent from the undo stack. This is a gap in an existing mechanism rather than a new
+  surface.
+
+## 46. A run ledger — what each panel ran, and how it ended
+
+`exitCodeFor` goes to real trouble to recover a truthful exit code through the `pane-died`
+hook and a file on disk, and then that number is sent once as `pty:exit` and forgotten.
+Append it instead: panel id, command, cwd, start time, duration, exit code — a small JSONL
+beside `layout.json`. That is the difference between "this panel exited with code 1" and
+"this panel has failed the same command four times this afternoon".
+
+- **Constraint: this is an append stream, not `layout-store.ts`'s pattern** — the same line
+  #30 draws. Write-temp-then-rename is wrong for a growing log, so it needs its own writer,
+  and `flushSync` must stay the only thing `before-quit` waits on.
+- **Constraint: it must survive the direct backend,** where `exitCodeFor` returns `null` by
+  contract and the client's own exit code stands.
+- **Why it is not #30 wearing a hat: it records no output bytes.** A few hundred bytes per
+  panel lifetime, all of it metadata, which is what keeps it entirely outside #31's
+  disclosure surface — no redaction question, no retention policy, no size cap.
+- **Nearest existing entry: #30 (durable scrollback),** which persists what a session
+  *said* and is gated on retention, caps and secret redaction. This persists only what it
+  *ran and returned*.
+
+## 47. The environment report — everything main already knows and never says
+
+Main resolves the login environment, logs whether `claude`, `codex` and `git` were found,
+picks a backend with a human-readable `reason`, and computes per-preset PATH availability.
+Almost all of that reaches the user as console output nobody sees; only `reason` surfaces,
+and only when it is `'direct'`. One read-only report — resolved PATH, which CLIs were found
+and where, tmux version or the exact cause of the fallback, the layout file path and whether
+a `.bak` was written — turns "why does this panel say command not found" from an hour into a
+glance.
+
+- **Constraint: it must not quietly absorb the loud fallback.** `shell-env.ts` logs its
+  failure deliberately. A report that shows the same fact calmly, in a pane nobody opened,
+  is not a replacement for it.
+- **Constraint: the probe is cached and runs once, so the report must say when it was
+  taken.** A `brew install` mid-session is invisible until relaunch — already recorded as a
+  known limit, and a report that does not timestamp itself turns that limit into a lie.
+- **Constraint: this is a dump of a resolved login environment, i.e. the user's exported
+  secrets.** #31 already flags the login-shell probe as a second copy of the same problem.
+  Key names only; never values.
+- **Nearest existing entry: #11 (settings surface).** #11 is where toggles live; this reads
+  nothing back and changes nothing. By #11's own standing rule it would be a page *in* the
+  settings surface rather than a home of its own.
+
+## 48. Lock and pin a panel — geometry that resists the gesture layer
+
+Every panel is draggable, resizable and closable at all times. A long-running agent whose
+panel you nudged four pixels during a pan is harmless; one you *closed* by a mis-click is a
+dead process. Two independent booleans: a **lock** (position and size frozen — the drag hook
+refuses to start a gesture) and a **pin** (the panel is always live, exempt from demotion).
+
+- **The lock half is one early return. The pin half is budget arithmetic, and it is sharp.**
+  Pinning is a second unconditional promotion alongside the focused panel, so N pins plus a
+  focused panel can only ever be allowed to consume `LIVE_BUDGET`. Pins must be counted
+  **inside `assignTiers`**, not applied at the `Canvas.tsx` apply step — otherwise the second
+  budget re-check that exists because of held-back demotions sees live panels it did not
+  count, and the twelve-WebGL-contexts failure returns through a new door. That re-check is
+  documented as "the cap is enforced in two places"; this is the third thing that would have
+  to respect both.
+- **Nearest existing entry: #23 (focus mode),** whose open question "does focus mode imply
+  *only* this panel is live" is the same budget arithmetic from the opposite direction, and
+  **#29**, which is about a panel's process rather than its geometry. Neither proposes
+  user-controlled exemption from the tiering rules.
+
+## 49. Two copies of the app must not eat each other — a live defect
+
+Nothing calls `app.requestSingleInstanceLock()`. Two instances share one `layout.json` (last
+coalesced write wins) and one tmux socket named by a module constant, so quitting **either**
+one runs `kill-server` and destroys **the other instance's agents**, with no message
+anywhere. Either take the lock and focus the existing window, or make the socket and the
+store per-instance — but it has to be a decision, because the failure is total, silent, and
+reachable by double-clicking the dock icon while a dev build is already running.
+
+- **This exact hazard is already documented, for the test harness only.** "The verify suites
+  must never touch the production socket" exists because `verify:pty-manager`'s `shutdown()`
+  once destroyed a live app's sessions. That is this bug, with the fix applied on one side
+  and not the other. `TMUX_SOCKET` being a module constant is what makes both true.
+- **Constraint: `window-all-closed` does not quit on darwin,** which makes a
+  windowless-but-still-running instance easy to forget about — the same state
+  `savePresetFromFocusedPanel` already comments on. A user who closed the window and
+  relaunched from the dock is the ordinary path into this, not an exotic one.
+- **Nearest existing entry: #20 (two windows, one canvas).** #20 is two `BrowserWindow`s in
+  one process sharing a store, and its failure modes are all confusion. This is two
+  *processes* sharing a socket, and the second one's quit is destructive in a way #20's
+  never is.
+
+## 50. Git worktree per panel — isolation for agents that share a repo
+
+The app's premise is many agents at once, and nothing in the codebase *or in the forty
+entries above* coordinates two of them editing the same checkout. A preset should be able to
+declare "spawn in a fresh worktree of this repo on a new branch", so four agents on one repo
+are four working trees and four branches, merged deliberately.
+
+- **This is the largest correctness gap in the product thesis.** The canvas actively
+  encourages the one configuration that silently corrupts work: two agents, one checkout,
+  both editing. Every other entry in this file makes the app better at something; this one
+  stops it being wrong at the thing it is *for*.
+- **Constraint: a `cwd`/worktree field is a fifth layer for the absent-`command` rule.**
+  "An absent `command` must stay absent through four layers" is already the most expensive
+  invariant in the preset path, and each of those four rebuilds its object field by field
+  rather than spreading. A worktree field inherits that discipline exactly.
+- **Constraint: it adds a fourth `registry.dispose` consumer's worth of cleanup.** Closing a
+  panel has to decide whether its worktree is removed — and `CLAUDE.md` says the dispose
+  call-site count is a number to re-derive from the code rather than trust, because it has
+  already gone stale once.
+- **Open question: what happens on undo?** `Cmd+N` then `Cmd+Z` must dispose the session, per
+  the note that entry exists for. If it also removes a worktree, undo becomes destructive to
+  files on disk, which nothing in this app currently is.
+- **Nearest existing entry: #4's separable git-status badge** and **#12's ticket→branch→panel
+  flow.** Both of those *display* or *source* git state. This one owns write isolation, and
+  it is the prerequisite that makes #12's "four tickets in flight" not a merge disaster.
+
+## 51. Per-panel change review — what this agent actually did
+
+Given #50's isolation, the natural companion: a panel-scoped diff of everything changed since
+the session started, reviewable without leaving the canvas, with discard/keep. On a canvas
+whose entire premise is that you were not watching, "show me the damage" is the operation you
+most want and the one that currently requires leaving for a terminal or an IDE.
+
+- **Constraint: this is a non-terminal node, and it lands squarely on the structural
+  decision at the bottom of this file.** A diff view must not consume `LIVE_BUDGET` or a
+  WebGL context. It is a cheaper first variant than #14 in one respect — it has no watcher
+  and no external app — and a worse one in another: it is a git question, so most of its
+  work is main-side.
+- **Constraint: every filesystem and git read is main-side,** so it needs new channels
+  declared in `ipc-contract.ts` first or `verify:ipc` fails.
+- **Nearest existing entry: #14 tier 1 (the watched local-file panel).** #14 renders *a
+  file*; this renders *a repository's delta attributable to one session*. It is the only
+  entry in this file that closes the loop on the work an agent produced.
+
+## 52. Multi-select — rubber-band, shift-click, and group drag
+
+`Canvas.tsx` tracks a single `selectedId` and a single `focusedId`, and `hitTest` returns
+exactly one id. Build the selection model once: `selectedIds: Set<string>`, a background drag
+that rubber-bands, shift-click to add, and `applyDrag` run per member so a group moves as one.
+
+- **Three entries above each independently assume this already exists** — #2's "move to new
+  workspace", #21's broadcast, and #25's tidy-the-selection. #21 says so outright: "what is
+  missing is **multi-selection**, which the canvas does not have today." This proposes it as
+  its own scheduled piece of machinery, deliberately *without* #21's broadcast half, which is
+  the dangerous part ("a mode you can forget you are in").
+- **Constraint: the background `onMouseDown` currently means "clear selection and release
+  focus".** A marquee has to claim that drag without breaking the focus-release rule — an
+  uncleared `focusedId` holds a WebGL context and a budget slot for the rest of the run.
+- **Constraint: group drag is `applyDrag` N times from N origin rects,** never one delta
+  applied to a bounding box. The recompute-from-origin rule is caller-side, and a bounding-box
+  implementation is exactly the accumulate-drift bug wearing a group costume.
+- **Constraint: one history push for the whole group,** per the one-entry-per-committed-gesture
+  rule.
+- **Nearest existing entry: #21,** which needs this and says so.
+
+## 53. Cards that show the last real screen, not a text tail
+
+`PanelCard` renders `handle.tail(6)`, and `tail()` unshifts only non-empty, trimmed lines — so
+a full-screen agent TUI's card is six fragments of a box frame with the colour stripped and
+the blank lines that carried its layout deleted. Two better sources exist and neither needs a
+disk log: `@xterm/addon-serialize` snapshotted at `detachSlot` for panels that ran this
+session, and `tmux capture-pane -p -e` on the surviving session for a panel restored dormant.
+
+- **The second half is the interesting one: it is the only thing in this codebase that can
+  make a freshly relaunched canvas show what it showed yesterday without storing a byte.**
+  The bytes never leave tmux's own memory, so none of #31's on-disk exposure applies.
+- **Constraint: the three-state lifetime at the bottom of this file is the whole problem.** A
+  dormant panel's `SessionHandle` has never been attached, its buffer is empty and `tail()`
+  returns `[]` — which is every panel on the canvas the moment the app starts.
+- **Constraint: the serialize snapshot has to be taken in `detachSlot`,** before the WebGL
+  context goes, and `capture-pane` is a new main-side read on the private socket that must
+  use the exact-match `=` target discipline `verify:tmux` 19 pins.
+- **Nearest existing entry: #30 (durable scrollback),** and it is distinct in the way that
+  matters — no append stream, no retention policy, no ring buffer, no redaction question. It
+  is most of #30's *display* value at none of its storage cost. Also distinct from **#22**,
+  which decides how *little* a card shows when far away; this decides whether what it shows
+  is true at all.
+
+## 54. Cmd-click a path or URL in agent output
+
+Agent CLIs print `src/main/pty-manager.ts:118`, `http://localhost:5173` and stack traces all
+day, and none of it is clickable — only the fit and webgl addons are installed, so neither
+OSC 8 hyperlinks nor a path/URL link provider exists. `registerLinkProvider` plus a main-side
+`shell.openPath`/`openExternal` channel turns every printed path into "open in my editor at
+that line", which is the highest-frequency interaction a terminal-on-a-canvas is missing.
+
+- **Constraint: this is the feature that makes the known hover limit user-visible.** Pointer
+  correction is anchored to a slot pinned at mousedown, so a hover with no prior in-slot
+  mousedown returns early uncorrected — recorded in `xterm-pointer.ts` as a known limit left
+  to a later milestone. Link underlines follow the hover, so at any zoom ≠ 1 the underline
+  appears over the wrong cell. **This entry is gated on that correction, not merely adjacent
+  to it.**
+- **Constraint: opening a URL goes through main, never the renderer.** The CSP is
+  `default-src 'self'` and `will-navigate` is blocked outright, because a navigation kills
+  the window's PTYs.
+- **Constraint: tmux `mouse` must stay off,** which is already load-bearing for all of M4a's
+  pointer work.
+- **Nearest existing entry: #13 (drag-drop images),** which is also "a path crosses the
+  terminal boundary" — but in the opposite direction. #13 writes a path *into* the PTY; this
+  reads one *out* of the rendered buffer.
+
+## 55. Ad-hoc task panels — `> npm test` from the palette
+
+The palette spawns *presets*: named, persisted, reusable. The missing sibling is the
+throwaway — type a command and get a panel that runs it, reports its real exit code, and is
+honestly a *task* rather than a shell. All the exit-code fidelity work already exists. This
+is what keeps presets for the things you actually repeat.
+
+- **Constraint: this collides with lazy spawn and fit-before-spawn head on.** A task panel
+  the user launched must start **now**, even if the canvas is scrolled elsewhere and
+  `LIVE_BUDGET` is full — but `spawn()` reads `handle.size()`, which throws by design for a
+  terminal that was never attached, because a fabricated 80×24 is exactly the silent failure
+  that guard exists to prevent. Resolving it means an explicit "spawn at a stated grid" path,
+  deliberately named, rather than quietly relaxing the guard.
+- **This is the entry that surfaces a distinction the app has so far been able to ignore:
+  user-initiated spawn vs. camera-initiated spawn.** Lazy spawn and dormancy both treat every
+  spawn as something the viewport decided. A typed command is the first one the user decided,
+  and #29's restart is the second.
+- **Nearest existing entry: #34 (panel templates)** and **#29**, both about *repeating* a
+  spawn. This is about a spawn worth zero ceremony.
+
+## 56. Agents that outlive the app — detach on quit, reattach on launch
+
+`before-quit` calls `killAll()` then `shutdown()`, i.e. `kill-server`, with an explicit
+comment that agents never outlive the app. That is a deliberate M4c scope line, not a
+technical limit: the substrate that already survives `Cmd+R` survives `Cmd+Q` for free,
+because `detachAll()` and `new-session -A` are the same two calls in a different order. An
+opt-in "keep agents running when I quit" reverses one call and lets the existing boot
+reconcile do the rest.
+
+- **Constraint: it makes the boot orphan-killer a correctness pair with the coalesced write.**
+  Boot kills any session with no saved panel. With quit-survival on, a layout write that has
+  not landed means an agent is killed for not being written down yet.
+- **Constraint: `RestoreSettings` is the right home, and this is the first setting that
+  breaks its shape.** Every existing setting affects only what the renderer is handed at boot.
+  This one changes what main *does to processes*, so `settings()` stops being
+  renderer-facing-only.
+- **Nearest existing entry: #29 (restart in place),** which is about deliberately ending and
+  recreating one process. This is about not ending any of them, and it is the only entry in
+  this file that changes what quitting means.
+
+## 57. `tc` — a CLI and a URL scheme, so the canvas is drivable from outside
+
+One binary and one `terminal-canvas://` handler: `tc open --preset claude --cwd ~/repo` spawns
+a panel on the running canvas, from a shell, a script, a git hook, or a launcher. Everything
+needed already lives in main and is reachable without a renderer — `templateOf` and a
+`PRESET_SPAWN` send. It also means an agent *inside* a panel can open its own panel, which
+makes the canvas something agents extend rather than only something a human arranges.
+
+- **This is the cheap version of several entries above.** #12 Jira, #26 toolbox and #9
+  integrations each become "something else calls `tc`" rather than "the app grows another
+  OAuth client".
+- **Constraint: a URL-scheme flavour must not become the navigation hole `will-navigate` and
+  `setWindowOpenHandler` exist to close.** Both deny everything today, because a navigation
+  kills the window's PTYs.
+- **Constraint: panel ids are minted by the renderer alone, and main must not mint one** —
+  that is the duplicate-id defect, whose symptom is two panels rendering as one because
+  `handle.host` can live in exactly one DOM slot.
+- **Constraint: it is the third input shape.** `CLAUDE.md`'s "`Cmd+N` stays a renderer
+  keybinding" note reasons about exactly two cases, menu accelerator and renderer listener.
+  An external spawn request is neither.
+- **Constraint: it is a trust boundary pointed inward.** The caller is an agent running
+  arbitrary commands. #9's "every integration is a new trust boundary" applies to the app
+  itself here.
+- **Nearest existing entry: #21** and **#12**, both of which are gestures *inside* the app.
+  This is the app's first external control surface.
+
+## 58. Backpressure on a runaway panel
+
+`enqueue` pushes every chunk into a per-session buffer with no cap and flushes the whole join
+every 16ms. The batching solves message *count*; it does nothing about message *size*. A
+`yes`, a `find /`, or an agent dumping a large file produces multi-megabyte strings crossing
+IPC every frame, and the UI locks up in exactly the way the batcher exists to prevent — the
+measured 33,198-reads-to-105-messages win says nothing about bytes.
+
+- **Constraint: an eliding cap must keep the tail.** The pending buffer is flushed *before*
+  `pty:exit` is announced precisely because the last lines are usually the error explaining
+  the exit. A naive head-preserving truncation drops exactly the bytes that note exists to
+  protect.
+- **Constraint: elision is a lie the panel must be told about.** `[N MB elided]` written into
+  the stream, or a user debugging missing output has no way to learn bytes were dropped —
+  which is the same silent-failure shape every note in `CLAUDE.md` is written against.
+- **Nearest existing entry: #18 (what the canvas costs the machine).** #18 reports what the
+  machine is spending. This is a *control* that stops one panel taking the app down with it,
+  and it lives in the batcher rather than in a new sampler.
+
+## 59. OSC 133 shell integration — command boundaries as first-class objects
+
+Nothing in the byte stream is parsed for structure today. If the spawned shell emits OSC 133
+prompt marks — and a preset can *make* it, by having main inject the marker into the shell's
+rc via the env it already resolves — then each command gets an xterm `Marker`, and the
+decorations API can paint a gutter rib per command, green or red by exit status. That gives
+"jump to the previous prompt", "copy the last command's output", and the first non-heuristic
+answer to "is this agent waiting for me": the shell said so.
+
+- **Constraint: the parse runs on every chunk, which is the hot path the memo design
+  protects.** A per-command *event* fires at human speed, but the *scan* does not. This must
+  not bump `registry.version()` — the fifth entry to record that same rule.
+- **Constraint: injection must survive the `$SHELL -ilc env` probe's fallback path,** and
+  because `PanelSpec.command` may be absent, main is the only party that knows which shell it
+  is decorating.
+- **Nearest existing entry: #5's detection option 4** ("terminal bell / OSC sequences — worth
+  checking whether Claude Code or Codex already do"). That is a one-line "check if it
+  exists"; this is the answer that does not depend on a vendor volunteering, because we can
+  install the marker ourselves at spawn. It also produces navigation and per-command exit
+  status, not just a state colour.
+
+## 60. Zoom-independent chrome — panel headers that stay operable
+
+At `scale = 0.3` a panel's chrome bar, close button and resize handle are 30% size, so the hit
+targets that let you *manage* the canvas vanish exactly when you are looking at the whole
+canvas. Counter-scale the chrome by `1/scale`, clamped to a band, so headers and controls keep
+a constant screen size while the terminal body scales normally.
+
+- **Constraint: this is a deliberate local exception to "one transform, not N layouts", and
+  the boundary is load-bearing.** The counter-scale must apply only to chrome, **never** to
+  the `.panel__slot` that hosts xterm — a transform on that subtree changes what
+  `getBoundingClientRect()` reports while `dimensions.css.cell.width` stays blind, which is
+  the exact arithmetic the pointer correction exists to compensate for. Counter-scale the
+  wrong node and the correction factor is wrong by a second unknown.
+- **Nearest existing entry: #22 (semantic zoom),** which changes what a *card* renders at low
+  zoom. This is the opposite question — what stays constant regardless of zoom — and it
+  applies to the *live* tier that #22 explicitly does not touch. They compose.
+
+## 61. Recover an orphan session instead of killing it
+
+At boot, any tmux session whose panel id is not in the saved layout is killed outright, with a
+comment saying adoption was rejected because it would mint geometry the user never chose. That
+is a fair trade for a rare crash, but it means the one moment the app has recovered work
+nobody else can reach — an agent mid-run when the machine died between spawn and the coalesced
+write — it destroys it. "N sessions from a previous run: restore or discard?" costs one dialog.
+
+- **The geometry objection is answered by #25.** Placement is the actual prerequisite, and
+  once new panels have a placement rule, a recovered orphan uses it like any other.
+- **Constraint: `parseListOutput`'s dead-pane filter decides whether a listed orphan is even
+  alive.** Offering to restore a corpse is worse than killing it silently.
+- **Constraint: the restore path must mint ids the renderer owns,** and a restored id that
+  collides with `nextIdRef`'s sequence is the id-collision defect again — the same one
+  "`nextIdRef` seeds from the restored ids" already fixed once through a different door.
+- **Nearest existing entry: #2 (named saved canvases).** #2 is about deliberately organising
+  layouts. This is about the sessions that exist with *no* layout at all — a state only main
+  can see, and today only main destroys.
+
+## 62. Camera animation — tweened flights, and where they fight tiering
+
+Every camera change today is an instantaneous jump: reset, `fitTo`, and the palette's
+go-to-panel. A teleport destroys spatial continuity, which is the one thing a spatial
+workspace is supposed to preserve. A short eased tween on discrete jumps — never on gestures —
+is a small pure addition and it is what makes #42's bookmarks, go-to-panel and #17's attention
+jumps legible rather than disorienting.
+
+- **Constraint: a tween must interpolate through *clamped* scales at every frame.** Deriving
+  translation from an unclamped intermediate is the sideways-drift bug `verify:viewport` check
+  3 exists for, reappearing mid-flight instead of at a pinch limit.
+- **Constraint: it fights `DEMOTE_DELAY_MS`, and this is the real cost.** A 300ms flight
+  crosses the canvas, every frame is a tiering input, and a flight could promote and demote a
+  dozen panels in transit — a dozen WebGL contexts created and destroyed for panels the user
+  never stopped at. Tiering has to be suppressed until the tween settles.
+- **Nearest existing entry: #32,** which notes "`prefers-reduced-motion` applies to the camera,
+  and nothing else in this file". That is a constraint on a feature nobody had proposed. This
+  is the feature — and the tiering interaction, which #32 does not mention, is the expensive
+  half.
+
+## 63. Spatial ordering the LOD already knows
+
+`assignTiers` computes `intersectsViewport` for every panel on every viewport change, and
+`lastFocusedAt` already records recency per panel. That is a live, sorted answer to "which
+panels are on screen, and which did I last care about" — and nothing outside tiering consumes
+it. Expose it: the palette's go-to-panel list has no order at all today and should list
+on-screen panels first, then by recency; a `Cmd+\`` cycle-to-next-panel falls out of the same
+data.
+
+- **Constraint: it must be a separate exported pure function over the same inputs,** not a
+  fourth return value from `assignTiers`. `lod.ts` is bundled into the plain-node verify
+  target and its job is rationing WebGL contexts — the same reason #22 is told that "the file
+  that rations contexts" must not start answering presentation questions.
+- **Nearest existing entry: #33 (minimap)** and **#17 (attention routing),** both of which need
+  to know where panels are relative to the viewport and both of which propose a *rendering*
+  surface. This is the query underneath, it is a prerequisite either way, and it is useful on
+  its own the day the palette ships.
+
+## 64. Something has to ration terminal memory, not just WebGL contexts
+
+`LIVE_BUDGET` is the app's only resource ceiling and it rations exactly one thing — WebGL
+contexts — because that has a hard cliff near 16 and a permanent failure mode. Meanwhile every
+session that has ever attached holds a `Terminal` with up to 10,000 lines of scrollback for
+the whole renderer lifetime, and M4c means those sessions now routinely outlive several days
+of canvas use.
+
+- **Constraint: anything that frees buffer memory is one careless step from `dispose()`.**
+  `pty.kill` must keep exactly two callers and tiering must never reach either — four checks
+  exist for that property alone.
+- **Constraint: trimming is destructive in a way detaching never was.** `detachTerminal`
+  explicitly "never touches the `Terminal`". This would be the first operation that does, so it
+  needs its own check in `verify:registry` beside 5 and 15.
+- **#53's snapshot is what makes this survivable** — a trimmed buffer with a captured last
+  screen still shows a truthful card.
+- **Nearest existing entry: #18,** which measures the *processes* via the pid in `PanelStatus`.
+  This is the renderer's own footprint, which no pid can see and which #18's main-side sampler
+  would attribute to a single Electron process. It is also the one #18 could not turn into a
+  governor even if it wanted to.
+
+## 65. Panes inside a panel — tmux splits as panel content
+
+The backend already runs a real tmux session per panel with `prefix None`, which means tmux's
+own splitting is switched off by design. Turning one panel into a two- or three-pane workspace
+— agent above, `git status` or a dev server below — is a genuinely different affordance from
+two panels side by side: the panes share a cwd, a lifetime and a rect, and they move as one.
+
+- **Constraint: `PanelSession` assumes exactly one `SessionHandle` and one `handle.host`,** and
+  `pty:create`/`pty:write`/`pty:resize` are all keyed by `PanelId`. A second pane needs a second
+  addressable stream under one panel id.
+- **Constraint: each pane is a `Terminal` and therefore a WebGL context,** so a split panel
+  costs two of eight — and `lod.ts`'s arithmetic counts panels, not contexts. That divergence is
+  the whole structural cost.
+- **Nearest existing entry: #35 (groups),** also "several things that move together" — but a
+  group is a canvas-space container of independent panels with no session at all. The structural
+  pressure is opposite: **#35 pushes toward the panel-kind union; this pushes toward a panel
+  owning N handles.** Worth noticing that the two pull the model in different directions, and
+  that building either one carelessly makes the other harder.
+
+## 66. Images in the terminal — let an agent show you the chart it made
+
+`@xterm/addon-image` supports sixel and the iTerm2 inline-image protocol. Agents already
+produce plots, diagrams and screenshots and can only tell you a file path. On an infinite
+canvas this is unusually valuable, because "twelve panels, three of which are showing a
+rendered diff or a chart" is legible in a way twelve text panes are not.
+
+- **Constraint: the image layer composites separately from the WebGL canvas,** and the
+  `webglDisabled` fallback after a context loss changes which of the two is drawing.
+- **Constraint: it silently defeats #53's card.** An image is not in `buffer.getLine()`, so
+  `tail()` sees a blank region and the card shows nothing at all.
+- **Constraint: image storage is per-`Terminal` memory that nothing rations,** on top of a
+  10,000-line scrollback that nothing rations either — see #64.
+- **Nearest existing entry: #13 (drag-drop images),** which is the inbound half: a human gives
+  an agent an image. This is the outbound half, and it needs no path-typing, no temp-file
+  cleanup and no per-CLI capability question.
+
+## 67. Layout time machine — the atomic write already earns it
+
+`writeNow` writes to a `.tmp` and renames, and `load` already knows how to preserve a file it
+must not overwrite as `.bak`. Keeping the last N renamed snapshots instead of one is a handful
+of lines, and it gives "put the canvas back to how it was this morning" — which `Cmd+Z` cannot,
+because the undo stack is renderer state that dies with the page, and the one action it
+explicitly cannot take back is reset.
+
+- **Constraint: this quietly makes `reset()` reversible,** and `reset()`'s whole design is that
+  it is not — it is the operation with a confirmation dialog whose promise is finality. Making
+  it undoable is either the point or a contradiction of that promise, and it has to be chosen
+  out loud rather than fallen into.
+- **Constraint: snapshots must not resurrect built-in presets.** Built-ins are code and never on
+  disk, for the stated reason that persisting them makes deleting one resurrect it.
+- **Constraint: a restored snapshot naming panels whose tmux sessions are long gone lands
+  straight in dormancy's rules** — "dormancy is about spawning, not attaching".
+- **Nearest existing entry: #2 (named saved canvases).** #2 is many canvases the user names and
+  switches between. This is the same canvas at earlier times, nobody names it, and it exists
+  because the machinery is already written.
+
+## 68. Space-drag and middle-drag — the mouse-only user has no pan
+
+There is no way to pan with a mouse button at all. A user with no trackpad can only pan by
+wheel: no middle-drag, no space-hold-drag, no right-drag marquee. Add the vocabulary every
+canvas app has.
+
+- **Constraint: "Cmd is required for every canvas shortcut", and space is a bare key.** Bare
+  keys belong to the agent TUI. So space-drag is legal only while the pointer is over the
+  background with nothing focused, or it must be dropped for a Cmd-family chord — and that
+  constraint is the whole design problem here, worth writing down before someone copies
+  Figma's keymap wholesale. **Middle-drag has no such conflict and is the free half.**
+- **Constraint: a drag-pan must be arbitrated by the same focus question, in the same place,**
+  as the capture-phase wheel listener — not by a second competing listener, which is how the
+  double-handling defect that listener fixed got introduced the first time.
+- **Nearest existing entry: #32 (keyboard-first canvas),** which is about keyboard traversal and
+  a11y. This is about the pointer, and specifically about the mouse-only user the current design
+  has no answer for.
+
+## 69. A gesture-history HUD line
+
+`CanvasHud` renders four facts and is described as "the fastest way to see the math misbehave".
+It is the only chrome outside `.world` and it is nearly empty. Add a transient line naming the
+last camera or layout action — "fit to 12 panels", "reset zoom", "undo: moved p3" — which does
+double duty as user feedback and as the debugging surface the HUD was built to be.
+
+- **Constraint: it must stay a status, not a toggle.** The HUD's own comment draws that line:
+  anything user-configurable moves to #11's settings surface by the standing rule.
+- **Constraint: it must not read `registry.version()`** — the same rule #5, #17, #18, #41 and
+  #59 each record.
+- **Constraint: the bottom-right corner is claimed.** #33 already notes the HUD owns it and
+  pushes the minimap to a top corner.
+- **Nearest existing entry: #38 (first run),** which wants the empty canvas to teach its own
+  gestures. This is the ongoing version, for a user who already knows the app, and it is a HUD
+  change rather than an onboarding flow.
+
+## 70. A shared verify harness with named checks and a printed manifest
+
+Eleven `scripts/verify-*.cjs` files each hand-roll the same `ok(n, pass, detail)` helper, each
+numbers its checks by hand, and none can run a single check — `CLAUDE.md` says so outright:
+"There is no test-name filter in any of them". Extract one harness that keeps the
+plain-node/Electron split exactly as it is but gives every check a stable **id and a one-line
+name**, supports `--only <id>`, and emits a manifest that a `verify:manifest` script diffs
+against the suite table.
+
+- **The suite table has already drifted, which is the argument for this.** `package.json`
+  declares `verify:palette` and `npm run verify` runs it, and it appears in **neither**
+  `README.md`'s script list nor `CLAUDE.md`'s suite table. That is exactly the failure
+  `CLAUDE.md` warns about for the `dispose(id)` call-site count — a number asserted in prose
+  that the code moved out from under — now happening to the table that documents the checks.
+- **What this changes: the numbering becomes generated rather than asserted.** "41 checks",
+  "checks 27–34", "`verify:panels` 26" are load-bearing references scattered through
+  `CLAUDE.md` and through this file, and today adding a check silently invalidates four
+  paragraphs of prose.
+- **Constraint: the plain-node entries must keep their `@shared` alias wiring,** which is
+  itself a note in `CLAUDE.md` about a resolution that only started mattering when a real
+  value crossed the boundary.
+- **Nearest existing entry: none of the forty** — the original backlog is entirely
+  product-facing. Closest in spirit is **#11**'s argument that one structure decided once
+  keeps toggle number ten cheap; this is that argument applied to check number two hundred.
+
+## 71. CI on a macOS runner
+
+There is no `.github/` and no CI of any kind; `npm run verify` is the whole story and it runs
+only when someone remembers. The suites are already display-free by design, so a
+`macos-latest` job needs little more than a tmux install and the `electron-rebuild`
+postinstall.
+
+- **The specific bug CI catches that a human does not: a stale `out/`.** `verify:canvas` and
+  `verify:panels` load the built renderer, and `CLAUDE.md` flags running either alone against
+  a stale build as "you are testing the previous commit". A clean-checkout runner cannot make
+  that mistake.
+- **Constraint: the tmux skip path must be an explicit CI decision.** `verify:pty-manager`
+  skips "loudly, never silently" with no tmux — on a runner, loud output nobody reads is
+  silent, and a green build that skipped the tmux half is worse than no build.
+- **Constraint: socket isolation is not optional on a shared runner** for the same reason it
+  is not optional on a developer's machine.
+- **Nearest existing entry: #28 (accounts)** is the only entry touching infrastructure, and
+  only as a hosted service for users. This is about the repo, not the product.
+
+## 72. One versioned automation surface, replacing the `__m4a*` / `__m5a*` hooks
+
+`Canvas.tsx` now carries **ten** global test hooks across two naming generations — eight
+`__m4a*` plus `__m5aSpecOf` and `__m5aDefaultSpec` — and every milestone adds more with a
+fresh prefix. `CLAUDE.md` still says eight. Consolidate them into one `window.__tc` namespace
+with a version field and a deliberately narrow, documented question-per-method contract,
+stripped from production builds by a vite define.
+
+- **The count in `CLAUDE.md` is the second confirmed drift, alongside #70's.** Both were found
+  by reading rather than by a check failing, which is the argument for #70 restated.
+- **What it unlocks: headless driving of everything after M5** — palette, multi-select,
+  annotations — without each milestone minting a prefix that permanently pins its era into a
+  component.
+- **Constraint: `CLAUDE.md`'s instruction stands and is the thing to preserve** — "keep the set
+  narrow and named by what each one answers", because the alternative is exposing the registry
+  and letting the suites drift into testing internals instead of behaviour. A namespace makes
+  that discipline easier to hold, not optional.
+- **Constraint: `tail` and `scrollPosition` exist *for* these hooks,** which `panel-session.ts`
+  documents. Renaming the surface must not orphan the reason those methods are on the
+  interface.
+- **Nearest existing entry: #32,** which also wants programmatic reach into panel state. That is
+  a user-facing input model; this is a test seam that must not ship to users.
+
+## 73. A flag registry — the constants verify currently cannot vary
+
+`LIVE_BUDGET` (8), `DEMOTE_DELAY_MS` (250), `CULL_MARGIN_PX` and the backend choice are
+compile-time constants, so a suite that wants to exercise budget pressure must either open
+eight panels or not test it. A small typed registry — defaults in code, overridable by env for
+verify — lets `verify:panels` force `LIVE_BUDGET=1` to prove the budget re-check at the apply
+step, and force the direct backend to test the no-tmux degradation path deterministically.
+
+- **This is what would have caught the held-demotion budget bug directly** rather than through
+  a twelve-panel pan. "The cap is enforced in two places and holds at every moment" is
+  currently asserted by prose and by a scenario, not by a check that can cheaply construct the
+  pressure.
+- **Constraint: developer flags and user settings must stay separate,** which is #11's own
+  warning read carefully — "exposing a performance knob invites a user to set it somewhere the
+  app misbehaves". This has no UI and no persistence guarantee, deliberately.
+- **Constraint: `probeTmux` already has the shape this generalises** — fall back and say why.
+  A forced-backend flag must go through the same loud path, not around it.
+- **Nearest existing entry: #11,** which is a user-facing pane with a search bar over durable
+  preferences. This is the opposite: a developer override layer with no home in that surface at
+  all.
+
+## 74. Updates that survive the tmux server
+
+M5c is packaging only; nothing addresses shipping the *second* build. The sharp part is
+architectural rather than logistical: **an in-app update restarts the app, and `before-quit`
+calls `shutdown()`, which is `kill-server` on the private socket** — so a "restart to update"
+prompt destroys every running agent, the exact outcome M4c exists to prevent.
+
+- **This wants deciding before the first update ships, not after a user loses twelve agents to
+  a version bump.** The stance it needs is the same one #56 needs: restart without
+  `kill-server`, reattach on relaunch. Whichever of the two is built first should establish it.
+- **Constraint: "one operation became three".** `detachAll` / `kill(id)` / `shutdown` are
+  distinct for exactly this reason, and an updater is a fourth caller that must pick the right
+  one. `verify:pty-manager` check 15 is the check that calls `shutdown()`.
+- **Constraint: the relaunch must land on the same socket,** which makes this and #49's
+  socket-naming question the same question asked twice.
+- **Nearest existing entry: none of the forty** — distribution is absent from the original
+  backlog. #28 is nearest and covers identity, not delivery.
+
+## 75. A diagnostics overlay, and a scrubbed bundle to hand a maintainer
+
+The HUD shows zoom and cursor. Almost every hard-won invariant in this codebase fails
+*silently*, and none of them are visible: held demotions, the live count against
+`LIVE_BUDGET`, each session's `{dormant, spawned, pid, tier}`, the backend kind and its
+fallback reason, the IPC message rate. A `Cmd`-gated overlay reading the registry, plus an
+"export diagnostics" writing a scrubbed bundle the user can inspect before sending, is the
+cheapest available reduction in the cost of every future silent bug — and it needs no server,
+so it collects nothing.
+
+- **The overlay half answers "which invariant just broke",** which no entry above does. This
+  file and `CLAUDE.md` together document roughly thirty failures whose defining property is
+  that nothing appears in any log; the overlay is the one surface where several of them would
+  be visible at a glance.
+- **Constraint: it must not bump `registry.version()`** — a diagnostics readout that re-renders
+  the canvas at 60Hz on a chatty agent is the exact cost the memo design exists to avoid.
+  Sixth entry to record it.
+- **Constraint: the export half is squarely under #31's standing rule,** since `layout.json`
+  holds preset commands and a main log may hold agent output.
+- **Nearest existing entry: #18** and **#39.** #18 measures what the *machine* spends and is
+  aimed at the user; #39 exports work product. This exports *app state*, for debugging.
+
+## A note on sequencing for 41–75
+
+The section below was written for entries 1–40 and has **not** been re-ordered to include
+these. Three observations that would change it if it were:
+
+- **#41 and #52 are load-bearing for entries that already exist,** in the same way the
+  panel-kind union is. Four entries assume live cwd; three assume multi-selection. Both are
+  cheap, and both are currently assumed-to-exist rather than built. They belong near the front
+  of any real ordering.
+- **#49 and #43 are defects, not features,** and #70's drift finding is a third. They should be
+  fixed rather than scheduled.
+- **#50 (worktree isolation) is the one entry here that changes what the product is for.**
+  Everything else in this file makes the canvas better at something. That one stops it being
+  wrong at the thing it exists to do — and its cost is real, because it lands on the
+  absent-`command` rule and on the dispose call-site count, the two most expensive invariants
+  in the app.
+
 ## Rough sequencing, if these were ever scheduled
 
 Ordered by (value × confidence) ÷ effort, not by preference:
