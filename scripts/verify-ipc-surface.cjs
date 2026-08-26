@@ -63,7 +63,10 @@ app.whenReady().then(() => {
     flushSync: () => {},
     renamePreset: () => false,
     deletePreset: () => false,
-    setDefaultPreset: () => {}
+    setDefaultPreset: () => {},
+    prompts: () => [],
+    addPrompt: () => {},
+    deletePrompt: () => false
   }
   const presetsStub = {
     list: () => [],
@@ -71,7 +74,10 @@ app.whenReady().then(() => {
     remove: () => false,
     setDefault: () => {},
     spawn: () => {},
-    requestReset: () => {}
+    requestReset: () => {},
+    listPrompts: () => [],
+    savePrompt: () => {},
+    removePrompt: () => false
   }
   registerIpcHandlers(
     stub,

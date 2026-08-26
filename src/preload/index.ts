@@ -79,6 +79,11 @@ const bridge: CanvasBridge = {
     setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id),
     spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id)
   },
+  prompt: {
+    list: (cwd: string | null) => ipcRenderer.invoke(IPC.PROMPT_LIST, cwd),
+    save: (name: string, body: string) => ipcRenderer.invoke(IPC.PROMPT_SAVE, name, body),
+    remove: (id: string) => ipcRenderer.invoke(IPC.PROMPT_DELETE, id)
+  },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)
   },

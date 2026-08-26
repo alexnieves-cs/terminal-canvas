@@ -103,7 +103,10 @@ app.whenReady().then(async () => {
       remove: () => false,
       setDefault: () => {},
       spawn: () => {},
-      requestReset: () => {}
+      requestReset: () => {},
+      listPrompts: () => [],
+      savePrompt: () => {},
+      removePrompt: () => false
     }
   )
 

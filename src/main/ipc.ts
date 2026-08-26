@@ -10,16 +10,19 @@ import type { CanvasState } from '../shared/layout-schema'
 import type { SessionBackendInfo, PresetListRow } from '../shared/ipc-contract'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
+import type { PromptListRow } from './prompts'
 
 /**
- * The preset mutations the palette drives, handed in from main/index.ts
- * because they need pieces only that module owns — the availability probe,
- * the menu rebuild, and the window to push PRESET_DEFAULT at. Kept as an
- * explicit parameter rather than reached for as module state, the same
- * dependency-injection posture ptyManager/layoutStore/getBackendInfo already
- * take.
+ * The preset AND prompt mutations the palette drives, handed in from
+ * main/index.ts because they need pieces only that module owns — the
+ * availability probe, the menu rebuild, the window to push PRESET_DEFAULT at,
+ * and the layout store. Kept as an explicit parameter rather than reached for
+ * as module state, the same dependency-injection posture
+ * ptyManager/layoutStore/getBackendInfo already take. Named PaletteHandlers,
+ * not PresetHandlers, since M5b's prompt library is the same "the palette
+ * asks main" surface rather than a fifth constructor argument.
  */
-export interface PresetHandlers {
+export interface PaletteHandlers {
   list(): PresetListRow[]
   rename(id: string, name: string): boolean
   remove(id: string): boolean
@@ -30,6 +33,9 @@ export interface PresetHandlers {
    */
   spawn(id: string): void
   requestReset(): void
+  listPrompts(cwd: string | null): PromptListRow[]
+  savePrompt(name: string, body: string): void
+  removePrompt(id: string): boolean
 }
 
 /** Registers the whole renderer -> main surface. One place, one call. */
@@ -37,7 +43,7 @@ export function registerIpcHandlers(
   ptyManager: PtyManager,
   layoutStore: LayoutStore,
   getBackendInfo: () => SessionBackendInfo,
-  presets: PresetHandlers
+  palette: PaletteHandlers
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -63,12 +69,16 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
-  ipcMain.handle(IPC.PRESET_LIST, () => presets.list())
-  ipcMain.handle(IPC.PRESET_RENAME, (_event, id: string, name: string) => presets.rename(id, name))
-  ipcMain.handle(IPC.PRESET_DELETE, (_event, id: string) => presets.remove(id))
-  ipcMain.handle(IPC.PRESET_SET_DEFAULT, (_event, id: string) => presets.setDefault(id))
-  ipcMain.handle(IPC.PRESET_SPAWN_BY_ID, (_event, id: string) => presets.spawn(id))
-  ipcMain.handle(IPC.CANVAS_REQUEST_RESET, () => presets.requestReset())
+  ipcMain.handle(IPC.PRESET_LIST, () => palette.list())
+  ipcMain.handle(IPC.PRESET_RENAME, (_event, id: string, name: string) => palette.rename(id, name))
+  ipcMain.handle(IPC.PRESET_DELETE, (_event, id: string) => palette.remove(id))
+  ipcMain.handle(IPC.PRESET_SET_DEFAULT, (_event, id: string) => palette.setDefault(id))
+  ipcMain.handle(IPC.PRESET_SPAWN_BY_ID, (_event, id: string) => palette.spawn(id))
+  ipcMain.handle(IPC.CANVAS_REQUEST_RESET, () => palette.requestReset())
+
+  ipcMain.handle(IPC.PROMPT_LIST, (_event, cwd: string | null) => palette.listPrompts(cwd))
+  ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))
+  ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
 }
 
 /**

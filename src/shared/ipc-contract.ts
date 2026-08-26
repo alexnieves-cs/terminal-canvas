@@ -65,7 +65,18 @@ export const IPC = {
    * the confirmation dialog and the counts request, so the renderer asks main
    * to run the flow it already has instead of growing a second one.
    */
-  CANVAS_REQUEST_RESET: 'canvas:request-reset'
+  CANVAS_REQUEST_RESET: 'canvas:request-reset',
+  /**
+   * The merged prompt list: the saved store plus .claude/commands under the
+   * cwd of the panel the palette captured. Takes a cwd because the project
+   * half is per-panel — and main expands it, since `~` is main's to resolve.
+   * A null cwd means "saved prompts only", which is what a palette opened with
+   * nothing focused should show.
+   */
+  PROMPT_LIST: 'prompt:list',
+  /** Always writes the SAVED store. The project half is read-only. */
+  PROMPT_SAVE: 'prompt:save',
+  PROMPT_DELETE: 'prompt:delete'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -147,6 +158,14 @@ export interface CapturedPanel {
   h: number
 }
 
+/** One row of the palette's prompt list. Mirrors PromptListRow in main. */
+export interface PromptBridgeRow {
+  id: string
+  name: string
+  source: 'saved' | 'project'
+  body: string
+}
+
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
   id: string
@@ -213,6 +232,12 @@ export interface CanvasBridge {
      * spawn the ordinary undo behaviour rather than a second spawn path.
      */
     spawnById(id: string): Promise<void>
+  }
+  prompt: {
+    list(cwd: string | null): Promise<PromptBridgeRow[]>
+    save(name: string, body: string): Promise<void>
+    /** False for an id the saved store does not hold — every project id, for one. */
+    remove(id: string): Promise<boolean>
   }
   session: {
     info(): Promise<SessionBackendInfo>

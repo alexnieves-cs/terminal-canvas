@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { BrowserWindow, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
-import { PtyManager } from './pty-manager'
+import { PtyManager, resolveCwd } from './pty-manager'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { attachPtyLifecycle } from './window-lifecycle'
@@ -13,11 +13,13 @@ import {
   allPresets,
   autoName,
   mintPresetId,
+  mintPromptId,
   presetRows,
   pushDefaultPreset,
   resolveAvailability,
   templateOf
 } from './presets'
+import { mergePrompts, readProjectPrompts } from './prompts'
 import type { CapturedPanel } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
@@ -328,7 +330,19 @@ app.whenReady().then(async () => {
       },
       requestReset: () => {
         void confirmReset()
-      }
+      },
+      listPrompts: (cwd) =>
+        mergePrompts(
+          layoutStore.prompts(),
+          // resolveCwd is pty-manager's — the same expansion a spawn gets, so
+          // the prompts the palette lists come from the directory the panel
+          // is actually in, not from a literal '~' that resolves to nothing.
+          cwd === null ? [] : readProjectPrompts(resolveCwd(cwd))
+        ),
+      savePrompt: (name, body) => {
+        layoutStore.addPrompt({ id: mintPromptId(layoutStore.prompts()), name, body })
+      },
+      removePrompt: (id) => layoutStore.deletePrompt(id)
     }
   )
   createWindow()

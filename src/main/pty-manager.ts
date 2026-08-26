@@ -25,7 +25,7 @@ const FLUSH_INTERVAL_MS = 16
  * if the directory is gone. Both are easy to hit once panels are persisted with
  * a cwd that has since been deleted (M4), so handle them at the boundary.
  */
-function resolveCwd(raw: string): string {
+export function resolveCwd(raw: string): string {
   const expanded = raw === '~' || raw.startsWith('~/') ? resolve(homedir(), raw.slice(2)) : raw
   if (existsSync(expanded)) return expanded
   console.warn(`[pty] cwd ${expanded} does not exist, falling back to home`)

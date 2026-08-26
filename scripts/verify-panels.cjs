@@ -275,7 +275,10 @@ app.whenReady().then(async () => {
     remove: () => false,
     setDefault: () => {},
     spawn: () => {},
-    requestReset: () => {}
+    requestReset: () => {},
+    listPrompts: () => [],
+    savePrompt: () => {},
+    removePrompt: () => false
   })
 
   // The same listener createWindow() installs, calling the same production
