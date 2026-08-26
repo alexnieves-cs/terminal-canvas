@@ -758,6 +758,67 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify(prompts))
 }
 
+// 53. Reads *.md from .claude/commands, names them by filename, and ignores
+//     everything else in the directory.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))   // spaced, on purpose
+  mkdirSync(join(dir, '.claude', 'commands'), { recursive: true })
+  writeFileSync(join(dir, '.claude', 'commands', 'review.md'), 'review this diff', 'utf8')
+  writeFileSync(join(dir, '.claude', 'commands', 'notes.txt'), 'not a prompt', 'utf8')
+  const out = L.readProjectPrompts(dir)
+  ok('53 project prompts are the .md files, named by filename',
+    out.length === 1 && out[0].name === 'review' && out[0].body === 'review this diff' &&
+    out[0].source === 'project')
+}
+
+// 54. A missing directory is EMPTY, not an error. Most panels' cwds have no
+//     .claude/commands, and a throw here would take the whole prompt list down
+//     with it — the palette would show no saved prompts either.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))
+  ok('54 a missing .claude/commands is empty, not an error',
+    L.readProjectPrompts(dir).length === 0)
+}
+
+// 55. The file count is capped. An unbounded read of whatever directory a user
+//     pointed a panel at is a hazard, not a feature.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))
+  const commands = join(dir, '.claude', 'commands')
+  mkdirSync(commands, { recursive: true })
+  for (let i = 0; i < L.MAX_PROJECT_PROMPTS + 20; i += 1) {
+    writeFileSync(join(commands, `p${i}.md`), 'body', 'utf8')
+  }
+  ok('55 the project prompt count is capped',
+    L.readProjectPrompts(dir).length === L.MAX_PROJECT_PROMPTS)
+}
+
+// 56. An oversized file is skipped rather than truncated. Half a prompt pasted
+//     into an agent is worse than none: it reads as a complete instruction.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))
+  const commands = join(dir, '.claude', 'commands')
+  mkdirSync(commands, { recursive: true })
+  writeFileSync(join(commands, 'huge.md'), 'x'.repeat(L.MAX_PROMPT_BYTES + 1), 'utf8')
+  writeFileSync(join(commands, 'fine.md'), 'ok', 'utf8')
+  const out = L.readProjectPrompts(dir)
+  ok('56 an oversized prompt file is skipped, not truncated',
+    out.length === 1 && out[0].name === 'fine')
+}
+
+// 57. Same-named prompts from the two sources both survive the merge, with
+//     distinct ids. Deduping by name is the quiet way to paste the wrong
+//     project's context into an agent (ideas-backlog #27).
+{
+  const merged = L.mergePrompts(
+    [{ id: 'p1', name: 'review', body: 'saved body' }],
+    [{ id: 'proj:review', name: 'review', source: 'project', body: 'project body' }]
+  )
+  ok('57 same-named prompts from two sources both survive',
+    merged.length === 2 && new Set(merged.map((p) => p.id)).size === 2 &&
+    merged.filter((p) => p.source === 'project').length === 1)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
