@@ -87,10 +87,24 @@ app.whenReady().then(async () => {
   // ipcMain.handle's return value crosses IPC via structured clone, so this
   // must be a plain { kind, reason } object, not the SessionBackend itself —
   // that carries a spawn() function, which structured clone cannot carry.
-  registerIpcHandlers(ptyManager, layoutStore, () => {
-    const b = createDirectBackend('verify: direct')
-    return { kind: b.kind, reason: b.reason }
-  })
+  // No check in this suite drives a preset mutation from IPC, so a stub that
+  // is never called is enough — what matters here is that registration still
+  // succeeds with the fourth argument in place.
+  registerIpcHandlers(
+    ptyManager,
+    layoutStore,
+    () => {
+      const b = createDirectBackend('verify: direct')
+      return { kind: b.kind, reason: b.reason }
+    },
+    {
+      list: () => [],
+      rename: () => false,
+      remove: () => false,
+      setDefault: () => {},
+      requestReset: () => {}
+    }
+  )
 
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
   await sleep(800)

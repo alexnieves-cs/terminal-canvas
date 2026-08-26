@@ -60,9 +60,24 @@ app.whenReady().then(() => {
     settings: () => ({ layout: true, camera: true, focus: true }),
     setSetting: () => {},
     reset: () => {},
-    flushSync: () => {}
+    flushSync: () => {},
+    renamePreset: () => false,
+    deletePreset: () => false,
+    setDefaultPreset: () => {}
   }
-  registerIpcHandlers(stub, layoutStoreStub, () => ({ kind: 'direct', reason: 'verify: direct' }))
+  const presetsStub = {
+    list: () => [],
+    rename: () => false,
+    remove: () => false,
+    setDefault: () => {},
+    requestReset: () => {}
+  }
+  registerIpcHandlers(
+    stub,
+    layoutStoreStub,
+    () => ({ kind: 'direct', reason: 'verify: direct' }),
+    presetsStub
+  )
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))

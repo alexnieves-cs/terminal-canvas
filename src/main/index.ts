@@ -13,6 +13,7 @@ import {
   allPresets,
   autoName,
   mintPresetId,
+  presetRows,
   pushDefaultPreset,
   resolveAvailability,
   templateOf
@@ -114,6 +115,17 @@ function rebuildMenu(): void {
       void savePresetFromFocusedPanel()
     }
   })
+}
+
+/**
+ * The three things every preset change has to do. Deleting the default one
+ * changes what Cmd+N spawns, and the renderer only learns that from a
+ * PRESET_DEFAULT push — without it the old template stays in defaultTemplateRef
+ * and Cmd+N keeps spawning a preset the user just deleted.
+ */
+function afterPresetChange(): void {
+  rebuildMenu()
+  if (mainWindow) pushDefaultPreset(mainWindow.webContents, layoutStore)
 }
 
 async function savePresetFromFocusedPanel(): Promise<void> {
@@ -272,10 +284,42 @@ app.whenReady().then(async () => {
   }
 
   rebuildMenu()
-  registerIpcHandlers(ptyManager, layoutStore, () => ({
-    kind: backend.kind,
-    reason: backend.reason
-  }))
+  registerIpcHandlers(
+    ptyManager,
+    layoutStore,
+    () => ({
+      kind: backend.kind,
+      reason: backend.reason
+    }),
+    {
+      list: () =>
+        presetRows(
+          resolveAvailability(allPresets(layoutStore.presets()), which),
+          layoutStore.defaultPresetId()
+        ),
+      rename: (id, name) => {
+        const changed = layoutStore.renamePreset(id, name)
+        // The menu lists presets by name, and Cmd+N's template carries none —
+        // but a rename can still change what the menu SAYS, so rebuild. Cheap,
+        // and the alternative is a menu that disagrees with the palette until
+        // relaunch.
+        if (changed) afterPresetChange()
+        return changed
+      },
+      remove: (id) => {
+        const changed = layoutStore.deletePreset(id)
+        if (changed) afterPresetChange()
+        return changed
+      },
+      setDefault: (id) => {
+        layoutStore.setDefaultPreset(id)
+        afterPresetChange()
+      },
+      requestReset: () => {
+        void confirmReset()
+      }
+    }
+  )
   createWindow()
 
   app.on('activate', () => {

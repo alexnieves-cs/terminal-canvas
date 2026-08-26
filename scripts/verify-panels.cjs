@@ -228,7 +228,17 @@ app.whenReady().then(async () => {
   // ipcMain.handle's return value crosses IPC via structured clone, so this
   // must be a plain { kind, reason } object, not the SessionBackend itself —
   // that carries a spawn() function, which structured clone cannot carry.
-  registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }))
+  // No check in this suite drives a preset mutation from IPC (that's Task 6's
+  // palette wiring), so a stub that never gets called is enough — the real
+  // requirement here is that registerIpcHandlers still registers all five
+  // preset/reset channels so verify:ipc's contract holds for a real renderer.
+  registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
+    list: () => [],
+    rename: () => false,
+    remove: () => false,
+    setDefault: () => {},
+    requestReset: () => {}
+  })
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends

@@ -35,7 +35,29 @@ export const IPC = {
    * is 'direct', so the user is never told their sessions are durable when
    * they are not.
    */
-  SESSION_BACKEND: 'session:backend'
+  SESSION_BACKEND: 'session:backend',
+  /**
+   * The preset list as the PALETTE needs it — names, availability, which is
+   * default, and which are built-in. Availability is main's alone: it is
+   * resolved against the login PATH, which the renderer's compiled-away
+   * process.env cannot see.
+   */
+  PRESET_LIST: 'preset:list',
+  /**
+   * The three mutations M5a deferred to the palette. These invert M5a's
+   * direction — its preset channels are main -> renderer because the MENU is
+   * main's; the palette is the renderer's, so the mutations are invokes, which
+   * is also why they belong here rather than in IPC_EVENTS.
+   */
+  PRESET_RENAME: 'preset:rename',
+  PRESET_DELETE: 'preset:delete',
+  PRESET_SET_DEFAULT: 'preset:set-default',
+  /**
+   * "Reset canvas…" asked for from the palette rather than the menu. Main owns
+   * the confirmation dialog and the counts request, so the renderer asks main
+   * to run the flow it already has instead of growing a second one.
+   */
+  CANVAS_REQUEST_RESET: 'canvas:request-reset'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -117,6 +139,16 @@ export interface CapturedPanel {
   h: number
 }
 
+/** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
+export interface PresetListRow {
+  id: string
+  name: string
+  available: boolean
+  builtIn: boolean
+  isDefault: boolean
+  subtitle: string
+}
+
 /** Shape of the bridge the preload exposes on window.canvas. */
 export interface CanvasBridge {
   pty: {
@@ -149,6 +181,8 @@ export interface CanvasBridge {
     /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
     onCounts(provide: () => { panels: number; running: number }): () => void
     onReset(listener: () => void): () => void
+    /** Runs main's existing confirm-then-reset flow. */
+    requestReset(): Promise<void>
   }
   preset: {
     /** A menu pick: spawn one panel from this template, now. */
@@ -160,6 +194,11 @@ export interface CanvasBridge {
      * Mirrors canvas.onCounts; returns null when nothing is focused.
      */
     onCapture(provide: () => CapturedPanel | null): () => void
+    list(): Promise<PresetListRow[]>
+    rename(id: string, name: string): Promise<boolean>
+    /** `remove`, not `delete`: `delete` is a reserved word as a method name. */
+    remove(id: string): Promise<boolean>
+    setDefault(id: string): Promise<void>
   }
   session: {
     info(): Promise<SessionBackendInfo>
