@@ -47,6 +47,7 @@ export function Palette(props: PaletteProps): JSX.Element {
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const selectedRef = useRef<HTMLLIElement>(null)
 
   const commands = useMemo(
     () =>
@@ -69,12 +70,46 @@ export function Palette(props: PaletteProps): JSX.Element {
     inputRef.current?.focus()
   }, [inputMode])
 
+  // What the selection was pointing AT last render, so the effect below can
+  // follow the command rather than the slot it happened to occupy.
+  const prevRowsRef = useRef<Command[]>(rows)
+  const prevQueryRef = useRef(query)
+
   // The list shrinks under the selection on every keystroke; re-seat it on a
   // row that can actually be run rather than leaving Enter pointed at a
   // disabled command or past the end.
+  //
+  // Only a QUERY change re-seats, though. `rows` also changes identity when a
+  // list ARRIVES: preset:list and prompt:list are invokes that resolve after
+  // the palette has opened, and reading .claude/commands off a cold disk is
+  // slow enough for the user to have arrowed down first. Re-seating there
+  // moves the highlight back to the top with no visible cause and Enter then
+  // runs a command they did not choose — the same silent-selection-move class
+  // as the resetViewport defect. So on a non-query change the selection
+  // follows its command by id (rows may have grown ABOVE it, which is exactly
+  // what an arriving list does), and only falls back to firstRunnable when
+  // that command is gone or has become unrunnable.
   useEffect(() => {
-    setIndex(firstRunnable(rows))
-  }, [rows])
+    const queryChanged = prevQueryRef.current !== query
+    const previous = prevRowsRef.current
+    prevQueryRef.current = query
+    prevRowsRef.current = rows
+    setIndex((i) => {
+      if (queryChanged) return firstRunnable(rows)
+      const selectedId = i >= 0 ? previous[i]?.id : undefined
+      const moved = selectedId === undefined ? -1 : rows.findIndex((r) => r.id === selectedId)
+      return moved >= 0 && rows[moved].disabledReason === undefined ? moved : firstRunnable(rows)
+    })
+  }, [rows, query])
+
+  // Keep the selected row on screen. .palette__list is max-height: 46vh with
+  // overflow-y: auto, and the list is long by construction — four rows per
+  // preset, one per panel, two per prompt — so ArrowDown walks straight past
+  // the bottom of the visible window and Enter runs a command the user cannot
+  // see. 'nearest' so a selection already in view does not scroll at all.
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [index, rows])
 
   // Cmd+C / Cmd+V are the app menu's accelerators (main/menu.ts), so they take
   // priority over the page: the browser never delivers a native copy or paste
@@ -121,6 +156,16 @@ export function Palette(props: PaletteProps): JSX.Element {
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     switch (event.key) {
+      // Tab is an exit, not a focus move. role="dialog" with exactly one
+      // focusable element means the browser's default Tab walks DOM focus
+      // onward — plausibly straight into xterm's tabbable helper textarea —
+      // leaving the overlay up with the keyboard back on the agent, which is
+      // the same lingering-overlay state an unhandled outside click produced
+      // (Canvas.tsx's onMouseDownCapture). It is a key people press
+      // reflexively in a text field, so it gets an answer rather than a
+      // default: close, exactly as Escape does, restoring focus to the panel
+      // the palette captured.
+      case 'Tab':
       case 'Escape':
         event.preventDefault()
         controller.closePalette()
@@ -187,6 +232,7 @@ export function Palette(props: PaletteProps): JSX.Element {
           {rows.map((row, i) => (
             <li
               key={row.id}
+              ref={i === index ? selectedRef : null}
               className={[
                 'palette__row',
                 i === index ? 'palette__row--selected' : '',

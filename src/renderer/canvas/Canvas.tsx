@@ -27,6 +27,7 @@ const DEMOTE_DELAY_MS = 250
 // a fresh [] each render would rebuild the command list on every frame of a pan.
 const EMPTY_PRESETS: PresetRow[] = []
 const EMPTY_PROMPTS: PromptRow[] = []
+const EMPTY_PANELS: PanelRow[] = []
 
 /**
  * What the switcher calls a panel. No user-set names exist yet (ideas-backlog
@@ -686,7 +687,13 @@ export function Canvas({
     setSelectedId((current) => (current === id ? null : current))
     setFocusedId((current) => (current === id ? null : current))
   }, [commitHistory])
-  const onSelectPanel = useCallback((id: string) => {
+  /**
+   * Select and raise, without waking. The half onSelectPanel and the palette's
+   * goToPanel share: a raise is a z change and nothing more (see "Stacking is
+   * Panel.z, never array order"), so it is safe for a navigation that must not
+   * start a process, while registry.wake — onSelectPanel's other half — is not.
+   */
+  const selectAndRaise = useCallback((id: string) => {
     setSelectedId(id)
     setPanels((current) => {
       // Skip the raise (and the history push it would trigger) when `id` is
@@ -707,6 +714,10 @@ export function Canvas({
       commitHistory(next)
       return next
     })
+  }, [commitHistory])
+
+  const onSelectPanel = useCallback((id: string) => {
+    selectAndRaise(id)
     // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
     // and so no focus handler of its own — its click falls through to the
     // canvas background, which hit-tests and selects. Hooking onFocusPanel
@@ -719,7 +730,7 @@ export function Canvas({
       return next
     })
     registry.wake(id)
-  }, [commitHistory])
+  }, [selectAndRaise])
   const onFocusPanel = useCallback((id: string) => {
     onSelectPanel(id)
     setFocusedId(id)
@@ -862,6 +873,28 @@ export function Canvas({
     setFocusedId(null)
   }
 
+  // The palette's third exit (the spec's focus rule 4 names Escape,
+  // Enter-after-run, and a click outside — this is the third). CAPTURE phase
+  // on the canvas host, and it has to be: every panel handler stopPropagations
+  // its own mousedown, so a click on a PANEL never reaches the background
+  // onMouseDown below and a close written there would fire for background
+  // clicks only. Without any of it the overlay survives the click with its
+  // input blurred and xterm's textarea focused — bare keys reach the agent
+  // while the palette sits there looking ready, and Escape reaches the PTY
+  // rather than the palette. verify:panels 42.
+  //
+  // Nothing is prevented or stopped: the click must still do its ordinary job
+  // of selecting and focusing whatever it landed on, which is also why this
+  // dismisses (no focus restore) rather than closing — see dismissPalette.
+  const onMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
+    if (!palette.isOpen()) return
+    // Clicks INSIDE the overlay are not an exit. The .palette root's own
+    // bubble-phase stopPropagation cannot help here — a capture listener on an
+    // ancestor has already run by then — so the containment test is explicit.
+    if ((event.target as HTMLElement | null)?.closest('.palette')) return
+    palette.dismissPalette()
+  }
+
   const onMouseMove = (event: MouseEvent<HTMLDivElement>): void => {
     // Ignore the corrected clones xterm-pointer dispatches during a selection
     // drag. Those carry CSS-pixel client coordinates measured against the
@@ -961,9 +994,15 @@ export function Canvas({
       centreOn(panel.rect)
       // Selection WITHOUT the wake. onSelectPanel is the click path and it
       // deliberately wakes (a card's whole affordance is "click to start");
-      // navigating is not interacting, so the switcher sets the highlight and
-      // leaves dormancy alone. verify:panels 39.
-      setSelectedId(id)
+      // navigating is not interacting, so the switcher leaves dormancy alone.
+      // verify:panels 39.
+      //
+      // It DOES raise, though, and deliberately: the selection ring is the
+      // only feedback this command gives, and a framed panel that happens to
+      // sit under an overlapping one shows none of it — the camera moves and
+      // nothing visibly happens. Raising is a z change and nothing else, so it
+      // costs none of what the no-wake rule is protecting.
+      selectAndRaise(id)
     },
     insertPrompt: (id) => {
       // The panel the palette CAPTURED, not the focused one: opening the
@@ -1025,12 +1064,20 @@ export function Canvas({
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
-  }), [resetViewport, centreOn, presetRows, reloadPresets, palette.openPalette,
+  }), [resetViewport, centreOn, selectAndRaise, presetRows, reloadPresets, palette.openPalette,
        palette.capturedId, reloadPrompts])
 
+  // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
+  // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
+  // this array flows into Palette.tsx's `commands` memo, whose [rows] effect
+  // re-seats the selected row. Tracking it would re-seat the palette's
+  // selection at 60Hz behind a drag, the same silent-selection-move defect
+  // "resetViewport must stay a useCallback" documents one file over. The list
+  // is only ever looked at while the overlay is up, and the commands that add
+  // or remove a panel close it first, so recomputing at open is enough.
   const panelRows = useMemo<PanelRow[]>(
-    () => panels.map((p) => ({ id: p.rect.id, label: panelLabel(p) })),
-    [panels]
+    () => (palette.open ? panelsRef.current.map((p) => ({ id: p.rect.id, label: panelLabel(p) })) : EMPTY_PANELS),
+    [palette.open]
   )
 
   // Cheap, and read once per render of the palette: getSelection() is a string
@@ -1041,7 +1088,13 @@ export function Canvas({
   }
 
   return (
-    <div className="canvas" ref={hostRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
+    <div
+      className="canvas"
+      ref={hostRef}
+      onMouseDownCapture={onMouseDownCapture}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+    >
       <div
         className="world"
         style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
