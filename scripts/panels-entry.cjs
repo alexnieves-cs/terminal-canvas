@@ -48,8 +48,16 @@ module.exports = {
      the two paths one path rather than two that can drift. */
   templateOf: require('../src/main/presets').templateOf,
   /* Check 40's prompt list comes from the real merge, so the rows the palette
-     renders are the rows main would build — not a shape invented here. */
+     renders are the rows main would build — not a shape invented here, and
+     check 43 needs the PROJECT half of that list too: readProjectPrompts +
+     resolveCwd are the two lines main/index.ts's listPrompts is made of, and
+     until check 43 nothing anywhere exercised them together. A regression in
+     that pair (the wrong cwd, an unexpanded '~', a swapped source label)
+     produces FEWER rows, which reads exactly like "this project has no
+     commands" — the silent shape this suite exists for. */
   mergePrompts: require('../src/main/prompts').mergePrompts,
+  readProjectPrompts: require('../src/main/prompts').readProjectPrompts,
+  resolveCwd: require('../src/main/pty-manager').resolveCwd,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,

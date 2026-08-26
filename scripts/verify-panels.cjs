@@ -44,6 +44,8 @@ const {
   presetRows,
   templateOf,
   mergePrompts,
+  readProjectPrompts,
+  resolveCwd,
   IPC_EVENTS
 } = require(ENTRY_OUT)
 
@@ -210,8 +212,24 @@ app.whenReady().then(async () => {
   // terminal buffer as the literal text "^[[200~". Against any ordinary shell
   // paste() and write() put byte-identical data on the PTY and nothing can
   // tell them apart — this program is the discriminator.
+  // Check 43's fixture, and check 40's cwd. A project prompt is a FILE under
+  // a panel's cwd, so the panel has to be pointed somewhere this suite owns:
+  // '~' would make the check depend on whatever .claude/commands happens to
+  // be in the running user's home directory, and a spaced path is deliberate
+  // — every cwd this app expands eventually reaches a shell (the same class
+  // of bug the tmux exitDir's quoting note in CLAUDE.md records).
+  const PROJECT_DIR = mkdtempSync(join(tmpdir(), 'tc panels project '))
+  mkdirSync(join(PROJECT_DIR, '.claude', 'commands'), { recursive: true })
+  // The name comes from the FILENAME (readProjectPrompts strips the .md), so
+  // this string is what check 43's query and row assertion both target.
+  const PROJECT_PROMPT_NAME = 'harness-project-prompt'
+  const PROJECT_PROMPT_BODY = 'zzprojectbody first line\nzzprojectbody second line'
+  writeFileSync(
+    join(PROJECT_DIR, '.claude', 'commands', PROJECT_PROMPT_NAME + '.md'),
+    PROJECT_PROMPT_BODY, 'utf8'
+  )
   const ECHO_PRESET = {
-    id: 'u2', name: 'echo -v', cwd: '~',
+    id: 'u2', name: 'echo -v', cwd: PROJECT_DIR,
     command: '/bin/sh', args: ['-c', "printf '\\033[?2004h'; cat -v"]
   }
   // Check 40's prompt. Two lines, because multi-line is the entire point: a
@@ -305,11 +323,22 @@ app.whenReady().then(async () => {
       if (found) win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
     },
     requestReset: () => {},
-    // The real merge, against the real store, with no project half: reading
-    // .claude/commands under the panel's cwd would make this suite depend on
-    // whatever happens to be in the running user's home directory. What check
-    // 40 needs is the seeded prompt and only the seeded prompt.
-    listPrompts: () => mergePrompts(layoutStore.prompts(), []),
+    // The same two lines main/index.ts's listPrompts is, project half
+    // included: check 43 is the only end-to-end exercise of readProjectPrompts
+    // anywhere, and a stub with `[]` for the project half (which this was
+    // until the M5b fix wave) leaves the whole .claude/commands path proven
+    // no further than verify:layout's pure unit checks. The fixture panel
+    // check 43 focuses is pointed at PROJECT_DIR, so the rows it asserts on
+    // are this suite's own files — but note the residual: a panel whose cwd
+    // is '~' now genuinely lists the running user's ~/.claude/commands, so
+    // every check that picks a palette row does it by explicit row TEXT
+    // rather than by position (check 39's "Go to" row included), and an extra
+    // row can never silently become the one that runs.
+    listPrompts: (cwd) =>
+      mergePrompts(
+        layoutStore.prompts(),
+        cwd === null ? [] : readProjectPrompts(resolveCwd(cwd))
+      ),
     savePrompt: () => {},
     removePrompt: () => false
   })
@@ -2247,16 +2276,45 @@ app.whenReady().then(async () => {
           setter.call(input, 'go to ${dormantId}')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 50))
-          document.querySelector('.palette__row').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          // By TEXT, not by position: the prompt list now includes whatever
+          // .claude/commands the focused panel's cwd holds, so "the first
+          // row" is no longer a fact this suite controls. A row picked by
+          // what it says can only ever run the command the check means.
+          const row = [...document.querySelectorAll('.palette__row')]
+            .find((r) => r.textContent.includes('Go to') && r.textContent.includes('${dormantId}'))
+          if (row) row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         })()`)
         await sleep(400)
         const after = await wc.executeJavaScript(`window.__m4aViewport()`)
         const stillDormant = await wc.executeJavaScript(`
           (window.__m4aSessions().find((s) => s.id === '${dormantId}') || {}).spawned === false
         `)
+        // WHERE the camera went, not merely that it moved: a centreOn that
+        // framed the wrong panel — or the right one at the wrong scale —
+        // also changes x and y, and "the viewport is not where it was" is
+        // true of any pan at all. The expectation is viewport.ts's centreOn
+        // recomputed here from the panel's own rect and the host's size:
+        // the rect's centre lands in the middle of the canvas at the
+        // UNCHANGED scale (framing must never re-zoom — verify:viewport
+        // 49-50). Recomputed rather than imported because this suite loads
+        // the built renderer and has no module to import from.
+        const expected = await wc.executeJavaScript(`(() => {
+          const rect = window.__m5aSpecOf('${dormantId}').rect
+          const host = document.querySelector('.canvas').getBoundingClientRect()
+          const vp = window.__m4aViewport()
+          return {
+            x: host.width / 2 - (rect.x + rect.w / 2) * vp.scale,
+            y: host.height / 2 - (rect.y + rect.h / 2) * vp.scale
+          }
+        })()`)
+        // Sub-pixel: the arithmetic is float, and getBoundingClientRect can
+        // hand back a fractional width. A wrong-panel framing is off by
+        // whole world units, so nothing this tolerance admits is a defect
+        // this check could otherwise catch.
+        const framed = Math.abs(after.x - expected.x) < 1 && Math.abs(after.y - expected.y) < 1
         ok('39 go-to frames a dormant panel without spawning it',
-          (after.x !== before.x || after.y !== before.y) && stillDormant === true,
-          `${JSON.stringify(before)} -> ${JSON.stringify(after)} spawned=${!stillDormant}`)
+          framed && after.scale === before.scale && stillDormant === true,
+          `${JSON.stringify(before)} -> ${JSON.stringify(after)} expected=${JSON.stringify(expected)} spawned=${!stillDormant}`)
       }
     }
 
@@ -2443,6 +2501,160 @@ app.whenReady().then(async () => {
       ok('41 a mouse-picked palette row does not release the focused panel',
         focusedBefore === true && picked === true && focusedAfter === true,
         `before=${focusedBefore} picked=${picked} after=${focusedAfter}`)
+    }
+
+    // 42. A click OUTSIDE the palette closes it — and still does its ordinary
+    //     job of focusing the panel it landed on.
+    //
+    //     The spec's focus rule 4 names three ways out of the palette:
+    //     Escape, Enter-after-run, and a click outside. The third was the one
+    //     with no code behind it, and its absence is reachable in ONE click:
+    //     .palette is a 680px box at top: 12%, not a full-viewport scrim, so a
+    //     click anywhere else lands on a panel (or the background) and the
+    //     overlay stays up with its input BLURRED — xterm's textarea now has
+    //     DOM focus, so bare keys go to the agent while the palette sits there
+    //     looking ready to take a query. That is verbatim the failure rule 1
+    //     exists to prevent, and Escape cannot even undo it: the key reaches
+    //     the PTY, not the palette's onKeyDown.
+    //
+    //     Panel clicks never reach .canvas's background onMouseDown (every
+    //     panel handler stopPropagations), so the close cannot live there —
+    //     it has to be a CAPTURE-phase handler that sees the click before the
+    //     panel does. Clicking a panel is therefore the discriminating
+    //     gesture: a fix written only into the background handler passes a
+    //     background-click check and fails this one.
+    //
+    //     Focus is the second half of the assertion and the reason the target
+    //     must be a panel other than the captured one: closePalette() calls
+    //     restoreFocus(capturedId), which would take the keyboard straight
+    //     back to the PREVIOUSLY focused panel and leave the user typing into
+    //     a panel they just clicked away from.
+    {
+      const capturedId = await wc.executeJavaScript(`(() => {
+        const el = document.activeElement && document.activeElement.closest('.panel')
+        return el ? el.getAttribute('data-panel-id') : null
+      })()`)
+      const targetId = await wc.executeJavaScript(`(() => {
+        const panel = [...document.querySelectorAll('.panel__slot')]
+          .map((slot) => slot.closest('.panel'))
+          .find((p) => p && p.getAttribute('data-panel-id') !== ${JSON.stringify(capturedId)})
+        return panel ? panel.getAttribute('data-panel-id') : null
+      })()`)
+      if (capturedId === null || targetId === null) {
+        ok('42 a click outside the palette closes it and focuses what it hit', false,
+          `fixture assumption broke: captured=${capturedId} target=${targetId} ` +
+          '(needs a focused panel and a SECOND live panel to click)')
+      } else {
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        // A real, bubbling mousedown on the terminal slot — the propagation
+        // path is the subject of the check, so nothing here may short-circuit
+        // it, and it is the same gesture check 40 uses to focus a panel.
+        await wc.executeJavaScript(`(() => {
+          const slot = document.querySelector('[data-panel-id=${JSON.stringify(targetId)}] .panel__slot')
+          slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        })()`)
+        const closed = await waitUntil(
+          () => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+        await sleep(200)
+        const focusedAfter = await wc.executeJavaScript(`(() => {
+          const el = document.activeElement && document.activeElement.closest('.panel')
+          return el ? el.getAttribute('data-panel-id') : null
+        })()`)
+        ok('42 a click outside the palette closes it and focuses what it hit',
+          closed === true && focusedAfter === targetId,
+          `captured=${capturedId} target=${targetId} closed=${closed} focused=${focusedAfter}`)
+      }
+    }
+
+    // 43. The PROJECT half of the prompt list, end to end.
+    //
+    //     Everything about .claude/commands was proven only as far as
+    //     verify:layout 53-57's pure unit checks: the harness's listPrompts
+    //     used to answer mergePrompts(saved, []) — a literal empty project
+    //     half — so main/index.ts's `readProjectPrompts(resolveCwd(cwd))` was
+    //     never called by any check anywhere. A regression there (the cwd of
+    //     the wrong panel, an unexpanded '~', a swapped source label) removes
+    //     ROWS, and a shorter list looks exactly like "this project has no
+    //     commands". Nothing throws and nothing logs.
+    //
+    //     The fixture is a real file in a real directory (PROJECT_DIR, with a
+    //     space in its path on purpose) that this suite wrote before the
+    //     window loaded, and the panel it belongs to is the ECHO panel check
+    //     40 spawned — the only panel pointed at that directory. Which makes
+    //     the assertion three things at once: the row exists (so the read
+    //     happened, under the CAPTURED panel's cwd and not some other
+    //     panel's), it is labelled `project` (the source survived the merge),
+    //     and its BODY reaches the terminal (so the `proj:` id the palette
+    //     holds still resolves to the file's text).
+    {
+      const echoId = await wc.executeJavaScript(`(() => {
+        const dir = ${JSON.stringify(PROJECT_DIR)}
+        const found = window.__m4aSessions()
+          .map((s) => s.id)
+          .find((id) => (window.__m5aSpecOf(id) || { spec: {} }).spec.cwd === dir)
+        return found || null
+      })()`)
+      if (echoId === null) {
+        ok('43 a project prompt is listed and inserted from the panel\'s own cwd', false,
+          'no panel is running in PROJECT_DIR — check 40a\'s spawn is this check\'s fixture')
+      } else {
+        // Focus it: the palette captures focusedId at OPEN time and lists the
+        // CAPTURED panel's cwd, so this click is what makes PROJECT_DIR the
+        // directory read. Retried for the same reason check 40's is.
+        const focused = await waitUntil(async () => {
+          await wc.executeJavaScript(`(() => {
+            const slot = document.querySelector('[data-panel-id=${JSON.stringify(echoId)}] .panel__slot')
+            if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()`)
+          return wc.executeJavaScript(`(() => {
+            const el = document.activeElement && document.activeElement.closest('.panel')
+            return el !== null && el.getAttribute('data-panel-id') === ${JSON.stringify(echoId)}
+          })()`)
+        }, 5000, 200)
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        // ENTER, not a click, for the same reason check 40 uses it: a mouse
+        // pick is fine (check 42 is what proves that now), but the assertion
+        // below reads the FOCUSED session through __m4aCellToScreen and the
+        // keyboard path leaves focus exactly where it was.
+        const insertRow = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'insert ${PROJECT_PROMPT_NAME}')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected) return 'no row'
+          const text = selected.textContent
+          // Both halves asserted before Enter: the NAME (so this is the
+          // project file and not the saved prompt check 40 seeded) and the
+          // SOURCE label (a swapped label is the silent half of this defect —
+          // the row still runs, it just tells the user the wrong story about
+          // where the text they are about to paste came from).
+          if (!text.includes('Insert prompt: ${PROJECT_PROMPT_NAME}') ||
+              !text.includes('project — .claude/commands')) return text
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          return true
+        })()`)
+        const arrived = insertRow === true
+          ? await waitUntil(
+              () => wc.executeJavaScript(`window.__m4aCellToScreen('zzprojectbody') !== null`),
+              3000
+            )
+          : false
+        ok('43 a project prompt is listed and inserted from the panel\'s own cwd',
+          arrived === true,
+          `focused=${focused} row=${insertRow} arrived=${arrived}`)
+      }
     }
 
   } catch (error) {
