@@ -16,6 +16,7 @@
     "postinstall": "electron-rebuild -f -w node-pty",
     "package": "npm run build && electron-builder --config electron-builder.config.cjs",
     "verify:package": "node scripts/verify-package.cjs",
+    "verify:packaged": "unset ELECTRON_RUN_AS_NODE && node scripts/verify-packaged.cjs",
     "verify:pty": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty.cjs",
     "verify:pty-manager": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty-manager.cjs",
     "verify:window": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-window-lifecycle.cjs",
