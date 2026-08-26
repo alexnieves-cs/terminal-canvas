@@ -378,6 +378,29 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       await sleep(300)
     }
 
+    // 16 — M6a. The first spawn creates; the second, after a detachAll that
+    // leaves the tmux session running, must report that it ATTACHED. This is
+    // the check that fails if hasSession is probed AFTER the spawn instead of
+    // before — `new-session -A` will have created the session by then, so a
+    // post-spawn probe answers true every single time and every panel claims
+    // to have reattached, including on a cold start.
+    {
+      const h1 = makeHarness(tmuxBackend)
+      const first = await h1.manager.create(spec('n-reattach'))
+      await sleep(700)
+      ok('16 a fresh session reports reattached false', first.reattached === false,
+        `reattached=${first.reattached}`)
+      h1.manager.detachAll()
+      await sleep(500)
+      const h2 = makeHarness(tmuxBackend)
+      const second = await h2.manager.create(spec('n-reattach'))
+      await sleep(700)
+      ok('16b the same panel spawned again reports reattached true', second.reattached === true,
+        `reattached=${second.reattached}`)
+      h2.manager.kill('n-reattach')
+      await sleep(300)
+    }
+
     // 15. destroy() ends the session, and shutdown() takes the server with it.
     {
       const h = makeHarness(tmuxBackend)

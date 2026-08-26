@@ -48,4 +48,12 @@ export interface PtyCreateResult {
   pid: number
   command: string
   cwd: string
+  /**
+   * True when this attached to a tmux session that was already running rather
+   * than creating one. Main's alone to know: `new-session -A` makes create and
+   * reattach the same call, so it is answered by a has-session probe taken
+   * BEFORE the spawn. Always false on the direct backend, which has no
+   * sessions to outlive anything.
+   */
+  reattached: boolean
 }

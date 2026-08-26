@@ -55,6 +55,7 @@ interface Session {
   killed: boolean
   command: string
   cwd: string
+  reattached: boolean
 }
 
 export class PtyManager {
@@ -81,6 +82,11 @@ export class PtyManager {
     const cwd = resolveCwd(spec.cwd)
     const command = resolveCommand(spec, loginEnv)
 
+    // BEFORE the spawn, not after. `new-session -A` creates the session if it
+    // is missing, so a probe taken afterwards answers true unconditionally and
+    // every panel — including one on a cold start — claims to have reattached.
+    const reattached = this.getBackend().hasSession(spec.panelId)
+
     const proc = this.getBackend().spawn(spec, command, cwd, env)
 
     const session: Session = {
@@ -90,7 +96,8 @@ export class PtyManager {
       flushTimer: null,
       killed: false,
       command,
-      cwd
+      cwd,
+      reattached
     }
     this.sessions.set(spec.panelId, session)
 
@@ -120,7 +127,7 @@ export class PtyManager {
         `${spec.cols}x${spec.rows} cwd=${cwd}`
     )
 
-    return { panelId: spec.panelId, pid: proc.pid, command, cwd }
+    return { panelId: spec.panelId, pid: proc.pid, command, cwd, reattached }
   }
 
   /**
@@ -139,7 +146,8 @@ export class PtyManager {
       panelId: s.panelId,
       pid: s.proc.pid,
       command: s.command,
-      cwd: s.cwd
+      cwd: s.cwd,
+      reattached: s.reattached
     }))
   }
 
