@@ -89,12 +89,27 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   const out: Command[] = []
 
   for (const panel of ctx.panels) {
-    out.push({
-      id: `panel.goto.${panel.id}`,
-      title: `Go to ${panel.label}`,
-      group: 'Panel',
-      run: () => actions.goToPanel(panel.id)
-    })
+    // The row's TITLE stays the command/cwd/id label — verify:panels check 39
+    // targets the row by that text, so it can't move. A user-set title rides
+    // as the SUBTITLE instead: haystack() in palette-model.ts is
+    // `${title} ${subtitle}`, so this is what makes a panel named "auth
+    // refactor" findable by typing "auth" into Cmd+K, not just by its command
+    // and cwd. Conditional, not `subtitle: panel.title`, so an untitled panel
+    // gets no subtitle key at all rather than one holding undefined.
+    out.push(panel.title !== undefined
+      ? {
+          id: `panel.goto.${panel.id}`,
+          title: `Go to ${panel.label}`,
+          subtitle: panel.title,
+          group: 'Panel',
+          run: () => actions.goToPanel(panel.id)
+        }
+      : {
+          id: `panel.goto.${panel.id}`,
+          title: `Go to ${panel.label}`,
+          group: 'Panel',
+          run: () => actions.goToPanel(panel.id)
+        })
   }
 
   {

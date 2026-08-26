@@ -893,7 +893,12 @@ with nothing in any log. `verify:pty-manager` 16/16b are the two halves, and
 they only separate the two implementations because 16 runs on a *fresh*
 session. The `=` on the target is the same exact-match rule every kill target
 obeys; without it panel `n1` reports a surviving session whenever `n12` is
-running.
+running. **M6a carries the fact and stops there — nothing renders it yet.**
+`PanelStatus.running.reattached` and `.cwd` are both live fields on every
+running panel with zero readers in the chrome; `TerminalPanel.tsx` reads only
+`status.command`. The spec's success criterion — a reattached panel visibly
+"saying so" — is deliberately NOT met by this milestone; that is a later
+sub-milestone's UI work, not a gap in this one.
 
 **The header's honest chain, and the backfill that must never happen
 (`TerminalPanel.tsx`).** The label is

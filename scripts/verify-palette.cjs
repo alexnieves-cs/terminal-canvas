@@ -388,6 +388,25 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     c.actions.calls[0][2] === 'auth refactor')
 }
 
+// 33 — M6a whole-branch review, Important 1. A titled panel's goto row must
+//     be findable by its TITLE, not just by its command/cwd/id label — the
+//     switcher is the primary find-a-panel surface on an infinite canvas, and
+//     "auth refactor" typed into Cmd+K found nothing until the row carried a
+//     subtitle (haystack() in palette-model.ts is `${title} ${subtitle}`).
+//     Asserting the exact row id (not just count === 1) is what would catch a
+//     regression that put the subtitle back on the wrong row.
+{
+  const rows = P.buildCommands(ctx({
+    panels: [
+      { id: 'p1', label: 'zsh — ~ (p1)', title: 'auth refactor' },
+      { id: 'p2', label: 'zsh — ~ (p2)' }
+    ]
+  }))
+  const found = P.filterCommands(rows, 'auth')
+  ok('33 a titled panel is findable in the palette by its title',
+    found.length === 1 && found[0].id === 'panel.goto.p1', found.map((c) => c.id).join(','))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

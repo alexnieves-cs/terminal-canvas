@@ -50,10 +50,11 @@ export interface PersistedPanel {
   // (per-panel environment overrides, say) would have those values vanish on
   // every restore with no warning anywhere in this file.
   /**
-   * User-set panel name. NOTHING in M4b writes this — no UI sets a title yet.
-   * Reserved because ideas-backlog item 6 puts titles on Panel and says
-   * "persisted by M4b": an optional field costs a line now and a format change
-   * later. Readers must tolerate its absence.
+   * User-set panel name, set from the command palette's rename row and
+   * persisted here since M6a (`layout-adapt.ts`'s `fromPanels`/`toPanels`).
+   * Reserved back in M4b — ideas-backlog item 6 put titles on Panel before any
+   * UI could set one — which is why the field predates its own writer.
+   * Readers must still tolerate its absence: most panels remain untitled.
    */
   title?: string
 }
