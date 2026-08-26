@@ -513,6 +513,24 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `parsed=${JSON.stringify(got[0])} roundTripped=${JSON.stringify(round)}`)
 }
 
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'Claude here', cwd: '/tmp', args: [] })
+  store.flushSync()
+
+  const onDisk = JSON.parse(readFileSync(path, 'utf8'))
+  const reread = L.createLayoutStore({ filePath: path })
+  reread.load()
+  ok('35 addPreset writes through the existing coalesced atomic path and survives a reload',
+    onDisk.presets.length === 1 && onDisk.presets[0].id === 'u1' &&
+      !('command' in onDisk.presets[0]) &&
+      reread.presets().length === 1 &&
+      reread.defaultPresetId() === L.DEFAULT_PRESET_ID,
+    `onDisk=${JSON.stringify(onDisk.presets)} reread=${reread.presets().length}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

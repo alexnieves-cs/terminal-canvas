@@ -5,6 +5,7 @@ import {
   parseLayout,
   type CanvasState,
   type LayoutSnapshot,
+  type Preset,
   type RestoreSettings,
   type Workspace
 } from '../shared/layout-schema'
@@ -51,6 +52,12 @@ export interface LayoutStore {
   save(incoming: CanvasState): void
   settings(): RestoreSettings
   setSetting(key: keyof RestoreSettings, value: boolean): void
+  /** User-created presets only; the built-ins live in main/presets.ts. */
+  presets(): Preset[]
+  /** Append one and schedule a write. Ids are minted by the caller. */
+  addPreset(preset: Preset): void
+  /** What Cmd+N spawns. May name a built-in, so main resolves it, not this. */
+  defaultPresetId(): string
   /** Return the active workspace to an empty canvas. */
   reset(): void
   /** Write now, synchronously. Never throws. */
@@ -191,6 +198,18 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       snapshot.settings[key] = value
       scheduleWrite()
     },
+
+    // Copied out, like settings(), so a caller cannot mutate the snapshot the
+    // store is about to serialise and have the write silently disagree with
+    // what addPreset scheduled.
+    presets: () => snapshot.presets.map((p) => ({ ...p })),
+
+    addPreset(preset) {
+      snapshot.presets = [...snapshot.presets, { ...preset }]
+      scheduleWrite()
+    },
+
+    defaultPresetId: () => snapshot.defaultPresetId,
 
     reset() {
       const w = activeWorkspace()
