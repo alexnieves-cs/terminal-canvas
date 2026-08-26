@@ -1055,7 +1055,7 @@ export function Canvas({
       void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
     },
     beginRenamePanel: () => {
-      // TODO: Task 7 — implement panel rename functionality
+      throw new Error('beginRenamePanel not implemented — Task 7 required')
     },
     resetCanvas: () => {
       // Main owns the confirmation dialog and the counts request. The palette
