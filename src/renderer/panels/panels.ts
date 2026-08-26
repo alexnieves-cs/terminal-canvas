@@ -21,6 +21,16 @@ export interface Panel {
    * those nodes at all.
    */
   z: number
+  /**
+   * A name the user typed. Optional because most panels never get one, and
+   * because the fallback chain below it (resolved command, then "login shell")
+   * is what an unnamed panel is supposed to show — see TerminalPanel's header.
+   *
+   * It lives on Panel rather than PanelSession because it is layout, not
+   * session state: it survives a relaunch, it belongs to the id rather than to
+   * the process, and a panel that has never spawned can still have one.
+   */
+  title?: string
 }
 
 export const PANEL_W = 720

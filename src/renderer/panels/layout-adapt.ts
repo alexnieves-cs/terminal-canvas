@@ -28,7 +28,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       ...(p.command === undefined ? {} : { command: p.command }),
       args: [...p.args]
     },
-    z: p.z
+    z: p.z,
+    ...(p.title === undefined ? {} : { title: p.title })
   }))
 }
 
@@ -42,6 +43,9 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     z: panel.z,
     cwd: panel.spec.cwd,
     ...(panel.spec.command === undefined ? {} : { command: panel.spec.command }),
+    // Same absent-stays-absent rule as `command` directly above, and for the
+    // same reason: a spread would write `title: undefined` into layout.json.
+    ...(panel.title === undefined ? {} : { title: panel.title }),
     args: [...panel.spec.args]
   }))
 }
