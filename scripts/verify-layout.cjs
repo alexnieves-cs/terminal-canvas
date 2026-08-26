@@ -600,6 +600,87 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `warnings=${JSON.stringify(w)} fileWarnings=${JSON.stringify(round.warnings)}`)
 }
 
+/* ---- M5b: rename, delete, and re-default a preset ---- */
+
+// 42. renamePreset renames the named preset and nothing else.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'one', cwd: '~', args: [] })
+  store.addPreset({ id: 'u2', name: 'two', cwd: '~', args: [] })
+  const changed = store.renamePreset('u1', 'renamed')
+  clock.fire()
+  const presets = JSON.parse(readFileSync(path, 'utf8')).presets
+  ok('42 renamePreset renames exactly one preset',
+    changed === true && presets.length === 2 &&
+      presets.find((p) => p.id === 'u1').name === 'renamed' &&
+      presets.find((p) => p.id === 'u2').name === 'two',
+    JSON.stringify(presets))
+}
+
+// 43. Renaming an id that is not there reports false and writes nothing. Main
+//     needs the difference: reporting success for a vanished preset means the
+//     palette shows a rename that did not happen.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  ok('43 renaming an unknown id reports false', store.renamePreset('nope', 'x') === false)
+}
+
+// 44. deletePreset removes only that preset and reports true.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'one', cwd: '~', args: [] })
+  store.addPreset({ id: 'u2', name: 'two', cwd: '~', args: [] })
+  const changed = store.deletePreset('u1')
+  clock.fire()
+  const presets = JSON.parse(readFileSync(path, 'utf8')).presets
+  ok('44 deletePreset removes exactly one preset',
+    changed === true && presets.length === 1 && presets[0].id === 'u2',
+    JSON.stringify(presets))
+}
+
+// 45. Deleting the DEFAULT preset falls the default back to the built-in
+//     login shell id rather than leaving defaultPresetId naming a preset that
+//     no longer exists. resolveDefault() in main/presets.ts would recover
+//     anyway, but a stored id pointing at nothing is a fact on disk that
+//     survives every future launch, and only this file can fix it at the
+//     moment the preset goes away.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'one', cwd: '~', args: [] })
+  store.setDefaultPreset('u1')
+  store.deletePreset('u1')
+  clock.fire()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  ok('45 deleting the default preset restores the built-in default',
+    written.defaultPresetId === 'shell', written.defaultPresetId)
+}
+
+// 46. setDefaultPreset persists, and does NOT validate against the built-ins —
+//     only main knows those (main/presets.ts's resolveDefault), exactly as
+//     parseLayout only checks the FORMAT of defaultPresetId.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.setDefaultPreset('claude')
+  clock.fire()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  ok('46 setDefaultPreset persists a built-in id it cannot itself verify',
+    written.defaultPresetId === 'claude', written.defaultPresetId)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

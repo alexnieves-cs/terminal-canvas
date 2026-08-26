@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import {
+  DEFAULT_PRESET_ID,
   defaultSnapshot,
   defaultWorkspace,
   parseLayout,
@@ -56,6 +57,15 @@ export interface LayoutStore {
   presets(): Preset[]
   /** Append one and schedule a write. Ids are minted by the caller. */
   addPreset(preset: Preset): void
+  /** Rename one user preset. False when the id names nothing. */
+  renamePreset(id: string, name: string): boolean
+  /**
+   * Remove one user preset. False when the id names nothing — including every
+   * built-in id, which is not this file's data to remove.
+   */
+  deletePreset(id: string): boolean
+  /** What Cmd+N spawns. Not validated here: only main knows the built-ins. */
+  setDefaultPreset(id: string): void
   /** What Cmd+N spawns. May name a built-in, so main resolves it, not this. */
   defaultPresetId(): string
   /** Return the active workspace to an empty canvas. */
@@ -206,6 +216,31 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
 
     addPreset(preset) {
       snapshot.presets = [...snapshot.presets, { ...preset }]
+      scheduleWrite()
+    },
+
+    renamePreset(id, name) {
+      const found = snapshot.presets.find((p) => p.id === id)
+      if (!found) return false
+      snapshot.presets = snapshot.presets.map((p) => (p.id === id ? { ...p, name } : p))
+      scheduleWrite()
+      return true
+    },
+
+    deletePreset(id) {
+      const before = snapshot.presets.length
+      snapshot.presets = snapshot.presets.filter((p) => p.id !== id)
+      if (snapshot.presets.length === before) return false
+      // A defaultPresetId naming a preset that no longer exists is a fact on
+      // disk that outlives this run. resolveDefault() recovers at read time,
+      // but only here is the moment the preset goes away visible.
+      if (snapshot.defaultPresetId === id) snapshot.defaultPresetId = DEFAULT_PRESET_ID
+      scheduleWrite()
+      return true
+    },
+
+    setDefaultPreset(id) {
+      snapshot.defaultPresetId = id
       scheduleWrite()
     },
 
