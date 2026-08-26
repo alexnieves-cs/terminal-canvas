@@ -1918,6 +1918,53 @@ app.whenReady().then(async () => {
         `${JSON.stringify(before)} -> ${JSON.stringify(state)}`)
     }
 
+    // 37. Cmd+Z stands down too. Rule 3 is "canvas shortcuts stand down", and
+    //     Cmd+Z is a menu accelerator on exactly the same footing as Cmd+V
+    //     (main/menu.ts sends edit:undo unconditionally). With the palette open
+    //     and a name half-typed, an unguarded edit:undo does not undo the
+    //     TYPING: it runs applyHistory, which REMOVES a panel and disposes its
+    //     session, behind the overlay, with nothing on screen to explain it —
+    //     strictly worse than the paste check 35 covers.
+    {
+      const ids = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      // Put a known entry on the history stack rather than depending on
+      // whatever the preceding checks happened to leave there: a check whose
+      // undo had nothing to undo would pass without testing anything.
+      const before = new Set(await ids())
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const spawned = await waitUntil(async () => {
+        const now = await ids()
+        return now.length > before.size ? now : false
+      }, 3000)
+      const newId = spawned ? spawned.find((id) => !before.has(id)) : undefined
+
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+
+      wc.send('edit:undo')
+      await sleep(400) // nothing to wait FOR: the assertion is that nothing happens
+      const survived = newId !== undefined && (await ids()).includes(newId)
+
+      // The other half, and the reason this check cannot pass vacuously: with
+      // the palette CLOSED the very same event must still undo the spawn. If
+      // it does not, the guard above is not standing down, it is broken.
+      await wc.executeJavaScript(`
+        document.querySelector('.palette__input')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        true
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+      wc.send('edit:undo')
+      const undone = newId !== undefined &&
+        Boolean(await waitUntil(async () => !(await ids()).includes(newId), 3000))
+
+      ok('37 Cmd+Z does not undo behind an open palette, and still undoes once it is closed',
+        survived && undone, `newId=${newId} survived=${survived} undoneAfterClose=${undone}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

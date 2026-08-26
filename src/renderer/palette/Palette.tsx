@@ -174,8 +174,9 @@ export function Palette(props: PaletteProps): JSX.Element {
                 i === index ? 'palette__row--selected' : '',
                 row.disabledReason ? 'palette__row--disabled' : ''
               ].join(' ')}
-              // onMouseDown, not onClick: a click would blur the input first,
-              // and the blur handler closes the palette.
+              // onMouseDown, not onClick: it keeps DOM focus in the input,
+              // where a click would blur it first — and the input's focus is
+              // rule 1, the only thing holding the keyboard away from xterm.
               onMouseDown={(e: MouseEvent<HTMLLIElement>) => {
                 e.preventDefault()
                 if (row.disabledReason) return

@@ -438,17 +438,24 @@ export function Canvas({
   // focused (xterm's hidden textarea, most of the time) rather than this
   // history stack.
   useEffect(() => {
-    const offUndo = window.canvas.edit.onUndo(() =>
+    // Rule 3 again, and this is the sharpest edge of it: Cmd+Z is a menu
+    // accelerator on exactly the same footing as Cmd+V, so with the palette
+    // open and a name half-typed it does not undo the TYPING — it runs
+    // applyHistory, which removes a panel and disposes its session, behind the
+    // overlay, with no visible cause. verify:panels 37.
+    const offUndo = window.canvas.edit.onUndo(() => {
+      if (palette.isOpen()) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
-    )
-    const offRedo = window.canvas.edit.onRedo(() =>
+    })
+    const offRedo = window.canvas.edit.onRedo(() => {
+      if (palette.isOpen()) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(next); return next })
-    )
+    })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory])
+  }, [applyHistory, palette.isOpen])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same

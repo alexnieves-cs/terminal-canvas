@@ -196,5 +196,14 @@ export function useViewport(
     )
   }, [hostRef])
 
-  return { viewport, resetViewport: () => setViewport(INITIAL), worldCentre }
+  // Referentially stable, and that is load-bearing rather than tidy: a fresh
+  // arrow per render propagates straight through Canvas.tsx's
+  // useMemo([resetViewport]) for the palette's actions into Palette.tsx's
+  // command list, whose [rows] effect re-seats the SELECTION. Canvas re-renders
+  // on every mousemove over .canvas (setCursor), so an unstable identity here
+  // means nudging the mouse silently moves the palette's highlighted row out
+  // from under the user's arrow keys, and Enter runs the wrong command.
+  const resetViewport = useCallback(() => setViewport(INITIAL), [])
+
+  return { viewport, resetViewport, worldCentre }
 }
