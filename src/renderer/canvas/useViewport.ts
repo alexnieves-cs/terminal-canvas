@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { normalizeWheel } from './canvas-input'
-import { fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
+import { centreOn as centreOnRect, fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
 
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
 const KEYBOARD_ZOOM_STEP = 1.2
@@ -28,6 +28,13 @@ export interface ViewportControls {
    * the camera), but a READ of where it already is is safe to expose.
    */
   worldCentre: () => Point
+  /**
+   * Frame one panel without changing the zoom. The general setter stays
+   * private — nothing outside this hook should move the camera — and this is
+   * the third narrow verb that asks by name, after resetViewport and
+   * worldCentre.
+   */
+  centreOn: (rect: WorldRect) => void
 }
 
 /**
@@ -205,5 +212,15 @@ export function useViewport(
   // from under the user's arrow keys, and Enter runs the wrong command.
   const resetViewport = useCallback(() => setViewport(INITIAL), [])
 
-  return { viewport, resetViewport, worldCentre }
+  // Same referential-stability reasoning as resetViewport/worldCentre above:
+  // this sits in Canvas.tsx's paletteActions dep array, and a fresh identity
+  // per render would re-seat the palette's selection on every mousemove.
+  const centreOn = useCallback((rect: WorldRect) => {
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    setViewport((vp) => centreOnRect(vp, rect, { width: bounds.width, height: bounds.height }))
+  }, [hostRef])
+
+  return { viewport, resetViewport, worldCentre, centreOn }
 }

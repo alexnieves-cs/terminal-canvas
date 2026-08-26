@@ -345,7 +345,7 @@ export function Canvas({
     if (!palette.open) setInputMode(null)
   }, [palette.open])
 
-  const { viewport, resetViewport, worldCentre } = useViewport(
+  const { viewport, resetViewport, worldCentre, centreOn } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen
   )
   const version = useRegistryVersion(registry)
@@ -932,7 +932,16 @@ export function Canvas({
       // of truth for what Cmd+N spawns, and it is main's.
       void window.canvas.preset.setDefault(id).then(reloadPresets)
     },
-    goToPanel: () => {},            // Task 7
+    goToPanel: (id) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (!panel) return
+      centreOn(panel.rect)
+      // Selection WITHOUT the wake. onSelectPanel is the click path and it
+      // deliberately wakes (a card's whole affordance is "click to start");
+      // navigating is not interacting, so the switcher sets the highlight and
+      // leaves dormancy alone. verify:panels 39.
+      setSelectedId(id)
+    },
     insertPrompt: () => {},         // Task 11
     beginSavePrompt: () => {},      // Task 11
     deletePrompt: () => {},         // Task 11
@@ -946,7 +955,7 @@ export function Canvas({
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
-  }), [resetViewport, presetRows, reloadPresets, palette.openPalette])
+  }), [resetViewport, centreOn, presetRows, reloadPresets, palette.openPalette])
 
   const panelRows = useMemo<PanelRow[]>(
     () => panels.map((p) => ({ id: p.rect.id, label: panelLabel(p) })),

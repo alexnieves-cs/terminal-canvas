@@ -201,6 +201,17 @@ app.whenReady().then(async () => {
   // so the row the check clicks is the one it means rather than whichever
   // built-in the fuzzy matcher happened to rank first.
   const RENAMABLE_PRESET = { id: 'u1', name: 'harness preset', cwd: '~', args: [] }
+  // Check 39's fixture. reset() (check 23) always collapses the canvas to
+  // firstRunPanels() — one panel — so nothing seeded into the BOOT layout can
+  // survive to the end of the run; check 39 needs a still-dormant,
+  // never-spawned panel at the very end of the suite, after reset, after the
+  // reload, after every check that runs between them. It is injected into
+  // the layout file check 26 already reloads from (see the comment there),
+  // parked far outside every coordinate any later check clicks — including
+  // check 30's background click at screen (0,0), which happens to land on
+  // world (-120,-120) and is what silently re-wakes the reset panel (p1) a
+  // naive seed would rely on instead.
+  const NEVER_WOKEN_ID = 'never-woken'
   writeFileSync(LAYOUT_PATH, JSON.stringify({
     version: 1,
     activeWorkspaceId: 'w1',
@@ -1653,6 +1664,38 @@ app.whenReady().then(async () => {
           : null
         const pidBefore = panesBefore ? panesBefore.get(newId) : undefined
 
+        // Check 39's fixture, seeded into the file THIS reload restores from
+        // rather than the boot one (see NEVER_WOKEN_ID's comment above: a
+        // boot-seeded panel dies at check 23's reset before check 39 ever
+        // runs). flushLayoutStore() lands the renderer's current state (p1
+        // plus the panel just spawned above) on disk first, so appending here
+        // — rather than replacing via layoutStore.save() — cannot drop either
+        // of them. No live session will ever exist for this id, so boot
+        // reconciliation after the reload below restores it dormant, exactly
+        // like a real relaunch restores a panel whose process already died.
+        flushLayoutStore()
+        {
+          const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+          const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+          const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+          ws.panels.push({
+            id: NEVER_WOKEN_ID,
+            // Far outside anything any later check's camera ever frames or
+            // clicks, including check 30's unqualified background mousedown.
+            // 720x460 matches PANEL_W/PANEL_H — hardcoded rather than
+            // imported, since the exact box size is irrelevant here (nothing
+            // reads it) and importing it would be one more coupling for no
+            // benefit.
+            x: 50000, y: 50000, w: 720, h: 460, z: maxZ + 1,
+            cwd: '~', args: ['-l']
+          })
+          writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+          // layout:load answers from layoutStore's in-memory snapshot, not a
+          // fresh disk read (see main/ipc.ts) — without re-loading here, the
+          // reload below would restore the file as it was before this push.
+          layoutStore.load()
+        }
+
         // The real thing: a renderer teardown that skips React cleanup,
         // exactly like Cmd+R.
         const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -2086,6 +2129,69 @@ app.whenReady().then(async () => {
       ok('38b the palette reopens in command mode after a completed and a cancelled rename',
         freshAfterSubmit === true && freshAfterCancel === true,
         `afterSubmit=${freshAfterSubmit} afterCancel=${freshAfterCancel}`)
+    }
+
+    // 39. "Go to <panel>" frames a dormant panel and does NOT start its
+    //     process. Waking hangs off SELECT, not focus (onSelectPanel clears
+    //     dormantIds and calls registry.wake), so the obvious implementation
+    //     — reuse onSelectPanel — would spawn an agent as a side effect of
+    //     NAVIGATING. On a restored twelve-panel canvas that is twelve CLIs
+    //     launched from a keyboard jump, which is the failure M4b's dormancy
+    //     rule exists to prevent. The card still says "click to start", and
+    //     it still means it.
+    //
+    //     Requires a dormant, never-spawned panel to still exist at this
+    //     point in the run. Every SEED_PANELS id got woken by the "wake every
+    //     panel" step before check 1, and reset (check 23) collapses the
+    //     canvas to one fresh, non-dormant panel — so nothing seeded into the
+    //     BOOT layout can be the fixture here. NEVER_WOKEN_ID is seeded
+    //     instead into the layout file check 26's reload restores from (see
+    //     the comment there), parked at world (50000, 50000) — far outside
+    //     every click any later check makes, including check 30's
+    //     unqualified background mousedown, which is what silently re-wakes
+    //     the reset panel (p1) and is the reason p1 itself is not this
+    //     fixture. A null dormantId here means one of those assumptions
+    //     broke, and the check fails loudly rather than silently skipping —
+    //     a check that passes because it found nothing to test is worse than
+    //     one that fails.
+    {
+      const dormantId = (await wc.executeJavaScript(`
+        (window.__m4aSessions().find((s) => s.dormant && !s.spawned) || {}).id || null
+      `))
+      if (dormantId === null) {
+        ok('39 go-to frames a dormant panel without spawning it', false,
+          'no dormant, unspawned panel survived to this check — fixture assumption broke')
+      } else {
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        // Cmd+K TOGGLES (usePalette.ts) — 38b leaves the palette OPEN in
+        // command mode, so a blind Cmd+K here would CLOSE it instead of
+        // opening it, and everything below would silently act on a null
+        // input. Only dispatch it when the palette is not already open, then
+        // wait on the actual DOM state (as check 33 does) instead of a fixed
+        // sleep that raced this exact toggle once already.
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'go to ${dormantId}')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 50))
+          document.querySelector('.palette__row').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        })()`)
+        await sleep(400)
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const stillDormant = await wc.executeJavaScript(`
+          (window.__m4aSessions().find((s) => s.id === '${dormantId}') || {}).spawned === false
+        `)
+        ok('39 go-to frames a dormant panel without spawning it',
+          (after.x !== before.x || after.y !== before.y) && stillDormant === true,
+          `${JSON.stringify(before)} -> ${JSON.stringify(after)} spawned=${!stillDormant}`)
+      }
     }
 
   } catch (error) {
