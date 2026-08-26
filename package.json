@@ -14,6 +14,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-rebuild -f -w node-pty",
+    "package": "npm run build && electron-builder --config electron-builder.config.cjs",
+    "verify:package": "node scripts/verify-package.cjs",
     "verify:pty": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty.cjs",
     "verify:pty-manager": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty-manager.cjs",
     "verify:window": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-window-lifecycle.cjs",
@@ -26,7 +28,7 @@
     "verify:canvas": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-canvas.cjs",
     "verify:xterm": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-xterm-detach.cjs",
     "verify:panels": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels.cjs",
-    "verify": "npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:palette && npm run verify:tmux && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
+    "verify": "npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:palette && npm run verify:tmux && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
   },
   "dependencies": {
     "node-pty": "1.1.0"
@@ -40,6 +42,7 @@
     "@xterm/addon-webgl": "0.18.0",
     "@xterm/xterm": "5.5.0",
     "electron": "43.4.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
