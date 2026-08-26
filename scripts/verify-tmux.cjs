@@ -283,6 +283,51 @@ const ok = (n, pass, detail) => {
     argOk && hookOk, `argv=${JSON.stringify(args)} hookOk=${hookOk}`)
 }
 
+// 20. Dev and packaged builds must land on DIFFERENT tmux servers. before-quit
+// calls shutdown(), which is kill-server: sharing a socket means quitting
+// either build destroys the other's running agents, which is precisely the
+// outcome M4c exists to prevent. M5c is the first thing that makes two
+// simultaneous instances plausible, so this is where the split is made.
+{
+  const dev = T.resolveSocket({ packaged: false })
+  const packaged = T.resolveSocket({ packaged: true })
+  ok('20 dev and packaged resolve to different sockets',
+    dev === T.TMUX_SOCKET && packaged === T.TMUX_SOCKET_PACKAGED && dev !== packaged,
+    `dev=${dev} packaged=${packaged}`)
+}
+
+// 21. The dev value is unchanged. Every argv builder still defaults to
+// TMUX_SOCKET, so check 9 keeps its meaning; M5c adds a socket, it does not
+// move one.
+{
+  ok('21 the dev socket is still the historic production value',
+    T.resolveSocket({ packaged: false }) === 'terminal-canvas',
+    T.resolveSocket({ packaged: false }))
+}
+
+// 22. The developer override. verify:packaged launches a REAL packaged binary,
+// and must be able to point it at a scratch server: without this it would
+// spawn sessions on — and could kill-server — the socket a real packaged app
+// is using. Same rule as "the verify suites must never touch the production
+// socket", one level up.
+{
+  ok('22 an explicit override beats both defaults',
+    T.resolveSocket({ packaged: true, override: 'tc-scratch' }) === 'tc-scratch' &&
+      T.resolveSocket({ packaged: false, override: 'tc-scratch' }) === 'tc-scratch')
+}
+
+// 23. THE SILENT ONE. `TC_TMUX_SOCKET=` in a shell yields '', not undefined,
+// and an empty -L argument does not mean "no socket" — tmux falls back to its
+// DEFAULT socket, i.e. the user's own tmux server, the one shutdown()'s
+// kill-server would then destroy. A whitespace-only value is the same shape.
+// Blank must be indistinguishable from unset.
+{
+  const cases = [undefined, null, '', '   ', '\t\n']
+  const bad = cases.filter((o) => T.resolveSocket({ packaged: false, override: o }) !== 'terminal-canvas')
+  ok('23 a blank or whitespace override is ignored, never passed through',
+    bad.length === 0, `leaked=${JSON.stringify(bad)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

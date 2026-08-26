@@ -28,6 +28,41 @@ export const TMUX_SOCKET = 'terminal-canvas'
 export type TmuxSocket = string
 
 /**
+ * The packaged app's socket. A packaged build and a dev build are two separate
+ * installations of the same program, and they must not share a tmux server:
+ * before-quit calls shutdown(), which is kill-server, so a shared socket means
+ * quitting either one destroys the other's running agents — the exact outcome
+ * M4c exists to prevent. Nothing before M5c made two simultaneous instances
+ * plausible, which is why this arrives with packaging rather than with tmux.
+ */
+export const TMUX_SOCKET_PACKAGED: TmuxSocket = 'terminal-canvas-app'
+
+/**
+ * Which socket this run uses. Pure, so the whole rule is covered by verify:tmux
+ * without an Electron runtime; main calls it once with app.isPackaged.
+ *
+ * `override` is a DEVELOPER flag (TC_TMUX_SOCKET), with no UI, no persistence
+ * and no settings entry — the separation ideas-backlog #72 asks for. It exists
+ * so verify:packaged can launch a real packaged binary against a scratch server
+ * instead of the one a real packaged app is using.
+ *
+ * A blank override is treated as unset, and that is load-bearing rather than
+ * tidy: `TC_TMUX_SOCKET=` in a shell produces '', and tmux given an empty -L
+ * does not error — it falls back to the DEFAULT socket, i.e. the user's own
+ * tmux server, which shutdown() would then kill-server. Blank has to be
+ * indistinguishable from unset or the failure is silent and other people's work
+ * is what it costs.
+ */
+export function resolveSocket(o: {
+  packaged: boolean
+  override?: string | null | undefined
+}): TmuxSocket {
+  const override = o.override?.trim()
+  if (override) return override
+  return o.packaged ? TMUX_SOCKET_PACKAGED : TMUX_SOCKET
+}
+
+/**
  * set-hook and #{pane_dead_status} both predate 3.0 comfortably; 3.0 is the
  * floor because it is old enough to be everywhere and new enough that we are
  * not guessing about behaviour we never tested.
