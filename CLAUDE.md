@@ -22,6 +22,7 @@ Don't "simplify" those away.
 ```sh
 npm run dev            # electron-vite dev (unsets ELECTRON_RUN_AS_NODE first)
 npm run build          # typecheck + electron-vite build
+npm run package         # electron-builder: the unsigned .app and .dmg, into release/
 npm run typecheck      # both projects; or typecheck:node / typecheck:web individually
 npm run verify         # every suite below, then a build, then the suites that need the build
 ```
@@ -36,7 +37,9 @@ work is done. Individual suites:
 | `verify:registry` | plain node | 24 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19) |
 | `verify:layout` | plain node | 57 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57) |
 | `verify:palette` | plain node | 30 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–30) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list |
-| `verify:tmux` | plain node | 20 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19) |
+| `verify:tmux` | plain node | 26 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19). M5c adds `resolveSocket`: dev and packaged landing on different sockets (20), the dev socket unchanged from its historic value (21), an explicit override beating both defaults (22), a blank or whitespace override falling back to the default rather than leaking through to tmux's own default socket (23), and `buildStartServerArgs` — the one tmux argv that used to be hand-rolled — defaulting to the private socket and threading an explicit one (24–25). The count is 26 while the last number is 25, because of the lettered sub-check `17b` |
+| `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value: `node-pty` unpacked from the asar and the pattern depth-independent (1–2), `asar` actually on (3), the `files` globs (4–5), app identity and output dir (6–7), signing explicitly *decided* rather than unmentioned (8), targets and architecture (9), and the arch being a parameter rather than a constant (10) |
+| `verify:packaged` | real Electron, **not in `npm run verify`** | 8 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped `PATH`, a throwaway `--user-data-dir` and a scratch `TC_TMUX_SOCKET`. Asserts the app survives startup (3 — the asar/`node-pty` proof), reports itself packaged (4), recovered a PATH launchd never gave it (5 — the first time `shell-env.ts`'s reason for existing has ever been observed), used the scratch socket (6), named a backend and a reason (7), and actually spawned a PTY (8). Kept out of the default chain because it rebuilds native modules and reaches electron-builder's cache — minutes, plus a network dependency — and the repo's one green-or-not signal must stay fast and offline. It is the **pre-release gate**; run it before cutting a build |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 18 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). Skipped loudly, never silently, when no tmux binary is found |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
@@ -839,6 +842,40 @@ every machine with no tmux binary, because check 26 and its reload skip together
 reason that has nothing to do with the command palette. A panel with no live session restores
 dormant under either backend ("Dormancy is about spawning, not attaching"), so check 39's reload
 needs nothing check 26 set up and is run unconditionally.
+
+**The packaging config is a function, not a blob (`build/builder-config.cjs`).** A `"build"`
+key in `package.json` or an `electron-builder.yml` has no *function* in it, so any check
+written against one reads JSON and compares it to itself. `buildConfig(opts)` returns the
+config, which is what lets `verify:package` assert "`node-pty` is unpacked" as a property of a
+computation in the cheapest tier the repo has. It is plain CJS in a TypeScript-first repo on
+purpose: electron-builder loads it itself, at build time, in a process nothing here can put
+esbuild in front of — and the payoff is that `verify-package.cjs` is the one plain-node suite
+needing no esbuild entry, because the module is import-free. Keep it import-free; requiring
+anything from `src/` drags the TypeScript build into the config load.
+
+**`asarUnpack` is the difference between an app and a demo (`build/builder-config.cjs`).**
+`node-pty` is a native module, and a `.node` binary cannot be `require`d out of an asar
+archive. Get it wrong and the app launches, renders the canvas, shows its first panel, and
+dies at the first `pty:create` — the latest and quietest failure this codebase can produce.
+The pattern is anchored `**/node_modules/node-pty/**` rather than at the root so it keeps
+matching if npm hoists `node-pty` to a nested depth; a root-anchored pattern stops matching
+silently, months later, with no code change to blame. `verify:package` 1–2 pin both halves and
+`verify:packaged` 8 is the end-to-end proof.
+
+**A packaged build must not share a tmux server with a dev build (`tmux-args.ts`'s
+`resolveSocket`, `main/index.ts`).** `before-quit` calls `shutdown()`, which is `kill-server`
+on the private socket, so a shared socket means quitting either build destroys the other's
+running agents — the exact outcome M4c exists to prevent, arriving through a door M4c could
+not see, because nothing before M5c made two simultaneous instances plausible. `TMUX_SOCKET`
+stays `'terminal-canvas'` and stays every builder's default, so `verify:tmux` check 9 is
+untouched; packaged resolves to `'terminal-canvas-app'`. The `TC_TMUX_SOCKET` override is a
+developer flag with no UI, and `verify:packaged` is why it exists. **A blank override must be
+treated as unset** (`verify:tmux` 23): `TC_TMUX_SOCKET=` in a shell is `''`, and tmux given an
+empty `-L` does not error — it falls back to the *default* socket, i.e. the user's own tmux
+server, which `shutdown()` would then `kill-server`. M5c also moved `start-server`'s argv out
+of `tmux-probe.ts` and into `buildStartServerArgs`: it was the one tmux argv in the codebase
+built by hand, which is exactly why check 9's list of socket-targeting argvs never mentioned
+it.
 
 ## Gotchas
 

@@ -2255,6 +2255,19 @@ so it collects nothing.
 - **Nearest existing entry: #18** and **#39.** #18 measures what the *machine* spends and is
   aimed at the user; #39 exports work product. This exports *app state*, for debugging.
 
+## 76. An app icon
+
+M5c ships with Electron's default icon. That is a deliberate deferral, not an oversight:
+choosing an app icon is a design pass, and acquiring one as a side effect of "make it
+package" is how a placeholder becomes permanent.
+
+- **Cheap and self-contained:** an `.icns` under `build/`, which electron-builder picks up
+  from `directories.buildResources` with no config change at all.
+- **Constraint: it is the first visual asset this repo would own,** and there is currently
+  no place for one — every pixel in the app today is CSS or xterm.
+- **Nearest existing entry: none.** Distribution is absent from the original backlog; #74
+  is the only other M5c-adjacent entry and it covers updates, not appearance.
+
 ## A note on sequencing for 41–75
 
 The section below was written for entries 1–40 and has **not** been re-ordered to include

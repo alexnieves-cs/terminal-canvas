@@ -40,6 +40,9 @@ npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
+npm run package              # the unsigned .app and .dmg, into release/
+npm run verify:package       # the packaging config, as a value, plain node
+npm run verify:packaged      # packages for real and launches it — NOT in verify
 ```
 
 `node-pty` is a native module built for Electron's ABI, so the checks that touch it run under
@@ -170,6 +173,15 @@ Nothing here ever writes into `.claude/`: authoring a file someone will commit i
 decision to ask for, not a side effect of "save". Two prompts with the same name
 from the two sources stay two rows, each labelled with its source.
 
+**A packaged build is a separate installation.** `productName` is `Terminal Canvas`, and
+`app.getPath('userData')` derives from the app's name — so the packaged app has its own
+`layout.json`, its own presets and prompts, and its own tmux socket
+(`terminal-canvas-app`), none of which the `npm run dev` build can see. The first launch
+therefore opens on one fresh panel rather than on your dev canvas; that is the two
+installations being separate, not data loss. The socket half is not cosmetic:
+`before-quit` calls `shutdown()`, which is `kill-server`, so a shared socket would mean
+quitting either build destroyed the other build's running agents.
+
 ## Milestones
 
 | | Scope | Status |
@@ -182,7 +194,7 @@ from the two sources stay two rows, each labelled with its source.
 | M4c | tmux backing: sessions survive the renderer | ✅ done |
 | M5a | Panel presets: saved spawns, a menu, Cmd+N's default | ✅ done |
 | M5b | Command palette: Cmd+K, preset management, panel switcher, prompts | ✅ done |
-| M5c | electron-builder packaging | |
+| M5c | electron-builder packaging | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
