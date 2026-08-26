@@ -1,5 +1,6 @@
 import { basename } from 'node:path'
 import { DEFAULT_PRESET_ID, type Preset } from '../shared/layout-schema'
+import { IPC_EVENTS, type PresetTemplate } from '../shared/ipc-contract'
 
 /**
  * The preset helpers, and deliberately NOTHING that touches the disk, the
@@ -42,6 +43,52 @@ export function allPresets(user: Preset[]): Preset[] {
  */
 export function resolveDefault(user: Preset[], id: string): Preset {
   return allPresets(user).find((p) => p.id === id) ?? BUILT_IN_PRESETS[0]
+}
+
+/**
+ * A preset as the renderer needs it — the panel id and the name stripped off.
+ *
+ * Absence is preserved by CONSTRUCTION rather than by copying the whole
+ * object: spreading a preset would carry `command: undefined` into the
+ * payload, which survives structured clone but reads as "explicitly none" to
+ * any later `'command' in template` check.
+ */
+export function templateOf(preset: {
+  cwd: string
+  command?: string
+  args: string[]
+  w?: number
+  h?: number
+}): PresetTemplate {
+  const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
+  if (preset.command !== undefined) template.command = preset.command
+  if (preset.w !== undefined) template.w = preset.w
+  if (preset.h !== undefined) template.h = preset.h
+  return template
+}
+
+/**
+ * Tell one renderer what Cmd+N should spawn from now on.
+ *
+ * It lives HERE, not inline in main/index.ts, so verify:panels can install the
+ * very push production installs instead of a hand-written send in the harness
+ * — the same reason panels-entry.cjs re-exports attachPtyLifecycle rather than
+ * letting the suite write its own lambda. verify:panels 32 is the check that
+ * depends on it, and a copy in the harness would have proven the harness
+ * right and production still inert.
+ *
+ * `sender` and `store` are structural types on purpose: an electron import
+ * here would drag this file (and verify:layout's preset checks with it) out of
+ * the plain-node tier, exactly as an fs import would to layout-store.ts.
+ */
+export function pushDefaultPreset(
+  sender: { send(channel: string, template: PresetTemplate): void },
+  store: { presets(): Preset[]; defaultPresetId(): string }
+): void {
+  sender.send(
+    IPC_EVENTS.PRESET_DEFAULT,
+    templateOf(resolveDefault(store.presets(), store.defaultPresetId()))
+  )
 }
 
 /** Checked against the built-ins too, so `u`-ids can never shadow `claude`. */

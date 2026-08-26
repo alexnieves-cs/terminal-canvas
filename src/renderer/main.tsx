@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 import type { CanvasState } from '@shared/layout-schema'
+import type { PresetTemplate } from '@shared/ipc-contract'
 import { DEFAULT_CAMERA } from '@shared/layout-schema'
 import { App } from './App'
 import { installDropGuard } from './drop-guard'
@@ -13,6 +14,32 @@ installDropGuard()
 
 const container = document.getElementById('root')
 if (!container) throw new Error('#root missing from index.html')
+
+/**
+ * What Cmd+N spawns, pushed by main and caught BEFORE React exists.
+ *
+ * The subscription is at module scope, ahead of boot()'s first await, and the
+ * ordering that makes it work is a guarantee rather than a wider race window:
+ * module script evaluation finishes before the page's load event, and main
+ * sends PRESET_DEFAULT from did-finish-load, which follows that load event.
+ * boot() then awaits TWO IPC round trips (layout.load, pty.list) before the
+ * first render, so Canvas.tsx's own subscription — inside an effect, at least
+ * two macrotask hops later — does not exist yet when the push arrives. It
+ * subscribed, the event landed with no listener, and nothing ever re-pushed:
+ * a hand-edited "defaultPresetId": "claude" gave a login shell forever, with
+ * nothing in any log, because makePanel's fallback is byte-identical to the
+ * built-in shell preset that the default usually is.
+ *
+ * Never unsubscribed: it lives exactly as long as the page does, and a later
+ * re-push (the presets or the default changing at runtime) has to keep
+ * arriving. Canvas KEEPS its own subscription for that case — this one only
+ * has to win the boot race, and the template it caught reaches Canvas as a
+ * prop, the same way `initial` and `liveSessionIds` do.
+ */
+let defaultTemplate: PresetTemplate | undefined
+window.canvas.preset.onDefault((template) => {
+  defaultTemplate = template
+})
 
 // The starting canvas is awaited BEFORE the first render rather than loaded in
 // an effect afterwards. useState is synchronous, so an async initial state
@@ -67,7 +94,15 @@ async function boot(): Promise<void> {
   // Deliberately NOT wrapped in StrictMode. StrictMode double-invokes effects
   // in development, which for a terminal means spawning a PTY, killing it, and
   // spawning it again on every mount.
-  createRoot(container!).render(<App initial={initial} liveSessionIds={liveSessionIds} />)
+  // defaultTemplate is read HERE, at render time, not captured earlier: the
+  // push may have landed at any point during the two awaits above.
+  createRoot(container!).render(
+    <App
+      initial={initial}
+      liveSessionIds={liveSessionIds}
+      defaultTemplate={defaultTemplate}
+    />
+  )
 }
 
 void boot()

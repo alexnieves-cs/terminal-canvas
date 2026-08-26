@@ -256,8 +256,20 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
 
 /** Never throws; drops entries individually, like every other parser here. */
 export function parsePresets(raw: unknown, warnings: string[]): Preset[] {
+  // ABSENT is not corruption — every file written before M5a has no presets
+  // key, and warning about those would make the first launch after an upgrade
+  // shout about a file that is perfectly fine (verify:layout 32).
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    // PRESENT but unusable is corruption, and the silent version of this line
+    // is the exact failure parseLayout's design note exists to prevent: a
+    // hand-edited `"presets": {}` drops every saved preset, and the user's
+    // only evidence is that the Presets menu got shorter.
+    warnings.push('replaced a presets field that was not an array')
+    return []
+  }
   const seen = new Set<string>()
-  return (Array.isArray(raw) ? raw : [])
+  return raw
     .map((p) => parsePreset(p, seen, warnings))
     .filter((p): p is Preset => p !== null)
 }

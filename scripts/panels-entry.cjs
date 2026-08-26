@@ -28,6 +28,11 @@ module.exports = {
   fromPanels: require('../src/renderer/panels/layout-adapt').fromPanels,
   SEED_PANELS: require('../src/renderer/panels/panels').SEED_PANELS,
   DEFAULT_CAMERA: require('../src/shared/layout-schema').DEFAULT_CAMERA,
+  /* Check 32 installs the SAME did-finish-load push production installs, so
+     it can prove the renderer is listening at the moment main really sends —
+     a send hand-written here would prove the harness right and leave the app
+     inert, which is the defect that check exists for. */
+  pushDefaultPreset: require('../src/main/presets').pushDefaultPreset,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,

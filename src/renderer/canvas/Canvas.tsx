@@ -53,11 +53,18 @@ const registry = createRegistry({
 
 export function Canvas({
   initial,
-  liveSessionIds
+  liveSessionIds,
+  defaultTemplate
 }: {
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
   liveSessionIds: Set<string>
+  /**
+   * Cmd+N's template, as of the moment React mounted. A PROP rather than
+   * something this component subscribes for, because main's push arrives
+   * before any effect here runs — see renderer/main.tsx.
+   */
+  defaultTemplate?: PresetTemplate
 }): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
 
@@ -142,9 +149,17 @@ export function Canvas({
 
   // The template Cmd+N spawns. A ref, not state: it is read inside onSpawn's
   // callback and a re-render is pointless — nothing on screen depends on it.
-  // Undefined until main's first PRESET_DEFAULT, and makePanel's own fallback
-  // covers that window, so an early Cmd+N is a login shell rather than nothing.
-  const defaultTemplateRef = useRef<PresetTemplate | undefined>(undefined)
+  //
+  // SEEDED from the prop, not from undefined. main pushes PRESET_DEFAULT at
+  // did-finish-load, which is over before this component's effects run, so the
+  // subscription below never sees the boot push — renderer/main.tsx catches it
+  // at module scope and it arrives here as a prop. Seeding from undefined
+  // instead reads as harmless (makePanel falls back to a login shell) and is
+  // exactly the silent inertness that made every configured default do
+  // nothing; verify:panels 32 is the check that fails if this goes back.
+  // The subscription stays for the re-push case: a runtime change to the
+  // presets or the default still has to land after mount.
+  const defaultTemplateRef = useRef<PresetTemplate | undefined>(defaultTemplate)
 
   const onSpawn = useCallback(
     (centre: Point, template?: PresetTemplate) => {

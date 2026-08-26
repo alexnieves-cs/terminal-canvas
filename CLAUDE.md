@@ -32,7 +32,7 @@ work is done. Individual suites:
 |---|---|---|
 | `verify:viewport` | plain node | 48 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), and `makePanel`'s spec/size arguments (48) |
 | `verify:registry` | plain node | 24 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19) |
-| `verify:layout` | plain node | 40 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40) |
+| `verify:layout` | plain node | 41 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41) |
 | `verify:tmux` | plain node | 20 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 18 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). Skipped loudly, never silently, when no tmux binary is found |
@@ -40,7 +40,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 31 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31) |
+| `verify:panels` | real Electron | 32 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -425,7 +425,11 @@ an exception there can wedge the quit before the window is allowed to close.
 malformed panel costs that panel, not the whole file — a canvas that was mostly fine on disk
 still opens mostly fine. **Duplicate ids are the one failure with no visible symptom**:
 `registry.ensure` returns the existing session for a repeated id, so two panels in `layout.json`
-silently render as one, because `handle.host` can live in exactly one DOM slot.
+silently render as one, because `handle.host` can live in exactly one DOM slot. `parsePresets`
+draws the same line between ABSENT and MALFORMED that the rest of the file draws: no `presets`
+key at all is every pre-M5a file and warns nothing (`verify:layout` 32), while a present
+`"presets": {}` warns (41) — silently coercing that to `[]` loses every saved preset with the
+Presets menu getting shorter as the user's only evidence.
 
 **`nextIdRef` seeds from the restored ids (`Canvas.tsx`).** Initialising it to `1` collides
 with a restored `n5` after five `Cmd+N` presses on the previous run — the same id-collision
@@ -571,7 +575,7 @@ because its check 15 calls `shutdown()` — `kill-server` — and running
 instance.
 
 **An absent `command` must stay absent through four layers (`shared/layout-schema.ts`'s
-`parsePresets`, `main/index.ts`'s `templateOf`, the `PRESET_SPAWN`/`PRESET_DEFAULT` payloads,
+`parsePresets`, `main/presets.ts`'s `templateOf`, the `PRESET_SPAWN`/`PRESET_DEFAULT` payloads,
 and `Canvas.tsx`'s `onSpawn`/`onCapture`).** Each of the four rebuilds its object field by
 field rather than spreading, because spreading a preset would carry `command: undefined`
 across the IPC structured clone, where `'command' in template` then reads **true** — the
@@ -580,7 +584,9 @@ absent. The failure is total and silent: every command-less preset (the built-in
 and any user preset saved from a login-shell panel) would spawn a hardcoded shell instead of
 resolving the user's actual login shell the way `resolveCommand` does. `verify:layout` 34 and
 `verify:panels` 31 are the two halves — one on the parse side, one end-to-end through a real
-spawn.
+spawn. The module-scope cache in `renderer/main.tsx` is deliberately NOT a fifth rebuild: it
+stores and passes the received template BY REFERENCE, so there is nothing there to get wrong.
+Writing `{...defaultTemplate}` at that hop would make it a fifth place that can lose absence.
 
 **`Cmd+N` stays a renderer keybinding, not a menu accelerator.** Moving it to
 `main/menu.ts` would be architecturally tidier — every other shortcut in this app is either a
@@ -589,9 +595,28 @@ check that drives it: `zoomTo(wc, 'n')` dispatches a synthetic `KeyboardEvent` o
 which a main-process accelerator never receives, only a real OS keydown does. That is checks
 7, 17, 22, 26, and 29 — worth re-deriving with `grep -n "zoomTo(wc, 'n')" scripts/verify-panels.cjs`
 rather than trusting this list, the same caution this file already gives the `dispose(id)`
-call-site count. Main instead pushes the default template over `PRESET_DEFAULT`, re-pushed on
-every `did-finish-load` so a `Cmd+R` reload does not silently revert `Cmd+N` back to spawning a
-login shell after the reload wipes `defaultTemplateRef`.
+call-site count. Main instead pushes the default template over `PRESET_DEFAULT`, at
+every `did-finish-load` — including the one a `Cmd+R` reload produces, which is what stops the
+reload silently reverting `Cmd+N` to a login shell after it wipes `defaultTemplateRef`.
+
+**The default preset is caught at module scope, not in an effect (`renderer/main.tsx`).**
+Main sends `PRESET_DEFAULT` from `did-finish-load`, which fires at the page's load event.
+`boot()` awaits TWO IPC round trips (`layout.load`, then `pty.list`) before the first
+`render()`, so a subscription made inside `Canvas.tsx`'s effect is at least two macrotask hops
+too late: the push landed with no listener, was dropped, and nothing re-pushed it. The
+subscription therefore runs at module scope, ahead of `boot()`'s first `await` — module script
+evaluation completes before the load event, so this is an ORDERING GUARANTEE, not a narrower
+race — and the template it caches reaches `Canvas` as a prop beside `initial` and
+`liveSessionIds`, which seeds `defaultTemplateRef` from it. `Canvas` keeps its own `onDefault`
+subscription for the re-push case; the two are not redundant, they cover different moments.
+The failure this prevents is completely silent, and that is why it survived a whole milestone:
+`defaultTemplateRef` stayed `undefined`, `makePanel` fell through to `shell(id)`, and
+`shell(id)` is byte-identical to the shipped `BUILT_IN_PRESETS[0]` — so the out-of-the-box
+canvas looked right and only a user who set `"defaultPresetId": "claude"` ever saw `Cmd+N`
+ignore it, with nothing in any log. `verify:panels` 32 is the check that fails if the
+subscription moves back into a component, and it is deliberately the ONE preset check that
+sends nothing itself: every other one drives the channel by hand, which is precisely how the
+feature stayed inert while the suite was green.
 
 **Built-in presets are code, not data (`main/presets.ts`'s `BUILT_IN_PRESETS`).** Persisting
 them into `layout.json` alongside user presets means deleting one resurrects it on the next

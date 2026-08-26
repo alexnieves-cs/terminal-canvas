@@ -38,6 +38,7 @@ const {
   SEED_PANELS,
   DEFAULT_CAMERA,
   requestFromRenderer,
+  pushDefaultPreset,
   IPC_EVENTS
 } = require(ENTRY_OUT)
 
@@ -179,7 +180,32 @@ app.whenReady().then(async () => {
   // (below) forces the store's 500ms-debounced write onto the SAME instance
   // rather than a second one built from a different path.
   const LAYOUT_PATH = join(mkdtempSync(join(tmpdir(), 'tc-panels-')), 'layout.json')
+  // Check 32's fixture, written to disk BEFORE the store reads it: a user
+  // preset that is emphatically not the login shell, named as the default.
+  // The distinction matters — makePanel's fallback is byte-identical to the
+  // built-in shell preset, so a default of `shell` proves nothing about
+  // whether the push arrived at all. /bin/cat -v for the same reason
+  // CLAUDE_TEMPLATE uses cat: it blocks on stdin and outlives the run, so a
+  // panel spawned from it does not vanish out of pty:list mid-suite. `-v` is
+  // NOT `-u`: check 29 pushes its own default with `-u`, and identical
+  // fixtures would let check 32 pass on check 29's push.
+  const BOOT_DEFAULT_PRESET = {
+    id: 'u9', name: 'Verify boot default', cwd: '/tmp', command: '/bin/cat', args: ['-v']
+  }
+  writeFileSync(LAYOUT_PATH, JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas', panels: [],
+      camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null
+    }],
+    presets: [BOOT_DEFAULT_PRESET],
+    defaultPresetId: BOOT_DEFAULT_PRESET.id
+  }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
+  // main/index.ts calls this at whenReady; without it the store would start
+  // from defaultSnapshot() and the seeded presets above would never be read.
+  layoutStore.load()
   const flushLayoutStore = () => layoutStore.flushSync()
 
   // Seed the store with the twelve-panel fixture BEFORE the window loads.
@@ -203,6 +229,15 @@ app.whenReady().then(async () => {
   // must be a plain { kind, reason } object, not the SessionBackend itself —
   // that carries a spawn() function, which structured clone cannot carry.
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }))
+
+  // The same listener createWindow() installs, calling the same production
+  // function — not a send written here. Check 32 is about WHEN main sends
+  // versus when the renderer starts listening, so the harness has to reproduce
+  // main's timing exactly; a send issued from the check body would arrive long
+  // after the renderer had settled and could never fail.
+  win.webContents.on('did-finish-load', () => {
+    pushDefaultPreset(win.webContents, layoutStore)
+  })
 
   // Check 24 needs boot reconciliation exercised end to end, not stubbed: a
   // real PTY for s01 exists BEFORE the window ever loads, so when the
@@ -242,6 +277,15 @@ app.whenReady().then(async () => {
   try {
     await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
     const wc = win.webContents
+
+    // Check 32's evidence, SAMPLED here and asserted at the end of the run
+    // beside the other preset checks. It cannot be asserted where it is
+    // numbered: check 29 deliberately pushes a PRESET_DEFAULT of its own, so
+    // by then the boot value is gone. Nothing between here and the load above
+    // sends PRESET_DEFAULT — the only push is main's own did-finish-load one,
+    // which is the whole point.
+    const bootDefault = await waitUntil(async () => await wc.executeJavaScript(
+      `window.__m5aDefaultSpec ? (window.__m5aDefaultSpec() || null) : null`), 3000)
 
     // ---------------------------------------------------------------------
     // 18. THE HEADLINE PROMISE of M4b's dormancy work: relaunch a restored
@@ -1726,6 +1770,21 @@ app.whenReady().then(async () => {
       ok('31 a command-less preset stays command-less and reads as the login shell',
         spec !== null && spec.spec.command === undefined && title === 'login shell',
         `command=${spec && JSON.stringify(spec.spec.command)} title=${title}`)
+    }
+
+    {
+      // 32. The default preset reaches the renderer AT REAL STARTUP, with the
+      // harness sending nothing. Every other preset check drives the channel by
+      // hand, which is exactly how the whole feature stayed inert while this
+      // suite was green: main pushed at did-finish-load, Canvas.tsx subscribed
+      // two awaited IPC round trips later, and the event landed with no
+      // listener. Nothing complained, because makePanel's fallback is the same
+      // login shell the default usually names — only a NON-shell default, like
+      // this fixture's, can tell the two apart.
+      ok('32 the configured default preset reaches the renderer at boot, unprompted',
+        bootDefault !== null && bootDefault.command === BOOT_DEFAULT_PRESET.command &&
+          bootDefault.cwd === BOOT_DEFAULT_PRESET.cwd && bootDefault.args[0] === '-v',
+        `bootDefault=${JSON.stringify(bootDefault)}`)
     }
 
   } catch (error) {

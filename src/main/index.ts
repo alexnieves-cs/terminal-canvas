@@ -13,10 +13,11 @@ import {
   allPresets,
   autoName,
   mintPresetId,
+  pushDefaultPreset,
   resolveAvailability,
-  resolveDefault
+  templateOf
 } from './presets'
-import type { CapturedPanel, PresetTemplate } from '../shared/ipc-contract'
+import type { CapturedPanel } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -90,29 +91,6 @@ async function confirmReset(): Promise<void> {
  */
 const which = (command: string): string | null => whichFromEnv(command, loginEnv)
 
-const templateOf = (preset: {
-  cwd: string
-  command?: string
-  args: string[]
-  w?: number
-  h?: number
-}): PresetTemplate => {
-  // Absence is preserved by CONSTRUCTION rather than by copying the whole
-  // object: spreading a preset would carry `command: undefined` into JSON,
-  // which survives structured clone but reads as "explicitly none" to any
-  // later `'command' in template` check.
-  const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
-  if (preset.command !== undefined) template.command = preset.command
-  if (preset.w !== undefined) template.w = preset.w
-  if (preset.h !== undefined) template.h = preset.h
-  return template
-}
-
-function pushDefaultPreset(): void {
-  const preset = resolveDefault(layoutStore.presets(), layoutStore.defaultPresetId())
-  mainWindow?.webContents.send(IPC_EVENTS.PRESET_DEFAULT, templateOf(preset))
-}
-
 function rebuildMenu(): void {
   buildAppMenu({
     settings: layoutStore.settings(),
@@ -140,6 +118,12 @@ function rebuildMenu(): void {
 
 async function savePresetFromFocusedPanel(): Promise<void> {
   const wc = mainWindow?.webContents
+  // A windowless app with a live menu bar is ORDINARY on darwin, not a
+  // can't-happen: window-all-closed deliberately does not quit there, so
+  // Cmd+W leaves this menu item clickable with nobody to ask. Returning
+  // silently is the same posture confirmReset takes one screenful up — there
+  // is no panel to save and no window to put a dialog over, so the only
+  // honest answer is to do nothing.
   if (!wc) return
   const captured = await requestFromRenderer<CapturedPanel | null>(
     wc,
@@ -233,8 +217,17 @@ function createWindow(): void {
   // After did-finish-load, not before: a send to a webContents that has not
   // finished loading is dropped, and Cmd+N would spawn nothing until the next
   // preset change.
+  //
+  // The renderer's half of this ordering is load-bearing and NOT in a
+  // component: did-finish-load fires at the page's load event, while
+  // Canvas.tsx's preset effect is two awaited IPC round trips later, so a
+  // subscription made there is not listening yet and the push lands with no
+  // listener at all. renderer/main.tsx subscribes at module scope — before
+  // boot()'s first await, and therefore before the load event — and hands the
+  // cached template to Canvas as a prop. Moving that subscription back into a
+  // component makes every configured default silently inert again.
   mainWindow.webContents.on('did-finish-load', () => {
-    pushDefaultPreset()
+    if (mainWindow) pushDefaultPreset(mainWindow.webContents, layoutStore)
   })
 }
 

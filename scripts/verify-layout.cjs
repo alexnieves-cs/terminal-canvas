@@ -586,6 +586,20 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `${L.menuLabel(missing)} | ${L.menuLabel(present)}`)
 }
 
+{
+  // Present but unusable. Check 32 (absent parses clean) is the other half of
+  // this pair: only one of the two may warn, and getting them backwards either
+  // shouts at every pre-M5a file or loses every saved preset in silence.
+  const w = []
+  const got = L.parsePresets({}, w)
+  const raw = JSON.stringify({ ...JSON.parse(file()), presets: {} })
+  const round = L.parseLayout(raw)
+  ok('41 a presets field that is present but not an array warns instead of vanishing',
+    got.length === 0 && w.length === 1 &&
+      round.snapshot.presets.length === 0 && round.warnings.length === 1,
+    `warnings=${JSON.stringify(w)} fileWarnings=${JSON.stringify(round.warnings)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

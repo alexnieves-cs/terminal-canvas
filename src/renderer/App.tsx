@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import type { CanvasState } from '@shared/layout-schema'
+import type { PresetTemplate } from '@shared/ipc-contract'
 import { Canvas } from './canvas/Canvas'
 
 /**
@@ -8,15 +9,22 @@ import { Canvas } from './canvas/Canvas'
  */
 export function App({
   initial,
-  liveSessionIds
+  liveSessionIds,
+  defaultTemplate
 }: {
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
   liveSessionIds: Set<string>
+  /** Cmd+N's template, caught at module scope; see renderer/main.tsx. */
+  defaultTemplate?: PresetTemplate
 }): JSX.Element {
   return (
     <div className="app">
-      <Canvas initial={initial} liveSessionIds={liveSessionIds} />
+      <Canvas
+        initial={initial}
+        liveSessionIds={liveSessionIds}
+        defaultTemplate={defaultTemplate}
+      />
     </div>
   )
 }
