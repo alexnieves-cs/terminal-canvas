@@ -1947,24 +1947,32 @@ app.whenReady().then(async () => {
       }, 3000)
       const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
       const spec = newId ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(newId)})`) : null
-      const title = newId ? await wc.executeJavaScript(
-        `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title').textContent`) : null
-      // Pre-M6a the header had no truer answer than the literal stand-in, so
-      // this always read 'login shell' by the time the check reached it.
-      // Since M6a (Task 5) it reads whatever main actually resolved once the
-      // spawn round trip completes, and that can land before this check's
-      // own two further executeJavaScript hops do — this fixture's real
-      // /bin/zsh -l spawns fast enough that it usually has. Either reading
-      // is correct depending on exactly where that race lands; what this
-      // check actually guards is the spec assertion beside it — that a
-      // command-less PRESET_SPAWN never gets a command INJECTED into the
-      // spec by a well-meaning default somewhere up the chain — so the
-      // title assertion accepts both truthful answers and rejects only a
-      // fabricated one.
+      // Since M6a (Task 5) the header reads status.command once main's real
+      // spawn resolves, not just spec.command — so reading the title right
+      // after the panel appears in the DOM (no wait for the backend) is a
+      // race, not a fact. Mirror check 44's own fix for the identical race:
+      // wait on sessionMap(wc) — MAIN's own pty:list — for backend
+      // confirmation, then poll the title until it settles on the resolved
+      // path. That keeps this a single deterministic assertion instead of
+      // one that accepts two different textual outcomes and so can no
+      // longer discriminate a broken resolved-path branch from a lucky race.
+      const spawnedOnBackend = newId
+        ? await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
+        : false
+      const title = newId
+        ? await waitUntil(async () => {
+            const text = await wc.executeJavaScript(
+              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+            return text.startsWith('/') ? text : false
+          }, 3000)
+        : false
+      // The spec assertion is the load-bearing half, unchanged from before
+      // M6a: a command-less PRESET_SPAWN must never get a command INJECTED
+      // into the spec by a well-meaning default somewhere up the chain.
       ok('31 a command-less preset stays command-less and reads as the login shell',
         spec !== null && spec.spec.command === undefined &&
-          (title === 'login shell' || (typeof title === 'string' && title.startsWith('/'))),
-        `command=${spec && JSON.stringify(spec.spec.command)} title=${title}`)
+          spawnedOnBackend && typeof title === 'string' && title.startsWith('/'),
+        `command=${spec && JSON.stringify(spec.spec.command)} spawnedOnBackend=${spawnedOnBackend} title=${title}`)
     }
 
     {
@@ -2745,6 +2753,19 @@ app.whenReady().then(async () => {
         newId !== undefined && spawnedOnBackend && label !== false && label !== 'login shell' &&
           typeof label === 'string' && label.startsWith('/'),
         `newId=${newId} spawnedOnBackend=${spawnedOnBackend} label=${label} rawLabel=${rawLabel}`)
+
+      // Restore what check 29 left as Cmd+N's default template. This check
+      // is not the last one in the file by accident of when it was written —
+      // Task 7 appends checks 45-46 right after it, driving the command
+      // palette, which plausibly exercises Cmd+N and the default-preset
+      // template. Leaving the command-less repoint above in place for the
+      // rest of the run would be exactly the silent shared-state leak check
+      // 39's design note already warns against (there, isolating a reload
+      // from check 26's; here, isolating this check's own repoint from
+      // whatever comes after it).
+      wc.send(IPC_EVENTS.PRESET_DEFAULT, { cwd: '/tmp', command: '/bin/cat', args: ['-u'] })
+      await waitUntil(async () => await wc.executeJavaScript(
+        `Boolean(window.__m5aDefaultSpec && window.__m5aDefaultSpec().command === '/bin/cat')`), 3000)
     }
 
   } catch (error) {
