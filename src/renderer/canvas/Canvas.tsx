@@ -16,9 +16,28 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
+import { usePalette } from '@renderer/palette/usePalette'
+import { Palette, type InputMode } from '@renderer/palette/Palette'
+import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
+
+// Module-level so the palette's props keep the same identity between renders;
+// a fresh [] each render would rebuild the command list on every frame of a pan.
+const EMPTY_PRESETS: PresetRow[] = []
+const EMPTY_PROMPTS: PromptRow[] = []
+
+/**
+ * What the switcher calls a panel. No user-set names exist yet (ideas-backlog
+ * #6 puts titles on Panel and PersistedPanel already reserves the field), so
+ * this is the same shape autoName() uses in main/presets.ts — the program and
+ * where it is running — plus the id, which is the only guaranteed-unique part.
+ */
+function panelLabel(panel: Panel): string {
+  const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
+  return `${command} — ${panel.spec.cwd} (${panel.rect.id})`
+}
 
 const registry = createRegistry({
   bridge: window.canvas,
@@ -306,7 +325,22 @@ export function Canvas({
     return panel.querySelector('.panel__slot') !== null
   }, [])
 
-  const { viewport, resetViewport, worldCentre } = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
+  // The palette owns the keyboard while it is open; see usePalette's four
+  // rules. restoreFocus is SessionHandle.focus() on the panel that was focused
+  // when it opened — the registry lookup lives here because the palette layer
+  // deliberately knows nothing about the registry.
+  const restoreFocus = useCallback((id: string) => {
+    registry.get(id)?.handle.focus()
+  }, [])
+  const palette = usePalette({ focusedIdRef, restoreFocus })
+  // Underscored because nothing sets it yet and noUnusedLocals is on: rename
+  // (beginRenamePreset) is Task 6 and save-prompt is Task 11. The palette
+  // renders command mode until then.
+  const [inputMode, _setInputMode] = useState<InputMode | null>(null)
+
+  const { viewport, resetViewport, worldCentre } = useViewport(
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen
+  )
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
@@ -334,12 +368,20 @@ export function Canvas({
   // shortcut requires Cmd" rule for bare keys reaching the PTY.)
   useEffect(() => {
     const offCopy = window.canvas.edit.onCopy(() => {
+      // With the palette open the user is looking at a text field, not a
+      // terminal, and focusedId still names that terminal (rule 2 keeps it).
+      // Copying its selection here would put text the user cannot see on the
+      // clipboard; Palette.tsx serves its own input instead.
+      if (palette.isOpen()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
       if (selection) void navigator.clipboard.writeText(selection)
     })
     const offPaste = window.canvas.edit.onPaste((text) => {
+      // Rule 3. Without this the text lands in a running agent, invisibly,
+      // while the user watches an empty text field. verify:panels 35.
+      if (palette.isOpen()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       if (text) session?.handle.paste(text)
@@ -348,7 +390,9 @@ export function Canvas({
       offCopy()
       offPaste()
     }
-  }, [])
+    // palette.isOpen is referentially stable, so this stays a once-only
+    // install; listing it makes the dependency visible rather than implied.
+  }, [palette.isOpen])
 
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
@@ -816,6 +860,39 @@ export function Canvas({
     if (world) setCursor(world)
   }
 
+  // Palette actions. Everything the palette can do that needs the registry,
+  // the camera, or IPC lives here — buildCommands takes callbacks precisely so
+  // none of that reaches the pure layer.
+  const paletteActions = useMemo<PaletteActions>(() => ({
+    spawnPreset: () => {},          // Task 6
+    beginRenamePreset: () => {},    // Task 6
+    deletePreset: () => {},         // Task 6
+    setDefaultPreset: () => {},     // Task 6
+    goToPanel: () => {},            // Task 7
+    insertPrompt: () => {},         // Task 11
+    beginSavePrompt: () => {},      // Task 11
+    deletePrompt: () => {},         // Task 11
+    resetCanvas: () => {},          // Task 6, once canvas:request-reset exists
+    // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
+    zoomToFit: () => resetViewport()
+  }), [resetViewport])
+
+  const panelRows = useMemo<PanelRow[]>(
+    () => panels.map((p) => ({ id: p.rect.id, label: panelLabel(p) })),
+    [panels]
+  )
+  // Real loads arrive with their commands: presets in Task 6, prompts in Task
+  // 11. Constants, not state, so the memo above them stays stable until then.
+  const presetRows: PresetRow[] = EMPTY_PRESETS
+  const promptRows: PromptRow[] = EMPTY_PROMPTS
+
+  // Cheap, and read once per render of the palette: getSelection() is a string
+  // copy out of xterm's buffer, not a repaint.
+  const hasSelection = (): boolean => {
+    const id = palette.capturedId
+    return id !== null && (registry.get(id)?.handle.getSelection() ?? '') !== ''
+  }
+
   return (
     <div className="canvas" ref={hostRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       <div
@@ -844,6 +921,17 @@ export function Canvas({
         })}
       </div>
       <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
+      {palette.open && (
+        <Palette
+          controller={palette}
+          actions={paletteActions}
+          presets={presetRows}
+          prompts={promptRows}
+          panels={panelRows}
+          hasSelection={hasSelection()}
+          inputMode={inputMode}
+        />
+      )}
     </div>
   )
 }

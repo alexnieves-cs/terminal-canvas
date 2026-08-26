@@ -277,3 +277,77 @@ body {
 .canvas-hud__warn {
   color: #f0b429;
 }
+
+/* The palette is in SCREEN space — a sibling of .world, never inside it. A
+   scale() ancestor would shrink it at low zoom and would put it in the
+   coordinate space xterm-pointer.ts rewrites during a drag. */
+.palette {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(680px, 90%);
+  z-index: 1000;
+  background: #1b1d27;
+  border: 1px solid #343747;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.palette__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #343747;
+  color: #e6e8f0;
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+
+.palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.palette__row {
+  display: grid;
+  grid-template-columns: 68px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 16px;
+  color: #c8cbdb;
+  cursor: default;
+}
+
+.palette__row--selected {
+  background: #2a2d3d;
+}
+
+.palette__row--disabled {
+  color: #6b6f85;
+}
+
+.palette__group {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7d8199;
+}
+
+.palette__hint {
+  font-size: 11px;
+  color: #7d8199;
+}
+
+.palette__empty {
+  padding: 10px 16px;
+  color: #7d8199;
+}

@@ -1787,6 +1787,137 @@ app.whenReady().then(async () => {
         `bootDefault=${JSON.stringify(bootDefault)}`)
     }
 
+    // Checks 33-36 need a FOCUSED panel: 33's Cmd+K captures focusedId, 35's
+    // __m4aCellToScreen reads the focused panel's buffer, and 36 asserts focus
+    // comes back to a terminal. Check 30 deliberately ends on a background
+    // click, which releases focus, and 31-32 focus nothing — so focus one here,
+    // with the same .panel__slot mousedown check 30 uses (the slot's own
+    // handler stopPropagation()s and calls onFocus; the canvas background
+    // handler would clear focus instead). A LIVE panel, because only a live
+    // panel has a .panel__slot and an xterm textarea to hand the keyboard back
+    // to in check 36.
+    {
+      const targetId = await wc.executeJavaScript(
+        `document.querySelector('.panel__slot').closest('.panel').getAttribute('data-panel-id')`)
+      await wc.executeJavaScript(`
+        document.querySelector('.panel[data-panel-id="${targetId}"] .panel__slot')
+          .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
+        true
+      `)
+      // Assert the precondition rather than assume it: checks 33-36 that ran
+      // against an unfocused canvas would pass for the wrong reason.
+      const focusedNow = await waitUntil(
+        () => requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null), 2000)
+      if (focusedNow === null) throw new Error('checks 33-36 precondition: no panel is focused')
+    }
+
+    // 33. Cmd+K opens the palette and takes DOM focus OFF the terminal.
+    //     This is the whole milestone in one assertion: xterm reads its own
+    //     hidden textarea and nothing else, so moving DOM focus to the input is
+    //     what stops bare keys reaching the PTY — no global key swallowing
+    //     required. Bound as a RENDERER keydown, not a menu accelerator, for the
+    //     same reason Cmd+N is: a main-process accelerator would never receive
+    //     a dispatched KeyboardEvent, so this check could not exist.
+    {
+      await wc.executeJavaScript(`
+        document.querySelector('.panel__slot .xterm-helper-textarea')?.focus();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      const read = () => wc.executeJavaScript(`(() => {
+        const el = document.activeElement
+        return {
+          open: document.querySelector('.palette') !== null,
+          onInput: el !== null && el.classList.contains('palette__input'),
+          onTerminal: el !== null && el.classList.contains('xterm-helper-textarea')
+        }
+      })()`)
+      // waitUntil stops on any TRUTHY value and an object is always truthy, so
+      // polling for the snapshot itself would return on the first read and
+      // assert against a canvas that has not re-rendered yet. Wait on the
+      // condition, then read the snapshot once.
+      await waitUntil(async () => (await read()).open, 2000)
+      const state = await read()
+      ok('33 Cmd+K opens the palette and moves DOM focus off xterm',
+        state.open && state.onInput && !state.onTerminal, JSON.stringify(state))
+    }
+
+    // 34. Canvas shortcuts stand down while it is open. Cmd+N typed while
+    //     filtering must not ALSO spawn a panel — useViewport's window keydown
+    //     listener sees every key regardless of what has DOM focus, so the
+    //     palette has to tell it to stand down.
+    {
+      const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))
+      `)
+      await sleep(300)
+      const after = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+      ok('34 Cmd+N does not spawn while the palette is open', before === after, `${before} -> ${after}`)
+    }
+
+    // 35. Cmd+V while the palette is open fills the INPUT, not the PTY. main's
+    //     menu accelerator sends edit:paste unconditionally, and Canvas routes it
+    //     into the focused session — so without a guard the text lands in a
+    //     running agent, invisibly, while the user watches an empty text field.
+    {
+      const MARK = 'M5BPASTEMARK'
+      wc.send('edit:paste', MARK)
+      const read = () => wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        return { inInput: input !== null && input.value.includes('${MARK}'),
+                 inTerminal: window.__m4aCellToScreen('${MARK}') !== null }
+      })()`)
+      // The negative half is the one that needs the wait, and it is the one an
+      // always-truthy poll would silently give away: read immediately and
+      // 'inTerminal' is false because no PTY could have echoed yet, guard or no
+      // guard. Wait for EITHER destination, then settle before the read that
+      // the assertion actually uses, so a slow echo cannot hide behind a poll
+      // that already returned.
+      await waitUntil(async () => { const s = await read(); return s.inInput || s.inTerminal }, 2000)
+      await sleep(500)
+      const seen = await read()
+      ok('35 a menu paste with the palette open reaches the input, not the PTY',
+        seen.inInput && !seen.inTerminal, JSON.stringify(seen))
+    }
+
+    // 36. Escape closes and gives the keyboard BACK. Without this the user
+    //     presses Escape, types, sees nothing happen, and concludes they
+    //     mis-clicked. SessionHandle.focus() exists for exactly this.
+    {
+      // Read the pre-Escape state and assert it too. Without it this check
+      // passes for the wrong reason when the palette never opened at all:
+      // check 33 leaves DOM focus on the xterm textarea, so "closed and on a
+      // terminal" is exactly what NO palette also looks like. `?.` so a
+      // missing input fails this check instead of aborting the whole run.
+      const before = await wc.executeJavaScript(`(() => {
+        const el = document.activeElement
+        return {
+          open: document.querySelector('.palette') !== null,
+          onInput: el !== null && el.classList.contains('palette__input')
+        }
+      })()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.palette__input')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        true
+      `)
+      const read = () => wc.executeJavaScript(`(() => {
+        const el = document.activeElement
+        return {
+          closed: document.querySelector('.palette') === null,
+          onTerminal: el !== null && el.classList.contains('xterm-helper-textarea')
+        }
+      })()`)
+      // Wait on onTerminal, not on the snapshot and not on `closed`: `closed`
+      // is also what a palette that never opened looks like, so it cannot be
+      // the thing this poll waits for.
+      await waitUntil(async () => (await read()).onTerminal, 2000)
+      const state = await read()
+      ok('36 Escape closes the palette and restores the terminal',
+        before.open && before.onInput && state.closed && state.onTerminal,
+        `${JSON.stringify(before)} -> ${JSON.stringify(state)}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

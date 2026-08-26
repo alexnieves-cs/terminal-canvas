@@ -42,7 +42,18 @@ export function useViewport(
   onSpawn?: (worldCentre: Point) => void,
   shouldYieldWheel?: (event: WheelEvent) => boolean,
   /** The restored camera. Cmd+0 still returns to INITIAL, not to this. */
-  initialViewport?: Viewport
+  initialViewport?: Viewport,
+  /**
+   * True while the command palette owns the keyboard. Every shortcut here is
+   * Cmd-gated, and so is the palette's own text field — Cmd+N typed while
+   * filtering would otherwise ALSO spawn a panel behind the overlay.
+   *
+   * Must be referentially stable (a useCallback with an empty dep list reading
+   * a ref, exactly like shouldYieldWheel): it sits in the keydown effect's dep
+   * array, and a changing identity would reinstall the listener on every
+   * render.
+   */
+  shouldIgnoreKeys?: () => boolean
 ): ViewportControls {
   const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
@@ -130,6 +141,7 @@ export function useViewport(
       // every bare key, so from M3 a bare keystroke must always reach the PTY.
       if (!event.metaKey) return
       if (event.ctrlKey || event.altKey) return
+      if (shouldIgnoreKeys?.()) return
 
       const host = hostRef.current
       if (!host) return
@@ -168,7 +180,7 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, onSpawn])
+  }, [hostRef, onSpawn, shouldIgnoreKeys])
 
   // The SETTER stays private — nothing outside should move the camera — but a
   // READ of where the camera is looking is what a menu-driven spawn needs, and
