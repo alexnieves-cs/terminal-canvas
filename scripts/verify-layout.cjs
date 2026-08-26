@@ -819,6 +819,40 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     merged.filter((p) => p.source === 'project').length === 1)
 }
 
+// 58-60 — M6a. PersistedPanel.title has been PARSED since M4b and dropped on
+//     the way out ever since: layout-adapt.fromPanels rebuilt the record field
+//     by field and simply never mentioned it. A title would therefore survive
+//     being typed, survive a save, and be gone after relaunch — the shape of
+//     bug that reads as a working feature in review.
+{
+  const [panel] = L.toPanels([{
+    id: 'p1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: ['-l'], title: 'auth refactor'
+  }])
+  ok('58 toPanels carries title in', panel.title === 'auth refactor')
+}
+{
+  const [out] = L.fromPanels([{
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'] },
+    z: 1,
+    title: 'flaky test hunt'
+  }])
+  ok('59 fromPanels carries title out', out.title === 'flaky test hunt')
+}
+{
+  // Absent must stay ABSENT, not become an explicit undefined. The same rule
+  // `command` obeys two lines above it in the same function: a spread would
+  // put `title: undefined` in layout.json, where `'title' in panel` reads true
+  // and a later "does this panel have a name" test answers yes for a panel
+  // with no name.
+  const [out] = L.fromPanels([{
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'] },
+    z: 1
+  }])
+  ok('60 an untitled panel writes no title key at all', !('title' in out))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

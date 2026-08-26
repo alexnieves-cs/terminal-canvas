@@ -82,7 +82,7 @@ app.whenReady().then(() => {
   registerIpcHandlers(
     stub,
     layoutStoreStub,
-    () => ({ kind: 'direct', reason: 'verify: direct' }),
+    () => ({ kind: 'direct', reason: 'verify: direct', hasSession: () => false }),
     presetsStub
   )
 

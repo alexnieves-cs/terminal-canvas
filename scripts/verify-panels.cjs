@@ -1947,11 +1947,42 @@ app.whenReady().then(async () => {
       }, 3000)
       const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
       const spec = newId ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(newId)})`) : null
-      const title = newId ? await wc.executeJavaScript(
-        `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title').textContent`) : null
+      // Since M6a (Task 5) the header reads status.command once main's real
+      // spawn resolves, not just spec.command — so reading the title right
+      // after the panel appears in the DOM (no wait for the backend) is a
+      // race, not a fact. Mirror check 44's own fix for the identical race:
+      // wait on sessionMap(wc) — MAIN's own pty:list — for backend
+      // confirmation, then poll the title until it settles on the resolved
+      // path. That keeps this a single deterministic assertion instead of
+      // one that accepts two different textual outcomes and so can no
+      // longer discriminate a broken resolved-path branch from a lucky race.
+      const spawnedOnBackend = newId
+        ? await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
+        : false
+      const title = newId
+        ? await waitUntil(async () => {
+            const text = await wc.executeJavaScript(
+              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+            return text.startsWith('/') ? text : false
+          }, 3000)
+        : false
+      // The spec assertion is the load-bearing half, unchanged from before
+      // M6a: a command-less PRESET_SPAWN must never get a command INJECTED
+      // into the spec by a well-meaning default somewhere up the chain.
+      //
+      // This check needs the spawned panel actually promoted to LIVE and
+      // spawning within the 3s window, and that is safe today only by
+      // accident: checks 26 and 39 are reloads, a reload restores every
+      // panel DORMANT ("Dormancy is about spawning, not attaching"), and
+      // `lod.ts` excludes dormant panels from `eligible` — so they consume
+      // no LIVE_BUDGET and leave this panel room to promote. A full budget
+      // of eight in-viewport non-dormant panels ahead of it would leave it a
+      // card forever and this would time out rather than fail. Checks 44 and
+      // 45 spawn the same way via Cmd+N and carry the identical dependency.
       ok('31 a command-less preset stays command-less and reads as the login shell',
-        spec !== null && spec.spec.command === undefined && title === 'login shell',
-        `command=${spec && JSON.stringify(spec.spec.command)} title=${title}`)
+        spec !== null && spec.spec.command === undefined &&
+          spawnedOnBackend && typeof title === 'string' && title.startsWith('/'),
+        `command=${spec && JSON.stringify(spec.spec.command)} spawnedOnBackend=${spawnedOnBackend} title=${title}`)
     }
 
     {
@@ -2668,6 +2699,208 @@ app.whenReady().then(async () => {
           arrived === true,
           `focused=${focused} row=${insertRow} arrived=${arrived}`)
       }
+    }
+
+    // 44 — M6a. A panel whose SPEC has no command is the default case —
+    //     every Cmd+N panel and the built-in login-shell preset — and its
+    //     header printed the literal string "login shell" for the whole
+    //     life of the app. Main has known the real answer since M4. By this
+    //     point in the suite the canvas has been reset (23), reloaded (26,
+    //     39) and had panels spawned-and-undone (37), so the first `.panel`
+    //     in DOM order is not a known quantity — this check spawns and
+    //     identifies its OWN panel rather than trusting a bare first match.
+    {
+      // Check 29 pointed Cmd+N's default at a fixture command ('/bin/cat
+      // -u'), but check 39's renderer reload re-fires did-finish-load, which
+      // re-pushes BOOT_DEFAULT_PRESET ('/bin/cat -v') over it — so by the
+      // time this check runs, the default in effect is BOOT_DEFAULT_PRESET,
+      // not check 29's. Left alone, this check would spawn a panel whose
+      // spec ALREADY names a command, and the header would read that command
+      // via the existing `spec.command ?? 'login shell'` fallback even
+      // before the chain changes — passing for a reason that has nothing to
+      // do with what this check tests. Re-point the default at a
+      // command-less template, the same shape check 31 uses, so this panel
+      // exercises the actual case the header stand-in exists for: an absent
+      // spec.command.
+      wc.send(IPC_EVENTS.PRESET_DEFAULT, { cwd: '/tmp', args: [] })
+      await waitUntil(async () => await wc.executeJavaScript(
+        `Boolean(window.__m5aDefaultSpec && window.__m5aDefaultSpec().command === undefined)`), 3000)
+
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      // Check 37 already establishes this exact idiom for capturing a
+      // Cmd+N panel's id: dispatch the synthetic keydown on window, then
+      // diff the id list against the snapshot taken before it.
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const ids = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 3000)
+      const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
+      // A command-less panel spawns only once it goes LIVE ("Lazy spawn"),
+      // and even then the header's honest answer is not available until
+      // pty:create resolves. sessionMap reads MAIN's own pty:list, so
+      // waiting on it is waiting for the actual spawn to have completed on
+      // the backend, not a guessed clock delay.
+      const spawnedOnBackend = newId
+        ? await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
+        : false
+      // The header re-renders off registry.version(), which bumps on the
+      // status transition to 'running' — a beat after the backend spawn
+      // above, not the same tick. Poll the label itself rather than reading
+      // it once right after the backend confirms.
+      const label = newId
+        ? await waitUntil(async () => {
+            const text = await wc.executeJavaScript(
+              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+            return text.startsWith('/') ? text : false
+          }, 3000)
+        : false
+      const rawLabel = newId
+        ? await wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+        : null
+      ok('44 the header names what main resolved, not the stand-in',
+        newId !== undefined && spawnedOnBackend && label !== false && label !== 'login shell' &&
+          typeof label === 'string' && label.startsWith('/'),
+        `newId=${newId} spawnedOnBackend=${spawnedOnBackend} label=${label} rawLabel=${rawLabel}`)
+
+      // Restore what was ACTUALLY in effect before this check's repoint —
+      // BOOT_DEFAULT_PRESET ('/bin/cat -v'), the value check 39's reload left
+      // behind, not check 29's ('/bin/cat -u'), which that reload already
+      // overwrote. This check is not the last one in the file by accident of
+      // when it was written — Task 7 appends checks 45-46 right after it,
+      // driving the command palette, which plausibly exercises Cmd+N and the
+      // default-preset template. Leaving the command-less repoint above in
+      // place for the rest of the run would be exactly the silent
+      // shared-state leak check 39's design note already warns against
+      // (there, isolating a reload from check 26's; here, isolating this
+      // check's own repoint from whatever comes after it).
+      wc.send(IPC_EVENTS.PRESET_DEFAULT,
+        { cwd: BOOT_DEFAULT_PRESET.cwd, command: BOOT_DEFAULT_PRESET.command, args: BOOT_DEFAULT_PRESET.args })
+      await waitUntil(async () => await wc.executeJavaScript(
+        `Boolean(window.__m5aDefaultSpec && window.__m5aDefaultSpec().command === '${BOOT_DEFAULT_PRESET.command}')`), 3000)
+    }
+
+    // 45-46 — M6a. A rename is a COMMITTED gesture, so it pushes exactly one
+    //     history entry — the same rule a drag obeys, for the same reason: an
+    //     entry per keystroke would make one rename take a dozen Cmd+Z presses
+    //     to unwind while every final-state assertion still passed.
+    //
+    //     By this point in the suite the canvas has been reset (23), reloaded
+    //     (26, 39) and had panels spawned-and-undone (37), so the first
+    //     `.panel` in DOM order is not a known quantity — check 44's idiom is
+    //     reused here: spawn a panel with Cmd+N, diff the id snapshot to find
+    //     it, and assert on that id specifically rather than trusting a bare
+    //     first match.
+    //
+    //     Note the nativeSet dance below, copied from check 38 and
+    //     load-bearing for the same reason: React's controlled <input>
+    //     IGNORES a plain input.value = x. Only the prototype's native setter
+    //     plus a dispatched 'input' event reaches React's state, so a check
+    //     written the obvious way types into a field the component never
+    //     learns about, submits an empty string, and fails for a reason that
+    //     has nothing to do with renaming.
+    {
+      const idsBefore45 = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const ids45 = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore45.size ? now : false
+      }, 3000)
+      const panelId = ids45 ? ids45.find((id) => !idsBefore45.has(id)) : undefined
+
+      // Spawning does not focus (check 40's note): the palette captures
+      // focusedId at OPEN time, so without this click the rename row would be
+      // aimed at whatever panel was focused before, not the one just spawned.
+      if (panelId) {
+        await waitUntil(async () => {
+          await wc.executeJavaScript(`(() => {
+            const slot = document.querySelector('[data-panel-id=${JSON.stringify(panelId)}] .panel__slot')
+            if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()`)
+          return wc.executeJavaScript(`window.__m4aGrid() !== null`)
+        }, 5000, 200)
+      }
+
+      const titleOf = () => panelId
+        ? wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id=${JSON.stringify(panelId)}] .panel__title')?.textContent ?? ''`)
+        : Promise.resolve('')
+      const panelExists = () => panelId
+        ? wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id=${JSON.stringify(panelId)}]') !== null`)
+        : Promise.resolve(false)
+
+      // Captured BEFORE the rename runs, so check 46 has something real to
+      // undo back TO. Without this, `titleOf()` returning '' after undo is
+      // ambiguous between "the rename reverted" and "the panel is gone" —
+      // and an undo that popped check 45's own Cmd+N spawn (e.g. because the
+      // rename pushed zero history entries) would produce exactly that ''
+      // and read as success.
+      //
+      // Waited, not read once: the grid being ready (above) only means the
+      // terminal is attached, not that pty:create has resolved and bumped
+      // registry.version() into 'running' — the same lag check 44 waits out
+      // with `label.startsWith('/')`. Capturing too early would freeze in
+      // '' or the stand-in, and the real command could still settle in
+      // behind the rename before the undo assertion runs, making a correct
+      // implementation look like it reverted to the wrong value.
+      const preRenameTitle = await waitUntil(async () => {
+        const text = await titleOf()
+        return text.startsWith('/') ? text : false
+      }, 3000) || await titleOf()
+
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+
+      const ran = panelId ? await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        nativeSet(document.querySelector('.palette__input'), 'rename panel')
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename panel'))
+        if (!row) return 'no rename-panel row'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        const field = document.querySelector('.palette__input')
+        if (!field) return 'no input after entering rename mode'
+        nativeSet(field, 'auth refactor')
+        await new Promise((r) => setTimeout(r, 50))
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        return 'ok'
+      })()`) : 'no panel spawned'
+
+      const landed = ran === 'ok' &&
+        Boolean(await waitUntil(async () => (await titleOf()) === 'auth refactor', 3000))
+      ok('45 a rename from the palette reaches the panel header', landed, `panelId=${panelId} ran=${ran}`)
+
+      wc.send('edit:undo')
+      // Asserts the panel is STILL THERE, not merely that its header no
+      // longer reads 'auth refactor' — `titleOf()` returns '' for a missing
+      // element too, so a zero-history-entry rename that let this Cmd+Z pop
+      // check 45's own Cmd+N spawn instead would satisfy a `!== 'auth
+      // refactor'` check while asserting the opposite of what it claims. The
+      // real assertion is that the header reverted to what it said before
+      // the rename ran.
+      const revertedTitle = await waitUntil(async () => {
+        const text = await titleOf()
+        return text === preRenameTitle ? text : false
+      }, 3000)
+      const stillExists = await panelExists()
+      const undone = stillExists && revertedTitle !== false
+      ok('46 one Cmd+Z undoes the whole rename', landed && undone,
+        `preRenameTitle=${preRenameTitle} stillExists=${stillExists} revertedTitle=${revertedTitle}`)
     }
 
   } catch (error) {

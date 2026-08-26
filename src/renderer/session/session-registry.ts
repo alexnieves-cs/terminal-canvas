@@ -134,7 +134,13 @@ export function createRegistry(deps: RegistryDeps): Registry {
         rows
       })
       .then((result) => {
-        session.status = { kind: 'running', pid: result.pid }
+        session.status = {
+          kind: 'running',
+          pid: result.pid,
+          command: result.command,
+          cwd: result.cwd,
+          reattached: result.reattached
+        }
         bump()
       })
       .catch((error: unknown) => {

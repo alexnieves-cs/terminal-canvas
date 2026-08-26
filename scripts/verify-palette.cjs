@@ -203,6 +203,7 @@ const spyActions = () => {
     insertPrompt: record('insertPrompt'),
     beginSavePrompt: record('beginSavePrompt'),
     deletePrompt: record('deletePrompt'),
+    beginRenamePanel: record('beginRenamePanel'),
     resetCanvas: record('resetCanvas'),
     zoomToFit: record('zoomToFit')
   }
@@ -357,6 +358,53 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   for (const r of rows) if (order[order.length - 1] !== r.group) order.push(r.group)
   ok('30 groups are built in a fixed order',
     order.join(',') === 'Panel,Preset,Prompt,Canvas', order.join(','))
+}
+
+// 31-32 — M6a. The rename row is aimed at capturedId, NOT at the row's own
+//     panel: the palette captures focusedId on open and deliberately never
+//     clears it, and every panel-acting command targets the panel the user was
+//     in. With nothing focused the row must stay VISIBLE with its reason — a
+//     row that disappears is indistinguishable from a feature that is missing.
+{
+  const row = byId(
+    P.buildCommands(ctx({ capturedId: null, panels: [{ id: 'p1', label: 'p1' }] })),
+    'panel.rename'
+  )
+  ok('31 rename stays visible with a reason when nothing is focused',
+    row !== undefined && row.disabledReason === P.REASON_NO_FOCUS)
+}
+{
+  const c = ctx({
+    capturedId: 'p1',
+    panels: [{ id: 'p1', label: 'p1', title: 'auth refactor' }]
+  })
+  const row = byId(P.buildCommands(c), 'panel.rename')
+  row.run()
+  ok('32 rename is runnable, echoes the current name, and acts on the captured panel',
+    row.disabledReason === undefined &&
+    row.subtitle.includes('auth refactor') &&
+    c.actions.calls[0][0] === 'beginRenamePanel' &&
+    c.actions.calls[0][1] === 'p1' &&
+    c.actions.calls[0][2] === 'auth refactor')
+}
+
+// 33 — M6a whole-branch review, Important 1. A titled panel's goto row must
+//     be findable by its TITLE, not just by its command/cwd/id label — the
+//     switcher is the primary find-a-panel surface on an infinite canvas, and
+//     "auth refactor" typed into Cmd+K found nothing until the row carried a
+//     subtitle (haystack() in palette-model.ts is `${title} ${subtitle}`).
+//     Asserting the exact row id (not just count === 1) is what would catch a
+//     regression that put the subtitle back on the wrong row.
+{
+  const rows = P.buildCommands(ctx({
+    panels: [
+      { id: 'p1', label: 'zsh — ~ (p1)', title: 'auth refactor' },
+      { id: 'p2', label: 'zsh — ~ (p2)' }
+    ]
+  }))
+  const found = P.filterCommands(rows, 'auth')
+  ok('33 a titled panel is findable in the palette by its title',
+    found.length === 1 && found[0].id === 'panel.goto.p1', found.map((c) => c.id).join(','))
 }
 
 const failed = results.filter((r) => !r.pass)

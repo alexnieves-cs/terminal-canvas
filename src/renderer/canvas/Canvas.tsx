@@ -30,10 +30,12 @@ const EMPTY_PROMPTS: PromptRow[] = []
 const EMPTY_PANELS: PanelRow[] = []
 
 /**
- * What the switcher calls a panel. No user-set names exist yet (ideas-backlog
- * #6 puts titles on Panel and PersistedPanel already reserves the field), so
- * this is the same shape autoName() uses in main/presets.ts — the program and
- * where it is running — plus the id, which is the only guaranteed-unique part.
+ * What the switcher calls a panel. This is always the command/cwd/id shape —
+ * autoName()'s shape in main/presets.ts — regardless of whether the panel has
+ * a user-set title: the goto row's TITLE stays stable so `verify:panels`
+ * check 39 can keep targeting it by text, and a titled panel's name is
+ * carried as the row's SUBTITLE instead (see the panel.goto.* row in
+ * commands.ts), which is what actually makes it findable in the palette.
  */
 function panelLabel(panel: Panel): string {
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
@@ -1054,6 +1056,44 @@ export function Canvas({
       // there (the row is disabled, but a stale list could still reach here).
       void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
     },
+    beginRenamePanel: (id, currentTitle) => {
+      setInputMode({
+        label: 'Name this panel…',
+        initial: currentTitle,
+        submit: (value) => {
+          const name = value.trim()
+          setPanels((prev) => {
+            // A captured id can outlive its panel — the row is aimed at
+            // whatever was focused when the palette opened, and that panel
+            // may have since been closed. Mapping over a missing id would
+            // still rewrite the array (a fresh reference for every element)
+            // and push a no-op history entry, so bail out instead: nothing
+            // changed, so nothing should look like it did.
+            if (!prev.some((p) => p.rect.id === id)) return prev
+            // Palette.tsx only calls submit() with a non-empty trimmed value
+            // (an empty Enter is a cancel, not a rename to "") — so `name`
+            // is never '' here, and clearing a title is not offered by this
+            // surface at all. Rebuilt field by field rather than spread, the
+            // same absent-stays-absent rule fromPanels obeys, so a future
+            // caller that DOES want to clear a title can't get there by
+            // accidentally spreading `title: undefined` through.
+            const next = prev.map((p) =>
+              p.rect.id === id ? { rect: p.rect, spec: p.spec, z: p.z, title: name } : p
+            )
+            // One entry for the whole gesture, on commit — the rule a drag
+            // already follows. Pushing per keystroke would make one rename
+            // take a dozen Cmd+Z presses to unwind.
+            commitHistory(next)
+            return next
+          })
+          setInputMode(null)
+        }
+      })
+      // Same reason beginRenamePreset does this: Palette.tsx closes the
+      // overlay BEFORE running a row's command, so without reopening, the mode
+      // would be set on a palette that is already gone.
+      palette.openPalette()
+    },
     resetCanvas: () => {
       // Main owns the confirmation dialog and the counts request. The palette
       // asks for the flow the menu item already runs rather than growing a
@@ -1065,7 +1105,7 @@ export function Canvas({
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
   }), [resetViewport, centreOn, selectAndRaise, presetRows, reloadPresets, palette.openPalette,
-       palette.capturedId, reloadPrompts])
+       palette.capturedId, reloadPrompts, commitHistory])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -1076,7 +1116,18 @@ export function Canvas({
   // is only ever looked at while the overlay is up, and the commands that add
   // or remove a panel close it first, so recomputing at open is enough.
   const panelRows = useMemo<PanelRow[]>(
-    () => (palette.open ? panelsRef.current.map((p) => ({ id: p.rect.id, label: panelLabel(p) })) : EMPTY_PANELS),
+    () => (palette.open
+      ? panelsRef.current.map((p) =>
+          // Field-by-field, not a spread: an untitled panel must produce a
+          // row with NO `title` key, not one holding `title: undefined`.
+          // Renderer-internal only (no structured clone here to carry the
+          // undefined across), but this is the one rule the rest of the
+          // branch is careful about everywhere else — stay consistent.
+          p.title !== undefined
+            ? { id: p.rect.id, label: panelLabel(p), title: p.title }
+            : { id: p.rect.id, label: panelLabel(p) }
+        )
+      : EMPTY_PANELS),
     [palette.open]
   )
 
@@ -1109,6 +1160,7 @@ export function Canvas({
               version={version}
               rect={panel.rect}
               z={panel.z}
+              title={panel.title}
               selected={panel.rect.id === selectedId}
               onSelect={onSelectPanel}
               onSlotMount={onSlotMount}

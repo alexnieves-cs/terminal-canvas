@@ -13,7 +13,25 @@ import type { Tier } from '@renderer/canvas/lod'
 export type PanelStatus =
   | { kind: 'idle' }
   | { kind: 'starting' }
-  | { kind: 'running'; pid: number }
+  | {
+      kind: 'running'
+      pid: number
+      /**
+       * What main ACTUALLY spawned, not what the spec asked for. The spec's
+       * command is optional and absent means "the login shell", which only
+       * main can name — so for every default panel this is the only honest
+       * label that exists anywhere in the renderer.
+       *
+       * It is deliberately NOT copied back into PanelSpec. Filling in the
+       * absence would make this a fifth place M5a's absent-command rule can be
+       * lost, and every command-less preset would start spawning a hardcoded
+       * shell.
+       */
+      command: string
+      cwd: string
+      /** Attached to a session that was already running. See PtyCreateResult. */
+      reattached: boolean
+    }
   | { kind: 'exited'; code: number }
   | { kind: 'error'; message: string }
 

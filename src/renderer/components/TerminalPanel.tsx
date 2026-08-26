@@ -22,6 +22,14 @@ export interface TerminalPanelProps {
   rect: WorldRect
   /** Paint order, rendered as style.zIndex — see the note on Panel.z. */
   z: number
+  /**
+   * The user's name for this panel, if they set one. A prop rather than a
+   * field on PanelSession because it is LAYOUT — it belongs to the id, it
+   * survives a relaunch, and a panel that never spawned can have one.
+   * Passing it as a prop also means memo sees it change; the session is
+   * mutated in place and would not.
+   */
+  title?: string
   selected: boolean
   onSelect: (id: string) => void
   onFocus: (id: string) => void
@@ -45,7 +53,7 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, z, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose
+  session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -123,11 +131,19 @@ function TerminalPanelImpl({
           })
         }}
       >
-        {/* A spec with no command runs the login shell, which only main can
-            name — rendering the raw value would print "undefined" for every
-            default panel. Once main reports what it actually spawned (M4 can
-            surface result.command here), this label is the honest stand-in. */}
-        <span className="panel__title">{session.spec.command ?? 'login shell'}</span>
+        {/* The honest chain, most specific first. `status.command` is what
+            main ACTUALLY spawned — the renderer cannot resolve it, because
+            electron-vite compiles process.env here down to {} — so for every
+            login-shell panel it is the only true answer in the renderer.
+            `spec.command` remains as the pre-spawn fallback: a dormant or
+            never-promoted panel has no status to read, and showing the
+            command it WILL run is better than showing nothing. */}
+        <span className="panel__title">
+          {title ??
+            (session.status.kind === 'running' ? session.status.command : undefined) ??
+            session.spec.command ??
+            'login shell'}
+        </span>
         <StatusBadge status={session.status} />
         {/* onMouseDown rather than onClick, so it runs in the same phase as
             every other panel interaction and beats the chrome's own drag

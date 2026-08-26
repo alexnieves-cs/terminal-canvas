@@ -3,6 +3,7 @@ import { readFileSync, rmSync, unlinkSync } from 'node:fs'
 import * as pty from 'node-pty'
 import type { PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
 import {
+  buildHasSessionArgs,
   buildKillServerArgs,
   buildKillSessionArgs,
   buildListArgs,
@@ -46,6 +47,13 @@ export interface SessionBackend {
   list(): PtyCreateResult[] | null
 
   /**
+   * Is there already a live session for this panel? Asked before spawn, not
+   * after: `new-session -A` would have created it by then and the answer would
+   * be true unconditionally.
+   */
+  hasSession(panelId: PanelId): boolean
+
+  /**
    * The command's real exit code, or null when the backend cannot know it.
    *
    * Both nulls in this interface mean the same thing and are worth reading
@@ -84,6 +92,10 @@ export function createDirectBackend(reason: string): SessionBackend {
     },
     // See the interface: null means "ask the manager", not "nothing is running".
     list: () => null,
+    // No sessions outlive this process, so nothing can ever be reattached to.
+    // Answering false is honest rather than a degradation — the same posture
+    // as list() returning null here.
+    hasSession: () => false,
     exitCodeFor: () => null,
     // The process IS the session here, so PtyManager's own kill is the whole
     // story and there is nothing extra to destroy or shut down.
@@ -166,8 +178,31 @@ export function createTmuxBackend(o: {
         panelId: e.panelId,
         pid: e.pid,
         command: e.command,
-        cwd: e.cwd
+        cwd: e.cwd,
+        // Anything list() can see outlived whatever destroyed the last
+        // renderer, so from the next renderer's point of view every one of
+        // these is a reattach by definition.
+        reattached: true
       }))
+    },
+
+    hasSession(panelId: PanelId): boolean {
+      // `cli` swallows a non-zero exit and returns '' — which is exactly what
+      // has-session does when the session is absent, and also what it does
+      // when no server is running at all. Both mean "nothing to reattach to",
+      // so the empty string is the correct negative and needs no special case.
+      // execFileSync throws on non-zero, so a bare success is the only path
+      // that returns a non-throwing result; we distinguish on that.
+      try {
+        execFileSync(o.tmuxPath, buildHasSessionArgs(panelId, socket), {
+          encoding: 'utf8',
+          timeout: 5000,
+          stdio: 'ignore'
+        })
+        return true
+      } catch {
+        return false
+      }
     },
 
     exitCodeFor(panelId: PanelId): number | null {

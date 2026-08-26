@@ -43,7 +43,7 @@ function fakeBridge() {
     pty: {
       async create(spec) {
         calls.create.push(spec)
-        return { panelId: spec.panelId, pid: 4000 + calls.create.length, command: spec.command, cwd: spec.cwd }
+        return { panelId: spec.panelId, pid: 4000 + calls.create.length, command: spec.command, cwd: spec.cwd, reattached: false }
       },
       async write(req) { calls.write.push(req) },
       async resize(req) { calls.resize.push(req) },
@@ -469,6 +469,38 @@ const tick = () => new Promise((r) => setImmediate(r))
     ok('19 closing a never-spawned panel still asks main to kill its session',
       spawnedBefore === false && bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'never',
       `spawned=${spawnedBefore} kills=${JSON.stringify(bridge.calls.kill)}`)
+  }
+
+  // 20 — M6a. The registry received the resolved command and cwd from the very
+  //     first M4 build and stored only the pid, so the header had nothing to
+  //     render but the SPEC's command — which is absent for every login-shell
+  //     panel. This is the check that fails if the widening is reverted.
+  //
+  //     The fake's create is overridden rather than used as-is on purpose: the
+  //     default returns `command: spec.command`, so a registry that wrongly read
+  //     the SPEC instead of the RESULT would pass against it. The resolved value
+  //     here is deliberately DIFFERENT from the spec's, and the spec's command
+  //     is absent, which is the real-world case.
+  {
+    const { bridge, factory, registry } = setup()
+    bridge.pty.create = async () => ({
+      panelId: 'p1',
+      pid: 4242,
+      command: '/opt/homebrew/bin/fish',
+      cwd: '/Users/x/proj',
+      reattached: true
+    })
+    const { command: _dropped, ...noCommand } = SPEC
+    registry.ensure('p1', noCommand)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const st = registry.get('p1').status
+    ok('20 running status carries what main resolved, not what the spec asked for',
+      st.kind === 'running' && st.pid === 4242 &&
+      st.command === '/opt/homebrew/bin/fish' &&
+      st.cwd === '/Users/x/proj' && st.reattached === true,
+      JSON.stringify(st))
   }
 
   console.log('\n' + '='.repeat(60))

@@ -88,9 +88,22 @@ body {
 .panel__title {
   font-weight: 550;
   letter-spacing: 0.01em;
+  /* A user-set title (M6a) is arbitrary-length text, unlike the fixed labels
+     .panel__chrome used to hold. Flex items default to min-width: auto, which
+     refuses to shrink below its content's intrinsic width — so without this,
+     a long title pushes the badge and close button out past `.panel`'s
+     overflow: hidden, and the panel becomes unclosable by mouse. min-width: 0
+     lets the title actually shrink to fit the remaining chrome space; the
+     rest truncates it visibly instead of just clipping mid-character. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel__close {
+  /* Never shrunk to make room for a long title — see .panel__title. */
+  flex: none;
   appearance: none;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -183,6 +196,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* Never shrunk to make room for a long .panel__title — see its comment. */
+  flex: none;
 }
 
 .badge::before {
