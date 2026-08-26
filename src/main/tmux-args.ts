@@ -246,6 +246,22 @@ export function buildKillSessionArgs(panelId: string, socket: TmuxSocket = TMUX_
   return ['-L', socket, 'kill-session', '-t', `=${panelId}`]
 }
 
+/**
+ * Does this panel already own a running session?
+ *
+ * Needed only because `new-session -A` collapses create and reattach into one
+ * call — the flag that made M4c cheap is the flag that erases the distinction
+ * M6a wants to report. Asking costs one exec on a user-initiated spawn.
+ *
+ * The `=` is not decoration. Without it tmux matches by prefix, so panel `n1`
+ * would report a surviving session whenever `n12` happened to be running, and
+ * the chrome would claim a reattach that never occurred. Same rule as every
+ * kill target in this file; see verify:tmux 19 and 26.
+ */
+export function buildHasSessionArgs(panelId: string, socket: TmuxSocket = TMUX_SOCKET): string[] {
+  return ['-L', socket, 'has-session', '-t', `=${panelId}`]
+}
+
 export function buildKillServerArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {
   return ['-L', socket, 'kill-server']
 }

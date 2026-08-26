@@ -350,6 +350,20 @@ const ok = (n, pass, detail) => {
     args[1] === 'terminal-canvas-app', JSON.stringify(args))
 }
 
+// 26 — M6a. The exact-match `=` is the same rule check 19 pins for every kill
+//     target, and it matters more here, not less: has-session without `=`
+//     matches by PREFIX, so a panel `n1` would report a surviving session
+//     whenever `n12` was running, and every fresh `n1` would claim to have
+//     reattached to a session that was never its own.
+{
+  const args = T.buildHasSessionArgs('n1')
+  ok('26 has-session targets the socket and matches exactly',
+    args.includes('-L') &&
+    args[args.indexOf('-L') + 1] === T.TMUX_SOCKET &&
+    args.includes('has-session') &&
+    args[args.indexOf('-t') + 1] === '=n1')
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
