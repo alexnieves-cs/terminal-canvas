@@ -531,6 +531,56 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `onDisk=${JSON.stringify(onDisk.presets)} reread=${reread.presets().length}`)
 }
 
+/* ---- M5a presets: main-side helpers ---- */
+
+{
+  const user = [{ id: 'u1', name: 'Mine', cwd: '/tmp', args: [] }]
+  ok('36 resolveDefault falls back to the login shell for an id nothing owns',
+    L.resolveDefault(user, 'u1').name === 'Mine' &&
+      L.resolveDefault(user, 'nope').id === L.DEFAULT_PRESET_ID &&
+      L.resolveDefault([], L.DEFAULT_PRESET_ID).command === undefined,
+    `unknown -> ${L.resolveDefault(user, 'nope').id}`)
+}
+
+{
+  const user = [{ id: 'u1', name: 'a', cwd: '/tmp', args: [] },
+                { id: 'u3', name: 'b', cwd: '/tmp', args: [] }]
+  ok('37 mintPresetId skips ids already taken, built-ins included',
+    L.mintPresetId(user) === 'u2' && L.mintPresetId([]) === 'u1' &&
+      !L.allPresets(user).some((p) => p.id === L.mintPresetId(user)),
+    `minted=${L.mintPresetId(user)}`)
+}
+
+{
+  const shellNamed = L.autoName({ cwd: '/Users/me/terminal-canvas', args: [] }, [])
+  const first = L.autoName({ command: '/opt/homebrew/bin/claude', cwd: '/Users/me/api', args: [] }, [])
+  const second = L.autoName(
+    { command: 'claude', cwd: '/Users/me/api', args: [] },
+    [{ id: 'u1', name: first, cwd: '/x', args: [] }]
+  )
+  ok('38 autoName uses basenames, says "login shell" for an absent command, and dedupes',
+    first === 'claude — api' && second === 'claude — api 2' &&
+      shellNamed === 'login shell — terminal-canvas',
+    `first=${first} second=${second} shell=${shellNamed}`)
+}
+
+{
+  const which = (cmd) => (cmd === 'claude' ? '/opt/homebrew/bin/claude' : null)
+  const rows = L.resolveAvailability(L.BUILT_IN_PRESETS, which)
+  const byId = Object.fromEntries(rows.map((r) => [r.preset.id, r.available]))
+  ok('39 availability is per command, and a preset with no command is always available',
+    byId.shell === true && byId.claude === true && byId.codex === false,
+    JSON.stringify(byId))
+}
+
+{
+  const missing = { preset: { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [] }, available: false }
+  const present = { preset: { id: 'claude', name: 'Claude', cwd: '~', command: 'claude', args: [] }, available: true }
+  ok('40 an unavailable preset says why in its own label',
+    L.menuLabel(missing) === 'Codex — not found on PATH' && L.menuLabel(present) === 'Claude',
+    `${L.menuLabel(missing)} | ${L.menuLabel(present)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
