@@ -2393,6 +2393,58 @@ app.whenReady().then(async () => {
       }
     }
 
+
+    // 41. A MOUSE-picked palette row leaves the focused panel focused.
+    //
+    //     Palette mounts inside .canvas, and .canvas's onMouseDown is the
+    //     background handler. Without a stopPropagation on the palette root,
+    //     every mousedown in the overlay — a row pick, or a click into the
+    //     input to place a caret — reaches it, and it does three things: it
+    //     releases focusedId, it hit-tests the click's WORLD point and selects
+    //     whatever panel lies under the overlay, and through onSelectPanel it
+    //     WAKES that panel if it is dormant. A palette click that spawns a
+    //     process is the exact failure M4b's dormancy rule exists to prevent.
+    //
+    //     Focus is the probe because it is the half that breaks the feature
+    //     shipped one check up: with focusedId null, the NEXT Cmd+K captures
+    //     nothing and buildCommands disables every "Insert prompt" row with
+    //     REASON_NO_FOCUS. __m4aGrid() resolves through focusedIdRef, so a
+    //     non-null answer is "the app still believes a live panel is focused"
+    //     — which is precisely what check 40 has to route around by driving
+    //     its row with Enter instead of a click.
+    //
+    //     The row picked is "Reset zoom": it must be a real, runnable,
+    //     mouse-clicked row (the whole point), and that one touches only the
+    //     camera, so nothing about the assertion depends on what it did.
+    {
+      const focusedBefore = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const picked = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'reset zoom')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 120))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Reset zoom'))
+        if (!row) return false
+        // A REAL mousedown, bubbling exactly as a user's does — the propagation
+        // is the subject of this check, so nothing here may short-circuit it.
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return true
+      })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+      const focusedAfter = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
+      ok('41 a mouse-picked palette row does not release the focused panel',
+        focusedBefore === true && picked === true && focusedAfter === true,
+        `before=${focusedBefore} picked=${picked} after=${focusedAfter}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

@@ -154,7 +154,25 @@ export function Palette(props: PaletteProps): JSX.Element {
   }, [inputMode])
 
   return (
-    <div className="palette" role="dialog" aria-label="Command palette">
+    <div
+      className="palette"
+      role="dialog"
+      aria-label="Command palette"
+      // The palette mounts INSIDE .canvas, whose onMouseDown is the background
+      // handler — so without this every mousedown in here (a row pick, a click
+      // into the input to place a caret) reads as a click on the canvas
+      // background, and that handler does three things, all wrong from here:
+      // it clears focusedId (unpinning the live panel, leaving menu Cmd+C/V
+      // with no target, and disabling every capturedId-gated row on the NEXT
+      // Cmd+K — including the prompt rows), it hit-tests the click's WORLD
+      // point and selects whatever panel happens to lie under the overlay, and
+      // through onSelectPanel that WAKES a dormant panel — spawning a process
+      // from a palette click, which is the one thing the dormancy rule exists
+      // to prevent. Bubble phase, so the rows' own handlers below still run
+      // first, and no preventDefault, so the input still places its caret.
+      // verify:panels 41.
+      onMouseDown={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}
+    >
       <input
         ref={inputRef}
         className="palette__input"
