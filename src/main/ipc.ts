@@ -43,24 +43,42 @@ export function registerIpcHandlers(
 }
 
 /**
- * Asks the renderer for the panel and running-process counts, so the reset
- * confirmation can name what it is about to destroy. Resolves to zeroes if the
- * renderer does not answer within the timeout — a dialog that never opens is a
- * worse failure than one that undercounts.
+ * A main -> renderer REQUEST, answered on an ephemeral channel invented per
+ * call. Two callers now (canvas:counts and preset:capture), which is why it is
+ * general rather than a second copy of the same trick.
+ *
+ * Resolves to `fallback` if the renderer does not answer in time. A dialog
+ * that never opens is a worse failure than one that undercounts, and a capture
+ * that hangs would wedge the menu.
+ *
+ * The sequence number matters: two requests inside the same millisecond would
+ * otherwise share a reply channel, and the first `once` listener would consume
+ * the other's answer.
  */
+let replySeq = 0
+
+export function requestFromRenderer<T>(
+  webContents: WebContents,
+  channel: string,
+  fallback: T,
+  timeoutMs = 1000
+): Promise<T> {
+  return new Promise((resolve) => {
+    const replyChannel = `${channel}:reply:${Date.now()}:${(replySeq += 1)}`
+    const timer = setTimeout(() => {
+      ipcMain.removeAllListeners(replyChannel)
+      resolve(fallback)
+    }, timeoutMs)
+    ipcMain.once(replyChannel, (_event, payload: T) => {
+      clearTimeout(timer)
+      resolve(payload)
+    })
+    webContents.send(channel, replyChannel)
+  })
+}
+
 export function requestCanvasCounts(
   webContents: WebContents
 ): Promise<{ panels: number; running: number }> {
-  return new Promise((resolve) => {
-    const replyChannel = `canvas:counts:reply:${Date.now()}`
-    const timer = setTimeout(() => {
-      ipcMain.removeAllListeners(replyChannel)
-      resolve({ panels: 0, running: 0 })
-    }, 1000)
-    ipcMain.once(replyChannel, (_event, counts: { panels: number; running: number }) => {
-      clearTimeout(timer)
-      resolve(counts)
-    })
-    webContents.send(IPC_EVENTS.CANVAS_COUNTS, replyChannel)
-  })
+  return requestFromRenderer(webContents, IPC_EVENTS.CANVAS_COUNTS, { panels: 0, running: 0 })
 }

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { BrowserWindow, app, dialog, shell } from 'electron'
-import { registerIpcHandlers, requestCanvasCounts } from './ipc'
+import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
 import { createDirectBackend, type SessionBackend } from './session-backend'
@@ -9,6 +9,14 @@ import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
 import { IPC_EVENTS } from '../shared/ipc-contract'
+import {
+  allPresets,
+  autoName,
+  mintPresetId,
+  resolveAvailability,
+  resolveDefault
+} from './presets'
+import type { CapturedPanel, PresetTemplate } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -18,6 +26,14 @@ let mainWindow: BrowserWindow | null = null
  * before the probe finishes still works rather than throwing.
  */
 let backend: SessionBackend = createDirectBackend('startup: tmux not probed yet')
+
+/**
+ * The login-shell env, resolved once inside app.whenReady(). Reassigned once
+ * by startup, same pattern as `backend` just above: `rebuildMenu` needs it to
+ * compute preset availability but runs after that resolution, so this is
+ * where it lands rather than a local inside whenReady.
+ */
+let loginEnv: Record<string, string> = {}
 
 // The manager needs a way to reach the live renderer; a getter rather than a
 // captured reference keeps it correct across window reloads. The backend is a
@@ -64,6 +80,95 @@ async function confirmReset(): Promise<void> {
   layoutStore.reset()
   layoutStore.flushSync()
   window.webContents.send(IPC_EVENTS.CANVAS_RESET)
+}
+
+/**
+ * The login environment is already resolved above, so availability costs
+ * nothing extra — it is the same whichFromEnv the startup diagnostic runs.
+ * Probed ONCE: a brew install mid-session is not noticed until relaunch,
+ * which is a known limit rather than a bug.
+ */
+const which = (command: string): string | null => whichFromEnv(command, loginEnv)
+
+const templateOf = (preset: {
+  cwd: string
+  command?: string
+  args: string[]
+  w?: number
+  h?: number
+}): PresetTemplate => {
+  // Absence is preserved by CONSTRUCTION rather than by copying the whole
+  // object: spreading a preset would carry `command: undefined` into JSON,
+  // which survives structured clone but reads as "explicitly none" to any
+  // later `'command' in template` check.
+  const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
+  if (preset.command !== undefined) template.command = preset.command
+  if (preset.w !== undefined) template.w = preset.w
+  if (preset.h !== undefined) template.h = preset.h
+  return template
+}
+
+function pushDefaultPreset(): void {
+  const preset = resolveDefault(layoutStore.presets(), layoutStore.defaultPresetId())
+  mainWindow?.webContents.send(IPC_EVENTS.PRESET_DEFAULT, templateOf(preset))
+}
+
+function rebuildMenu(): void {
+  buildAppMenu({
+    settings: layoutStore.settings(),
+    onToggle: (key, value) => layoutStore.setSetting(key, value),
+    onReset: () => {
+      void confirmReset()
+    },
+    presets: resolveAvailability(allPresets(layoutStore.presets()), which),
+    onSpawnPreset: (id) => {
+      const user = layoutStore.presets()
+      const found = allPresets(user).find((p) => p.id === id)
+      if (!found) {
+        // Never substitute a different preset: spawning the wrong program in
+        // the wrong directory is worse than spawning nothing.
+        console.warn(`[presets] menu named ${id}, which no longer exists`)
+        return
+      }
+      mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+    },
+    onSavePreset: () => {
+      void savePresetFromFocusedPanel()
+    }
+  })
+}
+
+async function savePresetFromFocusedPanel(): Promise<void> {
+  const wc = mainWindow?.webContents
+  if (!wc) return
+  const captured = await requestFromRenderer<CapturedPanel | null>(
+    wc,
+    IPC_EVENTS.PRESET_CAPTURE,
+    null
+  )
+  if (!captured) {
+    // Loud, not silent: a menu item that does nothing is indistinguishable
+    // from a broken one.
+    await dialog.showMessageBox({
+      type: 'info',
+      message: 'Focus a panel first',
+      detail: 'Click into the panel you want to save, then try again.'
+    })
+    return
+  }
+  const user = layoutStore.presets()
+  const preset = {
+    id: mintPresetId(user),
+    name: autoName(captured, allPresets(user)),
+    cwd: captured.cwd,
+    // Absent stays absent, all the way to resolveCommand.
+    ...(captured.command !== undefined ? { command: captured.command } : {}),
+    args: [...captured.args],
+    w: captured.w,
+    h: captured.h
+  }
+  layoutStore.addPreset(preset)
+  rebuildMenu()
 }
 
 function createWindow(): void {
@@ -124,12 +229,20 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // After did-finish-load, not before: a send to a webContents that has not
+  // finished loading is dropped, and Cmd+N would spawn nothing until the next
+  // preset change.
+  mainWindow.webContents.on('did-finish-load', () => {
+    pushDefaultPreset()
+  })
 }
 
 app.whenReady().then(async () => {
   // Resolve the login-shell environment before the first PTY can be requested,
   // so no panel ever spawns with the bare launchd PATH.
   const env = await resolveShellEnv()
+  loginEnv = env
   for (const binary of ['claude', 'codex', 'git']) {
     const found = whichFromEnv(binary, env)
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
@@ -165,13 +278,7 @@ app.whenReady().then(async () => {
     }
   }
 
-  buildAppMenu({
-    settings: layoutStore.settings(),
-    onToggle: (key, value) => layoutStore.setSetting(key, value),
-    onReset: () => {
-      void confirmReset()
-    }
-  })
+  rebuildMenu()
   registerIpcHandlers(ptyManager, layoutStore, () => ({
     kind: backend.kind,
     reason: backend.reason

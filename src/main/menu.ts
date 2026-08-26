@@ -1,11 +1,16 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import type { RestoreSettings } from '../shared/layout-schema'
+import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
   settings: RestoreSettings
   onToggle(key: keyof RestoreSettings, value: boolean): void
   onReset(): void
+  /** Built-ins and user presets together, each already resolved for availability. */
+  presets: PresetAvailability[]
+  onSpawnPreset(id: string): void
+  onSavePreset(): void
 }
 
 /**
@@ -59,6 +64,27 @@ export function buildAppMenu(options: AppMenuOptions): void {
         { role: 'unhide' },
         { type: 'separator' },
         { role: 'quit' }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New panel from preset',
+          submenu: options.presets.map((entry) => ({
+            label: menuLabel(entry),
+            // Disabled rather than hidden: a user who installed neither CLI
+            // should still learn the feature exists and what it wants.
+            enabled: entry.available,
+            click: () => options.onSpawnPreset(entry.preset.id)
+          }))
+        },
+        {
+          // No ellipsis: on macOS that promises a dialog, and M5a opens none —
+          // a saved preset names itself. See autoName in presets.ts.
+          label: 'Save panel as preset',
+          click: () => options.onSavePreset()
+        }
       ]
     },
     {
