@@ -308,13 +308,40 @@ export function Canvas({
   const panelsRef = useRef(panels)
   panelsRef.current = panels
 
-  // A wheel belongs to a terminal only when it is over the FOCUSED panel.
-  // Focus is explicit — the user clicked in — which makes the rule
-  // predictable without having to be explained.
+  // The one place that decides who owns a wheel gesture. Three rules, and the
+  // ORDER is the load-bearing part: the palette outranks zoom, and zoom
+  // outranks the focused panel.
   const shouldYieldWheel = useCallback((event: WheelEvent): boolean => {
+    const target = event.target as HTMLElement | null
+
+    // 1. The palette owns EVERY wheel over itself, zoom gestures included. It
+    // is a screen-space overlay mounted INSIDE .canvas, so useViewport's
+    // capture-phase listener sees the event before the overlay does; without
+    // this rule its preventDefault() suppresses the native scrolling of
+    // .palette__list (max-height: 46vh, overflow-y: auto) and pans the camera
+    // instead — the list simply never gets to move. The containment test is
+    // explicit for the same reason onMouseDownCapture's is: .palette's own
+    // bubble-phase stopPropagation cannot stop a capture listener on an
+    // ancestor that has already run. Outranking rule 2 is deliberate and is
+    // rule 3 of "who owns the keyboard" applied to the pointer: while the
+    // palette is open, every other canvas gesture stands down.
+    if (target?.closest?.('.palette')) return true
+
+    // 2. A zoom gesture is otherwise always the camera's, never a terminal
+    // scroll, regardless of what is under the cursor. Both spellings are
+    // claimed because canvas-input.ts treats both as a zoom intent: a trackpad
+    // pinch arrives as a wheel with ctrlKey true, and Cmd+wheel is the mouse
+    // equivalent. Claiming only ctrlKey would leave a mouse user who has
+    // clicked into a panel unable to zoom the canvas while the cursor is over
+    // it — and would make Cmd, the modifier every other canvas shortcut
+    // requires, the one thing the canvas ignores here.
+    if (event.ctrlKey || event.metaKey) return false
+
+    // 3. A wheel belongs to a terminal only when it is over the FOCUSED panel.
+    // Focus is explicit — the user clicked in — which makes the rule
+    // predictable without having to be explained.
     const id = focusedIdRef.current
     if (!id) return false
-    const target = event.target as HTMLElement | null
     const panel = target?.closest?.('.panel')
     if (panel?.getAttribute('data-panel-id') !== id) return false
     // A restored focusedId can name a panel lod.ts still refuses to promote

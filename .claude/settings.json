@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(tmux -V)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(grep -n \"verify:panels\\\\` 41 is the check that fails if it is removed\" CLAUDE.md)"
     ]
   }
 }

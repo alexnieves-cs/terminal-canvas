@@ -2903,6 +2903,94 @@ app.whenReady().then(async () => {
         `preRenameTitle=${preRenameTitle} stillExists=${stillExists} revertedTitle=${revertedTitle}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 47. The palette owns every wheel over itself. .palette mounts INSIDE
+    //     .canvas, so useViewport's capture-phase listener sees the event
+    //     first; before shouldYieldWheel learned about .palette it called
+    //     preventDefault() there, which both panned the camera and killed the
+    //     native scrolling of .palette__list (max-height: 46vh, overflow-y:
+    //     auto) — the list could only ever be moved by the arrow keys.
+    //
+    //     WHY THE ASSERTION IS CANCELLATION AND NOT scrollTop: a synthetic
+    //     WheelEvent is untrusted, and Chromium performs no default action
+    //     for an untrusted event — so .palette__list would NOT scroll here
+    //     even against a fully correct implementation, and a scrollTop check
+    //     would fail the fix it is meant to prove. dispatchEvent() returns
+    //     false iff something called preventDefault(), so "not cancelled" is
+    //     precisely "the browser will scroll this", and it is exactly the bit
+    //     this change flips. The background control below is what keeps that
+    //     from being vacuous: it must still come back cancelled, and must
+    //     still move the camera, or a listener that had simply stopped
+    //     working would pass the palette halves for the wrong reason.
+    // ---------------------------------------------------------------------
+    {
+      await zoomTo(wc, '0')
+      if (await wc.executeJavaScript(`document.querySelector('.palette') === null`)) {
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      }
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+
+      const result = await wc.executeJavaScript(`(async () => {
+        const read = () => getComputedStyle(document.querySelector('.world')).transform
+        // Dispatched on a ROW, not on .palette: a row is where a real cursor
+        // over the list actually is, and it is a descendant of the scroll
+        // container whose default action is the thing being protected. The
+        // same lesson check 12 records about .panel__slot vs .xterm-screen.
+        const row = document.querySelector('.palette__row')
+        if (!row) return { error: 'no .palette__row' }
+        if (!document.querySelector('.world')) return { error: 'no .world' }
+        const r = row.getBoundingClientRect()
+        const wheel = (extra) => new WheelEvent('wheel', Object.assign({
+          bubbles: true, cancelable: true,
+          clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+          deltaY: 120, deltaMode: 0
+        }, extra))
+
+        const before = read()
+        const plainOverPalette = row.dispatchEvent(wheel({}))
+        await new Promise((res) => setTimeout(res, 200))
+
+        // The pinch spelling. Over the palette this must be yielded TOO —
+        // rule 1 outranks rule 2 in shouldYieldWheel, because while the
+        // palette is open every other canvas gesture stands down. Safe to
+        // dispatch before the transform is re-read only because a yielded
+        // zoom changes no scale; if it were claimed, this is the wheel that
+        // would show up in transformAfter.
+        const pinchOverPalette = row.dispatchEvent(wheel({ ctrlKey: true }))
+        await new Promise((res) => setTimeout(res, 200))
+        const transformAfterPalette = read()
+
+        // Control: the same wheel on the background is still the camera's.
+        const canvas = document.querySelector('.canvas')
+        const overBackground = canvas.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, clientX: 5, clientY: 5, deltaY: 120, deltaMode: 0
+        }))
+        await new Promise((res) => setTimeout(res, 200))
+        const transformAfterBackground = read()
+
+        document.querySelector('.palette__input')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        return {
+          before, plainOverPalette, pinchOverPalette,
+          transformAfterPalette, overBackground, transformAfterBackground
+        }
+      })()`)
+
+      ok('47 a wheel over the open palette is left uncancelled and does not move the camera, pinch included, while the background still pans',
+        result && !result.error &&
+          result.plainOverPalette === true &&
+          result.pinchOverPalette === true &&
+          result.transformAfterPalette === result.before &&
+          result.overBackground === false &&
+          result.transformAfterBackground !== result.before,
+        `error=${result && result.error} plain=${result && result.plainOverPalette} ` +
+        `pinch=${result && result.pinchOverPalette} background=${result && result.overBackground} ` +
+        `transform: ${result && result.before} -> palette ${result && result.transformAfterPalette} ` +
+        `-> background ${result && result.transformAfterBackground}`)
+      await zoomTo(wc, '0')
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

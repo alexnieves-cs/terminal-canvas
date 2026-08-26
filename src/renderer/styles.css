@@ -329,7 +329,11 @@ body {
   margin: 0;
   padding: 6px 0;
   max-height: 46vh;
+  /* The palette's wheel is yielded by Canvas.tsx's shouldYieldWheel, so this
+     scrolls natively. `contain` stops a scroll past either end from chaining
+     outward into the macOS rubber-band bounce on a page that cannot scroll. */
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .palette__row {

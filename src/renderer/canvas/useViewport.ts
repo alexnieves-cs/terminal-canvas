@@ -47,6 +47,16 @@ export function useViewport(
   hostRef: RefObject<HTMLElement | null>,
   rects: WorldRect[],
   onSpawn?: (worldCentre: Point) => void,
+  /**
+   * The SOLE authority on wheel ownership: true means the camera stands down
+   * and the event continues untouched to whatever is under the cursor. It
+   * decides zoom gestures too — this hook deliberately holds no rule of its
+   * own any more, because the palette has to be able to outrank zoom and a
+   * post-filter here could only ever narrow the predicate's answer, never
+   * widen it. See Canvas.tsx's implementation for the three ordered rules.
+   *
+   * Must be referentially stable: it sits in the wheel effect's dep array.
+   */
   shouldYieldWheel?: (event: WheelEvent) => boolean,
   /** The restored camera. Cmd+0 still returns to INITIAL, not to this. */
   initialViewport?: Viewport,
@@ -89,24 +99,13 @@ export function useViewport(
     // event continue downward, or claim it for the camera by stopping it
     // from ever reaching xterm.
     const onWheel = (event: WheelEvent): void => {
-      // A zoom gesture is always the camera's, never a terminal scroll,
-      // regardless of what is under the cursor — so it is stopped here
-      // unconditionally, same as the focus check below. Both spellings are
-      // exempt because canvas-input.ts treats both as a zoom intent: a
-      // trackpad pinch arrives as a wheel with ctrlKey true, and Cmd+wheel is
-      // the mouse equivalent. Exempting only ctrlKey would leave a mouse user
-      // who has clicked into a panel unable to zoom the canvas while the
-      // cursor is over it — and would make Cmd, the modifier every other
-      // canvas shortcut requires, the one thing the canvas ignores here.
-      const isZoomGesture = event.ctrlKey || event.metaKey
-      const overFocused = !isZoomGesture && shouldYieldWheel?.(event)
-
-      if (overFocused) {
-        // Let the event fall through to the target/bubble phases undisturbed
-        // so xterm's own handler scrolls that terminal. No preventDefault,
-        // no stopPropagation — this is the one case where the terminal wins.
-        return
-      }
+      // Ownership is asked once and answered once. Yielding means doing
+      // NOTHING: no preventDefault, no stopPropagation, so the event reaches
+      // the target phase intact and whoever is under the cursor handles it —
+      // xterm's own handler for the focused panel, or the browser's native
+      // overflow scrolling for the command palette's row list, which only
+      // ever runs on a wheel nobody cancelled.
+      if (shouldYieldWheel?.(event)) return
 
       // Everything else (background, or a wheel over a panel that is not
       // focused) belongs to the camera. stopPropagation here, in capture,

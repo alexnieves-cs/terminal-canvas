@@ -46,7 +46,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 17 channels as of M5b, nine of them the palette's |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 48 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). The count is 48 while the last number is 46, because of the lettered sub-checks `38b` and `40a` |
+| `verify:panels` | real Electron | 49 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. The count is 49 while the last number is 47, because of the lettered sub-checks `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -428,14 +428,20 @@ none of that. `raisePanel` (`panels.ts`) only ever changes `z`; `Panel.z` render
 match — so paint order and pick order still agree. `verify:panels` check 16 asserts DOM order
 is stable across a raise.
 
-**Wheel ownership is decided by focus, in the capture phase (`useViewport.ts`,
-`Canvas.tsx`'s `shouldYieldWheel`).** A wheel over the *focused* panel scrolls that terminal;
-every other wheel — background, an unfocused panel, or any zoom gesture (a `ctrlKey` trackpad
-pinch or a `metaKey` mouse wheel, the two spellings `canvas-input.ts` reads as zoom) — pans or
-zooms the camera. The zoom exemption is unconditional and covers the focused panel too: `Cmd`
-is the modifier every other canvas shortcut requires, so it cannot be the one input where the
-canvas defers, and without the `metaKey` half a mouse user who had clicked into a panel could
-not zoom while the cursor was over it. The listener is installed on the canvas host with `{ capture: true, passive: false }`,
+**Wheel ownership is decided in one predicate, in the capture phase (`useViewport.ts`,
+`Canvas.tsx`'s `shouldYieldWheel`).** `shouldYieldWheel` is the SOLE authority — `useViewport`
+consults it unconditionally and holds no rule of its own, which is forced rather than tidy: the
+hook used to post-filter the answer as `!isZoomGesture && shouldYieldWheel(event)`, and an AND
+can only ever *narrow* what the predicate says, never widen it, so no palette rule written in
+`Canvas.tsx` could have outranked zoom while that AND stood. Three rules, in this order.
+**(1) The palette owns every wheel over `.palette`, zoom gestures included** — see "Scrolling the
+palette" below. **(2) Otherwise a zoom gesture is always the camera's**, covering the focused
+panel too (a `ctrlKey` trackpad pinch or a `metaKey` mouse wheel, the two spellings
+`canvas-input.ts` reads as zoom): `Cmd` is the modifier every other canvas shortcut requires, so
+it cannot be the one input where the canvas defers, and without the `metaKey` half a mouse user
+who had clicked into a panel could not zoom while the cursor was over it. **(3) Otherwise a
+wheel over the *focused* panel scrolls that terminal**, and everything else — background, an
+unfocused panel — pans the camera. The listener is installed on the canvas host with `{ capture: true, passive: false }`,
 not the bubble phase, and that is forced rather than chosen: xterm's own wheel handler is
 bound on a descendant and runs first in the target phase, so by the time a bubble-phase
 listener saw the event xterm had already scrolled. The first M4a implementation used bubble
@@ -694,6 +700,10 @@ every canvas shortcut"). Four rules make that work, and each one fails silently 
    drag behind an open palette (`verify:panels` 37) or `Cmd+N` spawning a panel the user cannot
    see (34). `isOpen` is a `useCallback` reading a ref, not state, precisely so it can sit in
    those dep arrays without tearing the listeners down on every open and close.
+   The *wheel* stands down too, but by a different route: `palette.isOpen` is passed to
+   `useViewport` as `shouldIgnoreKeys` and covers only the keyboard, so the pointer
+   half of this rule was missing for two milestones and a scroll over the overlay panned the canvas. It is
+   `shouldYieldWheel`'s rule 1 that closes it — see "Scrolling the palette is a yield" below.
 4. **Closing calls `restoreFocus(capturedId)`**, i.e. `SessionHandle.focus()`. Nothing else
    gives the keyboard back: the input is unmounting, and an unmounted element's blur leaves
    focus on `<body>`, where every subsequent keystroke goes nowhere at all
@@ -757,6 +767,31 @@ under the overlay, and through `onSelectPanel` it **wakes** that panel — spawn
 from a palette click, which is the one thing the dormancy rule exists to prevent. The guard is
 bubble phase (so the rows' own handlers still run) with no `preventDefault` (so the input still
 places its caret). `verify:panels` 41 is the check that fails if it is removed.
+
+**Scrolling the palette is a yield, not a scroll handler (`Canvas.tsx`'s `shouldYieldWheel`
+rule 1).** `.palette__list` has been `max-height: 46vh; overflow-y: auto` since M5b and could
+always have scrolled natively — what stopped it was one layer up. The overlay mounts INSIDE
+`.canvas`, so `useViewport`'s capture-phase wheel listener saw every wheel over the palette
+first, decided it was the camera's (no `.panel` ancestor, so the focus rule said no), and called
+`preventDefault()` — which is exactly what suppresses the browser's default scrolling. The
+symptom was that a two-finger scroll over the open palette **panned the canvas** while the list
+sat still, and the arrow keys were the only way through a list that is long by construction.
+The fix is subtractive: rule 1 returns `true`, `useViewport` returns without touching the event,
+and the browser scrolls the list. **No `onWheel` handler exists anywhere in `Palette.tsx`, and
+adding one would not help** — a bubble-phase handler there runs long after the ancestor's
+capture listener has already cancelled the event, the same asymmetry `onMouseDownCapture`
+documents. The containment test is an explicit `closest('.palette')` for that same reason.
+Rule 1 outranks the zoom rule deliberately: it is rule 3 of "who owns the keyboard" applied to
+the pointer — while the palette is open, every other canvas gesture stands down, and it would be
+strange for `Cmd+N` to be swallowed while a pinch over the same overlay zoomed the world behind
+it. Scrolling deliberately does NOT move the selected row (see "The palette's selection moves
+only when the user moves it"); `scrollIntoView`'s `block: 'nearest'` is what stops a
+user-scrolled view being yanked back. `verify:panels` 47 is the check, and **it asserts
+cancellation, not `scrollTop`**: a synthetic `WheelEvent` is untrusted and Chromium performs no
+default action for one, so the list would not scroll there even against a correct
+implementation, and a `scrollTop` assertion would fail the very fix it exists to prove.
+`dispatchEvent()` returns `false` iff something called `preventDefault()`, which is precisely
+the bit this change flips.
 
 **Three ways out of the palette, and the third one must not restore focus (`Canvas.tsx`'s
 `onMouseDownCapture`, `usePalette.ts`'s `dismissPalette`).** A click outside the overlay closes

@@ -208,9 +208,12 @@ function createWindow(): void {
   // behaviour.
   attachPtyLifecycle(mainWindow, () => ptyManager.detachAll())
 
-  // Belt and braces against Chromium's own pinch-to-zoom. The renderer already
-  // preventDefaults ctrl+wheel, but a missed path must not be able to zoom the
-  // whole UI, which would silently break every coordinate the canvas computes.
+  // Belt and braces against Chromium's own pinch-to-zoom. The renderer
+  // preventDefaults ctrl+wheel on every path the camera claims — but not on
+  // the ones it YIELDS: a pinch over the command palette is deliberately left
+  // uncancelled (shouldYieldWheel's rule 1), so this is the only thing
+  // stopping it zooming the whole UI, which would silently break every
+  // coordinate the canvas computes.
   mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch((error: unknown) => {
     console.warn('[window] could not pin visual zoom', error)
   })
