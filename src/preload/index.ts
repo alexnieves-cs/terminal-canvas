@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC, IPC_EVENTS, type CanvasBridge } from '../shared/ipc-contract'
+import {
+  IPC,
+  IPC_EVENTS,
+  type CanvasBridge,
+  type PresetTemplate,
+  type CapturedPanel
+} from '../shared/ipc-contract'
 import type {
   PanelId,
   PanelSpec,
@@ -53,6 +59,19 @@ const bridge: CanvasBridge = {
       return () => ipcRenderer.removeListener(IPC_EVENTS.CANVAS_COUNTS, wrapped)
     },
     onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener)
+  },
+  preset: {
+    onSpawn: (listener) => subscribe<PresetTemplate>(IPC_EVENTS.PRESET_SPAWN, listener),
+    onDefault: (listener) => subscribe<PresetTemplate>(IPC_EVENTS.PRESET_DEFAULT, listener),
+    // Same shape as canvas.onCounts: a main -> renderer REQUEST, answered on a
+    // one-shot reply channel whose name main invents and sends.
+    onCapture: (provide: () => CapturedPanel | null) => {
+      const wrapped = (_event: IpcRendererEvent, replyChannel: string): void => {
+        ipcRenderer.send(replyChannel, provide())
+      }
+      ipcRenderer.on(IPC_EVENTS.PRESET_CAPTURE, wrapped)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.PRESET_CAPTURE, wrapped)
+    }
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)

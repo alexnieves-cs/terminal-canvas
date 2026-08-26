@@ -60,13 +60,61 @@ export const IPC_EVENTS = {
    */
   CANVAS_COUNTS: 'canvas:counts',
   /** Confirmed reset: drop every panel and return to the first-run canvas. */
-  CANVAS_RESET: 'canvas:reset'
+  CANVAS_RESET: 'canvas:reset',
+  /**
+   * Spawn a panel from a preset the user picked in the menu. Main → renderer
+   * because the MENU is main's, and the renderer is the only side that can
+   * mint a panel id (nextIdRef) and know where the camera is looking.
+   */
+  PRESET_SPAWN: 'preset:spawn',
+  /**
+   * The template Cmd+N should use from now on. Pushed after load and whenever
+   * the presets or the default change.
+   *
+   * Cmd+N stays a renderer keybinding rather than a menu accelerator because
+   * verify:panels presses it with a dispatched KeyboardEvent, which a
+   * main-process accelerator would never receive — moving it would rewrite
+   * checks 7, 20 and 22 into IPC sends that prove strictly less.
+   */
+  PRESET_DEFAULT: 'preset:default',
+  /**
+   * "Save panel as preset": main owns the menu but only the renderer knows
+   * which panel has focus, so main asks. Answered on an ephemeral reply
+   * channel, exactly as CANVAS_COUNTS is, which is why this lives here rather
+   * than in IPC — verify:ipc only walks IPC.
+   */
+  PRESET_CAPTURE: 'preset:capture'
 } as const
 
 export interface SessionBackendInfo {
   kind: 'tmux' | 'direct'
   /** Human-readable cause, shown in the HUD when kind is 'direct'. */
   reason: string
+}
+
+/**
+ * A preset as the renderer needs it. NO panelId: the renderer mints that from
+ * nextIdRef, and a main-minted id would collide with the `n` sequence Cmd+N
+ * uses — the same duplicate-id defect M4a fixed and M4b nearly resurrected.
+ *
+ * `command` absent still means the login shell, all the way down to
+ * pty-manager's resolveCommand. Nothing on this journey may fill it in.
+ */
+export interface PresetTemplate {
+  cwd: string
+  command?: string
+  args: string[]
+  w?: number
+  h?: number
+}
+
+/** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
+export interface CapturedPanel {
+  cwd: string
+  command?: string
+  args: string[]
+  w: number
+  h: number
 }
 
 /** Shape of the bridge the preload exposes on window.canvas. */
@@ -101,6 +149,17 @@ export interface CanvasBridge {
     /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
     onCounts(provide: () => { panels: number; running: number }): () => void
     onReset(listener: () => void): () => void
+  }
+  preset: {
+    /** A menu pick: spawn one panel from this template, now. */
+    onSpawn(listener: (template: PresetTemplate) => void): () => void
+    /** What Cmd+N should spawn from now on. */
+    onDefault(listener: (template: PresetTemplate) => void): () => void
+    /**
+     * Registers a PROVIDER, not a listener — main asks, the renderer answers.
+     * Mirrors canvas.onCounts; returns null when nothing is focused.
+     */
+    onCapture(provide: () => CapturedPanel | null): () => void
   }
   session: {
     info(): Promise<SessionBackendInfo>
