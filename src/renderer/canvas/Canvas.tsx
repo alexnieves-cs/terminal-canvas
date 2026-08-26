@@ -333,10 +333,17 @@ export function Canvas({
     registry.get(id)?.handle.focus()
   }, [])
   const palette = usePalette({ focusedIdRef, restoreFocus })
-  // Underscored because nothing sets it yet and noUnusedLocals is on: rename
-  // (beginRenamePreset) is Task 6 and save-prompt is Task 11. The palette
-  // renders command mode until then.
-  const [inputMode, _setInputMode] = useState<InputMode | null>(null)
+  // null is command mode. Set by beginRenamePreset; save-prompt is Task 11.
+  const [inputMode, setInputMode] = useState<InputMode | null>(null)
+  // The palette always OPENS in command mode. Both ends of a rename leave the
+  // mode set otherwise: a completed one resolves after Palette has already
+  // closed itself (it closes before calling submit, so nothing on screen is
+  // left to clear it), and a cancelled one never reaches submit at all. Either
+  // way the next Cmd+K would greet the user with a stale text field, no list,
+  // and no explanation.
+  useEffect(() => {
+    if (!palette.open) setInputMode(null)
+  }, [palette.open])
 
   const { viewport, resetViewport, worldCentre } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen
@@ -867,30 +874,87 @@ export function Canvas({
     if (world) setCursor(world)
   }
 
+  // Loaded when the palette OPENS, not on mount and not on a subscription: the
+  // list is only ever looked at while the overlay is up, and availability is
+  // probed once at startup anyway (a brew install mid-session is a known limit
+  // of M5a, not something a subscription here would fix). Reloaded after every
+  // mutation, because main is the only side that knows what the store now says.
+  const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
+  const reloadPresets = useCallback(() => {
+    void window.canvas.preset.list().then(setPresetRows)
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadPresets()
+  }, [palette.open, reloadPresets])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
   const paletteActions = useMemo<PaletteActions>(() => ({
-    spawnPreset: () => {},          // Task 6
-    beginRenamePreset: () => {},    // Task 6
-    deletePreset: () => {},         // Task 6
-    setDefaultPreset: () => {},     // Task 6
+    spawnPreset: (id) => {
+      const row = presetRows.find((p) => p.id === id)
+      // buildCommands already disables an unavailable row, so this is the
+      // second half of the same rule rather than the only one: a stale list —
+      // the palette was open while the store changed — must not spawn a panel
+      // that dies instantly with "command not found".
+      if (!row || !row.available) return
+      // Routed through the SAME main-side path the menu uses, so a palette
+      // spawn and a menu spawn cannot drift: main resolves the template
+      // (absent command included) and sends PRESET_SPAWN back, which Canvas
+      // already handles through onSpawn — which is what gives it the ordinary
+      // undo behaviour, where removing a panel disposes its session.
+      void window.canvas.preset.spawnById(id)
+    },
+    beginRenamePreset: (id, currentName) => {
+      setInputMode({
+        label: `Rename \u201c${currentName}\u201d to\u2026`,
+        initial: currentName,
+        submit: (value) => {
+          void window.canvas.preset.rename(id, value).then(() => {
+            setInputMode(null)
+            reloadPresets()
+          })
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without this the mode would be set on a palette that is already gone
+      // — and the effect above would immediately clear it again. Reopening in
+      // the same batch is what turns "run the rename command" into "the
+      // palette is now a text field", which is the whole point of input mode.
+      palette.openPalette()
+    },
+    deletePreset: (id) => {
+      void window.canvas.preset.remove(id).then(reloadPresets)
+    },
+    setDefaultPreset: (id) => {
+      // No local bookkeeping: main answers by pushing PRESET_DEFAULT, which
+      // the existing subscription writes into defaultTemplateRef. One source
+      // of truth for what Cmd+N spawns, and it is main's.
+      void window.canvas.preset.setDefault(id).then(reloadPresets)
+    },
     goToPanel: () => {},            // Task 7
     insertPrompt: () => {},         // Task 11
     beginSavePrompt: () => {},      // Task 11
     deletePrompt: () => {},         // Task 11
-    resetCanvas: () => {},          // Task 6, once canvas:request-reset exists
+    resetCanvas: () => {
+      // Main owns the confirmation dialog and the counts request. The palette
+      // asks for the flow the menu item already runs rather than growing a
+      // second one that could drift from it. FIRE-AND-FORGET: main returns
+      // before the user answers the dialog, so this promise resolving says
+      // nothing about whether a reset happened and nothing here may act on it.
+      void window.canvas.canvas.requestReset()
+    },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
-  }), [resetViewport])
+  }), [resetViewport, presetRows, reloadPresets, palette.openPalette])
 
   const panelRows = useMemo<PanelRow[]>(
     () => panels.map((p) => ({ id: p.rect.id, label: panelLabel(p) })),
     [panels]
   )
-  // Real loads arrive with their commands: presets in Task 6, prompts in Task
-  // 11. Constants, not state, so the memo above them stays stable until then.
-  const presetRows: PresetRow[] = EMPTY_PRESETS
+  // Real loads arrive with their commands: prompts are Task 11. A module-level
+  // constant, not a fresh [] each render, so the palette's props keep the same
+  // identity between frames of a pan until then.
   const promptRows: PromptRow[] = EMPTY_PROMPTS
 
   // Cheap, and read once per render of the palette: getSelection() is a string

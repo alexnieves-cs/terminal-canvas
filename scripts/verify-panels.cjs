@@ -39,6 +39,9 @@ const {
   DEFAULT_CAMERA,
   requestFromRenderer,
   pushDefaultPreset,
+  allPresets,
+  resolveAvailability,
+  presetRows,
   IPC_EVENTS
 } = require(ENTRY_OUT)
 
@@ -192,6 +195,12 @@ app.whenReady().then(async () => {
   const BOOT_DEFAULT_PRESET = {
     id: 'u9', name: 'Verify boot default', cwd: '/tmp', command: '/bin/cat', args: ['-v']
   }
+  // Check 38's fixture. The name is what the check's query targets, and it is
+  // deliberately unlike every other preset's: 'rename harness' is a
+  // subsequence of "Rename preset harness preset" and of no other row's text,
+  // so the row the check clicks is the one it means rather than whichever
+  // built-in the fuzzy matcher happened to rank first.
+  const RENAMABLE_PRESET = { id: 'u1', name: 'harness preset', cwd: '~', args: [] }
   writeFileSync(LAYOUT_PATH, JSON.stringify({
     version: 1,
     activeWorkspaceId: 'w1',
@@ -199,7 +208,11 @@ app.whenReady().then(async () => {
       id: 'w1', name: 'Canvas', panels: [],
       camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null
     }],
-    presets: [BOOT_DEFAULT_PRESET],
+    // Check 38 needs a preset the palette is allowed to RENAME, which rules
+    // out every built-in — and BOOT_DEFAULT_PRESET is check 32's fixture, so
+    // renaming that one would leave 32 asserting against a name this check
+    // changed. A second user preset, never the default, keeps the two apart.
+    presets: [BOOT_DEFAULT_PRESET, RENAMABLE_PRESET],
     defaultPresetId: BOOT_DEFAULT_PRESET.id
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
@@ -228,15 +241,28 @@ app.whenReady().then(async () => {
   // ipcMain.handle's return value crosses IPC via structured clone, so this
   // must be a plain { kind, reason } object, not the SessionBackend itself —
   // that carries a spawn() function, which structured clone cannot carry.
-  // No check in this suite drives a preset mutation from IPC (that's Task 6's
-  // palette wiring), so a stub that never gets called is enough — the real
-  // requirement here is that registerIpcHandlers still registers all five
-  // preset/reset channels so verify:ipc's contract holds for a real renderer.
+  // list and rename are REAL, against the same store and the same presetRows
+  // builder main/index.ts uses: check 38 asserts a rename made in the palette
+  // survives a round trip through the store, and a stubbed pair would let it
+  // pass against the harness rather than against the app. The rest stay stubs
+  // — nothing here drives them, and the contract requirement is only that
+  // registerIpcHandlers registers every preset/reset channel.
+  //
+  // `which` answers null for everything: this process has no resolved login
+  // env, and availability is not what check 38 is about. It only affects the
+  // spawn rows, which no check in this suite clicks.
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
-    list: () => [],
-    rename: () => false,
+    list: () => presetRows(
+      resolveAvailability(allPresets(layoutStore.presets()), () => null),
+      layoutStore.defaultPresetId()
+    ),
+    // No afterPresetChange(): this entry point builds no menu, and re-pushing
+    // PRESET_DEFAULT here would hand check 32's assertion a second push it
+    // never asked for.
+    rename: (id, name) => layoutStore.renamePreset(id, name),
     remove: () => false,
     setDefault: () => {},
+    spawn: () => {},
     requestReset: () => {}
   })
 
@@ -1973,6 +1999,93 @@ app.whenReady().then(async () => {
 
       ok('37 Cmd+Z does not undo behind an open palette, and still undoes once it is closed',
         survived && undone, `newId=${newId} survived=${survived} undoneAfterClose=${undone}`)
+    }
+
+    // 38. A rename made in the palette reaches the store and comes back in the
+    //     next preset:list. This is the debt M5a deferred here by name: it
+    //     shipped presets that could be created and picked but not renamed,
+    //     because the rename needed a text field and the text field needed the
+    //     focus rules that did not exist yet.
+    {
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      // Filter to the rename row for the user preset the layout file seeded,
+      // run it, then type the new name and press Enter. React's controlled
+      // <input> ignores a plain input.value = x — the native setter plus a
+      // dispatched 'input' is what makes the change reach React's state, so
+      // do not simplify it into an assignment.
+      const renamed = await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        nativeSet(document.querySelector('.palette__input'), 'rename harness')
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename preset harness preset'))
+        if (!row) return 'no rename row for the seeded user preset'
+        if (row.className.includes('palette__row--disabled')) return 'rename row was disabled'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        // Still an input, and now in rename mode: the row's action must have
+        // reopened the palette into inputMode rather than leaving it shut.
+        const input2 = document.querySelector('.palette__input')
+        if (!input2) return 'palette closed instead of entering rename mode'
+        if (document.querySelector('.palette__list')) return 'still in command mode'
+        nativeSet(input2, 'renamed by palette')
+        input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await new Promise((r) => setTimeout(r, 200))
+        const rows = await window.canvas.preset.list()
+        return rows.some((r) => r.name === 'renamed by palette')
+      })()`)
+      ok('38 a rename in the palette reaches the store', renamed === true, String(renamed))
+
+      // The input mode must not outlive the rename. Palette.tsx closes BEFORE
+      // calling submit, so nothing in the submit path is still on screen to
+      // clear it — an uncleared mode greets the next Cmd+K with a stale text
+      // field and no list. The same applies to a rename abandoned with
+      // Escape, which is why both are asserted here rather than only the
+      // completed one.
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      const freshAfterSubmit = await wc.executeJavaScript(
+        `document.querySelector('.palette__list') !== null &&
+         (document.querySelector('.palette__input') || {}).value === ''`)
+
+      // Now enter rename mode again and abandon it with Escape.
+      const freshAfterCancel = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        // Guarded rather than assumed: a setter .call'd on null throws
+        // "Illegal invocation", which reports as an infrastructure crash and
+        // buries whichever earlier assertion actually went wrong.
+        if (!input) return 'palette was not open'
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        // 'rename renamed', not 'rename harness': the preset just got a new
+        // name, and the query has to be a subsequence of the row it means.
+        setter.call(input, 'rename renamed')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename preset renamed by palette'))
+        if (!row) return 'no rename row after the rename'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        document.querySelector('.palette__input')
+          .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        return document.querySelector('.palette__list') !== null &&
+          document.querySelector('.palette__input').value === ''
+      })()`)
+      ok('38b the palette reopens in command mode after a completed and a cancelled rename',
+        freshAfterSubmit === true && freshAfterCancel === true,
+        `afterSubmit=${freshAfterSubmit} afterCancel=${freshAfterCancel}`)
     }
 
   } catch (error) {

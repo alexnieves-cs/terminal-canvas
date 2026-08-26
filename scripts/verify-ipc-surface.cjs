@@ -70,6 +70,7 @@ app.whenReady().then(() => {
     rename: () => false,
     remove: () => false,
     setDefault: () => {},
+    spawn: () => {},
     requestReset: () => {}
   }
   registerIpcHandlers(

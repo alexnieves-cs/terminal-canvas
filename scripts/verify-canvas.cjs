@@ -102,6 +102,7 @@ app.whenReady().then(async () => {
       rename: () => false,
       remove: () => false,
       setDefault: () => {},
+      spawn: () => {},
       requestReset: () => {}
     }
   )

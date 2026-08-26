@@ -76,7 +76,8 @@ const bridge: CanvasBridge = {
     list: () => ipcRenderer.invoke(IPC.PRESET_LIST),
     rename: (id: string, name: string) => ipcRenderer.invoke(IPC.PRESET_RENAME, id, name),
     remove: (id: string) => ipcRenderer.invoke(IPC.PRESET_DELETE, id),
-    setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id)
+    setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id),
+    spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id)
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)

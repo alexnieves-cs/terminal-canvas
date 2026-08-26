@@ -53,6 +53,14 @@ export const IPC = {
   PRESET_DELETE: 'preset:delete',
   PRESET_SET_DEFAULT: 'preset:set-default',
   /**
+   * Spawn from a preset the PALETTE picked. Same main-side path as the menu's
+   * pick, and a channel rather than the renderer rebuilding the template from
+   * a PresetListRow: only main can resolve an ABSENT command into the user's
+   * login shell, so a renderer-side reconstruction would either lose the
+   * absence or guess zsh at it.
+   */
+  PRESET_SPAWN_BY_ID: 'preset:spawn-by-id',
+  /**
    * "Reset canvas…" asked for from the palette rather than the menu. Main owns
    * the confirmation dialog and the counts request, so the renderer asks main
    * to run the flow it already has instead of growing a second one.
@@ -199,6 +207,12 @@ export interface CanvasBridge {
     /** `remove`, not `delete`: `delete` is a reserved word as a method name. */
     remove(id: string): Promise<boolean>
     setDefault(id: string): Promise<void>
+    /**
+     * Ask main to spawn from this preset. It answers by sending PRESET_SPAWN,
+     * the same event a menu pick produces — which is what gives a palette
+     * spawn the ordinary undo behaviour rather than a second spawn path.
+     */
+    spawnById(id: string): Promise<void>
   }
   session: {
     info(): Promise<SessionBackendInfo>

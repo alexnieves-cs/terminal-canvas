@@ -92,6 +92,24 @@ async function confirmReset(): Promise<void> {
  */
 const which = (command: string): string | null => whichFromEnv(command, loginEnv)
 
+/**
+ * Spawn from a preset, by id. NAMED rather than inlined into the menu's
+ * options, because the palette picks presets too (PRESET_SPAWN_BY_ID) and the
+ * two picks have to be the identical code — a second copy is a second place
+ * for "which preset does this id mean" to answer differently.
+ */
+function onSpawnPreset(id: string): void {
+  const user = layoutStore.presets()
+  const found = allPresets(user).find((p) => p.id === id)
+  if (!found) {
+    // Never substitute a different preset: spawning the wrong program in
+    // the wrong directory is worse than spawning nothing.
+    console.warn(`[presets] a pick named ${id}, which no longer exists`)
+    return
+  }
+  mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+}
+
 function rebuildMenu(): void {
   buildAppMenu({
     settings: layoutStore.settings(),
@@ -100,17 +118,7 @@ function rebuildMenu(): void {
       void confirmReset()
     },
     presets: resolveAvailability(allPresets(layoutStore.presets()), which),
-    onSpawnPreset: (id) => {
-      const user = layoutStore.presets()
-      const found = allPresets(user).find((p) => p.id === id)
-      if (!found) {
-        // Never substitute a different preset: spawning the wrong program in
-        // the wrong directory is worse than spawning nothing.
-        console.warn(`[presets] menu named ${id}, which no longer exists`)
-        return
-      }
-      mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
-    },
+    onSpawnPreset,
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
     }
@@ -314,6 +322,9 @@ app.whenReady().then(async () => {
       setDefault: (id) => {
         layoutStore.setDefaultPreset(id)
         afterPresetChange()
+      },
+      spawn: (id) => {
+        onSpawnPreset(id)
       },
       requestReset: () => {
         void confirmReset()

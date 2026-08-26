@@ -33,6 +33,13 @@ module.exports = {
      a send hand-written here would prove the harness right and leave the app
      inert, which is the defect that check exists for. */
   pushDefaultPreset: require('../src/main/presets').pushDefaultPreset,
+  /* Check 38 drives a rename all the way from the palette to the store and
+     back out through preset:list, so its PresetHandlers cannot be the stub
+     the other checks were happy with: list has to answer with the real rows
+     main would build, or the palette has no user preset to rename. */
+  allPresets: require('../src/main/presets').allPresets,
+  resolveAvailability: require('../src/main/presets').resolveAvailability,
+  presetRows: require('../src/main/presets').presetRows,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,

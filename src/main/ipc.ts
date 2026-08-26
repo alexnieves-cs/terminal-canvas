@@ -24,6 +24,11 @@ export interface PresetHandlers {
   rename(id: string, name: string): boolean
   remove(id: string): boolean
   setDefault(id: string): void
+  /**
+   * A palette pick. Main answers by sending PRESET_SPAWN, exactly as a menu
+   * pick does, so the two cannot drift apart.
+   */
+  spawn(id: string): void
   requestReset(): void
 }
 
@@ -62,6 +67,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PRESET_RENAME, (_event, id: string, name: string) => presets.rename(id, name))
   ipcMain.handle(IPC.PRESET_DELETE, (_event, id: string) => presets.remove(id))
   ipcMain.handle(IPC.PRESET_SET_DEFAULT, (_event, id: string) => presets.setDefault(id))
+  ipcMain.handle(IPC.PRESET_SPAWN_BY_ID, (_event, id: string) => presets.spawn(id))
   ipcMain.handle(IPC.CANVAS_REQUEST_RESET, () => presets.requestReset())
 }
 
