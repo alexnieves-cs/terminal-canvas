@@ -264,6 +264,12 @@ the last being the end-to-end proof that `node-pty` loaded out of the unpacked
 asar. A fresh `userData` gives `firstRunPanels()`, one panel, which goes live
 and spawns, so the proof needs no synthetic input.
 
+The spawn half needs **no new code at all**: `PtyManager.create` has logged
+`[pty] spawned <command> pid=<n> panel=<id> ...` since M1. Greping a line that
+already exists is strictly better than adding one for a check, because a
+regression that stops PTYs spawning then fails here whether or not anyone
+remembers this suite exists.
+
 It is kept out of `npm run verify` because it packages and rebuilds native
 modules, which takes minutes and reaches the network through electron-builder's
 cache. Making the repo's one green-or-not signal slow and network-dependent
@@ -274,8 +280,9 @@ run.
 
 ### The one piece of production code the checks require
 
-A startup diagnostic in `main/index.ts`: one line naming the resolved backend
-and its reason, and confirming `node-pty` loaded. An external process observing
+A startup diagnostic in `main/index.ts`: **one line**, naming the build kind,
+the resolved `userData`, the socket, the chosen backend and its reason, and the
+resolved `PATH`. An external process observing
 a packaged app has no other channel — there is no IPC to a test harness, no
 custom entry point (`verify:panels`' `scripts/panels-entry.cjs` trick is
 unavailable, because a packaged app runs its own `main`), and no renderer hook.
@@ -297,11 +304,14 @@ scripts/verify-package.cjs
 scripts/verify-packaged.cjs
 ```
 
-Changed: `src/main/tmux-args.ts` (`resolveSocket`, and the `TC_TMUX_SOCKET`
-override), `src/main/index.ts` (resolve the socket from `app.isPackaged`; the
-startup diagnostic), `src/main/tmux-probe.ts` (accept the resolved socket rather
-than closing over the constant), `scripts/verify-tmux.cjs` (checks for the
-resolver; check 9 untouched), `package.json` (`electron-builder` devDependency,
+Changed: `src/main/tmux-args.ts` (`resolveSocket`, `TMUX_SOCKET_PACKAGED`, and
+`buildStartServerArgs` — the one tmux argv still built by hand, inline in
+`tmux-probe.ts`, and therefore the one check 9's socket assertion cannot see),
+`src/main/index.ts` (resolve the socket from `app.isPackaged`; the startup
+diagnostic), `src/main/tmux-probe.ts` (accept the resolved socket rather than
+closing over the constant, and pass it to `createTmuxBackend`),
+`scripts/verify-tmux.cjs` (checks for the resolver and for `start-server`;
+check 9 untouched), `package.json` (`electron-builder` devDependency,
 `package` / `verify:package` / `verify:packaged` scripts, the `verify` chain),
 `README.md`, `CLAUDE.md`, `docs/ideas-backlog.md` (the icon note).
 
