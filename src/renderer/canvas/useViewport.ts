@@ -217,6 +217,10 @@ export function useViewport(
   // per render would re-seat the palette's selection on every mousemove.
   const centreOn = useCallback((rect: WorldRect) => {
     const host = hostRef.current
+    // No host means no canvas mounted to frame anything against — a silent
+    // no-op, same as worldCentre's host-less fallback above, rather than a
+    // throw over a call that can only happen during teardown/an unmounted
+    // host, never from a normal palette action.
     if (!host) return
     const bounds = host.getBoundingClientRect()
     setViewport((vp) => centreOnRect(vp, rect, { width: bounds.width, height: bounds.height }))

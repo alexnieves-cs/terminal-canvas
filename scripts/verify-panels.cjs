@@ -204,13 +204,14 @@ app.whenReady().then(async () => {
   // Check 39's fixture. reset() (check 23) always collapses the canvas to
   // firstRunPanels() — one panel — so nothing seeded into the BOOT layout can
   // survive to the end of the run; check 39 needs a still-dormant,
-  // never-spawned panel at the very end of the suite, after reset, after the
-  // reload, after every check that runs between them. It is injected into
-  // the layout file check 26 already reloads from (see the comment there),
-  // parked far outside every coordinate any later check clicks — including
-  // check 30's background click at screen (0,0), which happens to land on
-  // world (-120,-120) and is what silently re-wakes the reset panel (p1) a
-  // naive seed would rely on instead.
+  // never-spawned panel at the very end of the suite, after reset, after
+  // every check that runs between them. It is injected via its OWN reload
+  // (below, right after check 26 — see the comment there for why that reload
+  // is not check 26's tmux-only one), parked far outside every coordinate
+  // any later check clicks — including check 30's background click at
+  // screen (0,0), which happens to land on world (-120,-120) and is what
+  // silently re-wakes the reset panel (p1), a naive seed would rely on
+  // instead.
   const NEVER_WOKEN_ID = 'never-woken'
   writeFileSync(LAYOUT_PATH, JSON.stringify({
     version: 1,
@@ -1664,38 +1665,6 @@ app.whenReady().then(async () => {
           : null
         const pidBefore = panesBefore ? panesBefore.get(newId) : undefined
 
-        // Check 39's fixture, seeded into the file THIS reload restores from
-        // rather than the boot one (see NEVER_WOKEN_ID's comment above: a
-        // boot-seeded panel dies at check 23's reset before check 39 ever
-        // runs). flushLayoutStore() lands the renderer's current state (p1
-        // plus the panel just spawned above) on disk first, so appending here
-        // — rather than replacing via layoutStore.save() — cannot drop either
-        // of them. No live session will ever exist for this id, so boot
-        // reconciliation after the reload below restores it dormant, exactly
-        // like a real relaunch restores a panel whose process already died.
-        flushLayoutStore()
-        {
-          const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
-          const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
-          const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
-          ws.panels.push({
-            id: NEVER_WOKEN_ID,
-            // Far outside anything any later check's camera ever frames or
-            // clicks, including check 30's unqualified background mousedown.
-            // 720x460 matches PANEL_W/PANEL_H — hardcoded rather than
-            // imported, since the exact box size is irrelevant here (nothing
-            // reads it) and importing it would be one more coupling for no
-            // benefit.
-            x: 50000, y: 50000, w: 720, h: 460, z: maxZ + 1,
-            cwd: '~', args: ['-l']
-          })
-          writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
-          // layout:load answers from layoutStore's in-memory snapshot, not a
-          // fresh disk read (see main/ipc.ts) — without re-loading here, the
-          // reload below would restore the file as it was before this push.
-          layoutStore.load()
-        }
-
         // The real thing: a renderer teardown that skips React cleanup,
         // exactly like Cmd+R.
         const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -1715,6 +1684,66 @@ app.whenReady().then(async () => {
           `newId=${newId} pid ${pidBefore} -> ${pidAfter ?? 'MISSING'} ` +
           `sessions=${JSON.stringify([...panesAfter.keys()])}`)
       }
+    }
+
+    // ---------------------------------------------------------------------
+    // Check 39's fixture: a still-dormant, never-spawned panel that survives
+    // to the very end of the suite.
+    //
+    // reset() (check 23) always collapses the canvas to firstRunPanels() —
+    // one fresh, non-dormant panel — so nothing seeded into the BOOT layout
+    // can be that fixture; it has to be seeded AFTER reset, into whatever a
+    // later reload restores from. "Dormancy is about spawning, not
+    // attaching" (CLAUDE.md): a panel with no live session restores dormant
+    // regardless of backend, so this reload deliberately does NOT live inside
+    // check 26's `if (!TMUX)` branch — that branch, and its reload, exist
+    // for what check 26 itself asserts (a tmux session outliving its
+    // client), and skip together on a machine with no tmux binary. Giving
+    // check 39 its own reload here, unconditionally, is what keeps it
+    // passing on a machine where check 26 SKIPPED — this suite's earlier
+    // draft nested this in check 26's tmux branch and check 39 hard-failed
+    // wherever check 26 did, for a reason that has nothing to do with the
+    // command palette.
+    // ---------------------------------------------------------------------
+    {
+      // flushLayoutStore() lands the renderer's current on-screen state on
+      // disk first, so appending below — rather than replacing wholesale via
+      // layoutStore.save() — cannot drop whatever panels are actually live.
+      flushLayoutStore()
+      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+      const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+      ws.panels.push({
+        id: NEVER_WOKEN_ID,
+        // Far outside anything any later check's camera ever frames or
+        // clicks, including check 30's unqualified background mousedown.
+        // 720x460 matches PANEL_W/PANEL_H — hardcoded rather than imported,
+        // since the exact box size is irrelevant here (nothing reads it)
+        // and importing it would be one more coupling for no benefit.
+        x: 50000, y: 50000, w: 720, h: 460, z: maxZ + 1,
+        cwd: '~', args: ['-l']
+      })
+      writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+      // layout:load answers from layoutStore's in-memory snapshot, not a
+      // fresh disk read (see main/ipc.ts) — without re-loading here, the
+      // reload below would restore the file as it was before this push.
+      layoutStore.load()
+
+      // No live PTY exists (or ever will) for NEVER_WOKEN_ID under EITHER
+      // backend, so boot reconciliation after this reload restores it
+      // dormant regardless of whether check 26 ran the tmux branch above or
+      // skipped it — this reload needs nothing check 26 set up.
+      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload()
+      await reloaded
+      // Boot reconciliation (pty:list, then registry.ensure for every
+      // restored panel) runs after first paint, not synchronously with
+      // did-finish-load; wait on the fixture actually showing up rather than
+      // a guessed sleep.
+      await waitUntil(async () => {
+        const sessions = await wc.executeJavaScript(`window.__m4aSessions ? window.__m4aSessions() : []`)
+        return sessions.some((s) => s.id === NEVER_WOKEN_ID) || false
+      }, 4000)
     }
 
     /* ---- M5a presets ---- */
@@ -2145,15 +2174,16 @@ app.whenReady().then(async () => {
     //     panel" step before check 1, and reset (check 23) collapses the
     //     canvas to one fresh, non-dormant panel — so nothing seeded into the
     //     BOOT layout can be the fixture here. NEVER_WOKEN_ID is seeded
-    //     instead into the layout file check 26's reload restores from (see
-    //     the comment there), parked at world (50000, 50000) — far outside
-    //     every click any later check makes, including check 30's
-    //     unqualified background mousedown, which is what silently re-wakes
-    //     the reset panel (p1) and is the reason p1 itself is not this
-    //     fixture. A null dormantId here means one of those assumptions
-    //     broke, and the check fails loudly rather than silently skipping —
-    //     a check that passes because it found nothing to test is worse than
-    //     one that fails.
+    //     instead by its own reload right after check 26 (see the comment
+    //     there — deliberately NOT check 26's tmux-only reload, so this
+    //     fixture exists whether or not tmux is installed), parked at world
+    //     (50000, 50000) — far outside every click any later check makes,
+    //     including check 30's unqualified background mousedown, which is
+    //     what silently re-wakes the reset panel (p1) and is the reason p1
+    //     itself is not this fixture. A null dormantId here means one of
+    //     those assumptions broke, and the check fails loudly rather than
+    //     silently skipping — a check that passes because it found nothing
+    //     to test is worse than one that fails.
     {
       const dormantId = (await wc.executeJavaScript(`
         (window.__m4aSessions().find((s) => s.dormant && !s.spawned) || {}).id || null
