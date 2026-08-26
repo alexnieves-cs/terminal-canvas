@@ -184,6 +184,178 @@ const cmd = (id, title, extra = {}) => ({
     P.firstRunnable([]) === -1 && P.stepRunnable([], 0, 1) === -1)
 }
 
+// --- commands.ts -----------------------------------------------------------
+
+/** Records every action call, so a check can assert what a row is wired to. */
+const spyActions = () => {
+  const calls = []
+  const record = (name) => (...args) => calls.push([name, ...args])
+  return {
+    calls,
+    spawnPreset: record('spawnPreset'),
+    beginRenamePreset: record('beginRenamePreset'),
+    deletePreset: record('deletePreset'),
+    setDefaultPreset: record('setDefaultPreset'),
+    goToPanel: record('goToPanel'),
+    insertPrompt: record('insertPrompt'),
+    beginSavePrompt: record('beginSavePrompt'),
+    deletePrompt: record('deletePrompt'),
+    resetCanvas: record('resetCanvas'),
+    zoomToFit: record('zoomToFit')
+  }
+}
+
+const ctx = (over = {}) => ({
+  presets: [],
+  prompts: [],
+  panels: [],
+  capturedId: null,
+  hasSelection: false,
+  actions: spyActions(),
+  ...over
+})
+
+const byId = (list, id) => list.find((c) => c.id === id)
+
+const SHELL = { id: 'shell', name: 'Login shell', available: true, builtIn: true, isDefault: true, subtitle: '~' }
+const CLAUDE = { id: 'claude', name: 'Claude', available: false, builtIn: true, isDefault: false, subtitle: '~' }
+const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: false, isDefault: false, subtitle: '~/work' }
+
+// 19. Every preset produces a spawn row, and the row calls spawnPreset with
+//     that preset's id — never a substituted one. Spawning the wrong program
+//     in the wrong directory is worse than spawning nothing (main/index.ts).
+{
+  const c = ctx({ presets: [SHELL, MINE] })
+  const row = byId(P.buildCommands(c), 'preset.spawn.u1')
+  row.run()
+  ok('19 a preset spawn row calls spawnPreset with its own id',
+    c.actions.calls.length === 1 && c.actions.calls[0][0] === 'spawnPreset' && c.actions.calls[0][1] === 'u1')
+}
+
+// 20. An unavailable preset is DISABLED and says why, rather than being hidden.
+//     A user who installed neither CLI should still learn the feature exists
+//     and what it wants — the same posture menuLabel() takes in the menu.
+{
+  const rows = P.buildCommands(ctx({ presets: [CLAUDE] }))
+  const row = byId(rows, 'preset.spawn.claude')
+  ok('20 an unavailable preset is disabled with a reason',
+    row !== undefined && row.disabledReason === P.REASON_NOT_ON_PATH)
+}
+
+// 21. Built-ins refuse rename AND delete, each with its own reason. Built-ins
+//     are code, not data (main/presets.ts): a "successful" rename would write a
+//     user preset shadowing a built-in id and revert on the next launch.
+{
+  const rows = P.buildCommands(ctx({ presets: [SHELL] }))
+  ok('21 a built-in refuses rename and delete, with reasons',
+    byId(rows, 'preset.rename.shell').disabledReason === P.REASON_BUILT_IN_RENAME &&
+    byId(rows, 'preset.delete.shell').disabledReason === P.REASON_BUILT_IN_DELETE)
+}
+
+// 22. A user preset allows both.
+{
+  const rows = P.buildCommands(ctx({ presets: [MINE] }))
+  ok('22 a user preset can be renamed and deleted',
+    byId(rows, 'preset.rename.u1').disabledReason === undefined &&
+    byId(rows, 'preset.delete.u1').disabledReason === undefined)
+}
+
+// 23. Rename hands the CURRENT name through, so the palette's input opens
+//     pre-filled — renaming "claude — work" to "claude — work 2" must not mean
+//     retyping it.
+{
+  const c = ctx({ presets: [MINE] })
+  byId(P.buildCommands(c), 'preset.rename.u1').run()
+  ok('23 rename carries the current name',
+    c.actions.calls[0][0] === 'beginRenamePreset' && c.actions.calls[0][2] === 'claude — work')
+}
+
+// 24. The preset that already IS the default has a disabled set-default row.
+//     Runnable, it would rewrite the file and rebuild the menu to no effect.
+{
+  const rows = P.buildCommands(ctx({ presets: [SHELL, MINE] }))
+  ok('24 the current default cannot be re-defaulted',
+    byId(rows, 'preset.default.shell').disabledReason === P.REASON_ALREADY_DEFAULT &&
+    byId(rows, 'preset.default.u1').disabledReason === undefined)
+}
+
+// 25. With no captured focus, every prompt insert is disabled and says so —
+//     the palette records focusedId at OPEN time, and "nothing was focused" is
+//     a state a user can easily be in (they clicked the background first).
+{
+  const rows = P.buildCommands(ctx({ prompts: [{ id: 'p1', name: 'review', source: 'saved' }] }))
+  ok('25 no captured panel disables prompt insertion',
+    byId(rows, 'prompt.insert.p1').disabledReason === P.REASON_NO_FOCUS)
+}
+
+// 26. With a captured panel, it runs and names the prompt.
+{
+  const c = ctx({ capturedId: 'n1', prompts: [{ id: 'p1', name: 'review', source: 'saved' }] })
+  const row = byId(P.buildCommands(c), 'prompt.insert.p1')
+  row.run()
+  ok('26 a captured panel enables insertion',
+    row.disabledReason === undefined && c.actions.calls[0][0] === 'insertPrompt' && c.actions.calls[0][1] === 'p1')
+}
+
+// 27. A project prompt cannot be deleted from the palette: it is a file in the
+//     user's repository, and the reason has to say that rather than nothing.
+{
+  const rows = P.buildCommands(ctx({
+    capturedId: 'n1',
+    prompts: [{ id: 'proj:review', name: 'review', source: 'project' }]
+  }))
+  ok('27 a project prompt refuses deletion, with a reason',
+    byId(rows, 'prompt.delete.proj:review').disabledReason === P.REASON_PROJECT_PROMPT)
+}
+
+// 28. Two prompts with the SAME name from different sources are two rows.
+//     Never deduped: pasting the wrong project's context into an agent is a
+//     quiet way to waste an hour (ideas-backlog #27), so the source is on the
+//     row and both survive.
+{
+  const rows = P.buildCommands(ctx({
+    capturedId: 'n1',
+    prompts: [
+      { id: 'p1', name: 'review', source: 'saved' },
+      { id: 'proj:review', name: 'review', source: 'project' }
+    ]
+  }))
+  const inserts = rows.filter((r) => r.id.startsWith('prompt.insert.'))
+  ok('28 same-named prompts from two sources are two distinguishable rows',
+    inserts.length === 2 && inserts[0].subtitle !== inserts[1].subtitle,
+    inserts.map((r) => r.subtitle).join(' | '))
+}
+
+// 29. "Save selection as prompt" needs BOTH a captured panel and a selection,
+//     and says which one is missing. Saving is always a deliberate gesture —
+//     ideas-backlog #27 rules out automatic capture, because noticing what to
+//     capture means retaining everything the user types, credentials included.
+{
+  const none = byId(P.buildCommands(ctx({})), 'prompt.save')
+  const noSel = byId(P.buildCommands(ctx({ capturedId: 'n1' })), 'prompt.save')
+  const both = byId(P.buildCommands(ctx({ capturedId: 'n1', hasSelection: true })), 'prompt.save')
+  ok('29 saving a prompt needs a panel and a selection, and says which is missing',
+    none.disabledReason === P.REASON_NO_FOCUS &&
+    noSel.disabledReason === P.REASON_NO_SELECTION &&
+    both.disabledReason === undefined)
+}
+
+// 30. Groups arrive in a fixed order — Panel, Preset, Prompt, Canvas — because
+//     filterCommands' stability means CONSTRUCTION order is what the user sees
+//     with an empty query.
+{
+  const rows = P.buildCommands(ctx({
+    panels: [{ id: 'n1', label: 'login shell — work (n1)' }],
+    presets: [SHELL],
+    prompts: [{ id: 'p1', name: 'review', source: 'saved' }],
+    capturedId: 'n1'
+  }))
+  const order = []
+  for (const r of rows) if (order[order.length - 1] !== r.group) order.push(r.group)
+  ok('30 groups are built in a fixed order',
+    order.join(',') === 'Panel,Preset,Prompt,Canvas', order.join(','))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)
