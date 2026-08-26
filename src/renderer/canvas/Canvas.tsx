@@ -333,7 +333,7 @@ export function Canvas({
     registry.get(id)?.handle.focus()
   }, [])
   const palette = usePalette({ focusedIdRef, restoreFocus })
-  // null is command mode. Set by beginRenamePreset; save-prompt is Task 11.
+  // null is command mode. Set by beginRenamePreset and beginSavePrompt.
   const [inputMode, setInputMode] = useState<InputMode | null>(null)
   // The palette always OPENS in command mode. Both ends of a rename leave the
   // mode set otherwise: a completed one resolves after Palette has already
@@ -887,6 +887,29 @@ export function Canvas({
     if (palette.open) reloadPresets()
   }, [palette.open, reloadPresets])
 
+  // The prompt list, reloaded whenever the palette opens — and whenever the
+  // panel it captured changes, because a project's prompts are its own
+  // directory's and two panels are rarely in the same one.
+  const [promptRows, setPromptRows] = useState<PromptRow[]>(EMPTY_PROMPTS)
+  // Bodies are deliberately NOT in the row type the palette renders:
+  // buildCommands has no use for a paragraph, and putting one in a list row's
+  // props means re-rendering the whole list whenever a prompt file changes.
+  const promptBodiesRef = useRef(new Map<string, string>())
+  const reloadPrompts = useCallback((capturedId: string | null) => {
+    const panel = capturedId ? panelsRef.current.find((p) => p.rect.id === capturedId) : undefined
+    // The panel's SPAWN directory, which is what spec.cwd is. Wherever the
+    // user has since cd'd to is only knowable from the pid, and that is
+    // explicitly out of this milestone — so a panel that has wandered lists
+    // the prompts of where it started, not of where it is.
+    void window.canvas.prompt.list(panel?.spec.cwd ?? null).then((rows) => {
+      promptBodiesRef.current = new Map(rows.map((r) => [r.id, r.body]))
+      setPromptRows(rows.map(({ id, name, source }) => ({ id, name, source })))
+    })
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadPrompts(palette.capturedId)
+  }, [palette.open, palette.capturedId, reloadPrompts])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -942,9 +965,56 @@ export function Canvas({
       // leaves dormancy alone. verify:panels 39.
       setSelectedId(id)
     },
-    insertPrompt: () => {},         // Task 11
-    beginSavePrompt: () => {},      // Task 11
-    deletePrompt: () => {},         // Task 11
+    insertPrompt: (id) => {
+      // The panel the palette CAPTURED, not the focused one: opening the
+      // palette moves DOM focus to its input, and a background click clears
+      // focusedId outright.
+      const target = palette.capturedId
+      const body = promptBodiesRef.current.get(id)
+      // A row whose body the last reload did not carry is a list that moved
+      // under the user (the file was deleted while the palette was open).
+      // Inserting nothing is the only honest answer; inserting the wrong
+      // prompt into a running agent is not.
+      if (!target || body === undefined) return
+      // paste(), NEVER write(). session-factory.ts spells out the failure it
+      // exists to prevent: term.paste wraps the payload in bracketed-paste
+      // markers when the app has enabled them (and normalises LF to CR), so a
+      // multi-line prompt arrives as ONE input. A raw write submits every
+      // newline separately — pasting a five-line prompt into `claude` fires
+      // off four incomplete fragments and then the tail. EVERY prompt is
+      // multi-line, so every use of this feature depends on this call.
+      // verify:panels 40 is the check that can tell the two apart.
+      registry.get(target)?.handle.paste(body)
+    },
+    beginSavePrompt: () => {
+      const target = palette.capturedId
+      // The current SELECTION, the same call that backs Cmd+C. A deliberate
+      // gesture and nothing else: capturing automatically would mean
+      // retaining everything the user ever types, credentials included.
+      const selection = target ? (registry.get(target)?.handle.getSelection() ?? '') : ''
+      // buildCommands already disables the row without a selection; this is
+      // the second half of the same rule, against a list that went stale
+      // while the palette was open.
+      if (!selection) return
+      setInputMode({
+        label: 'Name this prompt\u2026',
+        initial: '',
+        submit: (name) => {
+          void window.canvas.prompt.save(name, selection).then(() => setInputMode(null))
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without this the mode would be set on a palette that is already gone
+      // and the clear-on-close effect would wipe it again — the same pairing
+      // beginRenamePreset makes, for the same reason.
+      palette.openPalette()
+    },
+    deletePrompt: (id) => {
+      // Reloaded rather than filtered locally: main is the only side that
+      // knows what the store now says, and a project prompt refuses deletion
+      // there (the row is disabled, but a stale list could still reach here).
+      void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
+    },
     resetCanvas: () => {
       // Main owns the confirmation dialog and the counts request. The palette
       // asks for the flow the menu item already runs rather than growing a
@@ -955,16 +1025,13 @@ export function Canvas({
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
-  }), [resetViewport, centreOn, presetRows, reloadPresets, palette.openPalette])
+  }), [resetViewport, centreOn, presetRows, reloadPresets, palette.openPalette,
+       palette.capturedId, reloadPrompts])
 
   const panelRows = useMemo<PanelRow[]>(
     () => panels.map((p) => ({ id: p.rect.id, label: panelLabel(p) })),
     [panels]
   )
-  // Real loads arrive with their commands: prompts are Task 11. A module-level
-  // constant, not a fresh [] each render, so the palette's props keep the same
-  // identity between frames of a pan until then.
-  const promptRows: PromptRow[] = EMPTY_PROMPTS
 
   // Cheap, and read once per render of the palette: getSelection() is a string
   // copy out of xterm's buffer, not a repaint.

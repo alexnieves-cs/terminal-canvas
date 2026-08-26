@@ -42,6 +42,8 @@ const {
   allPresets,
   resolveAvailability,
   presetRows,
+  templateOf,
+  mergePrompts,
   IPC_EVENTS
 } = require(ENTRY_OUT)
 
@@ -201,6 +203,20 @@ app.whenReady().then(async () => {
   // so the row the check clicks is the one it means rather than whichever
   // built-in the fuzzy matcher happened to rank first.
   const RENAMABLE_PRESET = { id: 'u1', name: 'harness preset', cwd: '~', args: [] }
+  // Check 40's fixture, and the only reason that check can exist at all.
+  // `printf '\033[?2004h'` turns BRACKETED-PASTE MODE (DEC private mode 2004)
+  // on, so xterm wraps a paste in \e[200~ ... \e[201~; `cat -v` echoes what
+  // arrives with control characters made visible, so those markers land in the
+  // terminal buffer as the literal text "^[[200~". Against any ordinary shell
+  // paste() and write() put byte-identical data on the PTY and nothing can
+  // tell them apart — this program is the discriminator.
+  const ECHO_PRESET = {
+    id: 'u2', name: 'echo -v', cwd: '~',
+    command: '/bin/sh', args: ['-c', "printf '\\033[?2004h'; cat -v"]
+  }
+  // Check 40's prompt. Two lines, because multi-line is the entire point: a
+  // raw write of this body is two submissions, a bracketed paste is one.
+  const SEEDED_PROMPT = { id: 'p1', name: 'two liner', body: 'first line\nsecond line' }
   // Check 39's fixture. reset() (check 23) always collapses the canvas to
   // firstRunPanels() — one panel — so nothing seeded into the BOOT layout can
   // survive to the end of the run; check 39 needs a still-dormant,
@@ -224,8 +240,9 @@ app.whenReady().then(async () => {
     // out every built-in — and BOOT_DEFAULT_PRESET is check 32's fixture, so
     // renaming that one would leave 32 asserting against a name this check
     // changed. A second user preset, never the default, keeps the two apart.
-    presets: [BOOT_DEFAULT_PRESET, RENAMABLE_PRESET],
-    defaultPresetId: BOOT_DEFAULT_PRESET.id
+    presets: [BOOT_DEFAULT_PRESET, RENAMABLE_PRESET, ECHO_PRESET],
+    defaultPresetId: BOOT_DEFAULT_PRESET.id,
+    prompts: [SEEDED_PROMPT]
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
   // main/index.ts calls this at whenReady; without it the store would start
@@ -260,12 +277,16 @@ app.whenReady().then(async () => {
   // — nothing here drives them, and the contract requirement is only that
   // registerIpcHandlers registers every preset/reset channel.
   //
-  // `which` answers null for everything: this process has no resolved login
-  // env, and availability is not what check 38 is about. It only affects the
-  // spawn rows, which no check in this suite clicks.
+  // `which` resolves absolute paths and nothing else: this process has no
+  // resolved login env, so a PATH lookup is meaningless here — but check 40a
+  // CLICKS a spawn row, and buildCommands disables an unavailable one, so
+  // ECHO_PRESET's /bin/sh has to come back available or that row can never
+  // run. Answering only for a path that exists on disk keeps the answer
+  // honest rather than blanket-true.
+  const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
-      resolveAvailability(allPresets(layoutStore.presets()), () => null),
+      resolveAvailability(allPresets(layoutStore.presets()), whichHere),
       layoutStore.defaultPresetId()
     ),
     // No afterPresetChange(): this entry point builds no menu, and re-pushing
@@ -274,9 +295,21 @@ app.whenReady().then(async () => {
     rename: (id, name) => layoutStore.renamePreset(id, name),
     remove: () => false,
     setDefault: () => {},
-    spawn: () => {},
+    // Real, and the same two lines main/index.ts's onSpawnPreset is: check 40a
+    // is the only end-to-end exercise of preset:spawn-by-id anywhere in the
+    // suite, and it is the invoke reaching a resolve-and-push that it covers.
+    // A stub here would leave the palette's spawn proven only as far as the
+    // preload.
+    spawn: (id) => {
+      const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
+      if (found) win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+    },
     requestReset: () => {},
-    listPrompts: () => [],
+    // The real merge, against the real store, with no project half: reading
+    // .claude/commands under the panel's cwd would make this suite depend on
+    // whatever happens to be in the running user's home directory. What check
+    // 40 needs is the seeded prompt and only the seeded prompt.
+    listPrompts: () => mergePrompts(layoutStore.prompts(), []),
     savePrompt: () => {},
     removePrompt: () => false
   })
@@ -2224,6 +2257,139 @@ app.whenReady().then(async () => {
         ok('39 go-to frames a dormant panel without spawning it',
           (after.x !== before.x || after.y !== before.y) && stillDormant === true,
           `${JSON.stringify(before)} -> ${JSON.stringify(after)} spawned=${!stillDormant}`)
+      }
+    }
+
+    // 40a/40. Prompts in the palette, and the one thing about them that can
+    //     fail silently.
+    //
+    //     40a spawns a panel by picking a preset row, which is the only
+    //     end-to-end exercise of preset:spawn-by-id in this suite: the invoke
+    //     has to reach the harness's onSpawnPreset stand-in, the id has to
+    //     resolve to ECHO_PRESET and not to some other row the fuzzy matcher
+    //     ranked first, and the template has to arrive at makePanel. It is
+    //     asserted on the SPEC of the new panel, not on "a panel appeared" —
+    //     the wrong preset also makes a panel appear.
+    //
+    //     40 is the milestone's headline requirement. session-factory.ts
+    //     records the failure from Cmd+V: a raw write of a multi-line prompt
+    //     into an agent TUI is one submission per newline, i.e. several
+    //     partial prompts instead of one. paste() goes through xterm, which
+    //     brackets it when the app has enabled mode 2004, so the block
+    //     arrives as ONE input — and every prompt is multi-line, so every use
+    //     of this feature depends on it.
+    //
+    //     The discriminator is the bracketed-paste markers. ECHO_PRESET's
+    //     program enables 2004 and echoes with `cat -v`, so a paste() puts
+    //     "^[[200~" in the buffer and a write() puts the bare body there.
+    //     Nothing weaker can tell the two apart, because against an ordinary
+    //     shell both put identical bytes on the PTY — which is why this check
+    //     must never be relaxed into "the prompt text arrived".
+    {
+      const idsBefore = await wc.executeJavaScript(
+        `window.__m4aSessions().map((s) => s.id)`
+      )
+      // Cmd+K TOGGLES, and check 39 above ran a row (which closes the
+      // palette) — but assert the DOM state rather than trusting that, the
+      // same way 39 does after 38b left the palette open.
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const clicked = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'new panel from echo')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 80))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('New panel from echo -v'))
+        if (!row) return false
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return true
+      })()`)
+      const echoId = clicked
+        ? await waitUntil(async () => {
+            const ids = await wc.executeJavaScript(`window.__m4aSessions().map((s) => s.id)`)
+            return ids.find((id) => !idsBefore.includes(id)) || null
+          }, 3000)
+        : null
+      const echoSpec = echoId
+        ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(echoId)})`)
+        : null
+      ok('40a a palette preset pick spawns that preset through preset:spawn-by-id',
+        echoSpec !== null && echoSpec.spec.command === '/bin/sh' &&
+          echoSpec.spec.args[0] === '-c' && echoSpec.spec.args[1].includes('2004h'),
+        `${echoId} ${JSON.stringify(echoSpec && echoSpec.spec)}`)
+
+      if (!echoId) {
+        ok('40 a prompt insert arrives as a bracketed paste, not a raw write', false,
+          'no panel spawned, so there was nothing to paste into')
+      } else {
+        // Focus it: the palette captures focusedId at OPEN time (focus is
+        // released on a background click, so reading it live would be a
+        // different id), and insertPrompt targets that captured panel.
+        // Spawning does not focus, so this click is what makes the echo panel
+        // the target — and __m4aGrid()/__m4aCellToScreen() both read the
+        // focused session, so they are reading this panel from here on.
+        const focused = await waitUntil(async () => {
+          // Retried, not dispatched once: the panel is spawned by a setPanels
+          // in another check's tick and its slot only exists once tiering has
+          // promoted it, so the first click can land before there is anything
+          // to click.
+          await wc.executeJavaScript(`(() => {
+            const slot = document.querySelector('[data-panel-id=${JSON.stringify(echoId)}] .panel__slot')
+            if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()`)
+          return wc.executeJavaScript(`window.__m4aGrid() !== null`)
+        }, 5000, 200)
+        // The PTY has to have run the printf before the paste, or mode 2004 is
+        // still off and xterm sends the body unbracketed — a false FAIL that
+        // would look exactly like a write().
+        await waitUntil(async () => await wc.executeJavaScript(
+          `(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(echoId)}) || {}).spawned === true`
+        ), 5000)
+        await sleep(600)
+
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        // Run the row with ENTER, not a click. A mousedown on a palette row
+        // bubbles to .canvas's background handler, which releases focusedId —
+        // the insert still targets the right panel (the palette captured it at
+        // open), but __m4aCellToScreen reads the FOCUSED session and would
+        // have nothing to read. The keyboard is the palette's primary path
+        // anyway. The selected row's text is asserted before Enter, so this
+        // cannot pass by running some other row.
+        const insertRow = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'insert prompt two liner')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected || !selected.textContent.includes('Insert prompt: two liner')) {
+            return selected ? selected.textContent : 'no row'
+          }
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          return true
+        })()`)
+        const bracketed = insertRow === true
+          ? await waitUntil(
+              () => wc.executeJavaScript(`window.__m4aCellToScreen('200~') !== null`),
+              3000
+            )
+          : false
+        ok('40 a prompt insert arrives as a bracketed paste, not a raw write',
+          bracketed === true,
+          `focused=${focused} row=${insertRow} body=${JSON.stringify(
+            await wc.executeJavaScript(`window.__m4aCellToScreen('first line') !== null`)
+          )}`)
       }
     }
 

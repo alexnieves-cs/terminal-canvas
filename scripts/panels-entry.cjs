@@ -40,6 +40,14 @@ module.exports = {
   allPresets: require('../src/main/presets').allPresets,
   resolveAvailability: require('../src/main/presets').resolveAvailability,
   presetRows: require('../src/main/presets').presetRows,
+  /* Check 40a drives preset:spawn-by-id end to end, and the harness answers
+     that invoke the way main/index.ts's onSpawnPreset does: resolve the id,
+     then push the SAME template a menu pick would. templateOf is what makes
+     the two paths one path rather than two that can drift. */
+  templateOf: require('../src/main/presets').templateOf,
+  /* Check 40's prompt list comes from the real merge, so the rows the palette
+     renders are the rows main would build — not a shape invented here. */
+  mergePrompts: require('../src/main/prompts').mergePrompts,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,
