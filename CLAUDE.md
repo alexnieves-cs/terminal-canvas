@@ -584,12 +584,14 @@ spawn.
 
 **`Cmd+N` stays a renderer keybinding, not a menu accelerator.** Moving it to
 `main/menu.ts` would be architecturally tidier — every other shortcut in this app is either a
-menu accelerator or a renderer listener, not both — but it would break six check sites:
-`verify:panels` presses `Cmd+N` with a dispatched `KeyboardEvent` on `window`, which a
-main-process accelerator never receives, only a real OS keydown does. Main instead pushes the
-default template over `PRESET_DEFAULT`, re-pushed on every `did-finish-load` so a `Cmd+R`
-reload does not silently revert `Cmd+N` back to spawning a login shell after the reload wipes
-`defaultTemplateRef`.
+menu accelerator or a renderer listener, not both — but it would break every `verify:panels`
+check that drives it: `zoomTo(wc, 'n')` dispatches a synthetic `KeyboardEvent` on `window`,
+which a main-process accelerator never receives, only a real OS keydown does. That is checks
+7, 17, 22, 26, and 29 — worth re-deriving with `grep -n "zoomTo(wc, 'n')" scripts/verify-panels.cjs`
+rather than trusting this list, the same caution this file already gives the `dispose(id)`
+call-site count. Main instead pushes the default template over `PRESET_DEFAULT`, re-pushed on
+every `did-finish-load` so a `Cmd+R` reload does not silently revert `Cmd+N` back to spawning a
+login shell after the reload wipes `defaultTemplateRef`.
 
 **Built-in presets are code, not data (`main/presets.ts`'s `BUILT_IN_PRESETS`).** Persisting
 them into `layout.json` alongside user presets means deleting one resurrects it on the next
