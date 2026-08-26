@@ -437,6 +437,82 @@ const CANVAS = {
     `panels=${onDisk.panels.length}`)
 }
 
+/* ---- M5a presets: format ---- */
+
+/** A minimal valid preset, so each check can vary exactly one field. */
+const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', args: [], ...over })
+
+{
+  const w = []
+  const got = L.parsePresets([preset(), 'not-an-object', preset({ id: 'u2' })], w)
+  ok('27 parsePresets drops a non-object entry and keeps the rest',
+    got.length === 2 && got[0].id === 'u1' && got[1].id === 'u2' && w.length === 1,
+    `kept=${got.map((p) => p.id).join(',')} warnings=${w.length}`)
+}
+
+{
+  const w = []
+  const got = L.parsePresets([preset({ id: 'bad id!' }), preset({ id: 'u2' })], w)
+  ok('28 parsePresets drops a preset whose id fails ID_PATTERN',
+    got.length === 1 && got[0].id === 'u2' && w.length === 1,
+    `kept=${got.map((p) => p.id).join(',')}`)
+}
+
+{
+  const w = []
+  const got = L.parsePresets([preset(), preset({ name: 'Second' })], w)
+  ok('29 parsePresets drops a duplicate preset id',
+    got.length === 1 && got[0].name === 'Claude here' && w.length === 1,
+    `kept=${got.length}`)
+}
+
+{
+  const w = []
+  const got = L.parsePresets([preset({ args: ['-l', 7] }), preset({ id: 'u2' })], w)
+  ok('30 parsePresets drops a preset whose args is not an array of strings',
+    got.length === 1 && got[0].id === 'u2' && w.length === 1,
+    `kept=${got.map((p) => p.id).join(',')}`)
+}
+
+{
+  const w = []
+  const got = L.parsePresets([preset({ w: 10, h: 10 })], w)
+  ok('31 parsePresets clamps an undersized w/h instead of dropping the preset',
+    got.length === 1 && got[0].w === L.MIN_PANEL_W && got[0].h === L.MIN_PANEL_H,
+    `w=${got[0] && got[0].w} h=${got[0] && got[0].h}`)
+}
+
+{
+  // A file written before M5a. Absent is not corruption.
+  const { snapshot, warnings } = L.parseLayout(file())
+  ok('32 a pre-M5a file with no presets key parses clean',
+    Array.isArray(snapshot.presets) && snapshot.presets.length === 0 &&
+      snapshot.defaultPresetId === L.DEFAULT_PRESET_ID &&
+      warnings.length === 0,
+    `presets=${snapshot.presets && snapshot.presets.length} default=${snapshot.defaultPresetId} warnings=${warnings.length}`)
+}
+
+{
+  const raw = JSON.stringify({ ...JSON.parse(file()), defaultPresetId: 42 })
+  const { snapshot } = L.parseLayout(raw)
+  ok('33 an unusable defaultPresetId falls back to the shell built-in',
+    snapshot.defaultPresetId === L.DEFAULT_PRESET_ID,
+    `default=${snapshot.defaultPresetId}`)
+}
+
+{
+  // THE check of this suite. A parser that "helpfully" resolves an absent
+  // command makes every command-less preset spawn a hardcoded shell instead
+  // of the user's own, and passes every other assertion here while doing it.
+  const w = []
+  const got = L.parsePresets([preset({ command: undefined })], w)
+  const raw = JSON.stringify({ ...JSON.parse(file()), presets: [preset()] })
+  const round = L.parseLayout(raw).snapshot.presets[0]
+  ok('34 a preset with an absent command round-trips absent',
+    !('command' in got[0]) && !('command' in round),
+    `parsed=${JSON.stringify(got[0])} roundTripped=${JSON.stringify(round)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

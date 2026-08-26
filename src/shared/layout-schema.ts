@@ -58,6 +58,39 @@ export interface PersistedPanel {
   title?: string
 }
 
+/**
+ * The id of the built-in login-shell preset, and the fallback whenever a
+ * stored defaultPresetId names nothing. Cmd+N doing NOTHING is a worse failure
+ * than Cmd+N doing something ordinary, so there is always an answer.
+ *
+ * The built-in presets themselves are NOT here: they are product defaults, and
+ * this file decides what is valid rather than what ships. See main/presets.ts.
+ */
+export const DEFAULT_PRESET_ID = 'shell'
+
+/**
+ * A saved panel definition: everything about a panel that is known before it
+ * has a size, plus a name and a default box.
+ *
+ * `command` is optional for the same reason PanelSpec.command is, and the
+ * stakes are higher here because a preset is reused: absent means "the user's
+ * login shell", which only main can resolve. Anything that fills it in makes
+ * every future spawn from this preset run the wrong program.
+ *
+ * `w`/`h` are optional because this file must not learn PANEL_W/PANEL_H —
+ * those are the renderer's product defaults, and importing them here would
+ * drag panel geometry into the format layer.
+ */
+export interface Preset {
+  id: string
+  name: string
+  cwd: string
+  command?: string
+  args: string[]
+  w?: number
+  h?: number
+}
+
 export interface PersistedCamera {
   x: number
   y: number
@@ -91,6 +124,10 @@ export interface LayoutSnapshot {
   activeWorkspaceId: string
   workspaces: Workspace[]
   settings: RestoreSettings
+  /** User-created presets only. The built-ins are code; see main/presets.ts. */
+  presets: Preset[]
+  /** What Cmd+N spawns. May name a built-in or a user preset. */
+  defaultPresetId: string
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -119,7 +156,9 @@ export function defaultSnapshot(): LayoutSnapshot {
     version: LAYOUT_VERSION,
     activeWorkspaceId: DEFAULT_WORKSPACE_ID,
     workspaces: [defaultWorkspace()],
-    settings: defaultSettings()
+    settings: defaultSettings(),
+    presets: [],
+    defaultPresetId: DEFAULT_PRESET_ID
   }
 }
 
@@ -177,6 +216,50 @@ function parsePanel(
   if (isStr(command)) panel.command = command
   if (isStr(title)) panel.title = title
   return panel
+}
+
+function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Preset | null {
+  if (!isRecord(raw)) {
+    warnings.push('dropped a preset that was not an object')
+    return null
+  }
+  const { id, name, cwd, command, args, w, h } = raw
+  if (!isStr(id) || !ID_PATTERN.test(id)) {
+    warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
+    return null
+  }
+  if (seen.has(id)) {
+    warnings.push(`dropped a duplicate preset id: ${id}`)
+    return null
+  }
+  if (!isStr(cwd)) {
+    warnings.push(`dropped preset ${id}: cwd was not a string`)
+    return null
+  }
+  if (!Array.isArray(args) || !args.every(isStr)) {
+    warnings.push(`dropped preset ${id}: args was not an array of strings`)
+    return null
+  }
+  seen.add(id)
+  // Name falls back to the id rather than dropping the entry: an unnamed
+  // preset is usable, and losing a saved spawn over a missing label is not.
+  const preset: Preset = { id, name: isStr(name) ? name : id, cwd, args: [...args] }
+  // Absent stays absent. Assigning a default here is the single most damaging
+  // change anyone could make to this file — see the note on Preset.command.
+  if (isStr(command)) preset.command = command
+  // Clamped rather than dropped, the same trade parsePanel makes: the geometry
+  // is recoverable and losing the preset is the worse answer.
+  if (isNum(w)) preset.w = Math.max(MIN_PANEL_W, w)
+  if (isNum(h)) preset.h = Math.max(MIN_PANEL_H, h)
+  return preset
+}
+
+/** Never throws; drops entries individually, like every other parser here. */
+export function parsePresets(raw: unknown, warnings: string[]): Preset[] {
+  const seen = new Set<string>()
+  return (Array.isArray(raw) ? raw : [])
+    .map((p) => parsePreset(p, seen, warnings))
+    .filter((p): p is Preset => p !== null)
 }
 
 function parseCamera(raw: unknown, warnings: string[]): PersistedCamera {
@@ -277,7 +360,15 @@ export function parseLayout(raw: string): {
       version: LAYOUT_VERSION,
       activeWorkspaceId,
       workspaces,
-      settings: parseSettings(parsed.settings)
+      settings: parseSettings(parsed.settings),
+      presets: parsePresets(parsed.presets, warnings),
+      // Only the FORMAT is checked here — whether it is a plausible id at all.
+      // Whether it names a preset that exists is main's question, because only
+      // main knows the built-ins; resolveDefault answers it there.
+      defaultPresetId:
+        isStr(parsed.defaultPresetId) && ID_PATTERN.test(parsed.defaultPresetId)
+          ? parsed.defaultPresetId
+          : DEFAULT_PRESET_ID
     },
     warnings,
     futureVersion: false
