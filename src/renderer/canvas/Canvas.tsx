@@ -1054,8 +1054,44 @@ export function Canvas({
       // there (the row is disabled, but a stale list could still reach here).
       void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
     },
-    beginRenamePanel: () => {
-      throw new Error('beginRenamePanel not implemented — Task 7 required')
+    beginRenamePanel: (id, currentTitle) => {
+      setInputMode({
+        label: 'Name this panel…',
+        initial: currentTitle,
+        submit: (value) => {
+          const name = value.trim()
+          setPanels((prev) => {
+            // A captured id can outlive its panel — the row is aimed at
+            // whatever was focused when the palette opened, and that panel
+            // may have since been closed. Mapping over a missing id would
+            // still rewrite the array (a fresh reference for every element)
+            // and push a no-op history entry, so bail out instead: nothing
+            // changed, so nothing should look like it did.
+            if (!prev.some((p) => p.rect.id === id)) return prev
+            const next = prev.map((p) =>
+              p.rect.id === id
+                // Rebuilt field by field rather than spread-with-override so
+                // that clearing a name REMOVES the key instead of setting it
+                // to undefined — the same absent-stays-absent rule fromPanels
+                // obeys, enforced here so the undefined never gets that far.
+                ? name === ''
+                  ? { rect: p.rect, spec: p.spec, z: p.z }
+                  : { rect: p.rect, spec: p.spec, z: p.z, title: name }
+                : p
+            )
+            // One entry for the whole gesture, on commit — the rule a drag
+            // already follows. Pushing per keystroke would make one rename
+            // take a dozen Cmd+Z presses to unwind.
+            commitHistory(next)
+            return next
+          })
+          setInputMode(null)
+        }
+      })
+      // Same reason beginRenamePreset does this: Palette.tsx closes the
+      // overlay BEFORE running a row's command, so without reopening, the mode
+      // would be set on a palette that is already gone.
+      palette.openPalette()
     },
     resetCanvas: () => {
       // Main owns the confirmation dialog and the counts request. The palette
@@ -1068,7 +1104,7 @@ export function Canvas({
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
   }), [resetViewport, centreOn, selectAndRaise, presetRows, reloadPresets, palette.openPalette,
-       palette.capturedId, reloadPrompts])
+       palette.capturedId, reloadPrompts, commitHistory])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -1079,7 +1115,7 @@ export function Canvas({
   // is only ever looked at while the overlay is up, and the commands that add
   // or remove a panel close it first, so recomputing at open is enough.
   const panelRows = useMemo<PanelRow[]>(
-    () => (palette.open ? panelsRef.current.map((p) => ({ id: p.rect.id, label: panelLabel(p) })) : EMPTY_PANELS),
+    () => (palette.open ? panelsRef.current.map((p) => ({ id: p.rect.id, label: panelLabel(p), title: p.title })) : EMPTY_PANELS),
     [palette.open]
   )
 

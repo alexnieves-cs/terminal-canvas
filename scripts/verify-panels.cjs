@@ -2768,6 +2768,89 @@ app.whenReady().then(async () => {
         `Boolean(window.__m5aDefaultSpec && window.__m5aDefaultSpec().command === '/bin/cat')`), 3000)
     }
 
+    // 45-46 — M6a. A rename is a COMMITTED gesture, so it pushes exactly one
+    //     history entry — the same rule a drag obeys, for the same reason: an
+    //     entry per keystroke would make one rename take a dozen Cmd+Z presses
+    //     to unwind while every final-state assertion still passed.
+    //
+    //     By this point in the suite the canvas has been reset (23), reloaded
+    //     (26, 39) and had panels spawned-and-undone (37), so the first
+    //     `.panel` in DOM order is not a known quantity — check 44's idiom is
+    //     reused here: spawn a panel with Cmd+N, diff the id snapshot to find
+    //     it, and assert on that id specifically rather than trusting a bare
+    //     first match.
+    //
+    //     Note the nativeSet dance below, copied from check 38 and
+    //     load-bearing for the same reason: React's controlled <input>
+    //     IGNORES a plain input.value = x. Only the prototype's native setter
+    //     plus a dispatched 'input' event reaches React's state, so a check
+    //     written the obvious way types into a field the component never
+    //     learns about, submits an empty string, and fails for a reason that
+    //     has nothing to do with renaming.
+    {
+      const idsBefore45 = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const ids45 = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore45.size ? now : false
+      }, 3000)
+      const panelId = ids45 ? ids45.find((id) => !idsBefore45.has(id)) : undefined
+
+      // Spawning does not focus (check 40's note): the palette captures
+      // focusedId at OPEN time, so without this click the rename row would be
+      // aimed at whatever panel was focused before, not the one just spawned.
+      if (panelId) {
+        await waitUntil(async () => {
+          await wc.executeJavaScript(`(() => {
+            const slot = document.querySelector('[data-panel-id=${JSON.stringify(panelId)}] .panel__slot')
+            if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()`)
+          return wc.executeJavaScript(`window.__m4aGrid() !== null`)
+        }, 5000, 200)
+      }
+
+      const titleOf = () => panelId
+        ? wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id=${JSON.stringify(panelId)}] .panel__title')?.textContent ?? ''`)
+        : Promise.resolve('')
+
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+
+      const ran = panelId ? await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        nativeSet(document.querySelector('.palette__input'), 'rename panel')
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename panel'))
+        if (!row) return 'no rename-panel row'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        const field = document.querySelector('.palette__input')
+        if (!field) return 'no input after entering rename mode'
+        nativeSet(field, 'auth refactor')
+        await new Promise((r) => setTimeout(r, 50))
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        return 'ok'
+      })()`) : 'no panel spawned'
+
+      const landed = ran === 'ok' &&
+        Boolean(await waitUntil(async () => (await titleOf()) === 'auth refactor', 3000))
+      ok('45 a rename from the palette reaches the panel header', landed, `panelId=${panelId} ran=${ran}`)
+
+      wc.send('edit:undo')
+      const undone = Boolean(await waitUntil(async () => (await titleOf()) !== 'auth refactor', 3000))
+      ok('46 one Cmd+Z undoes the whole rename', landed && undone)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
