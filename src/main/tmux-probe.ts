@@ -3,7 +3,14 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createDirectBackend, createTmuxBackend, type SessionBackend } from './session-backend'
 import { whichFromEnv } from './shell-env'
-import { buildTmuxConf, isSupportedTmuxVersion, parseTmuxVersion, TMUX_SOCKET } from './tmux-args'
+import {
+  buildStartServerArgs,
+  buildTmuxConf,
+  isSupportedTmuxVersion,
+  parseTmuxVersion,
+  TMUX_SOCKET,
+  type TmuxSocket
+} from './tmux-args'
 
 /**
  * Which backend, and why. The `reason` is user-facing when kind is 'direct' —
@@ -80,11 +87,15 @@ function tmuxVersionOutput(tmuxPath: string): Promise<string | null> {
  * shutdown() kill-servers it anyway, and every panel would have started it a
  * moment later regardless.
  */
-function tmuxServerStarts(tmuxPath: string, confPath: string): Promise<string | null> {
+function tmuxServerStarts(
+  tmuxPath: string,
+  confPath: string,
+  socket: TmuxSocket
+): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(
       tmuxPath,
-      ['-L', TMUX_SOCKET, '-f', confPath, 'start-server'],
+      buildStartServerArgs(confPath, socket),
       { timeout: 5000 },
       (error, _stdout, stderr) => {
         if (!error) return resolve(null)
@@ -106,7 +117,10 @@ function tmuxServerStarts(tmuxPath: string, confPath: string): Promise<string | 
  */
 export async function probeTmux(
   env: Record<string, string>,
-  userDataDir: string
+  userDataDir: string,
+  // Defaulted so every existing caller keeps compiling AND keeps its current
+  // behaviour; main is the one caller that passes a resolved value.
+  socket: TmuxSocket = TMUX_SOCKET
 ): Promise<SessionBackend> {
   const found = whichFromEnv('tmux', env)
   const versionOutput = found ? await tmuxVersionOutput(found) : null
@@ -130,7 +144,7 @@ export async function probeTmux(
     confPath = join(userDataDir, 'tmux.conf')
     writeFileSync(confPath, buildTmuxConf(exitDir))
 
-    const failure = await tmuxServerStarts(choice.tmuxPath, confPath)
+    const failure = await tmuxServerStarts(choice.tmuxPath, confPath, socket)
     if (failure) {
       choice = {
         kind: 'direct',
@@ -157,6 +171,7 @@ export async function probeTmux(
     tmuxPath: choice.tmuxPath,
     exitDir,
     confPath,
-    reason: choice.reason
+    reason: choice.reason,
+    socket
   })
 }

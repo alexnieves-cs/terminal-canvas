@@ -220,6 +220,20 @@ export function buildListArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {
 }
 
 /**
+ * Starting the server is a probe, not a session: tmux-probe.ts runs it to find
+ * out whether a server can come up AT ALL on our socket with our config, which
+ * `tmux -V` cannot answer. It lived inline in that file until M5c, and was
+ * therefore the one argv check 9 could not see — the gap that mattered the
+ * moment the socket stopped being a constant.
+ */
+export function buildStartServerArgs(
+  confPath: string,
+  socket: TmuxSocket = TMUX_SOCKET
+): string[] {
+  return ['-L', socket, '-f', confPath, 'start-server']
+}
+
+/**
  * The `=` is EXACT-MATCH and it is load-bearing. tmux resolves a target that
  * is not an exact session name by UNIQUE PREFIX: with only `n10` alive,
  * `kill-session -t n1` kills n10 and exits 0. Panel ids are `n1`…`n12`, so

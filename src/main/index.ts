@@ -5,6 +5,7 @@ import { buildAppMenu } from './menu'
 import { PtyManager, resolveCwd } from './pty-manager'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
+import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
@@ -265,7 +266,16 @@ app.whenReady().then(async () => {
 
   // After the env probe, because tmux must be resolved from the LOGIN PATH:
   // launchd gives a GUI app a bare PATH and /opt/homebrew/bin is not on it.
-  backend = await probeTmux(env, app.getPath('userData'))
+  //
+  // The socket is resolved from app.isPackaged so a packaged build and a dev
+  // build never share a tmux server: before-quit calls shutdown(), which is
+  // kill-server, and a shared socket would mean quitting either one destroys
+  // the other's agents. TC_TMUX_SOCKET is a developer override with no UI.
+  const tmuxSocket = resolveSocket({
+    packaged: app.isPackaged,
+    override: process.env['TC_TMUX_SOCKET']
+  })
+  backend = await probeTmux(env, app.getPath('userData'), tmuxSocket)
 
   // Load before the menu and window exist: Task 10 gives the menu the restore
   // settings, and the renderer's first act is layout:load, which needs a

@@ -328,6 +328,28 @@ const ok = (n, pass, detail) => {
     bad.length === 0, `leaked=${JSON.stringify(bad)}`)
 }
 
+// 24. start-server was the ONE tmux argv in this codebase built by hand,
+// inline in tmux-probe.ts, which is why check 9's list of socket-targeting
+// argvs does not mention it. Socket isolation is worthless if the probe starts
+// a server on a different socket than the panels then attach to — and the
+// symptom would be a working app that quietly runs two tmux servers.
+{
+  const args = T.buildStartServerArgs('/tmp/tc verify/tmux.conf')
+  const pass =
+    args[0] === '-L' && args[1] === T.TMUX_SOCKET &&
+    args[args.indexOf('-f') + 1] === '/tmp/tc verify/tmux.conf' &&
+    args[args.length - 1] === 'start-server'
+  ok('24 start-server is built, not hand-rolled, and defaults to the private socket',
+    pass, JSON.stringify(args))
+}
+
+// 25. And it threads a custom socket, like every other builder in this file.
+{
+  const args = T.buildStartServerArgs('/tmp/c.conf', T.TMUX_SOCKET_PACKAGED)
+  ok('25 start-server threads an explicit socket',
+    args[1] === 'terminal-canvas-app', JSON.stringify(args))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
