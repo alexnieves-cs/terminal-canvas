@@ -11,7 +11,8 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
-import type { SessionBackendInfo } from '@shared/ipc-contract'
+import type { CapturedPanel, PresetTemplate, SessionBackendInfo } from '@shared/ipc-contract'
+import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
@@ -139,14 +140,35 @@ export function Canvas({
     setHistory((h) => pushHistory(h, next))
   }, [])
 
-  const onSpawn = useCallback((centre: Point) => {
-    const id = `n${nextIdRef.current++}`
-    setPanels((current) => {
-      const next = [...current, makePanel(id, centre, nextZ(current))]
-      commitHistory(next)
-      return next
-    })
-  }, [commitHistory])
+  // The template Cmd+N spawns. A ref, not state: it is read inside onSpawn's
+  // callback and a re-render is pointless — nothing on screen depends on it.
+  // Undefined until main's first PRESET_DEFAULT, and makePanel's own fallback
+  // covers that window, so an early Cmd+N is a login shell rather than nothing.
+  const defaultTemplateRef = useRef<PresetTemplate | undefined>(undefined)
+
+  const onSpawn = useCallback(
+    (centre: Point, template?: PresetTemplate) => {
+      const chosen = template ?? defaultTemplateRef.current
+      const id = `n${nextIdRef.current++}`
+      setPanels((current) => {
+        const next = [
+          ...current,
+          makePanel(
+            id,
+            centre,
+            nextZ(current),
+            chosen
+              ? { panelId: id, cwd: chosen.cwd, args: [...chosen.args], ...(chosen.command !== undefined ? { command: chosen.command } : {}) }
+              : undefined,
+            chosen ? { w: chosen.w, h: chosen.h } : undefined
+          )
+        ]
+        commitHistory(next)
+        return next
+      })
+    },
+    [commitHistory]
+  )
   const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId)
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
@@ -269,7 +291,7 @@ export function Canvas({
     return panel.querySelector('.panel__slot') !== null
   }, [])
 
-  const { viewport, resetViewport } = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
+  const { viewport, resetViewport, worldCentre } = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
@@ -312,6 +334,44 @@ export function Canvas({
       offPaste()
     }
   }, [])
+
+  // The three preset events main pushes (see main/index.ts's menu handlers).
+  // Routed through onSpawn/commitHistory rather than a second spawn path so a
+  // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
+  // panel must dispose its session, and that guarantee lives in applyHistory,
+  // reachable only by going through the ordinary history stack.
+  useEffect(() => {
+    const offSpawn = window.canvas.preset.onSpawn((template) => {
+      onSpawn(worldCentre(), template)
+    })
+    const offDefault = window.canvas.preset.onDefault((template) => {
+      defaultTemplateRef.current = template
+    })
+    const offCapture = window.canvas.preset.onCapture(() => {
+      const id = focusedIdRef.current
+      if (!id) return null
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (!panel) return null
+      // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
+      // to — reading the real one means asking the pid, which is its own piece
+      // of machinery (ideas-backlog #4) and deliberately not in M5a.
+      const captured: CapturedPanel = {
+        cwd: panel.spec.cwd,
+        args: [...panel.spec.args],
+        w: panel.rect.w,
+        h: panel.rect.h
+      }
+      // Absent stays absent: a captured login-shell panel must save as a
+      // login-shell preset, not as whatever this machine's shell happens to be.
+      if (panel.spec.command !== undefined) captured.command = panel.spec.command
+      return captured
+    })
+    return () => {
+      offSpawn()
+      offDefault()
+      offCapture()
+    }
+  }, [onSpawn, worldCentre])
 
   // Menu-driven undo/redo, delivered the same way as copy/paste — through
   // main's menu accelerators, never the stock 'undo'/'redo' roles, which
@@ -467,6 +527,17 @@ export function Canvas({
      * whole-branch review.
      */
     w.__m4bReset = (): void => resetCanvas()
+    /**
+     * A panel's spec and rect, by id — what check 27/29/31 read back to
+     * confirm a preset actually reached makePanel rather than just checking
+     * that SOME panel appeared.
+     */
+    w.__m5aSpecOf = (id: string): { spec: PanelSpecTemplate; rect: WorldRect } | null => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      return panel ? { spec: panel.spec, rect: panel.rect } : null
+    }
+    /** The template currently pushed as Cmd+N's default, or undefined. */
+    w.__m5aDefaultSpec = (): PresetTemplate | undefined => defaultTemplateRef.current
   }, [applyHistory, resetCanvas])
 
   // One gesture at a time, driven by document listeners installed once. Moves

@@ -36,7 +36,9 @@ const {
   createLayoutStore,
   fromPanels,
   SEED_PANELS,
-  DEFAULT_CAMERA
+  DEFAULT_CAMERA,
+  requestFromRenderer,
+  IPC_EVENTS
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -1590,6 +1592,137 @@ app.whenReady().then(async () => {
           `newId=${newId} pid ${pidBefore} -> ${pidAfter ?? 'MISSING'} ` +
           `sessions=${JSON.stringify([...panesAfter.keys()])}`)
       }
+    }
+
+    /* ---- M5a presets ---- */
+
+    // /bin/cat, not /bin/echo: this suite runs a DIRECT backend, so a process that
+    // exits immediately leaves pty:list before check 28 can watch undo dispose it.
+    // cat with no args blocks on stdin and stays alive for the whole suite.
+    const CLAUDE_TEMPLATE = { cwd: '/tmp', command: '/bin/cat', args: [], w: 400, h: 300 }
+
+    {
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      const vp = await wc.executeJavaScript(`window.__m4aViewport()`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, CLAUDE_TEMPLATE)
+      const ids = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 3000)
+      const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
+      const spec = newId ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(newId)})`) : null
+      ok('27 PRESET_SPAWN makes a panel with the preset cwd, command and box',
+        spec !== null && spec.spec.cwd === '/tmp' && spec.spec.command === '/bin/cat' &&
+          spec.spec.panelId === newId && spec.rect.w === 400 && spec.rect.h === 300,
+        `spec=${JSON.stringify(spec)} vp=${JSON.stringify(vp)}`)
+      // Under the real tmux backend (checks 27-31 run after check 26 has
+      // swapped it in), pty:create resolving is not the same moment the new
+      // session shows up in `tmux list-sessions` — there is a beat between
+      // the client attaching and the socket reflecting it. Check 28 takes its
+      // OWN "before" snapshot via sessionMap next, and without waiting here
+      // first, that snapshot can race ahead of this session's registration
+      // and miss it, then "discover" it only after check 28's own spawn/undo
+      // has already run — inflating its "after" count for a reason that has
+      // nothing to do with undo/dispose. Settling here, not loosening check
+      // 28's assertion, is the fix: it targets the actual race.
+      if (newId) await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
+    }
+
+    {
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      const sessionsBefore = await sessionMap(wc)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, CLAUDE_TEMPLATE)
+      const ids = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 3000)
+      const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
+      const spawned = newId
+        ? await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
+        : false
+      await wc.executeJavaScript(`window.__m4bUndo()`)
+      const gone = newId
+        ? Boolean(await waitUntil(async () => !(await sessionMap(wc)).has(newId), 3000))
+        : false
+      const after = await sessionMap(wc)
+      ok('28 undo of a preset spawn removes the panel AND disposes its session',
+        newId !== undefined && spawned && gone && after.size === sessionsBefore.size,
+        `newId=${newId} before=${sessionsBefore.size} after=${after.size}`)
+    }
+
+    {
+      wc.send(IPC_EVENTS.PRESET_DEFAULT, { cwd: '/tmp', command: '/bin/cat', args: ['-u'] })
+      // Give the listener a turn before the keypress: the send is asynchronous and
+      // Cmd+N reads a ref, not a promise.
+      await waitUntil(async () => await wc.executeJavaScript(
+        `Boolean(window.__m5aDefaultSpec && window.__m5aDefaultSpec().command === '/bin/cat')`), 3000)
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      await zoomTo(wc, 'n')
+      const ids = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 3000)
+      const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
+      const spec = newId ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(newId)})`) : null
+      ok('29 PRESET_DEFAULT changes what Cmd+N spawns',
+        spec !== null && spec.spec.command === '/bin/cat' &&
+          spec.spec.args[0] === '-u',
+        `spec=${spec && JSON.stringify(spec.spec)}`)
+    }
+
+    {
+      // Focus a panel by clicking its body, then capture; then clear focus with a
+      // background click and capture again. Focus release on a background click is
+      // the behaviour check 8 already depends on.
+      // A LIVE panel: .panel__slot exists only while tiering has the panel live —
+      // a carded one renders PanelCard instead and has no slot to click. The slot's
+      // own handler stopPropagation()s and calls onFocus, which is exactly the path
+      // a real click takes; the canvas background handler would clear focus instead.
+      const targetId = await wc.executeJavaScript(
+        `document.querySelector('.panel__slot').closest('.panel').getAttribute('data-panel-id')`)
+      await wc.executeJavaScript(`
+        document.querySelector('.panel[data-panel-id="${targetId}"] .panel__slot')
+          .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
+        true
+      `)
+      const focused = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
+      await wc.executeJavaScript(`
+        document.querySelector('.canvas')
+          .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
+        true
+      `)
+      const unfocused = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
+      ok('30 PRESET_CAPTURE returns the focused panel spec, and null with nothing focused',
+        focused !== null && typeof focused.cwd === 'string' &&
+          Array.isArray(focused.args) && typeof focused.w === 'number' &&
+          unfocused === null,
+        `focused=${JSON.stringify(focused)} unfocused=${JSON.stringify(unfocused)}`)
+    }
+
+    {
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      // No command at all — the login-shell case, and the one most likely to be
+      // broken by a well-meaning default somewhere up the chain.
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '~', args: ['-l'] })
+      const ids = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 3000)
+      const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
+      const spec = newId ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(newId)})`) : null
+      const title = newId ? await wc.executeJavaScript(
+        `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title').textContent`) : null
+      ok('31 a command-less preset stays command-less and reads as the login shell',
+        spec !== null && spec.spec.command === undefined && title === 'login shell',
+        `command=${spec && JSON.stringify(spec.spec.command)} title=${title}`)
     }
 
   } catch (error) {

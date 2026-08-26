@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { normalizeWheel } from './canvas-input'
 import { fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
 
@@ -19,6 +19,15 @@ export interface ViewportControls {
    * that emptiness on the very next save.
    */
   resetViewport: () => void
+  /**
+   * The world point the camera is currently centred on — the same value
+   * Cmd+N already computes one line above in the keydown handler. A menu-
+   * driven spawn (no keyboard event, no `bounds` to hand) needs a way to ask
+   * "where is the user looking" without being handed the setter itself; the
+   * setter stays private on purpose (nothing outside this hook should move
+   * the camera), but a READ of where it already is is safe to expose.
+   */
+  worldCentre: () => Point
 }
 
 /**
@@ -161,5 +170,19 @@ export function useViewport(
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [hostRef, onSpawn])
 
-  return { viewport, resetViewport: () => setViewport(INITIAL) }
+  // The SETTER stays private — nothing outside should move the camera — but a
+  // READ of where the camera is looking is what a menu-driven spawn needs, and
+  // it is the same value Cmd+N already computes one line above.
+  const worldCentre = useCallback((): Point => {
+    const host = hostRef.current
+    const size = host
+      ? { width: host.clientWidth, height: host.clientHeight }
+      : { width: 0, height: 0 }
+    return screenToWorld(
+      { x: size.width / 2, y: size.height / 2 },
+      viewportRef.current
+    )
+  }, [hostRef])
+
+  return { viewport, resetViewport: () => setViewport(INITIAL), worldCentre }
 }

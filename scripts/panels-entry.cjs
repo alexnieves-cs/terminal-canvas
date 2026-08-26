@@ -27,5 +27,9 @@ module.exports = {
   // twelve-panel fixture its checks (1, 3, 15, ...) depend on.
   fromPanels: require('../src/renderer/panels/layout-adapt').fromPanels,
   SEED_PANELS: require('../src/renderer/panels/panels').SEED_PANELS,
-  DEFAULT_CAMERA: require('../src/shared/layout-schema').DEFAULT_CAMERA
+  DEFAULT_CAMERA: require('../src/shared/layout-schema').DEFAULT_CAMERA,
+  /* Check 30 drives the capture round trip through the SAME helper main uses,
+     rather than a lambda here that could drift from production. */
+  requestFromRenderer: require('../src/main/ipc').requestFromRenderer,
+  IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS
 }
