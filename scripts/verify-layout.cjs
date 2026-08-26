@@ -681,6 +681,83 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     written.defaultPresetId === 'claude', written.defaultPresetId)
 }
 
+/* ---- M5b: Prompt, parsePrompts, and the store that holds them ---- */
+
+// 47. An absent prompts key is not corruption. Every file written before M5b
+//     has none, and warning about those would make the first launch after an
+//     upgrade shout about a file that is perfectly fine — the same trade
+//     parsePresets makes (check 32).
+{
+  const warnings = []
+  ok('47 an absent prompts key is silent',
+    L.parsePrompts(undefined, warnings).length === 0 && warnings.length === 0)
+}
+
+// 48. PRESENT but unusable IS corruption, and says so. A hand-edited
+//     `"prompts": {}` that silently emptied the list would leave the user with
+//     no evidence beyond a shorter palette.
+{
+  const warnings = []
+  ok('48 a non-array prompts field warns',
+    L.parsePrompts({}, warnings).length === 0 && warnings.length === 1)
+}
+
+// 49. Bad entries are dropped INDIVIDUALLY. One malformed prompt costs that
+//     prompt, not the file — the discipline every parser here follows.
+{
+  const warnings = []
+  const out = L.parsePrompts(
+    [
+      { id: 'p1', name: 'good', body: 'hello' },
+      { id: 'p2', name: 'no body' },
+      { id: '', name: 'bad id', body: 'x' },
+      { id: 'p3', name: 'also good', body: 'world' }
+    ],
+    warnings
+  )
+  ok('49 bad prompts are dropped one at a time',
+    out.length === 2 && out[0].id === 'p1' && out[1].id === 'p3' && warnings.length === 2,
+    JSON.stringify(warnings))
+}
+
+// 50. A duplicate id is dropped, for the reason duplicate PANEL ids are: the
+//     palette keys rows by id, and two rows with one id is a React list that
+//     renders one of them and loses the other with no error anywhere.
+{
+  const warnings = []
+  const out = L.parsePrompts(
+    [{ id: 'p1', name: 'a', body: 'x' }, { id: 'p1', name: 'b', body: 'y' }],
+    warnings
+  )
+  ok('50 a duplicate prompt id is dropped', out.length === 1 && warnings.length === 1)
+}
+
+// 51. An EMPTY body is dropped rather than kept. A prompt that pastes nothing
+//     is indistinguishable from a broken insert, and the palette would show it
+//     as a perfectly ordinary row.
+{
+  const warnings = []
+  ok('51 an empty body is not a prompt',
+    L.parsePrompts([{ id: 'p1', name: 'x', body: '' }], warnings).length === 0)
+}
+
+// 52. The store round-trips prompts: add, delete, and the file agrees.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPrompt({ id: 'p1', name: 'review', body: 'line one\nline two' })
+  store.addPrompt({ id: 'p2', name: 'other', body: 'x' })
+  const deleted = store.deletePrompt('p1')
+  const missing = store.deletePrompt('nope')
+  clock.fire()
+  const prompts = JSON.parse(readFileSync(path, 'utf8')).prompts
+  ok('52 prompts round-trip through the store',
+    deleted === true && missing === false && prompts.length === 1 && prompts[0].id === 'p2',
+    JSON.stringify(prompts))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

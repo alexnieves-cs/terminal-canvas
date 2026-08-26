@@ -99,6 +99,14 @@ export function mintPresetId(user: Preset[]): string {
   return `u${n}`
 }
 
+/** Same trick as mintPresetId, and the same file, because ids are minted here. */
+export function mintPromptId(existing: { id: string }[]): string {
+  const used = new Set(existing.map((p) => p.id))
+  let n = 1
+  while (used.has(`p${n}`)) n += 1
+  return `p${n}`
+}
+
 /**
  * M5a builds no modal, so a saved preset names itself. `~` becomes "home"
  * because basename('~') is '~', which reads as a typo rather than a place.

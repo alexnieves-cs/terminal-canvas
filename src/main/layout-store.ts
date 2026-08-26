@@ -7,6 +7,7 @@ import {
   type CanvasState,
   type LayoutSnapshot,
   type Preset,
+  type Prompt,
   type RestoreSettings,
   type Workspace
 } from '../shared/layout-schema'
@@ -68,6 +69,11 @@ export interface LayoutStore {
   setDefaultPreset(id: string): void
   /** What Cmd+N spawns. May name a built-in, so main resolves it, not this. */
   defaultPresetId(): string
+  /** The SAVED prompts only. Project prompts are read live; see main/prompts.ts. */
+  prompts(): Prompt[]
+  addPrompt(prompt: Prompt): void
+  /** False when the id names nothing — including any project prompt id. */
+  deletePrompt(id: string): boolean
   /** Return the active workspace to an empty canvas. */
   reset(): void
   /** Write now, synchronously. Never throws. */
@@ -245,6 +251,23 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     },
 
     defaultPresetId: () => snapshot.defaultPresetId,
+
+    // Copied out for the same reason presets() copies: a caller must not be
+    // able to mutate the snapshot the store is about to serialise.
+    prompts: () => snapshot.prompts.map((p) => ({ ...p })),
+
+    addPrompt(prompt) {
+      snapshot.prompts = [...snapshot.prompts, { ...prompt }]
+      scheduleWrite()
+    },
+
+    deletePrompt(id) {
+      const before = snapshot.prompts.length
+      snapshot.prompts = snapshot.prompts.filter((p) => p.id !== id)
+      if (snapshot.prompts.length === before) return false
+      scheduleWrite()
+      return true
+    },
 
     reset() {
       const w = activeWorkspace()
