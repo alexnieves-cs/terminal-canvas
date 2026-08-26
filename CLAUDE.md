@@ -799,7 +799,11 @@ id. `verify:panels` 43 is the only check that exercises the read end to end — 
 `listPrompts` is main's own `readProjectPrompts(resolveCwd(cwd))` against a fixture
 `.claude/commands/*.md` in a spaced temp directory that one fixture panel is pointed at — and it
 exists because a regression here removes ROWS, which is indistinguishable from "this project has
-no commands". Four limits, each protecting against a directory this app does not control: at most 100
+no commands". The harness **fences that read to its own fixture directory** and answers `[]` for
+every other cwd: several fixture panels are still `cwd: '~'`, and without the fence the suite
+would read the running developer's `~/.claude/commands`, i.e. depend on state the repo does not
+own — the same rule as "The verify suites must never touch the production socket". The fence
+costs no coverage, because check 43's panel is the only one pointed at that directory. Four limits, each protecting against a directory this app does not control: at most 100
 files, at most 64KB each (**skipped**, never truncated — half a prompt pasted into an agent
 reads as a complete instruction), one level deep (Claude Code namespaces commands in
 subdirectories; following that means a recursive walk over arbitrary user directories), and a

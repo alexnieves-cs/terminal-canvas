@@ -323,21 +323,30 @@ app.whenReady().then(async () => {
       if (found) win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
     },
     requestReset: () => {},
-    // The same two lines main/index.ts's listPrompts is, project half
-    // included: check 43 is the only end-to-end exercise of readProjectPrompts
-    // anywhere, and a stub with `[]` for the project half (which this was
-    // until the M5b fix wave) leaves the whole .claude/commands path proven
-    // no further than verify:layout's pure unit checks. The fixture panel
-    // check 43 focuses is pointed at PROJECT_DIR, so the rows it asserts on
-    // are this suite's own files — but note the residual: a panel whose cwd
-    // is '~' now genuinely lists the running user's ~/.claude/commands, so
-    // every check that picks a palette row does it by explicit row TEXT
-    // rather than by position (check 39's "Go to" row included), and an extra
-    // row can never silently become the one that runs.
+    // main/index.ts's listPrompts, project half included — check 43 is the
+    // only end-to-end exercise of readProjectPrompts anywhere, and a stub
+    // with `[]` for that half (which this was until the M5b fix wave) leaves
+    // the whole .claude/commands path proven no further than verify:layout's
+    // pure unit checks.
+    //
+    // The project read is FENCED to this suite's own fixture directory, and
+    // that fence is not a weakening: check 43's panel is the only one pointed
+    // at PROJECT_DIR, so nothing it asserts changes — while without the fence
+    // every panel still carrying `cwd: '~'` (s01, RENAMABLE_PRESET, the seed
+    // panels) would make this suite read the running developer's
+    // ~/.claude/commands, i.e. depend on state the repo does not own. That is
+    // the same class as the production-socket rule in CLAUDE.md ("The verify
+    // suites must never touch the production socket"), and it fails in both
+    // directions: a home file whose name contains a string another check
+    // asserts on, or a home directory large enough to push prompt:list past
+    // the sleeps the palette checks wait on. The wrong-cwd regression is
+    // still caught, because the fence is on the cwd the RENDERER sent: a
+    // palette that listed some other panel's directory gets `[]` here and
+    // check 43's row never appears.
     listPrompts: (cwd) =>
       mergePrompts(
         layoutStore.prompts(),
-        cwd === null ? [] : readProjectPrompts(resolveCwd(cwd))
+        cwd === PROJECT_DIR ? readProjectPrompts(resolveCwd(cwd)) : []
       ),
     savePrompt: () => {},
     removePrompt: () => false
@@ -2578,9 +2587,13 @@ app.whenReady().then(async () => {
     //     used to answer mergePrompts(saved, []) — a literal empty project
     //     half — so main/index.ts's `readProjectPrompts(resolveCwd(cwd))` was
     //     never called by any check anywhere. A regression there (the cwd of
-    //     the wrong panel, an unexpanded '~', a swapped source label) removes
-    //     ROWS, and a shorter list looks exactly like "this project has no
-    //     commands". Nothing throws and nothing logs.
+    //     the wrong panel, a `.claude/commands` path assembled wrongly, a
+    //     swapped source label) removes ROWS, and a shorter list looks
+    //     exactly like "this project has no commands". Nothing throws and
+    //     nothing logs. What this check does NOT cover is resolveCwd's `~`
+    //     expansion: PROJECT_DIR is absolute, so resolveCwd is the identity
+    //     here — the expansion is verify:pty-manager's ground, and claiming
+    //     it here would be a comment the check cannot honour.
     //
     //     The fixture is a real file in a real directory (PROJECT_DIR, with a
     //     space in its path on purpose) that this suite wrote before the
