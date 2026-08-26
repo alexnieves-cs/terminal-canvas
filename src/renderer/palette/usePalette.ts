@@ -99,6 +99,18 @@ export function usePalette(deps: {
       if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
       if (event.key !== 'k' && event.key !== 'K') return
       event.preventDefault()
+      // preventDefault FIRST, then stand down: a held Cmd+K is still ours to
+      // swallow even on the repeats we refuse to act on, or the tail of the
+      // chord leaks past to the browser and the PTY.
+      //
+      // The same auto-repeat rule useViewport's keydown handler applies (see
+      // REPEATABLE_KEYS there), with a louder symptom, because this one is a
+      // TOGGLE: an unguarded held chord flips the overlay open and closed at
+      // the OS repeat rate, and every re-open re-runs openPalette's
+      // setCapturedId(focusedIdRef.current) — so which panel the palette's
+      // rows act on comes down to whether the user released on an odd or an
+      // even repeat.
+      if (event.repeat) return
       // A toggle, not an open: Cmd+K twice must not leave a palette the user
       // has to find the Escape key for.
       if (openRef.current) closePalette()

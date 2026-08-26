@@ -5,6 +5,19 @@ import { centreOn as centreOnRect, fitTo, panBy, screenToWorld, zoomAt, type Poi
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
 const KEYBOARD_ZOOM_STEP = 1.2
 
+/**
+ * The only shortcuts an OS auto-repeat may reach. Holding Cmd+- to zoom out
+ * continuously is the affordance every canvas app has, so the zoom steppers
+ * WANT the repeat stream.
+ *
+ * Written as an allow-list rather than as three per-case guards so that the
+ * exemption is the thing recorded in the code, not the thing missing from it:
+ * a bare `if (event.repeat) return` scattered over '0', '1' and 'n' leaves
+ * '=' and '-' looking like an oversight, and the next reader closes the
+ * "gap" and silently deletes hold-to-zoom.
+ */
+const REPEATABLE_KEYS = new Set(['=', '+', '-'])
+
 export interface ViewportControls {
   viewport: Viewport
   /**
@@ -148,6 +161,22 @@ export function useViewport(
       if (!event.metaKey) return
       if (event.ctrlKey || event.altKey) return
       if (shouldIgnoreKeys?.()) return
+
+      // A held chord is ONE gesture but many events: the OS emits the real
+      // press and then an auto-repeat stream at roughly 15/sec, and every one
+      // of them arrives here as an ordinary keydown. Unguarded, `case 'n'`
+      // turns each repeat into a panel and — once it goes live — a PTY, so
+      // holding Cmd+N for two seconds is thirty agents and a canvas well past
+      // LIVE_BUDGET. Cmd+0/Cmd+1 are idempotent, so their repeats are merely
+      // wasted work; the zoom steppers are exempt because for them the repeat
+      // stream is the feature.
+      //
+      // `event.repeat` and NOT a "key is down" latch cleared on keyup: AppKit
+      // does not reliably deliver keyUp for a key pressed while Cmd is held,
+      // so a latch would stick "down" after the first Cmd+N and the shortcut
+      // would be dead for the rest of the run — a silent dead key traded for
+      // a loud bug, which is the worse of the two failures.
+      if (event.repeat && !REPEATABLE_KEYS.has(event.key)) return
 
       const host = hostRef.current
       if (!host) return

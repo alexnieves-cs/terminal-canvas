@@ -723,6 +723,40 @@ app.whenReady().then(async () => {
       `panels ${panelsBeforeSpawn} -> ${panelsAfterSpawn}, ` +
         `centre ${JSON.stringify(spawnedCentre)} expected ${JSON.stringify(expectedCentre)}`)
 
+    // 7b. HOLDING Cmd+N spawns exactly one panel, not one per OS key-repeat.
+    //     A held key is one gesture but many keydowns: the OS emits the real
+    //     press and then an auto-repeat stream at ~15/sec, and every one of
+    //     them reaches useViewport's switch. Unguarded, `case 'n'` turns each
+    //     repeat into a panel AND a PTY — two seconds of a held chord is
+    //     thirty agents and a canvas past LIVE_BUDGET.
+    //
+    //     This is the ONLY check in the suite that sets `repeat` at all. Every
+    //     other Cmd+N driver goes through zoomTo, whose KeyboardEvent leaves
+    //     `repeat` at its false default — which is exactly why the guard could
+    //     be added without touching checks 7, 17, 22, 26 or 29, and equally
+    //     why none of them would have caught its absence.
+    //
+    //     It deliberately does NOT then spawn a real panel to prove the
+    //     shortcut still works. Panel count is load-bearing state for later
+    //     checks, and 17/22/26/29 all drive a plain Cmd+N successfully
+    //     downstream — a guard that swallowed real presses too would take
+    //     every one of them down with it.
+    //
+    //     What this canNOT prove: that Chromium SETS `repeat` on macOS for a
+    //     Cmd-modified key. The flag is supplied by hand here, so this asserts
+    //     the guard READS it. The real-app half is a manual hold test.
+    await wc.executeJavaScript(`
+      for (let i = 0; i < 5; i++) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, repeat: true, bubbles: true }))
+      }
+      true
+    `)
+    await sleep(300)
+    const panelsAfterHeld = await panelCount(wc)
+    ok('7b holding Cmd+N spawns nothing further — auto-repeat is one gesture',
+      panelsAfterHeld === panelsAfterSpawn,
+      `${panelsAfterSpawn} -> ${panelsAfterHeld} after 5 repeat keydowns`)
+
     // 8. Typing reaches the focused panel's PTY. The whole input path through
     // the real SessionHandle (term.onData -> registry -> pty:write -> shell ->
     // pty:data -> term.write) is otherwise unexercised: wire onInput to the
@@ -2052,6 +2086,28 @@ app.whenReady().then(async () => {
       const state = await read()
       ok('33 Cmd+K opens the palette and moves DOM focus off xterm',
         state.open && state.onInput && !state.onTerminal, JSON.stringify(state))
+
+      // 33b. The same auto-repeat gap as 7b, one file over and with a louder
+      //      symptom. Cmd+K TOGGLES, so an unguarded held chord flips the
+      //      overlay open/closed at the repeat rate — a visible flicker, and
+      //      worse, every re-open re-runs setCapturedId(focusedIdRef.current),
+      //      so which panel the palette's rows act on ends up depending on
+      //      whether the user released on an odd or an even repeat.
+      //
+      //      Asserted from the OPEN state on purpose: an even number of
+      //      unguarded toggles would land back on "open" and read as a pass,
+      //      so this sends five — odd — and a broken build closes the palette.
+      //      Check 36 already proves a plain Cmd+K still closes it, and
+      //      leaving it open here is what check 34 expects to run against.
+      await wc.executeJavaScript(`
+        for (let i = 0; i < 5; i++) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, repeat: true, bubbles: true }))
+        }
+        true
+      `)
+      await sleep(300)
+      const stillOpen = await wc.executeJavaScript(`document.querySelector('.palette') !== null`)
+      ok('33b holding Cmd+K does not re-toggle the palette', stillOpen, `open=${stillOpen}`)
     }
 
     // 34. Canvas shortcuts stand down while it is open. Cmd+N typed while

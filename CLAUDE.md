@@ -46,7 +46,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 17 channels as of M5b, nine of them the palette's |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 49 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. The count is 49 while the last number is 47, because of the lettered sub-checks `38b` and `40a` |
+| `verify:panels` | real Electron | 51 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. The count is 51 while the last number is 47, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -934,6 +934,51 @@ running panel with zero readers in the chrome; `TerminalPanel.tsx` reads only
 `status.command`. The spec's success criterion — a reattached panel visibly
 "saying so" — is deliberately NOT met by this milestone; that is a later
 sub-milestone's UI work, not a gap in this one.
+
+**Auto-repeat is one gesture, not fifteen (`useViewport.ts`'s `REPEATABLE_KEYS`,
+`usePalette.ts`).** Holding a key does not produce one keydown; the OS emits the real
+press and then an auto-repeat stream at roughly 15/sec, and every one of them arrives
+as an ordinary `keydown`. Nothing in this codebase consulted `event.repeat` until this
+fix, so holding `Cmd+N` spawned a panel — and, once it went live, a PTY — per repeat:
+two seconds of a held chord was thirty agents and a canvas well past `LIVE_BUDGET`,
+i.e. a WebGL context count against a browser cap near sixteen, which
+`create-terminal.ts`'s `webglDisabled` makes permanent for the run. `Cmd+K` had the
+same gap with a louder symptom, because it TOGGLES: a held chord flickered the overlay
+at the repeat rate and re-ran `openPalette`'s `setCapturedId(focusedIdRef.current)` on
+every flip, so which panel the palette's rows acted on depended on whether the user
+released on an odd or an even repeat.
+
+Three things about the fix are worth not undoing. **The zoom steppers are exempt on
+purpose** — for `=`/`+`/`-` the repeat stream IS the feature, and `REPEATABLE_KEYS` is
+an allow-list rather than three scattered per-case guards precisely so the exemption is
+written down instead of merely absent, which is the form the next reader "fixes".
+**It is `event.repeat`, never a keyup latch**: AppKit does not reliably deliver `keyUp`
+for a key pressed while `Cmd` is held, so a flag set on keydown and cleared on keyup
+would stick "down" after the first `Cmd+N` and kill the shortcut for the rest of the
+run — a silently dead key traded for a loud bug, the worse of the two. And
+`usePalette.ts` calls `preventDefault()` **before** the repeat bail, unlike its modifier
+checks above it: those reject chords that are not ours, while this one rejects a chord
+that IS ours and we are declining to act on, so the tail of a held `Cmd+K` must still be
+swallowed rather than leaking to the browser and the focused agent's PTY.
+
+`verify:panels` 7b and 33b are the checks, and **neither proves the fix works** on its
+own: both construct a `KeyboardEvent` with `repeat: true` supplied by hand, so they
+assert the guard READS the flag and say nothing about who SETS it. That second link was
+checked separately and once, with a throwaway Electron script driving
+`webContents.sendInputEvent({ type: 'keyDown', keyCode: 'n', modifiers: ['meta',
+'isAutoRepeat'] })` — which enters through blink's real key handling rather than the
+DOM — and observing `KeyboardEvent.repeat` arrive `[false, true, true, true, true]`
+across one press plus four repeats on Electron 43.4.1. Note the spelling: `isAutoRepeat`
+is a **modifier string**, because Chromium carries auto-repeat as a bit in the modifier
+bitfield; passing it as a top-level field on `sendInputEvent` is silently ignored and
+reports the guard as inert when it is fine. The remaining unverified link — that macOS
+sets that bit for a physically held `Cmd`-modified key — is the one a future change can
+break with the whole suite still green, the same shape as `verify:panels` 32 and the
+`pane-died` quoting bug, and the one that needs a hand on the keyboard.
+
+The rest of the suite is a useful accomplice here, and worth knowing about before
+"fixing" an unrelated-looking failure: with the guard removed, 7b's five stray panels
+also fail check 8, and 33b's odd toggle count takes 34, 35, 36, 45 and 46 down with it.
 
 **The header's honest chain, and the backfill that must never happen
 (`TerminalPanel.tsx`).** The label is
