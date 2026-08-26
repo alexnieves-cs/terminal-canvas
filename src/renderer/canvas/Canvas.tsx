@@ -1109,6 +1109,7 @@ export function Canvas({
               version={version}
               rect={panel.rect}
               z={panel.z}
+              title={panel.title}
               selected={panel.rect.id === selectedId}
               onSelect={onSelectPanel}
               onSlotMount={onSlotMount}

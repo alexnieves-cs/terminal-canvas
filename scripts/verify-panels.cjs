@@ -1949,8 +1949,21 @@ app.whenReady().then(async () => {
       const spec = newId ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(newId)})`) : null
       const title = newId ? await wc.executeJavaScript(
         `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title').textContent`) : null
+      // Pre-M6a the header had no truer answer than the literal stand-in, so
+      // this always read 'login shell' by the time the check reached it.
+      // Since M6a (Task 5) it reads whatever main actually resolved once the
+      // spawn round trip completes, and that can land before this check's
+      // own two further executeJavaScript hops do — this fixture's real
+      // /bin/zsh -l spawns fast enough that it usually has. Either reading
+      // is correct depending on exactly where that race lands; what this
+      // check actually guards is the spec assertion beside it — that a
+      // command-less PRESET_SPAWN never gets a command INJECTED into the
+      // spec by a well-meaning default somewhere up the chain — so the
+      // title assertion accepts both truthful answers and rejects only a
+      // fabricated one.
       ok('31 a command-less preset stays command-less and reads as the login shell',
-        spec !== null && spec.spec.command === undefined && title === 'login shell',
+        spec !== null && spec.spec.command === undefined &&
+          (title === 'login shell' || (typeof title === 'string' && title.startsWith('/'))),
         `command=${spec && JSON.stringify(spec.spec.command)} title=${title}`)
     }
 
@@ -2668,6 +2681,70 @@ app.whenReady().then(async () => {
           arrived === true,
           `focused=${focused} row=${insertRow} arrived=${arrived}`)
       }
+    }
+
+    // 44 — M6a. A panel whose SPEC has no command is the default case —
+    //     every Cmd+N panel and the built-in login-shell preset — and its
+    //     header printed the literal string "login shell" for the whole
+    //     life of the app. Main has known the real answer since M4. By this
+    //     point in the suite the canvas has been reset (23), reloaded (26,
+    //     39) and had panels spawned-and-undone (37), so the first `.panel`
+    //     in DOM order is not a known quantity — this check spawns and
+    //     identifies its OWN panel rather than trusting a bare first match.
+    {
+      // Check 29 pointed Cmd+N's default at a fixture command ('/bin/cat')
+      // and nothing since has pointed it back. Left alone, this check would
+      // spawn a panel whose spec ALREADY names a command, and the header
+      // would read that command via the existing `spec.command ?? 'login
+      // shell'` fallback even before the chain changes — passing for a
+      // reason that has nothing to do with what this check tests. Re-point
+      // the default at a command-less template, the same shape check 31
+      // uses, so this panel exercises the actual case the header stand-in
+      // exists for: an absent spec.command.
+      wc.send(IPC_EVENTS.PRESET_DEFAULT, { cwd: '/tmp', args: [] })
+      await waitUntil(async () => await wc.executeJavaScript(
+        `Boolean(window.__m5aDefaultSpec && window.__m5aDefaultSpec().command === undefined)`), 3000)
+
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      // Check 37 already establishes this exact idiom for capturing a
+      // Cmd+N panel's id: dispatch the synthetic keydown on window, then
+      // diff the id list against the snapshot taken before it.
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const ids = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 3000)
+      const newId = ids ? ids.find((id) => !idsBefore.has(id)) : undefined
+      // A command-less panel spawns only once it goes LIVE ("Lazy spawn"),
+      // and even then the header's honest answer is not available until
+      // pty:create resolves. sessionMap reads MAIN's own pty:list, so
+      // waiting on it is waiting for the actual spawn to have completed on
+      // the backend, not a guessed clock delay.
+      const spawnedOnBackend = newId
+        ? await waitUntil(async () => (await sessionMap(wc)).has(newId), 3000)
+        : false
+      // The header re-renders off registry.version(), which bumps on the
+      // status transition to 'running' — a beat after the backend spawn
+      // above, not the same tick. Poll the label itself rather than reading
+      // it once right after the backend confirms.
+      const label = newId
+        ? await waitUntil(async () => {
+            const text = await wc.executeJavaScript(
+              `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+            return text.startsWith('/') ? text : false
+          }, 3000)
+        : false
+      const rawLabel = newId
+        ? await wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id="${newId}"] .panel__title')?.textContent ?? ''`)
+        : null
+      ok('44 the header names what main resolved, not the stand-in',
+        newId !== undefined && spawnedOnBackend && label !== false && label !== 'login shell' &&
+          typeof label === 'string' && label.startsWith('/'),
+        `newId=${newId} spawnedOnBackend=${spawnedOnBackend} label=${label} rawLabel=${rawLabel}`)
     }
 
   } catch (error) {
