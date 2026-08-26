@@ -203,6 +203,7 @@ const spyActions = () => {
     insertPrompt: record('insertPrompt'),
     beginSavePrompt: record('beginSavePrompt'),
     deletePrompt: record('deletePrompt'),
+    beginRenamePanel: record('beginRenamePanel'),
     resetCanvas: record('resetCanvas'),
     zoomToFit: record('zoomToFit')
   }
@@ -357,6 +358,34 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   for (const r of rows) if (order[order.length - 1] !== r.group) order.push(r.group)
   ok('30 groups are built in a fixed order',
     order.join(',') === 'Panel,Preset,Prompt,Canvas', order.join(','))
+}
+
+// 31-32 — M6a. The rename row is aimed at capturedId, NOT at the row's own
+//     panel: the palette captures focusedId on open and deliberately never
+//     clears it, and every panel-acting command targets the panel the user was
+//     in. With nothing focused the row must stay VISIBLE with its reason — a
+//     row that disappears is indistinguishable from a feature that is missing.
+{
+  const row = byId(
+    P.buildCommands(ctx({ capturedId: null, panels: [{ id: 'p1', label: 'p1' }] })),
+    'panel.rename'
+  )
+  ok('31 rename stays visible with a reason when nothing is focused',
+    row !== undefined && row.disabledReason === P.REASON_NO_FOCUS)
+}
+{
+  const c = ctx({
+    capturedId: 'p1',
+    panels: [{ id: 'p1', label: 'p1', title: 'auth refactor' }]
+  })
+  const row = byId(P.buildCommands(c), 'panel.rename')
+  row.run()
+  ok('32 rename is runnable, echoes the current name, and acts on the captured panel',
+    row.disabledReason === undefined &&
+    row.subtitle.includes('auth refactor') &&
+    c.actions.calls[0][0] === 'beginRenamePanel' &&
+    c.actions.calls[0][1] === 'p1' &&
+    c.actions.calls[0][2] === 'auth refactor')
 }
 
 const failed = results.filter((r) => !r.pass)

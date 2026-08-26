@@ -32,6 +32,8 @@ export interface PromptRow {
 export interface PanelRow {
   id: string
   label: string
+  /** The user's name for it, if set. Shown so the rename row can echo it. */
+  title?: string
 }
 
 export interface PaletteActions {
@@ -43,6 +45,7 @@ export interface PaletteActions {
   insertPrompt(id: string): void
   beginSavePrompt(): void
   deletePrompt(id: string): void
+  beginRenamePanel(id: string, currentTitle: string): void
   resetCanvas(): void
   zoomToFit(): void
 }
@@ -92,6 +95,26 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       group: 'Panel',
       run: () => actions.goToPanel(panel.id)
     })
+  }
+
+  {
+    const target = ctx.panels.find((p) => p.id === ctx.capturedId)
+    out.push(
+      withReason(
+        {
+          id: 'panel.rename',
+          title: 'Rename panel…',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          group: 'Panel',
+          run: () => actions.beginRenamePanel(ctx.capturedId!, target?.title ?? '')
+        },
+        // Aimed at the CAPTURED panel, not at a row's own panel: opening the
+        // palette moves DOM focus to the input but deliberately leaves
+        // focusedId alone, and that captured id is what every panel-acting
+        // command targets.
+        ctx.capturedId === null ? REASON_NO_FOCUS : undefined
+      )
+    )
   }
 
   for (const preset of ctx.presets) {

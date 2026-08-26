@@ -1054,6 +1054,9 @@ export function Canvas({
       // there (the row is disabled, but a stale list could still reach here).
       void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
     },
+    beginRenamePanel: () => {
+      // TODO: Task 7 — implement panel rename functionality
+    },
     resetCanvas: () => {
       // Main owns the confirmation dialog and the counts request. The palette
       // asks for the flow the menu item already runs rather than growing a
