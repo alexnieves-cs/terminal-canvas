@@ -195,6 +195,7 @@ quitting either build destroyed the other build's running agents.
 | M5a | Panel presets: saved spawns, a menu, Cmd+N's default | ✅ done |
 | M5b | Command palette: Cmd+K, preset management, panel switcher, prompts | ✅ done |
 | M5c | electron-builder packaging | ✅ done |
+| M6a | Panel identity: user titles, and chrome that says what main resolved | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
