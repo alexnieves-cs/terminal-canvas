@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **M1 through M5b have landed** — the PTY layer, the canvas, their
-merge, persistence and tmux-backed session survival (M4), presets (M5a), and the Cmd+K command
-palette (M5b). The three that shaped the architecture are worth keeping in mind: M1 is the PTY layer, M2 is the
+running a coding-agent CLI. **M1 through M5c have landed** — the PTY layer, the canvas, their
+merge, persistence and tmux-backed session survival (M4), presets (M5a), the Cmd+K command
+palette (M5b), and electron-builder packaging into a real, launchable `.app` (M5c). The three that shaped the architecture are worth keeping in mind: M1 is the PTY layer, M2 is the
 canvas and its coordinate math — deliberately built apart so that a blank panel had exactly
 one possible cause in each. M3 merges them: `Canvas.tsx` now renders real terminal panels
 instead of M2's placeholder rectangles, with level-of-detail tiering and viewport culling so
@@ -39,7 +39,7 @@ work is done. Individual suites:
 | `verify:palette` | plain node | 30 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–30) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list |
 | `verify:tmux` | plain node | 26 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19). M5c adds `resolveSocket`: dev and packaged landing on different sockets (20), the dev socket unchanged from its historic value (21), an explicit override beating both defaults (22), a blank or whitespace override falling back to the default rather than leaking through to tmux's own default socket (23), and `buildStartServerArgs` — the one tmux argv that used to be hand-rolled — defaulting to the private socket and threading an explicit one (24–25). The count is 26 while the last number is 25, because of the lettered sub-check `17b` |
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value: `node-pty` unpacked from the asar and the pattern depth-independent (1–2), `asar` actually on (3), the `files` globs (4–5), app identity and output dir (6–7), signing explicitly *decided* rather than unmentioned (8), targets and architecture (9), and the arch being a parameter rather than a constant (10) |
-| `verify:packaged` | real Electron, **not in `npm run verify`** | 8 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped `PATH`, a throwaway `--user-data-dir` and a scratch `TC_TMUX_SOCKET`. Asserts the app survives startup (3 — the asar/`node-pty` proof), reports itself packaged (4), recovered a PATH launchd never gave it (5 — the first time `shell-env.ts`'s reason for existing has ever been observed), used the scratch socket (6), named a backend and a reason (7), and actually spawned a PTY (8). Kept out of the default chain because it rebuilds native modules and reaches electron-builder's cache — minutes, plus a network dependency — and the repo's one green-or-not signal must stay fast and offline. It is the **pre-release gate**; run it before cutting a build |
+| `verify:packaged` | real Electron, **not in `npm run verify`** | 9 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped `PATH`, a throwaway `--user-data-dir` and a scratch `TC_TMUX_SOCKET`. Asserts the app survives startup (3 — the asar/`node-pty` proof), reports itself packaged (4), recovered a PATH launchd never gave it (5 — the first time `shell-env.ts`'s reason for existing has ever been observed), used the scratch socket (6), actually used the throwaway `--user-data-dir` rather than silently falling back to the real one (7), named a backend and a reason (8), and actually spawned a PTY (9). Kept out of the default chain because it rebuilds native modules and reaches electron-builder's cache — minutes, plus a network dependency — and the repo's one green-or-not signal must stay fast and offline. It is the **pre-release gate**; run it before cutting a build |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 18 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). Skipped loudly, never silently, when no tmux binary is found |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
@@ -77,7 +77,10 @@ what moves a module out of this tier is importing `electron` or `node-pty`, not 
 The palette's three pure modules are the same story on the renderer side — `commands.ts`
 builds the command list from plain data (preset rows, prompt rows, panel rows, a captured id)
 and holds no reference to the registry, the viewport, or React, which is what lets
-`verify:palette` assert on *disabled reasons* rather than on a rendered DOM.
+`verify:palette` assert on *disabled reasons* rather than on a rendered DOM. `verify:package`
+belongs on this list too — and needs less justification than any of the above:
+`build/builder-config.cjs` is plain CJS with zero imports at all, needing no esbuild entry
+whatsoever, unlike every other suite in this list.
 
 **`verify:pty` duplicates production code on purpose.** It re-implements `shell-env.ts`'s
 probe and `pty-manager.ts`'s batching by hand so it can test them without Electron's app
@@ -860,7 +863,7 @@ dies at the first `pty:create` — the latest and quietest failure this codebase
 The pattern is anchored `**/node_modules/node-pty/**` rather than at the root so it keeps
 matching if npm hoists `node-pty` to a nested depth; a root-anchored pattern stops matching
 silently, months later, with no code change to blame. `verify:package` 1–2 pin both halves and
-`verify:packaged` 8 is the end-to-end proof.
+`verify:packaged` 9 is the end-to-end proof.
 
 **A packaged build must not share a tmux server with a dev build (`tmux-args.ts`'s
 `resolveSocket`, `main/index.ts`).** `before-quit` calls `shutdown()`, which is `kill-server`
@@ -929,8 +932,8 @@ it.
 Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then an
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
-M2 and M3 are both worked examples of this. Follow it when starting M5c (electron-builder
-packaging), the next unstarted milestone.
+M2 and M3 are both worked examples of this. Follow it when starting the next unscheduled
+milestone — see `docs/ideas-backlog.md` for candidates.
 
 ## Conventions
 
