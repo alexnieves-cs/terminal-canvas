@@ -39,6 +39,13 @@ const {
   DEFAULT_CAMERA,
   requestFromRenderer,
   pushDefaultPreset,
+  allPresets,
+  resolveAvailability,
+  presetRows,
+  templateOf,
+  mergePrompts,
+  readProjectPrompts,
+  resolveCwd,
   IPC_EVENTS
 } = require(ENTRY_OUT)
 
@@ -192,6 +199,54 @@ app.whenReady().then(async () => {
   const BOOT_DEFAULT_PRESET = {
     id: 'u9', name: 'Verify boot default', cwd: '/tmp', command: '/bin/cat', args: ['-v']
   }
+  // Check 38's fixture. The name is what the check's query targets, and it is
+  // deliberately unlike every other preset's: 'rename harness' is a
+  // subsequence of "Rename preset harness preset" and of no other row's text,
+  // so the row the check clicks is the one it means rather than whichever
+  // built-in the fuzzy matcher happened to rank first.
+  const RENAMABLE_PRESET = { id: 'u1', name: 'harness preset', cwd: '~', args: [] }
+  // Check 40's fixture, and the only reason that check can exist at all.
+  // `printf '\033[?2004h'` turns BRACKETED-PASTE MODE (DEC private mode 2004)
+  // on, so xterm wraps a paste in \e[200~ ... \e[201~; `cat -v` echoes what
+  // arrives with control characters made visible, so those markers land in the
+  // terminal buffer as the literal text "^[[200~". Against any ordinary shell
+  // paste() and write() put byte-identical data on the PTY and nothing can
+  // tell them apart — this program is the discriminator.
+  // Check 43's fixture, and check 40's cwd. A project prompt is a FILE under
+  // a panel's cwd, so the panel has to be pointed somewhere this suite owns:
+  // '~' would make the check depend on whatever .claude/commands happens to
+  // be in the running user's home directory, and a spaced path is deliberate
+  // — every cwd this app expands eventually reaches a shell (the same class
+  // of bug the tmux exitDir's quoting note in CLAUDE.md records).
+  const PROJECT_DIR = mkdtempSync(join(tmpdir(), 'tc panels project '))
+  mkdirSync(join(PROJECT_DIR, '.claude', 'commands'), { recursive: true })
+  // The name comes from the FILENAME (readProjectPrompts strips the .md), so
+  // this string is what check 43's query and row assertion both target.
+  const PROJECT_PROMPT_NAME = 'harness-project-prompt'
+  const PROJECT_PROMPT_BODY = 'zzprojectbody first line\nzzprojectbody second line'
+  writeFileSync(
+    join(PROJECT_DIR, '.claude', 'commands', PROJECT_PROMPT_NAME + '.md'),
+    PROJECT_PROMPT_BODY, 'utf8'
+  )
+  const ECHO_PRESET = {
+    id: 'u2', name: 'echo -v', cwd: PROJECT_DIR,
+    command: '/bin/sh', args: ['-c', "printf '\\033[?2004h'; cat -v"]
+  }
+  // Check 40's prompt. Two lines, because multi-line is the entire point: a
+  // raw write of this body is two submissions, a bracketed paste is one.
+  const SEEDED_PROMPT = { id: 'p1', name: 'two liner', body: 'first line\nsecond line' }
+  // Check 39's fixture. reset() (check 23) always collapses the canvas to
+  // firstRunPanels() — one panel — so nothing seeded into the BOOT layout can
+  // survive to the end of the run; check 39 needs a still-dormant,
+  // never-spawned panel at the very end of the suite, after reset, after
+  // every check that runs between them. It is injected via its OWN reload
+  // (below, right after check 26 — see the comment there for why that reload
+  // is not check 26's tmux-only one), parked far outside every coordinate
+  // any later check clicks — including check 30's background click at
+  // screen (0,0), which happens to land on world (-120,-120) and is what
+  // silently re-wakes the reset panel (p1), a naive seed would rely on
+  // instead.
+  const NEVER_WOKEN_ID = 'never-woken'
   writeFileSync(LAYOUT_PATH, JSON.stringify({
     version: 1,
     activeWorkspaceId: 'w1',
@@ -199,8 +254,13 @@ app.whenReady().then(async () => {
       id: 'w1', name: 'Canvas', panels: [],
       camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null
     }],
-    presets: [BOOT_DEFAULT_PRESET],
-    defaultPresetId: BOOT_DEFAULT_PRESET.id
+    // Check 38 needs a preset the palette is allowed to RENAME, which rules
+    // out every built-in — and BOOT_DEFAULT_PRESET is check 32's fixture, so
+    // renaming that one would leave 32 asserting against a name this check
+    // changed. A second user preset, never the default, keeps the two apart.
+    presets: [BOOT_DEFAULT_PRESET, RENAMABLE_PRESET, ECHO_PRESET],
+    defaultPresetId: BOOT_DEFAULT_PRESET.id,
+    prompts: [SEEDED_PROMPT]
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
   // main/index.ts calls this at whenReady; without it the store would start
@@ -228,7 +288,69 @@ app.whenReady().then(async () => {
   // ipcMain.handle's return value crosses IPC via structured clone, so this
   // must be a plain { kind, reason } object, not the SessionBackend itself —
   // that carries a spawn() function, which structured clone cannot carry.
-  registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }))
+  // list and rename are REAL, against the same store and the same presetRows
+  // builder main/index.ts uses: check 38 asserts a rename made in the palette
+  // survives a round trip through the store, and a stubbed pair would let it
+  // pass against the harness rather than against the app. The rest stay stubs
+  // — nothing here drives them, and the contract requirement is only that
+  // registerIpcHandlers registers every preset/reset channel.
+  //
+  // `which` resolves absolute paths and nothing else: this process has no
+  // resolved login env, so a PATH lookup is meaningless here — but check 40a
+  // CLICKS a spawn row, and buildCommands disables an unavailable one, so
+  // ECHO_PRESET's /bin/sh has to come back available or that row can never
+  // run. Answering only for a path that exists on disk keeps the answer
+  // honest rather than blanket-true.
+  const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
+  registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
+    list: () => presetRows(
+      resolveAvailability(allPresets(layoutStore.presets()), whichHere),
+      layoutStore.defaultPresetId()
+    ),
+    // No afterPresetChange(): this entry point builds no menu, and re-pushing
+    // PRESET_DEFAULT here would hand check 32's assertion a second push it
+    // never asked for.
+    rename: (id, name) => layoutStore.renamePreset(id, name),
+    remove: () => false,
+    setDefault: () => {},
+    // Real, and the same two lines main/index.ts's onSpawnPreset is: check 40a
+    // is the only end-to-end exercise of preset:spawn-by-id anywhere in the
+    // suite, and it is the invoke reaching a resolve-and-push that it covers.
+    // A stub here would leave the palette's spawn proven only as far as the
+    // preload.
+    spawn: (id) => {
+      const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
+      if (found) win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+    },
+    requestReset: () => {},
+    // main/index.ts's listPrompts, project half included — check 43 is the
+    // only end-to-end exercise of readProjectPrompts anywhere, and a stub
+    // with `[]` for that half (which this was until the M5b fix wave) leaves
+    // the whole .claude/commands path proven no further than verify:layout's
+    // pure unit checks.
+    //
+    // The project read is FENCED to this suite's own fixture directory, and
+    // that fence is not a weakening: check 43's panel is the only one pointed
+    // at PROJECT_DIR, so nothing it asserts changes — while without the fence
+    // every panel still carrying `cwd: '~'` (s01, RENAMABLE_PRESET, the seed
+    // panels) would make this suite read the running developer's
+    // ~/.claude/commands, i.e. depend on state the repo does not own. That is
+    // the same class as the production-socket rule in CLAUDE.md ("The verify
+    // suites must never touch the production socket"), and it fails in both
+    // directions: a home file whose name contains a string another check
+    // asserts on, or a home directory large enough to push prompt:list past
+    // the sleeps the palette checks wait on. The wrong-cwd regression is
+    // still caught, because the fence is on the cwd the RENDERER sent: a
+    // palette that listed some other panel's directory gets `[]` here and
+    // check 43's row never appears.
+    listPrompts: (cwd) =>
+      mergePrompts(
+        layoutStore.prompts(),
+        cwd === PROJECT_DIR ? readProjectPrompts(resolveCwd(cwd)) : []
+      ),
+    savePrompt: () => {},
+    removePrompt: () => false
+  })
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -1638,6 +1760,66 @@ app.whenReady().then(async () => {
       }
     }
 
+    // ---------------------------------------------------------------------
+    // Check 39's fixture: a still-dormant, never-spawned panel that survives
+    // to the very end of the suite.
+    //
+    // reset() (check 23) always collapses the canvas to firstRunPanels() —
+    // one fresh, non-dormant panel — so nothing seeded into the BOOT layout
+    // can be that fixture; it has to be seeded AFTER reset, into whatever a
+    // later reload restores from. "Dormancy is about spawning, not
+    // attaching" (CLAUDE.md): a panel with no live session restores dormant
+    // regardless of backend, so this reload deliberately does NOT live inside
+    // check 26's `if (!TMUX)` branch — that branch, and its reload, exist
+    // for what check 26 itself asserts (a tmux session outliving its
+    // client), and skip together on a machine with no tmux binary. Giving
+    // check 39 its own reload here, unconditionally, is what keeps it
+    // passing on a machine where check 26 SKIPPED — this suite's earlier
+    // draft nested this in check 26's tmux branch and check 39 hard-failed
+    // wherever check 26 did, for a reason that has nothing to do with the
+    // command palette.
+    // ---------------------------------------------------------------------
+    {
+      // flushLayoutStore() lands the renderer's current on-screen state on
+      // disk first, so appending below — rather than replacing wholesale via
+      // layoutStore.save() — cannot drop whatever panels are actually live.
+      flushLayoutStore()
+      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+      const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+      ws.panels.push({
+        id: NEVER_WOKEN_ID,
+        // Far outside anything any later check's camera ever frames or
+        // clicks, including check 30's unqualified background mousedown.
+        // 720x460 matches PANEL_W/PANEL_H — hardcoded rather than imported,
+        // since the exact box size is irrelevant here (nothing reads it)
+        // and importing it would be one more coupling for no benefit.
+        x: 50000, y: 50000, w: 720, h: 460, z: maxZ + 1,
+        cwd: '~', args: ['-l']
+      })
+      writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+      // layout:load answers from layoutStore's in-memory snapshot, not a
+      // fresh disk read (see main/ipc.ts) — without re-loading here, the
+      // reload below would restore the file as it was before this push.
+      layoutStore.load()
+
+      // No live PTY exists (or ever will) for NEVER_WOKEN_ID under EITHER
+      // backend, so boot reconciliation after this reload restores it
+      // dormant regardless of whether check 26 ran the tmux branch above or
+      // skipped it — this reload needs nothing check 26 set up.
+      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload()
+      await reloaded
+      // Boot reconciliation (pty:list, then registry.ensure for every
+      // restored panel) runs after first paint, not synchronously with
+      // did-finish-load; wait on the fixture actually showing up rather than
+      // a guessed sleep.
+      await waitUntil(async () => {
+        const sessions = await wc.executeJavaScript(`window.__m4aSessions ? window.__m4aSessions() : []`)
+        return sessions.some((s) => s.id === NEVER_WOKEN_ID) || false
+      }, 4000)
+    }
+
     /* ---- M5a presets ---- */
 
     // /bin/cat, not /bin/echo: check 26 swaps the manager onto the real tmux
@@ -1785,6 +1967,707 @@ app.whenReady().then(async () => {
         bootDefault !== null && bootDefault.command === BOOT_DEFAULT_PRESET.command &&
           bootDefault.cwd === BOOT_DEFAULT_PRESET.cwd && bootDefault.args[0] === '-v',
         `bootDefault=${JSON.stringify(bootDefault)}`)
+    }
+
+    // Checks 33-36 need a FOCUSED panel: 33's Cmd+K captures focusedId, 35's
+    // __m4aCellToScreen reads the focused panel's buffer, and 36 asserts focus
+    // comes back to a terminal. Check 30 deliberately ends on a background
+    // click, which releases focus, and 31-32 focus nothing — so focus one here,
+    // with the same .panel__slot mousedown check 30 uses (the slot's own
+    // handler stopPropagation()s and calls onFocus; the canvas background
+    // handler would clear focus instead). A LIVE panel, because only a live
+    // panel has a .panel__slot and an xterm textarea to hand the keyboard back
+    // to in check 36.
+    {
+      const targetId = await wc.executeJavaScript(
+        `document.querySelector('.panel__slot').closest('.panel').getAttribute('data-panel-id')`)
+      await wc.executeJavaScript(`
+        document.querySelector('.panel[data-panel-id="${targetId}"] .panel__slot')
+          .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
+        true
+      `)
+      // Assert the precondition rather than assume it: checks 33-36 that ran
+      // against an unfocused canvas would pass for the wrong reason.
+      const focusedNow = await waitUntil(
+        () => requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null), 2000)
+      if (focusedNow === null) throw new Error('checks 33-36 precondition: no panel is focused')
+    }
+
+    // 33. Cmd+K opens the palette and takes DOM focus OFF the terminal.
+    //     This is the whole milestone in one assertion: xterm reads its own
+    //     hidden textarea and nothing else, so moving DOM focus to the input is
+    //     what stops bare keys reaching the PTY — no global key swallowing
+    //     required. Bound as a RENDERER keydown, not a menu accelerator, for the
+    //     same reason Cmd+N is: a main-process accelerator would never receive
+    //     a dispatched KeyboardEvent, so this check could not exist.
+    {
+      await wc.executeJavaScript(`
+        document.querySelector('.panel__slot .xterm-helper-textarea')?.focus();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      const read = () => wc.executeJavaScript(`(() => {
+        const el = document.activeElement
+        return {
+          open: document.querySelector('.palette') !== null,
+          onInput: el !== null && el.classList.contains('palette__input'),
+          onTerminal: el !== null && el.classList.contains('xterm-helper-textarea')
+        }
+      })()`)
+      // waitUntil stops on any TRUTHY value and an object is always truthy, so
+      // polling for the snapshot itself would return on the first read and
+      // assert against a canvas that has not re-rendered yet. Wait on the
+      // condition, then read the snapshot once.
+      await waitUntil(async () => (await read()).open, 2000)
+      const state = await read()
+      ok('33 Cmd+K opens the palette and moves DOM focus off xterm',
+        state.open && state.onInput && !state.onTerminal, JSON.stringify(state))
+    }
+
+    // 34. Canvas shortcuts stand down while it is open. Cmd+N typed while
+    //     filtering must not ALSO spawn a panel — useViewport's window keydown
+    //     listener sees every key regardless of what has DOM focus, so the
+    //     palette has to tell it to stand down.
+    {
+      const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))
+      `)
+      await sleep(300)
+      const after = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+      ok('34 Cmd+N does not spawn while the palette is open', before === after, `${before} -> ${after}`)
+    }
+
+    // 35. Cmd+V while the palette is open fills the INPUT, not the PTY. main's
+    //     menu accelerator sends edit:paste unconditionally, and Canvas routes it
+    //     into the focused session — so without a guard the text lands in a
+    //     running agent, invisibly, while the user watches an empty text field.
+    {
+      const MARK = 'M5BPASTEMARK'
+      wc.send('edit:paste', MARK)
+      const read = () => wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        return { inInput: input !== null && input.value.includes('${MARK}'),
+                 inTerminal: window.__m4aCellToScreen('${MARK}') !== null }
+      })()`)
+      // The negative half is the one that needs the wait, and it is the one an
+      // always-truthy poll would silently give away: read immediately and
+      // 'inTerminal' is false because no PTY could have echoed yet, guard or no
+      // guard. Wait for EITHER destination, then settle before the read that
+      // the assertion actually uses, so a slow echo cannot hide behind a poll
+      // that already returned.
+      await waitUntil(async () => { const s = await read(); return s.inInput || s.inTerminal }, 2000)
+      await sleep(500)
+      const seen = await read()
+      ok('35 a menu paste with the palette open reaches the input, not the PTY',
+        seen.inInput && !seen.inTerminal, JSON.stringify(seen))
+    }
+
+    // 36. Escape closes and gives the keyboard BACK. Without this the user
+    //     presses Escape, types, sees nothing happen, and concludes they
+    //     mis-clicked. SessionHandle.focus() exists for exactly this.
+    {
+      // Read the pre-Escape state and assert it too. Without it this check
+      // passes for the wrong reason when the palette never opened at all:
+      // check 33 leaves DOM focus on the xterm textarea, so "closed and on a
+      // terminal" is exactly what NO palette also looks like. `?.` so a
+      // missing input fails this check instead of aborting the whole run.
+      const before = await wc.executeJavaScript(`(() => {
+        const el = document.activeElement
+        return {
+          open: document.querySelector('.palette') !== null,
+          onInput: el !== null && el.classList.contains('palette__input')
+        }
+      })()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.palette__input')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        true
+      `)
+      const read = () => wc.executeJavaScript(`(() => {
+        const el = document.activeElement
+        return {
+          closed: document.querySelector('.palette') === null,
+          onTerminal: el !== null && el.classList.contains('xterm-helper-textarea')
+        }
+      })()`)
+      // Wait on onTerminal, not on the snapshot and not on `closed`: `closed`
+      // is also what a palette that never opened looks like, so it cannot be
+      // the thing this poll waits for.
+      await waitUntil(async () => (await read()).onTerminal, 2000)
+      const state = await read()
+      ok('36 Escape closes the palette and restores the terminal',
+        before.open && before.onInput && state.closed && state.onTerminal,
+        `${JSON.stringify(before)} -> ${JSON.stringify(state)}`)
+    }
+
+    // 37. Cmd+Z stands down too. Rule 3 is "canvas shortcuts stand down", and
+    //     Cmd+Z is a menu accelerator on exactly the same footing as Cmd+V
+    //     (main/menu.ts sends edit:undo unconditionally). With the palette open
+    //     and a name half-typed, an unguarded edit:undo does not undo the
+    //     TYPING: it runs applyHistory, which REMOVES a panel and disposes its
+    //     session, behind the overlay, with nothing on screen to explain it —
+    //     strictly worse than the paste check 35 covers.
+    {
+      const ids = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      // Put a known entry on the history stack rather than depending on
+      // whatever the preceding checks happened to leave there: a check whose
+      // undo had nothing to undo would pass without testing anything.
+      const before = new Set(await ids())
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const spawned = await waitUntil(async () => {
+        const now = await ids()
+        return now.length > before.size ? now : false
+      }, 3000)
+      const newId = spawned ? spawned.find((id) => !before.has(id)) : undefined
+
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+
+      wc.send('edit:undo')
+      await sleep(400) // nothing to wait FOR: the assertion is that nothing happens
+      const survived = newId !== undefined && (await ids()).includes(newId)
+
+      // The other half, and the reason this check cannot pass vacuously: with
+      // the palette CLOSED the very same event must still undo the spawn. If
+      // it does not, the guard above is not standing down, it is broken.
+      await wc.executeJavaScript(`
+        document.querySelector('.palette__input')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        true
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+      wc.send('edit:undo')
+      const undone = newId !== undefined &&
+        Boolean(await waitUntil(async () => !(await ids()).includes(newId), 3000))
+
+      ok('37 Cmd+Z does not undo behind an open palette, and still undoes once it is closed',
+        survived && undone, `newId=${newId} survived=${survived} undoneAfterClose=${undone}`)
+    }
+
+    // 38. A rename made in the palette reaches the store and comes back in the
+    //     next preset:list. This is the debt M5a deferred here by name: it
+    //     shipped presets that could be created and picked but not renamed,
+    //     because the rename needed a text field and the text field needed the
+    //     focus rules that did not exist yet.
+    {
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      // Filter to the rename row for the user preset the layout file seeded,
+      // run it, then type the new name and press Enter. React's controlled
+      // <input> ignores a plain input.value = x — the native setter plus a
+      // dispatched 'input' is what makes the change reach React's state, so
+      // do not simplify it into an assignment.
+      const renamed = await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        nativeSet(document.querySelector('.palette__input'), 'rename harness')
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename preset harness preset'))
+        if (!row) return 'no rename row for the seeded user preset'
+        if (row.className.includes('palette__row--disabled')) return 'rename row was disabled'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        // Still an input, and now in rename mode: the row's action must have
+        // reopened the palette into inputMode rather than leaving it shut.
+        const input2 = document.querySelector('.palette__input')
+        if (!input2) return 'palette closed instead of entering rename mode'
+        if (document.querySelector('.palette__list')) return 'still in command mode'
+        nativeSet(input2, 'renamed by palette')
+        input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await new Promise((r) => setTimeout(r, 200))
+        const rows = await window.canvas.preset.list()
+        return rows.some((r) => r.name === 'renamed by palette')
+      })()`)
+      ok('38 a rename in the palette reaches the store', renamed === true, String(renamed))
+
+      // The input mode must not outlive the rename. Palette.tsx closes BEFORE
+      // calling submit, so nothing in the submit path is still on screen to
+      // clear it — an uncleared mode greets the next Cmd+K with a stale text
+      // field and no list. The same applies to a rename abandoned with
+      // Escape, which is why both are asserted here rather than only the
+      // completed one.
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      const freshAfterSubmit = await wc.executeJavaScript(
+        `document.querySelector('.palette__list') !== null &&
+         (document.querySelector('.palette__input') || {}).value === ''`)
+
+      // Now enter rename mode again and abandon it with Escape.
+      const freshAfterCancel = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        // Guarded rather than assumed: a setter .call'd on null throws
+        // "Illegal invocation", which reports as an infrastructure crash and
+        // buries whichever earlier assertion actually went wrong.
+        if (!input) return 'palette was not open'
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        // 'rename renamed', not 'rename harness': the preset just got a new
+        // name, and the query has to be a subsequence of the row it means.
+        setter.call(input, 'rename renamed')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename preset renamed by palette'))
+        if (!row) return 'no rename row after the rename'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        document.querySelector('.palette__input')
+          .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        return document.querySelector('.palette__list') !== null &&
+          document.querySelector('.palette__input').value === ''
+      })()`)
+      ok('38b the palette reopens in command mode after a completed and a cancelled rename',
+        freshAfterSubmit === true && freshAfterCancel === true,
+        `afterSubmit=${freshAfterSubmit} afterCancel=${freshAfterCancel}`)
+    }
+
+    // 39. "Go to <panel>" frames a dormant panel and does NOT start its
+    //     process. Waking hangs off SELECT, not focus (onSelectPanel clears
+    //     dormantIds and calls registry.wake), so the obvious implementation
+    //     — reuse onSelectPanel — would spawn an agent as a side effect of
+    //     NAVIGATING. On a restored twelve-panel canvas that is twelve CLIs
+    //     launched from a keyboard jump, which is the failure M4b's dormancy
+    //     rule exists to prevent. The card still says "click to start", and
+    //     it still means it.
+    //
+    //     Requires a dormant, never-spawned panel to still exist at this
+    //     point in the run. Every SEED_PANELS id got woken by the "wake every
+    //     panel" step before check 1, and reset (check 23) collapses the
+    //     canvas to one fresh, non-dormant panel — so nothing seeded into the
+    //     BOOT layout can be the fixture here. NEVER_WOKEN_ID is seeded
+    //     instead by its own reload right after check 26 (see the comment
+    //     there — deliberately NOT check 26's tmux-only reload, so this
+    //     fixture exists whether or not tmux is installed), parked at world
+    //     (50000, 50000) — far outside every click any later check makes,
+    //     including check 30's unqualified background mousedown, which is
+    //     what silently re-wakes the reset panel (p1) and is the reason p1
+    //     itself is not this fixture. A null dormantId here means one of
+    //     those assumptions broke, and the check fails loudly rather than
+    //     silently skipping — a check that passes because it found nothing
+    //     to test is worse than one that fails.
+    {
+      const dormantId = (await wc.executeJavaScript(`
+        (window.__m4aSessions().find((s) => s.dormant && !s.spawned) || {}).id || null
+      `))
+      if (dormantId === null) {
+        ok('39 go-to frames a dormant panel without spawning it', false,
+          'no dormant, unspawned panel survived to this check — fixture assumption broke')
+      } else {
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        // Cmd+K TOGGLES (usePalette.ts) — 38b leaves the palette OPEN in
+        // command mode, so a blind Cmd+K here would CLOSE it instead of
+        // opening it, and everything below would silently act on a null
+        // input. Only dispatch it when the palette is not already open, then
+        // wait on the actual DOM state (as check 33 does) instead of a fixed
+        // sleep that raced this exact toggle once already.
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'go to ${dormantId}')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 50))
+          // By TEXT, not by position: the prompt list now includes whatever
+          // .claude/commands the focused panel's cwd holds, so "the first
+          // row" is no longer a fact this suite controls. A row picked by
+          // what it says can only ever run the command the check means.
+          const row = [...document.querySelectorAll('.palette__row')]
+            .find((r) => r.textContent.includes('Go to') && r.textContent.includes('${dormantId}'))
+          if (row) row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        })()`)
+        await sleep(400)
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const stillDormant = await wc.executeJavaScript(`
+          (window.__m4aSessions().find((s) => s.id === '${dormantId}') || {}).spawned === false
+        `)
+        // WHERE the camera went, not merely that it moved: a centreOn that
+        // framed the wrong panel — or the right one at the wrong scale —
+        // also changes x and y, and "the viewport is not where it was" is
+        // true of any pan at all. The expectation is viewport.ts's centreOn
+        // recomputed here from the panel's own rect and the host's size:
+        // the rect's centre lands in the middle of the canvas at the
+        // UNCHANGED scale (framing must never re-zoom — verify:viewport
+        // 49-50). Recomputed rather than imported because this suite loads
+        // the built renderer and has no module to import from.
+        const expected = await wc.executeJavaScript(`(() => {
+          const rect = window.__m5aSpecOf('${dormantId}').rect
+          const host = document.querySelector('.canvas').getBoundingClientRect()
+          const vp = window.__m4aViewport()
+          return {
+            x: host.width / 2 - (rect.x + rect.w / 2) * vp.scale,
+            y: host.height / 2 - (rect.y + rect.h / 2) * vp.scale
+          }
+        })()`)
+        // Sub-pixel: the arithmetic is float, and getBoundingClientRect can
+        // hand back a fractional width. A wrong-panel framing is off by
+        // whole world units, so nothing this tolerance admits is a defect
+        // this check could otherwise catch.
+        const framed = Math.abs(after.x - expected.x) < 1 && Math.abs(after.y - expected.y) < 1
+        ok('39 go-to frames a dormant panel without spawning it',
+          framed && after.scale === before.scale && stillDormant === true,
+          `${JSON.stringify(before)} -> ${JSON.stringify(after)} expected=${JSON.stringify(expected)} spawned=${!stillDormant}`)
+      }
+    }
+
+    // 40a/40. Prompts in the palette, and the one thing about them that can
+    //     fail silently.
+    //
+    //     40a spawns a panel by picking a preset row, which is the only
+    //     end-to-end exercise of preset:spawn-by-id in this suite: the invoke
+    //     has to reach the harness's onSpawnPreset stand-in, the id has to
+    //     resolve to ECHO_PRESET and not to some other row the fuzzy matcher
+    //     ranked first, and the template has to arrive at makePanel. It is
+    //     asserted on the SPEC of the new panel, not on "a panel appeared" —
+    //     the wrong preset also makes a panel appear.
+    //
+    //     40 is the milestone's headline requirement. session-factory.ts
+    //     records the failure from Cmd+V: a raw write of a multi-line prompt
+    //     into an agent TUI is one submission per newline, i.e. several
+    //     partial prompts instead of one. paste() goes through xterm, which
+    //     brackets it when the app has enabled mode 2004, so the block
+    //     arrives as ONE input — and every prompt is multi-line, so every use
+    //     of this feature depends on it.
+    //
+    //     The discriminator is the bracketed-paste markers. ECHO_PRESET's
+    //     program enables 2004 and echoes with `cat -v`, so a paste() puts
+    //     "^[[200~" in the buffer and a write() puts the bare body there.
+    //     Nothing weaker can tell the two apart, because against an ordinary
+    //     shell both put identical bytes on the PTY — which is why this check
+    //     must never be relaxed into "the prompt text arrived".
+    {
+      const idsBefore = await wc.executeJavaScript(
+        `window.__m4aSessions().map((s) => s.id)`
+      )
+      // Cmd+K TOGGLES, and check 39 above ran a row (which closes the
+      // palette) — but assert the DOM state rather than trusting that, the
+      // same way 39 does after 38b left the palette open.
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const clicked = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'new panel from echo')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 80))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('New panel from echo -v'))
+        if (!row) return false
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return true
+      })()`)
+      const echoId = clicked
+        ? await waitUntil(async () => {
+            const ids = await wc.executeJavaScript(`window.__m4aSessions().map((s) => s.id)`)
+            return ids.find((id) => !idsBefore.includes(id)) || null
+          }, 3000)
+        : null
+      const echoSpec = echoId
+        ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(echoId)})`)
+        : null
+      ok('40a a palette preset pick spawns that preset through preset:spawn-by-id',
+        echoSpec !== null && echoSpec.spec.command === '/bin/sh' &&
+          echoSpec.spec.args[0] === '-c' && echoSpec.spec.args[1].includes('2004h'),
+        `${echoId} ${JSON.stringify(echoSpec && echoSpec.spec)}`)
+
+      if (!echoId) {
+        ok('40 a prompt insert arrives as a bracketed paste, not a raw write', false,
+          'no panel spawned, so there was nothing to paste into')
+      } else {
+        // Focus it: the palette captures focusedId at OPEN time (focus is
+        // released on a background click, so reading it live would be a
+        // different id), and insertPrompt targets that captured panel.
+        // Spawning does not focus, so this click is what makes the echo panel
+        // the target — and __m4aGrid()/__m4aCellToScreen() both read the
+        // focused session, so they are reading this panel from here on.
+        const focused = await waitUntil(async () => {
+          // Retried, not dispatched once: the panel is spawned by a setPanels
+          // in another check's tick and its slot only exists once tiering has
+          // promoted it, so the first click can land before there is anything
+          // to click.
+          await wc.executeJavaScript(`(() => {
+            const slot = document.querySelector('[data-panel-id=${JSON.stringify(echoId)}] .panel__slot')
+            if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()`)
+          return wc.executeJavaScript(`window.__m4aGrid() !== null`)
+        }, 5000, 200)
+        // The PTY has to have run the printf before the paste, or mode 2004 is
+        // still off and xterm sends the body unbracketed — a false FAIL that
+        // would look exactly like a write().
+        await waitUntil(async () => await wc.executeJavaScript(
+          `(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(echoId)}) || {}).spawned === true`
+        ), 5000)
+        await sleep(600)
+
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        // Run the row with ENTER, not a click. A mousedown on a palette row
+        // bubbles to .canvas's background handler, which releases focusedId —
+        // the insert still targets the right panel (the palette captured it at
+        // open), but __m4aCellToScreen reads the FOCUSED session and would
+        // have nothing to read. The keyboard is the palette's primary path
+        // anyway. The selected row's text is asserted before Enter, so this
+        // cannot pass by running some other row.
+        const insertRow = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'insert prompt two liner')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected || !selected.textContent.includes('Insert prompt: two liner')) {
+            return selected ? selected.textContent : 'no row'
+          }
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          return true
+        })()`)
+        const bracketed = insertRow === true
+          ? await waitUntil(
+              () => wc.executeJavaScript(`window.__m4aCellToScreen('200~') !== null`),
+              3000
+            )
+          : false
+        ok('40 a prompt insert arrives as a bracketed paste, not a raw write',
+          bracketed === true,
+          `focused=${focused} row=${insertRow} body=${JSON.stringify(
+            await wc.executeJavaScript(`window.__m4aCellToScreen('first line') !== null`)
+          )}`)
+      }
+    }
+
+
+    // 41. A MOUSE-picked palette row leaves the focused panel focused.
+    //
+    //     Palette mounts inside .canvas, and .canvas's onMouseDown is the
+    //     background handler. Without a stopPropagation on the palette root,
+    //     every mousedown in the overlay — a row pick, or a click into the
+    //     input to place a caret — reaches it, and it does three things: it
+    //     releases focusedId, it hit-tests the click's WORLD point and selects
+    //     whatever panel lies under the overlay, and through onSelectPanel it
+    //     WAKES that panel if it is dormant. A palette click that spawns a
+    //     process is the exact failure M4b's dormancy rule exists to prevent.
+    //
+    //     Focus is the probe because it is the half that breaks the feature
+    //     shipped one check up: with focusedId null, the NEXT Cmd+K captures
+    //     nothing and buildCommands disables every "Insert prompt" row with
+    //     REASON_NO_FOCUS. __m4aGrid() resolves through focusedIdRef, so a
+    //     non-null answer is "the app still believes a live panel is focused"
+    //     — which is precisely what check 40 has to route around by driving
+    //     its row with Enter instead of a click.
+    //
+    //     The row picked is "Reset zoom": it must be a real, runnable,
+    //     mouse-clicked row (the whole point), and that one touches only the
+    //     camera, so nothing about the assertion depends on what it did.
+    {
+      const focusedBefore = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const picked = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'reset zoom')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 120))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Reset zoom'))
+        if (!row) return false
+        // A REAL mousedown, bubbling exactly as a user's does — the propagation
+        // is the subject of this check, so nothing here may short-circuit it.
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return true
+      })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+      const focusedAfter = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
+      ok('41 a mouse-picked palette row does not release the focused panel',
+        focusedBefore === true && picked === true && focusedAfter === true,
+        `before=${focusedBefore} picked=${picked} after=${focusedAfter}`)
+    }
+
+    // 42. A click OUTSIDE the palette closes it — and still does its ordinary
+    //     job of focusing the panel it landed on.
+    //
+    //     The spec's focus rule 4 names three ways out of the palette:
+    //     Escape, Enter-after-run, and a click outside. The third was the one
+    //     with no code behind it, and its absence is reachable in ONE click:
+    //     .palette is a 680px box at top: 12%, not a full-viewport scrim, so a
+    //     click anywhere else lands on a panel (or the background) and the
+    //     overlay stays up with its input BLURRED — xterm's textarea now has
+    //     DOM focus, so bare keys go to the agent while the palette sits there
+    //     looking ready to take a query. That is verbatim the failure rule 1
+    //     exists to prevent, and Escape cannot even undo it: the key reaches
+    //     the PTY, not the palette's onKeyDown.
+    //
+    //     Panel clicks never reach .canvas's background onMouseDown (every
+    //     panel handler stopPropagations), so the close cannot live there —
+    //     it has to be a CAPTURE-phase handler that sees the click before the
+    //     panel does. Clicking a panel is therefore the discriminating
+    //     gesture: a fix written only into the background handler passes a
+    //     background-click check and fails this one.
+    //
+    //     Focus is the second half of the assertion and the reason the target
+    //     must be a panel other than the captured one: closePalette() calls
+    //     restoreFocus(capturedId), which would take the keyboard straight
+    //     back to the PREVIOUSLY focused panel and leave the user typing into
+    //     a panel they just clicked away from.
+    {
+      const capturedId = await wc.executeJavaScript(`(() => {
+        const el = document.activeElement && document.activeElement.closest('.panel')
+        return el ? el.getAttribute('data-panel-id') : null
+      })()`)
+      const targetId = await wc.executeJavaScript(`(() => {
+        const panel = [...document.querySelectorAll('.panel__slot')]
+          .map((slot) => slot.closest('.panel'))
+          .find((p) => p && p.getAttribute('data-panel-id') !== ${JSON.stringify(capturedId)})
+        return panel ? panel.getAttribute('data-panel-id') : null
+      })()`)
+      if (capturedId === null || targetId === null) {
+        ok('42 a click outside the palette closes it and focuses what it hit', false,
+          `fixture assumption broke: captured=${capturedId} target=${targetId} ` +
+          '(needs a focused panel and a SECOND live panel to click)')
+      } else {
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        // A real, bubbling mousedown on the terminal slot — the propagation
+        // path is the subject of the check, so nothing here may short-circuit
+        // it, and it is the same gesture check 40 uses to focus a panel.
+        await wc.executeJavaScript(`(() => {
+          const slot = document.querySelector('[data-panel-id=${JSON.stringify(targetId)}] .panel__slot')
+          slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        })()`)
+        const closed = await waitUntil(
+          () => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+        await sleep(200)
+        const focusedAfter = await wc.executeJavaScript(`(() => {
+          const el = document.activeElement && document.activeElement.closest('.panel')
+          return el ? el.getAttribute('data-panel-id') : null
+        })()`)
+        ok('42 a click outside the palette closes it and focuses what it hit',
+          closed === true && focusedAfter === targetId,
+          `captured=${capturedId} target=${targetId} closed=${closed} focused=${focusedAfter}`)
+      }
+    }
+
+    // 43. The PROJECT half of the prompt list, end to end.
+    //
+    //     Everything about .claude/commands was proven only as far as
+    //     verify:layout 53-57's pure unit checks: the harness's listPrompts
+    //     used to answer mergePrompts(saved, []) — a literal empty project
+    //     half — so main/index.ts's `readProjectPrompts(resolveCwd(cwd))` was
+    //     never called by any check anywhere. A regression there (the cwd of
+    //     the wrong panel, a `.claude/commands` path assembled wrongly, a
+    //     swapped source label) removes ROWS, and a shorter list looks
+    //     exactly like "this project has no commands". Nothing throws and
+    //     nothing logs. What this check does NOT cover is resolveCwd's `~`
+    //     expansion: PROJECT_DIR is absolute, so resolveCwd is the identity
+    //     here — the expansion is verify:pty-manager's ground, and claiming
+    //     it here would be a comment the check cannot honour.
+    //
+    //     The fixture is a real file in a real directory (PROJECT_DIR, with a
+    //     space in its path on purpose) that this suite wrote before the
+    //     window loaded, and the panel it belongs to is the ECHO panel check
+    //     40 spawned — the only panel pointed at that directory. Which makes
+    //     the assertion three things at once: the row exists (so the read
+    //     happened, under the CAPTURED panel's cwd and not some other
+    //     panel's), it is labelled `project` (the source survived the merge),
+    //     and its BODY reaches the terminal (so the `proj:` id the palette
+    //     holds still resolves to the file's text).
+    {
+      const echoId = await wc.executeJavaScript(`(() => {
+        const dir = ${JSON.stringify(PROJECT_DIR)}
+        const found = window.__m4aSessions()
+          .map((s) => s.id)
+          .find((id) => (window.__m5aSpecOf(id) || { spec: {} }).spec.cwd === dir)
+        return found || null
+      })()`)
+      if (echoId === null) {
+        ok('43 a project prompt is listed and inserted from the panel\'s own cwd', false,
+          'no panel is running in PROJECT_DIR — check 40a\'s spawn is this check\'s fixture')
+      } else {
+        // Focus it: the palette captures focusedId at OPEN time and lists the
+        // CAPTURED panel's cwd, so this click is what makes PROJECT_DIR the
+        // directory read. Retried for the same reason check 40's is.
+        const focused = await waitUntil(async () => {
+          await wc.executeJavaScript(`(() => {
+            const slot = document.querySelector('[data-panel-id=${JSON.stringify(echoId)}] .panel__slot')
+            if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()`)
+          return wc.executeJavaScript(`(() => {
+            const el = document.activeElement && document.activeElement.closest('.panel')
+            return el !== null && el.getAttribute('data-panel-id') === ${JSON.stringify(echoId)}
+          })()`)
+        }, 5000, 200)
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        // ENTER, not a click, for the same reason check 40 uses it: a mouse
+        // pick is fine (check 42 is what proves that now), but the assertion
+        // below reads the FOCUSED session through __m4aCellToScreen and the
+        // keyboard path leaves focus exactly where it was.
+        const insertRow = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'insert ${PROJECT_PROMPT_NAME}')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected) return 'no row'
+          const text = selected.textContent
+          // Both halves asserted before Enter: the NAME (so this is the
+          // project file and not the saved prompt check 40 seeded) and the
+          // SOURCE label (a swapped label is the silent half of this defect —
+          // the row still runs, it just tells the user the wrong story about
+          // where the text they are about to paste came from).
+          if (!text.includes('Insert prompt: ${PROJECT_PROMPT_NAME}') ||
+              !text.includes('project — .claude/commands')) return text
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          return true
+        })()`)
+        const arrived = insertRow === true
+          ? await waitUntil(
+              () => wc.executeJavaScript(`window.__m4aCellToScreen('zzprojectbody') !== null`),
+              3000
+            )
+          : false
+        ok('43 a project prompt is listed and inserted from the panel\'s own cwd',
+          arrived === true,
+          `focused=${focused} row=${insertRow} arrived=${arrived}`)
+      }
     }
 
   } catch (error) {

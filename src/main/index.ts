@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { BrowserWindow, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
-import { PtyManager } from './pty-manager'
+import { PtyManager, resolveCwd } from './pty-manager'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { attachPtyLifecycle } from './window-lifecycle'
@@ -13,10 +13,13 @@ import {
   allPresets,
   autoName,
   mintPresetId,
+  mintPromptId,
+  presetRows,
   pushDefaultPreset,
   resolveAvailability,
   templateOf
 } from './presets'
+import { mergePrompts, readProjectPrompts } from './prompts'
 import type { CapturedPanel } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
@@ -91,6 +94,24 @@ async function confirmReset(): Promise<void> {
  */
 const which = (command: string): string | null => whichFromEnv(command, loginEnv)
 
+/**
+ * Spawn from a preset, by id. NAMED rather than inlined into the menu's
+ * options, because the palette picks presets too (PRESET_SPAWN_BY_ID) and the
+ * two picks have to be the identical code — a second copy is a second place
+ * for "which preset does this id mean" to answer differently.
+ */
+function onSpawnPreset(id: string): void {
+  const user = layoutStore.presets()
+  const found = allPresets(user).find((p) => p.id === id)
+  if (!found) {
+    // Never substitute a different preset: spawning the wrong program in
+    // the wrong directory is worse than spawning nothing.
+    console.warn(`[presets] a pick named ${id}, which no longer exists`)
+    return
+  }
+  mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+}
+
 function rebuildMenu(): void {
   buildAppMenu({
     settings: layoutStore.settings(),
@@ -99,21 +120,22 @@ function rebuildMenu(): void {
       void confirmReset()
     },
     presets: resolveAvailability(allPresets(layoutStore.presets()), which),
-    onSpawnPreset: (id) => {
-      const user = layoutStore.presets()
-      const found = allPresets(user).find((p) => p.id === id)
-      if (!found) {
-        // Never substitute a different preset: spawning the wrong program in
-        // the wrong directory is worse than spawning nothing.
-        console.warn(`[presets] menu named ${id}, which no longer exists`)
-        return
-      }
-      mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
-    },
+    onSpawnPreset,
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
     }
   })
+}
+
+/**
+ * The three things every preset change has to do. Deleting the default one
+ * changes what Cmd+N spawns, and the renderer only learns that from a
+ * PRESET_DEFAULT push — without it the old template stays in defaultTemplateRef
+ * and Cmd+N keeps spawning a preset the user just deleted.
+ */
+function afterPresetChange(): void {
+  rebuildMenu()
+  if (mainWindow) pushDefaultPreset(mainWindow.webContents, layoutStore)
 }
 
 async function savePresetFromFocusedPanel(): Promise<void> {
@@ -272,10 +294,57 @@ app.whenReady().then(async () => {
   }
 
   rebuildMenu()
-  registerIpcHandlers(ptyManager, layoutStore, () => ({
-    kind: backend.kind,
-    reason: backend.reason
-  }))
+  registerIpcHandlers(
+    ptyManager,
+    layoutStore,
+    () => ({
+      kind: backend.kind,
+      reason: backend.reason
+    }),
+    {
+      list: () =>
+        presetRows(
+          resolveAvailability(allPresets(layoutStore.presets()), which),
+          layoutStore.defaultPresetId()
+        ),
+      rename: (id, name) => {
+        const changed = layoutStore.renamePreset(id, name)
+        // The menu lists presets by name, and Cmd+N's template carries none —
+        // but a rename can still change what the menu SAYS, so rebuild. Cheap,
+        // and the alternative is a menu that disagrees with the palette until
+        // relaunch.
+        if (changed) afterPresetChange()
+        return changed
+      },
+      remove: (id) => {
+        const changed = layoutStore.deletePreset(id)
+        if (changed) afterPresetChange()
+        return changed
+      },
+      setDefault: (id) => {
+        layoutStore.setDefaultPreset(id)
+        afterPresetChange()
+      },
+      spawn: (id) => {
+        onSpawnPreset(id)
+      },
+      requestReset: () => {
+        void confirmReset()
+      },
+      listPrompts: (cwd) =>
+        mergePrompts(
+          layoutStore.prompts(),
+          // resolveCwd is pty-manager's — the same expansion a spawn gets, so
+          // the prompts the palette lists come from the directory the panel
+          // is actually in, not from a literal '~' that resolves to nothing.
+          cwd === null ? [] : readProjectPrompts(resolveCwd(cwd))
+        ),
+      savePrompt: (name, body) => {
+        layoutStore.addPrompt({ id: mintPromptId(layoutStore.prompts()), name, body })
+      },
+      removePrompt: (id) => layoutStore.deletePrompt(id)
+    }
+  )
   createWindow()
 
   app.on('activate', () => {

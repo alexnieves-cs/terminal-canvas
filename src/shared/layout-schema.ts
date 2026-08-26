@@ -91,6 +91,22 @@ export interface Preset {
   h?: number
 }
 
+/**
+ * A saved prompt: text the user pastes into an agent often enough to name.
+ *
+ * `body` is deliberately unbounded in length — a prompt IS a paragraph — but
+ * empty is invalid: a row that pastes nothing looks exactly like a broken
+ * insert. Placeholders ({{cwd}} and friends, ideas-backlog #27) are NOT part
+ * of this type; they need the read-the-real-cwd machinery #4 owns, and adding
+ * the field before the mechanism exists would ship a format promise nothing
+ * keeps.
+ */
+export interface Prompt {
+  id: string
+  name: string
+  body: string
+}
+
 export interface PersistedCamera {
   x: number
   y: number
@@ -128,6 +144,11 @@ export interface LayoutSnapshot {
   presets: Preset[]
   /** What Cmd+N spawns. May name a built-in or a user preset. */
   defaultPresetId: string
+  /**
+   * The saved store only; `.claude/commands` is read live, never persisted
+   * here — see main/prompts.ts.
+   */
+  prompts: Prompt[]
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -158,7 +179,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     workspaces: [defaultWorkspace()],
     settings: defaultSettings(),
     presets: [],
-    defaultPresetId: DEFAULT_PRESET_ID
+    defaultPresetId: DEFAULT_PRESET_ID,
+    prompts: []
   }
 }
 
@@ -274,6 +296,43 @@ export function parsePresets(raw: unknown, warnings: string[]): Preset[] {
     .filter((p): p is Preset => p !== null)
 }
 
+function parsePrompt(raw: unknown, seen: Set<string>, warnings: string[]): Prompt | null {
+  if (!isRecord(raw)) {
+    warnings.push('dropped a prompt that was not an object')
+    return null
+  }
+  const { id, name, body } = raw
+  if (!isStr(id) || !ID_PATTERN.test(id)) {
+    warnings.push(`dropped a prompt with an unusable id: ${JSON.stringify(id)}`)
+    return null
+  }
+  if (seen.has(id)) {
+    warnings.push(`dropped a duplicate prompt id: ${id}`)
+    return null
+  }
+  if (!isStr(body) || body === '') {
+    warnings.push(`dropped prompt ${id}: body was empty or not a string`)
+    return null
+  }
+  seen.add(id)
+  // Name falls back to the id, the same trade parsePreset makes: an unnamed
+  // prompt is usable, and losing saved text over a missing label is not.
+  return { id, name: isStr(name) ? name : id, body }
+}
+
+/** Never throws; drops entries individually, like every other parser here. */
+export function parsePrompts(raw: unknown, warnings: string[]): Prompt[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a prompts field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  return raw
+    .map((p) => parsePrompt(p, seen, warnings))
+    .filter((p): p is Prompt => p !== null)
+}
+
 function parseCamera(raw: unknown, warnings: string[]): PersistedCamera {
   if (!isRecord(raw) || !isNum(raw.x) || !isNum(raw.y) || !isNum(raw.scale) || raw.scale <= 0) {
     // A zero or negative scale is not cosmetic: screenToWorld divides by it,
@@ -380,7 +439,8 @@ export function parseLayout(raw: string): {
       defaultPresetId:
         isStr(parsed.defaultPresetId) && ID_PATTERN.test(parsed.defaultPresetId)
           ? parsed.defaultPresetId
-          : DEFAULT_PRESET_ID
+          : DEFAULT_PRESET_ID,
+      prompts: parsePrompts(parsed.prompts, warnings)
     },
     warnings,
     futureVersion: false

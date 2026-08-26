@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { normalizeWheel } from './canvas-input'
-import { fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
+import { centreOn as centreOnRect, fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
 
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
 const KEYBOARD_ZOOM_STEP = 1.2
@@ -28,6 +28,13 @@ export interface ViewportControls {
    * the camera), but a READ of where it already is is safe to expose.
    */
   worldCentre: () => Point
+  /**
+   * Frame one panel without changing the zoom. The general setter stays
+   * private — nothing outside this hook should move the camera — and this is
+   * the third narrow verb that asks by name, after resetViewport and
+   * worldCentre.
+   */
+  centreOn: (rect: WorldRect) => void
 }
 
 /**
@@ -42,7 +49,18 @@ export function useViewport(
   onSpawn?: (worldCentre: Point) => void,
   shouldYieldWheel?: (event: WheelEvent) => boolean,
   /** The restored camera. Cmd+0 still returns to INITIAL, not to this. */
-  initialViewport?: Viewport
+  initialViewport?: Viewport,
+  /**
+   * True while the command palette owns the keyboard. Every shortcut here is
+   * Cmd-gated, and so is the palette's own text field — Cmd+N typed while
+   * filtering would otherwise ALSO spawn a panel behind the overlay.
+   *
+   * Must be referentially stable (a useCallback with an empty dep list reading
+   * a ref, exactly like shouldYieldWheel): it sits in the keydown effect's dep
+   * array, and a changing identity would reinstall the listener on every
+   * render.
+   */
+  shouldIgnoreKeys?: () => boolean
 ): ViewportControls {
   const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
@@ -130,6 +148,7 @@ export function useViewport(
       // every bare key, so from M3 a bare keystroke must always reach the PTY.
       if (!event.metaKey) return
       if (event.ctrlKey || event.altKey) return
+      if (shouldIgnoreKeys?.()) return
 
       const host = hostRef.current
       if (!host) return
@@ -168,7 +187,7 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, onSpawn])
+  }, [hostRef, onSpawn, shouldIgnoreKeys])
 
   // The SETTER stays private — nothing outside should move the camera — but a
   // READ of where the camera is looking is what a menu-driven spawn needs, and
@@ -184,5 +203,28 @@ export function useViewport(
     )
   }, [hostRef])
 
-  return { viewport, resetViewport: () => setViewport(INITIAL), worldCentre }
+  // Referentially stable, and that is load-bearing rather than tidy: a fresh
+  // arrow per render propagates straight through Canvas.tsx's
+  // useMemo([resetViewport]) for the palette's actions into Palette.tsx's
+  // command list, whose [rows] effect re-seats the SELECTION. Canvas re-renders
+  // on every mousemove over .canvas (setCursor), so an unstable identity here
+  // means nudging the mouse silently moves the palette's highlighted row out
+  // from under the user's arrow keys, and Enter runs the wrong command.
+  const resetViewport = useCallback(() => setViewport(INITIAL), [])
+
+  // Same referential-stability reasoning as resetViewport/worldCentre above:
+  // this sits in Canvas.tsx's paletteActions dep array, and a fresh identity
+  // per render would re-seat the palette's selection on every mousemove.
+  const centreOn = useCallback((rect: WorldRect) => {
+    const host = hostRef.current
+    // No host means no canvas mounted to frame anything against — a silent
+    // no-op, same as worldCentre's host-less fallback above, rather than a
+    // throw over a call that can only happen during teardown/an unmounted
+    // host, never from a normal palette action.
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    setViewport((vp) => centreOnRect(vp, rect, { width: bounds.width, height: bounds.height }))
+  }, [hostRef])
+
+  return { viewport, resetViewport, worldCentre, centreOn }
 }

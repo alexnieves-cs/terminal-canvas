@@ -35,6 +35,7 @@ npm run verify:ipc           # every contract channel has a handler
 npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/pointer math, plain node
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
+npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
@@ -63,10 +64,22 @@ The main process owns every PTY; the renderer never spawns a process.
 ```
 renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill  -->  main
                        pty:list / layout:load / layout:save
+                       session:backend
+                       preset:list / preset:rename / preset:delete
+                       preset:set-default / preset:spawn-by-id
+                       prompt:list / prompt:save / prompt:delete
+                       canvas:request-reset
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo  -->  renderer
                        canvas:counts / canvas:reset
+                       preset:spawn / preset:default / preset:capture
 ```
+
+The last three invoke groups above — the preset mutations, the prompt library, and
+`canvas:request-reset` — are the palette's nine new channels. They exist so the
+palette runs code main already has rather than a renderer-side copy of it: only main
+can resolve an absent `command` into the login shell, and only main owns the reset
+confirmation dialog.
 
 `canvas:counts` is the one event that runs the other way: main sends it and the renderer
 replies on an ephemeral `canvas:counts:reply:<timestamp>` channel that is invented per call
@@ -137,6 +150,26 @@ that panel and it behaves exactly like a fresh one from then on. This is what
 stops a relaunch from re-launching every agent that happened to be open when
 you quit.
 
+**`Cmd+K` is the one surface that takes the keyboard away.** Everywhere else in
+this app a bare keystroke belongs to the agent — canvas shortcuts all require
+`Cmd` precisely so a TUI never loses a key. The palette inverts that: it opens a
+text field, and while it is open bare keys are its own. It spawns from a preset,
+renames/deletes/re-defaults one, jumps the camera to any panel by name, inserts a
+saved or project prompt into the panel it captured, and saves the current terminal
+selection as a new prompt. Two consequences are worth knowing. Jumping to a panel
+frames it but never *wakes* it, so a keyboard tour of a restored canvas still
+spawns nothing. And the panel the commands act on is the one that had focus when
+the palette **opened** — DOM focus moves to the input, but the app's idea of the
+focused panel deliberately does not, so the panel stays live and stays the target.
+
+**Prompts come from two places, and only one of them is writable.** Saved prompts
+live in `layout.json` alongside the panels; project prompts are read live from
+`.claude/commands/*.md` under the focused panel's cwd — the same files Claude Code
+reads, so they version-control with the repository and work outside this app.
+Nothing here ever writes into `.claude/`: authoring a file someone will commit is a
+decision to ask for, not a side effect of "save". Two prompts with the same name
+from the two sources stay two rows, each labelled with its source.
+
 ## Milestones
 
 | | Scope | Status |
@@ -148,7 +181,7 @@ you quit.
 | M4b | Layout persistence: panels survive a relaunch | ✅ done |
 | M4c | tmux backing: sessions survive the renderer | ✅ done |
 | M5a | Panel presets: saved spawns, a menu, Cmd+N's default | ✅ done |
-| M5b | Command palette | |
+| M5b | Command palette: Cmd+K, preset management, panel switcher, prompts | ✅ done |
 | M5c | electron-builder packaging | |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),

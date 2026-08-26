@@ -84,6 +84,22 @@ export function hitTest(rects: WorldRect[], world: Point): string | null {
   return null
 }
 
+/**
+ * Put one rect's centre in the middle of the viewport, at the CURRENT scale.
+ *
+ * Deliberately not a zoom: fitTo (Cmd+1) already exists for "show me
+ * everything", and framing a panel by changing the scale would discard the
+ * zoom level the user chose to work at.
+ */
+export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
+  const world = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
+  return {
+    scale: vp.scale,
+    x: size.width / 2 - world.x * vp.scale,
+    y: size.height / 2 - world.y * vp.scale
+  }
+}
+
 /** Largest clamped scale at which every rect fits with a margin, centred. */
 export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
   if (rects.length === 0) return { x: 0, y: 0, scale: 1 }

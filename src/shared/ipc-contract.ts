@@ -35,7 +35,48 @@ export const IPC = {
    * is 'direct', so the user is never told their sessions are durable when
    * they are not.
    */
-  SESSION_BACKEND: 'session:backend'
+  SESSION_BACKEND: 'session:backend',
+  /**
+   * The preset list as the PALETTE needs it — names, availability, which is
+   * default, and which are built-in. Availability is main's alone: it is
+   * resolved against the login PATH, which the renderer's compiled-away
+   * process.env cannot see.
+   */
+  PRESET_LIST: 'preset:list',
+  /**
+   * The three mutations M5a deferred to the palette. These invert M5a's
+   * direction — its preset channels are main -> renderer because the MENU is
+   * main's; the palette is the renderer's, so the mutations are invokes, which
+   * is also why they belong here rather than in IPC_EVENTS.
+   */
+  PRESET_RENAME: 'preset:rename',
+  PRESET_DELETE: 'preset:delete',
+  PRESET_SET_DEFAULT: 'preset:set-default',
+  /**
+   * Spawn from a preset the PALETTE picked. Same main-side path as the menu's
+   * pick, and a channel rather than the renderer rebuilding the template from
+   * a PresetListRow: only main can resolve an ABSENT command into the user's
+   * login shell, so a renderer-side reconstruction would either lose the
+   * absence or guess zsh at it.
+   */
+  PRESET_SPAWN_BY_ID: 'preset:spawn-by-id',
+  /**
+   * "Reset canvas…" asked for from the palette rather than the menu. Main owns
+   * the confirmation dialog and the counts request, so the renderer asks main
+   * to run the flow it already has instead of growing a second one.
+   */
+  CANVAS_REQUEST_RESET: 'canvas:request-reset',
+  /**
+   * The merged prompt list: the saved store plus .claude/commands under the
+   * cwd of the panel the palette captured. Takes a cwd because the project
+   * half is per-panel — and main expands it, since `~` is main's to resolve.
+   * A null cwd means "saved prompts only", which is what a palette opened with
+   * nothing focused should show.
+   */
+  PROMPT_LIST: 'prompt:list',
+  /** Always writes the SAVED store. The project half is read-only. */
+  PROMPT_SAVE: 'prompt:save',
+  PROMPT_DELETE: 'prompt:delete'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -117,6 +158,24 @@ export interface CapturedPanel {
   h: number
 }
 
+/** One row of the palette's prompt list. Mirrors PromptListRow in main. */
+export interface PromptBridgeRow {
+  id: string
+  name: string
+  source: 'saved' | 'project'
+  body: string
+}
+
+/** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
+export interface PresetListRow {
+  id: string
+  name: string
+  available: boolean
+  builtIn: boolean
+  isDefault: boolean
+  subtitle: string
+}
+
 /** Shape of the bridge the preload exposes on window.canvas. */
 export interface CanvasBridge {
   pty: {
@@ -149,6 +208,8 @@ export interface CanvasBridge {
     /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
     onCounts(provide: () => { panels: number; running: number }): () => void
     onReset(listener: () => void): () => void
+    /** Runs main's existing confirm-then-reset flow. */
+    requestReset(): Promise<void>
   }
   preset: {
     /** A menu pick: spawn one panel from this template, now. */
@@ -160,6 +221,23 @@ export interface CanvasBridge {
      * Mirrors canvas.onCounts; returns null when nothing is focused.
      */
     onCapture(provide: () => CapturedPanel | null): () => void
+    list(): Promise<PresetListRow[]>
+    rename(id: string, name: string): Promise<boolean>
+    /** `remove`, not `delete`: `delete` is a reserved word as a method name. */
+    remove(id: string): Promise<boolean>
+    setDefault(id: string): Promise<void>
+    /**
+     * Ask main to spawn from this preset. It answers by sending PRESET_SPAWN,
+     * the same event a menu pick produces — which is what gives a palette
+     * spawn the ordinary undo behaviour rather than a second spawn path.
+     */
+    spawnById(id: string): Promise<void>
+  }
+  prompt: {
+    list(cwd: string | null): Promise<PromptBridgeRow[]>
+    save(name: string, body: string): Promise<void>
+    /** False for an id the saved store does not hold — every project id, for one. */
+    remove(id: string): Promise<boolean>
   }
   session: {
     info(): Promise<SessionBackendInfo>

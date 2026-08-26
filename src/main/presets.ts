@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import { DEFAULT_PRESET_ID, type Preset } from '../shared/layout-schema'
-import { IPC_EVENTS, type PresetTemplate } from '../shared/ipc-contract'
+import { IPC_EVENTS, type PresetTemplate, type PresetListRow } from '../shared/ipc-contract'
 
 /**
  * The preset helpers, and deliberately NOTHING that touches the disk, the
@@ -99,6 +99,14 @@ export function mintPresetId(user: Preset[]): string {
   return `u${n}`
 }
 
+/** Same trick as mintPresetId, and the same file, because ids are minted here. */
+export function mintPromptId(existing: { id: string }[]): string {
+  const used = new Set(existing.map((p) => p.id))
+  let n = 1
+  while (used.has(`p${n}`)) n += 1
+  return `p${n}`
+}
+
 /**
  * M5a builds no modal, so a saved preset names itself. `~` becomes "home"
  * because basename('~') is '~', which reads as a typo rather than a place.
@@ -151,4 +159,26 @@ export function resolveAvailability(
 /** Says WHY it is disabled. A greyed-out row with no reason is a bug report. */
 export function menuLabel(entry: PresetAvailability): string {
   return entry.available ? entry.preset.name : `${entry.preset.name} — not found on PATH`
+}
+
+/**
+ * The palette's view of the presets. Built HERE rather than in the renderer
+ * because two of the four fields are main's alone: availability comes from the
+ * login PATH, and "built-in" is knowable only where BUILT_IN_PRESETS is.
+ *
+ * The subtitle is what makes a preset searchable by directory, which is the
+ * second thing anyone types into a palette after the name.
+ */
+export function presetRows(entries: PresetAvailability[], defaultId: string): PresetListRow[] {
+  const builtIn = new Set(BUILT_IN_PRESETS.map((p) => p.id))
+  return entries.map(({ preset, available }) => ({
+    id: preset.id,
+    name: preset.name,
+    available,
+    builtIn: builtIn.has(preset.id),
+    isDefault: preset.id === defaultId,
+    // "the user's login shell" spelled out, because only main can resolve an
+    // absent command and the renderer must not guess (it would get zsh).
+    subtitle: `${preset.command ?? 'login shell'} — ${preset.cwd}`
+  }))
 }

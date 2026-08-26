@@ -58,7 +58,8 @@ const bridge: CanvasBridge = {
       ipcRenderer.on(IPC_EVENTS.CANVAS_COUNTS, wrapped)
       return () => ipcRenderer.removeListener(IPC_EVENTS.CANVAS_COUNTS, wrapped)
     },
-    onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener)
+    onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener),
+    requestReset: () => ipcRenderer.invoke(IPC.CANVAS_REQUEST_RESET)
   },
   preset: {
     onSpawn: (listener) => subscribe<PresetTemplate>(IPC_EVENTS.PRESET_SPAWN, listener),
@@ -71,7 +72,17 @@ const bridge: CanvasBridge = {
       }
       ipcRenderer.on(IPC_EVENTS.PRESET_CAPTURE, wrapped)
       return () => ipcRenderer.removeListener(IPC_EVENTS.PRESET_CAPTURE, wrapped)
-    }
+    },
+    list: () => ipcRenderer.invoke(IPC.PRESET_LIST),
+    rename: (id: string, name: string) => ipcRenderer.invoke(IPC.PRESET_RENAME, id, name),
+    remove: (id: string) => ipcRenderer.invoke(IPC.PRESET_DELETE, id),
+    setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id),
+    spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id)
+  },
+  prompt: {
+    list: (cwd: string | null) => ipcRenderer.invoke(IPC.PROMPT_LIST, cwd),
+    save: (name: string, body: string) => ipcRenderer.invoke(IPC.PROMPT_SAVE, name, body),
+    remove: (id: string) => ipcRenderer.invoke(IPC.PROMPT_DELETE, id)
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)

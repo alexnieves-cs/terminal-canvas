@@ -600,6 +600,225 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `warnings=${JSON.stringify(w)} fileWarnings=${JSON.stringify(round.warnings)}`)
 }
 
+/* ---- M5b: rename, delete, and re-default a preset ---- */
+
+// 42. renamePreset renames the named preset and nothing else.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'one', cwd: '~', args: [] })
+  store.addPreset({ id: 'u2', name: 'two', cwd: '~', args: [] })
+  const changed = store.renamePreset('u1', 'renamed')
+  clock.fire()
+  const presets = JSON.parse(readFileSync(path, 'utf8')).presets
+  ok('42 renamePreset renames exactly one preset',
+    changed === true && presets.length === 2 &&
+      presets.find((p) => p.id === 'u1').name === 'renamed' &&
+      presets.find((p) => p.id === 'u2').name === 'two',
+    JSON.stringify(presets))
+}
+
+// 43. Renaming an id that is not there reports false and writes nothing. Main
+//     needs the difference: reporting success for a vanished preset means the
+//     palette shows a rename that did not happen.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  ok('43 renaming an unknown id reports false', store.renamePreset('nope', 'x') === false)
+}
+
+// 44. deletePreset removes only that preset and reports true.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'one', cwd: '~', args: [] })
+  store.addPreset({ id: 'u2', name: 'two', cwd: '~', args: [] })
+  const changed = store.deletePreset('u1')
+  clock.fire()
+  const presets = JSON.parse(readFileSync(path, 'utf8')).presets
+  ok('44 deletePreset removes exactly one preset',
+    changed === true && presets.length === 1 && presets[0].id === 'u2',
+    JSON.stringify(presets))
+}
+
+// 45. Deleting the DEFAULT preset falls the default back to the built-in
+//     login shell id rather than leaving defaultPresetId naming a preset that
+//     no longer exists. resolveDefault() in main/presets.ts would recover
+//     anyway, but a stored id pointing at nothing is a fact on disk that
+//     survives every future launch, and only this file can fix it at the
+//     moment the preset goes away.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'one', cwd: '~', args: [] })
+  store.setDefaultPreset('u1')
+  store.deletePreset('u1')
+  clock.fire()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  ok('45 deleting the default preset restores the built-in default',
+    written.defaultPresetId === 'shell', written.defaultPresetId)
+}
+
+// 46. setDefaultPreset persists, and does NOT validate against the built-ins —
+//     only main knows those (main/presets.ts's resolveDefault), exactly as
+//     parseLayout only checks the FORMAT of defaultPresetId.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.setDefaultPreset('claude')
+  clock.fire()
+  const written = JSON.parse(readFileSync(path, 'utf8'))
+  ok('46 setDefaultPreset persists a built-in id it cannot itself verify',
+    written.defaultPresetId === 'claude', written.defaultPresetId)
+}
+
+/* ---- M5b: Prompt, parsePrompts, and the store that holds them ---- */
+
+// 47. An absent prompts key is not corruption. Every file written before M5b
+//     has none, and warning about those would make the first launch after an
+//     upgrade shout about a file that is perfectly fine — the same trade
+//     parsePresets makes (check 32).
+{
+  const warnings = []
+  ok('47 an absent prompts key is silent',
+    L.parsePrompts(undefined, warnings).length === 0 && warnings.length === 0)
+}
+
+// 48. PRESENT but unusable IS corruption, and says so. A hand-edited
+//     `"prompts": {}` that silently emptied the list would leave the user with
+//     no evidence beyond a shorter palette.
+{
+  const warnings = []
+  ok('48 a non-array prompts field warns',
+    L.parsePrompts({}, warnings).length === 0 && warnings.length === 1)
+}
+
+// 49. Bad entries are dropped INDIVIDUALLY. One malformed prompt costs that
+//     prompt, not the file — the discipline every parser here follows.
+{
+  const warnings = []
+  const out = L.parsePrompts(
+    [
+      { id: 'p1', name: 'good', body: 'hello' },
+      { id: 'p2', name: 'no body' },
+      { id: '', name: 'bad id', body: 'x' },
+      { id: 'p3', name: 'also good', body: 'world' }
+    ],
+    warnings
+  )
+  ok('49 bad prompts are dropped one at a time',
+    out.length === 2 && out[0].id === 'p1' && out[1].id === 'p3' && warnings.length === 2,
+    JSON.stringify(warnings))
+}
+
+// 50. A duplicate id is dropped, for the reason duplicate PANEL ids are: the
+//     palette keys rows by id, and two rows with one id is a React list that
+//     renders one of them and loses the other with no error anywhere.
+{
+  const warnings = []
+  const out = L.parsePrompts(
+    [{ id: 'p1', name: 'a', body: 'x' }, { id: 'p1', name: 'b', body: 'y' }],
+    warnings
+  )
+  ok('50 a duplicate prompt id is dropped', out.length === 1 && warnings.length === 1)
+}
+
+// 51. An EMPTY body is dropped rather than kept. A prompt that pastes nothing
+//     is indistinguishable from a broken insert, and the palette would show it
+//     as a perfectly ordinary row.
+{
+  const warnings = []
+  ok('51 an empty body is not a prompt',
+    L.parsePrompts([{ id: 'p1', name: 'x', body: '' }], warnings).length === 0)
+}
+
+// 52. The store round-trips prompts: add, delete, and the file agrees.
+{
+  const clock = fakeClock()
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path, schedule: clock.schedule })
+  store.load()
+  store.addPrompt({ id: 'p1', name: 'review', body: 'line one\nline two' })
+  store.addPrompt({ id: 'p2', name: 'other', body: 'x' })
+  const deleted = store.deletePrompt('p1')
+  const missing = store.deletePrompt('nope')
+  clock.fire()
+  const prompts = JSON.parse(readFileSync(path, 'utf8')).prompts
+  ok('52 prompts round-trip through the store',
+    deleted === true && missing === false && prompts.length === 1 && prompts[0].id === 'p2',
+    JSON.stringify(prompts))
+}
+
+// 53. Reads *.md from .claude/commands, names them by filename, and ignores
+//     everything else in the directory.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))   // spaced, on purpose
+  mkdirSync(join(dir, '.claude', 'commands'), { recursive: true })
+  writeFileSync(join(dir, '.claude', 'commands', 'review.md'), 'review this diff', 'utf8')
+  writeFileSync(join(dir, '.claude', 'commands', 'notes.txt'), 'not a prompt', 'utf8')
+  const out = L.readProjectPrompts(dir)
+  ok('53 project prompts are the .md files, named by filename',
+    out.length === 1 && out[0].name === 'review' && out[0].body === 'review this diff' &&
+    out[0].source === 'project')
+}
+
+// 54. A missing directory is EMPTY, not an error. Most panels' cwds have no
+//     .claude/commands, and a throw here would take the whole prompt list down
+//     with it — the palette would show no saved prompts either.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))
+  ok('54 a missing .claude/commands is empty, not an error',
+    L.readProjectPrompts(dir).length === 0)
+}
+
+// 55. The file count is capped. An unbounded read of whatever directory a user
+//     pointed a panel at is a hazard, not a feature.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))
+  const commands = join(dir, '.claude', 'commands')
+  mkdirSync(commands, { recursive: true })
+  for (let i = 0; i < L.MAX_PROJECT_PROMPTS + 20; i += 1) {
+    writeFileSync(join(commands, `p${i}.md`), 'body', 'utf8')
+  }
+  ok('55 the project prompt count is capped',
+    L.readProjectPrompts(dir).length === L.MAX_PROJECT_PROMPTS)
+}
+
+// 56. An oversized file is skipped rather than truncated. Half a prompt pasted
+//     into an agent is worse than none: it reads as a complete instruction.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tc prompts '))
+  const commands = join(dir, '.claude', 'commands')
+  mkdirSync(commands, { recursive: true })
+  writeFileSync(join(commands, 'huge.md'), 'x'.repeat(L.MAX_PROMPT_BYTES + 1), 'utf8')
+  writeFileSync(join(commands, 'fine.md'), 'ok', 'utf8')
+  const out = L.readProjectPrompts(dir)
+  ok('56 an oversized prompt file is skipped, not truncated',
+    out.length === 1 && out[0].name === 'fine')
+}
+
+// 57. Same-named prompts from the two sources both survive the merge, with
+//     distinct ids. Deduping by name is the quiet way to paste the wrong
+//     project's context into an agent (ideas-backlog #27).
+{
+  const merged = L.mergePrompts(
+    [{ id: 'p1', name: 'review', body: 'saved body' }],
+    [{ id: 'proj:review', name: 'review', source: 'project', body: 'project body' }]
+  )
+  ok('57 same-named prompts from two sources both survive',
+    merged.length === 2 && new Set(merged.map((p) => p.id)).size === 2 &&
+    merged.filter((p) => p.source === 'project').length === 1)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

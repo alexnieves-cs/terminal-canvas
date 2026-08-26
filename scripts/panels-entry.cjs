@@ -33,6 +33,31 @@ module.exports = {
      a send hand-written here would prove the harness right and leave the app
      inert, which is the defect that check exists for. */
   pushDefaultPreset: require('../src/main/presets').pushDefaultPreset,
+  /* Check 38 drives a rename all the way from the palette to the store and
+     back out through preset:list, so its PaletteHandlers (named
+     PresetHandlers until M5b's prompt channels joined the same interface)
+     cannot be the stub the other checks were happy with: list has to answer
+     with the real rows main would build, or the palette has no user preset
+     to rename. */
+  allPresets: require('../src/main/presets').allPresets,
+  resolveAvailability: require('../src/main/presets').resolveAvailability,
+  presetRows: require('../src/main/presets').presetRows,
+  /* Check 40a drives preset:spawn-by-id end to end, and the harness answers
+     that invoke the way main/index.ts's onSpawnPreset does: resolve the id,
+     then push the SAME template a menu pick would. templateOf is what makes
+     the two paths one path rather than two that can drift. */
+  templateOf: require('../src/main/presets').templateOf,
+  /* Check 40's prompt list comes from the real merge, so the rows the palette
+     renders are the rows main would build — not a shape invented here, and
+     check 43 needs the PROJECT half of that list too: readProjectPrompts +
+     resolveCwd are the two lines main/index.ts's listPrompts is made of, and
+     until check 43 nothing anywhere exercised them together. A regression in
+     that pair (the wrong cwd, an unexpanded '~', a swapped source label)
+     produces FEWER rows, which reads exactly like "this project has no
+     commands" — the silent shape this suite exists for. */
+  mergePrompts: require('../src/main/prompts').mergePrompts,
+  readProjectPrompts: require('../src/main/prompts').readProjectPrompts,
+  resolveCwd: require('../src/main/pty-manager').resolveCwd,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,

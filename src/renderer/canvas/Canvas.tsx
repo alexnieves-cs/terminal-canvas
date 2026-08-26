@@ -16,9 +16,29 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
+import { usePalette } from '@renderer/palette/usePalette'
+import { Palette, type InputMode } from '@renderer/palette/Palette'
+import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
+
+// Module-level so the palette's props keep the same identity between renders;
+// a fresh [] each render would rebuild the command list on every frame of a pan.
+const EMPTY_PRESETS: PresetRow[] = []
+const EMPTY_PROMPTS: PromptRow[] = []
+const EMPTY_PANELS: PanelRow[] = []
+
+/**
+ * What the switcher calls a panel. No user-set names exist yet (ideas-backlog
+ * #6 puts titles on Panel and PersistedPanel already reserves the field), so
+ * this is the same shape autoName() uses in main/presets.ts — the program and
+ * where it is running — plus the id, which is the only guaranteed-unique part.
+ */
+function panelLabel(panel: Panel): string {
+  const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
+  return `${command} — ${panel.spec.cwd} (${panel.rect.id})`
+}
 
 const registry = createRegistry({
   bridge: window.canvas,
@@ -306,7 +326,29 @@ export function Canvas({
     return panel.querySelector('.panel__slot') !== null
   }, [])
 
-  const { viewport, resetViewport, worldCentre } = useViewport(hostRef, rects, onSpawn, shouldYieldWheel, initial.camera)
+  // The palette owns the keyboard while it is open; see usePalette's four
+  // rules. restoreFocus is SessionHandle.focus() on the panel that was focused
+  // when it opened — the registry lookup lives here because the palette layer
+  // deliberately knows nothing about the registry.
+  const restoreFocus = useCallback((id: string) => {
+    registry.get(id)?.handle.focus()
+  }, [])
+  const palette = usePalette({ focusedIdRef, restoreFocus })
+  // null is command mode. Set by beginRenamePreset and beginSavePrompt.
+  const [inputMode, setInputMode] = useState<InputMode | null>(null)
+  // The palette always OPENS in command mode. Both ends of a rename leave the
+  // mode set otherwise: a completed one resolves after Palette has already
+  // closed itself (it closes before calling submit, so nothing on screen is
+  // left to clear it), and a cancelled one never reaches submit at all. Either
+  // way the next Cmd+K would greet the user with a stale text field, no list,
+  // and no explanation.
+  useEffect(() => {
+    if (!palette.open) setInputMode(null)
+  }, [palette.open])
+
+  const { viewport, resetViewport, worldCentre, centreOn } = useViewport(
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen
+  )
   const version = useRegistryVersion(registry)
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
@@ -334,12 +376,20 @@ export function Canvas({
   // shortcut requires Cmd" rule for bare keys reaching the PTY.)
   useEffect(() => {
     const offCopy = window.canvas.edit.onCopy(() => {
+      // With the palette open the user is looking at a text field, not a
+      // terminal, and focusedId still names that terminal (rule 2 keeps it).
+      // Copying its selection here would put text the user cannot see on the
+      // clipboard; Palette.tsx serves its own input instead.
+      if (palette.isOpen()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
       if (selection) void navigator.clipboard.writeText(selection)
     })
     const offPaste = window.canvas.edit.onPaste((text) => {
+      // Rule 3. Without this the text lands in a running agent, invisibly,
+      // while the user watches an empty text field. verify:panels 35.
+      if (palette.isOpen()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       if (text) session?.handle.paste(text)
@@ -348,7 +398,9 @@ export function Canvas({
       offCopy()
       offPaste()
     }
-  }, [])
+    // palette.isOpen is referentially stable, so this stays a once-only
+    // install; listing it makes the dependency visible rather than implied.
+  }, [palette.isOpen])
 
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
@@ -394,17 +446,24 @@ export function Canvas({
   // focused (xterm's hidden textarea, most of the time) rather than this
   // history stack.
   useEffect(() => {
-    const offUndo = window.canvas.edit.onUndo(() =>
+    // Rule 3 again, and this is the sharpest edge of it: Cmd+Z is a menu
+    // accelerator on exactly the same footing as Cmd+V, so with the palette
+    // open and a name half-typed it does not undo the TYPING — it runs
+    // applyHistory, which removes a panel and disposes its session, behind the
+    // overlay, with no visible cause. verify:panels 37.
+    const offUndo = window.canvas.edit.onUndo(() => {
+      if (palette.isOpen()) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
-    )
-    const offRedo = window.canvas.edit.onRedo(() =>
+    })
+    const offRedo = window.canvas.edit.onRedo(() => {
+      if (palette.isOpen()) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(next); return next })
-    )
+    })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory])
+  }, [applyHistory, palette.isOpen])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same
@@ -628,7 +687,13 @@ export function Canvas({
     setSelectedId((current) => (current === id ? null : current))
     setFocusedId((current) => (current === id ? null : current))
   }, [commitHistory])
-  const onSelectPanel = useCallback((id: string) => {
+  /**
+   * Select and raise, without waking. The half onSelectPanel and the palette's
+   * goToPanel share: a raise is a z change and nothing more (see "Stacking is
+   * Panel.z, never array order"), so it is safe for a navigation that must not
+   * start a process, while registry.wake — onSelectPanel's other half — is not.
+   */
+  const selectAndRaise = useCallback((id: string) => {
     setSelectedId(id)
     setPanels((current) => {
       // Skip the raise (and the history push it would trigger) when `id` is
@@ -649,6 +714,10 @@ export function Canvas({
       commitHistory(next)
       return next
     })
+  }, [commitHistory])
+
+  const onSelectPanel = useCallback((id: string) => {
+    selectAndRaise(id)
     // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
     // and so no focus handler of its own — its click falls through to the
     // canvas background, which hit-tests and selects. Hooking onFocusPanel
@@ -661,7 +730,7 @@ export function Canvas({
       return next
     })
     registry.wake(id)
-  }, [commitHistory])
+  }, [selectAndRaise])
   const onFocusPanel = useCallback((id: string) => {
     onSelectPanel(id)
     setFocusedId(id)
@@ -804,6 +873,28 @@ export function Canvas({
     setFocusedId(null)
   }
 
+  // The palette's third exit (the spec's focus rule 4 names Escape,
+  // Enter-after-run, and a click outside — this is the third). CAPTURE phase
+  // on the canvas host, and it has to be: every panel handler stopPropagations
+  // its own mousedown, so a click on a PANEL never reaches the background
+  // onMouseDown below and a close written there would fire for background
+  // clicks only. Without any of it the overlay survives the click with its
+  // input blurred and xterm's textarea focused — bare keys reach the agent
+  // while the palette sits there looking ready, and Escape reaches the PTY
+  // rather than the palette. verify:panels 42.
+  //
+  // Nothing is prevented or stopped: the click must still do its ordinary job
+  // of selecting and focusing whatever it landed on, which is also why this
+  // dismisses (no focus restore) rather than closing — see dismissPalette.
+  const onMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
+    if (!palette.isOpen()) return
+    // Clicks INSIDE the overlay are not an exit. The .palette root's own
+    // bubble-phase stopPropagation cannot help here — a capture listener on an
+    // ancestor has already run by then — so the containment test is explicit.
+    if ((event.target as HTMLElement | null)?.closest('.palette')) return
+    palette.dismissPalette()
+  }
+
   const onMouseMove = (event: MouseEvent<HTMLDivElement>): void => {
     // Ignore the corrected clones xterm-pointer dispatches during a selection
     // drag. Those carry CSS-pixel client coordinates measured against the
@@ -816,8 +907,194 @@ export function Canvas({
     if (world) setCursor(world)
   }
 
+  // Loaded when the palette OPENS, not on mount and not on a subscription: the
+  // list is only ever looked at while the overlay is up, and availability is
+  // probed once at startup anyway (a brew install mid-session is a known limit
+  // of M5a, not something a subscription here would fix). Reloaded after every
+  // mutation, because main is the only side that knows what the store now says.
+  const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
+  const reloadPresets = useCallback(() => {
+    void window.canvas.preset.list().then(setPresetRows)
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadPresets()
+  }, [palette.open, reloadPresets])
+
+  // The prompt list, reloaded whenever the palette opens — and whenever the
+  // panel it captured changes, because a project's prompts are its own
+  // directory's and two panels are rarely in the same one.
+  const [promptRows, setPromptRows] = useState<PromptRow[]>(EMPTY_PROMPTS)
+  // Bodies are deliberately NOT in the row type the palette renders:
+  // buildCommands has no use for a paragraph, and putting one in a list row's
+  // props means re-rendering the whole list whenever a prompt file changes.
+  const promptBodiesRef = useRef(new Map<string, string>())
+  const reloadPrompts = useCallback((capturedId: string | null) => {
+    const panel = capturedId ? panelsRef.current.find((p) => p.rect.id === capturedId) : undefined
+    // The panel's SPAWN directory, which is what spec.cwd is. Wherever the
+    // user has since cd'd to is only knowable from the pid, and that is
+    // explicitly out of this milestone — so a panel that has wandered lists
+    // the prompts of where it started, not of where it is.
+    void window.canvas.prompt.list(panel?.spec.cwd ?? null).then((rows) => {
+      promptBodiesRef.current = new Map(rows.map((r) => [r.id, r.body]))
+      setPromptRows(rows.map(({ id, name, source }) => ({ id, name, source })))
+    })
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadPrompts(palette.capturedId)
+  }, [palette.open, palette.capturedId, reloadPrompts])
+
+  // Palette actions. Everything the palette can do that needs the registry,
+  // the camera, or IPC lives here — buildCommands takes callbacks precisely so
+  // none of that reaches the pure layer.
+  const paletteActions = useMemo<PaletteActions>(() => ({
+    spawnPreset: (id) => {
+      const row = presetRows.find((p) => p.id === id)
+      // buildCommands already disables an unavailable row, so this is the
+      // second half of the same rule rather than the only one: a stale list —
+      // the palette was open while the store changed — must not spawn a panel
+      // that dies instantly with "command not found".
+      if (!row || !row.available) return
+      // Routed through the SAME main-side path the menu uses, so a palette
+      // spawn and a menu spawn cannot drift: main resolves the template
+      // (absent command included) and sends PRESET_SPAWN back, which Canvas
+      // already handles through onSpawn — which is what gives it the ordinary
+      // undo behaviour, where removing a panel disposes its session.
+      void window.canvas.preset.spawnById(id)
+    },
+    beginRenamePreset: (id, currentName) => {
+      setInputMode({
+        label: `Rename \u201c${currentName}\u201d to\u2026`,
+        initial: currentName,
+        submit: (value) => {
+          void window.canvas.preset.rename(id, value).then(() => {
+            setInputMode(null)
+            reloadPresets()
+          })
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without this the mode would be set on a palette that is already gone
+      // — and the effect above would immediately clear it again. Reopening in
+      // the same batch is what turns "run the rename command" into "the
+      // palette is now a text field", which is the whole point of input mode.
+      palette.openPalette()
+    },
+    deletePreset: (id) => {
+      void window.canvas.preset.remove(id).then(reloadPresets)
+    },
+    setDefaultPreset: (id) => {
+      // No local bookkeeping: main answers by pushing PRESET_DEFAULT, which
+      // the existing subscription writes into defaultTemplateRef. One source
+      // of truth for what Cmd+N spawns, and it is main's.
+      void window.canvas.preset.setDefault(id).then(reloadPresets)
+    },
+    goToPanel: (id) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (!panel) return
+      centreOn(panel.rect)
+      // Selection WITHOUT the wake. onSelectPanel is the click path and it
+      // deliberately wakes (a card's whole affordance is "click to start");
+      // navigating is not interacting, so the switcher leaves dormancy alone.
+      // verify:panels 39.
+      //
+      // It DOES raise, though, and deliberately: the selection ring is the
+      // only feedback this command gives, and a framed panel that happens to
+      // sit under an overlapping one shows none of it — the camera moves and
+      // nothing visibly happens. Raising is a z change and nothing else, so it
+      // costs none of what the no-wake rule is protecting.
+      selectAndRaise(id)
+    },
+    insertPrompt: (id) => {
+      // The panel the palette CAPTURED, not the focused one: opening the
+      // palette moves DOM focus to its input, and a background click clears
+      // focusedId outright.
+      const target = palette.capturedId
+      const body = promptBodiesRef.current.get(id)
+      // A row whose body the last reload did not carry is a list that moved
+      // under the user (the file was deleted while the palette was open).
+      // Inserting nothing is the only honest answer; inserting the wrong
+      // prompt into a running agent is not.
+      if (!target || body === undefined) return
+      // paste(), NEVER write(). session-factory.ts spells out the failure it
+      // exists to prevent: term.paste wraps the payload in bracketed-paste
+      // markers when the app has enabled them (and normalises LF to CR), so a
+      // multi-line prompt arrives as ONE input. A raw write submits every
+      // newline separately — pasting a five-line prompt into `claude` fires
+      // off four incomplete fragments and then the tail. EVERY prompt is
+      // multi-line, so every use of this feature depends on this call.
+      // verify:panels 40 is the check that can tell the two apart.
+      registry.get(target)?.handle.paste(body)
+    },
+    beginSavePrompt: () => {
+      const target = palette.capturedId
+      // The current SELECTION, the same call that backs Cmd+C. A deliberate
+      // gesture and nothing else: capturing automatically would mean
+      // retaining everything the user ever types, credentials included.
+      const selection = target ? (registry.get(target)?.handle.getSelection() ?? '') : ''
+      // buildCommands already disables the row without a selection; this is
+      // the second half of the same rule, against a list that went stale
+      // while the palette was open.
+      if (!selection) return
+      setInputMode({
+        label: 'Name this prompt\u2026',
+        initial: '',
+        submit: (name) => {
+          void window.canvas.prompt.save(name, selection).then(() => setInputMode(null))
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without this the mode would be set on a palette that is already gone
+      // and the clear-on-close effect would wipe it again — the same pairing
+      // beginRenamePreset makes, for the same reason.
+      palette.openPalette()
+    },
+    deletePrompt: (id) => {
+      // Reloaded rather than filtered locally: main is the only side that
+      // knows what the store now says, and a project prompt refuses deletion
+      // there (the row is disabled, but a stale list could still reach here).
+      void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
+    },
+    resetCanvas: () => {
+      // Main owns the confirmation dialog and the counts request. The palette
+      // asks for the flow the menu item already runs rather than growing a
+      // second one that could drift from it. FIRE-AND-FORGET: main returns
+      // before the user answers the dialog, so this promise resolving says
+      // nothing about whether a reset happened and nothing here may act on it.
+      void window.canvas.canvas.requestReset()
+    },
+    // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
+    zoomToFit: () => resetViewport()
+  }), [resetViewport, centreOn, selectAndRaise, presetRows, reloadPresets, palette.openPalette,
+       palette.capturedId, reloadPrompts])
+
+  // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
+  // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
+  // this array flows into Palette.tsx's `commands` memo, whose [rows] effect
+  // re-seats the selected row. Tracking it would re-seat the palette's
+  // selection at 60Hz behind a drag, the same silent-selection-move defect
+  // "resetViewport must stay a useCallback" documents one file over. The list
+  // is only ever looked at while the overlay is up, and the commands that add
+  // or remove a panel close it first, so recomputing at open is enough.
+  const panelRows = useMemo<PanelRow[]>(
+    () => (palette.open ? panelsRef.current.map((p) => ({ id: p.rect.id, label: panelLabel(p) })) : EMPTY_PANELS),
+    [palette.open]
+  )
+
+  // Cheap, and read once per render of the palette: getSelection() is a string
+  // copy out of xterm's buffer, not a repaint.
+  const hasSelection = (): boolean => {
+    const id = palette.capturedId
+    return id !== null && (registry.get(id)?.handle.getSelection() ?? '') !== ''
+  }
+
   return (
-    <div className="canvas" ref={hostRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
+    <div
+      className="canvas"
+      ref={hostRef}
+      onMouseDownCapture={onMouseDownCapture}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+    >
       <div
         className="world"
         style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
@@ -844,6 +1121,17 @@ export function Canvas({
         })}
       </div>
       <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
+      {palette.open && (
+        <Palette
+          controller={palette}
+          actions={paletteActions}
+          presets={presetRows}
+          prompts={promptRows}
+          panels={panelRows}
+          hasSelection={hasSelection()}
+          inputMode={inputMode}
+        />
+      )}
     </div>
   )
 }

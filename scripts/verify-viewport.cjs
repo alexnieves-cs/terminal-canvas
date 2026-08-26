@@ -650,6 +650,30 @@ const SLOT = { left: 300, top: 200 }
     `panelId=${custom.spec.panelId} rect=${JSON.stringify(custom.rect)}`)
 }
 
+// 49. centreOn puts the rect's centre at the viewport's centre, at any scale.
+{
+  let worst = 0
+  const size = { width: 1200, height: 800 }
+  const rect = { id: 'n1', x: 3000, y: -1500, w: 480, h: 320 }
+  for (const vp of VIEWPORTS) {
+    const next = V.centreOn(vp, rect, size)
+    const centre = V.worldToScreen({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, next)
+    worst = Math.max(worst, Math.abs(centre.x - size.width / 2), Math.abs(centre.y - size.height / 2))
+  }
+  ok('49 centreOn centres the rect at every scale', worst < EPS, `worst drift ${worst}`)
+}
+
+// 50. centreOn does NOT change the scale. Framing a panel by zooming to it
+//     would reflow nothing (the world transform is scale-blind to xterm) but
+//     would throw away the zoom level the user chose — and Cmd+1 already
+//     exists for "fit everything".
+{
+  const size = { width: 1200, height: 800 }
+  const rect = { id: 'n1', x: 10, y: 10, w: 100, h: 100 }
+  const kept = VIEWPORTS.every((vp) => V.centreOn(vp, rect, size).scale === vp.scale)
+  ok('50 centreOn preserves scale', kept)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

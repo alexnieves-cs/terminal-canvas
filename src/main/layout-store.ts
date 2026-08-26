@@ -1,11 +1,13 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import {
+  DEFAULT_PRESET_ID,
   defaultSnapshot,
   defaultWorkspace,
   parseLayout,
   type CanvasState,
   type LayoutSnapshot,
   type Preset,
+  type Prompt,
   type RestoreSettings,
   type Workspace
 } from '../shared/layout-schema'
@@ -56,8 +58,22 @@ export interface LayoutStore {
   presets(): Preset[]
   /** Append one and schedule a write. Ids are minted by the caller. */
   addPreset(preset: Preset): void
+  /** Rename one user preset. False when the id names nothing. */
+  renamePreset(id: string, name: string): boolean
+  /**
+   * Remove one user preset. False when the id names nothing — including every
+   * built-in id, which is not this file's data to remove.
+   */
+  deletePreset(id: string): boolean
+  /** What Cmd+N spawns. Not validated here: only main knows the built-ins. */
+  setDefaultPreset(id: string): void
   /** What Cmd+N spawns. May name a built-in, so main resolves it, not this. */
   defaultPresetId(): string
+  /** The SAVED prompts only. Project prompts are read live; see main/prompts.ts. */
+  prompts(): Prompt[]
+  addPrompt(prompt: Prompt): void
+  /** False when the id names nothing — including any project prompt id. */
+  deletePrompt(id: string): boolean
   /** Return the active workspace to an empty canvas. */
   reset(): void
   /** Write now, synchronously. Never throws. */
@@ -209,7 +225,49 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       scheduleWrite()
     },
 
+    renamePreset(id, name) {
+      const found = snapshot.presets.find((p) => p.id === id)
+      if (!found) return false
+      snapshot.presets = snapshot.presets.map((p) => (p.id === id ? { ...p, name } : p))
+      scheduleWrite()
+      return true
+    },
+
+    deletePreset(id) {
+      const before = snapshot.presets.length
+      snapshot.presets = snapshot.presets.filter((p) => p.id !== id)
+      if (snapshot.presets.length === before) return false
+      // A defaultPresetId naming a preset that no longer exists is a fact on
+      // disk that outlives this run. resolveDefault() recovers at read time,
+      // but only here is the moment the preset goes away visible.
+      if (snapshot.defaultPresetId === id) snapshot.defaultPresetId = DEFAULT_PRESET_ID
+      scheduleWrite()
+      return true
+    },
+
+    setDefaultPreset(id) {
+      snapshot.defaultPresetId = id
+      scheduleWrite()
+    },
+
     defaultPresetId: () => snapshot.defaultPresetId,
+
+    // Copied out for the same reason presets() copies: a caller must not be
+    // able to mutate the snapshot the store is about to serialise.
+    prompts: () => snapshot.prompts.map((p) => ({ ...p })),
+
+    addPrompt(prompt) {
+      snapshot.prompts = [...snapshot.prompts, { ...prompt }]
+      scheduleWrite()
+    },
+
+    deletePrompt(id) {
+      const before = snapshot.prompts.length
+      snapshot.prompts = snapshot.prompts.filter((p) => p.id !== id)
+      if (snapshot.prompts.length === before) return false
+      scheduleWrite()
+      return true
+    },
 
     reset() {
       const w = activeWorkspace()
