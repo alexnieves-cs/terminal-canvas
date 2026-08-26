@@ -48,7 +48,13 @@ const USER_DATA = mkdtempSync(join(tmpdir(), 'tc packaged '))
 const SOCKET = 'terminal-canvas-verify-packaged'
 
 let child = null
+let cleaned = false
 function cleanup() {
+  // finish() calls cleanup() explicitly and then process.exit()s, which fires
+  // the 'exit' listener below and would otherwise run this a second time —
+  // harmless (idempotent) but a wasted kill-server exec on every run.
+  if (cleaned) return
+  cleaned = true
   if (child && child.exitCode === null) {
     try { child.kill('SIGKILL') } catch { /* already gone */ }
   }
@@ -80,9 +86,14 @@ process.on('exit', cleanup)
   ok('1 electron-builder produces a bundle', built, buildError)
   if (!built) return finish()
 
-  // The binary path is DERIVED from the same config the builder used, so
-  // productName lives in exactly one place. macOS puts the executable at
-  // Contents/MacOS/<productName>.
+  // The output dir and productName are DERIVED from the same config the
+  // builder used, so productName lives in exactly one place. macOS puts the
+  // executable at Contents/MacOS/<productName>. The 'mac-arm64' arch segment
+  // is NOT derived — it is electron-builder's own directory-naming convention
+  // for a single-arch dir target, hardcoded here rather than computed from
+  // config.mac.target, which this repo can do because Global Constraints
+  // fixes it arm64-only; widening to universal would need this literal to
+  // change too.
   const appPath = join(ROOT, config.directories.output, 'mac-arm64', `${config.productName}.app`)
   const binary = join(appPath, 'Contents', 'MacOS', config.productName)
   ok('2 the .app bundle is where the config says it is', existsSync(binary), binary)
@@ -156,16 +167,26 @@ process.on('exit', cleanup)
   ok('6 the packaged app used the scratch socket',
     startup.includes(`socket=${SOCKET}`), startup)
 
-  // 7. A backend was chosen and NAMED. Either kind is a pass — tmux is
+  // 7. THE THIRD DISTORTION, CHECKED. --user-data-dir is a throwaway directory
+  // so this run can never read or write the real packaged app's layout.json —
+  // same rule as "the verify suites must never touch the production socket".
+  // If Electron silently ignored the flag, this run would be against the REAL
+  // userData, and nothing else here would catch it. macOS resolves /tmp to
+  // /private/tmp, so both spellings are accepted.
+  ok('7 the throwaway --user-data-dir was actually used',
+    startup.includes(`userData=${USER_DATA}`) ||
+      startup.includes(`userData=/private${USER_DATA}`), startup)
+
+  // 8. A backend was chosen and NAMED. Either kind is a pass — tmux is
   // optional and its absence is a documented degradation — but a missing
   // reason is the silent fallback the loud warning exists to prevent.
   {
     const match = /backend=(tmux|direct) \(([^)]+)\)/.exec(startup)
-    ok('7 a backend was chosen and says why',
+    ok('8 a backend was chosen and says why',
       match !== null && match[2].trim().length > 0, startup)
   }
 
-  // 8. THE END-TO-END PROOF. A real PTY, spawned by a real packaged app, with
+  // 9. THE END-TO-END PROOF. A real PTY, spawned by a real packaged app, with
   // node-pty's native binding loaded out of the UNPACKED asar. Everything
   // above can pass with a broken pty layer; this cannot.
   // Greps PtyManager.create's OWN log line, which has existed since M1 rather
@@ -173,7 +194,7 @@ process.on('exit', cleanup)
   // fails here even if nobody remembers this check exists.
   {
     const match = /\[pty\] spawned .*pid=(\d+)/.exec(out)
-    ok('8 a PTY spawned in the packaged app',
+    ok('9 a PTY spawned in the packaged app',
       match !== null && Number(match[1]) > 0,
       match ? match[0] : out.slice(-2000))
   }

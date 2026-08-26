@@ -53,7 +53,14 @@ function buildConfig(opts) {
       '!**/*.tsbuildinfo',
       '!src/**',
       '!scripts/**',
-      '!docs/**'
+      '!docs/**',
+      // scripts/** alone is not enough: the Electron-runtime verify suites
+      // (verify:canvas, verify:panels, verify:window, verify:ipc, verify:xterm)
+      // esbuild their bundles into out/verify/, which out/** would otherwise
+      // ship inside the .app right alongside the code those bundles kill-server
+      // against — the exact accident the scripts/** exclusion above exists to
+      // prevent, just reached through a different directory.
+      '!out/verify/**'
     ],
 
     asar: true,

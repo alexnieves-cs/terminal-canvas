@@ -61,9 +61,9 @@ const config = buildConfig()
 // accident.
 {
   const files = config.files ?? []
-  const excluded = ['src', 'scripts', 'docs']
+  const excluded = ['src', 'scripts', 'docs', 'out/verify']
   const missing = excluded.filter((d) => !files.some((f) => f === `!${d}/**`))
-  ok('5 src, scripts and docs are excluded', missing.length === 0,
+  ok('5 src, scripts, docs and out/verify are excluded', missing.length === 0,
     `missing=${JSON.stringify(missing)} files=${JSON.stringify(files)}`)
 }
 
