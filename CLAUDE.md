@@ -5,7 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **M1, M2, and M3 have landed.** M1 is the PTY layer, M2 is the
+running a coding-agent CLI. **M1 through M5b have landed** — the PTY layer, the canvas, their
+merge, persistence and tmux-backed session survival (M4), presets (M5a), and the Cmd+K command
+palette (M5b). The three that shaped the architecture are worth keeping in mind: M1 is the PTY layer, M2 is the
 canvas and its coordinate math — deliberately built apart so that a blank panel had exactly
 one possible cause in each. M3 merges them: `Canvas.tsx` now renders real terminal panels
 instead of M2's placeholder rectangles, with level-of-detail tiering and viewport culling so
@@ -41,7 +43,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 17 channels as of M5b, nine of them the palette's |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 43 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), and a mouse-picked row not releasing the focused panel (41). The count is 43 while the last number is 41, because of the lettered sub-checks `38b` and `40a` |
+| `verify:panels` | real Electron | 45 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). The count is 45 while the last number is 43, because of the lettered sub-checks `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -522,9 +524,10 @@ that fails to resolve without the alias wired into each esbuild config, the same
 `electron.vite.config.ts` and the tsconfigs already carry. The real-Electron suites
 (`verify:canvas`, `verify:panels`) need no such alias — they load the already-built
 `out/renderer/index.html`, where electron-vite resolved it long before esbuild ever runs.
-`verify-palette.cjs` carries the alias pre-emptively: `commands.ts`'s `@shared` imports are all
-`import type` today, so nothing there needs it *yet* — which is exactly the state
-`verify-viewport.cjs` was in right up until the day it broke.
+`verify-palette.cjs` carries the alias pre-emptively even though **nothing in its bundle imports
+from `@shared` at all** — `commands.ts`'s only import is its sibling `palette-model.ts`. That is
+the point: needing no alias *yet* is exactly the state `verify-viewport.cjs` was in right up
+until the day it broke.
 
 **`RestoreSettings` lives in `layout.json`, not a second store.** The renderer never learns the
 settings exist as a distinct concept; main applies them in `LayoutStore.initial()` and hands
@@ -688,7 +691,17 @@ every canvas shortcut"). Four rules make that work, and each one fails silently 
 4. **Closing calls `restoreFocus(capturedId)`**, i.e. `SessionHandle.focus()`. Nothing else
    gives the keyboard back: the input is unmounting, and an unmounted element's blur leaves
    focus on `<body>`, where every subsequent keystroke goes nowhere at all
-   (`verify:panels` 36).
+   (`verify:panels` 36). The one exit that must NOT restore is the outside click — see "Three
+   ways out of the palette" below.
+
+There are exactly **three ways out**: `Escape`, `Enter` on a row that runs, and a click outside.
+`Tab` is a fourth key that would otherwise be an *un-audited* exit — `role="dialog"` with a
+single focusable element means the browser's default `Tab` walks DOM focus onward, plausibly
+into xterm's tabbable helper textarea, leaving the overlay up with the keyboard back on the
+agent — so it is handled in the same `switch` as `Escape` and closes. `Cmd+K` itself is
+Cmd-gated with `ctrlKey`, `altKey` **and `shiftKey`** all excluded: `Cmd+Shift+K` is a distinct
+shortcut in every editor the user also has open, and it arrives with `key === 'K'`, which the
+key check accepts on its own — so without the `shiftKey` exclusion it is silently the same chord.
 
 **`edit:paste` is guarded, `edit:copy` is redirected, and the palette owns its own
 subscriptions (`Palette.tsx`, `Canvas.tsx`).** `Cmd+C`/`Cmd+V` are main-process menu
@@ -718,9 +731,14 @@ implementation.
 `onSelectPanel` clears the dormant id and calls `registry.wake` — so the obvious implementation,
 reuse `onSelectPanel`, would spawn an agent as a side effect of NAVIGATING. On a restored
 twelve-panel canvas that is twelve CLIs launched by a keyboard tour, the exact failure M4b's
-dormancy rule exists to prevent. `goToPanel` calls `centreOn` and sets `selectedId` directly:
-the highlight moves, dormancy is left alone, and the card still says "click to start" and still
-means it. `verify:panels` 39.
+dormancy rule exists to prevent. `goToPanel` calls `centreOn` and then `selectAndRaise` — the
+select-and-raise half of `onSelectPanel`, factored out precisely so the switcher can have it
+without `registry.wake`. Raising is deliberate and is not a wake: a raise is a `z` change and
+nothing more, and without it a framed panel can land *underneath* an overlapping one, showing
+none of the selection ring this command's only feedback consists of. Dormancy is left alone, and
+the card still says "click to start" and still means it. `verify:panels` 39, which asserts WHERE
+the camera landed (recomputed from `centreOn`'s own arithmetic), not merely that it moved — a
+switcher that framed the wrong panel also moves the camera.
 
 **The palette swallows its own mousedowns (`Palette.tsx`).** The overlay mounts INSIDE
 `.canvas`, whose `onMouseDown` is the background handler — so without `stopPropagation` on the
@@ -734,13 +752,54 @@ from a palette click, which is the one thing the dormancy rule exists to prevent
 bubble phase (so the rows' own handlers still run) with no `preventDefault` (so the input still
 places its caret). `verify:panels` 41 is the check that fails if it is removed.
 
+**Three ways out of the palette, and the third one must not restore focus (`Canvas.tsx`'s
+`onMouseDownCapture`, `usePalette.ts`'s `dismissPalette`).** A click outside the overlay closes
+it. Without that, one click reaches the state rule 1 exists to prevent: `.palette` is a 680px
+box at `top: 12%`, not a full-viewport scrim, so the click lands on a panel or the background,
+the input is blurred, xterm's textarea has DOM focus — and the overlay is still on screen
+looking ready to take a query while every bare key goes to the agent. `Escape` cannot even undo
+it, because the key now reaches the PTY rather than the palette's `onKeyDown`. Two details are
+load-bearing. It is a **capture-phase** listener on the canvas host, not the background
+`onMouseDown`: every panel handler `stopPropagation`s its own mousedown, so a close written into
+the background handler would fire for background clicks *only* and leave the panel case — the
+common one — broken; the containment test is an explicit `closest('.palette')`, because the
+`.palette` root's own bubble-phase `stopPropagation` (see the note above) cannot stop a listener
+on an ancestor that has already run. And it calls `dismissPalette()`, which closes **without**
+`restoreFocus(capturedId)`: the click itself is the focus gesture — it is about to focus the
+panel it hit, or release focus entirely on the background — so restoring would either yank the
+keyboard back to the panel the user just clicked away from, or leave xterm focused while
+`focusedId` is null. Nothing prevented, nothing stopped: the click still selects and focuses
+what it landed on. `verify:panels` 42 asserts both halves.
+
+**The palette's selection moves only when the user moves it (`Palette.tsx`, `Canvas.tsx`'s
+`panelRows`).** Three separate routes re-seated it silently, and all three look identical from
+a screenshot — the highlight is simply somewhere else than the user believes, and `Enter` runs
+the wrong command. (1) The `[rows]` effect re-seated on every identity change of `rows`, and
+`preset:list`/`prompt:list` are invokes that RESOLVE AFTER the palette opens — on a cold
+`.claude/commands` read the user can have arrowed down first. It now re-seats only when the
+QUERY changed; on any other change the selection follows its command by **id** (an arriving list
+can grow rows above it) and falls back to `firstRunnable` only when that command is gone or has
+become unrunnable. (2) `panelRows` tracked `panels`, which is a fresh array on every
+`setPanelRect` — i.e. every frame of a drag — so a drag behind an open palette re-seated the
+selection at 60Hz; it is keyed on `palette.open` and read out of `panelsRef` instead, the same
+mirror-into-a-ref move `focusedIdRef` makes. (3) `resetViewport` and `centreOn` must stay
+`useCallback`s for the same reason, which has its own note above. Separately, the selected `<li>`
+carries a ref and `scrollIntoView({ block: 'nearest' })` runs when the index moves: `.palette__list`
+is `max-height: 46vh; overflow-y: auto` and the list is long by construction — four rows per
+preset, one per panel, two per prompt — so without it `stepRunnable` walks happily past the
+visible window and `Enter` runs a command the user cannot see.
+
 **Project prompts are read, never written (`main/prompts.ts`).** `.claude/commands/*.md` under
 a panel's cwd belongs to the *repository*: it version-controls with the project and works in a
 plain terminal outside this app, which is the whole argument for reading Claude Code's format
 rather than inventing a private one. Writing it is deliberately out of scope — authoring a file
 someone will commit is a decision to ask for, not to acquire as a side effect of "save", so
 `prompt:save` always writes the saved store and `prompt:delete` returns false for every project
-id. Four limits, each protecting against a directory this app does not control: at most 100
+id. `verify:panels` 43 is the only check that exercises the read end to end — the harness's
+`listPrompts` is main's own `readProjectPrompts(resolveCwd(cwd))` against a fixture
+`.claude/commands/*.md` in a spaced temp directory that one fixture panel is pointed at — and it
+exists because a regression here removes ROWS, which is indistinguishable from "this project has
+no commands". Four limits, each protecting against a directory this app does not control: at most 100
 files, at most 64KB each (**skipped**, never truncated — half a prompt pasted into an agent
 reads as a complete instruction), one level deep (Claude Code namespaces commands in
 subdirectories; following that means a recursive walk over arbitrary user directories), and a
