@@ -538,14 +538,19 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   ok('36 resolveDefault falls back to the login shell for an id nothing owns',
     L.resolveDefault(user, 'u1').name === 'Mine' &&
       L.resolveDefault(user, 'nope').id === L.DEFAULT_PRESET_ID &&
-      L.resolveDefault([], L.DEFAULT_PRESET_ID).command === undefined,
+      !('command' in L.resolveDefault([], L.DEFAULT_PRESET_ID)),
     `unknown -> ${L.resolveDefault(user, 'nope').id}`)
 }
 
 {
   const user = [{ id: 'u1', name: 'a', cwd: '/tmp', args: [] },
                 { id: 'u3', name: 'b', cwd: '/tmp', args: [] }]
-  ok('37 mintPresetId skips ids already taken, built-ins included',
+  // Names only the user half on purpose. mintPresetId also checks the
+  // built-ins, but no minted id can reach them while built-in ids are
+  // `shell`/`claude`/`codex` and minted ids are `u<n>` — so that half of the
+  // guard is defensive and UNPROVABLE here. It becomes load-bearing, and this
+  // check becomes insufficient, the day a built-in is named `u<n>`.
+  ok('37 mintPresetId skips ids already taken by user presets',
     L.mintPresetId(user) === 'u2' && L.mintPresetId([]) === 'u1' &&
       !L.allPresets(user).some((p) => p.id === L.mintPresetId(user)),
     `minted=${L.mintPresetId(user)}`)
