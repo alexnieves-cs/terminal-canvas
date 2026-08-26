@@ -277,6 +277,26 @@ app.whenReady().then(async () => {
   })
   backend = await probeTmux(env, app.getPath('userData'), tmuxSocket)
 
+  // One line naming everything an outside observer needs, because for a
+  // PACKAGED app stdout is the only channel there is: no IPC into a test
+  // harness, no renderer hook, and — unlike every other Electron suite here —
+  // no custom entry point, since scripts/panels-entry.cjs works by BEING the
+  // entry and a packaged app runs its own main.
+  //
+  // Reaching this line is itself the evidence that node-pty loaded: session-
+  // backend.ts imports it at module scope, so a .node binary trapped inside the
+  // asar throws during import and the app never gets here.
+  //
+  // The resolved PATH is included because it is the only way to tell a
+  // recovered login environment from launchd's bare one — and shell-env.ts's
+  // entire reason for existing has never been observable under npm run dev,
+  // where the app inherits the developer's own terminal environment.
+  console.log(
+    `[startup] packaged=${app.isPackaged} userData=${app.getPath('userData')} ` +
+      `socket=${tmuxSocket} backend=${backend.kind} (${backend.reason}) ` +
+      `PATH=${env['PATH'] ?? '<none>'}`
+  )
+
   // Load before the menu and window exist: Task 10 gives the menu the restore
   // settings, and the renderer's first act is layout:load, which needs a
   // resolved store to answer from.
