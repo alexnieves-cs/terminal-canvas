@@ -30,9 +30,9 @@ work is done. Individual suites:
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:viewport` | plain node | 47 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), and dormancy outranking focus in `lod.ts` (46–47) |
+| `verify:viewport` | plain node | 48 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), and `makePanel`'s spec/size arguments (48) |
 | `verify:registry` | plain node | 24 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19) |
-| `verify:layout` | plain node | 26 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution |
+| `verify:layout` | plain node | 40 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40) |
 | `verify:tmux` | plain node | 20 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19) |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 18 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). Skipped loudly, never silently, when no tmux binary is found |
@@ -40,7 +40,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 26 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), and a real renderer reload leaving its tmux session running (26) |
+| `verify:panels` | real Electron | 31 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31) |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -52,15 +52,19 @@ Node. `verify:pty` and `verify:pty-manager` therefore run under Electron with
 `ELECTRON_RUN_AS_NODE=1`; `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, and
 `verify:panels` need the real app lifecycle and `unset` it instead. `verify:viewport`,
 `verify:registry`, `verify:layout`, and `verify:tmux` are plain node, because `viewport.ts`,
-`lod.ts`, `session-registry.ts`, `shared/layout-schema.ts`, `main/layout-store.ts`, and
-`main/tmux-args.ts` have no native dependency, no DOM, and no direct `window`/`document` use —
-`session-registry.ts` gets there by taking its IPC bridge and its terminal factory as injected
-dependencies, so `verify:registry` can drive the whole session lifecycle against fakes instead
-of a real PTY or a real xterm, `layout-store.ts` gets there by taking the filesystem paths it
-reads and writes as constructor arguments instead of resolving `app.getPath('userData')`
-itself, and `tmux-args.ts` gets there by being pure argv/config/parsing builders that never
-import `node-pty` — the module that actually spawns a tmux client, `session-backend.ts`,
-deliberately stays out of this file's reach so `verify:tmux` can run under plain node at all.
+`lod.ts`, `session-registry.ts`, `shared/layout-schema.ts`, `main/layout-store.ts`,
+`main/tmux-args.ts`, and `main/presets.ts` have no native dependency, no DOM, and no direct
+`window`/`document` use — `session-registry.ts` gets there by taking its IPC bridge and its
+terminal factory as injected dependencies, so `verify:registry` can drive the whole session
+lifecycle against fakes instead of a real PTY or a real xterm, `layout-store.ts` gets there by
+taking the filesystem paths it reads and writes as constructor arguments instead of resolving
+`app.getPath('userData')` itself, `tmux-args.ts` gets there by being pure argv/config/parsing
+builders that never import `node-pty` — the module that actually spawns a tmux client,
+`session-backend.ts`, deliberately stays out of this file's reach so `verify:tmux` can run
+under plain node at all — and `main/presets.ts` gets there the same way `layout-store.ts`
+does: `resolveAvailability` takes `which` as an injected parameter rather than importing
+`shell-env.ts`, so a real PATH probe never has to run for `verify:layout`'s preset checks to
+pass.
 
 **`verify:pty` duplicates production code on purpose.** It re-implements `shell-env.ts`'s
 probe and `pty-manager.ts`'s batching by hand so it can test them without Electron's app
@@ -565,6 +569,33 @@ pins that default. `verify:pty-manager` runs on `terminal-canvas-verify`,
 because its check 15 calls `shutdown()` — `kill-server` — and running
 `npm run verify` with the app open used to destroy every agent in the live
 instance.
+
+**An absent `command` must stay absent through four layers (`shared/layout-schema.ts`'s
+`parsePresets`, `main/index.ts`'s `templateOf`, the `PRESET_SPAWN`/`PRESET_DEFAULT` payloads,
+and `Canvas.tsx`'s `onSpawn`/`onCapture`).** Each of the four rebuilds its object field by
+field rather than spreading, because spreading a preset would carry `command: undefined`
+across the IPC structured clone, where `'command' in template` then reads **true** — the
+field exists, it just holds `undefined`, and that is a different fact than the field being
+absent. The failure is total and silent: every command-less preset (the built-in login shell,
+and any user preset saved from a login-shell panel) would spawn a hardcoded shell instead of
+resolving the user's actual login shell the way `resolveCommand` does. `verify:layout` 34 and
+`verify:panels` 31 are the two halves — one on the parse side, one end-to-end through a real
+spawn.
+
+**`Cmd+N` stays a renderer keybinding, not a menu accelerator.** Moving it to
+`main/menu.ts` would be architecturally tidier — every other shortcut in this app is either a
+menu accelerator or a renderer listener, not both — but it would break six check sites:
+`verify:panels` presses `Cmd+N` with a dispatched `KeyboardEvent` on `window`, which a
+main-process accelerator never receives, only a real OS keydown does. Main instead pushes the
+default template over `PRESET_DEFAULT`, re-pushed on every `did-finish-load` so a `Cmd+R`
+reload does not silently revert `Cmd+N` back to spawning a login shell after the reload wipes
+`defaultTemplateRef`.
+
+**Built-in presets are code, not data (`main/presets.ts`'s `BUILT_IN_PRESETS`).** Persisting
+them into `layout.json` alongside user presets means deleting one resurrects it on the next
+launch — a bug with no good explanation, because nothing the user did caused it — and it grows
+a file `layout-store.ts` rewrites in full on every coalesced save for no benefit, since the
+three built-ins never change at runtime.
 
 ## Gotchas
 

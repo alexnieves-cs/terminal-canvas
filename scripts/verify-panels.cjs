@@ -1596,9 +1596,11 @@ app.whenReady().then(async () => {
 
     /* ---- M5a presets ---- */
 
-    // /bin/cat, not /bin/echo: this suite runs a DIRECT backend, so a process that
-    // exits immediately leaves pty:list before check 28 can watch undo dispose it.
-    // cat with no args blocks on stdin and stays alive for the whole suite.
+    // /bin/cat, not /bin/echo: check 26 has already swapped the manager onto the
+    // real tmux backend, so checks 27-31 run against tmux, not direct — but under
+    // EITHER backend a process that exits immediately leaves pty:list before check
+    // 28 can watch undo dispose it. cat with no args blocks on stdin and stays
+    // alive for the whole suite.
     const CLAUDE_TEMPLATE = { cwd: '/tmp', command: '/bin/cat', args: [], w: 400, h: 300 }
 
     {

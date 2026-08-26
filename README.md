@@ -147,7 +147,9 @@ you quit.
 | M4a | Panel manipulation: drag, resize, close, pointer correction | ✅ done |
 | M4b | Layout persistence: panels survive a relaunch | ✅ done |
 | M4c | tmux backing: sessions survive the renderer | ✅ done |
-| M5 | Presets, command palette, electron-builder packaging | |
+| M5a | Panel presets: saved spawns, a menu, Cmd+N's default | ✅ done |
+| M5b | Command palette | |
+| M5c | electron-builder packaging | |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
