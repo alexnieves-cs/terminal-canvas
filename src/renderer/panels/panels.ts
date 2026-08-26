@@ -75,11 +75,31 @@ export function firstRunPanels(): Panel[] {
   return [{ rect: { id: FIRST_RUN_ID, x: -PANEL_W / 2, y: -PANEL_H / 2, w: PANEL_W, h: PANEL_H }, spec: shell(FIRST_RUN_ID), z: 1 }]
 }
 
-/** Cmd+N: a panel centred on wherever the camera is looking, on top. */
-export function makePanel(id: string, centre: Point, z: number): Panel {
+/**
+ * Cmd+N, and every preset spawn: a panel centred on wherever the camera is
+ * looking, on top.
+ *
+ * `spec` and `size` are optional so the no-preset call is unchanged. An absent
+ * spec means the login shell, and note that `shell(id)` omits `command`
+ * entirely rather than defaulting it — see the note above on why the renderer
+ * must never resolve one.
+ */
+export function makePanel(
+  id: string,
+  centre: Point,
+  z: number,
+  spec?: Omit<PanelSpecTemplate, 'panelId'> & { panelId?: string },
+  size?: { w?: number; h?: number }
+): Panel {
+  const w = size?.w ?? PANEL_W
+  const h = size?.h ?? PANEL_H
   return {
-    rect: { id, x: centre.x - PANEL_W / 2, y: centre.y - PANEL_H / 2, w: PANEL_W, h: PANEL_H },
-    spec: shell(id),
+    rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
+    // panelId is forced to the minted id: a template carrying a stale one
+    // would give two panels the same session, which registry.ensure resolves
+    // by returning the FIRST — so both render one handle.host and one silently
+    // disappears. Same failure parseLayout's duplicate-id check exists for.
+    spec: spec ? { ...spec, panelId: id } : shell(id),
     z
   }
 }

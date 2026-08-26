@@ -630,6 +630,23 @@ const SLOT = { left: 300, top: 200 }
   ok('47 dormancy outranks focus', tiers.a === 'card', `a=${tiers.a}`)
 }
 
+// 48. makePanel honours a supplied spec and size, centering the result on the
+//     point. An absent spec means the login shell (command omitted). The minted
+//     id wins over any panelId in the spec to prevent duplicate sessions.
+{
+  const centre = { x: 100, y: 100 }
+  const plain = V.makePanel('n1', centre, 1)
+  const custom = V.makePanel('n2', centre, 2,
+    { panelId: 'n2', cwd: '/tmp/repo', command: 'claude', args: [] },
+    { w: 400, h: 300 })
+  ok('48 makePanel honours a supplied spec and size, and still centres on the point',
+    plain.spec.command === undefined && plain.rect.w === V.PANEL_W &&
+      custom.spec.command === 'claude' && custom.spec.cwd === '/tmp/repo' &&
+      custom.rect.w === 400 && custom.rect.h === 300 &&
+      custom.rect.x === centre.x - 200 && custom.rect.y === centre.y - 150,
+    `custom=${JSON.stringify(custom.rect)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
