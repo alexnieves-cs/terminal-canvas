@@ -149,24 +149,60 @@ This works only because of palette rule 2: DOM focus moves to the input, but
 `focusedId` is **captured, never cleared**, so the row knows which panel it is
 about.
 
-**Honest chrome.** `pty:create`'s *result* widens from `{ pid }` to:
+**Honest chrome — and it is smaller than it looks, because the data already
+crosses the wire and is thrown away.**
+
+`PtyCreateResult` *already* carries `command` and `cwd`, both resolved by main
+(`resolveCommand`, `resolveCwd`), and its doc comment already says why: *"so the
+renderer can show what actually got spawned."* The renderer then discards both —
+`session-registry.ts:137` is `session.status = { kind: 'running', pid: result.pid }`.
+The honest label has been one field away since M4 and nothing reads it.
+
+`backend` needs no home on this payload either: `session:backend` is already its
+own channel with its own renderer consumer.
+
+So exactly one field is genuinely missing:
 
 ```ts
-interface PtyCreateResult {
+export interface PtyCreateResult {
+  panelId: PanelId
   pid: number
-  /** What main actually spawned. Never absent — this is the resolved answer. */
-  command: string
-  /** Expanded. `~` is main's to resolve. */
-  cwd: string
-  backend: 'tmux' | 'direct'
-  /** True when this attached to a session that was already running. */
-  reattached: boolean
+  command: string          // already here
+  cwd: string              // already here
+  /** True when this attached to a tmux session that was already running. */
+  reattached: boolean      // new
 }
 ```
 
-`PanelStatus`'s `running` variant grows the same fields, landing at
-`session-registry.ts:137`. The header renders
+`reattached` must come from main and cannot be derived in the renderer. It is
+tempting to infer it from `liveSessionIds` — the set `pty:list` returns at boot —
+but that set only answers *"was this panel's session alive when the renderer
+started"*, which is a different question with a different answer for any panel
+that reattaches later in the run.
+
+**And main does not currently know either.** `session-backend.ts` says so
+outright: *"`new-session -A` attaches if the session exists and creates it if it
+does not, so create and reattach are the same call — the renderer never learns
+reattachment exists."* The single flag that made M4c cheap is exactly what
+erases the distinction M6a wants to report.
+
+So `reattached` costs one extra exec: a `has-session -t =<id>` probe **before**
+the spawn, whose answer is carried through to the result. The exact-match `=`
+is not optional — the same prefix-collision rule every other kill and list
+target in `tmux-args.ts` already obeys, and `verify:tmux` 19 already pins.
+One exec on a user-initiated, lazily-spawned panel is an acceptable price;
+`probeTmux` already spends one at startup for a comparable reason.
+
+The direct backend has no sessions to reattach to, so it reports `false`
+always — which is honest rather than a degradation, and matches the rule that a
+`null` from `SessionBackend.list()` means "this data does not exist here."
+
+`PanelStatus`'s `running` variant grows `command`, `cwd` and `reattached`, landing
+at `session-registry.ts:137`. The header renders
 `title ?? status.command ?? spec.command ?? 'login shell'`.
+
+Note that `pty:list` returns `PtyCreateResult[]` too, so widening the type touches
+boot reconciliation — every entry `list()` synthesises must set the new field.
 
 **The rule this must not break.** The resolved command is a `PanelStatus` fact
 and is **never written back into `PanelSpec`**. M5a's absent-`command` rule
@@ -396,10 +432,11 @@ New:
 
 Changed:
 
-- `src/shared/ipc-contract.ts` — `SETTINGS_LIST`, `SETTINGS_SET`, `AGENT_ACKNOWLEDGE`, `AGENT_STATE`; widened `pty:create` result
+- `src/shared/ipc-contract.ts` — `SETTINGS_LIST`, `SETTINGS_SET`, `AGENT_ACKNOWLEDGE`, `AGENT_STATE`
 - `src/shared/layout-schema.ts` — the settings block; `parseSettings` wired into `parseLayout`
-- `src/shared/types.ts` — `PtyCreateResult`
-- `src/main/pty-manager.ts` — scanner at `enqueue`; the idleness tick; the widened create result
+- `src/shared/types.ts` — `PtyCreateResult.reattached` (the only missing field; `command` and `cwd` are already there)
+- `src/main/session-backend.ts` — the tmux backend reports whether its spawn reattached
+- `src/main/pty-manager.ts` — scanner at `enqueue`; the idleness tick; `reattached` through `create` and `list`
 - `src/main/ipc.ts` — the two settings handlers and the acknowledge handler
 - `src/main/menu.ts` — "Restore on launch" rebuilt from the schema
 - `src/main/index.ts` — `Notification`, dock badge
