@@ -1698,108 +1698,146 @@ export function Canvas({
       // Same reason beginCreateWorkspace/beginRenamePreset both do this.
       palette.openPalette()
     },
-    deleteWorkspace: (id, name, liveCount) => {
+    deleteWorkspace: (id, name, panelCount) => {
       // Gated, not instant — the same reason deletePreset above is: a
       // delete row sat one Enter away from destroying a workspace's worth
       // of running agents, styled identically to "Go to n1".
-      setInputMode({
-        kind: 'confirm',
-        // The count is IN the question. "Delete this workspace?" and "stop
-        // 3 running agents?" are different questions, and only the second
-        // one is the one actually being asked.
-        label:
-          liveCount > 0
-            ? `Delete “${name}” and stop ${liveCount} running ${liveCount === 1 ? 'agent' : 'agents'}?`
-            : `Delete “${name}”?`,
-        initial: '',
-        submit: () => {
-          void (async (): Promise<void> => {
-            try {
-              const before = await window.canvas.workspace.list()
-              const doomed = before.find((w) => w.id === id)
-              // Re-read rather than trusting the row's captured panelIds:
-              // the palette's list is a snapshot from when it opened, and a
-              // panel may have been closed (or opened) since.
-              // Computed once, up front, and reused below rather than
-              // re-derived after remove(): a second `before.find` after the
-              // record is gone would still answer the same question, but
-              // computing it twice invites the two answers drifting apart
-              // if this function is ever edited to filter `before` in
-              // between.
-              const neighbour = before.find((w) => w.id !== id)
-              if (doomed) {
-                // Deleting the ACTIVE workspace: switch away BEFORE
-                // removing the record, never after. IPC.WORKSPACE_ACTIVATE's
-                // own doc comment says why — activate() writes its
-                // `outgoing` argument into whichever workspace main
-                // considers active AT THE MOMENT IT RUNS, and main's own
-                // remove() reassigns activeWorkspaceId to a neighbour the
-                // instant this record is gone. An activate() issued AFTER
-                // remove() would therefore write THIS (about-to-be-deleted)
-                // workspace's own stale panels — captured before dispose()
-                // below ever ran — into the NEIGHBOUR's record, silently
-                // resurrecting a disposed panel's id there. This was
-                // caught by a failing check, not by reading the doc
-                // comment first: verify:panels 69 disposed the session
-                // correctly and then watched it reappear in the registry a
-                // moment later, reintroduced by exactly this write.
-                // Switching first means the outgoing write lands on the
-                // record actually being left — this one, which we are
-                // about to delete anyway, so it is harmless there.
-                if (doomed.active && neighbour) switchWorkspace(neighbour.id)
-                // No neighbour and this was the active workspace: it was
-                // the only one. main's remove() below installs a fresh
-                // default and activates it on its own; there is nothing to
-                // pre-switch to, so the renderer catches up to that fresh
-                // workspace after remove() completes, in the one case where
-                // an activate() call after remove() is unavoidable — and
-                // safe, because the outgoing panels it carries are this
-                // now-deleted workspace's, landing on a brand new record
-                // with nothing in it yet to corrupt.
-                for (const panelId of doomed.panelIds) {
-                  // THE FOURTH registry.dispose CALL SITE in this file
-                  // (after onClosePanel, applyHistory and onReset). It adds
-                  // no caller of pty.kill: dispose(id) and disposeAll()
-                  // remain the only two inside session-registry.ts, and
-                  // routing through dispose() rather than reaching for
-                  // pty.kill directly is exactly what has kept that count
-                  // true across four milestones.
-                  //
-                  // Disposing rather than detaching is deliberate. The
-                  // workspace RECORD is going, so a surviving session is one
-                  // no UI can ever reach or stop again — the backlog item
-                  // for recovering an orphan session does not exist — which
-                  // means an agent would burn tokens invisibly until quit
-                  // kill-servers the whole tmux socket.
-                  registry.dispose(panelId)
-                  clearAgentState(panelId)
-                }
-              }
-              await window.canvas.workspace.remove(id)
-              // The only-workspace edge case from the comment above: nothing
-              // existed to switch to before removal, so main's own fresh
-              // default is picked up here instead.
-              if (doomed?.active && !neighbour) {
-                const after = await window.canvas.workspace.list()
-                const next = after.find((w) => w.active)
-                if (next) switchWorkspace(next.id)
-              }
-            } catch (error: unknown) {
-              // Unhandled otherwise. By the time any of these awaits could
-              // reject, the sessions above may already be disposed — the
-              // worst case this action's brief calls out — so silence here
-              // would strand the user on a canvas full of dead panels with
-              // no path back and nothing in any log.
-              console.warn('[workspace] could not delete workspace', id, error)
-            } finally {
-              reloadWorkspaces()
-              setInputMode(null)
-            }
-          })()
+      //
+      // `panelCount` (commands.ts's `w.panelIds.length`) is a PANEL count,
+      // not a LIVE one — three dormant, never-spawned panels would read as
+      // "stop 3 running agents", which is false, in the one place a false
+      // claim is worst: a destructive confirm. Recomputed honestly below,
+      // before the question is ever shown, against main's own pty list
+      // rather than this renderer's local registry — the same reason
+      // dispose()'s own fix above exists: a panel this renderer holds no
+      // PanelSession for (another workspace's, or one surviving a reload)
+      // can still be genuinely running, so the registry alone would
+      // undercount exactly the panels most worth warning about.
+      void (async (): Promise<void> => {
+        let liveCount = panelCount
+        try {
+          const [rows, sessions] = await Promise.all([
+            window.canvas.workspace.list(),
+            window.canvas.pty.list()
+          ])
+          const row = rows.find((w) => w.id === id)
+          if (row) {
+            const liveIds = new Set(sessions.map((s) => s.panelId))
+            liveCount = row.panelIds.filter((pid) => liveIds.has(pid)).length
+          }
+        } catch (error: unknown) {
+          // Failing toward the ORIGINAL (panel) count is the safe direction
+          // for a destructive confirm: overstating what is about to stop is
+          // the honest side of a guess to be wrong on, understating it is
+          // not.
+          console.warn('[workspace] could not compute a live count for delete confirm', id, error)
         }
-      })
-      // Same reason beginCreateWorkspace/beginRenamePreset both do this.
-      palette.openPalette()
+        setInputMode({
+          kind: 'confirm',
+          // The count is IN the question. "Delete this workspace?" and
+          // "stop 3 running agents?" are different questions, and only the
+          // second one is the one actually being asked.
+          label:
+            liveCount > 0
+              ? `Delete “${name}” and stop ${liveCount} running ${liveCount === 1 ? 'agent' : 'agents'}?`
+              : `Delete “${name}”?`,
+          initial: '',
+          submit: () => {
+            void (async (): Promise<void> => {
+              try {
+                const before = await window.canvas.workspace.list()
+                const doomed = before.find((w) => w.id === id)
+                // Re-read rather than trusting the row's captured
+                // panelIds: the palette's list is a snapshot from when it
+                // opened, and a panel may have been closed (or opened)
+                // since.
+                if (doomed) {
+                  // Deleting the ACTIVE workspace: switch away BEFORE
+                  // removing the record, never after. IPC.WORKSPACE_ACTIVATE's
+                  // own doc comment says why — activate() writes its
+                  // `outgoing` argument into whichever workspace main
+                  // considers active AT THE MOMENT IT RUNS, and main's own
+                  // remove() reassigns activeWorkspaceId to a neighbour the
+                  // instant this record is gone. An activate() issued AFTER
+                  // remove() would therefore write THIS (about-to-be-deleted)
+                  // workspace's own stale panels — captured before dispose()
+                  // below ever ran — into whatever main just made active,
+                  // silently resurrecting a disposed panel's id there. This
+                  // was caught by a failing check, not by reading the doc
+                  // comment first: verify:panels 69 disposed the session
+                  // correctly and then watched it reappear in the registry a
+                  // moment later, reintroduced by exactly this write.
+                  // Switching first means the outgoing write lands on the
+                  // record actually being left — this one, which we are
+                  // about to delete anyway, so it is harmless there.
+                  //
+                  // A workspace with no neighbour (this was the ONLY one)
+                  // gets the SAME treatment, not a special one: mint a
+                  // fresh replacement and switch to IT first, exactly as
+                  // though it were a neighbour that already existed. The
+                  // earlier shape of this branch let main's remove()
+                  // install its own fresh default and switched to THAT
+                  // afterward — which is the identical after-remove()
+                  // mistake this comment already rules out, just with the
+                  // neighbour missing rather than merely stale: the
+                  // outgoing write still landed on a real, currently-active
+                  // record (the fresh default) with this doomed workspace's
+                  // disposed panels, resurrecting them there. 'Canvas'
+                  // matches the name main's own defaultWorkspace() would
+                  // have installed, so the user sees the same thing either
+                  // way — the only difference is which process decided.
+                  let target = before.find((w) => w.id !== id)
+                  if (doomed.active && !target) {
+                    const freshId = await window.canvas.workspace.create('Canvas')
+                    target = { id: freshId, name: 'Canvas', panelIds: [], active: false }
+                  }
+                  if (doomed.active && target) switchWorkspace(target.id)
+                  for (const panelId of doomed.panelIds) {
+                    // THE FOURTH registry.dispose CALL SITE in this file
+                    // (after onClosePanel, applyHistory and onReset). It
+                    // adds no caller of pty.kill: dispose(id) and
+                    // disposeAll() remain the only two inside
+                    // session-registry.ts, and routing through dispose()
+                    // rather than reaching for pty.kill directly is exactly
+                    // what has kept that count true across four milestones.
+                    //
+                    // Disposing rather than detaching is deliberate. The
+                    // workspace RECORD is going, so a surviving session is
+                    // one no UI can ever reach or stop again — the backlog
+                    // item for recovering an orphan session does not exist
+                    // — which means an agent would burn tokens invisibly
+                    // until quit kill-servers the whole tmux socket. This
+                    // holds even for a panelId this renderer has no LOCAL
+                    // PanelSession for (a hidden workspace's own panel, or
+                    // one surviving a reload): dispose()'s own fix sends
+                    // pty.kill regardless, mirroring main's PtyManager.kill.
+                    registry.dispose(panelId)
+                    clearAgentState(panelId)
+                  }
+                }
+                await window.canvas.workspace.remove(id)
+              } catch (error: unknown) {
+                // Unhandled otherwise. By the time any of these awaits could
+                // reject, the sessions above may already be disposed — the
+                // worst case this action's brief calls out — so silence here
+                // would strand the user on a canvas full of dead panels with
+                // no path back and nothing in any log.
+                console.warn('[workspace] could not delete workspace', id, error)
+              } finally {
+                reloadWorkspaces()
+                setInputMode(null)
+              }
+            })()
+          }
+        })
+        // Palette.tsx closes the overlay BEFORE running a row's command, so
+        // without reopening, the mode would be set on a palette that is
+        // gone. Reopened here rather than before the count above, since
+        // this whole function is now async: opening early would show a
+        // confirm whose wording changes a beat later, which reads as the
+        // dialog glitching rather than as a deliberate wait.
+        palette.openPalette()
+      })()
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,

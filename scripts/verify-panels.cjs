@@ -4243,6 +4243,59 @@ app.whenReady().then(async () => {
         rows70.some((w) => w.id === keepId), `rows=${rows70.map((w) => w.name).join()}`)
     }
 
+    // 71 — fix round 1, finding #1/#2. Deleting the workspace you are IN when
+    //     it is the ONLY one left must not resurrect its disposed panels in
+    //     the fresh replacement main installs. Checks 69/70 only ever
+    //     exercise the "a neighbour already exists" branch of deleteWorkspace
+    //     — this drives the other one, which is unreachable unless every
+    //     OTHER workspace is gone first. There is no way to get there without
+    //     actually deleting them: this suite has accumulated several by this
+    //     point (the boot workspace, 'never rendered', 'school', 'keepme'),
+    //     and none of that is special setup — it is what "exactly one
+    //     workspace" actually requires, deleted through the same real gate
+    //     69/70 already proved correct so this check is free to trust it.
+    {
+      const soleId = await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('sole')`)
+      await settle()
+      await zoomTo(wc, 'n') // one panel in 'sole', which goes live and spawns
+      await settle()
+      const solePanelId = await wc.executeJavaScript(`
+        window.canvas.workspace.list().then((r) =>
+          (r.find((w) => w.id === ${JSON.stringify(soleId)}) || { panelIds: [] }).panelIds[0])
+      `)
+
+      // Delete every OTHER workspace. None of them is active, so each is a
+      // plain dispose+remove with no switch involved — the loop's own
+      // correctness rests entirely on 69/70, not on anything new here.
+      const others = (await wc.executeJavaScript(`window.canvas.workspace.list()`))
+        .filter((w) => w.id !== soleId)
+      for (const w of others) {
+        await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(w.id)})`)
+        await settle()
+        await pressPlain(wc, 'Enter')
+        await settle()
+      }
+      const onlyOneLeft = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const before71 = await wc.executeJavaScript(`window.__m4aSessions().length`)
+
+      // Now delete the LAST remaining workspace — the branch under test.
+      await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(soleId)})`)
+      await settle()
+      await pressPlain(wc, 'Enter')
+      await settle()
+      const after71 = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      const rowsFinal = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const freshActive = rowsFinal.find((w) => w.active)
+      ok('71 deleting the only remaining workspace disposes its sessions ' +
+         'and does not resurrect them in the fresh replacement',
+        onlyOneLeft.length === 1 && onlyOneLeft[0].id === soleId &&
+          after71 < before71 &&
+          rowsFinal.length === 1 && !rowsFinal.some((w) => w.id === soleId) &&
+          freshActive !== undefined && !freshActive.panelIds.includes(solePanelId),
+        `onlyOneLeft=${onlyOneLeft.length} sessions ${before71}->${after71} ` +
+        `rowsFinal=${JSON.stringify(rowsFinal)} solePanelId=${solePanelId}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
