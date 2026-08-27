@@ -80,9 +80,18 @@ Out, and deliberately so:
 └── <Inspector/>            collapsible; the selected panel
 ```
 
-`App.tsx`'s existing comment already says it "exists to own the outer layout,
-not state". That is the shell's home, and `Canvas` stays a child that never
-learns it got narrower.
+**The frame is rendered by `Canvas.tsx`, not by `App.tsx`.** `App.tsx`'s
+comment says it "exists to own the outer layout, not state", and the diagram
+above reads as though the shell belongs there — but every verb the shell needs
+(`paletteActions`, `openPalette`, the camera verbs, `presetRows`) is state that
+lives inside `Canvas`. An `App`-owned frame would mean lifting all of it up or
+threading it back through a callback, buying a nicer diagram at the price of
+making `App` a state owner. So `Canvas` returns the `.shell` grid with the
+existing `.canvas` host as its middle cell; `.app` keeps its `padding: 38px 0 0`
+for the traffic lights. `hostRef` stays on `.canvas`, which is what keeps
+`useViewport`, `EdgeIndicators` and every `getBoundingClientRect()` measuring
+the right box. The rules below are unaffected: the shell's components are still
+presentational and still reach the app only through `CanvasActions`.
 
 ### The shell is a second view over one verb surface
 
