@@ -86,6 +86,32 @@ body {
 .shell__rail { border-right: 1px solid var(--border); }
 .shell__inspector { border-left: 1px solid var(--border); }
 
+/* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
+   to stay clickable or the region is unreachable without the chord. */
+.shell--rail-collapsed { --shell-rail-w: 22px; }
+.shell--inspector-collapsed { --shell-inspector-w: 22px; }
+
+.shell--rail-collapsed .shell__rail .shell__region-title,
+.shell--inspector-collapsed .shell__inspector .shell__region-title {
+  display: none;
+}
+
+.shell__rail-toggle,
+.shell__inspector-toggle {
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* NO width transition. A transition fires ResizeObserver every frame, which
+   re-runs assignTiers at 60Hz mid-animation — the cascade TerminalPanel's memo
+   and registry.version() both exist to block. The collapse is a discrete
+   width change, and the 250ms demote hold absorbs the single step. */
+
 .shell__region-title {
   padding: 10px 12px 6px;
   color: var(--muted);

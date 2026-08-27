@@ -4575,6 +4575,148 @@ app.whenReady().then(async () => {
         `opened=${opened} dismissed=${dismissed}`)
     }
 
+    // 74. COLLAPSE IS REAL LAYOUT, AND IT PERSISTS TO MAIN'S STORE.
+    //     Read back through settings:list rather than off the shell's own class,
+    //     for the same reason check 53 does: a toggle that only flips a local
+    //     boolean looks identical on screen and is gone on the next launch.
+    {
+      const before = await wc.executeJavaScript(
+        `document.querySelector('.canvas').getBoundingClientRect().width`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__rail-toggle').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(150)
+      const after = await wc.executeJavaScript(
+        `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const stored = await wc.executeJavaScript(
+        `window.canvas.settings.list().then((rows) =>
+           rows.find((r) => r.id === 'shell.railOpen').value)`)
+      ok('74 collapsing the rail widens the canvas and reaches main\'s store',
+        after > before + 100 && stored === false,
+        `before=${before} after=${after} stored=${stored}`)
+    }
+
+    // 74b. AUTO-REPEAT IS ONE GESTURE. A held Cmd+\ toggles once, not fifteen
+    //      times — the Cmd+K defect, which for a toggle means the rail's final
+    //      state depends on whether the user released on an odd or even repeat.
+    //      Like checks 7b and 33b this supplies repeat:true by hand, so it proves
+    //      the guard READS the flag and says nothing about who sets it.
+    {
+      const open = () => wc.executeJavaScript(
+        `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+      const start = await open()
+      await wc.executeJavaScript(`
+        for (let i = 0; i < 5; i++) {
+          window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: '\\\\', code: 'Backslash', metaKey: true, repeat: true, bubbles: true }))
+        }
+      `)
+      await sleep(200)
+      const afterRepeats = await open()
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '\\\\', code: 'Backslash', metaKey: true, repeat: false, bubbles: true }))
+      `)
+      await sleep(200)
+      const afterReal = await open()
+      ok('74b a held Cmd+\\ toggles the rail once, not once per repeat',
+        afterRepeats === start && afterReal !== start,
+        `start=${start} afterRepeats=${afterRepeats} afterReal=${afterReal}`)
+    }
+
+    // 74c. A SHELL CONTROL NEVER TAKES THE KEYBOARD.
+    //      The quietest failure this surface has: click a button, and the next
+    //      keystroke goes nowhere because DOM focus is on the button rather than
+    //      xterm's hidden textarea. focusedId ALSO has to survive — assignTiers
+    //      pins the focused panel live, and it is the Cmd+C target.
+    //
+    //      Two deliberate departures from the brief's draft of this check, both
+    //      forced by what the renderer actually exposes.
+    //
+    //      (1) There is NO route from this suite to `focusedId` itself.
+    //      `__m4aSelection()` — the draft's read — returns xterm's SELECTED TEXT
+    //      (a string), so `.focusedId` on it is `undefined` at both ends and the
+    //      draft's equality would have compared undefined to a panel id, failing
+    //      for a reason that has nothing to do with shell controls.
+    //      PRESET_CAPTURE is no substitute either: it answers with the focused
+    //      panel's SPEC (cwd/args/w/h), never its id — check 30 pins exactly
+    //      that shape. So the two halves are probed the way the suite already
+    //      probes them, with no new renderer hook minted for one check:
+    //        - the exact IDENTITY, from `document.activeElement.closest('.panel')`,
+    //          which is where a stolen keyboard shows up and is the same read
+    //          check 6 uses for "a body click focuses the panel";
+    //        - `focusedId` NOT BEING RELEASED, from `__m4aGrid() !== null`,
+    //          which resolves through focusedIdRef — check 41's own probe, and
+    //          its comment explains why a non-null answer means "the app still
+    //          believes a live panel is focused".
+    //      What that pair cannot distinguish, stated rather than implied: a
+    //      control that swapped focusedId to a DIFFERENT live panel while DOM
+    //      focus stayed put would satisfy both. No such swap is reachable from a
+    //      button that never calls onSelectPanel, and closing the gap would mean
+    //      a new __m8a* hook for a fact nothing else needs.
+    //
+    //      (2) There is no top-level `clickPanel(id)` helper in this file; the
+    //      real-OS-click idiom is copied in locally below, the way checks 60 and
+    //      73 define their own local helpers rather than reaching across scopes.
+    //      A DISPATCHED mousedown would not serve: it sets focusedId, but the
+    //      browser moves no DOM focus for a synthetic event, so `insideBefore`
+    //      would be false and the check would prove nothing about the half it
+    //      exists for.
+    {
+      // The real-click focus idiom, copied from clickPanelBody (~line 761) and
+      // narrowed to what this check needs: sendInputEvent, not a dispatched
+      // MouseEvent, because only a real OS-level click moves DOM focus into
+      // xterm's hidden textarea — which is exactly what a shell control must
+      // not steal.
+      const realClick = async (selector) => {
+        const box = await wc.executeJavaScript(
+          `(() => { const s = document.querySelector(${JSON.stringify(selector)});
+                    if (!s) return null;
+                    const r = s.getBoundingClientRect();
+                    return { x: Math.round(r.left + r.width / 2),
+                             y: Math.round(r.top + r.height / 2) } })()`)
+        if (!box) throw new Error(`74c: no element matched ${selector}`)
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        await sleep(150)
+      }
+      const id = await wc.executeJavaScript(
+        `document.querySelector('.panel__slot').closest('.panel').getAttribute('data-panel-id')`)
+      await realClick(`.panel[data-panel-id="${id}"] .panel__slot`)
+      // Both halves in one read, so they describe the same instant.
+      const probe = () => wc.executeJavaScript(`(() => {
+        const host = document.activeElement && document.activeElement.closest('.panel')
+        return {
+          inside: host !== null && host !== undefined,
+          id: host ? host.getAttribute('data-panel-id') : null,
+          focusedLive: window.__m4aGrid() !== null
+        }
+      })()`)
+      const before = await probe()
+      // A REAL click on the toggle, not the draft's dispatched pair. This is
+      // what makes the check capable of failing at all: a synthetic MouseEvent
+      // is untrusted, and Chromium runs no default action for one — so it
+      // never moves DOM focus to the button whether or not onMouseDown calls
+      // preventDefault(), and a dispatched-event version of this check passes
+      // identically against the very regression it exists to catch. Confirmed
+      // by deleting the preventDefault and watching this go red.
+      await realClick('.shell__rail-toggle')
+      const after = await probe()
+      ok('74c a shell control takes neither focusedId nor DOM focus',
+        before.inside === true && after.inside === true &&
+          before.id === id && after.id === id &&
+          before.focusedLive === true && after.focusedLive === true,
+        `panel=${id} before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
+      // What 74/74b/74c LEAVE BEHIND, in the spirit of 72's own closing note:
+      // the one-panel, one-workspace world is unchanged, but the rail is now
+      // COLLAPSED and `shell.railOpen` is false in main's store (74 collapsed
+      // it, 74b's one real chord reopened it, 74c's button click collapsed it
+      // again). The inspector is untouched and still open. Anything appended
+      // below that measures the canvas's width — or clicks at a screen point
+      // captured before this block — must account for the narrower rail.
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

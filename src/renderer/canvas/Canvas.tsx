@@ -37,6 +37,7 @@ import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/p
 import { TopBar } from '../shell/TopBar'
 import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
+import { useShellChrome } from '../shell/useShellChrome'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -1415,6 +1416,13 @@ export function Canvas({
     })
   }, [settingRows])
 
+  // Rail and inspector visibility, persisted through main's settings store and
+  // chorded on Cmd+\ / ⇧Cmd+\. Sits beside glowEnabled and pipsEnabled above
+  // because it is the same kind of state and reads its initial value the same
+  // way — settings:list at mount, not settingRows, which only loads when the
+  // palette opens.
+  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen })
+
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
@@ -1947,9 +1955,13 @@ export function Canvas({
   }
 
   return (
-    <div className="shell" onMouseDownCapture={onMouseDownCapture}>
+    <div
+      className={`shell${chrome.railOpen ? '' : ' shell--rail-collapsed'}${
+        chrome.inspectorOpen ? '' : ' shell--inspector-collapsed'}`}
+      onMouseDownCapture={onMouseDownCapture}
+    >
       <TopBar />
-      <SideRail />
+      <SideRail onToggle={chrome.toggleRail} />
       <div
         className="canvas"
         ref={hostRef}
@@ -2007,7 +2019,7 @@ export function Canvas({
           />
         )}
       </div>
-      <Inspector />
+      <Inspector onToggle={chrome.toggleInspector} />
     </div>
   )
 }
