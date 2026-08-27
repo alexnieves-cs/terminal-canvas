@@ -42,7 +42,7 @@ work is done. Individual suites:
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value: `node-pty` unpacked from the asar and the pattern depth-independent (1–2), `asar` actually on (3), the `files` globs (4–5), app identity and output dir (6–7), signing explicitly *decided* rather than unmentioned (8), targets and architecture (9), and the arch being a parameter rather than a constant (10) |
 | `verify:packaged` | real Electron, **not in `npm run verify`** | 9 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped `PATH`, a throwaway `--user-data-dir` and a scratch `TC_TMUX_SOCKET`. Asserts the app survives startup (3 — the asar/`node-pty` proof), reports itself packaged (4), recovered a PATH launchd never gave it (5 — the first time `shell-env.ts`'s reason for existing has ever been observed), used the scratch socket (6), actually used the throwaway `--user-data-dir` rather than silently falling back to the real one (7), named a backend and a reason (8), and actually spawned a PTY (9). Kept out of the default chain because it rebuilds native modules and reaches electron-builder's cache — minutes, plus a network dependency — and the repo's one green-or-not signal must stay fast and offline. It is the **pre-release gate**; run it before cutting a build |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
-| `verify:pty-manager` | Electron as node | 23 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). M6a adds 16/16b: a fresh session reports `reattached: false` and the same panel spawned again — after the first one is still alive — reports `reattached: true`, the two halves that only separate a `has-session` probe taken *before* the spawn from one taken after (see "`reattached` costs a probe" below). M6c adds 17–19, the wiring proof that `agent-state.ts`'s pure state machine actually reaches `IPC.AGENT_STATE` through the real manager rather than sitting unused beside it: plain output on a fresh session produces exactly one `busy` event (17), a real OSC window title produces no `wants-you` at all — this suite runs the direct backend, so it is the one place a tmux-free machine can see the OSC trap NOT fire (18), and a real bell followed by a real write moves the panel to `wants-you` and then back off it (19). Skipped loudly, never silently, when no tmux binary is found |
+| `verify:pty-manager` | Electron as node | 24 checks (the last check number is 19; see the lettered sub-checks below): the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). M6a adds 16/16b: a fresh session reports `reattached: false` and the same panel spawned again — after the first one is still alive — reports `reattached: true`, the two halves that only separate a `has-session` probe taken *before* the spawn from one taken after (see "`reattached` costs a probe" below). M6c adds 3b and 17–19. Check 3b is the guard half: a kill()'d session emits no agent-state `exited`, which it did until a whole-branch review — see "`starting` is sent directly, and the killed exit is not sent at all" below for the recycled-id failure that produced. 17–19 are the wiring proof that `agent-state.ts`'s pure state machine actually reaches `IPC.AGENT_STATE` through the real manager rather than sitting unused beside it: plain output on a fresh session produces exactly one `busy` event, COUNTED after the stream has demonstrably settled — the check waits for the idle transition, which only a tick that observed the ABSENCE of output can produce, then waits one further tick before counting — which is what separates the emit-only-on-change dedupe from an implementation emitting on every 16ms flush and every 500ms tick, the 60Hz cascade the design exists to prevent; the fixture emits once and nothing writes to it, so there is no legitimate busy→idle→busy round trip for the count to mistake (17), a real OSC window title produces no `wants-you` at all — this suite runs the direct backend, so it is the one place a tmux-free machine can see the OSC trap NOT fire (18), and a real bell followed by a real write moves the panel to `wants-you` and then back off it (19). Skipped loudly, never silently, when no tmux binary is found. The count is 24 while the last number is 19, because of the lettered sub-checks `3b`, `14b`, `14c`, `14d` and `16b` |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 20 channels as of M6c, the newest being `agent:acknowledge` |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
@@ -1267,9 +1267,14 @@ production configuration — taken whenever tmux is absent, too old, or its own
 server fails to start (see "The probe checks that the SERVER starts" above) —
 so the scanner earns its place on three separate grounds even though tmux
 absorbs the one escape sequence it was originally written to defang: the direct
-backend is real and shipped; the stream under tmux still carries OSC and DCS
-that **tmux itself** emits (more on this below); and it is a small, pure module
-that costs the cheapest verify tier the repo has.
+backend is real and shipped; the stream under tmux **may** still carry OSC and
+DCS that **tmux itself** emits (more on this below — and it is the weakest of
+the three grounds, deliberately hedged: `buildTmuxConf` sets `prefix None` and
+leaves `mouse` off, so tmux's own copy path — the thing that would emit OSC 52
+under `set-clipboard external` — is not reachable from inside this app at all,
+which leaves OSC 8 hyperlink forwarding on tmux ≥ 3.4 as the only likely
+instance, and that too is unmeasured); and it is a small, pure module that
+costs the cheapest verify tier the repo has.
 
 What this does **not** establish, so a later note does not overclaim it: "tmux
 absorbs OSC" is not a general fact, only a fact about the two sequences named
@@ -1309,6 +1314,47 @@ disagree on purpose and see which value wins. Same limit this file already
 records for check 32 (the default-preset push) and the auto-repeat checks (what
 `repeat: true` proves versus what actually sets the flag) — a note for whoever
 next touches this path, not a defect in the check as it stands.
+
+**Hazard for M6d: `selectAndRaise` does not acknowledge (`Canvas.tsx`'s
+`goToPanel`, `onSelectPanel`).** Acknowledgement is FOCUS, not selection — the
+renderer sends `agent:acknowledge` from the focus path, and `goToPanel`
+deliberately calls `centreOn` + `selectAndRaise`, the half of `onSelectPanel`
+factored out precisely so navigating cannot wake a dormant panel (see
+"Navigating must not wake" above). M6d's "jump to the next panel that wants
+you" key is expected to reuse that same verb, and the two rules collide in a way
+that is invisible: `.panel--selected` is declared AFTER every
+`.panel--agent-*` rule and wins on purpose (selection is where the user is), so
+jumping to a panel would immediately HIDE its amber border while main still
+holds `wants-you` — the user lands on the panel the key promised and sees
+nothing telling them why, and the panel stays in the attention set, so the next
+press may well jump straight back to it. Whoever builds that key has to decide
+explicitly whether landing on a panel acknowledges it (in which case the jump
+needs the focus half too, and must then answer what happens to a DORMANT
+target) or whether the selection ring should yield to `wants-you` for the panel
+the jump just landed on. Not a bug in M6c: nothing in this milestone jumps.
+
+**`starting` is sent directly, and the killed exit is not sent at all
+(`pty-manager.ts`'s `create` and `onExit`).** Two exceptions to "applyEvent
+sends on a change", and each exists because the general rule gets that one case
+exactly backwards. `initialDetector` is BORN in `starting`, so nothing ever
+*enters* it and a change-gated send would never emit it — the state would be
+designed, styled (`.panel--agent-starting`, `.panel__card--agent-starting`),
+documented in the README, and unreachable on the wire, which is the whole
+window that matters: a real `claude` takes seconds to boot and that silence is
+exactly when a user wants to see something happening. `create` therefore sends
+it directly, once, after the session is in the map. At the other end, the
+`exit` event's SEND obeys the same `session.killed` guard `PTY_EXIT` does: an
+exit we asked for lands milliseconds after `kill()` returned, by which time the
+renderer has already run `clearAgentState(id)` at its dispose site, so an
+unguarded `'exited'` RE-ADDS the entry after the cleanup — the map then grows
+for the life of the renderer and a recycled id inherits a dead panel's border,
+the failure `clearAgentState`'s own comment claims to prevent. The recycled id
+is reachable: `onReset` disposes everything and installs `firstRunPanels()`,
+whose id is the constant `FIRST_RUN_ID`. Only the send is guarded — the
+TRANSITION still runs (`applyEvent`'s `mute` parameter, whose one caller this
+is), because `onExit`'s closure keeps the session object alive after the map
+entry is gone and a detector stranded in `busy` there could still emit for a
+panel nobody can see; `'exited'` being terminal is what makes that safe.
 
 **The idleness tick is a second timer on purpose (`pty-manager.ts`'s
 `IDLE_TICK_MS`, `startIdleTick`).** The existing flush timer only runs while
