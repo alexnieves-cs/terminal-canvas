@@ -76,6 +76,11 @@ ok(4, scanWhole(ESC + ']0;t' + BEL + 'after' + BEL).bells === 1, 'bell after OSC
 // 5. DCS bodies are skipped too, and are terminated ONLY by ST.
 ok(5, scanWhole(ESC + 'Psomething' + BEL + 'more' + ST).bells === 0, 'DCS body swallows BEL')
 
+// 5b. A real bell AFTER a DCS body — the mirror of check 4 on the DCS branch.
+//     Without this, a regression that broke dcs-esc -> text on ST while
+//     leaving the OSC exit intact would pass every other check here.
+ok('5b', scanWhole(ESC + 'Psomething' + ST + 'after' + BEL).bells === 1, 'bell after DCS still rings')
+
 // 6. Split one byte at a time: the trap must still not ring.
 ok(6, scanSplit(ESC + ']0;my title' + BEL).bells === 0, 'split OSC rings zero')
 
