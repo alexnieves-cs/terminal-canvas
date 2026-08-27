@@ -900,6 +900,43 @@ const M = V.EDGE_INDICATOR_MARGIN
     out === null && inn !== null, `0.25 -> ${JSON.stringify(out)}, 2.75 -> ${JSON.stringify(inn)}`)
 }
 
+// 66-70. nextAttentionId: which panel Cmd+J visits next. Pure, and separated
+//     from the store on purpose — every failure here is a keypress that lands
+//     somewhere the user did not expect, which reads as the key being flaky
+//     rather than as an off-by-one.
+const Q = ['n1', 'n2', 'n3']
+
+// 66. Nothing wants you: the key does nothing at all. Not "jump to the first
+//     panel", which would make Cmd+J a random-navigation key on a quiet canvas.
+ok('66 an empty queue has no next id',
+  V.nextAttentionId([], null, 1) === null && V.nextAttentionId([], 'n1', -1) === null)
+
+// 67. No cursor yet — the first press of the run. Forward starts at the head
+//     (the panel that has been waiting longest, since the queue is in entry
+//     order); backward starts at the tail.
+ok('67 with no cursor, forward starts at the head and backward at the tail',
+  V.nextAttentionId(Q, null, 1) === 'n1' && V.nextAttentionId(Q, null, -1) === 'n3')
+
+// 68. It wraps at BOTH ends. A cycle that stops at the last entry strands the
+//     user on one panel with no indication the key is still working.
+ok('68 the cycle wraps in both directions',
+  V.nextAttentionId(Q, 'n3', 1) === 'n1' && V.nextAttentionId(Q, 'n1', -1) === 'n3')
+
+// 69. The cursor names a panel that has since left the queue — acknowledged,
+//     closed, or exited between two presses. This is the common case, not an
+//     exotic one: visiting a panel is what makes the user deal with it. It
+//     must restart from the end the direction implies rather than returning
+//     null, which would make the second press a silent no-op.
+ok('69 a stale cursor restarts the cycle rather than dead-ending',
+  V.nextAttentionId(Q, 'gone', 1) === 'n1' && V.nextAttentionId(Q, 'gone', -1) === 'n3')
+
+// 70. One waiting panel, and the cursor is already on it. Returning the same
+//     id is right: the camera re-frames the panel the user asked for. Skipping
+//     it (returning null) would make Cmd+J do nothing in the single most
+//     common state this feature has.
+ok('70 a single-entry queue keeps returning that entry',
+  V.nextAttentionId(['n1'], 'n1', 1) === 'n1' && V.nextAttentionId(['n1'], 'n1', -1) === 'n1')
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
