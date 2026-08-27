@@ -3166,7 +3166,24 @@ app.whenReady().then(async () => {
         const headers = await wc.executeJavaScript(`
           [...document.querySelectorAll('.palette__section')].map((h) => h.textContent.trim())
         `)
-        const ORDER = ['Panels', 'New panel', 'Prompts', 'Canvas', 'Manage']
+        // Restates palette-model.ts's SECTIONS (by label) and MUST move with
+        // it — this is the same defect class CLAUDE.md records verify:palette
+        // check 30 being rewritten to fix: a restated list goes stale the
+        // moment a section is added, and the check then fails for a reason
+        // that has nothing to do with the section-ordering property it
+        // exists to prove. This exact staleness is what happened here: M7
+        // added 'workspace' to SECTIONS (between 'prompt' and 'canvas') and
+        // an unconditional 'New workspace…' row (group: 'workspace', no
+        // hiddenAtRest) that renders its header even with zero workspaces —
+        // ORDER did not move with it, and 'Settings' had already been
+        // missing since M6b for the same reason, silently harmless only
+        // because every settings row is hiddenAtRest and nothing unconditional
+        // renders that header at rest. Kept as a restated array rather than
+        // importing SECTIONS itself: this suite (unlike verify-palette.cjs)
+        // loads the built renderer rather than bundling palette-model.ts, so
+        // reaching the real SECTIONS value here would mean adding plumbing
+        // this task was told not to add.
+        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Manage']
         const unique = headers.length === new Set(headers).size
         const ordered = headers.join(',') ===
           ORDER.filter((label) => headers.includes(label)).join(',')
