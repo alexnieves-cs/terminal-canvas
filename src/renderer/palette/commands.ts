@@ -1,4 +1,10 @@
 import type { Command } from './palette-model'
+// Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
+// Erased by esbuild, so it costs verify:palette nothing that the bundle
+// otherwise has no @shared import at all (the alias is wired pre-emptively
+// for exactly this day).
+import type { SettingRow } from '@shared/ipc-contract'
+import type { SettingValue } from '@shared/settings-schema'
 
 /**
  * The palette's command list, built from PLAIN DATA and callbacks.
@@ -48,12 +54,28 @@ export interface PaletteActions {
   beginRenamePanel(id: string, currentTitle: string): void
   resetCanvas(): void
   zoomToFit(): void
+  /**
+   * Task 7 implements the real wiring (main's settings:set, then a reload of
+   * the row list from the answer it gives back — never an optimistic local
+   * flip, because main can refuse an id or a type). Optional here rather than
+   * required: Canvas.tsx and Palette.tsx's prop plumbing are Task 7's files,
+   * not this task's, and a required member would force a stub into both
+   * before either actually has settings to wire.
+   */
+  toggleSetting?(id: string, value: SettingValue): void
 }
 
 export interface PaletteContext {
   presets: PresetRow[]
   prompts: PromptRow[]
   panels: PanelRow[]
+  /**
+   * Empty until Task 7 loads it from `window.canvas.settings.list()`. Optional
+   * for the same reason toggleSetting is optional above — commands.ts can
+   * build the rows the moment a settings list exists, without Canvas.tsx or
+   * Palette.tsx having to carry a prop for a feature they don't populate yet.
+   */
+  settings?: SettingRow[]
   /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and
@@ -241,6 +263,35 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     run: () => actions.resetCanvas()
   })
 
+  // --- Settings ------------------------------------------------------------
+  //
+  // hiddenAtRest, like every administration row: M6c/M6d add more toggles, and
+  // the resting list stays the ~8 rows M6p sized it to rather than growing one
+  // row per setting. The door below is the always-visible way in.
+
+  for (const setting of ctx.settings ?? []) {
+    // Only booleans get a row in M6b, because only booleans exist. An enum or
+    // number needs an input mode rather than a toggle, and building that
+    // before a setting needs it would be an abstraction with no customer —
+    // the same trap ideas-backlog #11 warns about for the schema itself.
+    if (setting.type !== 'boolean') continue
+    const on = setting.value === true
+    out.push({
+      id: `setting.${setting.id}`,
+      title: `${setting.label}: ${on ? 'On' : 'Off'}`,
+      subtitle: setting.description,
+      // The synonyms, where the matcher can see them and the row cannot show
+      // them. Without this the row is findable only by its own label — and
+      // ideas-backlog #11's whole argument for a searchable settings surface
+      // is that a user looking for the theme types "dark", not "theme".
+      searchText: setting.keywords.join(' '),
+      group: 'setting',
+      scope: 'settings',
+      hiddenAtRest: true,
+      run: () => actions.toggleSetting?.(setting.id, !on)
+    })
+  }
+
   // --- Manage --------------------------------------------------------------
   //
   // Everything below is hiddenAtRest except the two doors, and the doors are
@@ -273,6 +324,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       ctx.prompts.length === 0 ? REASON_NO_PROMPTS : undefined
     )
   )
+  {
+    const settingCount = (ctx.settings ?? []).length
+    out.push({
+      id: 'manage.settings',
+      title: 'Manage settings…',
+      subtitle: `${settingCount} setting${settingCount === 1 ? '' : 's'}`,
+      group: 'manage',
+      entersScope: 'settings',
+      run: () => {}
+    })
+  }
 
   for (const preset of ctx.presets) {
     out.push(

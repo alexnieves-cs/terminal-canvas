@@ -205,7 +205,8 @@ const spyActions = () => {
     deletePrompt: record('deletePrompt'),
     beginRenamePanel: record('beginRenamePanel'),
     resetCanvas: record('resetCanvas'),
-    zoomToFit: record('zoomToFit')
+    zoomToFit: record('zoomToFit'),
+    toggleSetting: record('toggleSetting')
   }
 }
 
@@ -213,6 +214,7 @@ const ctx = (over = {}) => ({
   presets: [],
   prompts: [],
   panels: [],
+  settings: [],
   capturedId: null,
   hasSelection: false,
   actions: spyActions(),
@@ -660,6 +662,44 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   ok('50 a scope shows its own rows, hidden ones included, and nothing else',
     inside.join(',') === 'preset.default.u1,preset.delete.u1,preset.rename.u1,preset.spawn.u1',
     inside.join(','))
+}
+
+// 51-54 — M6b. 52 is the check that justifies the whole searchText field:
+//     ideas-backlog #11's argument for a searchable settings surface is that a
+//     user looking for the theme types "dark", so a setting findable only by
+//     its own label is a setting most users will never find.
+const SETTING = {
+  id: 'restore.camera', label: 'Restore camera position',
+  description: 'Return the canvas to the pan and zoom you left it at.',
+  keywords: ['zoom', 'viewport'], type: 'boolean', value: true,
+  category: 'Restore on launch'
+}
+{
+  const row = byId(P.buildCommands(ctx({ settings: [SETTING] })), 'setting.restore.camera')
+  ok('51 a setting becomes a runnable row showing its label and description',
+    row !== undefined && row.disabledReason === undefined &&
+    row.title.includes('Restore camera position') &&
+    row.subtitle.includes('Return the canvas'))
+}
+{
+  const rows = P.filterCommands(P.buildCommands(ctx({ settings: [SETTING] })), 'zoom')
+  ok('52 a setting is findable by a KEYWORD that appears nowhere in the row',
+    rows.some((r) => r.id === 'setting.restore.camera'),
+    rows.map((r) => r.id).join(','))
+}
+{
+  const c = ctx({ settings: [SETTING] })
+  byId(P.buildCommands(c), 'setting.restore.camera').run()
+  ok('53 running a boolean setting row toggles it to the opposite value',
+    c.actions.calls[0][0] === 'toggleSetting' &&
+    c.actions.calls[0][1] === 'restore.camera' &&
+    c.actions.calls[0][2] === false)
+}
+{
+  const off = { ...SETTING, value: false }
+  const row = byId(P.buildCommands(ctx({ settings: [off] })), 'setting.restore.camera')
+  ok('54 the row says which way the toggle currently sits',
+    row.title.includes('Off') || row.title.includes('off'), row.title)
 }
 
 const failed = results.filter((r) => !r.pass)

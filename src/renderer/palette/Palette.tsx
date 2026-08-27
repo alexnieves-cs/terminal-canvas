@@ -63,7 +63,8 @@ export interface PaletteProps {
 
 const SCOPE_LABEL: Record<PaletteScope, string> = {
   presets: 'Presets',
-  prompts: 'Prompts'
+  prompts: 'Prompts',
+  settings: 'Settings'
 }
 
 const sectionLabel = (id: SectionId): string =>
