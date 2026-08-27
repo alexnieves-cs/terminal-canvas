@@ -351,6 +351,14 @@ app.whenReady().then(async () => {
       ),
     savePrompt: () => {},
     removePrompt: () => false
+  }, () => {
+    // This entry point is its own Electron process with no application menu
+    // at all — createMenu()/rebuildMenu() belong to main/index.ts, which this
+    // harness deliberately does not run (see the hand-wiring note above). The
+    // no-op exists only to satisfy registerIpcHandlers' signature: settings:set
+    // still has to reach a callable fifth argument or a real settings-palette
+    // exercise here would throw "rebuildMenu is not a function" instead of
+    // testing what it means to.
   })
 
   // The same listener createWindow() installs, calling the same production
