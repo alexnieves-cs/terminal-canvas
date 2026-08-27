@@ -29,6 +29,14 @@ import { createHistory, pushHistory, undoHistory, redoHistory, type History } fr
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
+// M8a. The frame is rendered here rather than in App.tsx because every verb it
+// will eventually need (paletteActions, the camera verbs, presetRows) is state
+// that lives inside Canvas — an App-owned frame would mean lifting all of it up
+// or threading it back through a callback, making App a state owner in exchange
+// for a tidier diagram.
+import { TopBar } from '../shell/TopBar'
+import { SideRail } from '../shell/SideRail'
+import { Inspector } from '../shell/Inspector'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -1931,63 +1939,68 @@ export function Canvas({
   }
 
   return (
-    <div
-      className="canvas"
-      ref={hostRef}
-      onMouseDownCapture={onMouseDownCapture}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-    >
+    <div className="shell">
+      <TopBar />
+      <SideRail />
       <div
-        className="world"
-        style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+        className="canvas"
+        ref={hostRef}
+        onMouseDownCapture={onMouseDownCapture}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
       >
-        {panels.map((panel) => {
-          const session = registry.get(panel.rect.id)
-          if (!session) return null
-          return (
-            <TerminalPanel
-              key={panel.rect.id}
-              session={session}
-              version={version}
-              rect={panel.rect}
-              z={panel.z}
-              title={panel.title}
-              selected={panel.rect.id === selectedId}
-              onSelect={onSelectPanel}
-              onSlotMount={onSlotMount}
-              onSlotUnmount={onSlotUnmount}
-              onFocus={onFocusPanel}
-              onBeginDrag={onBeginDrag}
-              onClose={onClosePanel}
-              glow={glowEnabled}
-            />
-          )
-        })}
+        <div
+          className="world"
+          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+        >
+          {panels.map((panel) => {
+            const session = registry.get(panel.rect.id)
+            if (!session) return null
+            return (
+              <TerminalPanel
+                key={panel.rect.id}
+                session={session}
+                version={version}
+                rect={panel.rect}
+                z={panel.z}
+                title={panel.title}
+                selected={panel.rect.id === selectedId}
+                onSelect={onSelectPanel}
+                onSlotMount={onSlotMount}
+                onSlotUnmount={onSlotUnmount}
+                onFocus={onFocusPanel}
+                onBeginDrag={onBeginDrag}
+                onClose={onClosePanel}
+                glow={glowEnabled}
+              />
+            )
+          })}
+        </div>
+        {pipsEnabled && (
+          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
+        )}
+        <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
+        {palette.open && (
+          <Palette
+            controller={palette}
+            actions={paletteActions}
+            presets={presetRows}
+            prompts={promptRows}
+            panels={panelRows}
+            settings={settingRows}
+            workspaces={workspaceRows}
+            // The renderer's own attention set (agent-state-store.ts), not a
+            // second derivation: main never learns "which panels are
+            // wants-you" as a set, only individual agent:state transitions,
+            // and asking it to recompute one here would make it a second
+            // author of a fact this side already folds correctly.
+            attentionIds={waitingIds}
+            hasSelection={hasSelection()}
+            inputMode={inputMode}
+          />
+        )}
       </div>
-      {pipsEnabled && (
-        <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
-      )}
-      <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
-      {palette.open && (
-        <Palette
-          controller={palette}
-          actions={paletteActions}
-          presets={presetRows}
-          prompts={promptRows}
-          panels={panelRows}
-          settings={settingRows}
-          workspaces={workspaceRows}
-          // The renderer's own attention set (agent-state-store.ts), not a
-          // second derivation: main never learns "which panels are
-          // wants-you" as a set, only individual agent:state transitions,
-          // and asking it to recompute one here would make it a second
-          // author of a fact this side already folds correctly.
-          attentionIds={waitingIds}
-          hasSelection={hasSelection()}
-          inputMode={inputMode}
-        />
-      )}
+      <Inspector />
     </div>
   )
 }

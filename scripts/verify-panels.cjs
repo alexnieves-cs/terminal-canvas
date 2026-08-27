@@ -4478,6 +4478,50 @@ app.whenReady().then(async () => {
       // none of the earlier fixtures (w1, w2/'school', w9/w9p1) still around.
     }
 
+    // 72. THE FRAME INSETS THE CANVAS, and the canvas survives being inset.
+    //
+    //     Two assertions, and the second is the one worth having. That the
+    //     canvas got narrower is nearly tautological once a grid exists. That a
+    //     panel is STILL PROMOTED afterwards is not: a narrower canvas host is a
+    //     smaller cull region, assignTiers legitimately demotes on it, and a
+    //     frame that quietly demoted the panel the user was looking at would
+    //     render as a card with no error anywhere. The .xterm probe is the same
+    //     "is it still live" proof check 51 makes for the spawn cascade.
+    //
+    //     The Cmd+N is not decoration: check 71 above deletes every fixture
+    //     workspace and leaves a one-workspace, ZERO-panel world behind (its
+    //     own closing comment says so), so this check has to mint the panel
+    //     whose promotion it is about to assert. Spawning it here also makes
+    //     the promotion claim stronger than inheriting a survivor would: the
+    //     panel is created at the camera's centre on the ALREADY-inset canvas.
+    {
+      await zoomTo(wc, 'n')
+      await settle()
+      const geom = await wc.executeJavaScript(`(() => {
+        const shell = document.querySelector('.shell')
+        const canvas = document.querySelector('.canvas')
+        const rail = document.querySelector('.shell__rail')
+        const inspector = document.querySelector('.shell__inspector')
+        if (!shell || !canvas || !rail || !inspector) return null
+        const c = canvas.getBoundingClientRect()
+        return {
+          canvasWidth: c.width,
+          windowWidth: window.innerWidth,
+          railWidth: rail.getBoundingClientRect().width,
+          inspectorWidth: inspector.getBoundingClientRect().width,
+          canvasLeft: c.left
+        }
+      })()`)
+      const live = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel .xterm').length`)
+      ok('72 the shell frame insets the canvas and leaves a panel promoted',
+        geom !== null && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
+          geom.canvasWidth < geom.windowWidth - 80 &&
+          geom.canvasLeft >= geom.railWidth - 1 &&
+          live > 0,
+        JSON.stringify(geom) + ` live=${live}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
