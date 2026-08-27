@@ -890,6 +890,63 @@ const WS = [
     `title=${school && school.title} waiting=${school && school.waiting} haystack=${hay}`)
 }
 
+// 65-65c. doorIndex — the row that leads INTO a scope, which is where the
+//     selection has to land when the user pops back OUT of one. Before this,
+//     leaving a drill-in re-seeded from bestMatchIndex, and with the empty
+//     query a drill-in leaves behind every score ties at 0 — so the highlight
+//     jumped to the first row of the first section and the user lost the door
+//     they had just walked through. Anchoring on `entersScope` rather than on
+//     a remembered row id is what makes this a pure lookup over rows already
+//     in hand, and is what lets it answer the ⚙ top-bar path too, where the
+//     palette opened straight into a scope and no door was ever traversed.
+
+// 65. The door for the scope being left is found in the resting list.
+//     Asserted by ID, never by index: an index here would re-encode SECTIONS'
+//     order into this file, which is exactly the restatement check 30 was
+//     rewritten to stop doing.
+{
+  const rows = P.filterCommands(P.buildCommands(ctx({ settings: [SETTING] })), '', null)
+  const i = P.doorIndex(rows, 'settings')
+  ok('65 doorIndex finds the door that leads into a scope',
+    i >= 0 && rows[i].id === 'manage.settings' && rows[i].entersScope === 'settings',
+    `i=${i} id=${i >= 0 ? rows[i].id : 'none'}`)
+}
+
+// 65b. -1 when the door is not in the list, which is the entire contract the
+//      caller's `>= 0` guard rests on — without it the caller would index
+//      rows[-1] and seed the selection to undefined. Two fixtures in one
+//      assertion, because the door is absent for two different reasons:
+//      inside a scope it is filtered out (doors carry no `scope` of their
+//      own, check 49), and under a query it cannot match it is ranked out.
+{
+  const all = P.buildCommands(ctx({ settings: [SETTING] }))
+  const inScope = P.filterCommands(all, '', 'settings')
+  const unmatched = P.filterCommands(all, 'zzz', null)
+  ok('65b doorIndex is -1 when the door is not in the list',
+    P.doorIndex(inScope, 'settings') === -1 && P.doorIndex(unmatched, 'settings') === -1,
+    `inScope=${P.doorIndex(inScope, 'settings')} unmatched=${P.doorIndex(unmatched, 'settings')}`)
+}
+
+// 65c. A DISABLED door is not returned. This is not hypothetical: entering a
+//      scope needs a runnable door, but prompt:list re-fires while the
+//      palette is open (Canvas.tsx's reloadPrompts tracks capturedId), so the
+//      prompts door can go disabled UNDER a user already inside its scope.
+//      Seeding the selection there on the way out makes Enter a dead key —
+//      the one thing bestMatchIndex's own doc comment refuses to do.
+//
+//      Both halves in ONE assertion on purpose: the row must be PRESENT and
+//      still not returned. Asserting only the -1 would pass against an
+//      implementation that finds nothing merely because the row is missing,
+//      which says nothing at all about the disabled check.
+{
+  const rows = P.filterCommands(P.buildCommands(ctx({ prompts: [] })), '', null)
+  const door = byId(rows, 'manage.prompts')
+  ok('65c doorIndex skips a door that is present but disabled',
+    door !== undefined && door.disabledReason !== undefined &&
+      P.doorIndex(rows, 'prompts') === -1,
+    `present=${door !== undefined} reason=${door && door.disabledReason} i=${P.doorIndex(rows, 'prompts')}`)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

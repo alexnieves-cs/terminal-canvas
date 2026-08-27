@@ -11,6 +11,7 @@ import {
 import {
   SECTIONS,
   bestMatchIndex,
+  doorIndex,
   filterCommands,
   splitHighlight,
   stepRunnable,
@@ -181,14 +182,48 @@ export function Palette(props: PaletteProps): JSX.Element {
   // SCORE or every search lands the highlight somewhere unrelated. For an
   // empty query every score ties at 0 and this degenerates to exactly
   // firstRunnable, so the resting list still selects its first usable row.
+  // POPPING a scope is the one re-seat that does not want bestMatchIndex. The
+  // selection returns to the door it came in through instead — see doorIndex.
+  // Without it a drill-in is a one-way trip: the query is empty on the way out
+  // (runRow cleared it going in), every score ties at 0, and bestMatchIndex
+  // degenerates to firstRunnable, dropping the user at the top of the Panels
+  // section with no idea what moved them. Three things about this branch read
+  // as bugs unless they are written down:
+  //
+  //   - `scope === null` is technically redundant, since doors carry no
+  //     `scope` of their own and so are filtered out of every scoped list
+  //     (verify:palette 49) — a scope-to-scope move would find nothing anyway.
+  //     Kept because it states the DIRECTION this branch is for.
+  //   - A pop with a live query is deliberately a no-op here. Escape and
+  //     ArrowLeft both leave the query alone, so typing "del" inside Presets
+  //     and escaping finds no door (doorIndex returns -1, since that door
+  //     cannot match "del") and falls through to bestMatchIndex — correctly:
+  //     a query the user is still holding is a stronger statement of intent
+  //     than the door they left. Backspace is gated on an empty query and so
+  //     always gets the door.
+  //   - It also fires, inertly, on the input-mode round trip: Canvas.tsx's
+  //     beginRenamePreset and friends call closePalette() then openPalette()
+  //     inside one handler, which batches to "still open, scope now null"
+  //     with no unmount. Nothing reads the index there — the list is not
+  //     rendered while inputMode is set, selectedRef is null so the scroll
+  //     effect no-ops, and Enter branches to inputMode.submit before runRow
+  //     is reachable.
   useEffect(() => {
     const reseat = prevQueryRef.current !== query || prevScopeRef.current !== scope
     const previous = prevRowsRef.current
+    // Read BEFORE the ref is overwritten below: this is the scope being left.
+    const leaving = prevScopeRef.current
     prevQueryRef.current = query
     prevScopeRef.current = scope
     prevRowsRef.current = rows
     setIndex((i) => {
-      if (reseat) return bestMatchIndex(rows, query)
+      if (reseat) {
+        if (leaving !== null && scope === null) {
+          const door = doorIndex(rows, leaving)
+          if (door >= 0) return door
+        }
+        return bestMatchIndex(rows, query)
+      }
       const selectedId = i >= 0 ? previous[i]?.id : undefined
       const moved = selectedId === undefined ? -1 : rows.findIndex((r) => r.id === selectedId)
       return moved >= 0 && rows[moved].disabledReason === undefined ? moved : bestMatchIndex(rows, query)

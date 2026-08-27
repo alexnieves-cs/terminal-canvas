@@ -216,6 +216,40 @@ export function bestMatchIndex(commands: Command[], query: string): number {
 }
 
 /**
+ * The row that leads INTO `scope`, or -1 — which is where the selection has to
+ * land when the user pops back OUT of that scope.
+ *
+ * Popping used to re-seed from bestMatchIndex, and a pop leaves an EMPTY query
+ * behind (runRow clears it on the way in), so every score ties at 0 and that
+ * degenerates to firstRunnable: the top of the Panels section. The user walked
+ * through a door, came back out somewhere else entirely, and Enter was then
+ * pointed at a command they never chose — the silent-selection-move class this
+ * file's callers already guard three other doors against.
+ *
+ * The anchor is `entersScope` rather than a remembered row id, which buys two
+ * things a ref cannot. It is a pure lookup over rows the caller already holds,
+ * so it is testable in the cheapest tier the repo has; and it answers the case
+ * where no door was ever traversed at all — M8a's top-bar gear opens the
+ * palette straight into the settings scope, and popping from there lands on
+ * Manage settings… by the same one rule rather than by a second one.
+ *
+ * `disabledReason === undefined` is load-bearing, not symmetry with the rest of
+ * this file. Entering a scope needs a runnable door, but prompt:list re-fires
+ * while the palette is open (Canvas.tsx's reloadPrompts tracks capturedId), so
+ * the prompts door can go disabled UNDER a user already inside its scope.
+ * Seeding the selection there on the way out makes Enter a dead key — exactly
+ * what bestMatchIndex above refuses to do, and for the same reason.
+ *
+ * `scope` is deliberately NOT nullable. An absent `entersScope` is `undefined`,
+ * so `r.entersScope === null` is never true: a nullable parameter would return
+ * -1 for every null caller, silently and with nothing for the compiler to say.
+ * Callers narrow instead.
+ */
+export function doorIndex(rows: Command[], scope: PaletteScope): number {
+  return rows.findIndex((r) => r.entersScope === scope && r.disabledReason === undefined)
+}
+
+/**
  * The next runnable row in `delta`'s direction, wrapping.
  *
  * Returns -1 when nothing is runnable, which the view must tell apart from

@@ -3407,6 +3407,122 @@ app.whenReady().then(async () => {
         await closePalette()
       }
 
+      // 49d. POPPING A DRILL-IN RETURNS THE SELECTION TO THE DOOR IT CAME IN
+      //      THROUGH. Until this, leaving a scope re-seeded from
+      //      bestMatchIndex — and a pop leaves an EMPTY query behind (runRow
+      //      cleared it on the way in), so every score ties at 0 and that
+      //      degenerates to firstRunnable: the top of the Panels section. The
+      //      user walked through a door and came back out somewhere else,
+      //      with Enter now pointed at a command they never chose. The
+      //      existing follow-the-selection-by-id arm cannot cover this: the
+      //      row selected INSIDE the scope is hiddenAtRest, so it is not in
+      //      the resting list to be followed back to.
+      //
+      //      Clauses 1-3 are the anti-tautology half and are not optional.
+      //      If ArrowRight silently failed to enter the scope, the query would
+      //      still read 'manage settings' and the door would still be the
+      //      selected row — so a check asserting only clause 5 passes green
+      //      against a completely broken drill-in.
+      //
+      //      'manage settings' is unambiguous by construction: fuzzyMatch
+      //      drops spaces, so this is the single subsequence 'managesettings',
+      //      which no other door and no settings label can match.
+      {
+        await openPalette()
+        const result = await wc.executeJavaScript(`(async () => { try {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const selectedText = () => {
+            const row = document.querySelector('.palette__row--selected')
+            return row ? row.textContent : null
+          }
+          const input = document.querySelector('.palette__input')
+          setter.call(input, 'manage settings')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          // (1) The precondition: the door is what the query selected.
+          const selectedBefore = selectedText()
+          const typed = document.querySelector('.palette__input')
+          typed.setSelectionRange(typed.value.length, typed.value.length)
+          typed.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          // (2) We really are inside the settings scope.
+          const chip = (document.querySelector('.palette__scope') || {}).textContent || null
+          // Entering clears the query, so the caret is already at 0 — the one
+          // position ArrowLeft is allowed to pop from.
+          const input2 = document.querySelector('.palette__input')
+          input2.setSelectionRange(0, 0)
+          input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          return {
+            selectedBefore,
+            chip,
+            // (3) The pop happened and the overlay survived it.
+            stillOpen: document.querySelector('.palette') !== null,
+            chipGone: document.querySelector('.palette__scope') === null,
+            // (4) There IS a selected row: index -1 renders none at all, and
+            //     "no selection" would satisfy any assertion phrased as a
+            //     negative about where the selection is NOT.
+            hasSelection: document.querySelector('.palette__row--selected') !== null,
+            // (5) And it is the door.
+            selectedAfter: selectedText()
+          }
+        } catch (e) { return { error: String(e && e.message || e) } } })()`)
+        ok('49d popping a drill-in returns the selection to the door it was entered through',
+          result && !result.error &&
+            typeof result.selectedBefore === 'string' &&
+            result.selectedBefore.includes('Manage settings') &&
+            result.chip === 'Settings' &&
+            result.stillOpen === true &&
+            result.chipGone === true &&
+            result.hasSelection === true &&
+            typeof result.selectedAfter === 'string' &&
+            result.selectedAfter.includes('Manage settings'),
+          JSON.stringify(result))
+        await closePalette()
+      }
+
+      // 49e. THE SAME LANDING WHEN NO DOOR WAS EVER TRAVERSED. M8a's top-bar
+      //      gear opens the palette straight into the settings scope
+      //      (openPalette('settings')), so there is no entered row to
+      //      remember — and this is the ONLY check that separates the shipped
+      //      design, which DERIVES the door from `entersScope`, from the
+      //      obvious alternative of stashing the entered row's id in a ref.
+      //      That alternative satisfies 49d and cannot satisfy this at all.
+      //
+      //      Deliberately not folded into check 78, whose subject is "the
+      //      button opens IN the scope" and which must keep failing for its
+      //      own reason.
+      {
+        await closePalette()
+        const result = await wc.executeJavaScript(`(async () => { try {
+          document.querySelector('.shell__settings')
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          const chip = (document.querySelector('.palette__scope') || {}).textContent || null
+          const input = document.querySelector('.palette__input')
+          if (!input) return { error: 'palette did not open' }
+          input.setSelectionRange(0, 0)
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          const row = document.querySelector('.palette__row--selected')
+          return {
+            chip,
+            chipGone: document.querySelector('.palette__scope') === null,
+            stillOpen: document.querySelector('.palette') !== null,
+            selectedAfter: row ? row.textContent : null
+          }
+        } catch (e) { return { error: String(e && e.message || e) } } })()`)
+        ok('49e popping a scope the gear opened lands on that scope’s door too',
+          result && !result.error &&
+            result.chip === 'Settings' &&
+            result.chipGone === true &&
+            result.stillOpen === true &&
+            typeof result.selectedAfter === 'string' &&
+            result.selectedAfter.includes('Manage settings'),
+          JSON.stringify(result))
+        await closePalette()
+      }
+
       // 50. A delete is gated, and Escape CANCELS it. The assertion that
       //     matters is the last one: a confirm step that confirms
       //     unconditionally is invisible — the dialog appears, the user says
