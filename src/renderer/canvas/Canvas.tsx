@@ -11,7 +11,7 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
-import type { CapturedPanel, PresetTemplate, SessionBackendInfo } from '@shared/ipc-contract'
+import type { CapturedPanel, PresetTemplate, SessionBackendInfo, SettingRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { cascadeCentre, firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
@@ -28,6 +28,7 @@ const DEMOTE_DELAY_MS = 250
 const EMPTY_PRESETS: PresetRow[] = []
 const EMPTY_PROMPTS: PromptRow[] = []
 const EMPTY_PANELS: PanelRow[] = []
+const EMPTY_SETTINGS: SettingRow[] = []
 
 /**
  * What the switcher calls a panel. This is always the command/cwd/id shape —
@@ -988,6 +989,17 @@ export function Canvas({
     if (palette.open) reloadPrompts(palette.capturedId)
   }, [palette.open, palette.capturedId, reloadPrompts])
 
+  // The settings list, reloaded whenever the palette opens — main owns the
+  // store, so the row list always reflects what it actually holds rather than
+  // whatever the palette last rendered.
+  const [settingRows, setSettingRows] = useState<SettingRow[]>(EMPTY_SETTINGS)
+  const reloadSettings = useCallback(() => {
+    void window.canvas.settings.list().then(setSettingRows)
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadSettings()
+  }, [palette.open, reloadSettings])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -1189,13 +1201,16 @@ export function Canvas({
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport(),
-    // Task 7 placeholder: this task (M6b's Task 6) built the pure command
-    // list only. toggleSetting is required on PaletteActions on purpose (a
-    // compile-time net for Task 7 — see commands.ts), so this no-op is a
-    // type-satisfying stub, not the real settings:set + reload wiring.
-    toggleSetting: () => {}
+    toggleSetting: (id, value) => {
+      // Main owns the store, so the write goes there and the row list is
+      // reloaded from the answer rather than updated optimistically: an
+      // optimistic row that main refused (an unknown id, a wrong type) would
+      // show the new value until the next reload and then flip back.
+      void window.canvas.settings.set(id, value).then(reloadSettings)
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
-       palette.openPalette, palette.capturedId, reloadPrompts, commitHistory])
+       palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
+       settingRows, reloadSettings])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -1270,6 +1285,7 @@ export function Canvas({
           presets={presetRows}
           prompts={promptRows}
           panels={panelRows}
+          settings={settingRows}
           hasSelection={hasSelection()}
           inputMode={inputMode}
         />

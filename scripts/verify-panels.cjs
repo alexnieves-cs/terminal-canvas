@@ -3328,6 +3328,55 @@ app.whenReady().then(async () => {
           `viewCentre=${JSON.stringify(expectedCentre)} step=${CASCADE_STEP} live=${live}`)
     }
 
+    // 52-53 — M6b. The end-to-end proof that a palette toggle reaches main's store
+    //     and comes back changed. 53 is the half that matters: a toggle that
+    //     updates the row but never reaches the store looks identical on screen
+    //     until the next relaunch, when the setting is silently back.
+    {
+      const openPalette = async () => {
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      }
+      const closePalette = async () => {
+        await wc.executeJavaScript(`
+          document.querySelector('.palette__input')
+            ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          true
+        `)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+      }
+
+      await openPalette()
+      // Type a KEYWORD, not the label — this is check 35's property proven through
+      // the real palette rather than against buildCommands in isolation.
+      const found = await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        nativeSet(document.querySelector('.palette__input'), 'viewport')
+        await new Promise((r) => setTimeout(r, 100))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Restore camera position'))
+        if (!row) return 'not found'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return 'ok'
+      })()`)
+      ok('52 a setting is reachable in the palette by a keyword it does not display',
+        found === 'ok', String(found))
+
+      const stored = await waitUntil(async () => {
+        const v = await wc.executeJavaScript(
+          `window.canvas.settings.list().then((s) => s.find((x) => x.id === 'restore.camera').value)`)
+        return v === false ? 'off' : false
+      }, 3000)
+      ok('53 the toggle reached main\'s store, not just the row', stored === 'off')
+
+      await closePalette()
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
