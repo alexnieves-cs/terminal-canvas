@@ -128,6 +128,16 @@ export const SETTINGS: readonly SettingDef[] = [
     min: 250,
     max: 60000,
     category: AGENT_CATEGORY
+  },
+  {
+    id: 'agent.edgeIndicators',
+    label: 'Point at off-screen panels that want you',
+    description:
+      'Draw an arrow on the edge of the canvas for each panel that wants you but is out of view.',
+    keywords: ['edge', 'arrow', 'pip', 'indicator', 'offscreen', 'off-screen', 'attention', 'pointer', 'wants'],
+    type: 'boolean',
+    default: true,
+    category: AGENT_CATEGORY
   }
 ]
 
