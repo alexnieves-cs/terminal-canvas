@@ -1002,6 +1002,77 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     restore.map((d) => d.id).join(','))
 }
 
+// 75-80 — M6c. The three agent-state settings the border-colour feature reads
+//     later. Nothing consumes them yet; this is only the declaration and the
+//     one new rule the number type needs that a boolean never did — a range.
+{
+  // 75. The three ids the detector and the renderer will both hardcode. An id
+  //     is the persisted key, so a typo here is a silently lost preference
+  //     with no migration.
+  const ids = L.SETTINGS.map((d) => d.id)
+  ok('75 the three agent settings are declared',
+    ids.includes('agent.glow') && ids.includes('agent.bell') && ids.includes('agent.idleAfterMs'),
+    ids.join(','))
+}
+{
+  // 76. The threshold is a NUMBER setting, not a boolean smuggled in as one.
+  const def = L.settingDef('agent.idleAfterMs')
+  ok('76 idleAfterMs is a number setting',
+    def.type === 'number' && typeof def.default === 'number', JSON.stringify(def))
+}
+{
+  // 77. An unset threshold resolves to the schema default — the sparse-map
+  //     rule. A full map written on save would freeze this number at whatever
+  //     it was the first time the user launched, so tuning it later would
+  //     reach nobody.
+  const def = L.settingDef('agent.idleAfterMs')
+  ok('77 an unset threshold resolves to the default',
+    L.resolveSetting({}, 'agent.idleAfterMs') === def.default)
+}
+{
+  // 78. setPreference refuses a wrong-typed value for the number setting, the
+  //     same way check 72b covers the boolean case — by leaving the id absent
+  //     from preferences() rather than by a return value, since setPreference
+  //     returns void here just as it does for 72 and 72b.
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setPreference('agent.idleAfterMs', true)
+  ok('78 a boolean is refused for a number setting',
+    !('agent.idleAfterMs' in store.preferences()), JSON.stringify(store.preferences()))
+}
+{
+  // 79. RANGE. A threshold of 0 makes every gap between tokens read as
+  //     "finished" and the border strobes; one of an hour makes the signal
+  //     arrive after you have already looked. Both are silent — the app
+  //     works, it just never says anything useful — so the store refuses
+  //     out-of-range values rather than storing them, while the bounds
+  //     themselves are valid values and must be accepted.
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  const def = L.settingDef('agent.idleAfterMs')
+  store.setPreference('agent.idleAfterMs', def.min - 1)
+  const rejectedLow = !('agent.idleAfterMs' in store.preferences())
+  store.setPreference('agent.idleAfterMs', def.max + 1)
+  const rejectedHigh = !('agent.idleAfterMs' in store.preferences())
+  store.setPreference('agent.idleAfterMs', def.min)
+  const acceptedBound = store.preferences()['agent.idleAfterMs'] === def.min
+  ok('79 out-of-range thresholds are refused, the bounds themselves are not',
+    rejectedLow && rejectedHigh && acceptedBound,
+    `rejectedLow=${rejectedLow} rejectedHigh=${rejectedHigh} acceptedBound=${acceptedBound}`)
+}
+{
+  // 80. A number preference survives a write and a reopen, exactly as check
+  //     71 proves for a boolean.
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('agent.idleAfterMs', 2000)
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('80 a number preference round-trips', b.getSetting('agent.idleAfterMs') === 2000)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

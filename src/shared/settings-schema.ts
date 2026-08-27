@@ -22,6 +22,9 @@ export type SettingValue = boolean | string | number
  */
 export const RESTORE_CATEGORY = 'Restore on launch'
 
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const AGENT_CATEGORY = 'Agent state'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -41,6 +44,17 @@ export interface SettingDef {
   default: SettingValue
   /** Groups rows in the palette and names the menu submenu they came from. */
   category: string
+  /**
+   * Inclusive bounds for a `number` setting; ignored for booleans.
+   *
+   * They exist because both ends of the idleness threshold fail SILENTLY: at
+   * 0 every pause between tokens reads as "finished" and the border strobes,
+   * and at an hour the signal lands long after you have looked. The app keeps
+   * working in both cases, which is exactly why the store refuses the value
+   * rather than trusting whoever typed it.
+   */
+  min?: number
+  max?: number
 }
 
 /**
@@ -77,6 +91,43 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: true,
     category: RESTORE_CATEGORY
+  },
+  {
+    id: 'agent.glow',
+    label: 'Show agent state on panels',
+    description: 'Colour a panel’s border by what its agent is doing.',
+    keywords: ['glow', 'border', 'colour', 'color', 'status', 'busy', 'idle', 'state', 'highlight'],
+    type: 'boolean',
+    default: true,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'agent.bell',
+    label: 'Detect the terminal bell',
+    description:
+      'Treat a bell as “this panel wants you”. Your CLI must be set to ring it — Claude Code’s notification channel defaults to auto.',
+    keywords: ['bell', 'alert', 'notify', 'notification', 'attention', 'ping', 'sound'],
+    type: 'boolean',
+    default: true,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'agent.idleAfterMs',
+    label: 'Idle after',
+    description: 'Milliseconds of silence before a working panel is called idle.',
+    keywords: ['idle', 'timeout', 'threshold', 'delay', 'quiet', 'silence', 'milliseconds'],
+    type: 'number',
+    // PROVISIONAL — a stand-in, not a measured value. Task 1 measures the
+    // within-turn gap distribution against a real `claude` session (p50, p99,
+    // shortest turn-boundary gap) and this default is meant to sit above the
+    // p99 of within-turn gaps and below the shortest turn boundary worth
+    // noticing. That measurement has not been run yet; 1500 is a placeholder
+    // so this milestone's settings surface has something to show, and a later
+    // task must replace it with the measured number before shipping.
+    default: 1500,
+    min: 250,
+    max: 60000,
+    category: AGENT_CATEGORY
   }
 ]
 

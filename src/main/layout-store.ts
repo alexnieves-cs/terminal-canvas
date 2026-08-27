@@ -159,6 +159,13 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     const def = settingDef(id)
     if (def === undefined) return
     if (typeof value !== def.type) return
+    // Range, for the reason SettingDef.min/max records: both ends of the
+    // idleness threshold fail silently, so a value outside them is refused
+    // here rather than stored and puzzled over later.
+    if (def.type === 'number' && typeof value === 'number') {
+      if (def.min !== undefined && value < def.min) return
+      if (def.max !== undefined && value > def.max) return
+    }
     snapshot.preferences[id] = value
     scheduleWrite()
   }
