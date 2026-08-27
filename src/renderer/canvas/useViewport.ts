@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { normalizeWheel } from './canvas-input'
 import { centreOn as centreOnRect, fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
+import type { JumpDirection } from './attention'
 
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
 const KEYBOARD_ZOOM_STEP = 1.2
@@ -84,6 +85,16 @@ export function useViewport(
    * render.
    */
   shouldIgnoreKeys?: () => boolean
+  ,
+  /**
+   * Cmd+J: visit the next panel that wants you; Shift+Cmd+J the previous one.
+   * The hook holds no knowledge of WHO is waiting — that lives in the
+   * agent-state store, which is renderer state this layer has no business
+   * reading. It only turns a chord into a direction.
+   *
+   * Must be referentially stable: it sits in the keydown effect's dep array.
+   */
+  onJumpAttention?: (direction: JumpDirection) => void
 ): ViewportControls {
   const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
@@ -212,6 +223,14 @@ export function useViewport(
           event.preventDefault()
           onSpawn?.(screenToWorld(centre, viewportRef.current))
           break
+        case 'j':
+        case 'J':
+          // Both spellings: shiftKey is not excluded above (Shift+Cmd+J is
+          // the backward cycle), and a shifted `j` arrives as 'J' — the same
+          // detail usePalette.ts records about Cmd+Shift+K.
+          event.preventDefault()
+          onJumpAttention?.(event.shiftKey ? -1 : 1)
+          break
         default:
           break
       }
@@ -219,7 +238,7 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, onSpawn, shouldIgnoreKeys])
+  }, [hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention])
 
   // The SETTER stays private — nothing outside should move the camera — but a
   // READ of where the camera is looking is what a menu-driven spawn needs, and

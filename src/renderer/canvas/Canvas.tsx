@@ -6,10 +6,11 @@ import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
 import { usePanelDrag } from './usePanelDrag'
 import type { DragMode, DragState } from './panel-interaction'
+import { nextAttentionId, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
-import { applyAgentState, clearAgentState, useAttentionIds } from '@renderer/session/agent-state-store'
+import { applyAgentState, attentionIds, clearAgentState, useAttentionIds } from '@renderer/session/agent-state-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -399,8 +400,24 @@ export function Canvas({
     if (!palette.open) setInputMode(null)
   }, [palette.open])
 
+  // Cmd+J needs `centreOn` (returned BY this very useViewport call) and
+  // `selectAndRaise` (defined further below, near goToPanel) as closures, but
+  // must ALSO be passed INTO this call as its seventh argument — a genuine
+  // circular dependency, not just an ordering inconvenience: the value this
+  // callback needs does not exist until after the call it is an argument to
+  // returns. jumpAttentionImplRef is the indirection every other "must be
+  // stable but needs current data" case in this file already uses (see
+  // panelsRef/focusedIdRef above) — the OUTER callback below has a fixed,
+  // empty-deps identity for useViewport's dep array, while the actual jump
+  // logic is assigned into the ref once centreOn and selectAndRaise exist and
+  // is refreshed every render so it never runs against a stale closure.
+  const jumpAttentionImplRef = useRef<(direction: JumpDirection) => void>(() => {})
+  const onJumpAttention = useCallback((direction: JumpDirection) => {
+    jumpAttentionImplRef.current(direction)
+  }, [])
+
   const { viewport, resetViewport, worldCentre, centreOn } = useViewport(
-    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
   )
   const version = useRegistryVersion(registry)
 
@@ -785,6 +802,43 @@ export function Canvas({
       return next
     })
   }, [commitHistory])
+
+  // Which panel the jump key last visited. A ref, not state: it is a cursor
+  // for a keydown handler and nothing renders from it, so putting it in state
+  // would re-render the canvas on every press for no visible reason.
+  const jumpCursorRef = useRef<string | null>(null)
+
+  /**
+   * Cmd+J. centreOn + selectAndRaise, and deliberately NOTHING ELSE — no
+   * registry.wake, no registry.focus, no agent:acknowledge. Focus is the
+   * renderer's single trigger for acknowledgement (see onFocusPanel), and
+   * routing a second one through navigation would make the renderer a second
+   * author of a state main owns. The panel therefore keeps its amber border
+   * after you land on it, which is why styles.css lets wants-you outrank
+   * .panel--selected.
+   *
+   * Assigned into jumpAttentionImplRef (declared above, before useViewport)
+   * rather than being the callback passed to useViewport directly — see that
+   * ref's own comment for why the two cannot be the same binding. Reassigned
+   * every render so the closure below always sees the CURRENT centreOn and
+   * selectAndRaise, never a stale one from the render that first set it.
+   */
+  jumpAttentionImplRef.current = (direction: JumpDirection) => {
+    const queue = attentionIds()
+    const id = nextAttentionId(queue, jumpCursorRef.current, direction)
+    // Nothing is waiting: the key does nothing at all. Moving the camera
+    // "somewhere" would be worse than silence — the user asked to be taken to
+    // a panel that wants them, and there isn't one.
+    if (id === null) return
+    // panelsRef, not `panels`: this reads at keypress time and must not put a
+    // 60Hz-changing array into a useCallback's dep list (the same mirror-into-
+    // a-ref move focusedIdRef makes).
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    if (!panel) return
+    jumpCursorRef.current = id
+    centreOn(panel.rect)
+    selectAndRaise(id)
+  }
 
   const onSelectPanel = useCallback((id: string) => {
     selectAndRaise(id)

@@ -100,10 +100,21 @@ body {
 .panel--selected.panel--agent-starting,
 .panel--selected.panel--agent-busy,
 .panel--selected.panel--agent-idle,
-.panel--selected.panel--agent-wants-you,
 .panel--selected.panel--agent-exited {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px var(--blue);
+}
+
+/* M6d inverts exactly one half of the rule above. wants-you is the only state
+   that carries INTENT — a panel asking you something — and Cmd+J deliberately
+   does not acknowledge, so landing on a panel selects it while it is still
+   waiting. If selection painted over the amber here, the jump key would take
+   you to a panel and hide the very reason it took you there, leaving it in the
+   queue with nothing on screen saying so. The other four states stay below
+   selection: none of them is asking for anything. */
+.panel--selected.panel--agent-wants-you {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 2px var(--amber);
 }
 
 .panel__chrome {

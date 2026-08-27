@@ -3822,6 +3822,106 @@ app.whenReady().then(async () => {
         await panBy(1800, 1200)
         await sleep(300)
       }
+
+      const jump = (shift) => wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown',
+          { key: 'j', metaKey: true, shiftKey: ${shift ? 'true' : 'false'}, bubbles: true }))
+        true
+      `)
+
+      // 61. Cmd+J frames the waiting panel — and frames THAT panel, asserted
+      //     as WHERE the camera landed, recomputed from centreOn's own
+      //     arithmetic exactly as check 39 does. "The viewport moved" is true
+      //     of any pan at all, and a jump key that framed the wrong panel
+      //     would satisfy it.
+      //
+      //     It must also NOT spawn: the jump routes through selectAndRaise,
+      //     the half of onSelectPanel factored out precisely so navigation
+      //     cannot wake a panel. A wants-you panel has a live PTY and so is
+      //     never dormant, but reusing the safe verb is what keeps a future
+      //     widening of wants-you from turning a keyboard tour into spawns.
+      {
+        await clickBackground()
+        await panBy(-1800, -1200)
+        await sleep(300)
+        const spawnedBefore = await wc.executeJavaScript(
+          `(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(shellId)}) || {}).spawned`)
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        await jump(false)
+        await sleep(400)
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const expected = await wc.executeJavaScript(`(() => {
+          const rect = window.__m5aSpecOf(${JSON.stringify(shellId)}).rect
+          const host = document.querySelector('.canvas').getBoundingClientRect()
+          const vp = window.__m4aViewport()
+          return {
+            x: host.width / 2 - (rect.x + rect.w / 2) * vp.scale,
+            y: host.height / 2 - (rect.y + rect.h / 2) * vp.scale
+          }
+        })()`)
+        const spawnedAfter = await wc.executeJavaScript(
+          `(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(shellId)}) || {}).spawned`)
+        const framed = Math.abs(after.x - expected.x) < 1 && Math.abs(after.y - expected.y) < 1
+        ok('61 Cmd+J frames the waiting panel, at the same scale, spawning nothing new',
+          framed && after.scale === before.scale && spawnedAfter === spawnedBefore,
+          `${JSON.stringify(before)} -> ${JSON.stringify(after)} expected=${JSON.stringify(expected)}`)
+      }
+
+      // 62. Landing on the panel does NOT acknowledge it, and the amber
+      //     survives the selection ring. Two facts, and both are the decision
+      //     this milestone made explicitly: the jump does not focus, so main
+      //     never hears an acknowledge, so the state stays wants-you; and the
+      //     CSS was inverted so .panel--selected no longer paints over it.
+      //
+      //     The COLOUR is what this reads, not the state — check 61 already
+      //     covers the state — because the silent failure here is purely
+      //     visual: the user lands on the panel the key promised and sees
+      //     nothing telling them why they are there, while the panel is still
+      //     in the queue and the next press may jump straight back to it.
+      {
+        const selected = await wc.executeJavaScript(
+          `!!document.querySelector('[data-panel-id=${JSON.stringify(shellId)}].panel--selected')`)
+        const state = await agentStateOf(shellId)
+        const colour = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-panel-id=${JSON.stringify(shellId)}]')
+          if (!el) return null
+          const amber = getComputedStyle(document.documentElement).getPropertyValue('--amber').trim()
+          const probe = document.createElement('div')
+          probe.style.color = amber
+          document.body.appendChild(probe)
+          const want = getComputedStyle(probe).color
+          probe.remove()
+          return { border: getComputedStyle(el).borderTopColor, want }
+        })()`)
+        ok('62 the jump does not acknowledge, and wants-you outranks the selection ring',
+          selected === true && state === 'wants-you' &&
+          colour !== null && colour.border === colour.want,
+          `selected=${selected} state=${state} ${JSON.stringify(colour)}`)
+      }
+
+      // 63. Focus is still what acknowledges — the rule this milestone left
+      //     alone — and the pip goes with it. Clicking the panel (now on
+      //     screen, because check 61 framed it) sends agent:acknowledge, main
+      //     clears the state, the store drops it from the queue, and the pip
+      //     layer has nothing left to draw even after panning away again.
+      {
+        const point = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-panel-id=${JSON.stringify(shellId)}] .panel__slot')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
+        })()`)
+        if (!point) throw new Error('63: the framed panel has no slot to click')
+        wc.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        const cleared = await waitUntil(
+          async () => (await agentStateOf(shellId)) !== 'wants-you', 4000)
+        await panBy(-1800, -1200)
+        await sleep(400)
+        ok('63 focus acknowledges, and the pip leaves with the state',
+          cleared === true && (await pipAt(shellId)) === null,
+          `state=${await agentStateOf(shellId)} pip=${JSON.stringify(await pipAt(shellId))}`)
+      }
     }
 
   } catch (error) {
