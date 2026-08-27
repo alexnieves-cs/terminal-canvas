@@ -258,6 +258,11 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       // would drop it on the next load anyway, so accepting it here would mean
       // a setting that appears to take and is gone after a relaunch.
       if (def === undefined) return
+      // `typeof` never returns the string 'enum', so this silently rejects
+      // EVERY value of an 'enum'-typed SettingDef, valid ones included. M6c/M6d
+      // add the first one (settings-schema.ts's own comment says so); give
+      // 'enum' its own branch here before that setting ships, or it will
+      // appear to save and be gone after the next relaunch with no warning.
       if (typeof value !== def.type) return
       snapshot.preferences[id] = value
       scheduleWrite()

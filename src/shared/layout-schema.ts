@@ -339,6 +339,17 @@ export function parsePreferences(
       warnings.push(`dropped an unknown setting: ${id}`)
       continue
     }
+    // `typeof` never produces the literal string 'enum' — it only ever answers
+    // 'boolean', 'number', 'string' and the other JS primitive tags — so a
+    // SettingDef whose `type` is 'enum' fails this comparison for EVERY value,
+    // valid ones included, and every one is dropped here as though it were the
+    // wrong type — worse, warned about as though it were malformed, when it is
+    // exactly the value the schema asked for. Unreachable today: every
+    // SettingDef in SETTINGS is boolean, so def.type is always a real typeof
+    // result. settings-schema.ts's own comment says M6c and M6d add the first
+    // enum-typed setting; whoever does must give 'enum' its own branch ahead of
+    // this line, or that setting's saved value silently vanishes on the very
+    // next load.
     if (typeof value !== def.type) {
       warnings.push(`dropped setting ${id}: expected ${def.type}, got ${typeof value}`)
       continue
