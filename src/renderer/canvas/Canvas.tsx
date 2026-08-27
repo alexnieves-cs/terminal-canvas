@@ -8,6 +8,7 @@ import type { DragMode, DragState } from './panel-interaction'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
+import { applyAgentState, clearAgentState } from '@renderer/session/agent-state-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -281,7 +282,12 @@ export function Canvas({
     // the registry and `present` stay in step by construction after this
     // call, no matter which direction history moved.
     for (const session of registry.all()) {
-      if (!ids.has(session.id)) registry.dispose(session.id)
+      if (!ids.has(session.id)) {
+        registry.dispose(session.id)
+        // Without this the agent-state map grows for the life of the
+        // renderer and a recycled id inherits a dead panel's border.
+        clearAgentState(session.id)
+      }
     }
     setPanels(next.present)
     setDormantIds((current) => {
@@ -448,6 +454,15 @@ export function Canvas({
     // install; listing it makes the dependency visible rather than implied.
   }, [palette.isOpen])
 
+  // ONE subscription for the whole canvas, not one per panel: the payload
+  // names its own panel, and the store fans it out to exactly the panel that
+  // subscribed to that id. A per-panel subscription would mean every panel
+  // receiving and discarding every other panel's updates — the same argument
+  // the single Cmd+C/Cmd+V subscription above makes.
+  useEffect(() => window.canvas.agent.onState((update) => {
+    applyAgentState(update.panelId, update.state)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -523,7 +538,12 @@ export function Canvas({
     // only its two callers inside session-registry.ts, because every one
     // of these three routes through dispose() rather than calling
     // pty.kill directly.
-    for (const panel of panelsRef.current) registry.dispose(panel.rect.id)
+    for (const panel of panelsRef.current) {
+      registry.dispose(panel.rect.id)
+      // Same reason as the undo/redo site above: reset drops every panel at
+      // once, and each dropped id needs its cached agent state cleared too.
+      clearAgentState(panel.rect.id)
+    }
     const fresh = firstRunPanels()
     setPanels(fresh)
     setDormantIds(new Set())
@@ -725,6 +745,9 @@ export function Canvas({
     // early-returns on a missing id, and the cleanup's removeChild is guarded
     // on host.parentNode === slot.
     registry.dispose(id)
+    // Same reason as the other two dispose sites: a closed panel's id must
+    // not keep a cached agent state that a recycled id could inherit.
+    clearAgentState(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
