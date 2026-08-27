@@ -25,6 +25,9 @@ export const RESTORE_CATEGORY = 'Restore on launch'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const AGENT_CATEGORY = 'Agent state'
 
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const SHELL_CATEGORY = 'Shell'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -138,6 +141,24 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: true,
     category: AGENT_CATEGORY
+  },
+  {
+    id: 'shell.railOpen',
+    label: 'Show the side rail',
+    description: 'Keep the left rail open beside the canvas.',
+    keywords: ['rail', 'sidebar', 'side bar', 'left', 'panel list', 'outline', 'shell', 'chrome', 'hide'],
+    type: 'boolean',
+    default: true,
+    category: SHELL_CATEGORY
+  },
+  {
+    id: 'shell.inspectorOpen',
+    label: 'Show the inspector',
+    description: 'Keep the right inspector open beside the canvas.',
+    keywords: ['inspector', 'details', 'properties', 'right', 'sidebar', 'info', 'shell', 'chrome', 'hide'],
+    type: 'boolean',
+    default: true,
+    category: SHELL_CATEGORY
   }
 ]
 

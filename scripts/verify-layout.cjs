@@ -1376,6 +1376,55 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify(res && res.state.panels))
 }
 
+// 95. M8a's rail toggle. Declared like every other def and round-tripping
+//     through a write and a reopen. The keywords carry more weight here than
+//     usual: a user who wants the sidebar back has no vocabulary for "rail",
+//     so "sidebar" and "panel list" have to be in the haystack or the switch
+//     is reachable only by someone who already knows its name.
+{
+  const def = L.settingDef('shell.railOpen')
+  const declared = def !== undefined && def.type === 'boolean' && def.default === true &&
+    def.category === L.SHELL_CATEGORY &&
+    typeof def.label === 'string' && def.label.length > 0 &&
+    typeof def.description === 'string' && def.description.length > 0 &&
+    Array.isArray(def.keywords) && def.keywords.includes('sidebar')
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('shell.railOpen', false)
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('95 shell.railOpen is declared and round-trips',
+    declared && b.getSetting('shell.railOpen') === false,
+    `declared=${declared} reopened=${b.getSetting('shell.railOpen')}`)
+}
+
+// 96. The inspector toggle, and the half that is not a copy of 95: the two
+//     ids are INDEPENDENT. One sparse map holds both, and writing one must
+//     not disturb the other — a shared key, or a def whose id was pasted from
+//     its neighbour, produces two switches that move together and looks like
+//     a rendering bug rather than a schema one.
+{
+  const def = L.settingDef('shell.inspectorOpen')
+  const declared = def !== undefined && def.type === 'boolean' && def.default === true &&
+    def.category === L.SHELL_CATEGORY &&
+    typeof def.label === 'string' && def.label.length > 0 &&
+    typeof def.description === 'string' && def.description.length > 0 &&
+    Array.isArray(def.keywords) && def.keywords.length > 0
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('shell.inspectorOpen', false)
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('96 shell.inspectorOpen is declared, round-trips, and is independent of the rail',
+    declared && b.getSetting('shell.inspectorOpen') === false &&
+      b.getSetting('shell.railOpen') === true,
+    `declared=${declared} inspector=${b.getSetting('shell.inspectorOpen')} rail=${b.getSetting('shell.railOpen')}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
