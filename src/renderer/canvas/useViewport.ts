@@ -67,6 +67,23 @@ export interface ViewportControls {
    * come back to it.
    */
   restoreCamera: (camera: Viewport) => void
+  /**
+   * Multiply the scale about the viewport's centre — the fifth narrow verb,
+   * after resetViewport, worldCentre, centreOn and restoreCamera. The top
+   * bar's +/- buttons need to zoom and the setter stays private: exposing it
+   * would make every future caller a camera owner and take the coordinate
+   * math out of verify:viewport's reach.
+   *
+   * It exists as a VERB rather than as arithmetic repeated in the top bar for
+   * a second reason: Cmd+= and the + button must be the same gesture, and two
+   * copies of `zoomAt(vp, centre, step)` are two things that can drift.
+   */
+  zoomBy: (factor: number) => void
+  /**
+   * Frame every panel — the same target Cmd+1 hits, named so the top bar and
+   * the keydown case cannot drift apart.
+   */
+  fitAll: () => void
 }
 
 /**
@@ -183,6 +200,38 @@ export function useViewport(
     return () => host.removeEventListener('wheel', onWheel, { capture: true })
   }, [hostRef, shouldYieldWheel])
 
+  /**
+   * Zoom about the CENTRE of the host, not about a pointer: there is no
+   * cursor position in a button press or a keyboard chord, and the centre is
+   * the only anchor that keeps what the user is looking at where it is.
+   *
+   * A useCallback for the same load-bearing reason resetViewport is (see its
+   * comment below), plus a second one here: it sits in the keydown effect's
+   * dep array, and a fresh identity per render would tear that window
+   * listener down and reinstall it on every mousemove over the canvas.
+   */
+  const zoomBy = useCallback((factor: number) => {
+    const host = hostRef.current
+    // No host means nothing mounted to measure a centre against — a silent
+    // no-op, the same shape centreOn and worldCentre already take, rather
+    // than a throw on a call only reachable during teardown.
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const centre = { x: bounds.width / 2, y: bounds.height / 2 }
+    setViewport((vp) => zoomAt(vp, centre, factor))
+  }, [hostRef])
+
+  /** Cmd+1's target, named. Same stability requirement as zoomBy. */
+  const fitAll = useCallback(() => {
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    // rectsRef, not `rects`: read at press time, so the fit frames what is on
+    // the canvas NOW without the array's per-frame identity churn reaching a
+    // dep list. Same reason the keydown effect reads it through the ref.
+    setViewport(fitTo(rectsRef.current, { width: bounds.width, height: bounds.height }))
+  }, [hostRef])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Cmd is required for every canvas shortcut. Agent TUIs claim essentially
@@ -211,25 +260,30 @@ export function useViewport(
       if (!host) return
       const bounds = host.getBoundingClientRect()
       const centre = { x: bounds.width / 2, y: bounds.height / 2 }
-      const size = { width: bounds.width, height: bounds.height }
 
       switch (event.key) {
         case '0':
           event.preventDefault()
           setViewport(INITIAL)
           break
+        // These three call the named verbs rather than repeating the
+        // arithmetic, so the chord and the top bar's button are provably the
+        // same gesture. preventDefault still happens FIRST in each case: the
+        // verbs are ordinary functions with no knowledge of the event, and
+        // Cmd+= / Cmd+- are Chromium's own page-zoom accelerators, which is
+        // the thing being refused here.
         case '1':
           event.preventDefault()
-          setViewport(fitTo(rectsRef.current, size))
+          fitAll()
           break
         case '=':
         case '+':
           event.preventDefault()
-          setViewport((vp) => zoomAt(vp, centre, KEYBOARD_ZOOM_STEP))
+          zoomBy(KEYBOARD_ZOOM_STEP)
           break
         case '-':
           event.preventDefault()
-          setViewport((vp) => zoomAt(vp, centre, 1 / KEYBOARD_ZOOM_STEP))
+          zoomBy(1 / KEYBOARD_ZOOM_STEP)
           break
         case 'n':
           // Cmd+N spawns at the viewport centre in WORLD coordinates, so a
@@ -256,7 +310,7 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention])
+  }, [hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, zoomBy, fitAll])
 
   // The SETTER stays private — nothing outside should move the camera — but a
   // READ of where the camera is looking is what a menu-driven spawn needs, and
@@ -317,5 +371,5 @@ export function useViewport(
     setViewport(restoreCameraExact(camera))
   }, [])
 
-  return { viewport, resetViewport, worldCentre, centreOn, restoreCamera }
+  return { viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll }
 }

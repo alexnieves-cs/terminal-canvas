@@ -4717,6 +4717,111 @@ app.whenReady().then(async () => {
       // captured before this block — must account for the narrower rail.
     }
 
+    // 75. THE SPAWN BUTTON SPAWNS EXACTLY ONE PANEL, THROUGH MAIN.
+    //     Exactly one is half the check: a button that also let its click reach
+    //     the canvas background would spawn once and select something else, and a
+    //     double-fire looks identical to a slow machine.
+    {
+      const before = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__spawn').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(400)
+      const after = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      ok('75 the New panel button spawns exactly one panel',
+        after === before + 1, `${before} -> ${after}`)
+    }
+
+    // 76. THE ZOOM CLUSTER MOVES THE CAMERA THROUGH NAMED VERBS.
+    //     Reads __m4aScale rather than a CSS transform so it is the same number
+    //     viewport.ts computes. Fit is asserted separately from the steppers
+    //     because they are different verbs and a wiring that pointed both at
+    //     resetViewport would still change the scale.
+    {
+      const start = await wc.executeJavaScript(`window.__m4aScale()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__zoom-in').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(120)
+      const zoomedIn = await wc.executeJavaScript(`window.__m4aScale()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__zoom-out').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(120)
+      const backOut = await wc.executeJavaScript(`window.__m4aScale()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__fit').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(200)
+      const fitted = await wc.executeJavaScript(`window.__m4aScale()`)
+      ok('76 the zoom cluster steps in, steps out, and fits',
+        zoomedIn > start + 0.01 && Math.abs(backOut - start) < 0.001 && fitted > 0,
+        `start=${start} in=${zoomedIn} out=${backOut} fit=${fitted}`)
+    }
+
+    // 77. SEARCH AND SETTINGS OPEN THE PALETTE, AND SETTINGS ARRIVES IN ITS SCOPE.
+    //     The scope is the half that matters: an M6b setting is hiddenAtRest, so a
+    //     settings button that merely opened the palette would land the user on a
+    //     list with no settings visible at all — a feature that reads as missing.
+    {
+      await wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      })()`)
+      await sleep(120)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__search').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      const searchOpened = await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      await wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      })()`)
+      await sleep(120)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__settings').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      await sleep(150)
+      const inScope = await wc.executeJavaScript(`(() => {
+        const chip = document.querySelector('.palette__scope')
+        const rows = [...document.querySelectorAll('.palette__row')]
+        return {
+          chip: chip ? chip.textContent.trim() : null,
+          sawASetting: rows.some((r) => r.textContent.includes('Idle after'))
+        }
+      })()`)
+      ok('77 search opens the palette and settings opens it in the settings scope',
+        searchOpened === true && inScope.sawASetting === true,
+        `search=${searchOpened} scope=${JSON.stringify(inScope)}`)
+      // What 75/76/77 LEAVE BEHIND, in the spirit of 72's and 74c's closing
+      // notes. The world now holds TWO live panels, not one: check 75's spawn
+      // is real and is never undone. The camera is wherever `Fit` put it (a
+      // fitTo over both panels), NOT at INITIAL — anything appended below that
+      // reuses a screen coordinate captured earlier in this file is measuring
+      // against a camera that has moved. The rail is still collapsed and the
+      // inspector still open, both untouched here. The palette is closed: the
+      // two Escapes below pop the settings scope and then close the overlay,
+      // because Escape inside a drill-in deliberately pops rather than closes
+      // (Palette.tsx's two-stage rule), so ONE Escape would leave the overlay
+      // up and swallow the next check's keyboard.
+      for (let i = 0; i < 2; i++) {
+        await wc.executeJavaScript(`(() => {
+          const input = document.querySelector('.palette__input')
+          if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        })()`)
+        await sleep(120)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import type { PaletteScope } from './palette-model'
 
 /**
  * Who owns the keyboard.
@@ -24,7 +25,8 @@ export interface PaletteController {
   open: boolean
   /** focusedId as it was when the palette opened. */
   capturedId: string | null
-  openPalette(): void
+  /** `initialScope` opens straight into a drill-in; omitted means top level. */
+  openPalette(initialScope?: PaletteScope): void
   closePalette(): void
   /**
    * Close WITHOUT restoring focus — the outside-click exit, and the only
@@ -49,6 +51,24 @@ export interface PaletteController {
    * same constraint shouldYieldWheel documents one file over.
    */
   isOpen: () => boolean
+  /**
+   * Which drill-in is open, or null at the top level.
+   *
+   * This lived in Palette.tsx's own useState until M8a's top bar needed a
+   * settings button, and it moved here rather than growing a second way in.
+   * The rule the milestone is protecting is that there is exactly ONE
+   * authority for what scope the palette is in: a shell button that reached
+   * into Palette.tsx's state — or that faked the drill-in by pre-filling the
+   * query — would be a second author of the same fact, and the two would
+   * agree the day they were written and drift the first time either changed.
+   *
+   * Scope lives beside `open` for a reason of its own: a scope must never
+   * outlive the overlay it was entered from, which Palette.tsx used to get
+   * for free by unmounting. Now that the state survives the unmount, BOTH
+   * exits below clear it explicitly.
+   */
+  scope: PaletteScope | null
+  setScope: (scope: PaletteScope | null) => void
 }
 
 export function usePalette(deps: {
@@ -57,6 +77,7 @@ export function usePalette(deps: {
 }): PaletteController {
   const [open, setOpen] = useState(false)
   const [capturedId, setCapturedId] = useState<string | null>(null)
+  const [scope, setScope] = useState<PaletteScope | null>(null)
 
   const openRef = useRef(open)
   openRef.current = open
@@ -69,13 +90,33 @@ export function usePalette(deps: {
 
   const isOpen = useCallback(() => openRef.current, [])
 
-  const openPalette = useCallback(() => {
+  /**
+   * `initialScope` is how the top bar's ⚙ opens the palette already inside the
+   * settings drill-in. It is one argument on the existing verb rather than a
+   * second opener, so every rule opening already obeys — capturing focusedId,
+   * standing the canvas shortcuts down — applies unchanged.
+   *
+   * It defaults to null rather than being left alone, which is what makes a
+   * plain Cmd+K always land at the top level: without the reset, closing
+   * inside the settings scope and reopening with Cmd+K would silently drop
+   * the user back into Settings with the whole command list invisible.
+   *
+   * The parameter is deliberately safe to pass this straight to an onClick:
+   * a React MouseEvent is not a PaletteScope, so `onSearch={openPalette}`
+   * would type-error rather than open a bogus scope — every caller passes a
+   * literal or nothing.
+   */
+  const openPalette = useCallback((initialScope?: PaletteScope) => {
     setCapturedId(depsRef.current.focusedIdRef.current)
+    setScope(initialScope ?? null)
     setOpen(true)
   }, [])
 
   const closePalette = useCallback(() => {
     setOpen(false)
+    // Explicit now that the state outlives the overlay's unmount — see the
+    // `scope` note on the interface above.
+    setScope(null)
     const id = capturedRef.current
     // Restore the terminal's keyboard. Nothing else gives it back: the input
     // is about to unmount, and an unmounted element's blur focuses <body>.
@@ -85,6 +126,7 @@ export function usePalette(deps: {
   // Rule 4 with its one documented exception; see the interface above.
   const dismissPalette = useCallback(() => {
     setOpen(false)
+    setScope(null)
   }, [])
 
   useEffect(() => {
@@ -120,5 +162,5 @@ export function usePalette(deps: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPalette, closePalette])
 
-  return { open, capturedId, openPalette, closePalette, dismissPalette, isOpen }
+  return { open, capturedId, openPalette, closePalette, dismissPalette, isOpen, scope, setScope }
 }

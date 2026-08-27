@@ -467,7 +467,9 @@ export function Canvas({
     jumpAttentionImplRef.current(direction)
   }, [])
 
-  const { viewport, resetViewport, worldCentre, centreOn, restoreCamera } = useViewport(
+  const {
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll
+  } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
   )
   const version = useRegistryVersion(registry)
@@ -1335,6 +1337,12 @@ export function Canvas({
   useEffect(() => {
     if (palette.open) reloadPresets()
   }, [palette.open, reloadPresets])
+  // The top bar names the default preset, so the list must exist before the
+  // palette has ever been opened — the bar renders on the first paint and the
+  // user may never press Cmd+K at all. The palette-open reload above STAYS:
+  // this one runs once, and it is the reopen that keeps the rows fresh after
+  // a rename, a delete or a change of default.
+  useEffect(() => { reloadPresets() }, [reloadPresets])
 
   // The prompt list, reloaded whenever the palette opens — and whenever the
   // panel it captured changes, because a project's prompts are its own
@@ -1916,6 +1924,23 @@ export function Canvas({
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows, switchWorkspace, reloadWorkspaces])
 
+  /**
+   * The top bar's ⚙. It opens the palette straight into the settings
+   * drill-in through the controller's own scope — the SAME authority the
+   * `Manage settings…` row's `entersScope: 'settings'` reaches, not a second
+   * door. The scope is what makes the button honest: every setting row is
+   * hiddenAtRest, so merely opening the palette would land the user on a list
+   * with no settings visible at all, which reads as a feature that was never
+   * built.
+   */
+  const openSettingsScope = useCallback(() => {
+    palette.openPalette('settings')
+    // palette.openPalette is a useCallback with an empty dep list, so this
+    // stays referentially stable — which matters because it is a prop on
+    // TopBar and an unstable identity would re-render the bar on every
+    // mousemove over the canvas.
+  }, [palette.openPalette])
+
   // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
   // declared earlier in this component — see that ref's own comment for why
   // it exists instead of a direct reference.
@@ -1960,7 +1985,15 @@ export function Canvas({
         chrome.inspectorOpen ? '' : ' shell--inspector-collapsed'}`}
       onMouseDownCapture={onMouseDownCapture}
     >
-      <TopBar />
+      <TopBar
+        presets={presetRows}
+        scale={viewport.scale}
+        onSpawnPreset={paletteActions.spawnPreset}
+        onZoomBy={zoomBy}
+        onFit={fitAll}
+        onSearch={palette.openPalette}
+        onSettings={openSettingsScope}
+      />
       <SideRail onToggle={chrome.toggleRail} />
       <div
         className="canvas"

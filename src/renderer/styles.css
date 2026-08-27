@@ -83,6 +83,30 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* The top bar's controls. Small, quiet chrome: the canvas is the subject and
+   a toolbar that competes with it for attention is worse than no toolbar. */
+.shell__top button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.shell__top button:disabled { color: var(--muted); cursor: default; }
+.shell__zoom { display: flex; align-items: center; gap: 4px; }
+/* tabular-nums and a min-width so the readout does not shift the buttons
+   beside it as the percentage changes width mid-gesture. */
+.shell__zoom-readout {
+  min-width: 40px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.shell__spacer { flex: 1; }
+
 .shell__rail { border-right: 1px solid var(--border); }
 .shell__inspector { border-left: 1px solid var(--border); }
 
