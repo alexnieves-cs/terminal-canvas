@@ -1207,6 +1207,33 @@ export function Canvas({
       // optimistic row that main refused (an unknown id, a wrong type) would
       // show the new value until the next reload and then flip back.
       void window.canvas.settings.set(id, value).then(reloadSettings)
+    },
+    beginEditSetting: (id, label, current) => {
+      setInputMode({
+        kind: 'number',
+        label: `${label} (ms)…`,
+        initial: String(current),
+        submit: (value) => {
+          const parsed = Number(value)
+          // A non-number is a cancel, not a write of NaN. main's setPreference
+          // would refuse NaN anyway — it is the range check that lives there
+          // that makes this safe — but bouncing it here means the palette
+          // does not close on a typo and then silently change nothing.
+          if (!Number.isFinite(parsed)) {
+            setInputMode(null)
+            return
+          }
+          void window.canvas.settings.set(id, parsed).then(() => {
+            setInputMode(null)
+            reloadSettings()
+          })
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without this the mode would be set on a palette that is already gone
+      // and the clear-on-close effect would wipe it — the same pairing
+      // beginRenamePreset and deletePreset both make.
+      palette.openPalette()
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,

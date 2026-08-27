@@ -45,7 +45,17 @@ import type { PaletteController } from './usePalette'
  * and a confirm inherits all four of usePalette's focus rules by reusing it.
  */
 export interface InputMode {
-  kind: 'text' | 'confirm'
+  /**
+   * 'number' is 'text' with a parse and a range on the way out. It is not a
+   * new focus story: it inherits all four of usePalette's rules by being the
+   * same input, which is exactly why M5a's "a modal would fight xterm for
+   * keyboard focus" objection does not apply. The Enter handler below needs
+   * no branch for it — an empty field falls into the same "cancel" arm a
+   * blank rename already takes, and the parse/range check belongs in the
+   * submit callback, where the setting id and its bounds are in scope
+   * (Canvas.tsx's beginEditSetting).
+   */
+  kind: 'text' | 'confirm' | 'number'
   label: string
   initial: string
   submit(value: string): void

@@ -67,6 +67,12 @@ export interface PaletteActions {
    * them with the real thing; see Palette.tsx and Canvas.tsx.
    */
   toggleSetting(id: string, value: SettingValue): void
+  /**
+   * Open the palette's input mode on a number setting. Required, not
+   * optional, for the same reason toggleSetting is: an optional member is a
+   * compile-time hole a half-finished wiring passes straight through.
+   */
+  beginEditSetting(id: string, label: string, current: number): void
 }
 
 export interface PaletteContext {
@@ -274,26 +280,47 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // row per setting. The door below is the always-visible way in.
 
   for (const setting of ctx.settings) {
-    // Only booleans get a row in M6b, because only booleans exist. An enum or
-    // number needs an input mode rather than a toggle, and building that
-    // before a setting needs it would be an abstraction with no customer —
-    // the same trap ideas-backlog #11 warns about for the schema itself.
-    if (setting.type !== 'boolean') continue
-    const on = setting.value === true
-    out.push({
-      id: `setting.${setting.id}`,
-      title: `${setting.label}: ${on ? 'On' : 'Off'}`,
-      subtitle: setting.description,
-      // The synonyms, where the matcher can see them and the row cannot show
-      // them. Without this the row is findable only by its own label — and
-      // ideas-backlog #11's whole argument for a searchable settings surface
-      // is that a user looking for the theme types "dark", not "theme".
-      searchText: setting.keywords.join(' '),
-      group: 'setting',
-      scope: 'settings',
-      hiddenAtRest: true,
-      run: () => actions.toggleSetting(setting.id, !on)
-    })
+    if (setting.type === 'boolean') {
+      const on = setting.value === true
+      out.push({
+        id: `setting.${setting.id}`,
+        title: `${setting.label}: ${on ? 'On' : 'Off'}`,
+        subtitle: setting.description,
+        // The synonyms, where the matcher can see them and the row cannot show
+        // them. Without this the row is findable only by its own label — and
+        // ideas-backlog #11's whole argument for a searchable settings surface
+        // is that a user looking for the theme types "dark", not "theme".
+        searchText: setting.keywords.join(' '),
+        group: 'setting',
+        scope: 'settings',
+        hiddenAtRest: true,
+        run: () => actions.toggleSetting(setting.id, !on)
+      })
+      continue
+    }
+    if (setting.type === 'number') {
+      const current = typeof setting.value === 'number' ? setting.value : 0
+      out.push({
+        id: `setting.${setting.id}`,
+        // The value is in the TITLE, not only in the input it opens: a row
+        // that said just "Idle after" would put the user in an edit field
+        // with no idea what they are changing it from.
+        title: `${setting.label}: ${current}`,
+        subtitle: setting.description,
+        searchText: setting.keywords.join(' '),
+        group: 'setting',
+        scope: 'settings',
+        hiddenAtRest: true,
+        // NOT toggleSetting. `!1500` is `false`, which a number setting's
+        // store refuses — silently, leaving the row unchanged and the user
+        // with no idea why pressing Enter did nothing.
+        run: () => actions.beginEditSetting(setting.id, setting.label, current)
+      })
+      continue
+    }
+    // An enum (or any future type) has no row yet — building the input mode
+    // for a type with no customer would repeat the trap ideas-backlog #11
+    // warns about for the schema itself. Falls through to nothing pushed.
   }
 
   // --- Manage --------------------------------------------------------------
@@ -329,11 +356,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
   {
-    // Only counts settings that actually produce a row above (booleans, for
-    // now) — ctx.settings.length would count a future non-boolean setting the
-    // loop above `continue`s past, so the door would say "5 settings" while
-    // the scope it opens shows 3.
-    const settingCount = ctx.settings.filter((s) => s.type === 'boolean').length
+    // Booleans AND numbers now produce rows, so the count is the length again
+    // — but derive it from the same predicate the loop uses rather than from
+    // ctx.settings.length, so a future type that produces no row (an enum,
+    // still uncustomered) cannot make this door claim a setting the scope
+    // does not show.
+    const settingCount = ctx.settings.filter(
+      (s) => s.type === 'boolean' || s.type === 'number'
+    ).length
     out.push({
       id: 'manage.settings',
       title: 'Manage settings…',

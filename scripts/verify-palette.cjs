@@ -206,7 +206,8 @@ const spyActions = () => {
     beginRenamePanel: record('beginRenamePanel'),
     resetCanvas: record('resetCanvas'),
     zoomToFit: record('zoomToFit'),
-    toggleSetting: record('toggleSetting')
+    toggleSetting: record('toggleSetting'),
+    beginEditSetting: record('beginEditSetting')
   }
 }
 
@@ -711,6 +712,62 @@ const SETTING = {
   const row = byId(P.buildCommands(ctx({ settings: [off] })), 'setting.restore.camera')
   ok('54 the row says which way the toggle currently sits',
     row.title.includes('Off') || row.title.includes('off'), row.title)
+}
+
+// 55-58 — M6c. A NUMBER setting (agent.idleAfterMs) is the first non-boolean
+// the schema has ever had, and before this the loop above `continue`d past
+// every non-boolean, so it would have been reachable only by hand-editing
+// layout.json — failing success criterion 9 ("every switch is found by
+// typing a synonym into Cmd+K").
+//
+// buildOne is this file's `cmd(...)` for a settings row: one setting in, its
+// own row out, over the same ctx()/spyActions() plumbing check 51-54 already
+// use, so a number fixture doesn't need `P.buildCommands(ctx({...}))`
+// inlined at every call site.
+const buildOne = (setting, actions = spyActions()) =>
+  byId(P.buildCommands(ctx({ settings: [setting], actions })), `setting.${setting.id}`)
+
+const IDLE_AFTER_MS = {
+  id: 'agent.idleAfterMs', label: 'Idle after', description: 'ms of silence',
+  keywords: ['timeout'], type: 'number', value: 1500, category: 'Agent state'
+}
+
+// 55. A NUMBER setting produces a row at all.
+{
+  const rows = P.buildCommands(ctx({ settings: [IDLE_AFTER_MS] }))
+  ok('55 a number setting gets a row', rows.some((r) => r.id === 'setting.agent.idleAfterMs'))
+}
+
+// 56. The row's TITLE names the current value. A toggle row says which way it
+//     sits (check 54); a number row that did not would leave the user editing
+//     a value they cannot see.
+{
+  const row = buildOne(IDLE_AFTER_MS)
+  ok('56 a number row shows its current value', row.title.includes('1500'), row.title)
+}
+
+// 57. Running it does NOT toggle anything — it opens an edit. Reusing
+//     toggleSetting here would send `!1500` === false to a number setting and
+//     the store would refuse it, silently, with the row unchanged.
+{
+  const calls = []
+  const row = buildOne(IDLE_AFTER_MS, {
+    ...spyActions(),
+    beginEditSetting: (...a) => calls.push(a),
+    toggleSetting: () => calls.push(['TOGGLE'])
+  })
+  row.run()
+  ok('57 a number row begins an edit, never a toggle',
+    calls.length === 1 && calls[0][0] === 'agent.idleAfterMs' && calls[0][2] === 1500,
+    JSON.stringify(calls))
+}
+
+// 58. Number rows obey the same hiddenAtRest rule as every other setting row:
+//     M6p sized the resting list to about eight rows on purpose.
+{
+  const row = buildOne(IDLE_AFTER_MS)
+  ok('58 a number row is hidden at rest and lives in the settings scope',
+    row.hiddenAtRest === true && row.scope === 'settings')
 }
 
 const failed = results.filter((r) => !r.pass)
