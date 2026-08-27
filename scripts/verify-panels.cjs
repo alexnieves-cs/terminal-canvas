@@ -4738,6 +4738,23 @@ app.whenReady().then(async () => {
     //     viewport.ts computes. Fit is asserted separately from the steppers
     //     because they are different verbs and a wiring that pointed both at
     //     resetViewport would still change the scale.
+    //
+    //     The Fit clause is an inequality against backOut, NOT `fitted > 0`,
+    //     and the difference is the whole discrimination. `fitted > 0` is
+    //     satisfied by any non-zero scale: it passes against a Fit button
+    //     wired to resetViewport (scale 1), wired to zoomBy, and — worst —
+    //     wired to NOTHING AT ALL, since the scale then simply stays where the
+    //     steppers left it. Those are exactly the wirings the paragraph above
+    //     claims to separate, so the weaker form asserted nothing about Fit.
+    //     Requiring the scale to have MOVED off backOut is what pins that the
+    //     button ran and did something the steppers did not.
+    //
+    //     Why not recompute fitTo's expected scale from __m4aViewport() and
+    //     assert equality: that means restating fitTo's padding and clamp
+    //     arithmetic here, i.e. a second copy of math verify:viewport already
+    //     pins purely, and a copy that drifts silently the first time the real
+    //     one changes. The inequality needs no copy and fails against all
+    //     three mis-wirings above.
     {
       const start = await wc.executeJavaScript(`window.__m4aScale()`)
       await wc.executeJavaScript(`
@@ -4759,7 +4776,8 @@ app.whenReady().then(async () => {
       await sleep(200)
       const fitted = await wc.executeJavaScript(`window.__m4aScale()`)
       ok('76 the zoom cluster steps in, steps out, and fits',
-        zoomedIn > start + 0.01 && Math.abs(backOut - start) < 0.001 && fitted > 0,
+        zoomedIn > start + 0.01 && Math.abs(backOut - start) < 0.001 &&
+          Math.abs(fitted - backOut) > 0.001,
         `start=${start} in=${zoomedIn} out=${backOut} fit=${fitted}`)
     }
 
