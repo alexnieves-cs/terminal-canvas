@@ -5,6 +5,7 @@
  * nowhere else should produce a type error in every process that must handle it.
  */
 import type {
+  AgentStateUpdate,
   PanelId,
   PanelSpec,
   PtyCreateResult,
@@ -86,7 +87,19 @@ export const IPC = {
    * the renderer never needs its own copy of the defaults.
    */
   SETTINGS_LIST: 'settings:list',
-  SETTINGS_SET: 'settings:set'
+  SETTINGS_SET: 'settings:set',
+  /**
+   * "I have looked at this panel." The renderer's half of clearing wants-you.
+   *
+   * Who clears the state is not symmetric, and that asymmetry is why this
+   * channel exists at all. Typing is a fact main already holds — pty:write
+   * names the panel — so main clears it there with nothing new. Focus is a
+   * RENDERER fact: main has no idea which panel focusedId names. Clearing it
+   * renderer-side instead would make the renderer a second author of a state
+   * main owns, and the two would disagree the first time M6d fired a
+   * notification for a panel the user had already read.
+   */
+  AGENT_ACKNOWLEDGE: 'agent:acknowledge'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -134,7 +147,18 @@ export const IPC_EVENTS = {
    * channel, exactly as CANVAS_COUNTS is, which is why this lives here rather
    * than in IPC — verify:ipc only walks IPC.
    */
-  PRESET_CAPTURE: 'preset:capture'
+  PRESET_CAPTURE: 'preset:capture',
+  /**
+   * What a panel's agent is doing. Main -> renderer, fire-and-forget, like
+   * PTY_DATA — which is why it lives here rather than in IPC.
+   *
+   * Its own channel, deliberately: routing this through anything that bumps
+   * registry.version() would re-render the whole canvas on agent output and
+   * undo the memo that exists to block the 60Hz pan/zoom cascade. Main sends
+   * only on an actual CHANGE of state, so a panel printing a megabyte
+   * produces one message, not thousands.
+   */
+  AGENT_STATE: 'agent:state'
 } as const
 
 export interface SessionBackendInfo {
@@ -267,6 +291,12 @@ export interface CanvasBridge {
   settings: {
     list(): Promise<SettingRow[]>
     set(id: string, value: SettingValue): Promise<void>
+  }
+  agent: {
+    /** Per-panel state updates. Each subscribe returns its own unsubscribe. */
+    onState(listener: (update: AgentStateUpdate) => void): () => void
+    /** Focus counts as reading it. See IPC.AGENT_ACKNOWLEDGE. */
+    acknowledge(panelId: PanelId): Promise<void>
   }
   platform: NodeJS.Platform
 }
