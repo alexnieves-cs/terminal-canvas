@@ -6,7 +6,7 @@ import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
 import { usePanelDrag } from './usePanelDrag'
 import type { DragMode, DragState } from './panel-interaction'
-import { nextAttentionId, type JumpDirection } from './attention'
+import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
@@ -824,16 +824,30 @@ export function Canvas({
    * selectAndRaise, never a stale one from the render that first set it.
    */
   jumpAttentionImplRef.current = (direction: JumpDirection) => {
-    const queue = attentionIds()
+    // panelsRef, not `panels`: this reads at keypress time and must not put a
+    // 60Hz-changing array into a useCallback's dep list (the same mirror-into-
+    // a-ref move focusedIdRef makes).
+    //
+    // The attention store and the panel list can disagree: closing a panel
+    // disposes its session and clears its agent state synchronously while
+    // pty:kill is still in flight to main, and one more agent:state for that
+    // id in that window (an idle tick, a bell) re-inserts it into the queue
+    // with nothing left to clear it afterward (M6c's session.killed guard
+    // suppresses the matching `exited`). reachableQueue drops any such
+    // phantom BEFORE it can seat the cursor — seating it there first and
+    // bailing out on a missing panel would leave the cursor stuck on an id it
+    // can never leave, killing the key rather than skipping one press.
+    const known = new Set(panelsRef.current.map((p) => p.rect.id))
+    const queue = reachableQueue(attentionIds(), known)
     const id = nextAttentionId(queue, jumpCursorRef.current, direction)
     // Nothing is waiting: the key does nothing at all. Moving the camera
     // "somewhere" would be worse than silence — the user asked to be taken to
     // a panel that wants them, and there isn't one.
     if (id === null) return
-    // panelsRef, not `panels`: this reads at keypress time and must not put a
-    // 60Hz-changing array into a useCallback's dep list (the same mirror-into-
-    // a-ref move focusedIdRef makes).
     const panel = panelsRef.current.find((p) => p.rect.id === id)
+    // Belt-and-braces: a panel can still vanish between the filter above and
+    // this lookup in principle. It must never be the ONLY thing standing
+    // between the user and a working key, which is why the filter exists.
     if (!panel) return
     jumpCursorRef.current = id
     centreOn(panel.rect)

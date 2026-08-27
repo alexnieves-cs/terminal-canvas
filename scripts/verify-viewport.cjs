@@ -937,6 +937,38 @@ ok('69 a stale cursor restarts the cycle rather than dead-ending',
 ok('70 a single-entry queue keeps returning that entry',
   V.nextAttentionId(['n1'], 'n1', 1) === 'n1' && V.nextAttentionId(['n1'], 'n1', -1) === 'n1')
 
+// 71-72. reachableQueue: filters a phantom id out of the attention queue
+//     before it ever reaches nextAttentionId. See attention.ts's own comment
+//     for the failure this exists to prevent — a stale entry with no live
+//     panel behind it seats the cursor on an id the user can never leave,
+//     which is not "skip one press" but "the key is dead for the rest of the
+//     renderer's life".
+
+// 71. The filter itself: an unknown id is dropped, order and the known ids
+//     are preserved.
+{
+  const known = new Set(['n1', 'n3'])
+  const out = V.reachableQueue(['n1', 'n2', 'n3'], known)
+  ok('71 reachableQueue drops an unknown id and preserves order',
+    JSON.stringify(out) === JSON.stringify(['n1', 'n3']), JSON.stringify(out))
+}
+
+// 72. The actual regression: a queue whose HEAD is a phantom id (present in
+//     the queue, absent from the known panel set) must still advance to a
+//     real panel rather than sticking there forever. Composing reachableQueue
+//     with nextAttentionId is what the call site is required to do — passing
+//     the unfiltered queue straight to nextAttentionId reproduces the bug
+//     this check exists to catch: the cursor seats on the phantom and every
+//     later press re-picks it, because nothing ever removes it from the
+//     queue nextAttentionId sees.
+{
+  const known = new Set(['n1', 'n2'])
+  const filtered = V.reachableQueue(['ghost', 'n1', 'n2'], known)
+  const id = V.nextAttentionId(filtered, null, 1)
+  ok('72 a phantom at the head does not disable the jump',
+    id === 'n1', `got ${id}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
