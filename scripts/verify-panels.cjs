@@ -4884,6 +4884,151 @@ app.whenReady().then(async () => {
       }
     }
 
+    // 78. A PALETTE TOGGLE OF THE RAIL REACHES THE SCREEN, not only the store.
+    //
+    //     `shell.railOpen` is an ordinary boolean SettingDef, so main's
+    //     settings:list AUTO-GENERATES a runnable palette row for it — nobody
+    //     wrote that row, and nobody wired it to the shell. Running it writes
+    //     through settings:set and reloads settingRows, which is everything
+    //     check 53 asks of a setting and is NOT enough here: useShellChrome
+    //     holds the rail's visibility in its own React state, and a read effect
+    //     that never re-runs leaves the frame exactly where it was. The failure
+    //     is total and silent — the setting persists, the rail does not move,
+    //     and the row's own title (which renders which way the toggle currently
+    //     sits) then reads "Off" beside a visibly open rail. Main and the
+    //     renderer disagree, which is the two-authorities drift "One map, and a
+    //     typed view over it" exists to prevent.
+    //
+    //     This is the palette -> SCREEN direction, and nothing else covers it.
+    //     Check 53 is palette -> store and check 74 is button -> store; both
+    //     stay green against this defect, because neither ever looks at the
+    //     frame after a PALETTE-driven write. So the assertion that
+    //     discriminates is `moved` — the canvas host actually got narrower —
+    //     and `storedAfter` sits beside it as the non-vacuity guard: without
+    //     it, a run where the row was never found or never ran would report the
+    //     same "the rail did not move" as the real regression.
+    //
+    //     Watched failing against the empty-dep-array read effect before the
+    //     fix: stored=true (main took the write) with the canvas width
+    //     unchanged and shell--rail-collapsed still on the root.
+    //
+    //     World state inherited from 77: two live panels, camera wherever Fit
+    //     put it, RAIL COLLAPSED (shell.railOpen === false in main's store),
+    //     inspector open, palette closed. So the toggle below opens the rail,
+    //     and the canvas gets NARROWER — the opposite direction from 74's.
+    {
+      const openPalette = async () => {
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        return waitUntil(
+          () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      }
+      const canvasWidth = () => wc.executeJavaScript(
+        `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const railStored = () => wc.executeJavaScript(
+        `window.canvas.settings.list().then((rows) =>
+           rows.find((r) => r.id === 'shell.railOpen').value)`)
+
+      const storedBefore = await railStored()
+      const before = await canvasWidth()
+      await openPalette()
+      // By a keyword-ish query against the row's own label, the way check 52
+      // reaches a setting: the row is hiddenAtRest, so it is only in the list
+      // at all because something was typed.
+      const picked = await wc.executeJavaScript(`(async () => {
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set
+        const input = document.querySelector('.palette__input')
+        setter.call(input, 'side rail')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Show the side rail'))
+        if (!row) return 'not found'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return 'ok'
+      })()`)
+      if (picked !== 'ok') throw new Error(`78: the rail setting row was ${picked}`)
+      // runRow closes the overlay BEFORE running the command, so this is an
+      // assertion rather than a wait for something optional — a left-open
+      // palette would swallow check 79's chord.
+      await waitUntil(() => wc.executeJavaScript(
+        `document.querySelector('.palette') === null`), 2000)
+
+      const storedAfter = await waitUntil(async () =>
+        (await railStored()) === true ? true : false, 3000)
+      const moved = await waitUntil(async () =>
+        (await canvasWidth()) < before - 100 ? true : false, 3000)
+      const after = await canvasWidth()
+      const collapsed = await wc.executeJavaScript(
+        `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+      ok('78 a palette toggle of the rail moves the rail, not only the store',
+        storedBefore === false && storedAfter === true &&
+          moved === true && collapsed === false,
+        `storedBefore=${storedBefore} storedAfter=${storedAfter} ` +
+          `width ${before} -> ${after} collapsed=${collapsed}`)
+      // What 78 LEAVES BEHIND, in the spirit of 72's, 74c's and 77's closing
+      // notes: the world's two live panels and the camera are untouched, the
+      // palette is closed, and the RAIL IS NOW OPEN — `shell.railOpen` is true
+      // in main's store and the canvas is back to its narrower, three-column
+      // width. The inspector is still open and still untouched. Anything
+      // appended below that measures the canvas must account for the rail
+      // having reopened.
+    }
+
+    // 79. THE INSPECTOR CHORD, AS macOS ACTUALLY DELIVERS IT.
+    //
+    //     One check, three regressions, and none of them is reachable from any
+    //     other check in this file.
+    //
+    //     (a) `event.code`, not `event.key`. Check 74b dispatches
+    //         { key: '\\', code: 'Backslash' } — BOTH matching — so reverting
+    //         useShellChrome's `event.code === 'Backslash'` to an `event.key`
+    //         test passes it unchanged. With Shift held macOS reports
+    //         key '|' and code 'Backslash', which is what this check sends, so
+    //         a key-based test sees no chord at all and the inspector never
+    //         moves.
+    //     (b) The Shift BRANCH. Nothing else in the suite has ever sent
+    //         shiftKey with this chord, so `toggleRail()` written into both
+    //         branches — the easiest real mistake in that if/else — was
+    //         invisible to all of the checks before this one.
+    //     (c) The `shell--inspector-collapsed` class. The rail's class is
+    //         asserted by 74b; the inspector's was asserted nowhere, so a
+    //         class name typed wrong in Canvas.tsx's template literal would
+    //         render an inspector that never collapses with nothing red.
+    //
+    //     The rail clause is what makes (b) fail rather than merely look odd:
+    //     both-branches-rail flips shell--rail-collapsed and leaves
+    //     shell--inspector-collapsed alone, which is exactly the pair this
+    //     check forbids.
+    {
+      const classes = () => wc.executeJavaScript(`(() => {
+        const shell = document.querySelector('.shell')
+        return {
+          rail: shell.classList.contains('shell--rail-collapsed'),
+          inspector: shell.classList.contains('shell--inspector-collapsed')
+        }
+      })()`)
+      const before = await classes()
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '|', code: 'Backslash', metaKey: true, shiftKey: true,
+          repeat: false, bubbles: true }))
+      `)
+      await sleep(250)
+      const after = await classes()
+      ok('79 the inspector chord toggles the inspector and leaves the rail alone',
+        after.inspector !== before.inspector && after.rail === before.rail,
+        `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
+      // What 79 LEAVES BEHIND: the inspector is now COLLAPSED (it was open on
+      // entry, from 78's note) and `shell.inspectorOpen` is false in main's
+      // store; the rail stays open, the two panels and the camera are
+      // untouched, and the palette is closed.
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

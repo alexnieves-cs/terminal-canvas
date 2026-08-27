@@ -1426,10 +1426,15 @@ export function Canvas({
 
   // Rail and inspector visibility, persisted through main's settings store and
   // chorded on Cmd+\ / ⇧Cmd+\. Sits beside glowEnabled and pipsEnabled above
-  // because it is the same kind of state and reads its initial value the same
-  // way — settings:list at mount, not settingRows, which only loads when the
-  // palette opens.
-  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen })
+  // because it is the same kind of state and reads exactly the way they do:
+  // its own settings:list call (settingRows is empty until the palette has
+  // been opened, and the frame must be right on the first paint), re-run
+  // whenever settingRows changes identity. That last half is not optional —
+  // both settings are ordinary booleans, so main auto-generates a palette row
+  // for each, and without the dependency a palette toggle would persist while
+  // the rail never moved. See useShellChrome's own doc comment and
+  // verify:panels 78.
+  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows })
 
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.

@@ -10,20 +10,34 @@ export interface ShellChrome {
 /**
  * Rail and inspector visibility, persisted through main's settings store.
  *
- * Read at mount and written through settings:set — never held only in React
- * state. The preferences map is already the one place a user toggle lives
- * ("One map, and a typed view over it"), and a second store for two booleans
- * would be exactly the drift that entry exists to prevent.
+ * Read at mount AND on every change to main's setting rows, and written
+ * through settings:set — never held only in React state. The preferences map
+ * is already the one place a user toggle lives ("One map, and a typed view
+ * over it"), and a second store for two booleans would be exactly the drift
+ * that entry exists to prevent.
+ *
+ * `settingsSignal` is what closes the last hop of that rule. Both settings are
+ * ordinary boolean `SettingDef`s, so main's `settings:list` auto-generates a
+ * runnable palette row for each of them — nobody wrote those rows and nobody
+ * wired them to this hook. Running one writes to main's store and reloads
+ * `settingRows`; without a dependency on that reload, the store changes and
+ * the frame does not, so the row's own title ("Show the side rail: Off")
+ * reads the opposite of what is on screen until the next launch. The value is
+ * used for its IDENTITY only — the list is re-read from main rather than
+ * picked out of the passed rows, exactly as `glowEnabled`/`pipsEnabled` do in
+ * `Canvas.tsx`, because `settingRows` is empty until the palette has been
+ * opened and the frame has to be right on the first paint.
+ * `verify:panels` 78 is the check.
  */
-export function useShellChrome(deps: { paletteIsOpen: () => boolean }): ShellChrome {
-  const { paletteIsOpen } = deps
+export function useShellChrome(deps: {
+  paletteIsOpen: () => boolean
+  /** Change signal, compared by identity; see the note above. */
+  settingsSignal: unknown
+}): ShellChrome {
+  const { paletteIsOpen, settingsSignal } = deps
   const [railOpen, setRailOpen] = useState(true)
   const [inspectorOpen, setInspectorOpen] = useState(true)
 
-  // Read once at mount. Like glowEnabled and pipsEnabled in Canvas.tsx, this
-  // cannot ride settingRows: that list loads only when the palette OPENS, and
-  // the frame has to be right on the first paint whether or not the user has
-  // ever pressed Cmd+K.
   useEffect(() => {
     void window.canvas.settings.list().then((rows) => {
       const rail = rows.find((r) => r.id === 'shell.railOpen')
@@ -31,23 +45,28 @@ export function useShellChrome(deps: { paletteIsOpen: () => boolean }): ShellChr
       if (rail) setRailOpen(rail.value === true)
       if (inspector) setInspectorOpen(inspector.value === true)
     })
-  }, [])
+  }, [settingsSignal])
 
+  // The IPC write is deliberately OUTSIDE the setState updater. A React state
+  // updater must be pure — under StrictMode it is invoked twice, and a side
+  // effect inside it fires twice too, which is the same hazard Canvas.tsx's
+  // `commitHistory` comment flags. main.tsx omits StrictMode today, so the
+  // updater form was not actually broken; it was one `<StrictMode>` away from
+  // writing every toggle to the store twice. Reading `railOpen` from the
+  // closure costs this callback its stable identity, which is fine: its only
+  // consumers are the keydown effect below (which already depends on it) and
+  // a button's onClick.
   const toggleRail = useCallback(() => {
-    setRailOpen((open) => {
-      const next = !open
-      void window.canvas.settings.set('shell.railOpen', next)
-      return next
-    })
-  }, [])
+    const next = !railOpen
+    setRailOpen(next)
+    void window.canvas.settings.set('shell.railOpen', next)
+  }, [railOpen])
 
   const toggleInspector = useCallback(() => {
-    setInspectorOpen((open) => {
-      const next = !open
-      void window.canvas.settings.set('shell.inspectorOpen', next)
-      return next
-    })
-  }, [])
+    const next = !inspectorOpen
+    setInspectorOpen(next)
+    void window.canvas.settings.set('shell.inspectorOpen', next)
+  }, [inspectorOpen])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
