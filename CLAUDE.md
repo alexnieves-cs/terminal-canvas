@@ -35,7 +35,7 @@ work is done. Individual suites:
 |---|---|---|
 | `verify:viewport` | plain node | 55 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), `makePanel`'s spec/size arguments (48), and `centreOn` framing a rect without touching the scale (49–50). M6 adds `cascadeCentre`'s coincidence stepping (51–55) — including the half that is easiest to get subtly wrong: 51 pins that a merely OVERLAPPING panel does not move a spawn (centres, not rects), 53 walks the whole lattice rather than one step, and 54 asserts `CASCADE_EPSILON < CASCADE_STEP` as a relation, because inverting them makes every FIRST press run the lattice and land 384px off centre — a failure that surfaces in `verify:panels` 7 as a centring bug with nothing pointing at the epsilon |
 | `verify:registry` | plain node | 25 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19). M6a adds check 20: `PanelStatus.running` widens to carry `command`/`cwd`/`reattached`, so the header chain has something besides the spec to read for a login-shell panel |
-| `verify:layout` | plain node | 74 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57). M6a adds `Panel.title` round-tripping through `layout-adapt.ts` — parsed in on the way from disk (58), written back out on the way to disk (59), and an untitled panel writing no `title` key at all rather than a saved absent-marker (60). M6b adds `shared/settings-schema.ts` and its `preferences` map: the three restore ids and `settingsInCategory`'s query (61), an unset id resolving to the schema default (62), id uniqueness and every def carrying a label/description/keyword (63–64), `parsePreferences`'s absent-vs-malformed split — no key at all warns nothing (65), a non-object warns and is replaced (66) — an unknown id dropped with a warning rather than carried forward as a permanent typo (67), a wrong-typed value dropped and warned rather than coerced (68), the pre-M6b `settings`→`preferences` migration seeding only the three restore ids and only when a legacy key was actually present (69), a fresh store answering the schema defaults with an empty map (70), a preference surviving a write and a reopen (71), `setPreference` refusing an id the schema does not declare (72), `settings()`/`setSetting()` proven a VIEW over the same map rather than a second store by writing through one accessor and reading through the other (73), and the Restore submenu's own query returning exactly the three restore ids (74) — see "One map, and a typed view over it" and "The Restore submenu is derived, not listed" below, including what check 74 does **not** prove |
+| `verify:layout` | plain node | 75 checks (the last check number is 74; see the lettered sub-check below): `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57). M6a adds `Panel.title` round-tripping through `layout-adapt.ts` — parsed in on the way from disk (58), written back out on the way to disk (59), and an untitled panel writing no `title` key at all rather than a saved absent-marker (60). M6b adds `shared/settings-schema.ts` and its `preferences` map: the three restore ids and `settingsInCategory`'s query (61), an unset id resolving to the schema default (62), id uniqueness and every def carrying a label/description/keyword (63–64), `parsePreferences`'s absent-vs-malformed split — no key at all warns nothing (65), a non-object warns and is replaced (66) — an unknown id dropped with a warning rather than carried forward as a permanent typo (67), a wrong-typed value dropped and warned rather than coerced (68), the pre-M6b `settings`→`preferences` migration seeding only the three restore ids and only when a legacy key was actually present (69), a fresh store answering the schema defaults with an empty map (70), a preference surviving a write and a reopen (71), `setPreference` refusing an id the schema does not declare (72) and, now that `SettingDef['type']` is honest about what `typeof` returns, refusing a known id given a wrong-typed value too (72b), `settings()`/`setSetting()` proven a VIEW over the same map rather than a second store by writing through one accessor and reading through the other (73), and the Restore submenu's own query returning exactly the three restore ids (74) — see "One map, and a typed view over it" and "The Restore submenu is derived, not listed" below, including what check 74 does **not** prove |
 | `verify:palette` | plain node | 55 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–33) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list. M6a added the `panel.rename` row (31–32) and a titled panel being findable by its title (33). M6p adds the structure: section-first sorting outranking a better score in a later section and score still deciding inside one (34–35), `bestMatchIndex` skipping disabled rows (36–38), `hiddenAtRest` in BOTH directions (39–40), `searchText` including the whole phrase (41, 41b), `splitHighlight` (42–43), the two retitles (44–45), what is hidden versus what is not (46), exactly-two-destructive (47), `⌘N` on the default preset alone (48), and the drill-in doors and what a scope shows (49–50). **Check 30 was rewritten**: it derives its expectation from `SECTIONS` and runs through `filterCommands`, because construction order stopped being the grouping the moment sorting became section-first — see "Sections are data" below. M6b adds the `setting` section and its drill-in: a boolean setting rendering as a runnable row carrying its label and description (51), a setting findable by a keyword the row never shows (52), running a setting row toggling it to the opposite value (53), and the row's title naming which way the toggle currently sits (54) — see "Settings are a drill-in, not a flat list" below. The count is 55 while the last number is 54, because of the lettered sub-check `41b` |
 | `verify:tmux` | plain node | 27 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19). M5c adds `resolveSocket`: dev and packaged landing on different sockets (20), the dev socket unchanged from its historic value (21), an explicit override beating both defaults (22), a blank or whitespace override falling back to the default rather than leaking through to tmux's own default socket (23), and `buildStartServerArgs` — the one tmux argv that used to be hand-rolled — defaulting to the private socket and threading an explicit one (24–25). M6a adds check 26: `buildHasSessionArgs`'s argv, including the same exact-match `=` on its target that every kill-session target already obeys, so panel `n1`'s probe doesn't read `n12` as its own surviving session. The count is 27 while the last number is 26, because of the lettered sub-check `17b` |
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value: `node-pty` unpacked from the asar and the pattern depth-independent (1–2), `asar` actually on (3), the `files` globs (4–5), app identity and output dir (6–7), signing explicitly *decided* rather than unmentioned (8), targets and architecture (9), and the arch being a parameter rather than a constant (10) |
@@ -1183,46 +1183,35 @@ honest rather than a second way to lose a row.
 
 **The Restore submenu is derived, not listed (`main/menu.ts`) — and no check in
 `npm run verify` proves it stays that way.** The submenu maps over
-`settingsInCategory('Restore on launch')` rather than a hand-written list, and
-`SETTINGS_SET`'s handler calls `rebuildMenu()` so a palette toggle redraws the
-checkbox instead of the two surfaces disagreeing until the next unrelated
-rebuild. `verify:layout` 74 asserts `settingsInCategory('Restore on launch')`
-returns the three `restore.*` ids — a fact about the pure schema function
-ALONE. It never touches `menu.ts`, and **nothing in `npm run verify` calls
-`buildAppMenu` at all**, because `menu.ts` imports `electron` and no Electron-
-tier suite drives it: `verify:panels`' own harness (`scripts/verify-panels.cjs`)
-builds no menu and passes `rebuildMenu` as a no-op precisely because this
-harness has none to rebuild. So 74/74 would pass identically against a
-`menu.ts` that reverted to a hand-written list of the same three settings and
-never called the query at all — the exact drift this entry's first paragraph
-claims is prevented. That claim is true of the code as written today; it is
-**unverified by any automated check**, and closing the gap needs a new
-Electron-tier suite that actually constructs a menu and reads its items, which
-M6b did not scope. Do not read `74/74` as proof the menu is still derived —
-see `verify:panels` 32's note on what it deliberately sends nothing to prove,
-and the auto-repeat note on what its checks cannot show, for the same shape of
-gap elsewhere in this file.
+`settingsInCategory(RESTORE_CATEGORY)` rather than a hand-written list —
+`RESTORE_CATEGORY` is one exported constant in `settings-schema.ts`, used as
+every `SettingDef`'s own `category`, as the menu's query argument, and as the
+submenu's rendered `label`, so the four copies of `'Restore on launch'` cannot
+drift apart by a typo — and `SETTINGS_SET`'s handler calls `rebuildMenu()` so a
+palette toggle redraws the checkbox instead of the two surfaces disagreeing
+until the next unrelated rebuild. `verify:layout` 74 asserts
+`settingsInCategory(RESTORE_CATEGORY)` returns the three `restore.*` ids — a
+fact about the pure schema function ALONE. It never touches `menu.ts`, and
+**nothing in `npm run verify` calls `buildAppMenu` at all**, because `menu.ts`
+imports `electron` and no Electron-tier suite drives it:
+`verify:panels`' own harness (`scripts/verify-panels.cjs`) builds no menu and
+passes `rebuildMenu` as a no-op precisely because this harness has none to
+rebuild. So 74/74 would pass identically against a `menu.ts` that reverted to
+a hand-written list of the same three settings and never called the query at
+all — the exact drift this entry's first paragraph claims is prevented. That
+claim is true of the code as written today; it is **unverified by any
+automated check**, and closing the gap needs a new Electron-tier suite that
+actually constructs a menu and reads its items, which M6b did not scope. Do
+not read `74/74` as proof the menu is still derived — see `verify:panels` 32's
+note on what it deliberately sends nothing to prove, and the auto-repeat note
+on what its checks cannot show, for the same shape of gap elsewhere in this
+file.
 
-**`typeof` never returns `'enum'`, and both preference guards know it
-(`shared/layout-schema.ts`'s `parsePreferences`, `main/layout-store.ts`'s
-`setPreference`).** `SettingDef.type` is `'boolean' | 'enum' | 'number'`, but
-both guards compare `typeof value !== def.type`, and `typeof` only ever answers
-`'boolean'`, `'number'`, `'string'`, and the other real JS primitive tags —
-never the literal string `'enum'`. The first `enum`-typed `SettingDef` would
-therefore fail this comparison for EVERY value it is given, valid ones
-included: `setPreference` silently refuses to store any of them (no warning at
-all — the id just never saves), and `parsePreferences` drops them on load with
-a warning that misreports a valid value as malformed. It is inert today
-because all three shipped settings are boolean, so `def.type` is always a real
-`typeof` result and the branch never fires. The trigger is M6c or M6d's first
-non-boolean setting (`settings-schema.ts`'s own comment says they add one) —
-give `'enum'` its own branch in both guards before that setting ships, or its
-saved value silently vanishes on the very next load with nothing in any log
-explaining why. The controller ruled deliberately against fixing this now: a
-type-mapping layer for a type with zero live members is an abstraction with no
-customer, the same trap `ideas-backlog.md` #11 warns about for the schema
-itself. Both guards carry a comment saying so; this is the entry that stops a
-future session losing a day to "why doesn't my enum setting save".
+**`SettingDef['type']` tracks only what `typeof` can actually return
+(`shared/settings-schema.ts`).** An earlier draft added `'enum'` to the union
+with no enum-typed setting to back it; it was removed rather than given a
+type-mapping layer, since a customer-free abstraction is exactly what
+`ideas-backlog.md` #11 warns against.
 
 ## Gotchas
 
