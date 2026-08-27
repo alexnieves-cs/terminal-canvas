@@ -329,7 +329,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
   {
-    const settingCount = ctx.settings.length
+    // Only counts settings that actually produce a row above (booleans, for
+    // now) — ctx.settings.length would count a future non-boolean setting the
+    // loop above `continue`s past, so the door would say "5 settings" while
+    // the scope it opens shows 3.
+    const settingCount = ctx.settings.filter((s) => s.type === 'boolean').length
     out.push({
       id: 'manage.settings',
       title: 'Manage settings…',

@@ -969,6 +969,16 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     !('nope.gone' in store.preferences()))
 }
 {
+  // The type union tracks `typeof`'s tags now ('enum' is gone), so this path
+  // is genuinely reachable: a known id given a value of the wrong type must
+  // still be refused, not merely an unknown id.
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setPreference('restore.layout', 'yes')
+  ok('72b setting a known id with the wrong type is refused',
+    !('restore.layout' in store.preferences()))
+}
+{
   // The view, both directions. This is the check that makes "one map, two
   // accessor shapes" a fact rather than a claim.
   const store = L.createLayoutStore({ filePath: tmp() })
@@ -986,7 +996,7 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
 //     three settings drift, and the drift shows up as a menu that silently
 //     stops offering something the palette still offers.
 {
-  const restore = L.settingsInCategory('Restore on launch')
+  const restore = L.settingsInCategory(L.RESTORE_CATEGORY)
   ok('74 the Restore submenu query returns exactly the three restore settings',
     restore.length === 3 && restore.every((d) => d.id.startsWith('restore.')),
     restore.map((d) => d.id).join(','))

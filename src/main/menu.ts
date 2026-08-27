@@ -1,6 +1,6 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
-import { settingsInCategory, type SettingValue } from '../shared/settings-schema'
+import { RESTORE_CATEGORY, settingsInCategory, type SettingValue } from '../shared/settings-schema'
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
@@ -39,11 +39,11 @@ export function buildAppMenu(options: AppMenuOptions): void {
         { role: 'about' },
         { type: 'separator' },
         {
-          label: 'Restore on launch',
+          label: RESTORE_CATEGORY,
           // Built from the schema, not a hand-written list. A second list of
           // the same settings is a list that drifts, and the symptom is a menu
           // that silently stops offering something the palette still offers.
-          submenu: settingsInCategory('Restore on launch').map((def) => ({
+          submenu: settingsInCategory(RESTORE_CATEGORY).map((def) => ({
             label: def.label,
             type: 'checkbox' as const,
             checked: options.settingValue(def.id) === true,

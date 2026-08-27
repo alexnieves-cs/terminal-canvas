@@ -14,6 +14,14 @@
 
 export type SettingValue = boolean | string | number
 
+/**
+ * Named once so the menu's submenu label, the menu's `settingsInCategory`
+ * query, and every SettingDef's own `category` field can't drift from one
+ * another by a typo — a mismatch here returns [] and renders as a silently
+ * empty submenu, with nothing in any log. See CLAUDE.md.
+ */
+export const RESTORE_CATEGORY = 'Restore on launch'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -28,7 +36,8 @@ export interface SettingDef {
    * only by its own label is a setting most users will not find.
    */
   keywords: string[]
-  type: 'boolean' | 'enum' | 'number'
+  /** Tracks what `typeof` can actually answer — see parsePreferences/setPreference. */
+  type: 'boolean' | 'number'
   default: SettingValue
   /** Groups rows in the palette and names the menu submenu they came from. */
   category: string
@@ -49,7 +58,7 @@ export const SETTINGS: readonly SettingDef[] = [
     keywords: ['panels', 'layout', 'reopen', 'session', 'startup', 'launch'],
     type: 'boolean',
     default: true,
-    category: 'Restore on launch'
+    category: RESTORE_CATEGORY
   },
   {
     id: 'restore.camera',
@@ -58,7 +67,7 @@ export const SETTINGS: readonly SettingDef[] = [
     keywords: ['camera', 'zoom', 'pan', 'viewport', 'position', 'startup'],
     type: 'boolean',
     default: true,
-    category: 'Restore on launch'
+    category: RESTORE_CATEGORY
   },
   {
     id: 'restore.focus',
@@ -67,7 +76,7 @@ export const SETTINGS: readonly SettingDef[] = [
     keywords: ['focus', 'selection', 'selected', 'highlight', 'startup'],
     type: 'boolean',
     default: true,
-    category: 'Restore on launch'
+    category: RESTORE_CATEGORY
   }
 ]
 

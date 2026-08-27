@@ -1210,7 +1210,7 @@ export function Canvas({
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       settingRows, reloadSettings])
+       reloadSettings])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and

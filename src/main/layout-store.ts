@@ -151,6 +151,18 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     }
   }
 
+  // Shared by setPreference and setSetting, so neither can write an id the
+  // schema does not declare or a value of the wrong type — either would be an
+  // entry parsePreferences drops on the very next load: a setting that
+  // appears to take and is gone after a relaunch.
+  function writePreference(id: string, value: SettingValue): void {
+    const def = settingDef(id)
+    if (def === undefined) return
+    if (typeof value !== def.type) return
+    snapshot.preferences[id] = value
+    scheduleWrite()
+  }
+
   function scheduleWrite(): void {
     dirty = true
     // Coalescing, not queueing. A drag sends ~60 snapshots a second; only the
@@ -244,29 +256,16 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     settings: resolvedSettings,
 
     setSetting(key, value) {
-      snapshot.preferences[`restore.${key}`] = value
-      scheduleWrite()
+      // Routed through the same guard setPreference uses, rather than writing
+      // snapshot.preferences directly — see writePreference's comment.
+      writePreference(`restore.${key}`, value)
     },
 
     preferences: () => ({ ...snapshot.preferences }),
 
     getSetting: (id) => resolveSetting(snapshot.preferences, id),
 
-    setPreference(id, value) {
-      const def = settingDef(id)
-      // An id the schema does not declare cannot be stored. parsePreferences
-      // would drop it on the next load anyway, so accepting it here would mean
-      // a setting that appears to take and is gone after a relaunch.
-      if (def === undefined) return
-      // `typeof` never returns the string 'enum', so this silently rejects
-      // EVERY value of an 'enum'-typed SettingDef, valid ones included. M6c/M6d
-      // add the first one (settings-schema.ts's own comment says so); give
-      // 'enum' its own branch here before that setting ships, or it will
-      // appear to save and be gone after the next relaunch with no warning.
-      if (typeof value !== def.type) return
-      snapshot.preferences[id] = value
-      scheduleWrite()
-    },
+    setPreference: writePreference,
 
     // Copied out, like settings(), so a caller cannot mutate the snapshot the
     // store is about to serialise and have the write silently disagree with

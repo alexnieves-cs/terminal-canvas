@@ -14,7 +14,7 @@ import type {
   PtyWriteRequest
 } from './types'
 import type { CanvasState } from './layout-schema'
-import type { SettingValue } from './settings-schema'
+import type { SettingDef, SettingValue } from './settings-schema'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -192,7 +192,8 @@ export interface SettingRow {
   label: string
   description: string
   keywords: string[]
-  type: 'boolean' | 'enum' | 'number'
+  /** Derived from SettingDef so the two type unions cannot drift apart. */
+  type: SettingDef['type']
   value: SettingValue
   category: string
 }
