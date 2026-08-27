@@ -290,6 +290,48 @@ export function Palette(props: PaletteProps): JSX.Element {
         event.preventDefault()
         setIndex((i) => stepRunnable(rows, i, -1))
         break
+      // ArrowRight/ArrowLeft are the horizontal spelling of Enter-on-a-door
+      // and Escape-in-a-scope: right opens the drill-in under the selection,
+      // left comes back. Both are CARET-GATED, and that gate is the load-
+      // bearing half rather than a nicety — .palette__input is the only text
+      // field in this app the user cannot tab out of (Tab is an exit; see
+      // above), so arrows that always navigated would leave a typed query
+      // permanently uneditable, with no other key able to move the caret back
+      // into it. Same boundary rule Backspace above already obeys, expressed
+      // as a caret position instead of an empty string because there IS a
+      // sensible mid-query press here.
+      //
+      // A non-collapsed selection (start !== end) is a user selecting text,
+      // never navigating, so it fails the gate at both ends. Falling through
+      // without preventDefault is what hands the keypress back to the browser
+      // as ordinary caret movement.
+      case 'ArrowRight': {
+        if (inputMode) break
+        const { selectionStart: start, selectionEnd: end } = event.currentTarget
+        if (start === null || start !== end || start !== query.length) break
+        const row = index >= 0 ? rows[index] : undefined
+        // Deliberately only a door. ArrowRight never RUNS a row: Enter stays
+        // the single key that does that, so a stray arrow press can neither
+        // spawn a panel nor reach a destructive row's confirm. runRow already
+        // knows what opening a door means (set the scope, clear the query it
+        // was found with) and is reused rather than re-implemented here.
+        if (row?.entersScope && row.disabledReason === undefined) {
+          event.preventDefault()
+          runRow(row)
+        }
+        break
+      }
+      case 'ArrowLeft': {
+        if (inputMode || scope === null) break
+        const { selectionStart: start, selectionEnd: end } = event.currentTarget
+        if (start !== 0 || end !== 0) break
+        event.preventDefault()
+        // The query is left alone, unlike entering a door above. Popping is
+        // an undo of the scope, not of what the user has typed since — and
+        // at caret 0 with text in the field they are still editing it.
+        setScope(null)
+        break
+      }
       case 'Enter':
         event.preventDefault()
         if (inputMode) {
@@ -318,7 +360,14 @@ export function Palette(props: PaletteProps): JSX.Element {
     ? confirming
       ? '↵ confirm · esc cancel'
       : '↵ save · esc cancel'
-    : `↑↓ move · ↵ run · esc ${scope ? 'back' : 'close'}`
+    // The footer is the palette's only affordance list, so a shortcut absent
+    // from it is a shortcut nobody finds — the same reasoning hiddenAtRest
+    // obeys for rows. Which arrow is named depends on which one is reachable
+    // from here: there is nothing to go back to at the top level, and no door
+    // to open inside a scope (every row there is a leaf).
+    : scope
+      ? '↑↓ move · ↵ run · ← back · esc close'
+      : '↑↓ move · → open · ↵ run · esc close'
 
   return (
     <div

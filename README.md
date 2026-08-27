@@ -168,6 +168,10 @@ frames it but never *wakes* it, so a keyboard tour of a restored canvas still
 spawns nothing. And the panel the commands act on is the one that had focus when
 the palette **opened** — DOM focus moves to the input, but the app's idea of the
 focused panel deliberately does not, so the panel stays live and stays the target.
+Rows that lead somewhere — `Manage presets…`, `Manage settings…` — open on `→` as
+well as `Enter`, and `←` comes back out, alongside the `Escape` that already did.
+Both arrows act only from the edges of what you have typed (right from the end,
+left from the start), so they never take the caret away from an in-progress query.
 
 **Prompts come from two places, and only one of them is writable.** Saved prompts
 live in `layout.json` alongside the panels; project prompts are read live from

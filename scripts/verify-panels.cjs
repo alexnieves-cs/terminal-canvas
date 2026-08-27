@@ -3296,6 +3296,117 @@ app.whenReady().then(async () => {
         await closePalette()
       }
 
+      // 49b. The horizontal spelling of the same two moves: ArrowRight opens
+      //      the door under the selection, ArrowLeft comes back. It asserts
+      //      the same three facts about the SCOPE that 49 does rather than
+      //      merely "a chip appeared", so an ArrowRight that opened the wrong
+      //      drill-in still fails. Dispatched on .palette__input, never on
+      //      window: this handler is the input's own onKeyDown and a window
+      //      dispatch never reaches it (the same trap check 70 records).
+      {
+        await openPalette()
+        const result = await wc.executeJavaScript(`(async () => { try {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const input = document.querySelector('.palette__input')
+          setter.call(input, 'manage presets')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 80))
+          // Caret at the end — where typing leaves it — which is the only
+          // position ArrowRight is allowed to act from.
+          const typed = document.querySelector('.palette__input')
+          typed.setSelectionRange(typed.value.length, typed.value.length)
+          typed.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const inside = [...document.querySelectorAll('.palette__row')].map((r) => r.textContent)
+          const scoped = {
+            chip: (document.querySelector('.palette__scope') || {}).textContent || null,
+            leaked: inside.filter((t) => t.includes('Go to')).length,
+            hasDelete: inside.some((t) => t.includes('Delete preset')),
+            count: inside.length
+          }
+          // Entering a door clears the query, so the caret is at 0 already —
+          // which is exactly where ArrowLeft is allowed to pop from.
+          const input2 = document.querySelector('.palette__input')
+          input2.setSelectionRange(0, 0)
+          input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          return {
+            scoped,
+            stillOpen: document.querySelector('.palette') !== null,
+            chipGone: document.querySelector('.palette__scope') === null,
+            backAtTop: [...document.querySelectorAll('.palette__row')]
+              .some((r) => r.textContent.includes('Go to'))
+          }
+        } catch (e) { return { error: String(e && e.message || e) } } })()`)
+        ok('49b ArrowRight enters a drill-in and ArrowLeft pops back without closing',
+          result && !result.error &&
+            result.scoped.chip === 'Presets' &&
+            result.scoped.leaked === 0 &&
+            result.scoped.hasDelete === true &&
+            result.scoped.count > 0 &&
+            result.stillOpen === true &&
+            result.chipGone === true &&
+            result.backAtTop === true,
+          JSON.stringify(result))
+        await closePalette()
+      }
+
+      // 49c. The caret gate, both halves — and this is the half that
+      //      separates the shipped behaviour from the naive unconditional
+      //      one. .palette__input is the only text field in this app the
+      //      user cannot tab out of, so arrows that ALWAYS navigate make a
+      //      typed query uneditable: there is no other way to move the
+      //      caret back into it. 49b passes against that implementation.
+      //      So: caret at 0 with text present must NOT enter a scope, and
+      //      caret at the end with text present must NOT pop one.
+      {
+        await openPalette()
+        const result = await wc.executeJavaScript(`(async () => { try {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const type = async (text) => {
+            const el = document.querySelector('.palette__input')
+            setter.call(el, text)
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            await new Promise((r) => setTimeout(r, 80))
+          }
+          const press = async (key, caret) => {
+            const el = document.querySelector('.palette__input')
+            el.setSelectionRange(caret, caret)
+            el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+            await new Promise((r) => setTimeout(r, 120))
+          }
+          // Half one: the door is selected, but the caret is mid-query.
+          await type('manage presets')
+          await press('ArrowRight', 0)
+          const enteredFromCaretZero = document.querySelector('.palette__scope') !== null
+          // Now actually enter, from the end, and type inside the scope.
+          await press('ArrowRight', 'manage presets'.length)
+          const inScope = document.querySelector('.palette__scope') !== null
+          await type('del')
+          // Half two: caret at the end of a non-empty query must not pop.
+          await press('ArrowLeft', 'del'.length)
+          const poppedFromCaretEnd = document.querySelector('.palette__scope') === null
+          // And the gate is a gate, not a disablement: from caret 0 it pops.
+          await press('ArrowLeft', 0)
+          return {
+            enteredFromCaretZero,
+            inScope,
+            poppedFromCaretEnd,
+            poppedFromCaretZero: document.querySelector('.palette__scope') === null,
+            stillOpen: document.querySelector('.palette') !== null
+          }
+        } catch (e) { return { error: String(e && e.message || e) } } })()`)
+        ok('49c the drill-in arrows are caret-gated in both directions',
+          result && !result.error &&
+            result.enteredFromCaretZero === false &&
+            result.inScope === true &&
+            result.poppedFromCaretEnd === false &&
+            result.poppedFromCaretZero === true &&
+            result.stillOpen === true,
+          JSON.stringify(result))
+        await closePalette()
+      }
+
       // 50. A delete is gated, and Escape CANCELS it. The assertion that
       //     matters is the last one: a confirm step that confirms
       //     unconditionally is invisible — the dialog appears, the user says
