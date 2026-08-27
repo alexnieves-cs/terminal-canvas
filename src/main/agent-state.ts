@@ -1,12 +1,18 @@
 /**
  * The agent-state detector: a BEL scanner and a state machine, both pure.
  *
- * This module imports NOTHING — not electron, not node-pty, not node:fs. That
- * is deliberate and load-bearing: it is what puts the two pieces most able to
+ * This module imports nothing at RUNTIME — not electron, not node-pty, not
+ * node:fs; its one import is a type, which the compiler erases. That is
+ * deliberate and load-bearing: it is what puts the two pieces most able to
  * be subtly wrong into the cheapest, fastest verify tier the repo has, next to
  * tmux-args.ts and presets.ts. If this file ever needs a PTY or a window, the
  * impure part belongs in pty-manager.ts.
  */
+
+// Type-only, and it must stay that way: an erased import is what keeps this
+// module free of any runtime dependency at all, which is the whole reason it
+// sits in the plain-node verify tier next to tmux-args.ts.
+import type { AgentState } from '../shared/types'
 
 /**
  * Where the scanner is in the escape grammar. It has to be carried BETWEEN
@@ -85,8 +91,6 @@ export function scanForBell(
   }
   return { state: s, bells }
 }
-
-import type { AgentState } from '../shared/types'
 
 /**
  * The detector's whole memory for one panel.

@@ -139,6 +139,20 @@ export class PtyManager {
     // Only ever ticks while something is in the map; see startIdleTick.
     this.startIdleTick()
 
+    // The one DIRECT send in this class, and applyEvent structurally cannot
+    // do it: applyEvent sends only on a CHANGE, and the detector is born in
+    // 'starting', so nothing ever *enters* it and the state would never reach
+    // the wire at all. Without this send a panel that has spawned but not yet
+    // produced a byte carries no state — which is exactly the window that
+    // matters, because a real `claude` takes seconds to boot and that silence
+    // is the moment the user most needs to see something is happening. It is
+    // sent after the map entry exists so the ordering matches every other
+    // send: a state is only ever announced for a session main is holding.
+    this.send(IPC_EVENTS.AGENT_STATE, {
+      panelId: spec.panelId,
+      state: session.detector.state satisfies AgentState
+    })
+
     proc.onData((data) => this.enqueue(session, data))
     proc.onExit(({ exitCode, signal }) => {
       // Flush whatever is pending BEFORE announcing exit, otherwise the last
@@ -153,7 +167,27 @@ export class PtyManager {
       // in one direction only: 'exited' is terminal in the state machine
       // precisely so the last bytes a dying process emits — which the flush
       // has just delivered — cannot revive the panel to 'busy'.
-      this.applyEvent(session, { kind: 'exit' })
+      //
+      // The SEND obeys the same guard PTY_EXIT does, for the same reason and
+      // with a sharper failure: an exit we asked for arrives milliseconds
+      // after kill() returned, by which time the renderer has already run
+      // clearAgentState(id) at its dispose site. An unguarded 'exited' lands
+      // AFTER that cleanup and re-adds the entry — so the map grows for the
+      // life of the renderer and a recycled id inherits a dead panel's
+      // border, which is precisely the failure clearAgentState's own comment
+      // claims to prevent. The recycled id is not hypothetical: onReset
+      // disposes every panel and immediately installs firstRunPanels(), whose
+      // id is the constant FIRST_RUN_ID, so resetting a canvas whose 'p1' was
+      // running painted the brand-new 'p1' red until its first byte arrived —
+      // and never healed at all if that panel was never promoted.
+      //
+      // The TRANSITION is not guarded, only the send. The detector still has
+      // to reach its terminal state: this closure keeps `session` alive after
+      // the map entry is gone, so a straggler read on a killed session would
+      // otherwise be applied to a detector still sitting in 'busy' and send a
+      // state for a panel nobody can see. 'exited' is terminal, so once it is
+      // recorded no later event can produce a send at all.
+      this.applyEvent(session, { kind: 'exit' }, session.killed)
       if (this.sessions.size === 0) this.stopIdleTick()
       // An exit we asked for is not news the panel needs to paint.
       if (session.killed) return
@@ -311,11 +345,17 @@ export class PtyManager {
    * a megabyte produces one 'busy' message rather than one per 16ms flush, so
    * this channel cannot become the 60Hz cascade the renderer's memo exists to
    * block.
+   *
+   * `mute` advances the machine WITHOUT telling anyone. It exists for exactly
+   * one caller — the exit of a session we killed — and the split is the point:
+   * suppressing the transition too would leave a detector stranded mid-state
+   * on an object this class's own onExit/onData closures still hold.
    */
-  private applyEvent(session: Session, event: AgentEvent): void {
+  private applyEvent(session: Session, event: AgentEvent, mute = false): void {
     const before = session.detector.state
     session.detector = nextState(session.detector, event, Date.now(), this.getIdleAfterMs())
     if (session.detector.state === before) return
+    if (mute) return
     this.send(IPC_EVENTS.AGENT_STATE, {
       panelId: session.panelId,
       state: session.detector.state satisfies AgentState

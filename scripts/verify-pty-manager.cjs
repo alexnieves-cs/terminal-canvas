@@ -70,6 +70,14 @@ const ok = (n, pass, detail) => {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+/* One full idleness tick plus margin. Check 17 counts `busy` sends only after
+   this has elapsed past the idle transition, so an implementation that emitted
+   per tick rather than per change has had at least one more chance to do so
+   before the count is read. Mirrors pty-manager.ts's IDLE_TICK_MS (500) —
+   deliberately restated rather than imported, since the bundle exports only
+   the class. */
+const IDLE_TICK_SETTLE_MS = 700
+
 /**
  * Polls until predicate() is true, or gives up. Returns whether it became
  * true rather than throwing, so a failure is reported as a FAIL line with the
@@ -159,11 +167,30 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
   // 3. An intentional kill is not a process exit the panel should paint
   // "[process exited]" for. Only unrequested exits get reported.
   {
-    const { manager, exits } = makeHarness()
+    const states = []
+    const { manager, exits } = makeHarness(DIRECT, {
+      onSend: (channel, payload) => {
+        if (channel === 'agent:state') states.push(payload)
+      }
+    })
     await manager.create(spec('panel-c'))
     manager.kill('panel-c')
     await sleep(500)
     ok('3 kill() emits no spurious pty:exit', exits().length === 0, `${exits().length} exit event(s)`)
+    // 3b. The agent-state 'exited' obeys the SAME guard, and until a
+    //     whole-branch review it did not — it was sent from above the
+    //     `if (session.killed) return`. The failure it produced is not an
+    //     asymmetry anyone would notice locally: the renderer runs
+    //     clearAgentState(id) at every dispose site, this send lands
+    //     milliseconds LATER, and so it re-adds the entry after the cleanup —
+    //     which onReset then hands to the brand-new panel, whose id is the
+    //     constant FIRST_RUN_ID, as a red 'exited' border on a panel that has
+    //     never run anything. Asserted as "no 'exited' for this panel", not
+    //     "no agent:state at all", because 'starting' is legitimately sent at
+    //     spawn and is not what the guard is about.
+    ok('3b kill() emits no agent-state exit either',
+      !states.some((s) => s.panelId === 'panel-c' && s.state === 'exited'),
+      JSON.stringify(states))
   }
 
   // 4. Regression guard: a real, unrequested exit must still be reported
@@ -245,6 +272,30 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
   // 17. A panel that prints something reaches 'busy', and the state arrives on
   //     AGENT_STATE — not on PTY_DATA, and not by bumping anything the renderer
   //     already subscribes to.
+  //
+  //     And it arrives EXACTLY ONCE. That half is the one worth the extra
+  //     wait: applyEvent's send-only-on-change dedupe IS the throttle the
+  //     design rests on, and `states.some(... 'busy')` — which is all this
+  //     check asserted until a whole-branch review — passes just as happily
+  //     against an implementation that emitted on every 16ms flush and every
+  //     500ms tick, i.e. against the 60Hz cascade the dedupe exists to
+  //     prevent. A count is the only assertion that separates them.
+  //
+  //     The FIXTURE is what makes that count mean anything, and the obvious
+  //     one does not: a single `printf hello` produces one PTY read, so an
+  //     implementation with the dedupe deleted still emits exactly one busy
+  //     and the check passes against the very thing it exists to catch (this
+  //     was confirmed by deleting the dedupe and watching 17 stay green). So
+  //     the fixture prints forty lines with a gap between each, comfortably
+  //     more than one per 16ms flush: with the dedupe, that whole burst is
+  //     ONE busy; without it, it is one per read plus one per tick.
+  //
+  //     The gap (20ms) stays well under idleAfterMs (200ms), so no legitimate
+  //     busy -> idle -> busy round trip happens mid-burst for the count to
+  //     mistake for a dedupe failure. And the count is taken only after the
+  //     stream has demonstrably SETTLED — the check waits for the idle
+  //     transition, which can only arrive once a full tick has found no
+  //     output for idleAfterMs, and then waits one further tick.
   {
     const states = []
     const h = makeHarness(DIRECT, {
@@ -253,10 +304,20 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       },
       idleAfterMs: 200
     })
-    await h.manager.create(spec('a1', '/bin/sh', ['-c', 'printf hello; sleep 5']))
+    await h.manager.create(spec('a1', '/bin/sh', [
+      '-c',
+      'i=0; while [ $i -lt 40 ]; do printf "line$i\n"; i=$((i+1)); sleep 0.02; done; sleep 5'
+    ]))
     const seen = await waitFor(() => states.some((s) => s.panelId === 'a1' && s.state === 'busy'))
-    ok('17 output produces a busy state on agent:state', seen,
-      JSON.stringify(states))
+    // The settle: idle can only follow a tick that observed the absence of
+    // output, so reaching it proves the stream is over rather than merely
+    // paused between two reads of it.
+    const settled = await waitFor(() => states.some((s) => s.panelId === 'a1' && s.state === 'idle'))
+    await sleep(IDLE_TICK_SETTLE_MS)
+    const busies = states.filter((s) => s.panelId === 'a1' && s.state === 'busy').length
+    ok('17 output produces exactly one busy state on agent:state',
+      seen && settled && busies === 1,
+      `busies=${busies} ${JSON.stringify(states)}`)
     h.manager.kill('a1')
   }
 

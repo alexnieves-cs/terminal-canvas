@@ -283,11 +283,15 @@ app.whenReady().then(async () => {
     // Checks 54-57's clock. The schema's MINIMUM, deliberately: it is the
     // shortest value the store will accept, so the idle transitions those
     // checks wait on land within a few hundred milliseconds instead of the
-    // 1500ms default — and because it goes through parsePreferences like any
-    // other saved value, a value the schema would reject fails loudly here
-    // rather than being silently substituted. Written as a preference rather
-    // than passed to the manager as a literal so the getters above are
-    // exercised as production exercises them.
+    // 1500ms default. Written as a preference rather than passed to the
+    // manager as a literal so the getters above are exercised as production
+    // exercises them — which is also this seed's one hazard, recorded rather
+    // than claimed away: a value the schema would REJECT is dropped by
+    // parsePreferences with a console.warn and resolves to the 1500ms
+    // default, and nothing in this suite reads warnings, so checks 54-57
+    // would then quietly wait on a six-times-slower clock and fail on their
+    // timeouts with nothing pointing at this line. If this number is ever
+    // changed, check it against the schema's minimum by hand.
     preferences: { 'agent.idleAfterMs': 250 }
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
