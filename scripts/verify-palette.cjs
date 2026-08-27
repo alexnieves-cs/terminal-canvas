@@ -871,20 +871,23 @@ const WS = [
     `inScope=${inScope.length}`)
 }
 
-// 64. The waiting count renders in the title and is NOT searchable. A count is
-//     state, not a name: a row findable by typing "2" is a row whose match
-//     score changes as agents finish, which is a ranking that moves under the
-//     user for reasons they cannot see.
+// 64. The waiting count is state, not a name: it never reaches `title` at
+//     all, so the view (Palette.tsx) is what composes it into what renders,
+//     and the matcher never sees it — a row findable by typing "2" would be
+//     a row whose match score moves as agents finish, a ranking that changes
+//     under the user for reasons they cannot see. haystack() stays in this
+//     assertion (not a re-derivation) because that is the whole reason it
+//     was exported: this tests what the matcher actually sees.
 {
   const rows = P.buildCommands(ctx({ workspaces: WS, attentionIds: ['n3', 'n4'] }))
-  const school = rows.find((c) => c.group === 'workspace' && c.title.includes('school'))
-  const startup = rows.find((c) => c.group === 'workspace' && c.title.includes('startup'))
-  const searchable = school !== undefined && P.haystack(school).includes('2 waiting')
-  ok('64 the waiting count is in the title and not in the haystack',
-    school !== undefined && school.title.includes('2 waiting') &&
-      startup !== undefined && !startup.title.includes('waiting') &&
-      !searchable,
-    `title=${school && school.title} searchable=${searchable}`)
+  const school = rows.find((c) => c.group === 'workspace' && c.title === 'school')
+  const startup = rows.find((c) => c.group === 'workspace' && c.title === 'startup')
+  const hay = school !== undefined ? P.haystack(school) : ''
+  ok('64 the waiting count is state on the row, composed by the view, never in the haystack',
+    school !== undefined && school.title === 'school' && school.waiting === 2 &&
+      startup !== undefined && startup.title === 'startup' && startup.waiting === undefined &&
+      !hay.includes('waiting') && !hay.includes('2'),
+    `title=${school && school.title} waiting=${school && school.waiting} haystack=${hay}`)
 }
 
 const failed = results.filter((r) => !r.pass)

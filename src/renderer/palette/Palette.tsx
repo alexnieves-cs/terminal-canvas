@@ -433,6 +433,11 @@ export function Palette(props: PaletteProps): JSX.Element {
                         ? <mark key={si} className="palette__hit">{seg.text}</mark>
                         : <span key={si}>{seg.text}</span>
                     )}
+                    {/* Composed here, not baked into row.title: the count is
+                        transient state (agents finish, it changes), and
+                        row.title feeds haystack() unconditionally — see
+                        Command.waiting's doc comment in palette-model.ts. */}
+                    {row.waiting !== undefined && ` · ${row.waiting} waiting`}
                   </span>
                   {/* Says WHY it is disabled. A greyed-out row with no reason
                       is a bug report — the same rule menuLabel() states for

@@ -64,17 +64,16 @@ export interface Command {
    */
   searchText?: string
   /**
-   * Overrides what `haystack()` reads in place of `title`. Present only when
-   * the rendered title carries something that must NOT be searchable — a
-   * workspace's waiting count is the one case today: the title reads
-   * "school · 2 waiting" so the count is visible, but a row findable by
-   * typing "2" would be a row whose match score moves as agents finish, a
-   * ranking that changes under the user for a reason nothing on screen
-   * explains. `searchTitle` lets the count feed the title without feeding
-   * the match. Absent everywhere else — `title` alone is fine when it holds
-   * nothing but a name.
+   * A transient count the VIEW composes into what it renders — never baked
+   * into `title`. A workspace's waiting count is the case today: it changes
+   * as agents finish, and `title` feeds `haystack()` unconditionally, so a
+   * count folded into `title` would make the row findable by typing a digit,
+   * with its match score moving under the user for a reason nothing on
+   * screen explains. Kept as a plain number, not text, so nothing here can
+   * accidentally reintroduce it into the matcher. Present only when > 0,
+   * matching how the rest of this file treats its other optional flags.
    */
-  searchTitle?: string
+  waiting?: number
   group: SectionId
   /** Rendered as a <kbd> chip. Only set where a shortcut genuinely exists. */
   shortcut?: string
@@ -132,8 +131,7 @@ export interface Command {
  * works.
  */
 export const haystack = (c: Command): string => {
-  const title = c.searchTitle ?? c.title
-  let s = c.searchText ? `${c.searchText} ${title}` : title
+  let s = c.searchText ? `${c.searchText} ${c.title}` : c.title
   if (c.subtitle) s += ` ${c.subtitle}`
   return s
 }

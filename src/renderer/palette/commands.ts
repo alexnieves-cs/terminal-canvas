@@ -278,16 +278,12 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `workspace.switch.${w.id}`,
-          // The count is in the TITLE and nowhere else. It is state, not a
-          // name: putting it in searchText would make the row findable by
-          // typing a digit, and its match score would then move as agents
-          // finish — a ranking that changes under the user for a reason
-          // nothing on screen explains.
-          title: waiting > 0 ? `${w.name} · ${waiting} waiting` : w.name,
-          // The base name, not the count-appended title: `haystack()` reads
-          // this in title's place, which is what keeps the waiting count out
-          // of search while still showing it on screen.
-          searchTitle: w.name,
+          // The bare name. The count is transient state, not a name, and
+          // `title` feeds `haystack()` unconditionally — so the count lives
+          // on `waiting` instead, which the view composes into what it
+          // renders, and the matcher never sees.
+          title: w.name,
+          ...(waiting > 0 ? { waiting } : {}),
           searchText: 'switch workspace canvas go to',
           group: 'workspace',
           run: () => actions.switchWorkspace(w.id)
