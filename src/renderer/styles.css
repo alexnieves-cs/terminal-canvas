@@ -8,6 +8,7 @@
   --green: #9ece6a;
   --red: #f7768e;
   --blue: #7aa2f7;
+  --amber: #e0af68;
 }
 
 * {
@@ -66,6 +67,32 @@ body {
 }
 
 .panel--selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+
+/* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
+   terminal, and tinting it would fight the agent's own colours — which
+   tmux-args.ts goes out of its way to pass through at 24-bit. */
+.panel--agent-busy { border-color: var(--blue); }
+.panel--agent-idle { border-color: var(--border); }
+.panel--agent-wants-you {
+  border-color: var(--amber);
+  /* The one state with a second visual channel. wants-you is the only signal
+     that carries INTENT — idleness cannot tell "finished" from "asked you a
+     question" — so it is the only one worth making findable across a canvas. */
+  box-shadow: 0 0 0 2px var(--amber);
+}
+.panel--agent-exited { border-color: var(--red); }
+
+/* .panel--selected must still win: selection is where the USER is, and a
+   border that stopped tracking the click would make the canvas feel broken
+   in a way no colour is worth. Declared after, so it does. */
+.panel--selected,
+.panel--selected.panel--agent-busy,
+.panel--selected.panel--agent-idle,
+.panel--selected.panel--agent-wants-you,
+.panel--selected.panel--agent-exited {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px var(--blue);
 }
@@ -185,6 +212,14 @@ body {
   color: var(--muted);
   font-style: italic;
 }
+
+/* The card's own left rule. The card sits inside .panel, so it already gets
+   the border above — this is what makes the state legible at the zoom where
+   a 1px border is a hairline. */
+.panel__card--agent-busy { border-left: 3px solid var(--blue); }
+.panel__card--agent-wants-you { border-left: 3px solid var(--amber); }
+.panel__card--agent-exited { border-left: 3px solid var(--red); }
+.panel__card--agent-idle { border-left: 3px solid var(--border); }
 
 .badge {
   font-size: 11px;

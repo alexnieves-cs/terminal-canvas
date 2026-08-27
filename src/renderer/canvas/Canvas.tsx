@@ -804,6 +804,13 @@ export function Canvas({
     onSelectPanel(id)
     setFocusedId(id)
     registry.focus(id)
+    // Looking at a panel is reading it. Sent unconditionally rather than only
+    // when this panel is in wants-you: main is the only author of that state,
+    // and a renderer that decided when to bother telling it would be deciding
+    // the state itself — the exact second-author problem the acknowledge
+    // channel exists to avoid. The handler is a map lookup and a no-op for
+    // any panel that does not want you.
+    void window.canvas.agent.acknowledge(id)
   }, [onSelectPanel])
 
   // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
@@ -1022,6 +1029,18 @@ export function Canvas({
   useEffect(() => {
     if (palette.open) reloadSettings()
   }, [palette.open, reloadSettings])
+
+  // Read once at mount and again whenever a setting changes, so toggling the
+  // glow off takes effect without a relaunch. settingRows is loaded only when
+  // the palette OPENS, so it cannot be the source here — a panel must know
+  // this whether or not the palette has ever been opened.
+  const [glowEnabled, setGlowEnabled] = useState(true)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'agent.glow')
+      if (row) setGlowEnabled(row.value === true)
+    })
+  }, [settingRows])
 
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
@@ -1359,6 +1378,7 @@ export function Canvas({
               onFocus={onFocusPanel}
               onBeginDrag={onBeginDrag}
               onClose={onClosePanel}
+              glow={glowEnabled}
             />
           )
         })}
