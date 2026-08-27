@@ -66,6 +66,13 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.PTY_LIST, () => ptyManager.list())
 
+  // The renderer's half of clearing wants-you. Main sees typing (pty:write
+  // clears it there) but cannot see FOCUS, which is the other way a user says
+  // "I have read this panel" — hence a channel rather than more inference.
+  ipcMain.handle(IPC.AGENT_ACKNOWLEDGE, (_event, panelId: PanelId) => {
+    ptyManager.acknowledge(panelId)
+  })
+
   ipcMain.handle(IPC.LAYOUT_LOAD, () => layoutStore.initial())
 
   ipcMain.handle(IPC.LAYOUT_SAVE, (_event, state: CanvasState) => {
@@ -93,7 +100,11 @@ export function registerIpcHandlers(
       keywords: [...def.keywords],
       type: def.type,
       value: layoutStore.getSetting(def.id),
-      category: def.category
+      category: def.category,
+      // Passed through so the palette can reject an out-of-range edit before
+      // it ever reaches this process's own (silent) range check below.
+      min: def.min,
+      max: def.max
     }))
   )
   ipcMain.handle(IPC.SETTINGS_SET, (_event, id: string, value: SettingValue) => {

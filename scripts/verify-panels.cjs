@@ -175,7 +175,25 @@ app.whenReady().then(async () => {
   // only way a renderer reload can be asked to prove session SURVIVAL — under
   // the direct backend a detached process is simply a dead one.
   let backend = createDirectBackend('verify: direct')
-  const ptyManager = new PtyManager(() => win.webContents, () => backend)
+  // The last two arguments are the SAME getters main/index.ts passes, closing
+  // over the layoutStore built below — not the constructor's defaults. Two
+  // reasons, and neither is cosmetic. (1) Checks 54-57 need a panel to reach
+  // 'idle' inside a bounded wait, and the default threshold is 1500ms: a
+  // suite that waits that long per transition is slow, and a suite that
+  // instead waits a guessed fixed time is flaky on a loaded machine. The
+  // layout file seeded below sets agent.idleAfterMs to the schema's MINIMUM
+  // (250), so the wait is short and the number under test is still one the
+  // store validated rather than one this harness invented. (2) Taking the
+  // defaults would leave this harness the one PtyManager construction site
+  // that reads no setting at all — so a regression that broke the getters
+  // (a frozen boot value, a missing store read) would be invisible here,
+  // which is exactly the seam this file exists to watch.
+  const ptyManager = new PtyManager(
+    () => win.webContents,
+    () => backend,
+    () => Number(layoutStore.getSetting('agent.idleAfterMs')),
+    () => layoutStore.getSetting('agent.bell') === true
+  )
 
   // A real store, not a stub: the built renderer now calls and awaits
   // window.canvas.layout.load() before React mounts, so an unhandled channel
@@ -261,7 +279,20 @@ app.whenReady().then(async () => {
     // changed. A second user preset, never the default, keeps the two apart.
     presets: [BOOT_DEFAULT_PRESET, RENAMABLE_PRESET, ECHO_PRESET],
     defaultPresetId: BOOT_DEFAULT_PRESET.id,
-    prompts: [SEEDED_PROMPT]
+    prompts: [SEEDED_PROMPT],
+    // Checks 54-57's clock. The schema's MINIMUM, deliberately: it is the
+    // shortest value the store will accept, so the idle transitions those
+    // checks wait on land within a few hundred milliseconds instead of the
+    // 1500ms default. Written as a preference rather than passed to the
+    // manager as a literal so the getters above are exercised as production
+    // exercises them — which is also this seed's one hazard, recorded rather
+    // than claimed away: a value the schema would REJECT is dropped by
+    // parsePreferences with a console.warn and resolves to the 1500ms
+    // default, and nothing in this suite reads warnings, so checks 54-57
+    // would then quietly wait on a six-times-slower clock and fail on their
+    // timeouts with nothing pointing at this line. If this number is ever
+    // changed, check it against the schema's minimum by hand.
+    preferences: { 'agent.idleAfterMs': 250 }
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
   // main/index.ts calls this at whenReady; without it the store would start
@@ -3375,6 +3406,259 @@ app.whenReady().then(async () => {
       ok('53 the toggle reached main\'s store, not just the row', stored === 'off')
 
       await closePalette()
+    }
+
+    // ---------------------------------------------------------------------
+    // 54-57 — M6c. Agent state, end to end in a real renderer.
+    //
+    //     Everything under the renderer is already proven in a cheaper tier:
+    //     scanForBell and the state machine under plain node, the manager's
+    //     wiring under Electron-as-node. What none of those tiers can see is
+    //     the SEAM — whether a state main derived reaches the pixels at all,
+    //     whether it reaches a CARD, and whether main is the one that clears
+    //     it. Every layer can be individually correct and the feature still
+    //     be invisible, which is the shape of failure this suite exists for.
+    //
+    //     The fixture is a panel of this block's own, running a plain
+    //     /bin/sh, rather than one of the seed panels. These checks need a
+    //     PTY that will EMIT chosen bytes on demand — a real BEL, and a real
+    //     OSC window title — and by this point in the run Cmd+N's default is
+    //     check 29's `cat`, which only echoes what it is given and can never
+    //     produce a control byte of its own. Bytes are put on the PTY with
+    //     ptyManager.write, i.e. through the same call pty:write's handler
+    //     makes, so the detector sees them exactly as it sees a user typing.
+    // ---------------------------------------------------------------------
+    {
+      // The shell reads these as command lines, so what reaches the detector
+      // is printf's OUTPUT — one real BEL byte, and one real OSC title ending
+      // in the BEL that is its terminator. The echoed input contains no
+      // control bytes at all, which is what keeps the two stimuli distinct.
+      const BELL_LINE = "printf '\\007'\n"
+      const TITLE_LINE = "printf '\\033]0;a title\\007'\n"
+
+      const panelIds = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
+      )
+      // Read by data-panel-id, never "the last .panel": array order and paint
+      // order are deliberately different here (Panel.z), the same rule check
+      // 51 states.
+      const agentStateOf = (id) => wc.executeJavaScript(
+        `(() => { const el = document.querySelector('[data-panel-id=${JSON.stringify(id)}]')
+                  return el ? el.getAttribute('data-agent-state') : null })()`
+      )
+      const cardClassOf = (id) => wc.executeJavaScript(
+        `(() => { const el = document.querySelector('[data-panel-id=${JSON.stringify(id)}] .panel__card')
+                  return el ? el.className : null })()`
+      )
+      const isLive = (id) => wc.executeJavaScript(
+        `!!document.querySelector('[data-panel-id=${JSON.stringify(id)}] .panel__slot .xterm')`
+      )
+      // A wheel on the canvas host, the same gesture check 51 pans with. Two
+      // opposite calls restore the camera exactly, which is what lets check 56
+      // demote a panel and check 57 bring the SAME one back into reach of a
+      // real click.
+      const panBy = (dx, dy) => wc.executeJavaScript(`
+        document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+          deltaX: ${dx}, deltaY: ${dy}, deltaMode: 0
+        }))
+        true
+      `)
+      const clickBackground = async () => {
+        const point = await backgroundPoint(wc)
+        if (!point) throw new Error('54-57: found no background point on the canvas')
+        wc.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        await sleep(150)
+      }
+
+      // Pin this block's fixture to the DIRECT backend. Check 26 swapped the
+      // manager onto a real tmux one, and a tmux CLIENT NEVER SEES AN OSC
+      // WINDOW TITLE: tmux parses its pane's output stream itself and consumes
+      // `ESC ] 0 ; <title> BEL` to set the pane title, forwarding the bell it
+      // is made of to no one. Check 55's stimulus therefore never reached
+      // main's detector at all while this block ran under tmux — measured, not
+      // assumed: with the scanner deliberately broken to count the OSC
+      // terminator as a bell, verify:agent-state went red and check 55 stayed
+      // GREEN, which is exactly the shape of a check that reads as coverage
+      // and proves nothing.
+      //
+      // Swapping back also makes 54-57 backend-INDEPENDENT: they otherwise ran
+      // against a different byte stream on a machine with tmux than on one
+      // without, so the four of them would mean two different things depending
+      // on who ran the suite.
+      //
+      // Safe at teardown, and only because this is the last block in the run:
+      // DirectBackend.destroy is a no-op, PtyManager.kill still kills each
+      // local handle (which for the earlier panels is a tmux CLIENT), and the
+      // sessions those clients leave behind on PANELS_SOCKET are ended by the
+      // tmuxBackend.shutdown() in the finally below, which holds its own
+      // reference rather than reading this variable.
+      backend = createDirectBackend('verify: direct (m6c fixture)')
+
+      // Release focus BEFORE panning. shouldYieldWheel gives a wheel over the
+      // FOCUSED panel to that terminal, so a pan attempted while some earlier
+      // check's panel still holds focus scrolls a terminal and moves no
+      // camera — the panel would then never leave the cull region and check 56
+      // would fail for a reason that has nothing to do with agent state.
+      await clickBackground()
+      // Into empty world space, for the same reason check 51 does it: the
+      // spawn cascade is decided against the live panel array, so an empty
+      // neighbourhood makes this panel land where it asked and keeps it clear
+      // of check 51's two, whose rects would otherwise sit under the clicks
+      // below.
+      await panBy(2000, 2000)
+
+      const idsBefore = new Set(await panelIds())
+      // The same event a menu pick sends. Spawning through PRESET_SPAWN rather
+      // than Cmd+N is what lets this block choose the command: Cmd+N would use
+      // whatever default the run last pushed.
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const idsAfter = await waitUntil(async () => {
+        const now = await panelIds()
+        return now.length > idsBefore.size ? now : false
+      }, 4000)
+      const shellId = idsAfter ? idsAfter.find((id) => !idsBefore.has(id)) : null
+      if (!shellId) throw new Error('54-57: PRESET_SPAWN produced no new panel')
+      // Lazy spawn: the PTY exists only once the panel has gone live and been
+      // laid out, so nothing may be written until pty:list admits it.
+      const spawned = await waitUntil(async () => (await sessionMap(wc)).has(shellId), 8000)
+      if (!spawned) throw new Error(`54-57: panel ${shellId} never got a PTY`)
+
+      // A record of what main actually SENT, taken off the real bridge. Check
+      // 57 is the one that needs it (see there); installing it here means it
+      // is already listening before the first stimulus, so nothing has to be
+      // inferred from a state read after the fact.
+      await wc.executeJavaScript(`(() => {
+        if (!window.__m6cAgentLog) {
+          window.__m6cAgentLog = []
+          window.canvas.agent.onState((u) => window.__m6cAgentLog.push(u))
+        }
+        return true
+      })()`)
+      const agentLog = () => wc.executeJavaScript(`window.__m6cAgentLog || []`)
+
+      // 54. A real bell, through a real PTY, reaches the panel's DOM.
+      //     The attribute is read rather than the class list on purpose: the
+      //     class is a styling decision and a restyle may rename it, while
+      //     data-agent-state is the panel's stated answer to "what is this
+      //     agent doing". The silent failure this catches is the whole chain
+      //     being inert — the detector deriving a state that no send, no
+      //     store fan-out, or no render ever turns into anything a user could
+      //     see, with every unit tier still green.
+      {
+        ptyManager.write(shellId, BELL_LINE)
+        const rang = await waitUntil(
+          async () => (await agentStateOf(shellId)) === 'wants-you', 6000)
+        ok('54 a real bell reaches the panel in a real renderer',
+          rang === true, `${shellId} -> ${await agentStateOf(shellId)}`)
+      }
+
+      // 55. THE TRAP, in a real renderer. `ESC ] 0 ; <title> BEL` sets the
+      //     window title and ends in a BEL that is a STRING TERMINATOR, not a
+      //     bell; Claude Code emits exactly that, so a scanner that counts it
+      //     flashes the border on every title change for a reason no user
+      //     could diagnose. This is the third and last tier the trap is
+      //     checked at — the pure function, the manager's wiring, and now the
+      //     pixels — and a regression at any one of them is silent at the
+      //     other two.
+      //
+      //     The wait is on a POSITIVE transition, never a bare sleep: the
+      //     panel is first brought to 'idle', and the title's arrival is then
+      //     observed as idle -> busy. Without that, "no wants-you appeared"
+      //     would be satisfied just as well by bytes that never reached main
+      //     at all, which is a check that proves nothing while looking
+      //     stronger than the one above it.
+      {
+        // Acknowledge first, so this starts from a state that is not already
+        // the one being asserted against.
+        const click = await clickPanelBody(`[data-panel-id="${shellId}"] .panel__slot`)
+        const idled = await waitUntil(
+          async () => (await agentStateOf(shellId)) === 'idle', 6000)
+        const mark = (await agentLog()).length
+        ptyManager.write(shellId, TITLE_LINE)
+        const busied = await waitUntil(
+          async () => (await agentStateOf(shellId)) === 'busy', 6000)
+        // The title has landed by now (the transition above is what says so);
+        // this bounded settle is for a LATE wants-you — a scanner that only
+        // mis-handles the OSC body once it straddles a flush boundary.
+        await sleep(800)
+        const since = (await agentLog()).slice(mark)
+        const rangAnyway = since.some((u) => u.panelId === shellId && u.state === 'wants-you')
+        const finalState = await agentStateOf(shellId)
+        ok('55 a window title moves nothing in a real renderer',
+          idled === true && busied === true && !rangAnyway && finalState !== 'wants-you',
+          `active=${click.active} idled=${idled} busied=${busied} ` +
+            `updates=${JSON.stringify(since)} final=${finalState}`)
+      }
+
+      // 56. THE CARD — the tier this feature exists for. LIVE_BUDGET caps
+      //     live panels at eight, so on the twelve-panel canvas M6c is aimed
+      //     at, most of what wants you is a card. A check written only
+      //     against a live panel would pass an implementation that renders
+      //     nothing on cards at all, and the feature would be missing exactly
+      //     where it is needed and present exactly where it is not.
+      //
+      //     Both surfaces are asserted: the panel root still states the
+      //     panel's answer, and the card itself carries it. Reading only the
+      //     root would pass a PanelCard that ignores its agentState prop.
+      {
+        ptyManager.write(shellId, BELL_LINE)
+        const rang = await waitUntil(
+          async () => (await agentStateOf(shellId)) === 'wants-you', 6000)
+        // assignTiers pins the FOCUSED panel live unconditionally, so a panel
+        // still holding focus cannot be demoted by any amount of panning. The
+        // background click releases it and — unlike a click on the panel —
+        // acknowledges nothing, so wants-you survives the release.
+        await clickBackground()
+        await panBy(3000, 0)
+        const carded = await waitUntil(async () => (await cardClassOf(shellId)) !== null, 6000)
+        const cardClass = await cardClassOf(shellId)
+        const rootState = await agentStateOf(shellId)
+        ok('56 the wants-you state reaches a demoted panel\'s card, not just a live panel',
+          rang === true && carded === true &&
+            String(cardClass).includes('panel__card--agent-wants-you') &&
+            rootState === 'wants-you',
+          `card=${JSON.stringify(cardClass)} root=${rootState} live=${await isLive(shellId)}`)
+      }
+
+      // 57. Focus acknowledges — and MAIN is what answers. The renderer never
+      //     writes the cleared state itself: it asks over agent:acknowledge,
+      //     main runs the machine, and the answer comes back on agent:state.
+      //
+      //     A check that only re-read the DOM after the click would pass
+      //     against a renderer that cleared its own store and left main still
+      //     believing this panel wants you — precisely the disagreement the
+      //     acknowledge channel exists to prevent, and precisely what M6d
+      //     would then fire a notification into. So the assertion is on the
+      //     MESSAGE: a recorded agent:state update for this panel, sent after
+      //     the click, naming a state that is not wants-you. Only main sends
+      //     on that channel, so a locally-cleared renderer produces no such
+      //     entry however convincing its DOM looks.
+      //
+      //     What this does NOT prove: that the renderer *only* takes main's
+      //     answer. An implementation that cleared locally AND asked main
+      //     would satisfy both halves. Distinguishing those two would need
+      //     main to be made to not answer, which is a fault injection this
+      //     harness has no seam for — the honest limit, recorded rather than
+      //     papered over.
+      {
+        await panBy(-3000, 0)
+        const back = await waitUntil(() => isLive(shellId), 6000)
+        const before = await agentStateOf(shellId)
+        const mark = (await agentLog()).length
+        const click = await clickPanelBody(`[data-panel-id="${shellId}"] .panel__slot`)
+        const answered = await waitUntil(async () => {
+          const since = (await agentLog()).slice(mark)
+          return since.some((u) => u.panelId === shellId && u.state !== 'wants-you')
+        }, 6000)
+        const cleared = await waitUntil(
+          async () => (await agentStateOf(shellId)) !== 'wants-you', 3000)
+        ok('57 focus acknowledges, and main is the one that answers',
+          back === true && before === 'wants-you' && answered === true && cleared === true,
+          `before=${before} active=${click.active} answered=${answered} ` +
+            `after=${await agentStateOf(shellId)}`)
+      }
     }
 
   } catch (error) {

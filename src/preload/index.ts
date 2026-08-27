@@ -7,6 +7,7 @@ import {
   type CapturedPanel
 } from '../shared/ipc-contract'
 import type {
+  AgentStateUpdate,
   PanelId,
   PanelSpec,
   PtyDataChunk,
@@ -91,6 +92,10 @@ const bridge: CanvasBridge = {
   settings: {
     list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),
     set: (id: string, value: SettingValue) => ipcRenderer.invoke(IPC.SETTINGS_SET, id, value)
+  },
+  agent: {
+    onState: (listener) => subscribe<AgentStateUpdate>(IPC_EVENTS.AGENT_STATE, listener),
+    acknowledge: (panelId: PanelId) => ipcRenderer.invoke(IPC.AGENT_ACKNOWLEDGE, panelId)
   },
   platform: process.platform
 }

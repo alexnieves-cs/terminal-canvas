@@ -57,3 +57,19 @@ export interface PtyCreateResult {
    */
   reattached: boolean
 }
+
+/**
+ * What a panel's agent is doing, derived in main from bytes and their absence.
+ *
+ * 'exited' is the detector's terminal state and NOT a second source of truth
+ * about how a process ended: PanelStatus.exited stays authoritative for the
+ * exit code and the pane-died hook's recovery of it. This exists only so the
+ * detector stops emitting and the panel leaves the attention set.
+ */
+export type AgentState = 'starting' | 'busy' | 'idle' | 'wants-you' | 'exited'
+
+/** What IPC_EVENTS.AGENT_STATE carries. */
+export interface AgentStateUpdate {
+  panelId: PanelId
+  state: AgentState
+}

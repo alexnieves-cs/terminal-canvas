@@ -46,7 +46,14 @@ let loginEnv: Record<string, string> = {}
 // run when this module is evaluated.
 const ptyManager = new PtyManager(
   () => mainWindow?.webContents ?? null,
-  () => backend
+  () => backend,
+  // Getters, closing over layoutStore rather than reading it here: the store
+  // is constructed BELOW this line, and a value read at construction would
+  // also freeze the setting at its boot value, so changing it in the palette
+  // would reach nothing until a relaunch. Both are only ever called from a
+  // running PTY's callbacks, long after module evaluation.
+  () => Number(layoutStore.getSetting('agent.idleAfterMs')),
+  () => layoutStore.getSetting('agent.bell') === true
 )
 
 // userData is the standard per-user application directory; app.getPath is only

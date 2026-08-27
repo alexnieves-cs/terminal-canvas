@@ -4,7 +4,8 @@ import { resolve } from 'node:path'
 import type { WebContents } from 'electron'
 import type * as pty from 'node-pty'
 import { IPC_EVENTS } from '../shared/ipc-contract'
-import type { PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
+import type { AgentState, PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
+import { initialDetector, nextState, scanForBell, type AgentEvent, type Detector } from './agent-state'
 import type { SessionBackend } from './session-backend'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
 
@@ -19,6 +20,18 @@ import { buildPtyEnv, resolveShellEnv } from './shell-env'
  */
 
 const FLUSH_INTERVAL_MS = 16
+
+/**
+ * The idleness tick. A SEPARATE timer from the flush, and one per manager
+ * rather than per session, because the flush timer only runs when there IS
+ * pending data — it structurally cannot observe the absence of data, which is
+ * the entire signal idleness is made of.
+ *
+ * 500ms is the resolution of "idle", not its threshold: the threshold is the
+ * agent.idleAfterMs setting, and this only bounds how late the transition can
+ * be reported. One timer for the whole app at 2Hz costs nothing.
+ */
+const IDLE_TICK_MS = 500
 
 /**
  * node-pty passes cwd straight to the OS, so it never expands `~` and it throws
@@ -56,10 +69,20 @@ interface Session {
   command: string
   cwd: string
   reattached: boolean
+  /**
+   * The agent-state detector's whole memory for this panel, including the BEL
+   * scanner's position. It lives on the SESSION rather than in a parallel map
+   * so it cannot outlive the process it describes: every path that removes a
+   * session removes the detector with it, which is why a dormant panel — one
+   * with no entry here at all — cannot produce a state.
+   */
+  detector: Detector
 }
 
 export class PtyManager {
   private sessions = new Map<PanelId, Session>()
+  /** One per manager, not per session. See IDLE_TICK_MS. */
+  private idleTimer: NodeJS.Timeout | null = null
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -68,7 +91,19 @@ export class PtyManager {
      * the backend is chosen by an async startup probe that has not finished
      * when this manager is constructed at module scope.
      */
-    private readonly getBackend: () => SessionBackend
+    private readonly getBackend: () => SessionBackend,
+    /**
+     * Getters for the same reason getTarget and getBackend are: this manager
+     * is constructed at module scope, before the layout store has resolved
+     * anything — and a captured value would also freeze the setting at its
+     * boot value, so a change made in the palette would reach nothing until a
+     * relaunch.
+     *
+     * The defaults mirror the schema's, and exist so the other construction
+     * sites (the verify harnesses) keep compiling unchanged.
+     */
+    private readonly getIdleAfterMs: () => number = () => 1500,
+    private readonly getBellEnabled: () => boolean = () => true
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -97,9 +132,26 @@ export class PtyManager {
       killed: false,
       command,
       cwd,
-      reattached
+      reattached,
+      detector: initialDetector(Date.now())
     }
     this.sessions.set(spec.panelId, session)
+    // Only ever ticks while something is in the map; see startIdleTick.
+    this.startIdleTick()
+
+    // The one DIRECT send in this class, and applyEvent structurally cannot
+    // do it: applyEvent sends only on a CHANGE, and the detector is born in
+    // 'starting', so nothing ever *enters* it and the state would never reach
+    // the wire at all. Without this send a panel that has spawned but not yet
+    // produced a byte carries no state — which is exactly the window that
+    // matters, because a real `claude` takes seconds to boot and that silence
+    // is the moment the user most needs to see something is happening. It is
+    // sent after the map entry exists so the ordering matches every other
+    // send: a state is only ever announced for a session main is holding.
+    this.send(IPC_EVENTS.AGENT_STATE, {
+      panelId: spec.panelId,
+      state: session.detector.state satisfies AgentState
+    })
 
     proc.onData((data) => this.enqueue(session, data))
     proc.onExit(({ exitCode, signal }) => {
@@ -111,6 +163,32 @@ export class PtyManager {
       // alone would unhook that new session and orphan its PTY, so only remove
       // the entry if it is still this exact session.
       if (this.sessions.get(spec.panelId) === session) this.sessions.delete(spec.panelId)
+      // AFTER the flush above and before the exit is announced. Order matters
+      // in one direction only: 'exited' is terminal in the state machine
+      // precisely so the last bytes a dying process emits — which the flush
+      // has just delivered — cannot revive the panel to 'busy'.
+      //
+      // The SEND obeys the same guard PTY_EXIT does, for the same reason and
+      // with a sharper failure: an exit we asked for arrives milliseconds
+      // after kill() returned, by which time the renderer has already run
+      // clearAgentState(id) at its dispose site. An unguarded 'exited' lands
+      // AFTER that cleanup and re-adds the entry — so the map grows for the
+      // life of the renderer and a recycled id inherits a dead panel's
+      // border, which is precisely the failure clearAgentState's own comment
+      // claims to prevent. The recycled id is not hypothetical: onReset
+      // disposes every panel and immediately installs firstRunPanels(), whose
+      // id is the constant FIRST_RUN_ID, so resetting a canvas whose 'p1' was
+      // running painted the brand-new 'p1' red until its first byte arrived —
+      // and never healed at all if that panel was never promoted.
+      //
+      // The TRANSITION is not guarded, only the send. The detector still has
+      // to reach its terminal state: this closure keeps `session` alive after
+      // the map entry is gone, so a straggler read on a killed session would
+      // otherwise be applied to a detector still sitting in 'busy' and send a
+      // state for a panel nobody can see. 'exited' is terminal, so once it is
+      // recorded no later event can produce a send at all.
+      this.applyEvent(session, { kind: 'exit' }, session.killed)
+      if (this.sessions.size === 0) this.stopIdleTick()
       // An exit we asked for is not news the panel needs to paint.
       if (session.killed) return
       // The tmux CLIENT's exit code carries no information — an inner command
@@ -156,6 +234,9 @@ export class PtyManager {
     const session = this.sessions.get(panelId)
     if (!session) return false
     session.proc.write(data)
+    // Typing into a panel is reading it. Main already holds this fact, which
+    // is why only the FOCUS half of acknowledgement needed a new channel.
+    this.applyEvent(session, { kind: 'acknowledge' })
     return true
   }
 
@@ -197,6 +278,7 @@ export class PtyManager {
     // Without this the tmux session survives with no panel able to reach it.
     this.getBackend().destroy(panelId)
     this.sessions.delete(panelId)
+    if (this.sessions.size === 0) this.stopIdleTick()
   }
 
   /** Called on before-quit so no PTY outlives the app. */
@@ -221,9 +303,112 @@ export class PtyManager {
       }
       this.sessions.delete(session.panelId)
     }
+    if (this.sessions.size === 0) this.stopIdleTick()
+  }
+
+  /**
+   * The renderer's half of clearing wants-you: it knows about focus, which
+   * main cannot see. See IPC.AGENT_ACKNOWLEDGE.
+   *
+   * An id with no live session is silently ignored rather than treated as an
+   * error: the renderer focuses dormant and carded panels freely, and those
+   * have no entry here by design.
+   */
+  acknowledge(panelId: PanelId): void {
+    const session = this.sessions.get(panelId)
+    if (!session) return
+    this.applyEvent(session, { kind: 'acknowledge' })
+  }
+
+  private startIdleTick(): void {
+    if (this.idleTimer) return
+    this.idleTimer = setInterval(() => {
+      for (const session of this.sessions.values()) {
+        this.applyEvent(session, { kind: 'tick' })
+      }
+    }, IDLE_TICK_MS)
+    // Do not hold the process open for a 2Hz timer nothing is waiting on —
+    // the verify harnesses run under plain node, where a live interval would
+    // keep the suite from ever exiting.
+    this.idleTimer.unref?.()
+  }
+
+  private stopIdleTick(): void {
+    if (!this.idleTimer) return
+    clearInterval(this.idleTimer)
+    this.idleTimer = null
+  }
+
+  /**
+   * Runs one event through the state machine and sends ONLY on an actual
+   * change. That dedupe IS the throttle the design asks for: a panel printing
+   * a megabyte produces one 'busy' message rather than one per 16ms flush, so
+   * this channel cannot become the 60Hz cascade the renderer's memo exists to
+   * block.
+   *
+   * `mute` advances the machine WITHOUT telling anyone. Every caller passes
+   * `session.killed`, and the split is the point: suppressing the TRANSITION
+   * too would leave a detector stranded mid-state on an object this class's
+   * own onExit/onData closures still hold, and those closures keep running
+   * after the map entry — and the renderer's cached state — are both gone.
+   */
+  private applyEvent(session: Session, event: AgentEvent, mute = false): void {
+    const before = session.detector.state
+    session.detector = nextState(session.detector, event, Date.now(), this.getIdleAfterMs())
+    if (session.detector.state === before) return
+    if (mute) return
+    this.send(IPC_EVENTS.AGENT_STATE, {
+      panelId: session.panelId,
+      state: session.detector.state satisfies AgentState
+    })
   }
 
   private enqueue(session: Session, data: string): void {
+    // The choke point. Every byte from every PTY in this app passes through
+    // here, so the detector sits at the one place both of its signals exist —
+    // and a dormant panel, which has no entry in the session map at all,
+    // cannot produce a state. The bug where a restored canvas draws
+    // indicators for twelve processes that do not exist is unreachable rather
+    // than defended against.
+    //
+    // Scanning happens BEFORE the buffering, so a bell is seen on the read
+    // that carried it rather than up to 16ms later when the flush runs.
+    const scanned = scanForBell(session.detector.scan, data)
+    // The scanner's position must be written back, or an OSC body straddling
+    // a flush boundary is re-entered as ordinary text on the next chunk and a
+    // window title ending in BEL rings a bell — intermittently, under load.
+    session.detector = { ...session.detector, scan: scanned.state }
+    // Output BEFORE bell, for this chunk. A panel's very first bytes may
+    // contain a bell; bell-then-output would leave the machine in 'busy',
+    // because the output event would overwrite the bell's state. This order
+    // gives starting -> busy -> wants-you.
+    //
+    // Both are MUTED for a killed session, the same guard the exit send
+    // obeys. This path is reached from the captured proc.onData closure, not
+    // from a map lookup, so it still runs in the window between kill() —
+    // which deleted the map entry and ran the renderer's clearAgentState —
+    // and onExit, which is what finally records 'exited'. A read already
+    // buffered in the pty landing in that window would otherwise apply an
+    // unmuted 'output' to a detector still at 'starting' or 'idle', i.e. a
+    // real change, i.e. a 'busy' sent for a panel the renderer has dropped:
+    // the same recycled-id defect the exit guard exists to close, entered
+    // through the other door. Reachable in one gesture — Cmd+N, close the
+    // panel before its first byte, and the shell's prompt bytes land after
+    // kill().
+    //
+    // Muting rather than returning early is not a style choice. enqueue also
+    // BUFFERS, and onExit deliberately flushes pending output BEFORE
+    // announcing the exit so the last lines — usually the error explaining
+    // the exit — are not dropped. An early return here would silently delete
+    // that, which is a load-bearing property this file documents above.
+    this.applyEvent(session, { kind: 'output' }, session.killed)
+    // Bells are counted, not merely detected, but the machine treats any
+    // positive count as one event: two bells in one chunk are one request for
+    // attention.
+    if (scanned.bells > 0 && this.getBellEnabled()) {
+      this.applyEvent(session, { kind: 'bell' }, session.killed)
+    }
+
     session.buffer.push(data)
     if (session.flushTimer) return
     session.flushTimer = setTimeout(() => this.flush(session), FLUSH_INTERVAL_MS)

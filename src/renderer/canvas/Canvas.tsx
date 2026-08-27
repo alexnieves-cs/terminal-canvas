@@ -8,6 +8,7 @@ import type { DragMode, DragState } from './panel-interaction'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
+import { applyAgentState, clearAgentState } from '@renderer/session/agent-state-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -281,7 +282,12 @@ export function Canvas({
     // the registry and `present` stay in step by construction after this
     // call, no matter which direction history moved.
     for (const session of registry.all()) {
-      if (!ids.has(session.id)) registry.dispose(session.id)
+      if (!ids.has(session.id)) {
+        registry.dispose(session.id)
+        // Without this the agent-state map grows for the life of the
+        // renderer and a recycled id inherits a dead panel's border.
+        clearAgentState(session.id)
+      }
     }
     setPanels(next.present)
     setDormantIds((current) => {
@@ -448,6 +454,15 @@ export function Canvas({
     // install; listing it makes the dependency visible rather than implied.
   }, [palette.isOpen])
 
+  // ONE subscription for the whole canvas, not one per panel: the payload
+  // names its own panel, and the store fans it out to exactly the panel that
+  // subscribed to that id. A per-panel subscription would mean every panel
+  // receiving and discarding every other panel's updates — the same argument
+  // the single Cmd+C/Cmd+V subscription above makes.
+  useEffect(() => window.canvas.agent.onState((update) => {
+    applyAgentState(update.panelId, update.state)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -523,7 +538,12 @@ export function Canvas({
     // only its two callers inside session-registry.ts, because every one
     // of these three routes through dispose() rather than calling
     // pty.kill directly.
-    for (const panel of panelsRef.current) registry.dispose(panel.rect.id)
+    for (const panel of panelsRef.current) {
+      registry.dispose(panel.rect.id)
+      // Same reason as the undo/redo site above: reset drops every panel at
+      // once, and each dropped id needs its cached agent state cleared too.
+      clearAgentState(panel.rect.id)
+    }
     const fresh = firstRunPanels()
     setPanels(fresh)
     setDormantIds(new Set())
@@ -725,6 +745,9 @@ export function Canvas({
     // early-returns on a missing id, and the cleanup's removeChild is guarded
     // on host.parentNode === slot.
     registry.dispose(id)
+    // Same reason as the other two dispose sites: a closed panel's id must
+    // not keep a cached agent state that a recycled id could inherit.
+    clearAgentState(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -781,6 +804,13 @@ export function Canvas({
     onSelectPanel(id)
     setFocusedId(id)
     registry.focus(id)
+    // Looking at a panel is reading it. Sent unconditionally rather than only
+    // when this panel is in wants-you: main is the only author of that state,
+    // and a renderer that decided when to bother telling it would be deciding
+    // the state itself — the exact second-author problem the acknowledge
+    // channel exists to avoid. The handler is a map lookup and a no-op for
+    // any panel that does not want you.
+    void window.canvas.agent.acknowledge(id)
   }, [onSelectPanel])
 
   // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
@@ -1000,6 +1030,18 @@ export function Canvas({
     if (palette.open) reloadSettings()
   }, [palette.open, reloadSettings])
 
+  // Read once at mount and again whenever a setting changes, so toggling the
+  // glow off takes effect without a relaunch. settingRows is loaded only when
+  // the palette OPENS, so it cannot be the source here — a panel must know
+  // this whether or not the palette has ever been opened.
+  const [glowEnabled, setGlowEnabled] = useState(true)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'agent.glow')
+      if (row) setGlowEnabled(row.value === true)
+    })
+  }, [settingRows])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -1207,10 +1249,73 @@ export function Canvas({
       // optimistic row that main refused (an unknown id, a wrong type) would
       // show the new value until the next reload and then flip back.
       void window.canvas.settings.set(id, value).then(reloadSettings)
+    },
+    beginEditSetting: (id, label, current) => {
+      // Read off the row we already loaded, rather than hardcoding 250/60000
+      // (or any other bound): the schema is the single source of truth for
+      // min/max, and a renderer-side constant would silently drift from it
+      // the day a range changes. Absent for a row with no bound.
+      const row = settingRows.find((s) => s.id === id)
+      const { min, max } = row ?? {}
+
+      // Re-entrant so an out-of-range refusal can reopen the same edit with
+      // the bad value still visible, rather than starting over from `current`.
+      const openEdit = (initial: string, refused?: string): void => {
+        setInputMode({
+          kind: 'number',
+          label: refused ? `${label} (ms) — ${refused}` : `${label} (ms)…`,
+          initial,
+          // Set ONLY on the refusal reopen. The ordinary label above is a
+          // placeholder-worthy hint ("here's the current value"); this one is
+          // an answer to a question nobody asked unless they just typed
+          // something wrong, and a placeholder can't show it — see
+          // InputMode's `feedback` doc comment in Palette.tsx.
+          ...(refused ? { feedback: true as const } : {}),
+          submit: (value) => {
+            const parsed = Number(value)
+            // A non-number is a cancel, not a write of NaN. main's
+            // setPreference would refuse NaN anyway, but bouncing it here
+            // means a typo does not close the palette and silently change
+            // nothing.
+            if (!Number.isFinite(parsed)) {
+              setInputMode(null)
+              return
+            }
+            // Checked here too, even though main enforces the SAME bound in
+            // setPreference. main's check is the last line of defence for a
+            // file it did not write; it is not enough on its own, because a
+            // refusal that happens only there is INVISIBLE — the palette
+            // closes exactly as it does on success, SETTINGS_SET's handler
+            // resolves regardless, and reloadSettings() re-fetches the
+            // unchanged value with nothing anywhere saying the edit was
+            // dropped. Re-opening here is what makes the refusal visible to
+            // the user; it does not replace main's check, which still catches
+            // a value that reached this process by some other route.
+            if ((min !== undefined && parsed < min) || (max !== undefined && parsed > max)) {
+              openEdit(value, `must be ${min ?? '−∞'}–${max ?? '∞'}, got ${parsed}`)
+              return
+            }
+            void window.canvas.settings.set(id, parsed).then(() => {
+              setInputMode(null)
+              reloadSettings()
+            })
+          }
+        })
+        // Palette.tsx closes the overlay BEFORE running a row's command (and
+        // before calling an input mode's submit), so without this the mode
+        // would be set on a palette that is already gone and the
+        // clear-on-close effect would wipe it — the same pairing
+        // beginRenamePreset and deletePreset both make, and the reason the
+        // out-of-range branch above must call openEdit (which reopens) rather
+        // than just setInputMode.
+        palette.openPalette()
+      }
+
+      openEdit(String(current))
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings])
+       reloadSettings, settingRows])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -1273,6 +1378,7 @@ export function Canvas({
               onFocus={onFocusPanel}
               onBeginDrag={onBeginDrag}
               onClose={onClosePanel}
+              glow={glowEnabled}
             />
           )
         })}

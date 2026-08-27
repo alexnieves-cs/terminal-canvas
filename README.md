@@ -37,6 +37,7 @@ npm run verify:registry      # session lifecycle against a fake bridge/terminal,
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
+npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
@@ -71,8 +72,11 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill  -->  main
                        preset:list / preset:rename / preset:delete
                        preset:set-default / preset:spawn-by-id
                        prompt:list / prompt:save / prompt:delete
+                       settings:list / settings:set
                        canvas:request-reset
+                       agent:acknowledge
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
+                       agent:state
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo  -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -182,6 +186,22 @@ installations being separate, not data loss. The socket half is not cosmetic:
 `before-quit` calls `shutdown()`, which is `kill-server`, so a shared socket would mean
 quitting either build destroyed the other build's running agents.
 
+**A panel's border reports what its agent is doing, and the bell needs your CLI's
+cooperation.** Every panel gets a colour from a small state machine — starting,
+busy, idle after a quiet stretch, or "wants you" after a real terminal bell — fed
+by the same PTY bytes the terminal already renders, so nothing new is spawned to
+watch it. The bell precondition is honest, not automatic: it only rings if the
+CLI running inside the panel is actually configured to emit one. Claude Code's
+own notification channel defaults to `auto`, which does not always mean "ring a
+bell" — so a panel that never rings may simply have a CLI that was never asked
+to. Two things about the detector are worth knowing if you go looking for a
+transcript reader or a title-based indicator instead: it never inspects the
+agent's own output for meaning, only for a BEL byte and the absence of further
+bytes, and under the bundled tmux backend the agent's window-title escape
+sequence never reaches this app at all — tmux consumes it for its own pane
+title before this app's PTY layer ever sees it, so it was never a candidate
+signal on that path in the first place.
+
 ## Milestones
 
 | | Scope | Status |
@@ -197,6 +217,7 @@ quitting either build destroyed the other build's running agents.
 | M5c | electron-builder packaging | ✅ done |
 | M6a | Panel identity: user titles, and chrome that says what main resolved | ✅ done |
 | M6b | Settings: a declarative schema, searchable in the palette | ✅ done |
+| M6c | Agent state: a border that says what each panel is doing | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

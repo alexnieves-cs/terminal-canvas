@@ -354,6 +354,22 @@ export function parsePreferences(
       warnings.push(`dropped setting ${id}: expected ${def.type}, got ${typeof value}`)
       continue
     }
+    // The write path (layout-store.ts's setPreference) enforces min/max, but
+    // this file is the OTHER door into the same map — a hand-edited
+    // layout.json, one synced from another machine, or plain corruption never
+    // goes through setPreference at all. A guard on one door only is a guard
+    // with a hole in it: an out-of-range agent.idleAfterMs loaded here would
+    // reach resolveSetting and the feature exactly as if setPreference had
+    // approved it. Dropping with a warning — never clamping — is the same
+    // rule the type check above already enforces, for the same reason: a
+    // silently-coerced value is a preference the user (or their sync) set
+    // that stopped applying, with nothing anywhere saying why.
+    if (def.type === 'number' && typeof value === 'number') {
+      if ((def.min !== undefined && value < def.min) || (def.max !== undefined && value > def.max)) {
+        warnings.push(`dropped setting ${id}: ${value} is outside [${def.min}, ${def.max}]`)
+        continue
+      }
+    }
     out[id] = value as SettingValue
   }
   return out

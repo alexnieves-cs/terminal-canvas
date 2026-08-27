@@ -49,6 +49,7 @@ app.whenReady().then(() => {
     resize: () => {},
     kill: () => {},
     list: () => [],
+    acknowledge: () => {},
     killAll: () => {}
   }
   // Minimal LayoutStore shape — this suite only needs the handlers to
