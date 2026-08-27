@@ -1072,6 +1072,19 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   b.load()
   ok('80 a number preference round-trips', b.getSetting('agent.idleAfterMs') === 2000)
 }
+{
+  // 80b. The LOAD path is a second door into the same preferences map, and it
+  //      must refuse an out-of-range number the same way the write path
+  //      (setPreference, check 79) does — a hand-edited or synced
+  //      layout.json never goes through setPreference at all. Assert BOTH
+  //      halves: a version that dropped the value silently, with no warning,
+  //      would be a different bug wearing the same green check.
+  const w = []
+  const out = L.parsePreferences({ 'agent.idleAfterMs': 0 }, w)
+  ok('80b an out-of-range number loaded from disk is dropped and warned, not carried into the map',
+    !('agent.idleAfterMs' in out) && w.length === 1,
+    JSON.stringify(out) + ' | ' + w.join('|'))
+}
 
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
