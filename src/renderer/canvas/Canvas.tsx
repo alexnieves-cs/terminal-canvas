@@ -1293,6 +1293,14 @@ export function Canvas({
   // Nothing is prevented or stopped: the click must still do its ordinary job
   // of selecting and focusing whatever it landed on, which is also why this
   // dismisses (no focus restore) rather than closing — see dismissPalette.
+  //
+  // Mounted on .shell, not .canvas: since M8a the top bar, rail and inspector
+  // are SIBLINGS of .canvas, so a listener there never sees a click on a shell
+  // control — the overlay would stay up with DOM focus on a button and every
+  // bare key going to the agent. Capture phase and the explicit
+  // closest('.palette') test are unchanged and still load-bearing: .palette's
+  // own bubble-phase stopPropagation cannot stop an ancestor's capture
+  // listener that has already run.
   const onMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
     if (!palette.isOpen()) return
     // Clicks INSIDE the overlay are not an exit. The .palette root's own
@@ -1939,13 +1947,12 @@ export function Canvas({
   }
 
   return (
-    <div className="shell">
+    <div className="shell" onMouseDownCapture={onMouseDownCapture}>
       <TopBar />
       <SideRail />
       <div
         className="canvas"
         ref={hostRef}
-        onMouseDownCapture={onMouseDownCapture}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
       >

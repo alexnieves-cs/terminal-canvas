@@ -4545,6 +4545,36 @@ app.whenReady().then(async () => {
       // Cmd+Z expecting nothing to undo must account for it.
     }
 
+    // 73. THE PALETTE'S THIRD EXIT STILL WORKS FROM THE SHELL.
+    //
+    //     Task 2 made the shell a SIBLING of .canvas, and the outside-click
+    //     dismissal is a capture listener on .canvas — so without this it never
+    //     runs for a shell click and the overlay stays up with DOM focus on a
+    //     button. That is the fourth, un-audited exit "Three ways out of the
+    //     palette" exists to remove, and Escape cannot undo it because the key no
+    //     longer reaches the palette's own onKeyDown.
+    //
+    //     Check 42 already pins the canvas case and must stay green: this is an
+    //     ADDITIONAL door, not a replacement one.
+    {
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      const opened = await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const dismissed = await wc.executeJavaScript(`(async () => {
+        const rail = document.querySelector('.shell__rail')
+        rail.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 20, clientY: 300 }))
+        await new Promise((r) => setTimeout(r, 120))
+        return document.querySelector('.palette') === null
+      })()`)
+      ok('73 a mousedown on the shell dismisses the open palette',
+        opened === true && dismissed === true,
+        `opened=${opened} dismissed=${dismissed}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
