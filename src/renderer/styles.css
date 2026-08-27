@@ -75,6 +75,14 @@ body {
    terminal, and tinting it would fight the agent's own colours — which
    tmux-args.ts goes out of its way to pass through at 24-bit. */
 .panel--agent-busy { border-color: var(--blue); }
+/* Same colour as .panel's own base border-color — deliberately, not left out.
+   agent-state.ts refuses to alias `starting` to `idle` ("painting it idle at
+   spawn would make the very first thing the user sees a lie"), so the state
+   machine treats them as distinct even though they currently render alike on
+   this surface. Without this rule the coincidence is invisible: the next
+   person who changes .panel's base border colour turns `starting` into a
+   silent visual bug, because nothing here would move with it. */
+.panel--agent-starting { border-color: var(--border); }
 .panel--agent-idle { border-color: var(--border); }
 .panel--agent-wants-you {
   border-color: var(--amber);
@@ -89,6 +97,7 @@ body {
    border that stopped tracking the click would make the canvas feel broken
    in a way no colour is worth. Declared after, so it does. */
 .panel--selected,
+.panel--selected.panel--agent-starting,
 .panel--selected.panel--agent-busy,
 .panel--selected.panel--agent-idle,
 .panel--selected.panel--agent-wants-you,
@@ -219,6 +228,15 @@ body {
 .panel__card--agent-busy { border-left: 3px solid var(--blue); }
 .panel__card--agent-wants-you { border-left: 3px solid var(--amber); }
 .panel__card--agent-exited { border-left: 3px solid var(--red); }
+/* Unlike the panel surface, .panel__card has no border-left of its own at
+   rest — without this rule a `starting` card would render with NO rule at
+   all while an `idle` card shows a visible 3px one, which is a real (not
+   coincidental) inconsistency: a slow-launching agent would look different
+   from an idle one for no principled reason. Same neutral treatment as
+   `idle` for the same reason as the panel-surface comment above: `starting`
+   is a distinct, reachable state in the state machine even where it happens
+   to look identical to `idle` here. */
+.panel__card--agent-starting { border-left: 3px solid var(--border); }
 .panel__card--agent-idle { border-left: 3px solid var(--border); }
 
 .badge {
