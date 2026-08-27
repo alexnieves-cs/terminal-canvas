@@ -283,12 +283,38 @@ app.whenReady().then(async () => {
   // silently re-wakes the reset panel (p1), a naive seed would rely on
   // instead.
   const NEVER_WOKEN_ID = 'never-woken'
+  // Check 68's fixture: a SECOND workspace, seeded on disk before the window
+  // ever loads, holding a panel this renderer process has never rendered and
+  // therefore never registered a session for. w1 is where the app boots, so
+  // registry.ensure only ever runs against w1's panels until something
+  // switches away from it — which is exactly the gap the mass-spawn bug lived
+  // in: a workspace's own panels/session state, reached for the FIRST time by
+  // a switch rather than by boot(). focusedId is set to this panel on
+  // purpose: assignTiers pins a focused panel live UNCONDITIONALLY, so if
+  // dormantIds is ever wrong on the very first render after the switch (the
+  // exact bug this check exists to catch), this panel is promoted and spawns
+  // regardless of the camera or the cull region — the check does not have to
+  // depend on framing to force the failure into view. A static id ('w9') that
+  // no runtime-created workspace can collide with: nextWorkspaceId derives
+  // from the maximum existing `w<n>`, so seeding w9 here makes any later
+  // createWorkspace() call in this run mint w10 onward, never colliding with
+  // the id this check depends on.
+  const NEVER_RENDERED_WORKSPACE_ID = 'w9'
+  const NEVER_RENDERED_PANEL_ID = 'w9p1'
   writeFileSync(LAYOUT_PATH, JSON.stringify({
     version: 1,
     activeWorkspaceId: 'w1',
     workspaces: [{
       id: 'w1', name: 'Canvas', panels: [],
       camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null
+    }, {
+      id: NEVER_RENDERED_WORKSPACE_ID, name: 'never rendered',
+      panels: [{
+        id: NEVER_RENDERED_PANEL_ID, x: 5000, y: 5000, w: 400, h: 300, z: 1,
+        cwd: '/tmp', command: '/bin/cat', args: []
+      }],
+      camera: { ...DEFAULT_CAMERA },
+      selectedId: NEVER_RENDERED_PANEL_ID, focusedId: NEVER_RENDERED_PANEL_ID
     }],
     // Check 38 needs a preset the palette is allowed to RENAME, which rules
     // out every built-in — and BOOT_DEFAULT_PRESET is check 32's fixture, so
@@ -3988,7 +4014,13 @@ app.whenReady().then(async () => {
       //     is the authority on pids, and asking it is strictly better than
       //     widening a hook that is deliberately kept narrow.
       const before = await settledSessionMap(wc)
-      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('school')`)
+      // Captured, never hardcoded: nextWorkspaceId() mints w<max+1> over
+      // whatever ids already exist, so a literal 'w2' here would be a guess
+      // this suite has no business making — and a WRONG guess fails
+      // silently, since activate() on an unknown id returns null and simply
+      // changes nothing (Task 2's own contract), so a check built on one
+      // would report a switch that never happened as a passing one.
+      const schoolId = await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('school')`)
       await settle()
       await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
       await settle()
@@ -4002,9 +4034,11 @@ app.whenReady().then(async () => {
       //     still in the registry. This is "demote, not dispose" stated as
       //     two facts that must BOTH hold — the DOM half alone passes against
       //     a dispose, and the registry half alone passes against a switch
-      //     that never rendered. 'w2' is the workspace check 64 created (via
-      //     createAndSwitch) and left empty.
-      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w2')`)
+      //     that never rendered. Switches to `schoolId`, the id check 64
+      //     actually captured back from createAndSwitch — not a literal
+      //     'w2' — because that is the one workspace this run guarantees is
+      //     both real and still empty.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo(${JSON.stringify(schoolId)})`)
       await settle()
       const hidden = await wc.executeJavaScript(`
         ({
@@ -4016,20 +4050,35 @@ app.whenReady().then(async () => {
         hidden.panelsInDom === 0 && hidden.sessionsInRegistry > 0,
         JSON.stringify(hidden))
 
-      // 66. Cmd+N in the second (still empty) workspace does not mint an id
-      //     the first is using. PanelId doubles as the tmux session name, so
-      //     a collision is two panels naming one session — the second to go
-      //     live attaches to the first one's process, and neither panel shows
-      //     anything wrong.
-      const otherIds = await wc.executeJavaScript(`window.__m7aWorkspace().allPanelIds()`)
+      // 66. Cmd+N in the second (still empty, still active) workspace does
+      //     not mint an id any OTHER workspace is using. PanelId doubles as
+      //     the tmux session name, so a collision is two panels naming one
+      //     session — the second to go live attaches to the first one's
+      //     process, and neither panel shows anything wrong.
+      //
+      //     otherIds excludes the ACTIVE workspace deliberately:
+      //     allPanelIds() spans EVERY workspace by design (Task 2), so
+      //     intersecting the panel this very Cmd+N is about to mint against
+      //     the unfiltered set would report a collision with itself the
+      //     instant it renders.
+      const workspaceRows = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const otherIds = workspaceRows
+        .filter((w) => !w.active)
+        .flatMap((w) => w.panelIds)
       zoomTo(wc, 'n')
       await settle()
+      // `.panel[data-panel-id]`, not the bare attribute selector: a panel's
+      // OWN root and its slot/card children can each carry the attribute
+      // (TerminalPanel places it on more than one element), so the bare
+      // selector double-counts every panel — visible in an earlier run's
+      // `minted=p1,p1,n6,n6,...` output. The panel ROOT is the one place the
+      // id is authoritative.
       const minted = await wc.executeJavaScript(`
-        Array.from(document.querySelectorAll('[data-panel-id]')).map((e) => e.dataset.panelId)
+        Array.from(document.querySelectorAll('.panel[data-panel-id]')).map((e) => e.dataset.panelId)
       `)
       const collision = minted.filter((id) => otherIds.includes(id))
       ok('66 a spawn in another workspace mints no colliding id',
-        collision.length === 0, `minted=${minted.join()} collision=${collision.join()}`)
+        collision.length === 0, `minted=${minted.join()} otherIds=${otherIds.join()} collision=${collision.join()}`)
 
       // 67. Cmd+Z immediately after a switch is INERT. history is one stack
       //     over one Panel[], and applyHistory calls registry.dispose for any
@@ -4067,6 +4116,38 @@ app.whenReady().then(async () => {
       ok('67 Cmd+Z right after a switch changes nothing',
         beforeUndo.panels === afterUndo.panels && beforeUndo.sessions === afterUndo.sessions,
         `${JSON.stringify(beforeUndo)} -> ${JSON.stringify(afterUndo)}`)
+
+      // 68. THE MASS-SPAWN CHECK. Checks 64-67 all switch between workspaces
+      //     this renderer has ALREADY rendered at least once — w1 at boot,
+      //     'school'/w2 by creating it live — so registry.ensure already has
+      //     (or trivially gets, for an empty workspace) a settled session for
+      //     every panel involved, and dormantIds being briefly wrong on the
+      //     wrong render is invisible against that fixture. w9/w9p1 close
+      //     that gap: seeded on DISK before the window ever loaded (see the
+      //     LAYOUT_PATH fixture above), never rendered by this process before
+      //     this moment, and its own persisted focusedId names w9p1 —
+      //     assignTiers pins a focused panel live UNCONDITIONALLY, so if
+      //     dormantIds is wrong on the very first render after the switch
+      //     (committing `next` before `pty.list()` resolves, the exact bug
+      //     this check exists to catch), this fixture forces it into a spawn
+      //     rather than merely hoping a camera/cull coincidence produces one.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('${NEVER_RENDERED_WORKSPACE_ID}')`)
+      await settle()
+      // Waits for the FAILURE condition (a live session appearing) rather
+      // than reading absence immediately: the spawn path is a few IPC round
+      // trips deep (fit-before-spawn, then pty:create), so an instant read
+      // could pass for a reason that has nothing to do with correctness — the
+      // spawn simply had not landed yet. Other checks in this suite wait
+      // 3-8s for a GENUINE spawn to land, so 3s of silence here is well past
+      // that budget before the negative is trusted.
+      const spawned = await waitUntil(
+        async () => (await sessionMap(wc)).has(NEVER_RENDERED_PANEL_ID), 3000)
+      const sessions68 = await wc.executeJavaScript(`window.__m4aSessions()`)
+      const registered = sessions68.find((s) => s.id === NEVER_RENDERED_PANEL_ID)
+      ok('68 a workspace switched to for the first time spawns nothing, even focused',
+        spawned !== true && registered !== undefined &&
+          registered.dormant === true && registered.spawned === false,
+        `spawned=${spawned} registered=${JSON.stringify(registered)}`)
     }
 
   } catch (error) {

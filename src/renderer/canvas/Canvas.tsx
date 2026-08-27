@@ -644,7 +644,7 @@ export function Canvas({
   viewportRef.current = viewport
 
   /**
-   * A workspace switch is a SECOND BOOT.
+   * A workspace switch is a SECOND BOOT — not merely shaped like one.
    *
    * Everything derived from the starting state is RE-DERIVED rather than
    * carried: the id counter (from ActivateResult.allPanelIds, which spans
@@ -661,6 +661,27 @@ export function Canvas({
    * must never be one: `verify:panels` 64 is the check that fails first if
    * one creeps in, and it is the one no cheaper tier can catch (see
    * CLAUDE.md's "Switching in a real renderer" task note).
+   *
+   * `pty.list()` is AWAITED BEFORE `next` is committed, and `dormantIds` is
+   * set in the SAME synchronous batch as `setPanels`. That ordering is not a
+   * style choice: renderer/main.tsx's boot() awaits pty:list before its
+   * FIRST render, which is the actual thing that makes "restored panels are
+   * dormant unless live" true there — an earlier draft of this function
+   * committed `next` first and corrected `dormantIds` afterward, once a
+   * second, independent pty:list promise resolved, and its comment claimed
+   * to reuse boot()'s rule while doing the opposite of what makes that rule
+   * hold. The tiering memo's `registry.ensure(id, spec, { dormant:
+   * dormantIds.has(id) })` runs on the FIRST render of the incoming panels,
+   * and `ensure` early-returns for a session that already exists — so a
+   * dormantIds correction arriving even one render late can never repair a
+   * session that was already created non-dormant. Both dormancy layers then
+   * agree for the wrong reason: lod.ts promotes the panel because
+   * dormantIds does not (yet) contain it, and the registry's own dormancy
+   * guard passes because session.dormant is already false. attachSlot spawns.
+   * Restoring focusedId makes it worse — assignTiers pins the focused panel
+   * live unconditionally. The result was up to LIVE_BUDGET agent CLIs
+   * launched by a workspace switch with no user gesture, exactly what
+   * "dormant until clicked" exists to prevent.
    */
   const switchWorkspace = useCallback(
     (id: string) => {
@@ -670,25 +691,63 @@ export function Canvas({
         selectedId,
         focusedId
       }
-      void window.canvas.workspace.activate(id, outgoing).then((result: ActivateResult | null) => {
+      void (async (): Promise<void> => {
+        let result: ActivateResult | null
+        try {
+          result = await window.canvas.workspace.activate(id, outgoing)
+        } catch (error: unknown) {
+          // Unhandled otherwise: `void`ing the chain silences the lint, not
+          // the rejection. A throw here can land after main has already
+          // flipped activeWorkspaceId (activate is write-then-flip, not
+          // atomic across the IPC boundary) while this renderer keeps
+          // showing the outgoing canvas — the same shape boot()'s two
+          // try/catches exist to prevent, just on the switch path instead of
+          // the boot path.
+          console.warn('[workspace] could not activate workspace', id, error)
+          return
+        }
         // Null means the id named nothing — a stale palette row, or a
         // workspace deleted out from under an in-flight switch. Main changed
         // nothing, so neither does this.
         if (!result) return
         const next = toPanels(result.state.panels)
+
+        // Every restored panel arrives DORMANT unless it already has a live
+        // session — the same rule boot() applies in renderer/main.tsx, for
+        // the same reason: a switch must spawn nothing. Resolved BEFORE
+        // `next` is committed (see this function's own doc comment above for
+        // why the ordering, not just the rule, is what boot() actually
+        // relies on) and reusing pty:list — main's authority on what is
+        // actually live — rather than restating the rule is what keeps a
+        // switch and a boot from disagreeing.
+        let dormant: Set<string>
+        try {
+          const sessions = await window.canvas.pty.list()
+          const live = new Set(sessions.map((s) => s.panelId))
+          dormant = new Set(next.map((p) => p.rect.id).filter((pid) => !live.has(pid)))
+        } catch (error: unknown) {
+          // The same failure DIRECTION boot() chooses, for the same reason:
+          // an empty set here means "spawn nothing", the safe side to fail
+          // toward. Leaving `dormant` unset and falling through to the old
+          // (outgoing) dormantIds would fail the OTHER way — every incoming
+          // panel reading as non-dormant — which is the mass-spawn this
+          // whole fix exists to prevent, arriving through an unhandled
+          // rejection instead of a wrong ordering.
+          console.warn(
+            '[workspace] could not list live sessions; restoring every panel dormant', error
+          )
+          dormant = new Set(next.map((p) => p.rect.id))
+        }
+
+        // Committed together, in one synchronous block with no `await`
+        // between them, so React batches them into a single render: `next`
+        // and its correct `dormant` set reach the tiering memo on the same
+        // pass, never `next` first and `dormant` a render later.
         setPanels(next)
+        setDormantIds(dormant)
         setSelectedId(result.state.selectedId)
         setFocusedId(result.state.focusedId)
         restoreCamera(result.state.camera)
-        // Every restored panel arrives DORMANT unless it already has a live
-        // session — the same rule boot() applies in renderer/main.tsx, for
-        // the same reason: a switch must spawn nothing. Reusing pty:list
-        // (main's authority on what is actually live) rather than restating
-        // the rule is what keeps a switch and a boot from disagreeing.
-        void window.canvas.pty.list().then((sessions) => {
-          const live = new Set(sessions.map((s) => s.panelId))
-          setDormantIds(new Set(next.map((p) => p.rect.id).filter((pid) => !live.has(pid))))
-        })
         // HISTORY IS CLEARED, not carried. history is ONE stack over ONE
         // Panel[], and applyHistory disposes any panel the undone state no
         // longer contains — which reaches pty.kill. An uncarried stack would
@@ -712,7 +771,7 @@ export function Canvas({
           const match = /^n(\d+)$/.exec(pid)
           return match ? Math.max(max, Number(match[1]) + 1) : max
         }, 1)
-      })
+      })()
     },
     [selectedId, focusedId, restoreCamera]
   )
@@ -722,10 +781,14 @@ export function Canvas({
   // viewport changes on every wheel event.
   useEffect(() => installPointerCorrection(() => viewportRef.current.scale), [])
 
-  // Test hooks for verify:panels. The registry is a module-level closure with
-  // no global handle by design, and executeJavaScript has no other route into
-  // it. Kept to seven narrow reads/writes rather than exposing the registry
-  // itself, so the suite cannot quietly start depending on internals.
+  // Test hooks for verify:panels. The registry (and, since M7, the workspace
+  // surface) is a module-level/main-owned concept with no other route in for
+  // executeJavaScript. Kept to narrow, single-purpose reads/writes — named
+  // for what each one ANSWERS — rather than exposing the registry itself, so
+  // the suite cannot quietly start depending on internals. Grep `w\.__` in
+  // this effect for the current count rather than trusting a number here:
+  // it has already drifted once (an earlier comment said "seven" after the
+  // count had grown past a dozen).
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m4aScale = (): number => viewportRef.current.scale
@@ -820,12 +883,21 @@ export function Canvas({
      */
     w.__m7aWorkspace = (): {
       switchTo: (workspaceId: string) => void
-      createAndSwitch: (name: string) => Promise<void>
+      createAndSwitch: (name: string) => Promise<string>
       allPanelIds: () => Promise<string[]>
     } => ({
       switchTo: (workspaceId: string) => switchWorkspace(workspaceId),
+      // Returns the id the store actually minted, not just a fire-and-forget
+      // void: nextWorkspaceId() derives from the current maximum `w<n>`, so a
+      // caller has no honest way to predict it in advance. A check that
+      // hardcodes the id it EXPECTS createWorkspace to hand back is a check
+      // that never actually switched anywhere the day that assumption drifts
+      // — it would still read as green, just against the wrong workspace.
       createAndSwitch: (name: string) =>
-        window.canvas.workspace.create(name).then((workspaceId) => switchWorkspace(workspaceId)),
+        window.canvas.workspace.create(name).then((workspaceId) => {
+          switchWorkspace(workspaceId)
+          return workspaceId
+        }),
       allPanelIds: () =>
         window.canvas.workspace.list().then((rows) => rows.flatMap((row) => row.panelIds))
     })
@@ -1622,9 +1694,9 @@ export function Canvas({
           prompts={promptRows}
           panels={panelRows}
           settings={settingRows}
-          // Stub: Task 5 loads the real list from window.canvas.workspace.list().
+          // Stub: Task 7 loads the real list from window.canvas.workspace.list().
           workspaces={EMPTY_WORKSPACES}
-          // Stub: Task 5 wires this to the renderer's real attention set.
+          // Stub: Task 7 wires this to the renderer's real attention set.
           attentionIds={EMPTY_ATTENTION_IDS}
           hasSelection={hasSelection()}
           inputMode={inputMode}
