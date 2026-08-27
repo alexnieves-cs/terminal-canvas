@@ -29,6 +29,15 @@ import { createHistory, pushHistory, undoHistory, redoHistory, type History } fr
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
+// M8a. The frame is rendered here rather than in App.tsx because every verb it
+// will eventually need (paletteActions, the camera verbs, presetRows) is state
+// that lives inside Canvas — an App-owned frame would mean lifting all of it up
+// or threading it back through a callback, making App a state owner in exchange
+// for a tidier diagram.
+import { TopBar } from '../shell/TopBar'
+import { SideRail } from '../shell/SideRail'
+import { Inspector } from '../shell/Inspector'
+import { useShellChrome } from '../shell/useShellChrome'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -458,7 +467,9 @@ export function Canvas({
     jumpAttentionImplRef.current(direction)
   }, [])
 
-  const { viewport, resetViewport, worldCentre, centreOn, restoreCamera } = useViewport(
+  const {
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll
+  } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
   )
   const version = useRegistryVersion(registry)
@@ -1285,6 +1296,14 @@ export function Canvas({
   // Nothing is prevented or stopped: the click must still do its ordinary job
   // of selecting and focusing whatever it landed on, which is also why this
   // dismisses (no focus restore) rather than closing — see dismissPalette.
+  //
+  // Mounted on .shell, not .canvas: since M8a the top bar, rail and inspector
+  // are SIBLINGS of .canvas, so a listener there never sees a click on a shell
+  // control — the overlay would stay up with DOM focus on a button and every
+  // bare key going to the agent. Capture phase and the explicit
+  // closest('.palette') test are unchanged and still load-bearing: .palette's
+  // own bubble-phase stopPropagation cannot stop an ancestor's capture
+  // listener that has already run.
   const onMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
     if (!palette.isOpen()) return
     // Clicks INSIDE the overlay are not an exit. The .palette root's own
@@ -1306,11 +1325,14 @@ export function Canvas({
     if (world) setCursor(world)
   }
 
-  // Loaded when the palette OPENS, not on mount and not on a subscription: the
-  // list is only ever looked at while the overlay is up, and availability is
-  // probed once at startup anyway (a brew install mid-session is a known limit
-  // of M5a, not something a subscription here would fix). Reloaded after every
-  // mutation, because main is the only side that knows what the store now says.
+  // Loaded on mount AND whenever the palette opens — but never on a
+  // subscription: availability is probed once at startup anyway (a brew
+  // install mid-session is a known limit of M5a, not something a subscription
+  // here would fix), and reloading after every mutation is enough because main
+  // is the only side that knows what the store now says. The mount-time load
+  // is the effect twelve lines below, added by M8a: until then this list was
+  // palette-only, and the comment here still said so — see that effect for why
+  // the top bar cannot wait for a first Cmd+K.
   const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
   const reloadPresets = useCallback(() => {
     void window.canvas.preset.list().then(setPresetRows)
@@ -1318,6 +1340,12 @@ export function Canvas({
   useEffect(() => {
     if (palette.open) reloadPresets()
   }, [palette.open, reloadPresets])
+  // The top bar names the default preset, so the list must exist before the
+  // palette has ever been opened — the bar renders on the first paint and the
+  // user may never press Cmd+K at all. The palette-open reload above STAYS:
+  // this one runs once, and it is the reopen that keeps the rows fresh after
+  // a rename, a delete or a change of default.
+  useEffect(() => { reloadPresets() }, [reloadPresets])
 
   // The prompt list, reloaded whenever the palette opens — and whenever the
   // panel it captured changes, because a project's prompts are its own
@@ -1398,6 +1426,18 @@ export function Canvas({
       if (row) setPipsEnabled(row.value === true)
     })
   }, [settingRows])
+
+  // Rail and inspector visibility, persisted through main's settings store and
+  // chorded on Cmd+\ / ⇧Cmd+\. Sits beside glowEnabled and pipsEnabled above
+  // because it is the same kind of state and reads exactly the way they do:
+  // its own settings:list call (settingRows is empty until the palette has
+  // been opened, and the frame must be right on the first paint), re-run
+  // whenever settingRows changes identity. That last half is not optional —
+  // both settings are ordinary booleans, so main auto-generates a palette row
+  // for each, and without the dependency a palette toggle would persist while
+  // the rail never moved. See useShellChrome's own doc comment and
+  // verify:panels 78.
+  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows })
 
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
@@ -1892,6 +1932,27 @@ export function Canvas({
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows, switchWorkspace, reloadWorkspaces])
 
+  /**
+   * The top bar's ⚙. It opens the palette straight into the settings
+   * drill-in through the controller's own scope — the SAME authority the
+   * `Manage settings…` row's `entersScope: 'settings'` reaches, not a second
+   * door. The scope is what makes the button honest: every setting row is
+   * hiddenAtRest, so merely opening the palette would land the user on a list
+   * with no settings visible at all, which reads as a feature that was never
+   * built.
+   */
+  const openSettingsScope = useCallback(() => {
+    palette.openPalette('settings')
+    // A useCallback for consistency with its sibling verbs, not for a
+    // load-bearing reason. An earlier comment here claimed an unstable
+    // identity would re-render TopBar on every mousemove over the canvas;
+    // that is false. TopBar is not memo-wrapped, so it re-renders whenever
+    // Canvas does — which a mousemove's setCursor already makes it do —
+    // whatever this prop's identity is. The parallel note in useViewport.ts
+    // IS true and load-bearing (those callbacks sit in a keydown effect's dep
+    // array); don't read this one as saying the same thing.
+  }, [palette.openPalette])
+
   // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
   // declared earlier in this component — see that ref's own comment for why
   // it exists instead of a direct reference.
@@ -1932,62 +1993,78 @@ export function Canvas({
 
   return (
     <div
-      className="canvas"
-      ref={hostRef}
+      className={`shell${chrome.railOpen ? '' : ' shell--rail-collapsed'}${
+        chrome.inspectorOpen ? '' : ' shell--inspector-collapsed'}`}
       onMouseDownCapture={onMouseDownCapture}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
     >
+      <TopBar
+        presets={presetRows}
+        scale={viewport.scale}
+        onSpawnPreset={paletteActions.spawnPreset}
+        onZoomBy={zoomBy}
+        onFit={fitAll}
+        onSearch={palette.openPalette}
+        onSettings={openSettingsScope}
+      />
+      <SideRail onToggle={chrome.toggleRail} />
       <div
-        className="world"
-        style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+        className="canvas"
+        ref={hostRef}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
       >
-        {panels.map((panel) => {
-          const session = registry.get(panel.rect.id)
-          if (!session) return null
-          return (
-            <TerminalPanel
-              key={panel.rect.id}
-              session={session}
-              version={version}
-              rect={panel.rect}
-              z={panel.z}
-              title={panel.title}
-              selected={panel.rect.id === selectedId}
-              onSelect={onSelectPanel}
-              onSlotMount={onSlotMount}
-              onSlotUnmount={onSlotUnmount}
-              onFocus={onFocusPanel}
-              onBeginDrag={onBeginDrag}
-              onClose={onClosePanel}
-              glow={glowEnabled}
-            />
-          )
-        })}
+        <div
+          className="world"
+          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+        >
+          {panels.map((panel) => {
+            const session = registry.get(panel.rect.id)
+            if (!session) return null
+            return (
+              <TerminalPanel
+                key={panel.rect.id}
+                session={session}
+                version={version}
+                rect={panel.rect}
+                z={panel.z}
+                title={panel.title}
+                selected={panel.rect.id === selectedId}
+                onSelect={onSelectPanel}
+                onSlotMount={onSlotMount}
+                onSlotUnmount={onSlotUnmount}
+                onFocus={onFocusPanel}
+                onBeginDrag={onBeginDrag}
+                onClose={onClosePanel}
+                glow={glowEnabled}
+              />
+            )
+          })}
+        </div>
+        {pipsEnabled && (
+          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
+        )}
+        <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
+        {palette.open && (
+          <Palette
+            controller={palette}
+            actions={paletteActions}
+            presets={presetRows}
+            prompts={promptRows}
+            panels={panelRows}
+            settings={settingRows}
+            workspaces={workspaceRows}
+            // The renderer's own attention set (agent-state-store.ts), not a
+            // second derivation: main never learns "which panels are
+            // wants-you" as a set, only individual agent:state transitions,
+            // and asking it to recompute one here would make it a second
+            // author of a fact this side already folds correctly.
+            attentionIds={waitingIds}
+            hasSelection={hasSelection()}
+            inputMode={inputMode}
+          />
+        )}
       </div>
-      {pipsEnabled && (
-        <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
-      )}
-      <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
-      {palette.open && (
-        <Palette
-          controller={palette}
-          actions={paletteActions}
-          presets={presetRows}
-          prompts={promptRows}
-          panels={panelRows}
-          settings={settingRows}
-          workspaces={workspaceRows}
-          // The renderer's own attention set (agent-state-store.ts), not a
-          // second derivation: main never learns "which panels are
-          // wants-you" as a set, only individual agent:state transitions,
-          // and asking it to recompute one here would make it a second
-          // author of a fact this side already folds correctly.
-          attentionIds={waitingIds}
-          hasSelection={hasSelection()}
-          inputMode={inputMode}
-        />
-      )}
+      <Inspector onToggle={chrome.toggleInspector} />
     </div>
   )
 }

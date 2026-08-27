@@ -4585,6 +4585,621 @@ app.whenReady().then(async () => {
         JSON.stringify(hover))
     }
 
+    // 73. THE FRAME INSETS THE CANVAS, and the canvas survives being inset.
+    //
+    //     Two assertions, and the second is the one worth having. That the
+    //     canvas got narrower is nearly tautological once a grid exists. That a
+    //     panel is STILL PROMOTED afterwards is not: a narrower canvas host is a
+    //     smaller cull region, assignTiers legitimately demotes on it, and a
+    //     frame that quietly demoted the panel the user was looking at would
+    //     render as a card with no error anywhere. The .xterm probe is the same
+    //     "is it still live" proof check 51 makes for the spawn cascade.
+    //
+    //     The Cmd+N is not decoration: check 71 above deletes every fixture
+    //     workspace and leaves a one-workspace, ZERO-panel world behind (its
+    //     own closing comment says so), so this check has to mint the panel
+    //     whose promotion it is about to assert. Spawning it here also makes
+    //     the promotion claim stronger than inheriting a survivor would: the
+    //     panel is created at the camera's centre on the ALREADY-inset canvas.
+    {
+      await zoomTo(wc, 'n')
+      await settle()
+      const geom = await wc.executeJavaScript(`(() => {
+        const shell = document.querySelector('.shell')
+        const canvas = document.querySelector('.canvas')
+        const rail = document.querySelector('.shell__rail')
+        const inspector = document.querySelector('.shell__inspector')
+        if (!shell || !canvas || !rail || !inspector) return null
+        const c = canvas.getBoundingClientRect()
+        return {
+          canvasWidth: c.width,
+          windowWidth: window.innerWidth,
+          railWidth: rail.getBoundingClientRect().width,
+          inspectorWidth: inspector.getBoundingClientRect().width,
+          canvasLeft: c.left
+        }
+      })()`)
+      const live = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel .xterm').length`)
+      ok('73 the shell frame insets the canvas and leaves a panel promoted',
+        geom !== null && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
+          geom.canvasWidth < geom.windowWidth - 80 &&
+          geom.canvasLeft >= geom.railWidth - 1 &&
+          // The EXACT inset, and it is the clause that does the discriminating.
+          // Every bound above it is loose enough to survive the one CSS failure
+          // the frame's own comment names: drop `min-width: 0` from the canvas
+          // cell and the grid item refuses to shrink, so the canvas overflows
+          // and shoves the inspector off screen — yet getBoundingClientRect()
+          // reports width for an element pushed out of view exactly as it does
+          // for a visible one, so railWidth is still 240, inspectorWidth is
+          // still 260, canvasLeft is still 240, and an overflowing canvasWidth
+          // is still comfortably under windowWidth - 80. All five loose clauses
+          // pass under that regression. Only the identity — the three columns
+          // summing to the window — fails, because an overflowing middle cell is
+          // precisely a canvas WIDER than the space the other two leave it.
+          // ±1 for fractional device pixels, not for slack in the claim.
+          Math.abs(geom.canvasWidth -
+            (geom.windowWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
+          live > 0,
+        JSON.stringify(geom) + ` live=${live}`)
+      // The state this check LEAVES BEHIND, in the same spirit as 71's own
+      // closing note, because this is a top-to-bottom suite and 74 onward will
+      // be appended directly below: the zero-panel world 71 describes ends
+      // here. Check 73 spawns one panel via Cmd+N at the camera's centre and
+      // lets it go live, so anything appended after this inherits a
+      // one-workspace world holding ONE panel with a live PTY — not an empty
+      // one. A later check that counts panels, counts sessions, or presses
+      // Cmd+Z expecting nothing to undo must account for it.
+    }
+
+    // 74. THE PALETTE'S THIRD EXIT STILL WORKS FROM THE SHELL.
+    //
+    //     Task 2 made the shell a SIBLING of .canvas, and the outside-click
+    //     dismissal is a capture listener on .canvas — so without this it never
+    //     runs for a shell click and the overlay stays up with DOM focus on a
+    //     button. That is the fourth, un-audited exit "Three ways out of the
+    //     palette" exists to remove, and Escape cannot undo it because the key no
+    //     longer reaches the palette's own onKeyDown.
+    //
+    //     Check 42 already pins the canvas case and must stay green: this is an
+    //     ADDITIONAL door, not a replacement one.
+    {
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      const opened = await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const dismissed = await wc.executeJavaScript(`(async () => {
+        const rail = document.querySelector('.shell__rail')
+        rail.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 20, clientY: 300 }))
+        await new Promise((r) => setTimeout(r, 120))
+        return document.querySelector('.palette') === null
+      })()`)
+      ok('74 a mousedown on the shell dismisses the open palette',
+        opened === true && dismissed === true,
+        `opened=${opened} dismissed=${dismissed}`)
+    }
+
+    // 75. COLLAPSE IS REAL LAYOUT, IT PERSISTS TO MAIN'S STORE, AND IT DEMOTES
+    //     NOTHING.
+    //     Read back through settings:list rather than off the shell's own class,
+    //     for the same reason check 53 does: a toggle that only flips a local
+    //     boolean looks identical on screen and is gone on the next launch.
+    //
+    //     The `stillLive` clause is the spec's own conjunction, which until now
+    //     shipped as two checks that never met: check 73 asserts `.xterm` but
+    //     collapses nothing, and this check collapsed but never looked at
+    //     promotion, so success criterion 3 ("no panel that was live before the
+    //     collapse is demoted by it") was asserted nowhere.
+    //
+    //     BE HONEST ABOUT ITS POWER TODAY: the clause is close to tautological.
+    //     Nothing in the renderer observes the canvas host's SIZE — the tiering
+    //     effect depends on [rects, viewport, focusedId, version, dormantIds]
+    //     and reads getBoundingClientRect() only when one of those changes, and
+    //     the single ResizeObserver in the renderer belongs to EdgeIndicators
+    //     and re-renders the pip layer alone. So a collapse does not re-run
+    //     assignTiers at all and nothing could demote here. The clause exists
+    //     for the future in which that stops being true: the moment anything
+    //     makes a width change re-tier (a ResizeObserver on the host, a window
+    //     size in Canvas state), a collapse becomes able to demote the panel
+    //     the user was looking at into a card with nothing in any log, and this
+    //     is the check that would go red. It is cheap insurance on a real
+    //     criterion, not a proof of one.
+    {
+      const before = await wc.executeJavaScript(
+        `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const liveBefore = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel .xterm').length`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__rail-toggle').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      // Longer than the 150ms this used to wait: DEMOTE_DELAY_MS is 250, so a
+      // demotion triggered by the collapse would be APPLIED after the old
+      // wait, not before it, and the .xterm probe would read the pre-demotion
+      // DOM and pass against exactly the future regression it is here for.
+      await sleep(500)
+      const after = await wc.executeJavaScript(
+        `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const liveAfter = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel .xterm').length`)
+      const stored = await wc.executeJavaScript(
+        `window.canvas.settings.list().then((rows) =>
+           rows.find((r) => r.id === 'shell.railOpen').value)`)
+      ok('75 collapsing the rail widens the canvas, reaches main\'s store, and demotes nothing',
+        after > before + 100 && stored === false &&
+          liveBefore > 0 && liveAfter >= liveBefore,
+        `before=${before} after=${after} stored=${stored} ` +
+          `live ${liveBefore} -> ${liveAfter}`)
+    }
+
+    // 75b. AUTO-REPEAT IS ONE GESTURE. A held Cmd+\ toggles once, not fifteen
+    //      times — the Cmd+K defect, which for a toggle means the rail's final
+    //      state depends on whether the user released on an odd or even repeat.
+    //      Like checks 7b and 33b this supplies repeat:true by hand, so it proves
+    //      the guard READS the flag and says nothing about who sets it.
+    {
+      // Named for what it ANSWERS. It was `open()` and returned whether the
+      // rail is COLLAPSED, so the detail string below read backwards: a
+      // passing run printed start=true for a rail that was shut.
+      const collapsed = () => wc.executeJavaScript(
+        `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+      const start = await collapsed()
+      await wc.executeJavaScript(`
+        for (let i = 0; i < 5; i++) {
+          window.dispatchEvent(new KeyboardEvent('keydown', {
+            key: '\\\\', code: 'Backslash', metaKey: true, repeat: true, bubbles: true }))
+        }
+      `)
+      await sleep(200)
+      const afterRepeats = await collapsed()
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '\\\\', code: 'Backslash', metaKey: true, repeat: false, bubbles: true }))
+      `)
+      await sleep(200)
+      const afterReal = await collapsed()
+      ok('75b a held Cmd+\\ toggles the rail once, not once per repeat',
+        afterRepeats === start && afterReal !== start,
+        `collapsed: start=${start} afterRepeats=${afterRepeats} afterReal=${afterReal}`)
+    }
+
+    // 75c. A SHELL CONTROL NEVER TAKES THE KEYBOARD.
+    //      The quietest failure this surface has: click a button, and the next
+    //      keystroke goes nowhere because DOM focus is on the button rather than
+    //      xterm's hidden textarea. focusedId ALSO has to survive — assignTiers
+    //      pins the focused panel live, and it is the Cmd+C target.
+    //
+    //      Two deliberate departures from the brief's draft of this check, both
+    //      forced by what the renderer actually exposes.
+    //
+    //      (1) There is NO route from this suite to `focusedId` itself.
+    //      `__m4aSelection()` — the draft's read — returns xterm's SELECTED TEXT
+    //      (a string), so `.focusedId` on it is `undefined` at both ends and the
+    //      draft's equality would have compared undefined to a panel id, failing
+    //      for a reason that has nothing to do with shell controls.
+    //      PRESET_CAPTURE is no substitute either: it answers with the focused
+    //      panel's SPEC (cwd/args/w/h), never its id — check 30 pins exactly
+    //      that shape. So the two halves are probed the way the suite already
+    //      probes them, with no new renderer hook minted for one check:
+    //        - the exact IDENTITY, from `document.activeElement.closest('.panel')`,
+    //          which is where a stolen keyboard shows up and is the same read
+    //          check 6 uses for "a body click focuses the panel";
+    //        - `focusedId` NOT BEING RELEASED, from `__m4aGrid() !== null`,
+    //          which resolves through focusedIdRef — check 41's own probe, and
+    //          its comment explains why a non-null answer means "the app still
+    //          believes a live panel is focused".
+    //      What that pair cannot distinguish, stated rather than implied: a
+    //      control that swapped focusedId to a DIFFERENT live panel while DOM
+    //      focus stayed put would satisfy both. No such swap is reachable from a
+    //      button that never calls onSelectPanel, and closing the gap would mean
+    //      a new __m8a* hook for a fact nothing else needs.
+    //
+    //      (2) There is no top-level `clickPanel(id)` helper in this file. The
+    //      real-OS-click idiom is copied in locally below, and NOT because the
+    //      original is out of reach: `clickPanelBody` (~line 761) is declared in
+    //      the same enclosing try block and is perfectly in scope here. The copy
+    //      is deliberate, and what it buys is narrowness — this check needs a
+    //      click at the centre of an arbitrary SELECTOR (it clicks a shell
+    //      button, which is not a panel body at all), and widening
+    //      `clickPanelBody` to serve that would put a second caller with
+    //      different needs on a helper a dozen earlier checks depend on. The
+    //      duplication is four lines of sendInputEvent; the alternative is a
+    //      shared helper that goes wrong for checks nobody was editing.
+    //      A DISPATCHED mousedown would not serve: it sets focusedId, but the
+    //      browser moves no DOM focus for a synthetic event, so `insideBefore`
+    //      would be false and the check would prove nothing about the half it
+    //      exists for.
+    {
+      // The real-click focus idiom, copied from clickPanelBody (~line 761) and
+      // narrowed to what this check needs: sendInputEvent, not a dispatched
+      // MouseEvent, because only a real OS-level click moves DOM focus into
+      // xterm's hidden textarea — which is exactly what a shell control must
+      // not steal.
+      const realClick = async (selector) => {
+        const box = await wc.executeJavaScript(
+          `(() => { const s = document.querySelector(${JSON.stringify(selector)});
+                    if (!s) return null;
+                    const r = s.getBoundingClientRect();
+                    return { x: Math.round(r.left + r.width / 2),
+                             y: Math.round(r.top + r.height / 2) } })()`)
+        if (!box) throw new Error(`75c: no element matched ${selector}`)
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        await sleep(150)
+      }
+      const id = await wc.executeJavaScript(
+        `document.querySelector('.panel__slot').closest('.panel').getAttribute('data-panel-id')`)
+      await realClick(`.panel[data-panel-id="${id}"] .panel__slot`)
+      // Both halves in one read, so they describe the same instant.
+      const probe = () => wc.executeJavaScript(`(() => {
+        const host = document.activeElement && document.activeElement.closest('.panel')
+        return {
+          inside: host !== null && host !== undefined,
+          id: host ? host.getAttribute('data-panel-id') : null,
+          focusedLive: window.__m4aGrid() !== null
+        }
+      })()`)
+      const before = await probe()
+      // A REAL click on the toggle, not the draft's dispatched pair. This is
+      // what makes the check capable of failing at all: a synthetic MouseEvent
+      // is untrusted, and Chromium runs no default action for one — so it
+      // never moves DOM focus to the button whether or not onMouseDown calls
+      // preventDefault(), and a dispatched-event version of this check passes
+      // identically against the very regression it exists to catch. Confirmed
+      // by deleting the preventDefault and watching this go red.
+      await realClick('.shell__rail-toggle')
+      const after = await probe()
+      ok('75c a shell control takes neither focusedId nor DOM focus',
+        before.inside === true && after.inside === true &&
+          before.id === id && after.id === id &&
+          before.focusedLive === true && after.focusedLive === true,
+        `panel=${id} before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
+      // What 75/75b/75c LEAVE BEHIND, in the spirit of 73's own closing note:
+      // the one-panel, one-workspace world is unchanged, but the rail is now
+      // COLLAPSED and `shell.railOpen` is false in main's store (75 collapsed
+      // it, 75b's one real chord reopened it, 75c's button click collapsed it
+      // again). The inspector is untouched and still open. Anything appended
+      // below that measures the canvas's width — or clicks at a screen point
+      // captured before this block — must account for the narrower rail.
+    }
+
+    // 76. THE SPAWN BUTTON SPAWNS EXACTLY ONE PANEL, THROUGH MAIN.
+    //     Exactly one is half the check: a button that also let its click reach
+    //     the canvas background would spawn once and select something else, and a
+    //     double-fire looks identical to a slow machine.
+    {
+      const before = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__spawn').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(400)
+      const after = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      ok('76 the New panel button spawns exactly one panel',
+        after === before + 1, `${before} -> ${after}`)
+    }
+
+    // 77. THE ZOOM CLUSTER MOVES THE CAMERA THROUGH NAMED VERBS.
+    //     Reads __m4aScale rather than a CSS transform so it is the same number
+    //     viewport.ts computes. Fit is asserted separately from the steppers
+    //     because they are different verbs and a wiring that pointed both at
+    //     resetViewport would still change the scale.
+    //
+    //     The Fit half is THREE clauses, and it takes all three. The obvious
+    //     one — `fitted > 0` — is satisfied by any non-zero scale at all, so
+    //     it passes against a Fit button wired to resetViewport, wired to
+    //     zoomBy, and, worst, wired to NOTHING (the scale simply stays where
+    //     the steppers left it). Each clause below kills one of those.
+    //
+    //     (a) |fitted - backOut| > 0.001 kills "wired to nothing", and NOTHING
+    //         ELSE. It is emphatically NOT sufficient on its own, and the
+    //         numbers are worth writing down because they are close enough to
+    //         look like coverage: TopBar's ZOOM_STEP is 1.2 and this fixture's
+    //         real fit is ~1.194, so a Fit button carrying a copy-pasted
+    //         zoom-in handler (onZoomBy(ZOOM_STEP) — the easiest real mistake
+    //         on this bar) lands 1.2 against the correct 1.194. |1.2 - 1| =
+    //         0.2 and |1.194 - 1| = 0.194: both clear this bound just as
+    //         easily, and clause (a) cannot tell them apart.
+    //
+    //     (b) |fitTwice - fitted| < 0.001 is what separates a FIT from a
+    //         STEPPER, and it is the clause that actually kills the zoomBy
+    //         mis-wiring. fitAll is idempotent — fitting an unchanged world
+    //         twice lands the same scale — while zoomBy COMPOUNDS: 1.2 then
+    //         1.44. Clicking Fit a second time and demanding the scale did not
+    //         move is therefore a property of "this is a fit", and it needs
+    //         zero knowledge of what fitTo computes internally.
+    //
+    //         That is deliberately chosen over recomputing fitTo's expected
+    //         scale from __m4aViewport() and asserting equality. Recomputing
+    //         means restating fitTo's padding and clamp arithmetic here — a
+    //         second copy of math verify:viewport already pins purely, and one
+    //         that goes silently wrong the first time the real one changes.
+    //         The harness must never grow that copy.
+    //
+    //     (c) |fitted - 1| > 0.001 kills resetViewport DELIBERATELY rather
+    //         than by coincidence. INITIAL.scale is 1, and clause (a) only
+    //         happened to exclude a reset because backOut is also 1 in this
+    //         run's world — a coincidence of the fixture, not a property.
+    //
+    //         CLAUSE (c) IS FIXTURE-DEPENDENT and must not be "fixed" by
+    //         loosening its tolerance. It assumes this world's panels do not
+    //         happen to fit at exactly scale 1.0. A later task that changes
+    //         the world — panel count, sizes, positions, or the canvas's own
+    //         size, which the collapsed rail already affects — can make the
+    //         true fit land on 1.0, and this clause then goes red for a reason
+    //         that has nothing whatever to do with the Fit button. The right
+    //         response to that failure is to change the FIXTURE (or to state
+    //         the new expected scale), never to widen the bound: widening it
+    //         hands resetViewport back its free pass.
+    {
+      const start = await wc.executeJavaScript(`window.__m4aScale()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__zoom-in').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(120)
+      const zoomedIn = await wc.executeJavaScript(`window.__m4aScale()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__zoom-out').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(120)
+      const backOut = await wc.executeJavaScript(`window.__m4aScale()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__fit').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(200)
+      const fitted = await wc.executeJavaScript(`window.__m4aScale()`)
+      // The second Fit, for clause (b). Nothing about the world changes
+      // between the two clicks, so a real fitAll must land on exactly the
+      // scale it just landed on — and a stepper cannot.
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__fit').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(200)
+      const fitTwice = await wc.executeJavaScript(`window.__m4aScale()`)
+      ok('77 the zoom cluster steps in, steps out, and fits',
+        zoomedIn > start + 0.01 && Math.abs(backOut - start) < 0.001 &&
+          Math.abs(fitted - backOut) > 0.001 &&
+          Math.abs(fitTwice - fitted) < 0.001 &&
+          Math.abs(fitted - 1) > 0.001,
+        `start=${start} in=${zoomedIn} out=${backOut} fit=${fitted} fitTwice=${fitTwice}`)
+    }
+
+    // 78. SEARCH AND SETTINGS OPEN THE PALETTE, AND SETTINGS ARRIVES IN ITS SCOPE.
+    //     The scope is the half that matters: an M6b setting is hiddenAtRest, so a
+    //     settings button that merely opened the palette would land the user on a
+    //     list with no settings visible at all — a feature that reads as missing.
+    {
+      await wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      })()`)
+      await sleep(120)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__search').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      const searchOpened = await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      // Read the chip here too, not only after the gear. See the note on the
+      // ok() below for what this second read is the only thing that can catch.
+      const searchChip = await wc.executeJavaScript(`(() => {
+        const chip = document.querySelector('.palette__scope')
+        return chip ? chip.textContent.trim() : null
+      })()`)
+      await wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      })()`)
+      await sleep(120)
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__settings').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      await sleep(150)
+      const inScope = await wc.executeJavaScript(`(() => {
+        const chip = document.querySelector('.palette__scope')
+        const rows = [...document.querySelectorAll('.palette__row')]
+        return {
+          chip: chip ? chip.textContent.trim() : null,
+          sawASetting: rows.some((r) => r.textContent.includes('Idle after'))
+        }
+      })()`)
+      // The chip is now ASSERTED at BOTH clicks, not collected into the detail
+      // string and left out of the condition.
+      //
+      // `inScope.chip === 'Settings'` is the gear's half. `sawASetting` alone
+      // does not pin it: a gear that opened the palette with the query
+      // pre-filled — a plausible alternative implementation — would surface a
+      // setting row with no scope at all, and the scope is what makes the
+      // button honest, because a scope survives the user clearing the query
+      // while a pre-filled search does not.
+      //
+      // `searchChip === null` is Search's half, and it is the ONLY clause that
+      // can fail against a Search button mis-wired to openSettingsScope. Note
+      // what the gear-side read cannot do here: it is taken after the GEAR was
+      // clicked, so it reads 'Settings' whether or not Search is also
+      // scope-opening. The two reads are at two different moments on purpose.
+      ok('78 search opens the palette unscoped and settings opens it in the settings scope',
+        searchOpened === true && searchChip === null &&
+          inScope.sawASetting === true && inScope.chip === 'Settings',
+        `search=${searchOpened} searchChip=${searchChip} scope=${JSON.stringify(inScope)}`)
+      // What 76/77/78 LEAVE BEHIND, in the spirit of 73's and 75c's closing
+      // notes. The world now holds TWO live panels, not one: check 76's spawn
+      // is real and is never undone. The camera is wherever `Fit` put it (a
+      // fitTo over both panels), NOT at INITIAL — anything appended below that
+      // reuses a screen coordinate captured earlier in this file is measuring
+      // against a camera that has moved. Check 77 clicks Fit TWICE, and the
+      // second click is asserted to leave the camera's scale exactly where the
+      // first put it (clause (b)), so "wherever Fit put it" is one place, not
+      // two — that idempotence is checked, not assumed. The rail is still collapsed and the
+      // inspector still open, both untouched here. The palette is closed: the
+      // two Escapes below pop the settings scope and then close the overlay,
+      // because Escape inside a drill-in deliberately pops rather than closes
+      // (Palette.tsx's two-stage rule), so ONE Escape would leave the overlay
+      // up and swallow the next check's keyboard.
+      for (let i = 0; i < 2; i++) {
+        await wc.executeJavaScript(`(() => {
+          const input = document.querySelector('.palette__input')
+          if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        })()`)
+        await sleep(120)
+      }
+    }
+
+    // 79. A PALETTE TOGGLE OF THE RAIL REACHES THE SCREEN, not only the store.
+    //
+    //     `shell.railOpen` is an ordinary boolean SettingDef, so main's
+    //     settings:list AUTO-GENERATES a runnable palette row for it — nobody
+    //     wrote that row, and nobody wired it to the shell. Running it writes
+    //     through settings:set and reloads settingRows, which is everything
+    //     check 53 asks of a setting and is NOT enough here: useShellChrome
+    //     holds the rail's visibility in its own React state, and a read effect
+    //     that never re-runs leaves the frame exactly where it was. The failure
+    //     is total and silent — the setting persists, the rail does not move,
+    //     and the row's own title (which renders which way the toggle currently
+    //     sits) then reads "Off" beside a visibly open rail. Main and the
+    //     renderer disagree, which is the two-authorities drift "One map, and a
+    //     typed view over it" exists to prevent.
+    //
+    //     This is the palette -> SCREEN direction, and nothing else covers it.
+    //     Check 53 is palette -> store and check 75 is button -> store; both
+    //     stay green against this defect, because neither ever looks at the
+    //     frame after a PALETTE-driven write. So the assertion that
+    //     discriminates is `moved` — the canvas host actually got narrower —
+    //     and `storedAfter` sits beside it as the non-vacuity guard: without
+    //     it, a run where the row was never found or never ran would report the
+    //     same "the rail did not move" as the real regression.
+    //
+    //     Watched failing against the empty-dep-array read effect before the
+    //     fix: stored=true (main took the write) with the canvas width
+    //     unchanged and shell--rail-collapsed still on the root.
+    //
+    //     World state inherited from 78: two live panels, camera wherever Fit
+    //     put it, RAIL COLLAPSED (shell.railOpen === false in main's store),
+    //     inspector open, palette closed. So the toggle below opens the rail,
+    //     and the canvas gets NARROWER — the opposite direction from 75's.
+    {
+      const openPalette = async () => {
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        return waitUntil(
+          () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      }
+      const canvasWidth = () => wc.executeJavaScript(
+        `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const railStored = () => wc.executeJavaScript(
+        `window.canvas.settings.list().then((rows) =>
+           rows.find((r) => r.id === 'shell.railOpen').value)`)
+
+      const storedBefore = await railStored()
+      const before = await canvasWidth()
+      await openPalette()
+      // By a keyword-ish query against the row's own label, the way check 52
+      // reaches a setting: the row is hiddenAtRest, so it is only in the list
+      // at all because something was typed.
+      const picked = await wc.executeJavaScript(`(async () => {
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set
+        const input = document.querySelector('.palette__input')
+        setter.call(input, 'side rail')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Show the side rail'))
+        if (!row) return 'not found'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return 'ok'
+      })()`)
+      if (picked !== 'ok') throw new Error(`79: the rail setting row was ${picked}`)
+      // runRow closes the overlay BEFORE running the command, so this is an
+      // assertion rather than a wait for something optional — a left-open
+      // palette would swallow check 80's chord.
+      await waitUntil(() => wc.executeJavaScript(
+        `document.querySelector('.palette') === null`), 2000)
+
+      const storedAfter = await waitUntil(async () =>
+        (await railStored()) === true ? true : false, 3000)
+      const moved = await waitUntil(async () =>
+        (await canvasWidth()) < before - 100 ? true : false, 3000)
+      const after = await canvasWidth()
+      const collapsed = await wc.executeJavaScript(
+        `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+      ok('79 a palette toggle of the rail moves the rail, not only the store',
+        storedBefore === false && storedAfter === true &&
+          moved === true && collapsed === false,
+        `storedBefore=${storedBefore} storedAfter=${storedAfter} ` +
+          `width ${before} -> ${after} collapsed=${collapsed}`)
+      // What 79 LEAVES BEHIND, in the spirit of 73's, 75c's and 78's closing
+      // notes: the world's two live panels and the camera are untouched, the
+      // palette is closed, and the RAIL IS NOW OPEN — `shell.railOpen` is true
+      // in main's store and the canvas is back to its narrower, three-column
+      // width. The inspector is still open and still untouched. Anything
+      // appended below that measures the canvas must account for the rail
+      // having reopened.
+    }
+
+    // 80. THE INSPECTOR CHORD, AS macOS ACTUALLY DELIVERS IT.
+    //
+    //     One check, three regressions, and none of them is reachable from any
+    //     other check in this file.
+    //
+    //     (a) `event.code`, not `event.key`. Check 75b dispatches
+    //         { key: '\\', code: 'Backslash' } — BOTH matching — so reverting
+    //         useShellChrome's `event.code === 'Backslash'` to an `event.key`
+    //         test passes it unchanged. With Shift held macOS reports
+    //         key '|' and code 'Backslash', which is what this check sends, so
+    //         a key-based test sees no chord at all and the inspector never
+    //         moves.
+    //     (b) The Shift BRANCH. Nothing else in the suite has ever sent
+    //         shiftKey with this chord, so `toggleRail()` written into both
+    //         branches — the easiest real mistake in that if/else — was
+    //         invisible to all of the checks before this one.
+    //     (c) The `shell--inspector-collapsed` class. The rail's class is
+    //         asserted by 75b; the inspector's was asserted nowhere, so a
+    //         class name typed wrong in Canvas.tsx's template literal would
+    //         render an inspector that never collapses with nothing red.
+    //
+    //     The rail clause is what makes (b) fail rather than merely look odd:
+    //     both-branches-rail flips shell--rail-collapsed and leaves
+    //     shell--inspector-collapsed alone, which is exactly the pair this
+    //     check forbids.
+    {
+      const classes = () => wc.executeJavaScript(`(() => {
+        const shell = document.querySelector('.shell')
+        return {
+          rail: shell.classList.contains('shell--rail-collapsed'),
+          inspector: shell.classList.contains('shell--inspector-collapsed')
+        }
+      })()`)
+      const before = await classes()
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '|', code: 'Backslash', metaKey: true, shiftKey: true,
+          repeat: false, bubbles: true }))
+      `)
+      await sleep(250)
+      const after = await classes()
+      ok('80 the inspector chord toggles the inspector and leaves the rail alone',
+        after.inspector !== before.inspector && after.rail === before.rail,
+        `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
+      // What 80 LEAVES BEHIND: the inspector is now COLLAPSED (it was open on
+      // entry, from 79's note) and `shell.inspectorOpen` is false in main's
+      // store; the rail stays open, the two panels and the camera are
+      // untouched, and the palette is closed.
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

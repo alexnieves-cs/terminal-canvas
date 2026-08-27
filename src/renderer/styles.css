@@ -34,10 +34,131 @@ body {
   padding: 38px 0 0; /* clears the hiddenInset traffic lights */
 }
 
+/* M8a. The frame. The rail and inspector are grid COLUMNS with real width,
+   so .canvas is genuinely narrower rather than partly hidden under an
+   overlay — which is what keeps every getBoundingClientRect() in the canvas
+   honest. Nothing in the canvas measures the window (useViewport, Canvas and
+   EdgeIndicators all measure the .canvas host at event time), which is the
+   whole reason insetting is safe; a future window measurement breaks this
+   silently. */
+.shell {
+  --shell-rail-w: 240px;
+  --shell-inspector-w: 260px;
+  display: grid;
+  height: 100%;
+  grid-template-columns: var(--shell-rail-w) 1fr var(--shell-inspector-w);
+  grid-template-rows: 36px 1fr;
+  grid-template-areas:
+    "top top top"
+    "rail canvas inspector";
+}
+
+.shell__top { grid-area: top; }
+.shell__rail { grid-area: rail; }
+.shell__inspector { grid-area: inspector; }
+.canvas { grid-area: canvas; }
+
+/* min-width/min-height 0 on the canvas cell: a grid item defaults to
+   min-width:auto, which refuses to shrink below its content and would let the
+   canvas overflow the frame rather than inset — the failure looks like the
+   inspector being pushed off screen. */
+.canvas {
+  min-width: 0;
+  min-height: 0;
+}
+
+.shell__top,
+.shell__rail,
+.shell__inspector {
+  background: var(--chrome-bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.shell__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The top bar's controls. Small, quiet chrome: the canvas is the subject and
+   a toolbar that competes with it for attention is worse than no toolbar. */
+.shell__top button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 3px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.shell__top button:disabled { color: var(--muted); cursor: default; }
+.shell__zoom { display: flex; align-items: center; gap: 4px; }
+/* tabular-nums and a min-width so the readout does not shift the buttons
+   beside it as the percentage changes width mid-gesture. */
+.shell__zoom-readout {
+  min-width: 40px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.shell__spacer { flex: 1; }
+
+.shell__rail { border-right: 1px solid var(--border); }
+.shell__inspector { border-left: 1px solid var(--border); }
+
+/* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
+   to stay clickable or the region is unreachable without the chord. */
+.shell--rail-collapsed { --shell-rail-w: 22px; }
+.shell--inspector-collapsed { --shell-inspector-w: 22px; }
+
+.shell--rail-collapsed .shell__rail .shell__region-title,
+.shell--inspector-collapsed .shell__inspector .shell__region-title {
+  display: none;
+}
+
+.shell__rail-toggle,
+.shell__inspector-toggle {
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* NO width transition, and the honest reason is smaller than it looks.
+   An earlier version of this comment claimed a transition would re-run
+   assignTiers at 60Hz. It would not: the tiering effect observes no size at
+   all — it depends on [rects, viewport, focusedId, version, dormantIds] and
+   reads getBoundingClientRect() only when one of those changes — and the
+   renderer's ONE ResizeObserver belongs to EdgeIndicators, which observes
+   itself and, by its own comment, re-renders the pip layer and nothing else.
+   So what an animated collapse would actually cost is a pip-layer re-render
+   on every frame of the transition: real, but confined to the one layer built
+   to absorb it, and a weaker argument for keeping the collapse discrete than
+   the one it replaces. It is kept discrete on that weaker argument plus the
+   plain one that a sliding frame buys nothing here. Don't restate the 60Hz
+   claim — a confidently false why gets "fixed" by matching the code to it. */
+
+.shell__region-title {
+  padding: 10px 12px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* The fixed viewport. Clips the world and catches every canvas event. */
 .canvas {
   position: relative;
-  height: 100%;
+  /* No height: 100% any more — as the grid's middle cell the canvas is sized
+     by its row track. Keeping the old declaration would resolve it against
+     .app's full height and push the canvas back out of the frame. */
   overflow: hidden;
   background:
     radial-gradient(circle at 1px 1px, #1c2030 1px, transparent 0) 0 0 / 32px 32px;

@@ -254,6 +254,29 @@ up as a decision — nobody yet knows how often switching happens in practice,
 and a wrong guess is a worse outcome than a palette-only path for one more
 milestone.
 
+**The chrome is a second view over the palette, not a second implementation.**
+Until M8a the app was almost entirely chords and a hidden `Cmd+K`, and a first
+launch showed a canvas with no visible way in. The shell — a top bar, a
+collapsible rail, a collapsible inspector, with the canvas as the grid's middle
+cell — adds no verb of its own: the New panel button routes through
+`preset:spawn-by-id` (only main can resolve an absent `command` into your real
+login shell), the zoom cluster calls `useViewport`'s own named verbs so `+` and
+`⌘=` are provably the same gesture, and Search and the gear open the palette,
+the gear landing directly in its `Settings` scope because settings rows are
+hidden at rest. Every control is deliberately **unfocusable**: each one
+`preventDefault`s its own mousedown so DOM focus never leaves the terminal's
+hidden textarea, which is what keeps the app's central promise — bare keys
+reach the agent — true on the very first click. Both side regions collapse to a
+sliver with `⌘\` (rail) and `⇧⌘\` (inspector), and the choice persists like any
+other setting — through the same `preferences` map every other setting uses, so
+each side also gets a palette row for free and toggling it there moves the frame
+immediately rather than at the next launch. The collapse is a discrete width
+change with no animation on purpose, though the reason is smaller than it first
+looks: nothing in the renderer watches the canvas host's size, so an animated
+collapse would not re-tier anything — it would re-render the edge-indicator
+layer on every frame of the transition, which is a real but modest cost in the
+one layer built to absorb it.
+
 ## Milestones
 
 | | Scope | Status |
@@ -272,6 +295,7 @@ milestone.
 | M6c | Agent state: a border that says what each panel is doing | ✅ done |
 | M6d | Attention routing: edge pips for off-screen panels, Cmd+J to jump | ✅ done |
 | M7 | Workspaces: named canvases, switching without disposing | ✅ done |
+| M8a | The app shell: a frame, collapsible rail and inspector, a visible toolbar | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

@@ -104,10 +104,15 @@ export function Palette(props: PaletteProps): JSX.Element {
   const { controller, inputMode } = props
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
-  // Which drill-in is open. Local state and nothing more: the component
-  // unmounts when the palette closes (Canvas.tsx renders it conditionally), so
-  // a scope can never outlive the overlay it was entered from.
-  const [scope, setScope] = useState<PaletteScope | null>(null)
+  // Which drill-in is open. Read from the controller, NOT from local state:
+  // M8a's top bar opens the palette directly into the settings scope, and the
+  // scope has exactly one authority (usePalette). Keeping a copy here would
+  // make this component a second author of it — the drift this milestone's
+  // architecture exists to avoid. The controller clears it on both exits, so
+  // the "a scope never outlives its overlay" guarantee this used to get for
+  // free from unmounting still holds.
+  const scope = controller.scope
+  const setScope = controller.setScope
   const inputRef = useRef<HTMLInputElement>(null)
   const selectedRef = useRef<HTMLLIElement>(null)
   // The last position a REAL mouse move reported. Blink re-dispatches a
