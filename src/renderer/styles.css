@@ -131,10 +131,19 @@ body {
   font-size: 12px;
 }
 
-/* NO width transition. A transition fires ResizeObserver every frame, which
-   re-runs assignTiers at 60Hz mid-animation — the cascade TerminalPanel's memo
-   and registry.version() both exist to block. The collapse is a discrete
-   width change, and the 250ms demote hold absorbs the single step. */
+/* NO width transition, and the honest reason is smaller than it looks.
+   An earlier version of this comment claimed a transition would re-run
+   assignTiers at 60Hz. It would not: the tiering effect observes no size at
+   all — it depends on [rects, viewport, focusedId, version, dormantIds] and
+   reads getBoundingClientRect() only when one of those changes — and the
+   renderer's ONE ResizeObserver belongs to EdgeIndicators, which observes
+   itself and, by its own comment, re-renders the pip layer and nothing else.
+   So what an animated collapse would actually cost is a pip-layer re-render
+   on every frame of the transition: real, but confined to the one layer built
+   to absorb it, and a weaker argument for keeping the collapse discrete than
+   the one it replaces. It is kept discrete on that weaker argument plus the
+   plain one that a sliding frame buys nothing here. Don't restate the 60Hz
+   claim — a confidently false why gets "fixed" by matching the code to it. */
 
 .shell__region-title {
   padding: 10px 12px 6px;

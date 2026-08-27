@@ -1325,11 +1325,14 @@ export function Canvas({
     if (world) setCursor(world)
   }
 
-  // Loaded when the palette OPENS, not on mount and not on a subscription: the
-  // list is only ever looked at while the overlay is up, and availability is
-  // probed once at startup anyway (a brew install mid-session is a known limit
-  // of M5a, not something a subscription here would fix). Reloaded after every
-  // mutation, because main is the only side that knows what the store now says.
+  // Loaded on mount AND whenever the palette opens — but never on a
+  // subscription: availability is probed once at startup anyway (a brew
+  // install mid-session is a known limit of M5a, not something a subscription
+  // here would fix), and reloading after every mutation is enough because main
+  // is the only side that knows what the store now says. The mount-time load
+  // is the effect twelve lines below, added by M8a: until then this list was
+  // palette-only, and the comment here still said so — see that effect for why
+  // the top bar cannot wait for a first Cmd+K.
   const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
   const reloadPresets = useCallback(() => {
     void window.canvas.preset.list().then(setPresetRows)
@@ -1940,10 +1943,14 @@ export function Canvas({
    */
   const openSettingsScope = useCallback(() => {
     palette.openPalette('settings')
-    // palette.openPalette is a useCallback with an empty dep list, so this
-    // stays referentially stable — which matters because it is a prop on
-    // TopBar and an unstable identity would re-render the bar on every
-    // mousemove over the canvas.
+    // A useCallback for consistency with its sibling verbs, not for a
+    // load-bearing reason. An earlier comment here claimed an unstable
+    // identity would re-render TopBar on every mousemove over the canvas;
+    // that is false. TopBar is not memo-wrapped, so it re-renders whenever
+    // Canvas does — which a mousemove's setCursor already makes it do —
+    // whatever this prop's identity is. The parallel note in useViewport.ts
+    // IS true and load-bearing (those callbacks sit in a keydown effect's dep
+    // array); don't read this one as saying the same thing.
   }, [palette.openPalette])
 
   // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook

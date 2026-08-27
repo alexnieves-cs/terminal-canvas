@@ -268,9 +268,14 @@ hidden at rest. Every control is deliberately **unfocusable**: each one
 hidden textarea, which is what keeps the app's central promise — bare keys
 reach the agent — true on the very first click. Both side regions collapse to a
 sliver with `⌘\` (rail) and `⇧⌘\` (inspector), and the choice persists like any
-other setting. The collapse is a discrete width change with no animation on
-purpose: an animated one would re-run the canvas's tier assignment on every
-frame of the transition.
+other setting — through the same `preferences` map every other setting uses, so
+each side also gets a palette row for free and toggling it there moves the frame
+immediately rather than at the next launch. The collapse is a discrete width
+change with no animation on purpose, though the reason is smaller than it first
+looks: nothing in the renderer watches the canvas host's size, so an animated
+collapse would not re-tier anything — it would re-render the edge-indicator
+layer on every frame of the transition, which is a real but modest cost in the
+one layer built to absorb it.
 
 ## Milestones
 

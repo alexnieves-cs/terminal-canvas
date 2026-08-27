@@ -135,9 +135,19 @@ rather than left to review.
    rules hold unchanged. Clicking a shell control must **not** clear
    `focusedId`: `assignTiers` pins the focused panel live, and `focusedId` is
    also the `Cmd+C`/`Cmd+V` target and what every `capturedId`-gated palette row
-   acts on. Shell buttons therefore blur back to the focused session's terminal
-   after acting (`SessionHandle.focus()`, the same call `restoreFocus` makes),
-   and no shell element swallows a bare key.
+   acts on. Shell controls therefore **never take DOM focus in the first
+   place**: each one `preventDefault()`s its own `mousedown` (`shell-control.ts`
+   in the shipped M8a), so focus never leaves xterm's hidden textarea and there
+   is nothing to restore afterwards. No shell element swallows a bare key.
+
+   *Amended after M8a shipped.* This rule originally mandated the opposite
+   shape — let focus move, then blur back with `SessionHandle.focus()`, the
+   same call `restoreFocus` makes. That was rejected during implementation and
+   the rule now commands what shipped, because blur-back leaves a window
+   between the two in which a keystroke goes nowhere, and it fails exactly as
+   silently as an unrestored palette close: the button works, and the next
+   thing the user types vanishes. Never taking focus has no such window. New
+   controls in M8b–M8d mount `shellControl()`; they do not blur back.
 3. **The palette's outside-click exit must be raised to the shell — this is a
    defect M8a introduces if it is not.** `onMouseDownCapture` is a prop on the
    `.canvas` div, and the shell's regions are **siblings** of it. So a click on
@@ -148,10 +158,15 @@ rather than left to review.
    and `Escape` cannot even undo it because the key no longer reaches the
    palette's `onKeyDown`.
 
-   The fix is to move that capture listener from `.canvas` to `.app`, keeping
+   The fix is to move that capture listener from `.canvas` up to the shell
+   root, keeping
    the `closest('.palette')` containment test and `dismissPalette()` (which
    deliberately does **not** restore focus, because the click itself is the
-   focus gesture) exactly as they are. `verify:panels` 42 must still pass
+   focus gesture) exactly as they are. *Amended after M8a shipped:* it went to
+   `.shell` — the grid root `Canvas.tsx` returns — not to `.app`, because
+   `.app` is not where the frame lives (see "The frame is rendered by
+   `Canvas.tsx`, not by `App.tsx`" above). Anything M8b–M8d adds must be a
+   descendant of `.shell` to be covered by it. `verify:panels` 42 must still pass
    unchanged — it asserts both halves of the canvas case — and M8a adds the
    shell case beside it. The shell's own regions additionally
    `stopPropagation` on mousedown, and any popover rendered inside `.canvas`
@@ -202,8 +217,12 @@ Two second-order effects are real and must be handled:
 
 ## M8a — The frame
 
-**Ships:** `App.tsx` as a grid; `TopBar.tsx`; `SideRail.tsx` and
+**Ships:** the `.shell` grid, **returned by `Canvas.tsx`** — `App.tsx` is
+unchanged and stays a pass-through; `TopBar.tsx`; `SideRail.tsx` and
 `Inspector.tsx` as headers with empty bodies; collapse and its persistence.
+(*Amended after M8a shipped.* This line said "`App.tsx` as a grid", which
+contradicts the Architecture section's own decision above and the code as
+built. An earlier amendment corrected only that paragraph.)
 
 **Top bar contents**, all wired to verbs that exist:
 
@@ -213,6 +232,18 @@ Two second-order effects are real and must be handled:
   records: only main can resolve an **absent** `command` into the user's login
   shell, and a renderer-side reconstruction would spawn a hardcoded shell for
   every command-less preset.
+
+  **Scope actually shipped in M8a: a PLAIN button, no dropdown.** It spawns the
+  default preset through `preset:spawn-by-id` exactly as specified; the
+  non-default presets are not listed anywhere on the bar, and they remain
+  reachable only through the palette. This was dropped silently during
+  implementation rather than decided, and it is recorded here so a later reader
+  does not take the paragraph above as a description of the code.
+  **The dropdown moves to M8b**, which is already opening the rail's own
+  per-panel surface and is where a menu-shaped control belongs; it needs no new
+  verb (`spawnPreset(id)` exists and has a palette row), and it must obey rule
+  2 — a popover is another element that can take DOM focus. Do not build it as
+  part of a fix to M8a.
 - **Zoom cluster** — `−` / a percentage readout / `+` / *Fit*. Wired to
   `zoomToFit()` and to the existing narrow camera verbs. The `setViewport`
   setter **stays private**; a shell control that needed the setter would make
@@ -248,6 +279,15 @@ repeat rate is the `Cmd+K` auto-repeat defect exactly.
 - `verify:panels`: with the palette open, a mousedown on a shell control
   dismisses it — the raised capture listener — while check 42's existing
   canvas-case assertions stay green.
+- *Added by M8a's final review, and required of M8b–M8d too:* both settings are
+  ordinary booleans, so main auto-generates a **palette row** for each of them
+  that nobody wrote. Running that row must move the frame, not only the store
+  (`verify:panels` 78) — the palette→screen direction, which the store-facing
+  checks above all pass against a renderer that never re-reads. And the
+  inspector chord must be exercised as macOS delivers it,
+  `{ key: '|', code: 'Backslash', shiftKey: true }` (`verify:panels` 79): a
+  chord check that sends a matching `key` AND `code` cannot fail against a
+  `code`→`key` revert, and the Shift branch was otherwise unexercised.
 
 ## M8b — The panel outline
 
