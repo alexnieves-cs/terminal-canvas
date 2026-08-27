@@ -35,18 +35,19 @@ work is done. Individual suites:
 |---|---|---|
 | `verify:viewport` | plain node | 55 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), `makePanel`'s spec/size arguments (48), and `centreOn` framing a rect without touching the scale (49–50). M6 adds `cascadeCentre`'s coincidence stepping (51–55) — including the half that is easiest to get subtly wrong: 51 pins that a merely OVERLAPPING panel does not move a spawn (centres, not rects), 53 walks the whole lattice rather than one step, and 54 asserts `CASCADE_EPSILON < CASCADE_STEP` as a relation, because inverting them makes every FIRST press run the lattice and land 384px off centre — a failure that surfaces in `verify:panels` 7 as a centring bug with nothing pointing at the epsilon |
 | `verify:registry` | plain node | 25 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19). M6a adds check 20: `PanelStatus.running` widens to carry `command`/`cwd`/`reattached`, so the header chain has something besides the spec to read for a login-shell panel |
-| `verify:layout` | plain node | 75 checks (the last check number is 74; see the lettered sub-check below): `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57). M6a adds `Panel.title` round-tripping through `layout-adapt.ts` — parsed in on the way from disk (58), written back out on the way to disk (59), and an untitled panel writing no `title` key at all rather than a saved absent-marker (60). M6b adds `shared/settings-schema.ts` and its `preferences` map: the three restore ids and `settingsInCategory`'s query (61), an unset id resolving to the schema default (62), id uniqueness and every def carrying a label/description/keyword (63–64), `parsePreferences`'s absent-vs-malformed split — no key at all warns nothing (65), a non-object warns and is replaced (66) — an unknown id dropped with a warning rather than carried forward as a permanent typo (67), a wrong-typed value dropped and warned rather than coerced (68), the pre-M6b `settings`→`preferences` migration seeding only the three restore ids and only when a legacy key was actually present (69), a fresh store answering the schema defaults with an empty map (70), a preference surviving a write and a reopen (71), `setPreference` refusing an id the schema does not declare (72) and, now that `SettingDef['type']` is honest about what `typeof` returns, refusing a known id given a wrong-typed value too (72b), `settings()`/`setSetting()` proven a VIEW over the same map rather than a second store by writing through one accessor and reading through the other (73), and the Restore submenu's own query returning exactly the three restore ids (74) — see "One map, and a typed view over it" and "The Restore submenu is derived, not listed" below, including what check 74 does **not** prove |
-| `verify:palette` | plain node | 55 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–33) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list. M6a added the `panel.rename` row (31–32) and a titled panel being findable by its title (33). M6p adds the structure: section-first sorting outranking a better score in a later section and score still deciding inside one (34–35), `bestMatchIndex` skipping disabled rows (36–38), `hiddenAtRest` in BOTH directions (39–40), `searchText` including the whole phrase (41, 41b), `splitHighlight` (42–43), the two retitles (44–45), what is hidden versus what is not (46), exactly-two-destructive (47), `⌘N` on the default preset alone (48), and the drill-in doors and what a scope shows (49–50). **Check 30 was rewritten**: it derives its expectation from `SECTIONS` and runs through `filterCommands`, because construction order stopped being the grouping the moment sorting became section-first — see "Sections are data" below. M6b adds the `setting` section and its drill-in: a boolean setting rendering as a runnable row carrying its label and description (51), a setting findable by a keyword the row never shows (52), running a setting row toggling it to the opposite value (53), and the row's title naming which way the toggle currently sits (54) — see "Settings are a drill-in, not a flat list" below. The count is 55 while the last number is 54, because of the lettered sub-check `41b` |
+| `verify:layout` | plain node | 82 checks (the last check number is 80; see the lettered sub-checks below): `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57). M6a adds `Panel.title` round-tripping through `layout-adapt.ts` — parsed in on the way from disk (58), written back out on the way to disk (59), and an untitled panel writing no `title` key at all rather than a saved absent-marker (60). M6b adds `shared/settings-schema.ts` and its `preferences` map: the three restore ids and `settingsInCategory`'s query (61), an unset id resolving to the schema default (62), id uniqueness and every def carrying a label/description/keyword (63–64), `parsePreferences`'s absent-vs-malformed split — no key at all warns nothing (65), a non-object warns and is replaced (66) — an unknown id dropped with a warning rather than carried forward as a permanent typo (67), a wrong-typed value dropped and warned rather than coerced (68), the pre-M6b `settings`→`preferences` migration seeding only the three restore ids and only when a legacy key was actually present (69), a fresh store answering the schema defaults with an empty map (70), a preference surviving a write and a reopen (71), `setPreference` refusing an id the schema does not declare (72) and, now that `SettingDef['type']` is honest about what `typeof` returns, refusing a known id given a wrong-typed value too (72b), `settings()`/`setSetting()` proven a VIEW over the same map rather than a second store by writing through one accessor and reading through the other (73), and the Restore submenu's own query returning exactly the three restore ids (74) — see "One map, and a typed view over it" and "The Restore submenu is derived, not listed" below, including what check 74 does **not** prove. M6c adds the three `agent.*` settings: all three declared with the required label/description/keywords (75), `agent.idleAfterMs` typed as a `number` def rather than the schema's usual boolean (76), an unset threshold resolving to its schema default (77), a boolean value refused for a number setting (78), an out-of-range threshold refused on both ends while the bounds THEMSELVES are accepted (79), a number preference round-tripping through a write and a reopen (80), and a hand-edited, out-of-range `agent.idleAfterMs` loaded from disk dropped and warned rather than silently carried into the map (80b) — the load-path half of the same bound the write path already enforces; see "`agent.idleAfterMs` is bounded, and both ends fail silently" below. The count is 82 while the last number is 80, because of the lettered sub-checks `72b` and `80b` |
+| `verify:palette` | plain node | 60 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–33) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list. M6a added the `panel.rename` row (31–32) and a titled panel being findable by its title (33). M6p adds the structure: section-first sorting outranking a better score in a later section and score still deciding inside one (34–35), `bestMatchIndex` skipping disabled rows (36–38), `hiddenAtRest` in BOTH directions (39–40), `searchText` including the whole phrase (41, 41b), `splitHighlight` (42–43), the two retitles (44–45), what is hidden versus what is not (46), exactly-two-destructive (47), `⌘N` on the default preset alone (48), and the drill-in doors and what a scope shows (49–50). **Check 30 was rewritten**: it derives its expectation from `SECTIONS` and runs through `filterCommands`, because construction order stopped being the grouping the moment sorting became section-first — see "Sections are data" below. M6b adds the `setting` section and its drill-in: a boolean setting rendering as a runnable row carrying its label and description (51), a setting findable by a keyword the row never shows (52), running a setting row toggling it to the opposite value (53), and the row's title naming which way the toggle currently sits (54) — see "Settings are a drill-in, not a flat list" below. M6c adds the `agent.idleAfterMs` number row: it renders with its current value in the title (55, 56), and stepping it begins an EDIT rather than toggling it like a boolean row (57) — a number setting is a different `run()` shape, not a boolean with extra text — and the row is hidden at rest and lives in the `settings` scope like every other setting (58), with its id recovering the full `SettingRow` (carrying `min`/`max`) rather than a bare boolean (58b). The count is 60 while the last number is 58, because of the lettered sub-checks `41b` and `58b` |
 | `verify:tmux` | plain node | 27 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19). M5c adds `resolveSocket`: dev and packaged landing on different sockets (20), the dev socket unchanged from its historic value (21), an explicit override beating both defaults (22), a blank or whitespace override falling back to the default rather than leaking through to tmux's own default socket (23), and `buildStartServerArgs` — the one tmux argv that used to be hand-rolled — defaulting to the private socket and threading an explicit one (24–25). M6a adds check 26: `buildHasSessionArgs`'s argv, including the same exact-match `=` on its target that every kill-session target already obeys, so panel `n1`'s probe doesn't read `n12` as its own surviving session. The count is 27 while the last number is 26, because of the lettered sub-check `17b` |
+| `verify:agent-state` | plain node | 25 checks (the last check number is 24; see the lettered sub-check below): `scanForBell`'s scanner (1–10) and `nextState`'s state machine (11–24). The two that matter most: 2 and 3 pin that an OSC/DCS-terminating BEL rings zero bells — a bare `indexOf(0x07)` would fail both silently, painting a title change as an attention-worthy bell — and 6–8 pin the scanner across a SPLIT chunk (an OSC opened in one 16ms flush and terminated in the next, and a bare BEL split the same way), which is the whole reason `ScanState` is carried between calls rather than reset per call. 5/5b assert a DCS body swallows an embedded BEL and a REAL bell right after it still rings — the state machine doesn't just eat the trap, it recovers cleanly the instant real content resumes. 9 asserts a CSI (no BEL-swallowing string body) leaves a bell alone, guarding the boundary the other direction. 16–19 pin that `wants-you` is STICKY against further output, a second bell, and even an hour of idle ticks — nothing but `acknowledge` or `exit` moves it. 23–24 pin `exited` as terminal and unconditional: even a panel mid-`wants-you` goes straight to `exited` on a PTY exit, and nothing revives it after. See "A title is not a bell" below |
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value: `node-pty` unpacked from the asar and the pattern depth-independent (1–2), `asar` actually on (3), the `files` globs (4–5), app identity and output dir (6–7), signing explicitly *decided* rather than unmentioned (8), targets and architecture (9), and the arch being a parameter rather than a constant (10) |
 | `verify:packaged` | real Electron, **not in `npm run verify`** | 9 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped `PATH`, a throwaway `--user-data-dir` and a scratch `TC_TMUX_SOCKET`. Asserts the app survives startup (3 — the asar/`node-pty` proof), reports itself packaged (4), recovered a PATH launchd never gave it (5 — the first time `shell-env.ts`'s reason for existing has ever been observed), used the scratch socket (6), actually used the throwaway `--user-data-dir` rather than silently falling back to the real one (7), named a backend and a reason (8), and actually spawned a PTY (9). Kept out of the default chain because it rebuilds native modules and reaches electron-builder's cache — minutes, plus a network dependency — and the repo's one green-or-not signal must stay fast and offline. It is the **pre-release gate**; run it before cutting a build |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
-| `verify:pty-manager` | Electron as node | 20 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). M6a adds 16/16b: a fresh session reports `reattached: false` and the same panel spawned again — after the first one is still alive — reports `reattached: true`, the two halves that only separate a `has-session` probe taken *before* the spawn from one taken after (see "`reattached` costs a probe" below). Skipped loudly, never silently, when no tmux binary is found |
+| `verify:pty-manager` | Electron as node | 23 checks: the real `PtyManager` (1–10 on the direct backend), plus the real `TmuxBackend` end to end against a throwaway socket and a spaced `exitDir` — session creation, detach-and-reattach at the same pid (12), cross-manager list (13), exit-code fidelity (14–14b), destroying a session this manager never spawned (14c), a prefix-colliding kill target leaving the wrong session alone (14d), and destroy/shutdown (15). M6a adds 16/16b: a fresh session reports `reattached: false` and the same panel spawned again — after the first one is still alive — reports `reattached: true`, the two halves that only separate a `has-session` probe taken *before* the spawn from one taken after (see "`reattached` costs a probe" below). M6c adds 17–19, the wiring proof that `agent-state.ts`'s pure state machine actually reaches `IPC.AGENT_STATE` through the real manager rather than sitting unused beside it: plain output on a fresh session produces exactly one `busy` event (17), a real OSC window title produces no `wants-you` at all — this suite runs the direct backend, so it is the one place a tmux-free machine can see the OSC trap NOT fire (18), and a real bell followed by a real write moves the panel to `wants-you` and then back off it (19). Skipped loudly, never silently, when no tmux binary is found |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 19 channels as of M6b, the newest pair being `settings:list`/`settings:set` |
+| `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 20 channels as of M6c, the newest being `agent:acknowledge` |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 57 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. M6p adds the palette's structure in a real renderer: section headers rendering once each in `SECTIONS` order (48), a drill-in narrowing to its own rows with Escape popping back **without closing** (49), and a destructive row that is marked, gated by a confirm, and left un-deleted by Escape — read back out of `preset.list()`, not off the overlay (50). Check 51 is the spawn cascade in a real renderer: two `Cmd+N` presses at one camera, in empty world space, must land exactly one `CASCADE_STEP` apart — and the second panel must still have an `.xterm` under it, which is the ONLY place the suite proves a cascaded panel is still inside the cull region and therefore still promoted, rather than merely arguing it. It reads the step out of `panels-entry.cjs` rather than restating 48, and reads each panel by `data-panel-id` rather than "the last `.panel`", since array order and paint order are deliberately different things here. M6b adds the settings row end to end in a real renderer: a setting reached by a keyword it does not display (52), and a toggle reaching `main`'s store — not just the row's own local state — read back out through `settings:list` (53); `scripts/verify-panels.cjs` passes `registerIpcHandlers` an explicit no-op `rebuildMenu`, because this harness is its own Electron entry point with no application menu for `settings:set`'s handler to call. The count is 57 while the last number is 53, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
+| `verify:panels` | real Electron | 61 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. M6p adds the palette's structure in a real renderer: section headers rendering once each in `SECTIONS` order (48), a drill-in narrowing to its own rows with Escape popping back **without closing** (49), and a destructive row that is marked, gated by a confirm, and left un-deleted by Escape — read back out of `preset.list()`, not off the overlay (50). Check 51 is the spawn cascade in a real renderer: two `Cmd+N` presses at one camera, in empty world space, must land exactly one `CASCADE_STEP` apart — and the second panel must still have an `.xterm` under it, which is the ONLY place the suite proves a cascaded panel is still inside the cull region and therefore still promoted, rather than merely arguing it. It reads the step out of `panels-entry.cjs` rather than restating 48, and reads each panel by `data-panel-id` rather than "the last `.panel`", since array order and paint order are deliberately different things here. M6b adds the settings row end to end in a real renderer: a setting reached by a keyword it does not display (52), and a toggle reaching `main`'s store — not just the row's own local state — read back out through `settings:list` (53); `scripts/verify-panels.cjs` passes `registerIpcHandlers` an explicit no-op `rebuildMenu`, because this harness is its own Electron entry point with no application menu for `settings:set`'s handler to call. M6c adds the agent-state seam end to end: a real bell reaches a real panel's `data-agent-state` (54); a real OSC window title moves nothing — this block deliberately swaps the harness onto the DIRECT backend first, because a tmux client never sees the title at all and check 55 would otherwise pass against a broken scanner for a reason that has nothing to do with the scanner, see "The OSC trap is unreachable under tmux" below (55); the state reaches a DEMOTED panel's card, not only a live panel's border, panning the culprit off screen first (56); and focus is what acknowledges it, with the value read back from main's own store rather than the panel's local class, proving main is the one that answered (57). The count is 61 while the last number is 57, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -57,7 +58,7 @@ Electron's ABI by the `postinstall` `electron-rebuild`, so it will not load unde
 Node. `verify:pty` and `verify:pty-manager` therefore run under Electron with
 `ELECTRON_RUN_AS_NODE=1`; `verify:window`, `verify:ipc`, `verify:canvas`, `verify:xterm`, and
 `verify:panels` need the real app lifecycle and `unset` it instead. `verify:viewport`,
-`verify:registry`, `verify:layout`, `verify:palette`, and `verify:tmux` are plain node, because
+`verify:registry`, `verify:layout`, `verify:palette`, `verify:tmux`, and `verify:agent-state` are plain node, because
 `viewport.ts`, `lod.ts`, `session-registry.ts`, `shared/layout-schema.ts`,
 `main/layout-store.ts`, `main/prompts.ts`, `main/tmux-args.ts`, `main/presets.ts`, and the
 palette's `fuzzy.ts`/`palette-model.ts`/`commands.ts` have no native dependency, no DOM, and
@@ -80,7 +81,11 @@ and holds no reference to the registry, the viewport, or React, which is what le
 `verify:palette` assert on *disabled reasons* rather than on a rendered DOM. `verify:package`
 belongs on this list too — and needs less justification than any of the above:
 `build/builder-config.cjs` is plain CJS with zero imports at all, needing no esbuild entry
-whatsoever, unlike every other suite in this list.
+whatsoever, unlike every other suite in this list. `main/agent-state.ts` qualifies the same way
+`tmux-args.ts` does: it imports neither `electron` nor `node-pty`, so `scanForBell` and
+`nextState` — the two pieces of this milestone most able to be subtly wrong — sit in the
+cheapest, fastest tier the repo has rather than needing a real PTY or a real Electron window to
+exercise a byte-scanning state machine that never touches either.
 
 **`verify:pty` duplicates production code on purpose.** It re-implements `shell-env.ts`'s
 probe and `pty-manager.ts`'s batching by hand so it can test them without Electron's app
@@ -1212,6 +1217,179 @@ file.
 with no enum-typed setting to back it; it was removed rather than given a
 type-mapping layer, since a customer-free abstraction is exactly what
 `ideas-backlog.md` #11 warns against.
+
+**A title is not a bell (`main/agent-state.ts`'s `scanForBell`).** Claude Code
+sets its window title with `ESC ] 0 ; <title> BEL` — the terminator is a literal
+BEL byte, not a distinct one — so a naive `chunk.indexOf(0x07)` reports a bell on
+every title change: the panel's border flashes on a rhythm that tracks the
+agent's UI state, not its need for attention, and nothing in any log explains
+why. `scanForBell` is a small state machine over the escape grammar instead —
+`text`/`esc`/`osc`/`osc-esc`/`dcs`/`dcs-esc` — so a BEL is only counted while the
+scanner is in `text`; one reached from inside an OSC or DCS body is consumed as
+that string's terminator. The state has to be **carried between calls**, not
+reset per chunk: output is flushed roughly every 16ms, so an OSC body routinely
+straddles two `enqueue` calls, and a per-chunk scanner would re-enter the tail of
+a split title as ordinary text and ring a bell on it — intermittently, and only
+under load, which is the worst shape a bug can have because it never reproduces
+on demand. The trap is checked at three tiers on purpose — `verify:agent-state`
+(the pure scanner and state machine, split-chunk cases included),
+`verify:pty-manager` (the real manager wired to a real PTY), and `verify:panels`
+(a real renderer, real pixels) — because a regression at any ONE of them is
+silent at the other two: the pure check cannot see whether the detector is wired
+to `enqueue` at all, the manager check cannot see whether the state ever reaches
+a border, and neither can see whether the *bytes reaching the scanner* are the
+agent's own — see the tmux entry immediately below for why that last question
+has its own answer.
+
+**Under tmux, `PtyManager` never sees the agent's own OSC title — measured, not
+assumed (`main/agent-state.ts`, `main/tmux-args.ts`'s `buildTmuxConf`).** Under
+the tmux backend, `node-pty` spawns a tmux **client**, not the agent — so the
+bytes `enqueue` scans are tmux's REDRAW of the pane, not the agent's output
+stream verbatim. No escape sequence the agent emits reaches the scanner
+unchanged; tmux has already parsed and re-rendered it. tmux itself consumes
+`ESC ] 0 ; <title> BEL` / `ESC ] 2 ; …` to set its own pane and window titles, and
+`buildTmuxConf` sets no `set-titles` — tmux's default there is off — so it does
+not re-emit a title to the client either. The consequence is exact: **the
+agent's OSC window title never reaches this app under tmux, in dev or in
+production**, and the OSC-title trap `scanForBell` exists to defuse is
+unreachable on that path. A pane **bell**, by contrast, *is* forwarded — this
+config leaves `bell-action`/`visual-bell` at tmux's own defaults, which pass it
+through — and that asymmetry (bell forwarded, title consumed) is exactly why
+`verify:panels` 54 passed under either backend while 55 would have silently
+passed against a **deliberately broken** scanner had its fixture not been pinned
+to the direct backend: with the scanner changed to count an OSC terminator as a
+bell, `verify:agent-state` went red (correctly) while a tmux-backed 55 stayed
+green, the shape of a check that reads as coverage and proves nothing. The
+direct backend is where the trap **is** reachable, and it is a real, supported,
+production configuration — taken whenever tmux is absent, too old, or its own
+server fails to start (see "The probe checks that the SERVER starts" above) —
+so the scanner earns its place on three separate grounds even though tmux
+absorbs the one escape sequence it was originally written to defang: the direct
+backend is real and shipped; the stream under tmux still carries OSC and DCS
+that **tmux itself** emits (more on this below); and it is a small, pure module
+that costs the cheapest verify tier the repo has.
+
+What this does **not** establish, so a later note does not overclaim it: "tmux
+absorbs OSC" is not a general fact, only a fact about the two sequences named
+above. tmux emits OSC of its **own** to the client under options this repo never
+pins — `set-clipboard` (default `external`, i.e. OSC 52 on copy) and OSC 8
+hyperlinks (tmux ≥ 3.4) — and which byte terminates *those* (BEL or ST) is
+**unmeasured** here. Separately, an agent's own DCS passthrough needs
+`allow-passthrough`, which `buildTmuxConf` does not set and which defaults to
+off, so an agent's DCS body is discarded by tmux — but tmux may still emit DCS
+sequences of its own that the scanner would see. The experiment that would
+settle both: one instrumented run under the tmux backend, logging raw bytes at
+`enqueue`, while an inner `/bin/sh` runs `printf '\033]52;c;aGk=\007'`, then
+`printf '\033]8;;https://x\033\\text\033]8;;\033\\'`, then
+`printf '\033Ptmux;hello\033\\'`. Nobody has run it; do not write down an answer
+to it as though somebody had.
+
+**`wants-you` is sticky, and who clears it is asymmetric (`main/agent-state.ts`'s
+`nextState`, `IPC.AGENT_ACKNOWLEDGE`).** A TUI typically rings its bell and THEN
+prints its question, so a naive "output clears wants-you" rule would clear the
+state milliseconds after setting it — the feature would exist in the code and
+never once be seen. `wants-you` therefore survives further output and is
+cleared only by `acknowledge`. What triggers acknowledge is where the asymmetry
+is: typing into the panel is a fact **main** already holds, via the same
+`pty:write` handler that reaches the PTY, so main clears it there for free.
+Focus is a **renderer** fact main cannot see on its own — the registry, not
+main, knows which panel is focused — so the renderer has to tell main, which is
+the entire reason `agent:acknowledge` exists as an invoke rather than the
+renderer clearing its own local copy of the state. A renderer-side clear would
+make the renderer a second author of a state main owns, the same shape of bug
+"One map, and a typed view over it" exists to prevent for settings: two places
+that agree on the day they are written and drift apart the first time one of
+them is wrong. `verify:panels` 57 is the check that proves main answers the
+acknowledge — but it does **not** distinguish a correct implementation from one
+that also clears the state locally in the renderer and merely happens to agree
+with main's answer: no fault-injection seam exists in that harness to make main
+disagree on purpose and see which value wins. Same limit this file already
+records for check 32 (the default-preset push) and the auto-repeat checks (what
+`repeat: true` proves versus what actually sets the flag) — a note for whoever
+next touches this path, not a defect in the check as it stands.
+
+**The idleness tick is a second timer on purpose (`pty-manager.ts`'s
+`IDLE_TICK_MS`, `startIdleTick`).** The existing flush timer only runs while
+there is pending PTY data to flush, so it can observe output but never the
+ABSENCE of it — an agent that goes quiet produces no event on the flush timer
+at all, because there is nothing to flush. A single 500ms interval per manager,
+independent of any panel's own traffic, is what lets `nextState`'s `tick` event
+exist: it walks every live session and asks the state machine whether enough
+time has passed since `lastOutputAt`, which is the only way "busy" ever becomes
+"idle" without a human intervening. The timer is `unref`'d so it cannot hold a
+plain-node verify process open on its own.
+
+**The agent-state channel must never bump `registry.version()`
+(`renderer/session/agent-state-store.ts`).** `TerminalPanel.tsx`'s `memo` is
+gated on `registry.version()`, which bumps on tier/status/focus/exit and
+nothing higher-frequency than that — see "`version` exists only so `memo` can
+see a mutation" above. Agent state changes on its own scale entirely: a bell can
+land while nothing else about the panel changed, and riding `version()` would
+mean every panel in the app re-renders on every OTHER panel's bell, the exact
+60Hz-cascade shape `version()` was built to block. `agent-state-store.ts` is
+therefore a separate module-level store, subscribed **per panel id** rather than
+globally, so a state change for panel `n3` notifies only whatever component
+asked about `n3`. And on the main side, `applyEvent`'s dedupe — sending
+`IPC.AGENT_STATE` only when `nextState` actually changed the state, never on
+every byte — is not an optimisation bolted on afterward; it IS the throttle the
+design asks for, the same way "sections are data" and "the promote/demote hold"
+are each one mechanism serving double duty rather than two.
+
+**The glow reaches the card, not just the border (`styles.css`'s
+`.panel__card--agent-*`).** `LIVE_BUDGET` caps live panels at 8 regardless of how
+many exist on the canvas — see "Lazy spawn" above — so on the canvas this
+feature exists for, MOST of what a user might want to know about is sitting in
+a card, not a live terminal. A glow that only painted `.panel`'s border would be
+invisible for exactly the panels a "what needs me" scan is for: the ones off
+budget, demoted, or never promoted. `TerminalPanel.tsx` renders the card variant
+from the same `data-agent-state` the live variant reads, so a bell on a
+carded panel is exactly as visible as a bell on a live one — `verify:panels` 56
+is the check that pans the panel off budget FIRST and only then rings its bell,
+so it fails if the card path is ever dropped in favour of the simpler
+border-only one.
+
+**`exited` here is not an exit code (`main/agent-state.ts`'s `Detector`,
+`PanelStatus.exited`).** The detector's `exited` state exists for exactly one
+reason: to stop emitting further `busy`/`idle`/`wants-you` transitions once a
+process is gone, because a dying process's last bytes arrive AFTER `onExit` is
+already known — the same ordering `pty-manager.ts`'s flush-before-exit comment
+already documents — and a detector that revived on those trailing bytes would
+leave a dead panel glowing `busy` for the rest of the run. It carries no number
+and answers no question about SUCCESS or FAILURE; `PanelStatus.exited` (the
+real exit code, surfaced through `pty:exit`) stays the sole authority on that,
+unchanged by this milestone. Treating the detector's `exited` as a substitute
+for the real exit code would be reading a boolean where a number belongs.
+
+**`agent.idleAfterMs` is bounded, and both ends fail silently
+(`shared/settings-schema.ts`, `LayoutStore`/`parsePreferences`).** The bound
+(`min: 250, max: 60000`) is enforced on **two** independent doors into the same
+map, not one: the write path (`setSetting`/`setPreference`, which refuses an
+out-of-range number the same way it refuses a wrong-typed one — see "One map,
+and a typed view over it" above) and the load path (`parsePreferences`, which
+drops an out-of-range value read from a hand-edited `layout.json` with a
+warning rather than silently clamping or carrying it into the map). Only
+enforcing the write path leaves the load path as a second, unguarded door: a
+value edited directly into the file bypasses `setSetting` entirely, and without
+the load-side check it would sit in the resolved map as a value the schema
+itself says is invalid, changing timing behaviour with nothing in any log to
+explain why panels are suddenly idle after 3 seconds or never idle at all. Both
+failure directions are silent on their own — a rejected write just looks like
+nothing happened, and a silently-clamped load looks like the user's own number
+took effect when a different one did — which is why `verify:layout` pins both
+ends separately (78–79 on the write path, 80b on the load path) rather than
+trusting one to imply the other.
+
+Separately, and worth being honest about rather than implying otherwise: the
+shipped **default** of 1500ms is a **provisional stand-in**, not a measured
+value. The plan for this milestone called for measuring the within-turn gap
+distribution of a real `claude` session — p50, p99, and the shortest genuine
+turn-boundary gap — via `scripts/measure-idleness.cjs`, and setting the default
+above the p99 of within-turn silence and below the shortest gap worth calling
+"done". **That measurement has not been run.** 1500 exists so this milestone's
+settings surface has something concrete to show and to let `verify:agent-state`
+and `verify:layout` exercise a real number; it is not evidence that 1500 sits
+where the design intends, and a future task replacing it with the measured
+value is expected, not a regression.
 
 ## Gotchas
 
