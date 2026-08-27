@@ -19,3 +19,10 @@ release/
 # would put a multi-megabyte generated artifact in front of every diff and
 # every reviewer. Keep it locally, never in git.
 graphify-out/
+
+# Isolated worktrees and subagent-driven-development scratch. Both are local
+# working state, not source: committing a worktree would put the whole tree
+# in the repo a second time, and the SDD ledger is a recovery map for one
+# session, not a record anyone reads later.
+.claude/worktrees/
+.superpowers/
