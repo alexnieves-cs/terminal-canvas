@@ -4518,8 +4518,31 @@ app.whenReady().then(async () => {
         geom !== null && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
           geom.canvasWidth < geom.windowWidth - 80 &&
           geom.canvasLeft >= geom.railWidth - 1 &&
+          // The EXACT inset, and it is the clause that does the discriminating.
+          // Every bound above it is loose enough to survive the one CSS failure
+          // the frame's own comment names: drop `min-width: 0` from the canvas
+          // cell and the grid item refuses to shrink, so the canvas overflows
+          // and shoves the inspector off screen — yet getBoundingClientRect()
+          // reports width for an element pushed out of view exactly as it does
+          // for a visible one, so railWidth is still 240, inspectorWidth is
+          // still 260, canvasLeft is still 240, and an overflowing canvasWidth
+          // is still comfortably under windowWidth - 80. All five loose clauses
+          // pass under that regression. Only the identity — the three columns
+          // summing to the window — fails, because an overflowing middle cell is
+          // precisely a canvas WIDER than the space the other two leave it.
+          // ±1 for fractional device pixels, not for slack in the claim.
+          Math.abs(geom.canvasWidth -
+            (geom.windowWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
           live > 0,
         JSON.stringify(geom) + ` live=${live}`)
+      // The state this check LEAVES BEHIND, in the same spirit as 71's own
+      // closing note, because this is a top-to-bottom suite and 73 onward will
+      // be appended directly below: the zero-panel world 71 describes ends
+      // here. Check 72 spawns one panel via Cmd+N at the camera's centre and
+      // lets it go live, so anything appended after this inherits a
+      // one-workspace world holding ONE panel with a live PTY — not an empty
+      // one. A later check that counts panels, counts sessions, or presses
+      // Cmd+Z expecting nothing to undo must account for it.
     }
 
   } catch (error) {
