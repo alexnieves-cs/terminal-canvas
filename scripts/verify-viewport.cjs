@@ -674,6 +674,113 @@ const SLOT = { left: 300, top: 200 }
   ok('50 centreOn preserves scale', kept)
 }
 
+// 51. cascadeCentre leaves a spawn that coincides with NOTHING exactly where it
+//     was — including one that merely overlaps an existing panel. This is the
+//     check that pins "centres, not rects". Overlap is the normal state of a
+//     working canvas (two 720x460 panels can barely both be on screen in a
+//     1400x900 window without touching), so an overlap-based rule would step
+//     nearly every press away from where the user is looking — which is the
+//     explicit spec item verify:panels 7 exists to pin. The defect being fixed
+//     is INDISTINGUISHABILITY: perfect coincidence is the only state with no
+//     visual evidence the second panel exists at all, and where the buried
+//     panel's close button is unreachable while it still holds a WebGL context
+//     and a LIVE_BUDGET slot. Overlap you can see, raise, and drag apart.
+{
+  const centre = { x: 500, y: 400 }
+  const heavyOverlap = [V.makePanel('a', { x: centre.x + V.PANEL_W / 2, y: centre.y + V.PANEL_H / 2 }, 1)]
+  const oneStepAway = [V.makePanel('a', { x: centre.x + V.CASCADE_STEP, y: centre.y + V.CASCADE_STEP }, 1)]
+  const justOutside = [V.makePanel('a', { x: centre.x + V.CASCADE_EPSILON * 2, y: centre.y }, 1)]
+  // The function must not sort, splice or otherwise touch the array it is
+  // handed: it runs inside setPanels' updater, where `current` is React's own
+  // state array.
+  const snapshot = JSON.stringify(heavyOverlap)
+  const unchanged = (panels) => {
+    const r = V.cascadeCentre(centre, panels)
+    return r.x === centre.x && r.y === centre.y
+  }
+  ok('51 cascadeCentre moves only a COINCIDENT spawn, never a merely overlapping one',
+    unchanged([]) && unchanged(heavyOverlap) && unchanged(oneStepAway) && unchanged(justOutside) &&
+      JSON.stringify(heavyOverlap) === snapshot,
+    `empty=${unchanged([])} overlap=${unchanged(heavyOverlap)} ` +
+      `step=${unchanged(oneStepAway)} outside=${unchanged(justOutside)}`)
+}
+
+// 52. An exact coincidence steps exactly one step, DOWN and RIGHT. The
+//     direction is not arbitrary: the new panel takes nextZ and paints on top,
+//     so stepping down-right is what leaves the older panel's chrome — its
+//     title and its close button — uncovered. Up-left would put the new
+//     chrome straight over the old one and buy nothing.
+{
+  const centre = { x: -320, y: 96 }
+  const one = [V.makePanel('a', centre, 1)]
+  const r = V.cascadeCentre(centre, one)
+  ok('52 an exact coincidence steps one CASCADE_STEP, down and right',
+    r.x === centre.x + V.CASCADE_STEP && r.y === centre.y + V.CASCADE_STEP,
+    `${JSON.stringify(r)} from ${JSON.stringify(centre)} step=${V.CASCADE_STEP}`)
+}
+
+// 53. Repeated spawns walk the lattice — the real Cmd+N sequence, feeding the
+//     function its own output and appending a panel at each result. Check 52
+//     passes for an implementation that steps once and gives up; only the run
+//     separates "step and re-test" from "step".
+{
+  const centre = { x: 0, y: 0 }
+  const panels = []
+  const placed = []
+  for (let i = 0; i <= V.CASCADE_MAX_STEPS; i++) {
+    const p = V.cascadeCentre(centre, panels)
+    placed.push(p)
+    panels.push(V.makePanel(`n${i}`, p, i + 1))
+  }
+  const stepped = placed.every((p, i) =>
+    i === 0 || (p.x === placed[i - 1].x + V.CASCADE_STEP && p.y === placed[i - 1].y + V.CASCADE_STEP))
+  const distinct = placed.every((p, i) =>
+    placed.every((q, j) =>
+      i === j || Math.abs(p.x - q.x) >= V.CASCADE_EPSILON || Math.abs(p.y - q.y) >= V.CASCADE_EPSILON))
+  ok('53 repeated spawns walk the lattice one step at a time, never twice onto one slot',
+    stepped && distinct && placed.length === V.CASCADE_MAX_STEPS + 1,
+    `stepped=${stepped} distinct=${distinct} n=${placed.length}`)
+}
+
+// 54. CASCADE_EPSILON is strictly smaller than CASCADE_STEP — asserted as a
+//     relation AND behaviourally (a slot one step from an occupied one must
+//     read as free). The two constants are chosen independently and read as
+//     unrelated. Invert them and a stepped candidate collides with the panel
+//     it just stepped away from, so EVERY first press runs the whole lattice
+//     and lands CASCADE_MAX_STEPS * CASCADE_STEP off centre — which surfaces
+//     as a confusing verify:panels 7 centring failure with nothing anywhere
+//     pointing at the epsilon.
+{
+  const centre = { x: 12, y: -8 }
+  const one = [V.makePanel('a', centre, 1)]
+  const target = { x: centre.x + V.CASCADE_STEP, y: centre.y + V.CASCADE_STEP }
+  const r = V.cascadeCentre(target, one)
+  ok('54 CASCADE_EPSILON < CASCADE_STEP, so a stepped slot reads as free',
+    V.CASCADE_EPSILON < V.CASCADE_STEP && r.x === target.x && r.y === target.y,
+    `eps=${V.CASCADE_EPSILON} step=${V.CASCADE_STEP} r=${JSON.stringify(r)}`)
+}
+
+// 55. The cascade is capped, and an exhausted one returns the ORIGINAL centre
+//     rather than a slot further down. The bound is what the tiering argument
+//     rests on: a panel walked outside the cull region is never promoted to
+//     live, so it never spawns a PTY, and Cmd+N appears to do nothing at all —
+//     which is a quieter failure than the stacking it replaced. Wrapping puts
+//     the panel back under the user's eyes; marching loses it.
+{
+  const centre = { x: 1000, y: 1000 }
+  const panels = []
+  for (let i = 0; i <= V.CASCADE_MAX_STEPS; i++) {
+    panels.push(V.makePanel(`n${i}`,
+      { x: centre.x + i * V.CASCADE_STEP, y: centre.y + i * V.CASCADE_STEP }, i + 1))
+  }
+  const r = V.cascadeCentre(centre, panels)
+  const reach = V.CASCADE_MAX_STEPS * V.CASCADE_STEP
+  const bounded = Math.abs(r.x - centre.x) <= reach && Math.abs(r.y - centre.y) <= reach
+  ok('55 an exhausted cascade wraps back to the original centre rather than marching',
+    r.x === centre.x && r.y === centre.y && bounded,
+    `${JSON.stringify(r)} centre=${JSON.stringify(centre)} reach=${reach}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

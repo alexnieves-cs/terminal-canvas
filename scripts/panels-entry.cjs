@@ -27,6 +27,11 @@ module.exports = {
   // twelve-panel fixture its checks (1, 3, 15, ...) depend on.
   fromPanels: require('../src/renderer/panels/layout-adapt').fromPanels,
   SEED_PANELS: require('../src/renderer/panels/panels').SEED_PANELS,
+  /* Check 51 reads the cascade step from the source of truth rather than
+     restating 48 here: a literal in the harness would keep passing against a
+     changed constant, i.e. the suite would agree with itself while the app
+     did something else. Same rule as SEED_PANELS/DEFAULT_CAMERA above. */
+  CASCADE_STEP: require('../src/renderer/panels/panels').CASCADE_STEP,
   DEFAULT_CAMERA: require('../src/shared/layout-schema').DEFAULT_CAMERA,
   /* Check 32 installs the SAME did-finish-load push production installs, so
      it can prove the renderer is listening at the moment main really sends —

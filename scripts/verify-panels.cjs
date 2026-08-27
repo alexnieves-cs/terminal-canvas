@@ -37,6 +37,7 @@ const {
   fromPanels,
   SEED_PANELS,
   DEFAULT_CAMERA,
+  CASCADE_STEP,
   requestFromRenderer,
   pushDefaultPreset,
   allPresets,
@@ -675,9 +676,18 @@ app.whenReady().then(async () => {
     // the current viewport in world coordinates") with no coverage anywhere
     // else: without this check the shortcut could do nothing at all, or place
     // panels in screen coordinates, and every other suite would still pass.
-    // Run at the ~0.69 scale check 6 left behind on purpose — at scale 1 with
-    // no translation, screen and world coordinates coincide and the conversion
-    // this asserts would be untestable.
+    // Check 6 ends by resetting the camera, so this runs at INITIAL — scale 1
+    // but translated {x:120,y:120}, which is what keeps the world/screen
+    // conversion under test rather than degenerate.
+    //
+    // A DEPENDENCY this check acquired when spawns started cascading (check 51
+    // below): "centred on the view" now holds only while nothing is ALREADY
+    // centred there. In this window (1400x900) at INITIAL the view centre in
+    // world is (580, 330), and the nearest SEED_PANELS centre is s01's
+    // (360, 230) — 220 world px away, some 440x CASCADE_EPSILON. Edit
+    // SEED_PANELS or DEFAULT_CAMERA so that a fixture panel lands on that
+    // point and this check fails by exactly one CASCADE_STEP, which reads as a
+    // centring regression and is not one.
     const panelCount = (w) => w.executeJavaScript(`document.querySelectorAll('.panel').length`)
     // Both expectations are read back out of the live DOM — the canvas host's
     // own bounds and the world layer's own transform — rather than duplicating
@@ -1696,7 +1706,7 @@ app.whenReady().then(async () => {
     //     teardown must DETACH the tmux client and leave the session running,
     //     so the next page lands back in the same process.
     //
-    //     Nothing else in the 165-check suite could catch its loss.
+    //     Nothing else anywhere in the verify suites could catch its loss.
     //     verify:pty-manager 12 calls detachAll() directly on a manager with
     //     no renderer anywhere, so a renderer-side teardown listener never
     //     fires; verify:window 4 installs its own lambda for the same reason.
@@ -3209,6 +3219,105 @@ app.whenReady().then(async () => {
           JSON.stringify(result))
         await closePalette()
       }
+    }
+
+    // 51. A SECOND Cmd+N at the same camera lands one CASCADE_STEP down and
+    //     right of the first instead of on top of it. Every path that makes a
+    //     panel funnels through Canvas.tsx's onSpawn, which used to hand the
+    //     view centre straight to makePanel — so N presses without moving the
+    //     camera produced N byte-identical rects. The canvas then LOOKS like
+    //     it holds one panel: the buried ones are unreachable (their close
+    //     buttons are underneath) while each still holds a WebGL context and a
+    //     LIVE_BUDGET slot, and the panel count in the HUD is the only
+    //     evidence they exist.
+    //
+    //     Why this check has to be here and not only in verify:viewport:
+    //     cascadeCentre can be perfect and green under plain node while
+    //     onSpawn never calls it. Every other Cmd+N driver in this suite (7b,
+    //     17, 22, 26, 29) asserts count, ids or spec — none of them would
+    //     notice.
+    //
+    //     Why EXACTLY one step and not merely "somewhere else": a cascade that
+    //     jitters by a random amount also un-stacks the panels, but it is
+    //     unpredictable to the user and nothing could assert it. The lattice
+    //     is what makes the gap-filling behaviour (close one, spawn again,
+    //     land back in that hole) possible at all.
+    //
+    //     And why the live assertion: this is the ONLY place the suite proves
+    //     a cascaded panel is still inside the cull region and therefore still
+    //     promoted, rather than merely arguing it. A panel walked off screen
+    //     is never attached, never spawns a PTY, and Cmd+N appears to do
+    //     nothing whatsoever — a quieter failure than the stacking it
+    //     replaced. It is also what protects check 22's stated assumption
+    //     ("Cmd+N's panel is centred on the current view, so it is on-screen
+    //     and therefore live") from a future CASCADE_MAX_STEPS increase.
+    {
+      // Reset, then pan far outside every panel this run has created, for the
+      // same reason check 22 does it: the cascade is decided against the LIVE
+      // panel array, so starting over empty world space makes the first press
+      // land dead centre deterministically instead of depending on which
+      // lattice slots fifty checks of spawning and dragging have filled.
+      await zoomTo(wc, '0')
+      await wc.executeJavaScript(`
+        document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+          bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+          deltaX: -300000, deltaY: -300000, deltaMode: 0
+        }))
+        true
+      `)
+
+      const panelIds = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`
+      )
+      // Read by data-panel-id, never "the last .panel in the DOM": array order
+      // and paint order are deliberately different things here (see Panel.z),
+      // so the newest panel is not necessarily the last element.
+      const centreOf = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.panel[data-panel-id=${JSON.stringify(id)}]')
+        if (!el) return null
+        return { x: parseFloat(el.style.left) + parseFloat(el.style.width) / 2,
+                 y: parseFloat(el.style.top) + parseFloat(el.style.height) / 2 }
+      })()`)
+      const spawnOne = async () => {
+        const before = new Set(await panelIds())
+        await zoomTo(wc, 'n')
+        const after = await waitUntil(async () => {
+          const ids = await panelIds()
+          return ids.length > before.size ? ids : false
+        }, 3000)
+        return after ? after.find((id) => !before.has(id)) : undefined
+      }
+
+      // The expectation comes out of the live DOM — the host's own bounds and
+      // the world layer's own transform — rather than from INITIAL/PANEL_W,
+      // for the reason check 7's comment gives.
+      const expectedCentre = await viewCentreInWorld(wc)
+      const firstId = await spawnOne()
+      const secondId = await spawnOne()
+      const first = firstId ? await centreOf(firstId) : null
+      const second = secondId ? await centreOf(secondId) : null
+      const live = secondId
+        ? Boolean(
+            await waitUntil(
+              () => wc.executeJavaScript(
+                `!!document.querySelector('.panel[data-panel-id="${secondId}"] .xterm')`
+              ),
+              3000
+            )
+          )
+        : false
+
+      const TOL = 1 // same 1px float-rounding slack check 7 allows
+      const firstCentred = first &&
+        Math.abs(first.x - expectedCentre.x) <= TOL &&
+        Math.abs(first.y - expectedCentre.y) <= TOL
+      const stepped = first && second &&
+        Math.abs(second.x - first.x - CASCADE_STEP) <= TOL &&
+        Math.abs(second.y - first.y - CASCADE_STEP) <= TOL
+      ok('51 a second Cmd+N at one camera cascades one step instead of stacking, and still goes live',
+        Boolean(firstCentred && stepped && live),
+        `first=${JSON.stringify(first)} second=${JSON.stringify(second)} ` +
+          `viewCentre=${JSON.stringify(expectedCentre)} step=${CASCADE_STEP} live=${live}`)
     }
 
   } catch (error) {

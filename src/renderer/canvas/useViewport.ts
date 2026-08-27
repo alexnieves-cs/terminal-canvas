@@ -204,7 +204,11 @@ export function useViewport(
           break
         case 'n':
           // Cmd+N spawns at the viewport centre in WORLD coordinates, so a
-          // panel appears where you are looking at any zoom.
+          // panel appears where you are looking at any zoom. "Where you are
+          // looking" is where it ASKS for: onSpawn runs the point through
+          // panels.ts's cascadeCentre, which steps it down-and-right when a
+          // panel is already centred there, so repeated presses stack
+          // visibly instead of landing on identical rects.
           event.preventDefault()
           onSpawn?.(screenToWorld(centre, viewportRef.current))
           break

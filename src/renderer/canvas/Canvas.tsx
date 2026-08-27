@@ -14,7 +14,7 @@ import type { CanvasState } from '@shared/layout-schema'
 import type { CapturedPanel, PresetTemplate, SessionBackendInfo } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
+import { cascadeCentre, firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
@@ -188,11 +188,27 @@ export function Canvas({
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
       setPanels((current) => {
+        // Where the panel ACTUALLY goes. Without this, N presses at an
+        // unmoved camera produce N byte-identical rects and the canvas looks
+        // like it holds one panel — see cascadeCentre for the whole argument.
+        //
+        // `current` — this updater's own argument — and never a panelsRef.
+        // React applies queued updaters sequentially, so two spawns batched
+        // into one tick each see the previous one's array; a ref (written a
+        // render later) would hand both presses the same array and both would
+        // pick the same slot, which is the stacking bug resurrected through a
+        // door that only opens under batching.
+        //
+        // cascadeCentre being PURE is also what keeps this line clear of the
+        // hazard the note above describes: called twice with the same
+        // `current` it returns the same point, so a StrictMode double-invoke
+        // could not place the panel somewhere else.
+        const placed = cascadeCentre(centre, current)
         const next = [
           ...current,
           makePanel(
             id,
-            centre,
+            placed,
             nextZ(current),
             chosen
               ? { panelId: id, cwd: chosen.cwd, args: [...chosen.args], ...(chosen.command !== undefined ? { command: chosen.command } : {}) }

@@ -33,7 +33,7 @@ work is done. Individual suites:
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:viewport` | plain node | 50 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), `makePanel`'s spec/size arguments (48), and `centreOn` framing a rect without touching the scale (49–50) |
+| `verify:viewport` | plain node | 55 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), `makePanel`'s spec/size arguments (48), and `centreOn` framing a rect without touching the scale (49–50). M6 adds `cascadeCentre`'s coincidence stepping (51–55) — including the half that is easiest to get subtly wrong: 51 pins that a merely OVERLAPPING panel does not move a spawn (centres, not rects), 53 walks the whole lattice rather than one step, and 54 asserts `CASCADE_EPSILON < CASCADE_STEP` as a relation, because inverting them makes every FIRST press run the lattice and land 384px off centre — a failure that surfaces in `verify:panels` 7 as a centring bug with nothing pointing at the epsilon |
 | `verify:registry` | plain node | 25 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19). M6a adds check 20: `PanelStatus.running` widens to carry `command`/`cwd`/`reattached`, so the header chain has something besides the spec to read for a login-shell panel |
 | `verify:layout` | plain node | 60 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57). M6a adds `Panel.title` round-tripping through `layout-adapt.ts` — parsed in on the way from disk (58), written back out on the way to disk (59), and an untitled panel writing no `title` key at all rather than a saved absent-marker (60) |
 | `verify:palette` | plain node | 51 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–33) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list. M6a added the `panel.rename` row (31–32) and a titled panel being findable by its title (33). M6p adds the structure: section-first sorting outranking a better score in a later section and score still deciding inside one (34–35), `bestMatchIndex` skipping disabled rows (36–38), `hiddenAtRest` in BOTH directions (39–40), `searchText` including the whole phrase (41, 41b), `splitHighlight` (42–43), the two retitles (44–45), what is hidden versus what is not (46), exactly-two-destructive (47), `⌘N` on the default preset alone (48), and the drill-in doors and what a scope shows (49–50). **Check 30 was rewritten**: it derives its expectation from `SECTIONS` and runs through `filterCommands`, because construction order stopped being the grouping the moment sorting became section-first — see "Sections are data" below |
@@ -46,7 +46,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 17 channels as of M5b, nine of them the palette's |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 54 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. M6p adds the palette's structure in a real renderer: section headers rendering once each in `SECTIONS` order (48), a drill-in narrowing to its own rows with Escape popping back **without closing** (49), and a destructive row that is marked, gated by a confirm, and left un-deleted by Escape — read back out of `preset.list()`, not off the overlay (50). The count is 54 while the last number is 50, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
+| `verify:panels` | real Electron | 55 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. M6p adds the palette's structure in a real renderer: section headers rendering once each in `SECTIONS` order (48), a drill-in narrowing to its own rows with Escape popping back **without closing** (49), and a destructive row that is marked, gated by a confirm, and left un-deleted by Escape — read back out of `preset.list()`, not off the overlay (50). Check 51 is the spawn cascade in a real renderer: two `Cmd+N` presses at one camera, in empty world space, must land exactly one `CASCADE_STEP` apart — and the second panel must still have an `.xterm` under it, which is the ONLY place the suite proves a cascaded panel is still inside the cull region and therefore still promoted, rather than merely arguing it. It reads the step out of `panels-entry.cjs` rather than restating 48, and reads each panel by `data-panel-id` rather than "the last `.panel`", since array order and paint order are deliberately different things here. The count is 55 while the last number is 51, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -653,7 +653,7 @@ Writing `{...defaultTemplate}` at that hop would make it a fifth place that can 
 menu accelerator or a renderer listener, not both — but it would break every `verify:panels`
 check that drives it: `zoomTo(wc, 'n')` dispatches a synthetic `KeyboardEvent` on `window`,
 which a main-process accelerator never receives, only a real OS keydown does. That is checks
-7, 17, 22, 26, and 29 — worth re-deriving with `grep -n "zoomTo(wc, 'n')" scripts/verify-panels.cjs`
+7, 17, 22, 26, 29 and 51 — worth re-deriving with `grep -n "zoomTo(wc, 'n')" scripts/verify-panels.cjs`
 rather than trusting this list, the same caution this file already gives the `dispose(id)`
 call-site count. Main instead pushes the default template over `PRESET_DEFAULT`, at
 every `did-finish-load` — including the one a `Cmd+R` reload produces, which is what stops the
@@ -1080,6 +1080,53 @@ hidden textarea does. So it is positioned off-view at `opacity: 0` rather than
 removed: `display: none` or `visibility: hidden` would make it unfocusable and
 hand the keyboard straight back to the agent with a destructive question on
 screen and no key able to answer it.
+
+**Cmd+N cascades, and the test is CENTRES, not overlap (`panels/panels.ts`'s
+`cascadeCentre`, `Canvas.tsx`'s `onSpawn`).** Every path that makes a panel — `Cmd+N`, the
+Presets menu, the palette's `preset:spawn-by-id` — funnels through `onSpawn`, which handed
+the camera's world centre straight to `makePanel`. So N presses at an unmoved camera produced
+N **byte-identical rects**, and the failure is total and silent: the canvas looks like it
+holds one panel, the buried ones cannot be closed because their close buttons are underneath,
+and each still holds a WebGL context and a `LIVE_BUDGET` slot. The HUD count is the only
+evidence they exist. `cascadeCentre` returns the requested centre unless a panel is ALREADY
+centred there, and otherwise steps down-and-right until it finds a free slot.
+
+Five things about it are load-bearing rather than incidental:
+
+- **It is in `panels.ts`, not in `makePanel`.** `makePanel` has no panel list and no business
+  gaining one, and `verify:viewport` 48 pins `custom.rect.x === centre.x - 200` — exact
+  centring — as its contract.
+- **The test compares panel CENTRES, never rect overlap.** This fixes *indistinguishability*,
+  not overlap. Overlap is the normal state of a working canvas — two 720×460 panels can barely
+  both be on screen in a 1400×900 window without touching — so an overlap rule would step
+  nearly every press away from where the user is looking, contradicting the explicit spec item
+  `verify:panels` 7 exists to pin, and would exhaust the cascade constantly. Perfect
+  coincidence is the only state with no visual evidence at all. `verify:viewport` 51 is the
+  check that fails if this is "simplified" to an overlap test.
+- **`CASCADE_EPSILON` is half a pixel, deliberately not a "looks stacked" radius.** Every
+  coincidence this app can produce is EXACT — two presses at an unmoved camera both come from
+  the same `screenToWorld(centre, viewportRef.current)` — so the epsilon only has to survive
+  recovering a centre as `rect.x + w/2` from a rect built as `centre.x - w/2`. Widening it
+  re-introduces the overlap rule through the back door.
+- **The step is world units, never `step / viewport.scale`.** Panels scale with the zoom, so a
+  world-fixed step keeps the cascade constant *relative to the panels* at every zoom — always
+  one chrome-height of each card showing. `onSpawn` and `worldCentre()` also carry no camera
+  state on purpose (the setter stays private), so threading a scale through would push camera
+  state into the panel model.
+- **It runs inside the `setPanels` updater on `current`, never on a ref.** React applies queued
+  updaters sequentially, so two spawns batched into one tick each see the previous one's array;
+  a ref read (written a render later) hands both presses the same array and both pick the same
+  slot — the stacking bug resurrected through a door that only opens under batching. Its purity
+  is also what keeps it clear of the StrictMode hazard the `commitHistory`-in-an-updater note in
+  `Canvas.tsx` describes.
+
+It is collision-based rather than a spawn counter, which is what makes it self-resetting (pan
+somewhere empty and the next panel is centred again), gap-filling (close the middle of a cascade
+and the next spawn lands back in that hole), and correct against panels restored from disk. And
+it **wraps** at `CASCADE_MAX_STEPS` instead of marching: a panel walked outside the cull region
+is never promoted, so it never spawns a PTY, and `Cmd+N` appears to do nothing at all — a
+quieter failure than the stacking it replaced. `verify:panels` 51's live assertion is the only
+place that property is proven rather than argued.
 
 **The header's honest chain, and the backfill that must never happen
 (`TerminalPanel.tsx`).** The label is
