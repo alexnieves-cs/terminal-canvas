@@ -668,10 +668,21 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
 //     ideas-backlog #11's argument for a searchable settings surface is that a
 //     user looking for the theme types "dark", so a setting findable only by
 //     its own label is a setting most users will never find.
+//
+// R12 fix-round-1 note: the original fixture's keywords included 'zoom', and
+// 'zoom' is a literal substring of this description ("...the pan and zoom you
+// left it..."). haystack() is searchText + title + subtitle, so a query of
+// 'zoom' matched via the SUBTITLE alone and check 52 passed identically with
+// searchText never populated — it could not fail, which is worse than no
+// check at all for the one property that justifies the field. 'viewport' and
+// 'anchor' below are neither substrings NOR subsequence-reachable through
+// "Restore camera position" + the description (confirmed by hand, see the fix
+// report): reading the description letter-by-letter there is no 'v' before an
+// 'i' before an 'e' before a 'w'... in the required order, unlike 'zoom'.
 const SETTING = {
   id: 'restore.camera', label: 'Restore camera position',
   description: 'Return the canvas to the pan and zoom you left it at.',
-  keywords: ['zoom', 'viewport'], type: 'boolean', value: true,
+  keywords: ['viewport', 'anchor'], type: 'boolean', value: true,
   category: 'Restore on launch'
 }
 {
@@ -682,7 +693,7 @@ const SETTING = {
     row.subtitle.includes('Return the canvas'))
 }
 {
-  const rows = P.filterCommands(P.buildCommands(ctx({ settings: [SETTING] })), 'zoom')
+  const rows = P.filterCommands(P.buildCommands(ctx({ settings: [SETTING] })), 'viewport')
   ok('52 a setting is findable by a KEYWORD that appears nowhere in the row',
     rows.some((r) => r.id === 'setting.restore.camera'),
     rows.map((r) => r.id).join(','))

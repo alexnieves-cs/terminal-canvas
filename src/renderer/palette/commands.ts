@@ -57,12 +57,16 @@ export interface PaletteActions {
   /**
    * Task 7 implements the real wiring (main's settings:set, then a reload of
    * the row list from the answer it gives back — never an optimistic local
-   * flip, because main can refuse an id or a type). Optional here rather than
-   * required: Canvas.tsx and Palette.tsx's prop plumbing are Task 7's files,
-   * not this task's, and a required member would force a stub into both
-   * before either actually has settings to wire.
+   * flip, because main can refuse an id or a type). REQUIRED, not optional:
+   * an optional member here would let Canvas.tsx's paletteActions object
+   * satisfy this interface while wiring only the `settings` prop and
+   * forgetting this callback (or vice versa), and tsc would say nothing — the
+   * exact silent gap "a row that disappears is indistinguishable from a
+   * feature that is missing" warns about elsewhere in this file. Required
+   * forces a type-satisfying stub at both call sites until Task 7 replaces
+   * them with the real thing; see Palette.tsx and Canvas.tsx.
    */
-  toggleSetting?(id: string, value: SettingValue): void
+  toggleSetting(id: string, value: SettingValue): void
 }
 
 export interface PaletteContext {
@@ -70,12 +74,12 @@ export interface PaletteContext {
   prompts: PromptRow[]
   panels: PanelRow[]
   /**
-   * Empty until Task 7 loads it from `window.canvas.settings.list()`. Optional
-   * for the same reason toggleSetting is optional above — commands.ts can
-   * build the rows the moment a settings list exists, without Canvas.tsx or
-   * Palette.tsx having to carry a prop for a feature they don't populate yet.
+   * Empty until Task 7 loads it from `window.canvas.settings.list()`.
+   * REQUIRED for the same reason toggleSetting is required above — leaving it
+   * optional is a compile-time hole a half-finished Task 7 wiring could pass
+   * straight through.
    */
-  settings?: SettingRow[]
+  settings: SettingRow[]
   /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and
@@ -269,7 +273,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // the resting list stays the ~8 rows M6p sized it to rather than growing one
   // row per setting. The door below is the always-visible way in.
 
-  for (const setting of ctx.settings ?? []) {
+  for (const setting of ctx.settings) {
     // Only booleans get a row in M6b, because only booleans exist. An enum or
     // number needs an input mode rather than a toggle, and building that
     // before a setting needs it would be an abstraction with no customer —
@@ -288,7 +292,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       group: 'setting',
       scope: 'settings',
       hiddenAtRest: true,
-      run: () => actions.toggleSetting?.(setting.id, !on)
+      run: () => actions.toggleSetting(setting.id, !on)
     })
   }
 
@@ -325,7 +329,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
   {
-    const settingCount = (ctx.settings ?? []).length
+    const settingCount = ctx.settings.length
     out.push({
       id: 'manage.settings',
       title: 'Manage settings…',

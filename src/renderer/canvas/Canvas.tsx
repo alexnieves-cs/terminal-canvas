@@ -1188,7 +1188,12 @@ export function Canvas({
       void window.canvas.canvas.requestReset()
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
-    zoomToFit: () => resetViewport()
+    zoomToFit: () => resetViewport(),
+    // Task 7 placeholder: this task (M6b's Task 6) built the pure command
+    // list only. toggleSetting is required on PaletteActions on purpose (a
+    // compile-time net for Task 7 — see commands.ts), so this no-op is a
+    // type-satisfying stub, not the real settings:set + reload wiring.
+    toggleSetting: () => {}
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory])
 

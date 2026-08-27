@@ -87,6 +87,12 @@ export function Palette(props: PaletteProps): JSX.Element {
         presets: props.presets,
         prompts: props.prompts,
         panels: props.panels,
+        // Task 7 placeholder: this task (M6b's Task 6) only builds the pure
+        // command list, not the prop chain that would carry a real settings
+        // list down from Canvas.tsx. `settings` is required on PaletteContext
+        // on purpose (a compile-time net for Task 7 — see commands.ts), so
+        // this empty array is a type-satisfying stub, not finished wiring.
+        settings: [],
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         actions: props.actions
