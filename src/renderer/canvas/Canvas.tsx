@@ -14,7 +14,14 @@ import { applyAgentState, attentionIds, clearAgentState, useAttentionIds } from 
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
-import type { CapturedPanel, PresetTemplate, SessionBackendInfo, SettingRow, WorkspaceRow } from '@shared/ipc-contract'
+import type {
+  ActivateResult,
+  CapturedPanel,
+  PresetTemplate,
+  SessionBackendInfo,
+  SettingRow,
+  WorkspaceRow
+} from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { cascadeCentre, firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
@@ -84,7 +91,8 @@ const registry = createRegistry({
 export function Canvas({
   initial,
   liveSessionIds,
-  defaultTemplate
+  defaultTemplate,
+  allPanelIds
 }: {
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
@@ -95,6 +103,14 @@ export function Canvas({
    * before any effect here runs — see renderer/main.tsx.
    */
   defaultTemplate?: PresetTemplate
+  /**
+   * Every panel id in every workspace, not just this one's — see
+   * renderer/main.tsx for why nextIdRef needs the whole set rather than
+   * `initial.panels` alone. A prop, and re-derived on every switch (below,
+   * from ActivateResult.allPanelIds) rather than fetched here again: main
+   * already answers with the up-to-date set as part of the switch itself.
+   */
+  allPanelIds: readonly string[]
 }): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
 
@@ -132,9 +148,18 @@ export function Canvas({
   // Restore a canvas holding n5, press Cmd+N five times, and the fifth panel is
   // n5 too — the same duplicate-id defect the comment above describes,
   // resurrected through a different door.
+  //
+  // M7: seeded from `allPanelIds` — EVERY workspace's ids, not just this
+  // one's (`initial.panels`) — for the same persistence reason, arriving
+  // through a different door. PanelId doubles as the tmux session name, so
+  // Cmd+N in workspace B minting an id workspace A already uses is two panels
+  // naming one session; the second to go live attaches to the first one's
+  // process, with nothing visibly wrong on either panel. `switchWorkspace`
+  // re-seeds this same ref from ActivateResult.allPanelIds on every switch,
+  // for the identical reason.
   const nextIdRef = useRef(
-    initial.panels.reduce((max, p) => {
-      const match = /^n(\d+)$/.exec(p.id)
+    allPanelIds.reduce((max, id) => {
+      const match = /^n(\d+)$/.exec(id)
       return match ? Math.max(max, Number(match[1]) + 1) : max
     }, 1)
   )
@@ -270,7 +295,23 @@ export function Canvas({
   // revive — registry.ensure (in the useMemo below) recreates the session
   // from scratch once the panel reappears in `panels`, and passing dormant:
   // true for it is what turns that into a card instead of a fresh spawn.
-  const applyHistory = useCallback((next: History<Panel[]>) => {
+  //
+  // Takes the PREVIOUS present array as its first argument, not just `next`.
+  // Before M7 the departing set was derived from the WHOLE registry (every
+  // session not in `next.present`), which was self-healing rather than a
+  // shortcut: the registry only ever held ids from this one canvas's own
+  // history, so "everything the registry has that `next` doesn't" and
+  // "everything THIS transition just dropped" were the same set. M7 breaks
+  // that equivalence — the registry now legitimately holds sessions for every
+  // OTHER workspace too (see switchWorkspace's "demote, not dispose" doc
+  // comment) — so a registry-wide diff would dispose every hidden workspace's
+  // sessions on ANY undo/redo in this one, including a genuine no-op (empty
+  // past/future, `next === previous`, nothing actually moved). Diffing
+  // against the specific state this transition left, instead, gives the
+  // right answer in both worlds: a real undo/redo still disposes exactly the
+  // panel(s) that vanished from `present`, and a no-op disposes nothing,
+  // because previousIds and ids are then identical.
+  const applyHistory = useCallback((previousPresent: Panel[], next: History<Panel[]>) => {
     const ids = new Set(next.present.map((p) => p.rect.id))
     // Undo of a spawn (or redo of a close) removes a panel from `present`
     // without ever routing through onClosePanel, so without this loop a
@@ -283,16 +324,13 @@ export function Canvas({
     // instead of a click. It does not add a caller of pty.kill: dispose(id)
     // and disposeAll() remain the only two (see session-registry.ts), and
     // routing through dispose() rather than calling pty.kill directly is
-    // exactly what keeps that count true. Deriving the departing set from
-    // the registry (rather than tracking it separately) is self-healing:
-    // the registry and `present` stay in step by construction after this
-    // call, no matter which direction history moved.
-    for (const session of registry.all()) {
-      if (!ids.has(session.id)) {
-        registry.dispose(session.id)
+    // exactly what keeps that count true.
+    for (const panel of previousPresent) {
+      if (!ids.has(panel.rect.id)) {
+        registry.dispose(panel.rect.id)
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
-        clearAgentState(session.id)
+        clearAgentState(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -420,7 +458,7 @@ export function Canvas({
     jumpAttentionImplRef.current(direction)
   }, [])
 
-  const { viewport, resetViewport, worldCentre, centreOn } = useViewport(
+  const { viewport, resetViewport, worldCentre, centreOn, restoreCamera } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
   )
   const version = useRegistryVersion(registry)
@@ -536,11 +574,11 @@ export function Canvas({
     // overlay, with no visible cause. verify:panels 37.
     const offUndo = window.canvas.edit.onUndo(() => {
       if (palette.isOpen()) return
-      setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
+      setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
       if (palette.isOpen()) return
-      setHistory((h) => { const next = redoHistory(h); applyHistory(next); return next })
+      setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
       offUndo()
@@ -604,6 +642,80 @@ export function Canvas({
   // drop the drag state it is holding.
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
+
+  /**
+   * A workspace switch is a SECOND BOOT.
+   *
+   * Everything derived from the starting state is RE-DERIVED rather than
+   * carried: the id counter (from ActivateResult.allPanelIds, which spans
+   * every workspace — see nextIdRef's comment), the undo stack (cleared, for
+   * the reason applyHistory's own comment gives: an uncleared stack would let
+   * Cmd+Z apply the OTHER workspace's array here and dispose sessions this
+   * workspace still wants running), the camera, and the selection. What is
+   * deliberately NOT touched is the registry: unmounting these panels calls
+   * detachSlot (TerminalPanel's cleanup), which disposes the WebGL addon and
+   * pulls the host out of the DOM while the PanelSession, its PTY and its
+   * tmux session stay exactly where they are — "two lifetimes, not one"
+   * paying out at the scale of a whole canvas instead of one culled panel.
+   * There is no `registry.dispose` call anywhere in this function, and there
+   * must never be one: `verify:panels` 64 is the check that fails first if
+   * one creeps in, and it is the one no cheaper tier can catch (see
+   * CLAUDE.md's "Switching in a real renderer" task note).
+   */
+  const switchWorkspace = useCallback(
+    (id: string) => {
+      const outgoing: CanvasState = {
+        panels: fromPanels(panelsRef.current),
+        camera: viewportRef.current,
+        selectedId,
+        focusedId
+      }
+      void window.canvas.workspace.activate(id, outgoing).then((result: ActivateResult | null) => {
+        // Null means the id named nothing — a stale palette row, or a
+        // workspace deleted out from under an in-flight switch. Main changed
+        // nothing, so neither does this.
+        if (!result) return
+        const next = toPanels(result.state.panels)
+        setPanels(next)
+        setSelectedId(result.state.selectedId)
+        setFocusedId(result.state.focusedId)
+        restoreCamera(result.state.camera)
+        // Every restored panel arrives DORMANT unless it already has a live
+        // session — the same rule boot() applies in renderer/main.tsx, for
+        // the same reason: a switch must spawn nothing. Reusing pty:list
+        // (main's authority on what is actually live) rather than restating
+        // the rule is what keeps a switch and a boot from disagreeing.
+        void window.canvas.pty.list().then((sessions) => {
+          const live = new Set(sessions.map((s) => s.panelId))
+          setDormantIds(new Set(next.map((p) => p.rect.id).filter((pid) => !live.has(pid))))
+        })
+        // HISTORY IS CLEARED, not carried. history is ONE stack over ONE
+        // Panel[], and applyHistory disposes any panel the undone state no
+        // longer contains — which reaches pty.kill. An uncarried stack would
+        // let Cmd+Z apply the PREVIOUS workspace's array here and kill THIS
+        // workspace's sessions to restore panels that are not even on
+        // screen. Cmd+Z doing nothing right after a switch is the honest
+        // failure; doing something is the dangerous one. verify:panels 67.
+        //
+        // Per-workspace stacks are the tempting alternative and are YAGNI:
+        // undo is scoped to a gesture the user just made, and a per-workspace
+        // stack would have to be disposed alongside its workspace or a
+        // deleted workspace's history would hold Panel records whose
+        // sessions are gone.
+        setHistory(createHistory(next))
+        // Re-seeded from the GLOBAL maximum ActivateResult hands back, not
+        // from `next` alone — the same reason nextIdRef's own comment gives:
+        // a workspace can be switched TO while another workspace's ids are
+        // higher, and minting from this workspace's own panels would let
+        // Cmd+N here collide with an id a hidden workspace already owns.
+        nextIdRef.current = result.allPanelIds.reduce((max, pid) => {
+          const match = /^n(\d+)$/.exec(pid)
+          return match ? Math.max(max, Number(match[1]) + 1) : max
+        }, 1)
+      })
+    },
+    [selectedId, focusedId, restoreCamera]
+  )
 
   // Corrects xterm's coordinates for the world transform. Reads the scale
   // through a ref so the listener is installed once and never resubscribes —
@@ -679,7 +791,7 @@ export function Canvas({
      * verb verify:panels needs to exercise undo without one.
      */
     w.__m4bUndo = (): void =>
-      setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
+      setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     /**
      * Drives the same reset path the confirmed "Reset canvas…" menu item
      * does, minus the native dialog executeJavaScript cannot reach. Exists
@@ -700,7 +812,24 @@ export function Canvas({
     }
     /** The template currently pushed as Cmd+N's default, or undefined. */
     w.__m5aDefaultSpec = (): PresetTemplate | undefined => defaultTemplateRef.current
-  }, [applyHistory, resetCanvas])
+    /**
+     * verify:panels' route into workspace switching, the same reason every
+     * other __m4a* hook exists: the registry (and now the workspace surface)
+     * is a module-level/main-owned concept executeJavaScript cannot reach any
+     * other way. Kept narrow and named for what each member ANSWERS.
+     */
+    w.__m7aWorkspace = (): {
+      switchTo: (workspaceId: string) => void
+      createAndSwitch: (name: string) => Promise<void>
+      allPanelIds: () => Promise<string[]>
+    } => ({
+      switchTo: (workspaceId: string) => switchWorkspace(workspaceId),
+      createAndSwitch: (name: string) =>
+        window.canvas.workspace.create(name).then((workspaceId) => switchWorkspace(workspaceId)),
+      allPanelIds: () =>
+        window.canvas.workspace.list().then((rows) => rows.flatMap((row) => row.panelIds))
+    })
+  }, [applyHistory, resetCanvas, switchWorkspace])
 
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
@@ -1401,9 +1530,7 @@ export function Canvas({
 
       openEdit(String(current))
     },
-    // Stub: Task 5 wires this to window.canvas.workspace.activate and the
-    // second-boot reconcile it drives.
-    switchWorkspace: () => {},
+    switchWorkspace,
     // Stub: Task 6 wires this to an input-mode prompt, the same shape as
     // beginRenamePreset above.
     beginCreateWorkspace: () => {},
@@ -1415,7 +1542,7 @@ export function Canvas({
     deleteWorkspace: () => {}
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows])
+       reloadSettings, settingRows, switchWorkspace])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and

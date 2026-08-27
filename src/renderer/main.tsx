@@ -91,16 +91,38 @@ async function boot(): Promise<void> {
     console.warn('[boot] could not list live sessions; restoring every panel dormant', error)
   }
 
+  // Every panel id in every workspace, not just the active one.
+  //
+  // nextIdRef seeds from this. Seeding from `initial.panels` alone was correct
+  // while there was exactly one workspace and is a defect the moment there is
+  // more than one: PanelId doubles as the tmux session name, so Cmd+N in
+  // workspace B could mint an id workspace A is already using, and the second
+  // panel to go live would attach to the first one's process — with nothing
+  // visibly wrong on either panel. This is the id-collision defect M4a fixed
+  // by removing length-derived ids, reachable again through a door M4a could
+  // not see.
+  let allPanelIds: string[] = initial.panels.map((p) => p.id)
+  try {
+    const rows = await window.canvas.workspace.list()
+    allPanelIds = rows.flatMap((w) => w.panelIds)
+  } catch (error: unknown) {
+    // Degrades to the active workspace's ids — the M4b behaviour. The failure
+    // direction matters: a SHORTER list can collide, so this is logged loudly
+    // rather than swallowed.
+    console.warn('[boot] could not list workspaces; ids seed from this canvas only', error)
+  }
+
   // Deliberately NOT wrapped in StrictMode. StrictMode double-invokes effects
   // in development, which for a terminal means spawning a PTY, killing it, and
   // spawning it again on every mount.
   // defaultTemplate is read HERE, at render time, not captured earlier: the
-  // push may have landed at any point during the two awaits above.
+  // push may have landed at any point during the three awaits above.
   createRoot(container!).render(
     <App
       initial={initial}
       liveSessionIds={liveSessionIds}
       defaultTemplate={defaultTemplate}
+      allPanelIds={allPanelIds}
     />
   )
 }

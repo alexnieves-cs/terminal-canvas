@@ -101,6 +101,20 @@ export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
 }
 
 /**
+ * The fourth camera verb (after resetViewport, worldCentre and centreOn),
+ * factored out as pure math for the same reason those are: so the one fact
+ * that separates it from centreOn — it sets the SCALE, because a workspace's
+ * saved zoom is part of what it means to come back to it, where centreOn
+ * deliberately leaves scale alone so framing a panel never discards the zoom
+ * the user chose — is provable under plain node instead of taken on faith
+ * from a useCallback body this tier cannot execute. There is no geometry to
+ * compute; the whole contract is that nothing here is dropped or coerced.
+ */
+export function restoreCamera(camera: Viewport): Viewport {
+  return { x: camera.x, y: camera.y, scale: camera.scale }
+}
+
+/**
  * How far inside the viewport edge a pip sits, in screen pixels. A pip drawn
  * exactly on the boundary is half clipped by the window.
  */

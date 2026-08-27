@@ -127,6 +127,23 @@ const zoomTo = (wc, key) =>
   )
 
 /**
+ * M7's workspace-switch checks (64-67) call this after every
+ * __m7aWorkspace() action. switchWorkspace's own work is a fire-and-forget
+ * chain of TWO local IPC round trips (workspace:activate, then a second
+ * pty:list for dormancy) before Canvas commits setPanels/setHistory/
+ * nextIdRef — and __m7aWorkspace's switchTo/createAndSwitch return void
+ * (matching the production paletteActions.switchWorkspace shape), so
+ * executeJavaScript resolves before any of that has necessarily landed.
+ * A fixed wait rather than a condition on a specific DOM/session shape,
+ * because the four call sites want different things settled (an empty
+ * workspace's panel count, a spawn's minted id, history's inertness) and no
+ * single predicate covers all of them; 300ms is the same margin already used
+ * for other post-action settling throughout this file (e.g. the M6d block
+ * above), comfortably above two local IPC round trips to an idle process.
+ */
+const settle = () => sleep(300)
+
+/**
  * True only if every panelId present in `before` is still present in `after`
  * with the IDENTICAL pid — i.e. that session was never killed, even briefly.
  * `after` may have MORE entries than `before` (new panels scrolling into
@@ -3488,12 +3505,14 @@ app.whenReady().then(async () => {
       // without, so the four of them would mean two different things depending
       // on who ran the suite.
       //
-      // Safe at teardown, and only because this is the last block in the run:
-      // DirectBackend.destroy is a no-op, PtyManager.kill still kills each
-      // local handle (which for the earlier panels is a tmux CLIENT), and the
-      // sessions those clients leave behind on PANELS_SOCKET are ended by the
-      // tmuxBackend.shutdown() in the finally below, which holds its own
-      // reference rather than reading this variable.
+      // Safe at teardown regardless of whether further blocks run after this
+      // one (M7's checks 64-67 now do): DirectBackend.destroy is a no-op,
+      // PtyManager.kill still kills each local handle directly (which for the
+      // earlier panels is a tmux CLIENT) independent of which backend is
+      // currently bound, and the SESSIONS those clients leave behind on
+      // PANELS_SOCKET are ended unconditionally by the tmuxBackend.shutdown()
+      // in the finally below, which holds its own reference rather than
+      // reading this variable.
       backend = createDirectBackend('verify: direct (m6c fixture)')
 
       // Release focus BEFORE panning. shouldYieldWheel gives a wheel over the
@@ -3922,6 +3941,115 @@ app.whenReady().then(async () => {
           cleared === true && (await pipAt(shellId)) === null,
           `state=${await agentStateOf(shellId)} pip=${JSON.stringify(await pipAt(shellId))}`)
       }
+    }
+
+    // ---------------------------------------------------------------------
+    // 64-67 — M7. Workspace switching, end to end in a real renderer.
+    //
+    //     Everything else in this milestone is provable in plain node: the
+    //     store's transaction, the IPC surface, the palette rows. The one
+    //     property that actually matters — the SAME PROCESS is there when you
+    //     come back — is unprovable anywhere cheaper, because it requires a
+    //     real registry holding a real PanelSession across a real switch.
+    //     __m7aWorkspace() is this suite's route into switchWorkspace, the
+    //     same reason every other __m4a*/__m5a*/__m6* hook exists.
+    // ---------------------------------------------------------------------
+    {
+      // 64. THE PID CHECK. Switch away from the boot workspace (w1, holding
+      //     the SEED_PANELS fixture) and back, and every session that
+      //     survived must be the SAME PROCESS — not merely the same count.
+      //     Every other check in this milestone stays green against an
+      //     implementation that disposes on switch: the panels come back,
+      //     the layout is right, the file is right, and the agents are dead.
+      //     Same argument verify:pty-manager 12 makes for asserting the
+      //     reattached pid rather than merely that a session exists.
+      //
+      //     Reads main's OWN answer (pty:list, via settledSessionMap/
+      //     pidsPreserved — the exact helpers checks 4/5 and the M6a block
+      //     already use) rather than __m4aSessions(), which the registry hook
+      //     exposes with no pid field at all (id/dormant/spawned only) — main
+      //     is the authority on pids, and asking it is strictly better than
+      //     widening a hook that is deliberately kept narrow.
+      const before = await settledSessionMap(wc)
+      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('school')`)
+      await settle()
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+      await settle()
+      const after = await settledSessionMap(wc)
+      const { ok: preserved, changed } = pidsPreserved(before, after)
+      ok('64 a switch away and back keeps the SAME pid for every session',
+        before.size > 0 && preserved,
+        `before=${before.size} sessions changed=[${changed.join(', ')}]`)
+
+      // 65. A hidden workspace's panel is out of the DOM while its session is
+      //     still in the registry. This is "demote, not dispose" stated as
+      //     two facts that must BOTH hold — the DOM half alone passes against
+      //     a dispose, and the registry half alone passes against a switch
+      //     that never rendered. 'w2' is the workspace check 64 created (via
+      //     createAndSwitch) and left empty.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w2')`)
+      await settle()
+      const hidden = await wc.executeJavaScript(`
+        ({
+          panelsInDom: document.querySelectorAll('.panel').length,
+          sessionsInRegistry: window.__m4aSessions().length
+        })
+      `)
+      ok('65 a hidden workspace keeps its sessions and loses its DOM',
+        hidden.panelsInDom === 0 && hidden.sessionsInRegistry > 0,
+        JSON.stringify(hidden))
+
+      // 66. Cmd+N in the second (still empty) workspace does not mint an id
+      //     the first is using. PanelId doubles as the tmux session name, so
+      //     a collision is two panels naming one session — the second to go
+      //     live attaches to the first one's process, and neither panel shows
+      //     anything wrong.
+      const otherIds = await wc.executeJavaScript(`window.__m7aWorkspace().allPanelIds()`)
+      zoomTo(wc, 'n')
+      await settle()
+      const minted = await wc.executeJavaScript(`
+        Array.from(document.querySelectorAll('[data-panel-id]')).map((e) => e.dataset.panelId)
+      `)
+      const collision = minted.filter((id) => otherIds.includes(id))
+      ok('66 a spawn in another workspace mints no colliding id',
+        collision.length === 0, `minted=${minted.join()} collision=${collision.join()}`)
+
+      // 67. Cmd+Z immediately after a switch is INERT. history is one stack
+      //     over one Panel[], and applyHistory calls registry.dispose for any
+      //     panel the undone state no longer contains — so an uncleared stack
+      //     would apply the OTHER workspace's array here and kill this
+      //     workspace's agents. Doing nothing is the honest failure; doing
+      //     something is the dangerous one.
+      //
+      //     Driven through window.__m4bUndo(), NOT a raw 'z' keydown: Cmd+Z is
+      //     a main-process MENU ACCELERATOR (src/main/menu.ts), not a
+      //     renderer keybinding the way Cmd+N is (see CLAUDE.md's "Cmd+N
+      //     stays a renderer keybinding, not a menu accelerator") — and this
+      //     harness is its own Electron entry point with no application menu
+      //     (the same reason scripts/panels-entry.cjs passes registerIpcHandlers
+      //     a no-op rebuildMenu). A synthetic keydown for 'z' therefore
+      //     reaches no listener at all: useViewport's keydown switch has no
+      //     'z' case, so zoomTo(wc, 'z') would silently assert a no-op against
+      //     a harness that could never have exercised the real path either
+      //     way. __m4bUndo() is the hook every other undo-driven check in this
+      //     file already uses for exactly this reason (checks 22, 38, 45/46,
+      //     50) — it drives the SAME setHistory(h => { undoHistory; applyHistory })
+      //     call Cmd+Z's real 'edit:undo' handler runs.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+      await settle()
+      const beforeUndo = await wc.executeJavaScript(`
+        ({ panels: document.querySelectorAll('.panel').length,
+           sessions: window.__m4aSessions().length })
+      `)
+      await wc.executeJavaScript(`window.__m4bUndo()`)
+      await settle()
+      const afterUndo = await wc.executeJavaScript(`
+        ({ panels: document.querySelectorAll('.panel').length,
+           sessions: window.__m4aSessions().length })
+      `)
+      ok('67 Cmd+Z right after a switch changes nothing',
+        beforeUndo.panels === afterUndo.panels && beforeUndo.sessions === afterUndo.sessions,
+        `${JSON.stringify(beforeUndo)} -> ${JSON.stringify(afterUndo)}`)
     }
 
   } catch (error) {

@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { normalizeWheel } from './canvas-input'
-import { centreOn as centreOnRect, fitTo, panBy, screenToWorld, zoomAt, type Point, type Viewport, type WorldRect } from './viewport'
+import {
+  centreOn as centreOnRect,
+  fitTo,
+  panBy,
+  restoreCamera as restoreCameraExact,
+  screenToWorld,
+  zoomAt,
+  type Point,
+  type Viewport,
+  type WorldRect
+} from './viewport'
 import type { JumpDirection } from './attention'
 
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
@@ -49,6 +59,14 @@ export interface ViewportControls {
    * worldCentre.
    */
   centreOn: (rect: WorldRect) => void
+  /**
+   * The fourth narrow verb: put the camera back exactly where a workspace
+   * left it. Unlike centreOn, which deliberately leaves the scale alone so
+   * framing a panel never discards the zoom the user chose, this one DOES
+   * set the scale — a workspace's saved zoom is part of what it means to
+   * come back to it.
+   */
+  restoreCamera: (camera: Viewport) => void
 }
 
 /**
@@ -277,5 +295,27 @@ export function useViewport(
     setViewport((vp) => centreOnRect(vp, rect, { width: bounds.width, height: bounds.height }))
   }, [hostRef])
 
-  return { viewport, resetViewport, worldCentre, centreOn }
+  /**
+   * The fourth verb that asks by name, after resetViewport, worldCentre and
+   * centreOn. Unlike centreOn — which deliberately leaves the scale alone,
+   * because framing a panel must not throw away the zoom the user chose —
+   * this one DOES set the scale: a workspace's saved zoom is part of what it
+   * means to come back to it. The math itself is restoreCameraExact
+   * (viewport.ts's `restoreCamera`, renamed on import the same way centreOn
+   * is), kept as a pure function so the property that separates this verb
+   * from centreOn is provable under plain node.
+   *
+   * A useCallback for the same load-bearing reason resetViewport and
+   * centreOn already are, not tidiness: a fresh arrow per render propagates
+   * through Canvas.tsx's useMemo for paletteActions into Palette.tsx's
+   * commands memo, whose [rows] effect re-seats the selected row — and
+   * Canvas re-renders on every mousemove over .canvas. The symptom is
+   * arrowing down three times, nudging the mouse, pressing Enter, and
+   * running the wrong command.
+   */
+  const restoreCamera = useCallback((camera: Viewport) => {
+    setViewport(restoreCameraExact(camera))
+  }, [])
+
+  return { viewport, resetViewport, worldCentre, centreOn, restoreCamera }
 }
