@@ -11,6 +11,7 @@ import {
   type RestoreSettings,
   type Workspace
 } from '../shared/layout-schema'
+import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 
 /**
  * Owns layout.json.
@@ -54,6 +55,15 @@ export interface LayoutStore {
   save(incoming: CanvasState): void
   settings(): RestoreSettings
   setSetting(key: keyof RestoreSettings, value: boolean): void
+  /**
+   * Everything the user has changed, keyed by SettingDef.id. Copied out, like
+   * settings() and presets(), so a caller cannot mutate the snapshot the store
+   * is about to serialise and have the write silently disagree with it.
+   */
+  preferences(): Record<string, SettingValue>
+  /** Resolved: the persisted value if there is one, else the schema default. */
+  getSetting(id: string): SettingValue
+  setPreference(id: string, value: SettingValue): void
   /** User-created presets only; the built-ins live in main/presets.ts. */
   presets(): Preset[]
   /** Append one and schedule a write. Ids are minted by the caller. */
@@ -112,7 +122,13 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // is a reason to log, not a reason to refuse to run.
     try {
       const tmp = `${filePath}.tmp`
-      writeFileSync(tmp, JSON.stringify(snapshot, null, 2), 'utf8')
+      // `settings` is deliberately NOT written any more: it is a derived view
+      // of three preferences entries, and writing both would create exactly
+      // the second storage this milestone removed. parseLayout still reads it,
+      // so a pre-M6b file migrates on first load — but once this app has
+      // written the file, `preferences` is the only record.
+      const { settings: _settings, ...onDisk } = snapshot
+      writeFileSync(tmp, JSON.stringify(onDisk, null, 2), 'utf8')
       // rename is atomic on macOS. Writing in place would let a crash
       // mid-write leave a truncated file — parseLayout survives that, but it
       // survives it by discarding the whole canvas.
@@ -120,6 +136,18 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       dirty = false
     } catch (error: unknown) {
       warn(`could not write ${filePath}: ${String(error)}`)
+    }
+  }
+
+  // The single place that resolves the three restore.* entries, so initial(),
+  // save() and the settings() view can never read them out of step with each
+  // other or with setSetting/setPreference, which both write straight into
+  // snapshot.preferences.
+  function resolvedSettings(): RestoreSettings {
+    return {
+      layout: resolveSetting(snapshot.preferences, 'restore.layout') as boolean,
+      camera: resolveSetting(snapshot.preferences, 'restore.camera') as boolean,
+      focus: resolveSetting(snapshot.preferences, 'restore.focus') as boolean
     }
   }
 
@@ -167,7 +195,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
 
     initial() {
       const w = activeWorkspace()
-      const { layout, camera, focus } = snapshot.settings
+      const { layout, camera, focus } = resolvedSettings()
       // Settings are applied HERE so the renderer never learns they exist —
       // the same shape as PanelSpec.command, where main resolves what only
       // main can know and the renderer consumes the answer.
@@ -185,7 +213,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
 
     save(incoming) {
       const w = activeWorkspace()
-      const { layout, camera, focus } = snapshot.settings
+      const { layout, camera, focus } = resolvedSettings()
       // Symmetric with initial(): a restore setting that is OFF means "start
       // fresh each launch", not "discard on launch". initial() already hands
       // the renderer nothing for that field, so the renderer's snapshot never
@@ -208,10 +236,30 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       scheduleWrite()
     },
 
-    settings: () => ({ ...snapshot.settings }),
+    // The typed view of the three `restore.*` schema entries. It stays because
+    // initial()'s restore logic is written in terms of RestoreSettings and
+    // rewriting that buys nothing — but it is a VIEW, not a second storage:
+    // both members go through the same preferences map, so a write through
+    // either API is visible through the other (verify:layout 73).
+    settings: resolvedSettings,
 
     setSetting(key, value) {
-      snapshot.settings[key] = value
+      snapshot.preferences[`restore.${key}`] = value
+      scheduleWrite()
+    },
+
+    preferences: () => ({ ...snapshot.preferences }),
+
+    getSetting: (id) => resolveSetting(snapshot.preferences, id),
+
+    setPreference(id, value) {
+      const def = settingDef(id)
+      // An id the schema does not declare cannot be stored. parsePreferences
+      // would drop it on the next load anyway, so accepting it here would mean
+      // a setting that appears to take and is gone after a relaunch.
+      if (def === undefined) return
+      if (typeof value !== def.type) return
+      snapshot.preferences[id] = value
       scheduleWrite()
     },
 

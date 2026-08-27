@@ -391,10 +391,13 @@ const CANVAS = {
   store.flushSync()
   const written = JSON.parse(readFileSync(path, 'utf8'))
   const w = written.workspaces[0]
+  // M6b: `settings` is no longer written to disk at all (it is now a derived
+  // view over `preferences` — see layout-store.ts's writeNow), so what
+  // survives reset() is the `restore.camera` entry in the preferences map.
   ok('25 reset empties the canvas but preserves settings and workspace identity',
     w.panels.length === 0 && w.selectedId === null && w.focusedId === null &&
-    w.id === L.DEFAULT_WORKSPACE_ID && written.settings.camera === false,
-    JSON.stringify({ panels: w.panels.length, id: w.id, camera: written.settings.camera }))
+    w.id === L.DEFAULT_WORKSPACE_ID && written.preferences['restore.camera'] === false,
+    JSON.stringify({ panels: w.panels.length, id: w.id, camera: written.preferences['restore.camera'] }))
 }
 
 // 26. THE CRITICAL ONE. Unchecking "Panel layout" must never destroy the
@@ -929,6 +932,53 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     snap.preferences['restore.camera'] === true &&
     snap.preferences['restore.focus'] === false,
     JSON.stringify(snap.preferences))
+}
+
+// 70-73 — M6b. The store is the one place a setting is read or written, and
+//     73 is the check that matters most: settings() and setSetting() are now a
+//     typed VIEW over the preferences map rather than a second storage, so a
+//     write through either API must be visible through the other. Two
+//     storages that agree on the day they are written and drift later is the
+//     exact failure this milestone exists to prevent.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  ok('70 an untouched store reports the schema defaults',
+    store.getSetting('restore.layout') === true &&
+    Object.keys(store.preferences()).length === 0,
+    JSON.stringify(store.preferences()))
+}
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.setPreference('restore.camera', false)
+  store.save(CANVAS)
+  store.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  ok('71 a preference survives a write and a reopen',
+    reopened.getSetting('restore.camera') === false &&
+    reopened.getSetting('restore.layout') === true)
+}
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setPreference('nope.gone', true)
+  ok('72 setting an id the schema does not declare is refused',
+    !('nope.gone' in store.preferences()))
+}
+{
+  // The view, both directions. This is the check that makes "one map, two
+  // accessor shapes" a fact rather than a claim.
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setSetting('focus', false)
+  const viaId = store.getSetting('restore.focus')
+  store.setPreference('restore.layout', false)
+  const viaTyped = store.settings().layout
+  ok('73 settings() and setSetting() are a view over the same map, not a second store',
+    viaId === false && viaTyped === false, `viaId=${viaId} viaTyped=${viaTyped}`)
 }
 
 console.log('\n' + '='.repeat(60))
