@@ -1223,6 +1223,12 @@ export function Canvas({
           kind: 'number',
           label: refused ? `${label} (ms) — ${refused}` : `${label} (ms)…`,
           initial,
+          // Set ONLY on the refusal reopen. The ordinary label above is a
+          // placeholder-worthy hint ("here's the current value"); this one is
+          // an answer to a question nobody asked unless they just typed
+          // something wrong, and a placeholder can't show it — see
+          // InputMode's `feedback` doc comment in Palette.tsx.
+          ...(refused ? { feedback: true as const } : {}),
           submit: (value) => {
             const parsed = Number(value)
             // A non-number is a cancel, not a write of NaN. main's

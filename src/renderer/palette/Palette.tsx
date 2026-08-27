@@ -59,6 +59,20 @@ export interface InputMode {
   label: string
   initial: string
   submit(value: string): void
+  /**
+   * Present when `label` is a REFUSAL, not a hint — e.g. "must be 250–60000,
+   * got 50" after an out-of-range number edit. A placeholder cannot carry
+   * this message: the re-prompt sets `initial` to the value the user just
+   * typed (so they can see and correct it), and a placeholder only shows
+   * when the field is EMPTY — which it never is on that path. Without a
+   * separate rendered element the refusal is computed and then never shown,
+   * which is worse than the silent close it replaced, because it looks like
+   * the mode is broken rather than like nothing happened. Absent (the
+   * ordinary case) leaves the label exactly where it already was: the
+   * placeholder, which is genuinely a hint when the field starts non-empty
+   * because it holds the CURRENT value, not a rejected one.
+   */
+  feedback?: true
 }
 
 export interface PaletteProps {
@@ -360,6 +374,14 @@ export function Palette(props: PaletteProps): JSX.Element {
       )}
 
       {confirming && <div className="palette__confirm">{inputMode.label}</div>}
+
+      {/* A refusal (out-of-range number edit) is not covered by `confirming`
+          above — it stays in the ordinary bar, with the bad value still in
+          the field, so it needs its OWN visible line for the same reason a
+          confirm question does: read the `feedback` doc comment on
+          InputMode for why the placeholder this mode also sets can never be
+          the thing that shows this text. */}
+      {inputMode?.feedback && <div className="palette__number-error">{inputMode.label}</div>}
 
       {!inputMode && (
         <ul className="palette__list">

@@ -369,6 +369,16 @@ body {
   box-shadow: inset 3px 0 0 #e8807f;
 }
 
+/* An out-of-range number edit's refusal — genuinely an error, not a question,
+   so it reads with --red rather than palette__confirm's red-tinted --text.
+   Sits in the ordinary bar (the input with the bad value still in it stays
+   visible above it), unlike palette__confirm which replaces the bar outright. */
+.palette__number-error {
+  padding: 8px 16px 16px;
+  color: var(--red);
+  font-size: 13px;
+}
+
 .palette__list {
   list-style: none;
   margin: 0;
