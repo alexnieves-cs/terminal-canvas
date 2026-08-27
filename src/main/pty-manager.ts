@@ -346,10 +346,11 @@ export class PtyManager {
    * this channel cannot become the 60Hz cascade the renderer's memo exists to
    * block.
    *
-   * `mute` advances the machine WITHOUT telling anyone. It exists for exactly
-   * one caller — the exit of a session we killed — and the split is the point:
-   * suppressing the transition too would leave a detector stranded mid-state
-   * on an object this class's own onExit/onData closures still hold.
+   * `mute` advances the machine WITHOUT telling anyone. Every caller passes
+   * `session.killed`, and the split is the point: suppressing the TRANSITION
+   * too would leave a detector stranded mid-state on an object this class's
+   * own onExit/onData closures still hold, and those closures keep running
+   * after the map entry — and the renderer's cached state — are both gone.
    */
   private applyEvent(session: Session, event: AgentEvent, mute = false): void {
     const before = session.detector.state
@@ -381,12 +382,31 @@ export class PtyManager {
     // contain a bell; bell-then-output would leave the machine in 'busy',
     // because the output event would overwrite the bell's state. This order
     // gives starting -> busy -> wants-you.
-    this.applyEvent(session, { kind: 'output' })
+    //
+    // Both are MUTED for a killed session, the same guard the exit send
+    // obeys. This path is reached from the captured proc.onData closure, not
+    // from a map lookup, so it still runs in the window between kill() —
+    // which deleted the map entry and ran the renderer's clearAgentState —
+    // and onExit, which is what finally records 'exited'. A read already
+    // buffered in the pty landing in that window would otherwise apply an
+    // unmuted 'output' to a detector still at 'starting' or 'idle', i.e. a
+    // real change, i.e. a 'busy' sent for a panel the renderer has dropped:
+    // the same recycled-id defect the exit guard exists to close, entered
+    // through the other door. Reachable in one gesture — Cmd+N, close the
+    // panel before its first byte, and the shell's prompt bytes land after
+    // kill().
+    //
+    // Muting rather than returning early is not a style choice. enqueue also
+    // BUFFERS, and onExit deliberately flushes pending output BEFORE
+    // announcing the exit so the last lines — usually the error explaining
+    // the exit — are not dropped. An early return here would silently delete
+    // that, which is a load-bearing property this file documents above.
+    this.applyEvent(session, { kind: 'output' }, session.killed)
     // Bells are counted, not merely detected, but the machine treats any
     // positive count as one event: two bells in one chunk are one request for
     // attention.
     if (scanned.bells > 0 && this.getBellEnabled()) {
-      this.applyEvent(session, { kind: 'bell' })
+      this.applyEvent(session, { kind: 'bell' }, session.killed)
     }
 
     session.buffer.push(data)

@@ -336,8 +336,16 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     })
     await h.manager.create(spec('a2', '/bin/sh', ['-c', "printf '\\033]0;a title\\007'; sleep 5"]))
     await sleep(600)
+    // The first clause is the NON-VACUITY guard, and it has to name 'busy'
+    // specifically. "no wants-you" is satisfied just as well by bytes that
+    // never reached main at all, so this check is only worth anything if it
+    // first proves the stream got here — and 'busy' is the one state in this
+    // fixture that ONLY enqueue can produce. A bare `some(panelId === 'a2')`
+    // stopped meaning that the moment create() began sending 'starting'
+    // directly at spawn: that send happens before a single byte flows, so it
+    // would satisfy the guard against a manager whose enqueue never ran.
     ok('18 a window title produces no wants-you',
-      states.some((s) => s.panelId === 'a2') &&
+      states.some((s) => s.panelId === 'a2' && s.state === 'busy') &&
         !states.some((s) => s.panelId === 'a2' && s.state === 'wants-you'),
       JSON.stringify(states))
     h.manager.kill('a2')
