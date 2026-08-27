@@ -15,6 +15,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
+import type { SettingValue } from '../shared/settings-schema'
 
 /**
  * Every subscribe helper returns its own unsubscribe function. Without this,
@@ -86,6 +87,10 @@ const bridge: CanvasBridge = {
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)
+  },
+  settings: {
+    list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),
+    set: (id: string, value: SettingValue) => ipcRenderer.invoke(IPC.SETTINGS_SET, id, value)
   },
   platform: process.platform
 }

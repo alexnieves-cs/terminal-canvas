@@ -14,6 +14,7 @@ import type {
   PtyWriteRequest
 } from './types'
 import type { CanvasState } from './layout-schema'
+import type { SettingValue } from './settings-schema'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -76,7 +77,16 @@ export const IPC = {
   PROMPT_LIST: 'prompt:list',
   /** Always writes the SAVED store. The project half is read-only. */
   PROMPT_SAVE: 'prompt:save',
-  PROMPT_DELETE: 'prompt:delete'
+  PROMPT_DELETE: 'prompt:delete',
+  /**
+   * The settings surface. Renderer -> main and invokes, not events, for the
+   * same reason M5b's preset mutations are: main owns the store, because the
+   * before-quit flush cannot ask a renderer that Cmd+R may already have
+   * destroyed. The list carries the schema AND the resolved value together, so
+   * the renderer never needs its own copy of the defaults.
+   */
+  SETTINGS_LIST: 'settings:list',
+  SETTINGS_SET: 'settings:set'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -176,6 +186,17 @@ export interface PresetListRow {
   subtitle: string
 }
 
+/** A setting as the palette needs it: its declaration plus its current value. */
+export interface SettingRow {
+  id: string
+  label: string
+  description: string
+  keywords: string[]
+  type: 'boolean' | 'enum' | 'number'
+  value: SettingValue
+  category: string
+}
+
 /** Shape of the bridge the preload exposes on window.canvas. */
 export interface CanvasBridge {
   pty: {
@@ -241,6 +262,10 @@ export interface CanvasBridge {
   }
   session: {
     info(): Promise<SessionBackendInfo>
+  }
+  settings: {
+    list(): Promise<SettingRow[]>
+    set(id: string, value: SettingValue): Promise<void>
   }
   platform: NodeJS.Platform
 }

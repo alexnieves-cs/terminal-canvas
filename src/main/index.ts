@@ -376,7 +376,8 @@ app.whenReady().then(async () => {
         layoutStore.addPrompt({ id: mintPromptId(layoutStore.prompts()), name, body })
       },
       removePrompt: (id) => layoutStore.deletePrompt(id)
-    }
+    },
+    rebuildMenu
   )
   createWindow()
 

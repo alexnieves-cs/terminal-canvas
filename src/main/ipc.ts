@@ -11,6 +11,7 @@ import type { SessionBackendInfo, PresetListRow } from '../shared/ipc-contract'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
+import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -43,7 +44,11 @@ export function registerIpcHandlers(
   ptyManager: PtyManager,
   layoutStore: LayoutStore,
   getBackendInfo: () => SessionBackendInfo,
-  palette: PaletteHandlers
+  palette: PaletteHandlers,
+  // Its own parameter, not a PaletteHandlers member: SETTINGS_SET needs it to
+  // redraw the Restore submenu's checkbox state, the same collaborator
+  // getBackendInfo already is rather than something routed through palette.
+  rebuildMenu: () => void
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -79,6 +84,25 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_LIST, (_event, cwd: string | null) => palette.listPrompts(cwd))
   ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
+
+  ipcMain.handle(IPC.SETTINGS_LIST, () =>
+    SETTINGS.map((def) => ({
+      id: def.id,
+      label: def.label,
+      description: def.description,
+      keywords: [...def.keywords],
+      type: def.type,
+      value: layoutStore.getSetting(def.id),
+      category: def.category
+    }))
+  )
+  ipcMain.handle(IPC.SETTINGS_SET, (_event, id: string, value: SettingValue) => {
+    layoutStore.setPreference(id, value)
+    // The Restore submenu renders checkbox state from the same schema, so a
+    // toggle made in the palette has to redraw it or the two surfaces disagree
+    // until the next unrelated rebuild.
+    rebuildMenu()
+  })
 }
 
 /**
