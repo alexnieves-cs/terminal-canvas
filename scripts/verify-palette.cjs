@@ -216,6 +216,8 @@ const ctx = (over = {}) => ({
   prompts: [],
   panels: [],
   settings: [],
+  workspaces: [],
+  attentionIds: [],
   capturedId: null,
   hasSelection: false,
   actions: spyActions(),
@@ -788,6 +790,104 @@ const IDLE_AFTER_MS = {
   ok('58b a number row’s id recovers the SettingRow carrying its range',
     row !== undefined && recovered !== undefined &&
     recovered.min === 250 && recovered.max === 60000)
+}
+
+// M7. Workspaces. A section, a drill-in, and a waiting count that must not be
+// searchable.
+//
+// NOTE: the Command field for section membership is `group`, not `section` —
+// see palette-model.ts's `Command.group: SectionId`. The checks below read
+// `.group`, matching the interface every other check in this file already
+// uses (e.g. check 30's `byId(rows, 'manage.presets').group === 'manage'`).
+
+const WS = [
+  { id: 'w1', name: 'startup', panelIds: ['n1', 'n2'], active: true },
+  { id: 'w2', name: 'school', panelIds: ['n3', 'n4'], active: false }
+]
+
+// 59. The section exists, sits before `manage`, and every workspace row lands
+//     in it. Derived from SECTIONS rather than restated, the rule check 30
+//     was rewritten to obey: construction order stopped being the grouping
+//     the moment sorting became section-first.
+{
+  const wi = P.SECTIONS.findIndex((s) => s.id === 'workspace')
+  const mi = P.SECTIONS.findIndex((s) => s.id === 'manage')
+  const rows = P.buildCommands(ctx({ workspaces: WS }))
+    .filter((c) => c.title.includes('startup') || c.title.includes('school'))
+  ok('59 the workspace section exists and precedes manage',
+    wi !== -1 && mi !== -1 && wi < mi && rows.length > 0 &&
+      rows.every((c) => c.group === 'workspace' || c.group === 'manage'),
+    `workspace=${wi} manage=${mi}`)
+}
+
+// 60. The ACTIVE workspace's switch row is disabled with its reason, not
+//     absent. The rule check 31 states in its own comment: a row that
+//     disappears is indistinguishable from a feature that is missing.
+{
+  const rows = P.buildCommands(ctx({ workspaces: WS }))
+  const active = rows.find((c) => c.group === 'workspace' && c.title.includes('startup'))
+  const other = rows.find((c) => c.group === 'workspace' && c.title.includes('school'))
+  ok('60 the active workspace’s row is disabled with a reason',
+    active !== undefined && active.disabledReason === P.REASON_ALREADY_ACTIVE &&
+      other !== undefined && other.disabledReason === undefined,
+    `active=${active && active.disabledReason}`)
+}
+
+// 61. The administration rows are hidden at rest and findable by query. Both
+//     halves, because an implementation that only hides has quietly deleted
+//     three commands from the app.
+{
+  const all = P.buildCommands(ctx({ workspaces: WS }))
+  const resting = P.filterCommands(all, '', null).map((c) => c.id)
+  const searched = P.filterCommands(all, 'delete', null).map((c) => c.id)
+  const del = all.find((c) => c.id.startsWith('workspace.delete'))
+  ok('61 workspace admin rows are hidden at rest and findable by query',
+    del !== undefined && del.hiddenAtRest === true &&
+      !resting.includes(del.id) && searched.includes(del.id),
+    `resting=${resting.length} searched=${searched.length}`)
+}
+
+// 62. Delete is marked destructive. Marked AND gated — Task 6 owns the gate;
+//     this is the mark, and neither half replaces the other.
+{
+  const del = P.buildCommands(ctx({ workspaces: WS }))
+    .find((c) => c.id.startsWith('workspace.delete'))
+  ok('62 the workspace delete row is destructive',
+    del !== undefined && del.destructive === true,
+    `destructive=${del && del.destructive}`)
+}
+
+// 63. The drill-in: `Manage workspaces…` is always visible, enters the scope,
+//     and the scope shows the workspace rows and nothing from another scope.
+{
+  const all = P.buildCommands(ctx({ workspaces: WS }))
+  const door = all.find((c) => c.entersScope === 'workspaces')
+  const resting = P.filterCommands(all, '', null).map((c) => c.id)
+  const inScope = P.filterCommands(all, '', 'workspaces')
+  ok('63 the workspaces drill-in has a visible door and its own rows',
+    door !== undefined && door.hiddenAtRest === undefined &&
+      resting.includes(door.id) && inScope.length > 0 &&
+      inScope.every((c) => c.scope === 'workspaces'),
+    `inScope=${inScope.length}`)
+}
+
+// 64. The waiting count is state, not a name: it never reaches `title` at
+//     all, so the view (Palette.tsx) is what composes it into what renders,
+//     and the matcher never sees it — a row findable by typing "2" would be
+//     a row whose match score moves as agents finish, a ranking that changes
+//     under the user for reasons they cannot see. haystack() stays in this
+//     assertion (not a re-derivation) because that is the whole reason it
+//     was exported: this tests what the matcher actually sees.
+{
+  const rows = P.buildCommands(ctx({ workspaces: WS, attentionIds: ['n3', 'n4'] }))
+  const school = rows.find((c) => c.group === 'workspace' && c.title === 'school')
+  const startup = rows.find((c) => c.group === 'workspace' && c.title === 'startup')
+  const hay = school !== undefined ? P.haystack(school) : ''
+  ok('64 the waiting count is state on the row, composed by the view, never in the haystack',
+    school !== undefined && school.title === 'school' && school.waiting === 2 &&
+      startup !== undefined && startup.title === 'startup' && startup.waiting === undefined &&
+      !hay.includes('waiting') && !hay.includes('2'),
+    `title=${school && school.title} waiting=${school && school.waiting} haystack=${hay}`)
 }
 
 const failed = results.filter((r) => !r.pass)

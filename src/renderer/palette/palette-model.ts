@@ -6,7 +6,7 @@ import { fuzzyMatch } from './fuzzy'
  * in Palette.tsx owns no decision this file can make.
  */
 
-export type SectionId = 'panel' | 'spawn' | 'prompt' | 'canvas' | 'setting' | 'manage'
+export type SectionId = 'panel' | 'spawn' | 'prompt' | 'workspace' | 'canvas' | 'setting' | 'manage'
 
 export interface SectionDef {
   id: SectionId
@@ -30,6 +30,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { id: 'panel', label: 'Panels' },
   { id: 'spawn', label: 'New panel' },
   { id: 'prompt', label: 'Prompts' },
+  { id: 'workspace', label: 'Workspaces' },
   { id: 'canvas', label: 'Canvas' },
   { id: 'setting', label: 'Settings' },
   { id: 'manage', label: 'Manage' }
@@ -40,7 +41,7 @@ export const SECTIONS: readonly SectionDef[] = [
  * view holds rather than a value a Command carries — a Command names the ONE
  * scope it appears in, or names none and appears only at the top level.
  */
-export type PaletteScope = 'presets' | 'prompts' | 'settings'
+export type PaletteScope = 'presets' | 'prompts' | 'settings' | 'workspaces'
 
 /** Unknown ids sink to the bottom rather than throwing: a row in a section
  *  that no longer exists is a display bug, not a reason to blank the palette. */
@@ -62,6 +63,17 @@ export interface Command {
    * still present and simply stops being reachable the way they reach it.
    */
   searchText?: string
+  /**
+   * A transient count the VIEW composes into what it renders — never baked
+   * into `title`. A workspace's waiting count is the case today: it changes
+   * as agents finish, and `title` feeds `haystack()` unconditionally, so a
+   * count folded into `title` would make the row findable by typing a digit,
+   * with its match score moving under the user for a reason nothing on
+   * screen explains. Kept as a plain number, not text, so nothing here can
+   * accidentally reintroduce it into the matcher. Present only when > 0,
+   * matching how the rest of this file treats its other optional flags.
+   */
+  waiting?: number
   group: SectionId
   /** Rendered as a <kbd> chip. Only set where a shortcut genuinely exists. */
   shortcut?: string
@@ -118,7 +130,7 @@ export interface Command {
  * section — sections themselves are sorted first — and is worth a phrase that
  * works.
  */
-const haystack = (c: Command): string => {
+export const haystack = (c: Command): string => {
   let s = c.searchText ? `${c.searchText} ${c.title}` : c.title
   if (c.subtitle) s += ` ${c.subtitle}`
   return s

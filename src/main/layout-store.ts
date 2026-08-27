@@ -12,6 +12,7 @@ import {
   type Workspace
 } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
+import type { ActivateResult, WorkspaceRow } from '../shared/ipc-contract'
 
 /**
  * Owns layout.json.
@@ -84,6 +85,39 @@ export interface LayoutStore {
   addPrompt(prompt: Prompt): void
   /** False when the id names nothing — including any project prompt id. */
   deletePrompt(id: string): boolean
+  /** Every workspace, with the active one flagged. Copied out, like presets(). */
+  workspaces(): WorkspaceRow[]
+  /**
+   * Mint one and return its id. Does NOT activate it: a create that also
+   * switched would move the user somewhere they did not ask to go, and
+   * switching is a transaction with its own rules (see activateWorkspace).
+   */
+  createWorkspace(name: string): string
+  /** False when the id names nothing, like renamePreset. */
+  renameWorkspace(id: string, name: string): boolean
+  /**
+   * False when the id names nothing. Deleting the ACTIVE workspace activates
+   * a neighbour, and deleting the LAST one installs a fresh default — there
+   * is never zero workspaces, which parseLayout guarantees only on load.
+   *
+   * NOTE: this removes the RECORD. The panels' sessions belong to the
+   * renderer's registry and are disposed there, before this is called.
+   */
+  deleteWorkspace(id: string): boolean
+  /**
+   * Switch the active workspace, and write the outgoing canvas into the one
+   * being left. Null when the id names nothing, having changed nothing.
+   *
+   * It takes `outgoing` — a parameter it looks like it should not need — for
+   * one reason: save() merges into whatever is active AT THE MOMENT IT RUNS,
+   * and writes are coalesced on a WRITE_DEBOUNCE_MS timer. A switch that
+   * merely flipped the id would leave a window in which the outgoing canvas's
+   * next save lands in the INCOMING workspace's record. The file stays
+   * well-formed and simply holds the wrong panels, which the user discovers
+   * launches later with nothing in any log. This call IS the outgoing
+   * canvas's last save.
+   */
+  activateWorkspace(id: string, outgoing: CanvasState): ActivateResult | null
   /** Return the active workspace to an empty canvas. */
   reset(): void
   /** Write now, synchronously. Never throws. */
@@ -114,6 +148,18 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     snapshot.workspaces = [fresh]
     snapshot.activeWorkspaceId = fresh.id
     return fresh
+  }
+
+  // Ids are `w<n>` above the current maximum, the same shape parseWorkspace's
+  // own fallback already assumes (`w${index + 1}`). Derived from the existing
+  // ids rather than from the count, so deleting w2 out of [w1, w2, w3] cannot
+  // mint a second w3.
+  function nextWorkspaceId(): string {
+    const max = snapshot.workspaces.reduce((n, w) => {
+      const match = /^w(\d+)$/.exec(w.id)
+      return match ? Math.max(n, Number(match[1])) : n
+    }, 0)
+    return `w${max + 1}`
   }
 
   function writeNow(): void {
@@ -182,6 +228,79 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     }, WRITE_DEBOUNCE_MS)
   }
 
+  // Every id in every workspace. The renderer seeds nextIdRef from this, and
+  // the reason it must not be the active workspace's ids alone is that
+  // PanelId doubles as a tmux session name — see ActivateResult.
+  function allPanelIds(): string[] {
+    return snapshot.workspaces.flatMap((w) => w.panels.map((p) => p.id))
+  }
+
+  // Hoisted out of the returned object literal so activateWorkspace can call
+  // both without going through `this` — a method-shorthand call would work
+  // (JS binds `this` at call time), but it would break the moment a caller
+  // destructures the store (`const { activateWorkspace } = store`), and nowhere
+  // else in this file relies on `this`. Both the public save()/initial() below
+  // and activateWorkspace call these same two functions, so the restore-
+  // settings logic exists in exactly one place — duplicating it here is the
+  // same second-storage failure M6b removed for settings.
+  // Both restore-settings consumers below take an `applyRestoreSettings` flag
+  // so activateWorkspace can opt out without a second copy of this logic.
+  // The three `restore.*` preferences answer "what should the app show me
+  // when it STARTS" — restore.layout's own schema description says so in
+  // those words — and a workspace switch is not a start. Applying them there
+  // means turning off restore.layout turns Cmd+K workspace switching into a
+  // silent canvas shredder: the outgoing workspace never records the panels
+  // it had (their tmux sessions orphan, reachable from no workspace) and the
+  // incoming workspace reads back empty regardless of what it holds on disk.
+  // Defaulting the flag to true keeps the public save()/initial() members
+  // (and every existing caller) behaving exactly as before.
+  function doInitial(applyRestoreSettings = true): CanvasState {
+    const w = activeWorkspace()
+    const { layout, camera, focus } = applyRestoreSettings
+      ? resolvedSettings()
+      : { layout: true, camera: true, focus: true }
+    // Settings are applied HERE so the renderer never learns they exist —
+    // the same shape as PanelSpec.command, where main resolves what only
+    // main can know and the renderer consumes the answer.
+    const panels = layout ? w.panels.map((p) => ({ ...p })) : []
+    // With no panels there is nothing for a selection to name, so it goes
+    // regardless of the focus setting.
+    const keepSelection = layout && focus
+    return {
+      panels,
+      camera: camera ? { ...w.camera } : { ...defaultWorkspace().camera },
+      selectedId: keepSelection ? w.selectedId : null,
+      focusedId: keepSelection ? w.focusedId : null
+    }
+  }
+
+  function doSave(incoming: CanvasState, applyRestoreSettings = true): void {
+    const w = activeWorkspace()
+    const { layout, camera, focus } = applyRestoreSettings
+      ? resolvedSettings()
+      : { layout: true, camera: true, focus: true }
+    // Symmetric with initial(): a restore setting that is OFF means "start
+    // fresh each launch", not "discard on launch". initial() already hands
+    // the renderer nothing for that field, so the renderer's snapshot never
+    // reflects the stored value — writing it back unconditionally would let
+    // an unrelated save (any panel move, any camera pan) overwrite real data
+    // with whatever the fresh-start renderer invented instead. Leaving the
+    // field untouched freezes the stored value at whatever it was when the
+    // setting was last on; re-checking the box gives it back. Preserving is
+    // strictly better than destroying, and it is the only reading under
+    // which "restore on launch" is not secretly "discard on launch".
+    if (layout) w.panels = incoming.panels.map((p) => ({ ...p }))
+    // selectedId/focusedId name panels, so they ride with `layout` (whether
+    // there is anything to select) as well as `focus` (whether selection
+    // itself restores) — either OFF is a reason to leave them alone.
+    if (layout && focus) {
+      w.selectedId = incoming.selectedId
+      w.focusedId = incoming.focusedId
+    }
+    if (camera) w.camera = { ...incoming.camera }
+    scheduleWrite()
+  }
+
   return {
     load() {
       if (!existsSync(filePath)) return
@@ -212,48 +331,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       snapshot = parsed
     },
 
-    initial() {
-      const w = activeWorkspace()
-      const { layout, camera, focus } = resolvedSettings()
-      // Settings are applied HERE so the renderer never learns they exist —
-      // the same shape as PanelSpec.command, where main resolves what only
-      // main can know and the renderer consumes the answer.
-      const panels = layout ? w.panels.map((p) => ({ ...p })) : []
-      // With no panels there is nothing for a selection to name, so it goes
-      // regardless of the focus setting.
-      const keepSelection = layout && focus
-      return {
-        panels,
-        camera: camera ? { ...w.camera } : { ...defaultWorkspace().camera },
-        selectedId: keepSelection ? w.selectedId : null,
-        focusedId: keepSelection ? w.focusedId : null
-      }
-    },
+    initial: doInitial,
 
-    save(incoming) {
-      const w = activeWorkspace()
-      const { layout, camera, focus } = resolvedSettings()
-      // Symmetric with initial(): a restore setting that is OFF means "start
-      // fresh each launch", not "discard on launch". initial() already hands
-      // the renderer nothing for that field, so the renderer's snapshot never
-      // reflects the stored value — writing it back unconditionally would let
-      // an unrelated save (any panel move, any camera pan) overwrite real data
-      // with whatever the fresh-start renderer invented instead. Leaving the
-      // field untouched freezes the stored value at whatever it was when the
-      // setting was last on; re-checking the box gives it back. Preserving is
-      // strictly better than destroying, and it is the only reading under
-      // which "restore on launch" is not secretly "discard on launch".
-      if (layout) w.panels = incoming.panels.map((p) => ({ ...p }))
-      // selectedId/focusedId name panels, so they ride with `layout` (whether
-      // there is anything to select) as well as `focus` (whether selection
-      // itself restores) — either OFF is a reason to leave them alone.
-      if (layout && focus) {
-        w.selectedId = incoming.selectedId
-        w.focusedId = incoming.focusedId
-      }
-      if (camera) w.camera = { ...incoming.camera }
-      scheduleWrite()
-    },
+    save: doSave,
 
     // The typed view of the three `restore.*` schema entries. It stays because
     // initial()'s restore logic is written in terms of RestoreSettings and
@@ -326,6 +406,93 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       if (snapshot.prompts.length === before) return false
       scheduleWrite()
       return true
+    },
+
+    workspaces: () =>
+      snapshot.workspaces.map((w) => ({
+        id: w.id,
+        name: w.name,
+        // Copied out for the reason presets() copies: a caller must not be
+        // able to mutate the snapshot the store is about to serialise.
+        panelIds: w.panels.map((p) => p.id),
+        active: w.id === snapshot.activeWorkspaceId
+      })),
+
+    createWorkspace(name) {
+      const id = nextWorkspaceId()
+      // Every field of a Workspace is populated by defaultWorkspace(), so the
+      // spread cannot lose an absent-vs-undefined distinction the way
+      // spreading a Preset can (see "An absent command must stay absent" in
+      // CLAUDE.md). A future optional field on Workspace would make this a
+      // hazard and should be set explicitly rather than spread.
+      snapshot.workspaces = [...snapshot.workspaces, { ...defaultWorkspace(), id, name }]
+      scheduleWrite()
+      return id
+    },
+
+    renameWorkspace(id, name) {
+      const found = snapshot.workspaces.find((w) => w.id === id)
+      if (!found) return false
+      snapshot.workspaces = snapshot.workspaces.map((w) =>
+        w.id === id ? { ...w, name } : w
+      )
+      scheduleWrite()
+      return true
+    },
+
+    deleteWorkspace(id) {
+      const before = snapshot.workspaces.length
+      snapshot.workspaces = snapshot.workspaces.filter((w) => w.id !== id)
+      if (snapshot.workspaces.length === before) return false
+      // NEVER ZERO. parseLayout guarantees at least one workspace on LOAD, but
+      // that is the read path; this is a write path that did not exist when it
+      // was written. With an empty array, activeWorkspace()'s repair branch —
+      // documented as unreachable from a parsed file — fires on the next save
+      // and repairs by discarding whatever the caller had.
+      if (snapshot.workspaces.length === 0) {
+        snapshot.workspaces = [defaultWorkspace()]
+      }
+      // An activeWorkspaceId naming a record that is gone is the same class of
+      // fact-on-disk-that-outlives-this-run as a defaultPresetId naming a
+      // deleted preset: recoverable at read time, but only HERE is the moment
+      // the workspace goes away visible.
+      if (snapshot.activeWorkspaceId === id) {
+        snapshot.activeWorkspaceId = snapshot.workspaces[0].id
+      }
+      scheduleWrite()
+      return true
+    },
+
+    activateWorkspace(id, outgoing) {
+      const target = snapshot.workspaces.find((w) => w.id === id)
+      // Nothing is written for an unknown id. A half-applied transaction — the
+      // outgoing state saved, the switch refused — is strictly worse than a
+      // no-op, because the caller has no way to tell it happened.
+      if (!target) return null
+
+      // 1. Write the outgoing canvas into the workspace being LEFT. Calling
+      //    the same function save() itself calls is exactly right here: it
+      //    merges into activeWorkspace(), which is still the OLD one at this
+      //    point in the function. Ordering is the whole mechanism — moving
+      //    this below the flip is the save race. It does NOT obey the three
+      //    restore.* settings (applyRestoreSettings: false) — those answer
+      //    "what should the app show at launch", and a switch is not a
+      //    launch. With restore.layout off, applying them here would skip
+      //    `w.panels = …` and leave the workspace's panels un-recorded while
+      //    their tmux sessions keep running — reachable from no workspace,
+      //    the orphan outcome the delete design explicitly rejects.
+      doSave(outgoing, false)
+
+      // 2. Flip.
+      snapshot.activeWorkspaceId = id
+      scheduleWrite()
+
+      // 3. Hand back the incoming canvas exactly as initial() would IN
+      //    ORDERING (await pty:list before committing panels stays load-
+      //    bearing — see the caller), but also restore-settings-free: the
+      //    read side must match the write side above, or a switch lands on
+      //    an empty canvas whose panels are sitting untouched on disk.
+      return { state: doInitial(false), allPanelIds: allPanelIds() }
     },
 
     reset() {

@@ -10,13 +10,16 @@ import { Canvas } from './canvas/Canvas'
 export function App({
   initial,
   liveSessionIds,
-  defaultTemplate
+  defaultTemplate,
+  allPanelIds
 }: {
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
   liveSessionIds: Set<string>
   /** Cmd+N's template, caught at module scope; see renderer/main.tsx. */
   defaultTemplate?: PresetTemplate
+  /** Every panel id in every workspace; see renderer/main.tsx and Canvas.tsx. */
+  allPanelIds: readonly string[]
 }): JSX.Element {
   return (
     <div className="app">
@@ -24,6 +27,7 @@ export function App({
         initial={initial}
         liveSessionIds={liveSessionIds}
         defaultTemplate={defaultTemplate}
+        allPanelIds={allPanelIds}
       />
     </div>
   )

@@ -1111,6 +1111,271 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `declared=${declared} reopened=${b.getSetting('agent.edgeIndicators')}`)
 }
 
+// M7. Workspaces. The format has carried them since M4b (Workspace extends
+// CanvasState, keyed by activeWorkspaceId) — these checks are about the STORE,
+// which until now could only ever see one of them.
+
+// 82. A fresh store answers one workspace, and it is the active one.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const ws = s.workspaces()
+  ok('82 a fresh store has exactly one active workspace',
+    ws.length === 1 && ws[0].active === true && ws[0].id === L.DEFAULT_WORKSPACE_ID,
+    JSON.stringify(ws))
+}
+
+// 83. createWorkspace mints an ID_PATTERN-valid id, does NOT activate it, and
+//     returns an id the list then contains. Not activating is the point: a
+//     create that also switched would make "new workspace" a destination
+//     change the user did not ask for, and Task 2 owns switching.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const id = s.createWorkspace('school')
+  const ws = s.workspaces()
+  const made = ws.find((w) => w.id === id)
+  ok('83 createWorkspace mints a valid id and does not activate it',
+    L.ID_PATTERN.test(id) && ws.length === 2 && made !== undefined &&
+      made.name === 'school' && made.active === false &&
+      made.panelIds.length === 0,
+    `id=${id} ${JSON.stringify(ws)}`)
+}
+
+// 84. panelIds reports the workspace's own panels. This is what the renderer
+//     intersects with attentionIds() — a wrong answer here is a waiting count
+//     attributed to the wrong canvas.
+{
+  const path = tmp()
+  writeFileSync(path, file(), 'utf8')
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  const ws = s.workspaces()
+  ok('84 panelIds reports the workspace’s own panels',
+    ws.length === 1 && ws[0].panelIds.length === 1 && ws[0].panelIds[0] === 'p1',
+    JSON.stringify(ws[0].panelIds))
+}
+
+// 85. Rename round-trips through a write and a reopen; an unknown id is false
+//     and changes nothing — the same "false when the id names nothing" rule
+//     renamePreset and deletePrompt already obey.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  const id = a.createWorkspace('school')
+  const renamed = a.renameWorkspace(id, 'university')
+  const missing = a.renameWorkspace('nope', 'x')
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  const found = b.workspaces().find((w) => w.id === id)
+  ok('85 renameWorkspace round-trips, and an unknown id is false',
+    renamed === true && missing === false && found !== undefined &&
+      found.name === 'university',
+    `renamed=${renamed} missing=${missing} name=${found && found.name}`)
+}
+
+// 86. Deleting a NON-active workspace removes it and leaves the active id
+//     alone.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const id = s.createWorkspace('school')
+  const gone = s.deleteWorkspace(id)
+  const ws = s.workspaces()
+  ok('86 deleting a non-active workspace leaves the active one alone',
+    gone === true && ws.length === 1 &&
+      ws[0].id === L.DEFAULT_WORKSPACE_ID && ws[0].active === true,
+    JSON.stringify(ws))
+}
+
+// 87. Deleting the ACTIVE workspace activates a neighbour. Leaving
+//     activeWorkspaceId naming a record that is gone would send
+//     activeWorkspace() into its repair branch — a branch written for a
+//     snapshot built in code and documented as unreachable from a parsed
+//     file, which repairs by silently discarding whatever the caller thought
+//     it was working with.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const other = s.createWorkspace('school')
+  const gone = s.deleteWorkspace(L.DEFAULT_WORKSPACE_ID)
+  const ws = s.workspaces()
+  ok('87 deleting the active workspace activates a neighbour',
+    gone === true && ws.length === 1 && ws[0].id === other && ws[0].active === true,
+    JSON.stringify(ws))
+}
+
+// 88. NEVER ZERO WORKSPACES. parseLayout guarantees at least one ON LOAD, but
+//     that is a read-path guarantee and deleteWorkspace is a write path that
+//     did not exist when it was written. Deleting the last one installs a
+//     fresh default and activates it — and it must survive a reopen, because
+//     the failure this guards is a file with an empty workspaces array.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  const gone = a.deleteWorkspace(L.DEFAULT_WORKSPACE_ID)
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  const ws = b.workspaces()
+  ok('88 deleting the last workspace installs a fresh one',
+    gone === true && ws.length === 1 && ws[0].active === true &&
+      ws[0].panelIds.length === 0,
+    JSON.stringify(ws))
+}
+
+// 89. THE SAVE RACE. activate writes the OUTGOING state into the OLD record
+//     before flipping the active id. save() merges into whatever is active AT
+//     THE MOMENT IT RUNS, on a 500ms coalescing debounce — so a switch that
+//     merely flips the id has a window in which workspace A's panels are
+//     written into workspace B. The file stays well-formed. This is the whole
+//     reason activate takes a parameter it looks like it should not need.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const other = s.createWorkspace('school')
+  const outgoing = {
+    panels: [panel({ id: 'a1' })],
+    camera: { x: 7, y: 8, scale: 3 },
+    selectedId: 'a1',
+    focusedId: 'a1'
+  }
+  const res = s.activateWorkspace(other, outgoing)
+  const ws = s.workspaces()
+  const old = ws.find((w) => w.id === L.DEFAULT_WORKSPACE_ID)
+  const now = ws.find((w) => w.id === other)
+  ok('89 activate writes the outgoing state into the OLD record',
+    res !== null && old !== undefined && old.panelIds.join() === 'a1' &&
+      now !== undefined && now.active === true && now.panelIds.length === 0,
+    `old=${old && old.panelIds.join()} new=${now && now.panelIds.join()}`)
+}
+
+// 90. activate returns the INCOMING workspace's own state, round-tripped
+//     with the restore.* preferences NOT applied — a switch deliberately
+//     ignores them, because they answer "what should the app show me when
+//     it starts" and a switch is not a start (see check 94 and "A workspace
+//     switch is a second boot, but not in preference semantics" in
+//     CLAUDE.md). The fixture below is unaffected either way: it never
+//     touches restore.*, so this check passes whether or not settings are
+//     applied, and its real job is proving p1/its camera survive the round
+//     trip at all, not exercising the settings path.
+{
+  const path = tmp()
+  writeFileSync(path, file(), 'utf8')
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  const other = s.createWorkspace('school')
+  const empty = { panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  // Check 89 already proves `outgoing` is written into whichever workspace is
+  // ACTIVE at the moment of the call (the one being left) — so leaving w1
+  // with `empty` as outgoing would overwrite w1's own p1/camera with empty,
+  // and the assertion below could never see p1 again on the way back. A real
+  // switch-away passes whatever the renderer actually holds; here that is
+  // w1's own unmodified canvas, so the write is a faithful no-op.
+  const w1Now = { panels: [panel()], camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null }
+  // Into the new one...
+  s.activateWorkspace(other, w1Now)
+  // ...and back, which must hand p1 (and its camera) straight back.
+  const res = s.activateWorkspace(L.DEFAULT_WORKSPACE_ID, empty)
+  ok('90 activate returns the incoming workspace’s own state',
+    res !== null && res.state.panels.length === 1 && res.state.panels[0].id === 'p1' &&
+      res.state.camera.x === 10 && res.state.camera.scale === 2,
+    JSON.stringify(res && res.state.camera))
+}
+
+// 91. allPanelIds spans EVERY workspace, not the active one. nextIdRef seeds
+//     from this, and PanelId doubles as the tmux session name — so a partial
+//     view here is two panels naming one session, where the second to go live
+//     attaches to the first one's process. This is the id-collision defect
+//     M4a fixed by removing length-derived ids, resurrected through a door
+//     M4a could not see.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const other = s.createWorkspace('school')
+  const empty = { panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  s.activateWorkspace(other, {
+    ...empty, panels: [panel({ id: 'n3' }), panel({ id: 'n7' })]
+  })
+  const res = s.activateWorkspace(other, { ...empty, panels: [panel({ id: 'n1' })] })
+  const ids = res === null ? [] : [...res.allPanelIds].sort()
+  ok('91 allPanelIds spans every workspace',
+    ids.join() === 'n1,n3,n7', ids.join())
+}
+
+// 92. An unknown id returns null and changes NOTHING — in particular it must
+//     not have written the outgoing state anywhere. A switch to a workspace
+//     that is gone (a stale palette row, a second window) must be a no-op,
+//     not a half-applied transaction.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const res = s.activateWorkspace('nope', {
+    panels: [panel({ id: 'zz' })],
+    camera: { x: 1, y: 1, scale: 1 }, selectedId: null, focusedId: null
+  })
+  const ws = s.workspaces()
+  ok('92 activating an unknown id is null and changes nothing',
+    res === null && ws.length === 1 && ws[0].panelIds.length === 0,
+    `res=${res} ${JSON.stringify(ws)}`)
+}
+
+// 93. The whole transaction survives a write and a reopen. 89 proves the
+//     in-memory ordering; this proves it reached disk, which is where the
+//     save race actually hurts.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  const other = a.createWorkspace('school')
+  a.activateWorkspace(other, {
+    panels: [panel({ id: 'a1' })],
+    camera: { x: 5, y: 6, scale: 1 }, selectedId: null, focusedId: null
+  })
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  const ws = b.workspaces()
+  const old = ws.find((w) => w.id === L.DEFAULT_WORKSPACE_ID)
+  const now = ws.find((w) => w.id === other)
+  ok('93 the activate transaction survives a reopen',
+    old !== undefined && old.panelIds.join() === 'a1' &&
+      now !== undefined && now.active === true,
+    JSON.stringify(ws))
+}
+
+// 94. A workspace switch must not obey restore.layout — that preference
+//     answers "what should the app show at launch", not "at a switch". With
+//     restore.layout OFF, activateWorkspace used to reuse the same doSave/
+//     doInitial the launch path uses (with the settings applied), which meant
+//     doSave skipped `w.panels = …` on the way OUT (the workspace being left
+//     never records the panels it had — their tmux sessions orphan, reachable
+//     from no workspace) and doInitial returned `panels: []` on the way IN
+//     (the workspace being entered reads empty regardless of what it holds on
+//     disk). Switch away from a workspace holding a panel, switch back, and
+//     the panel must still be there.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  s.setSetting('layout', false)
+  const other = s.createWorkspace('school')
+  const empty = { panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  // Leave w1 holding p1 (its own unmodified canvas, same fixture shape check
+  // 90 uses) and switch into the new, empty workspace.
+  const w1Now = { panels: [panel()], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  s.activateWorkspace(other, w1Now)
+  // Switch back. If restore.layout were being consulted here, doSave would
+  // have skipped writing p1 into w1's record on the way out, and doInitial
+  // would hand back `panels: []` on the way in regardless.
+  const res = s.activateWorkspace(L.DEFAULT_WORKSPACE_ID, empty)
+  ok('94 a workspace switch ignores restore.layout — panels survive a round trip with it off',
+    res !== null && res.state.panels.length === 1 && res.state.panels[0].id === 'p1',
+    JSON.stringify(res && res.state.panels))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

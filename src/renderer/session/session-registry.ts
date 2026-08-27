@@ -291,21 +291,47 @@ export function createRegistry(deps: RegistryDeps): Registry {
 
     dispose(id) {
       const session = sessions.get(id)
-      if (!session) return
-      session.handle.dispose()
-      // Unconditional since M4c, and the `spawned` guard that used to stand
-      // here was a real leak rather than an optimisation. Under node-pty a
-      // never-spawned panel genuinely had no process. Under tmux it may own a
-      // SURVIVING session — reattachable after a reload but never promoted to
-      // live, because it was off-screen or held back by LIVE_BUDGET — and
-      // skipping the kill leaves that agent running with no panel able to
-      // reach it for the rest of the run. main's PtyManager.kill now reaches
-      // backend.destroy() even for an id it has no local session for, which is
-      // the other half of the same fix. The cost when there really is nothing
-      // is one wasted IPC round trip.
+      // Local cleanup only when there is a local session to clean up.
+      if (session) {
+        session.handle.dispose()
+        sessions.delete(id)
+      }
+      // The kill, by contrast, is sent UNCONDITIONALLY — even when `session`
+      // is undefined — and that is deliberate, not a fallthrough. Two
+      // reasons stack here, one from M4c and one from M7.
+      //
+      // M4c: unconditional since then, and the `spawned` guard that used to
+      // stand here was a real leak rather than an optimisation. Under
+      // node-pty a never-spawned panel genuinely had no process. Under tmux
+      // it may own a SURVIVING session — reattachable after a reload but
+      // never promoted to live, because it was off-screen or held back by
+      // LIVE_BUDGET — and skipping the kill leaves that agent running with
+      // no panel able to reach it for the rest of the run.
+      //
+      // M7: `session` can be undefined for the very same class of reason,
+      // one hop further out. A workspace switch never disposes a HIDDEN
+      // workspace's sessions on the way out ("demote, not dispose" — see
+      // switchWorkspace's own doc comment in Canvas.tsx), so a panel spawned
+      // in a workspace this renderer no longer holds a PanelSession for —
+      // because it was switched away from and then this renderer reloaded
+      // (Cmd+R restores only the ACTIVE workspace's panels), or was never
+      // rendered here at all in this run — can still own a surviving tmux
+      // session with nothing local to represent it. Returning early here
+      // without sending pty.kill would leave that session running forever
+      // the moment its WORKSPACE RECORD is deleted: no UI can ever reach it
+      // again, and it burns tokens until quit kill-servers the whole socket.
+      //
+      // Both cases mirror main's OWN PtyManager.kill, which deliberately
+      // reaches backend.destroy(panelId) even for an id it holds no local
+      // session for either (verify:pty-manager 14c) — this is the
+      // renderer-side half of that same rule, not two separate ones. The
+      // cost when there really is nothing on either side is one wasted IPC
+      // round trip. Still exactly ONE call to pty.kill here, and dispose()
+      // is still exactly ONE of the two `pty.kill` call sites in this file
+      // (disposeAll is the other); nothing here adds a third caller
+      // anywhere else, in particular not in Canvas.tsx.
       void bridge.pty.kill(id)
-      sessions.delete(id)
-      bump()
+      if (session) bump()
     },
 
     disposeAll() {

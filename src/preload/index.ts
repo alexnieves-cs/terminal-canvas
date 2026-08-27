@@ -97,6 +97,15 @@ const bridge: CanvasBridge = {
     onState: (listener) => subscribe<AgentStateUpdate>(IPC_EVENTS.AGENT_STATE, listener),
     acknowledge: (panelId: PanelId) => ipcRenderer.invoke(IPC.AGENT_ACKNOWLEDGE, panelId)
   },
+  workspace: {
+    list: () => ipcRenderer.invoke(IPC.WORKSPACE_LIST),
+    activate: (id: string, outgoing: CanvasState) =>
+      ipcRenderer.invoke(IPC.WORKSPACE_ACTIVATE, id, outgoing),
+    create: (name: string) => ipcRenderer.invoke(IPC.WORKSPACE_CREATE, name),
+    rename: (id: string, name: string) =>
+      ipcRenderer.invoke(IPC.WORKSPACE_RENAME, id, name),
+    remove: (id: string) => ipcRenderer.invoke(IPC.WORKSPACE_DELETE, id)
+  },
   platform: process.platform
 }
 

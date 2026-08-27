@@ -127,6 +127,48 @@ const zoomTo = (wc, key) =>
   )
 
 /**
+ * An unmodified keydown — Enter/Escape at the workspace confirm gate (checks
+ * 69-70), which must NOT carry metaKey the way every other synthetic key
+ * this suite dispatches does. zoomTo's name and shape are both wrong for
+ * that: it always sets metaKey, and a `true` value there would be a lie
+ * about what a real Enter/Escape press looks like.
+ *
+ * Dispatched on `document.activeElement`, never on `window`: React's own
+ * `onKeyDown` here is bound to the palette's `<input>` element, and an event
+ * only reaches a listener bound to a DESCENDANT of its dispatch target during
+ * the CAPTURE phase, which a plain `dispatchEvent` never runs — bubbling only
+ * ever climbs from the target toward the root, so a window-targeted dispatch
+ * reaches window's own listeners and nothing an input owns (the same shape
+ * of mistake CLAUDE.md's ".panel__slot never reaches xterm's listeners"
+ * documents for mouse events). Rule 1 of "who owns the keyboard" guarantees
+ * the palette's own input holds focus the instant it opens, which is what
+ * makes `document.activeElement` the right target rather than a guess.
+ */
+const pressPlain = (wc, key) =>
+  wc.executeJavaScript(`(() => {
+    const target = document.activeElement || document.body
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', bubbles: true }))
+    return true
+  })()`)
+
+/**
+ * M7's workspace-switch checks (64-67) call this after every
+ * __m7aWorkspace() action. switchWorkspace's own work is a fire-and-forget
+ * chain of TWO local IPC round trips (workspace:activate, then a second
+ * pty:list for dormancy) before Canvas commits setPanels/setHistory/
+ * nextIdRef — and __m7aWorkspace's switchTo/createAndSwitch return void
+ * (matching the production paletteActions.switchWorkspace shape), so
+ * executeJavaScript resolves before any of that has necessarily landed.
+ * A fixed wait rather than a condition on a specific DOM/session shape,
+ * because the four call sites want different things settled (an empty
+ * workspace's panel count, a spawn's minted id, history's inertness) and no
+ * single predicate covers all of them; 300ms is the same margin already used
+ * for other post-action settling throughout this file (e.g. the M6d block
+ * above), comfortably above two local IPC round trips to an idle process.
+ */
+const settle = () => sleep(300)
+
+/**
  * True only if every panelId present in `before` is still present in `after`
  * with the IDENTICAL pid — i.e. that session was never killed, even briefly.
  * `after` may have MORE entries than `before` (new panels scrolling into
@@ -266,12 +308,38 @@ app.whenReady().then(async () => {
   // silently re-wakes the reset panel (p1), a naive seed would rely on
   // instead.
   const NEVER_WOKEN_ID = 'never-woken'
+  // Check 68's fixture: a SECOND workspace, seeded on disk before the window
+  // ever loads, holding a panel this renderer process has never rendered and
+  // therefore never registered a session for. w1 is where the app boots, so
+  // registry.ensure only ever runs against w1's panels until something
+  // switches away from it — which is exactly the gap the mass-spawn bug lived
+  // in: a workspace's own panels/session state, reached for the FIRST time by
+  // a switch rather than by boot(). focusedId is set to this panel on
+  // purpose: assignTiers pins a focused panel live UNCONDITIONALLY, so if
+  // dormantIds is ever wrong on the very first render after the switch (the
+  // exact bug this check exists to catch), this panel is promoted and spawns
+  // regardless of the camera or the cull region — the check does not have to
+  // depend on framing to force the failure into view. A static id ('w9') that
+  // no runtime-created workspace can collide with: nextWorkspaceId derives
+  // from the maximum existing `w<n>`, so seeding w9 here makes any later
+  // createWorkspace() call in this run mint w10 onward, never colliding with
+  // the id this check depends on.
+  const NEVER_RENDERED_WORKSPACE_ID = 'w9'
+  const NEVER_RENDERED_PANEL_ID = 'w9p1'
   writeFileSync(LAYOUT_PATH, JSON.stringify({
     version: 1,
     activeWorkspaceId: 'w1',
     workspaces: [{
       id: 'w1', name: 'Canvas', panels: [],
       camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null
+    }, {
+      id: NEVER_RENDERED_WORKSPACE_ID, name: 'never rendered',
+      panels: [{
+        id: NEVER_RENDERED_PANEL_ID, x: 5000, y: 5000, w: 400, h: 300, z: 1,
+        cwd: '/tmp', command: '/bin/cat', args: []
+      }],
+      camera: { ...DEFAULT_CAMERA },
+      selectedId: NEVER_RENDERED_PANEL_ID, focusedId: NEVER_RENDERED_PANEL_ID
     }],
     // Check 38 needs a preset the palette is allowed to RENAME, which rules
     // out every built-in — and BOOT_DEFAULT_PRESET is check 32's fixture, so
@@ -3149,7 +3217,24 @@ app.whenReady().then(async () => {
         const headers = await wc.executeJavaScript(`
           [...document.querySelectorAll('.palette__section')].map((h) => h.textContent.trim())
         `)
-        const ORDER = ['Panels', 'New panel', 'Prompts', 'Canvas', 'Manage']
+        // Restates palette-model.ts's SECTIONS (by label) and MUST move with
+        // it — this is the same defect class CLAUDE.md records verify:palette
+        // check 30 being rewritten to fix: a restated list goes stale the
+        // moment a section is added, and the check then fails for a reason
+        // that has nothing to do with the section-ordering property it
+        // exists to prove. This exact staleness is what happened here: M7
+        // added 'workspace' to SECTIONS (between 'prompt' and 'canvas') and
+        // an unconditional 'New workspace…' row (group: 'workspace', no
+        // hiddenAtRest) that renders its header even with zero workspaces —
+        // ORDER did not move with it, and 'Settings' had already been
+        // missing since M6b for the same reason, silently harmless only
+        // because every settings row is hiddenAtRest and nothing unconditional
+        // renders that header at rest. Kept as a restated array rather than
+        // importing SECTIONS itself: this suite (unlike verify-palette.cjs)
+        // loads the built renderer rather than bundling palette-model.ts, so
+        // reaching the real SECTIONS value here would mean adding plumbing
+        // this task was told not to add.
+        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Manage']
         const unique = headers.length === new Set(headers).size
         const ordered = headers.join(',') ===
           ORDER.filter((label) => headers.includes(label)).join(',')
@@ -3488,12 +3573,14 @@ app.whenReady().then(async () => {
       // without, so the four of them would mean two different things depending
       // on who ran the suite.
       //
-      // Safe at teardown, and only because this is the last block in the run:
-      // DirectBackend.destroy is a no-op, PtyManager.kill still kills each
-      // local handle (which for the earlier panels is a tmux CLIENT), and the
-      // sessions those clients leave behind on PANELS_SOCKET are ended by the
-      // tmuxBackend.shutdown() in the finally below, which holds its own
-      // reference rather than reading this variable.
+      // Safe at teardown regardless of whether further blocks run after this
+      // one (M7's checks 64-67 now do): DirectBackend.destroy is a no-op,
+      // PtyManager.kill still kills each local handle directly (which for the
+      // earlier panels is a tmux CLIENT) independent of which backend is
+      // currently bound, and the SESSIONS those clients leave behind on
+      // PANELS_SOCKET are ended unconditionally by the tmuxBackend.shutdown()
+      // in the finally below, which holds its own reference rather than
+      // reading this variable.
       backend = createDirectBackend('verify: direct (m6c fixture)')
 
       // Release focus BEFORE panning. shouldYieldWheel gives a wheel over the
@@ -3922,6 +4009,362 @@ app.whenReady().then(async () => {
           cleared === true && (await pipAt(shellId)) === null,
           `state=${await agentStateOf(shellId)} pip=${JSON.stringify(await pipAt(shellId))}`)
       }
+    }
+
+    // ---------------------------------------------------------------------
+    // 64-67 — M7. Workspace switching, end to end in a real renderer.
+    //
+    //     Everything else in this milestone is provable in plain node: the
+    //     store's transaction, the IPC surface, the palette rows. The one
+    //     property that actually matters — the SAME PROCESS is there when you
+    //     come back — is unprovable anywhere cheaper, because it requires a
+    //     real registry holding a real PanelSession across a real switch.
+    //     __m7aWorkspace() is this suite's route into switchWorkspace, the
+    //     same reason every other __m4a*/__m5a*/__m6* hook exists.
+    // ---------------------------------------------------------------------
+    {
+      // 64. THE PID CHECK. Switch away from the boot workspace (w1, holding
+      //     the SEED_PANELS fixture) and back, and every session that
+      //     survived must be the SAME PROCESS — not merely the same count.
+      //     Every other check in this milestone stays green against an
+      //     implementation that disposes on switch: the panels come back,
+      //     the layout is right, the file is right, and the agents are dead.
+      //     Same argument verify:pty-manager 12 makes for asserting the
+      //     reattached pid rather than merely that a session exists.
+      //
+      //     Reads main's OWN answer (pty:list, via settledSessionMap/
+      //     pidsPreserved — the exact helpers checks 4/5 and the M6a block
+      //     already use) rather than __m4aSessions(), which the registry hook
+      //     exposes with no pid field at all (id/dormant/spawned only) — main
+      //     is the authority on pids, and asking it is strictly better than
+      //     widening a hook that is deliberately kept narrow.
+      const before = await settledSessionMap(wc)
+      // Captured, never hardcoded: nextWorkspaceId() mints w<max+1> over
+      // whatever ids already exist, so a literal 'w2' here would be a guess
+      // this suite has no business making — and a WRONG guess fails
+      // silently, since activate() on an unknown id returns null and simply
+      // changes nothing (Task 2's own contract), so a check built on one
+      // would report a switch that never happened as a passing one.
+      const schoolId = await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('school')`)
+      await settle()
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+      await settle()
+      const after = await settledSessionMap(wc)
+      const { ok: preserved, changed } = pidsPreserved(before, after)
+      ok('64 a switch away and back keeps the SAME pid for every session',
+        before.size > 0 && preserved,
+        `before=${before.size} sessions changed=[${changed.join(', ')}]`)
+
+      // 65. A hidden workspace's panel is out of the DOM while its session is
+      //     still in the registry. This is "demote, not dispose" stated as
+      //     two facts that must BOTH hold — the DOM half alone passes against
+      //     a dispose, and the registry half alone passes against a switch
+      //     that never rendered. Switches to `schoolId`, the id check 64
+      //     actually captured back from createAndSwitch — not a literal
+      //     'w2' — because that is the one workspace this run guarantees is
+      //     both real and still empty.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo(${JSON.stringify(schoolId)})`)
+      await settle()
+      const hidden = await wc.executeJavaScript(`
+        ({
+          panelsInDom: document.querySelectorAll('.panel').length,
+          sessionsInRegistry: window.__m4aSessions().length
+        })
+      `)
+      ok('65 a hidden workspace keeps its sessions and loses its DOM',
+        hidden.panelsInDom === 0 && hidden.sessionsInRegistry > 0,
+        JSON.stringify(hidden))
+
+      // 66. Cmd+N in the second (still empty, still active) workspace does
+      //     not mint an id any OTHER workspace is using. PanelId doubles as
+      //     the tmux session name, so a collision is two panels naming one
+      //     session — the second to go live attaches to the first one's
+      //     process, and neither panel shows anything wrong.
+      //
+      //     otherIds excludes the ACTIVE workspace deliberately:
+      //     allPanelIds() spans EVERY workspace by design (Task 2), so
+      //     intersecting the panel this very Cmd+N is about to mint against
+      //     the unfiltered set would report a collision with itself the
+      //     instant it renders.
+      const workspaceRows = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const otherIds = workspaceRows
+        .filter((w) => !w.active)
+        .flatMap((w) => w.panelIds)
+      zoomTo(wc, 'n')
+      await settle()
+      // `.panel[data-panel-id]`, not the bare attribute selector: a panel's
+      // OWN root and its slot/card children can each carry the attribute
+      // (TerminalPanel places it on more than one element), so the bare
+      // selector double-counts every panel — visible in an earlier run's
+      // `minted=p1,p1,n6,n6,...` output. The panel ROOT is the one place the
+      // id is authoritative.
+      const minted = await wc.executeJavaScript(`
+        Array.from(document.querySelectorAll('.panel[data-panel-id]')).map((e) => e.dataset.panelId)
+      `)
+      const collision = minted.filter((id) => otherIds.includes(id))
+      ok('66 a spawn in another workspace mints no colliding id',
+        collision.length === 0, `minted=${minted.join()} otherIds=${otherIds.join()} collision=${collision.join()}`)
+
+      // 67. Cmd+Z immediately after a switch is INERT. history is one stack
+      //     over one Panel[], and applyHistory calls registry.dispose for any
+      //     panel the undone state no longer contains — so an uncleared stack
+      //     would apply the OTHER workspace's array here and kill this
+      //     workspace's agents. Doing nothing is the honest failure; doing
+      //     something is the dangerous one.
+      //
+      //     Driven through window.__m4bUndo(), NOT a raw 'z' keydown: Cmd+Z is
+      //     a main-process MENU ACCELERATOR (src/main/menu.ts), not a
+      //     renderer keybinding the way Cmd+N is (see CLAUDE.md's "Cmd+N
+      //     stays a renderer keybinding, not a menu accelerator") — and this
+      //     harness is its own Electron entry point with no application menu
+      //     (the same reason scripts/panels-entry.cjs passes registerIpcHandlers
+      //     a no-op rebuildMenu). A synthetic keydown for 'z' therefore
+      //     reaches no listener at all: useViewport's keydown switch has no
+      //     'z' case, so zoomTo(wc, 'z') would silently assert a no-op against
+      //     a harness that could never have exercised the real path either
+      //     way. __m4bUndo() is the hook every other undo-driven check in this
+      //     file already uses for exactly this reason (checks 22, 38, 45/46,
+      //     50) — it drives the SAME setHistory(h => { undoHistory; applyHistory })
+      //     call Cmd+Z's real 'edit:undo' handler runs.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+      await settle()
+      const beforeUndo = await wc.executeJavaScript(`
+        ({ panels: document.querySelectorAll('.panel').length,
+           sessions: window.__m4aSessions().length })
+      `)
+      await wc.executeJavaScript(`window.__m4bUndo()`)
+      await settle()
+      const afterUndo = await wc.executeJavaScript(`
+        ({ panels: document.querySelectorAll('.panel').length,
+           sessions: window.__m4aSessions().length })
+      `)
+      ok('67 Cmd+Z right after a switch changes nothing',
+        beforeUndo.panels === afterUndo.panels && beforeUndo.sessions === afterUndo.sessions,
+        `${JSON.stringify(beforeUndo)} -> ${JSON.stringify(afterUndo)}`)
+
+      // 68. THE MASS-SPAWN CHECK. Checks 64-67 all switch between workspaces
+      //     this renderer has ALREADY rendered at least once — w1 at boot,
+      //     'school'/w2 by creating it live — so registry.ensure already has
+      //     (or trivially gets, for an empty workspace) a settled session for
+      //     every panel involved, and dormantIds being briefly wrong on the
+      //     wrong render is invisible against that fixture. w9/w9p1 close
+      //     that gap: seeded on DISK before the window ever loaded (see the
+      //     LAYOUT_PATH fixture above), never rendered by this process before
+      //     this moment, and its own persisted focusedId names w9p1 —
+      //     assignTiers pins a focused panel live UNCONDITIONALLY, so if
+      //     dormantIds is wrong on the very first render after the switch
+      //     (committing `next` before `pty.list()` resolves, the exact bug
+      //     this check exists to catch), this fixture forces it into a spawn
+      //     rather than merely hoping a camera/cull coincidence produces one.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('${NEVER_RENDERED_WORKSPACE_ID}')`)
+      await settle()
+      // Waits for the FAILURE condition (a live session appearing) rather
+      // than reading absence immediately: the spawn path is a few IPC round
+      // trips deep (fit-before-spawn, then pty:create), so an instant read
+      // could pass for a reason that has nothing to do with correctness — the
+      // spawn simply had not landed yet. Other checks in this suite wait
+      // 3-8s for a GENUINE spawn to land, so 3s of silence here is well past
+      // that budget before the negative is trusted.
+      const spawned = await waitUntil(
+        async () => (await sessionMap(wc)).has(NEVER_RENDERED_PANEL_ID), 3000)
+      const sessions68 = await wc.executeJavaScript(`window.__m4aSessions()`)
+      const registered = sessions68.find((s) => s.id === NEVER_RENDERED_PANEL_ID)
+      ok('68 a workspace switched to for the first time spawns nothing, even focused',
+        spawned !== true && registered !== undefined &&
+          registered.dormant === true && registered.spawned === false,
+        `spawned=${spawned} registered=${JSON.stringify(registered)}`)
+      // This block leaves NEVER_RENDERED_WORKSPACE_ID active when it ends —
+      // there is no switch back to whatever was active before. Checks 69+
+      // run against whatever workspace this one left active, not against a
+      // known starting point.
+    }
+
+    // 69-70 — Task 6. Create/rename/delete from the palette, and the fourth
+    //     registry.dispose call site. __m7aWorkspace().deleteWorkspace(id)
+    //     drives the SAME gated action a real "Delete workspace…" row does
+    //     (paletteActions.deleteWorkspace) rather than a bypass, which is
+    //     what lets these two checks tell a real confirm gate apart from a
+    //     delete function that runs unconditionally.
+    {
+      // 69. Deleting a workspace disposes its panels' sessions. Not detach —
+      //     the record is going, so a surviving session is one no UI can
+      //     ever reach or stop: backlog #61 (recover an orphan session) does
+      //     not exist, so it would burn tokens invisibly until quit
+      //     kill-servers the socket.
+      //
+      //     The plan's own check for this omitted the confirm step
+      //     entirely — it called deleteWorkspace(id) and expected the
+      //     session gone after a plain settle(), which only holds if the
+      //     confirm gate does nothing, i.e. against a BROKEN implementation.
+      //     Against the real gated action nothing is disposed until the
+      //     question is answered, so this check answers it with a real
+      //     Enter on the reopened palette's own input before reading
+      //     anything back — the same reason check 50 clicks a real row
+      //     rather than calling a store method directly.
+      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('doomed')`)
+      await settle()
+      await zoomTo(wc, 'n') // one panel in 'doomed', which goes live and spawns
+      await settle()
+      const before = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      const doomed = await wc.executeJavaScript(`
+        window.canvas.workspace.list().then((r) => (r.find((w) => w.name === 'doomed') || {}).id)
+      `)
+      await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(doomed)})`)
+      await settle()
+      await pressPlain(wc, 'Enter') // answers the confirm; see this block's own comment
+      await settle()
+      const after = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      const rows69 = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      ok('69 deleting a workspace disposes its sessions and its record',
+        after < before && !rows69.some((w) => w.name === 'doomed'),
+        `sessions ${before} -> ${after} rows=${rows69.length}`)
+
+      // 70. The confirm is a real gate: Escape leaves the workspace
+      //     UNDELETED, read back out of workspace.list() rather than off the
+      //     overlay. A confirm step that confirms unconditionally is
+      //     invisible — the same reason check 50 reads preset.list()
+      //     instead of the DOM.
+      //
+      //     The plan's own check dispatched Escape on `window`, which never
+      //     reaches Palette.tsx's onKeyDown at all — that handler is bound
+      //     to the palette's own `<input>`, and a window-targeted dispatch
+      //     only reaches window's own listeners, never a descendant's
+      //     (bubbling runs from the EVENT'S TARGET upward, and window has no
+      //     ancestors to bubble past its own target in the first place —
+      //     see CLAUDE.md's ".panel__slot never reaches xterm's listeners"
+      //     for the same shape of mistake). pressPlain instead dispatches on
+      //     `document.activeElement`, which the confirm input holds because
+      //     opening the palette always focuses it (rule 1 in Canvas.tsx's
+      //     "who owns the keyboard").
+      const keepId = await wc.executeJavaScript(`window.canvas.workspace.create('keepme')`)
+      await settle()
+      await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(keepId)})`)
+      await settle()
+      await pressPlain(wc, 'Escape')
+      await settle()
+      const rows70 = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      ok('70 Escape at the confirm leaves the workspace undeleted',
+        rows70.some((w) => w.id === keepId), `rows=${rows70.map((w) => w.name).join()}`)
+    }
+
+    // 70b — Task 7. M6d's premise applied to the strongest case of "an agent
+    //     you cannot see": a wants-you panel whose whole CANVAS is hidden,
+    //     not merely off screen. The count on its workspace row is read off
+    //     a real rendered palette row, through main's real store — the same
+    //     end-to-end shape checks 54-63 already used for the pip layer.
+    //
+    //     A fresh workspace, never hardcoded: createAndSwitch mints its own
+    //     id the way checks 64-68 insist on, and this check reads it back
+    //     rather than guessing a literal.
+    {
+      const BELL_LINE = "printf '\\007'\n"
+      await wc.executeJavaScript(
+        `window.__m7aWorkspace().createAndSwitch('waitroom')`)
+      await settle()
+      // A real shell, not Cmd+N's default `cat`: cat only ECHOES what it is
+      // given, so writing BELL_LINE's literal backslash-escaped text to one
+      // produces no actual 0x07 byte at all — the same reason checks 54-63
+      // spawn through PRESET_SPAWN with an explicit /bin/sh rather than
+      // using zoomTo(wc, 'n'). PRESET_SPAWN lands in whichever workspace is
+      // currently active, which 'waitroom' now is.
+      const idsBefore70b = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const panelId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !idsBefore70b.includes(id)) || false
+      }, 4000)
+      if (!panelId) throw new Error('70b: PRESET_SPAWN produced no new panel')
+      // Lazy spawn: the PTY exists only once the panel has gone live and been
+      // laid out, so nothing may be written to it until pty:list admits it.
+      const spawned = await waitUntil(
+        async () => (await settledSessionMap(wc)).has(panelId), 8000)
+      if (!spawned) throw new Error(`70b: panel ${panelId} never got a PTY`)
+
+      // Ring a real bell while the panel is still on screen and known live,
+      // THEN leave — the same ordering check 58 uses and for the same
+      // reason: switching away first would demote/unmount the panel before
+      // the write could land.
+      ptyManager.write(panelId, BELL_LINE)
+      const rang = await waitUntil(async () => wc.executeJavaScript(`
+        document.querySelector('.panel[data-panel-id=${JSON.stringify(panelId)}]')
+          ?.dataset.agentState
+      `).then((s) => s === 'wants-you'), 6000)
+      if (rang !== true) throw new Error('70b: the panel never reached wants-you')
+
+      // Leave — 'waitroom' is now hidden, its panel gone from the DOM, its
+      // session and its agent state both still alive underneath.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+      await settle()
+
+      await zoomTo(wc, 'k') // open the palette
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      const titles70b = await wc.executeJavaScript(`
+        Array.from(document.querySelectorAll('.palette__row')).map((e) => e.textContent)
+      `)
+      ok('70b a hidden workspace with a waiting panel says so on its row',
+        titles70b.some((t) => t.includes('waiting')), titles70b.join(' | '))
+
+      await pressPlain(wc, 'Escape')
+      await settle()
+    }
+
+    // 71 — fix round 1, finding #1/#2. Deleting the workspace you are IN when
+    //     it is the ONLY one left must not resurrect its disposed panels in
+    //     the fresh replacement main installs. Checks 69/70 only ever
+    //     exercise the "a neighbour already exists" branch of deleteWorkspace
+    //     — this drives the other one, which is unreachable unless every
+    //     OTHER workspace is gone first. There is no way to get there without
+    //     actually deleting them: this suite has accumulated several by this
+    //     point (the boot workspace, 'never rendered', 'school', 'keepme'),
+    //     and none of that is special setup — it is what "exactly one
+    //     workspace" actually requires, deleted through the same real gate
+    //     69/70 already proved correct so this check is free to trust it.
+    {
+      const soleId = await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('sole')`)
+      await settle()
+      await zoomTo(wc, 'n') // one panel in 'sole', which goes live and spawns
+      await settle()
+      const solePanelId = await wc.executeJavaScript(`
+        window.canvas.workspace.list().then((r) =>
+          (r.find((w) => w.id === ${JSON.stringify(soleId)}) || { panelIds: [] }).panelIds[0])
+      `)
+
+      // Delete every OTHER workspace. None of them is active, so each is a
+      // plain dispose+remove with no switch involved — the loop's own
+      // correctness rests entirely on 69/70, not on anything new here.
+      const others = (await wc.executeJavaScript(`window.canvas.workspace.list()`))
+        .filter((w) => w.id !== soleId)
+      for (const w of others) {
+        await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(w.id)})`)
+        await settle()
+        await pressPlain(wc, 'Enter')
+        await settle()
+      }
+      const onlyOneLeft = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const before71 = await wc.executeJavaScript(`window.__m4aSessions().length`)
+
+      // Now delete the LAST remaining workspace — the branch under test.
+      await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(soleId)})`)
+      await settle()
+      await pressPlain(wc, 'Enter')
+      await settle()
+      const after71 = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      const rowsFinal = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const freshActive = rowsFinal.find((w) => w.active)
+      ok('71 deleting the only remaining workspace disposes its sessions ' +
+         'and does not resurrect them in the fresh replacement',
+        onlyOneLeft.length === 1 && onlyOneLeft[0].id === soleId &&
+          after71 < before71 &&
+          rowsFinal.length === 1 && !rowsFinal.some((w) => w.id === soleId) &&
+          freshActive !== undefined && !freshActive.panelIds.includes(solePanelId),
+        `onlyOneLeft=${onlyOneLeft.length} sessions ${before71}->${after71} ` +
+        `rowsFinal=${JSON.stringify(rowsFinal)} solePanelId=${solePanelId}`)
+      // This must remain the LAST workspace check in the suite: it deletes
+      // every fixture workspace, including the sole survivor, so anything
+      // appended after it inherits a one-workspace, zero-panel world with
+      // none of the earlier fixtures (w1, w2/'school', w9/w9p1) still around.
     }
 
   } catch (error) {

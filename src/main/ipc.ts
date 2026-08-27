@@ -114,6 +114,31 @@ export function registerIpcHandlers(
     // until the next unrelated rebuild.
     rebuildMenu()
   })
+
+  // Straight through to the store, with no PaletteHandlers indirection: unlike
+  // preset:spawn-by-id (which needs main's command resolution) and
+  // canvas:request-reset (which needs main's dialog), nothing here needs a
+  // collaborator main/index.ts owns. A handler that just forwards is the right
+  // shape when there is genuinely nothing to add.
+  ipcMain.handle(IPC.WORKSPACE_LIST, () => layoutStore.workspaces())
+
+  ipcMain.handle(
+    IPC.WORKSPACE_ACTIVATE,
+    (_event, id: string, outgoing: CanvasState) =>
+      layoutStore.activateWorkspace(id, outgoing)
+  )
+
+  ipcMain.handle(IPC.WORKSPACE_CREATE, (_event, name: string) =>
+    layoutStore.createWorkspace(name)
+  )
+
+  ipcMain.handle(IPC.WORKSPACE_RENAME, (_event, id: string, name: string) =>
+    layoutStore.renameWorkspace(id, name)
+  )
+
+  ipcMain.handle(IPC.WORKSPACE_DELETE, (_event, id: string) =>
+    layoutStore.deleteWorkspace(id)
+  )
 }
 
 /**

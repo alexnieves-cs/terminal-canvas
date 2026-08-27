@@ -3,7 +3,7 @@ import type { Command } from './palette-model'
 // Erased by esbuild, so it costs verify:palette nothing that the bundle
 // otherwise has no @shared import at all (the alias is wired pre-emptively
 // for exactly this day).
-import type { SettingRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { SettingValue } from '@shared/settings-schema'
 
 /**
@@ -73,6 +73,15 @@ export interface PaletteActions {
    * compile-time hole a half-finished wiring passes straight through.
    */
   beginEditSetting(id: string, label: string, current: number): void
+  switchWorkspace(id: string): void
+  beginCreateWorkspace(): void
+  beginRenameWorkspace(id: string, currentName: string): void
+  /**
+   * `liveCount` is passed in rather than looked up because the confirm names
+   * it, and the row is the only place that knows both the workspace and the
+   * renderer's session set.
+   */
+  deleteWorkspace(id: string, name: string, liveCount: number): void
 }
 
 export interface PaletteContext {
@@ -86,6 +95,13 @@ export interface PaletteContext {
    * straight through.
    */
   settings: SettingRow[]
+  workspaces: WorkspaceRow[]
+  /**
+   * Panel ids currently in wants-you, from the renderer's own attention set.
+   * Intersected with each row's panelIds — which is why WORKSPACE_LIST returns
+   * ids and not a count: main does not hold this fact, the renderer does.
+   */
+  attentionIds: readonly string[]
   /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and
@@ -106,6 +122,7 @@ export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
+export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -253,6 +270,37 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
 
+  // --- Workspaces ------------------------------------------------------------
+
+  for (const w of ctx.workspaces) {
+    const waiting = w.panelIds.filter((id) => ctx.attentionIds.includes(id)).length
+    out.push(
+      withReason(
+        {
+          id: `workspace.switch.${w.id}`,
+          // The bare name. The count is transient state, not a name, and
+          // `title` feeds `haystack()` unconditionally — so the count lives
+          // on `waiting` instead, which the view composes into what it
+          // renders, and the matcher never sees.
+          title: w.name,
+          ...(waiting > 0 ? { waiting } : {}),
+          searchText: 'switch workspace canvas go to',
+          group: 'workspace',
+          run: () => actions.switchWorkspace(w.id)
+        },
+        w.active ? REASON_ALREADY_ACTIVE : undefined
+      )
+    )
+  }
+
+  out.push({
+    id: 'workspace.create',
+    title: 'New workspace…',
+    searchText: 'create add canvas workspace',
+    group: 'workspace',
+    run: () => actions.beginCreateWorkspace()
+  })
+
   // --- Canvas --------------------------------------------------------------
 
   out.push({
@@ -373,6 +421,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => {}
     })
   }
+  out.push({
+    id: 'manage.workspaces',
+    title: 'Manage workspaces…',
+    subtitle: `${ctx.workspaces.length} workspace${ctx.workspaces.length === 1 ? '' : 's'}`,
+    group: 'manage',
+    entersScope: 'workspaces',
+    run: () => {}
+  })
 
   for (const preset of ctx.presets) {
     out.push(
@@ -434,6 +490,34 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         prompt.source === 'project' ? REASON_PROJECT_PROMPT : undefined
       )
     )
+  }
+
+  // hiddenAtRest for the reason every other admin row is: two rows per
+  // workspace un-hidden would put the resting list back past the roughly-
+  // eight-row budget M6p sized it to. They stay findable by query — typing
+  // "delete" surfaces them — because a row that disappears is
+  // indistinguishable from a feature that is missing.
+  for (const w of ctx.workspaces) {
+    out.push({
+      id: `workspace.rename.${w.id}`,
+      title: `Rename workspace “${w.name}”…`,
+      group: 'manage',
+      scope: 'workspaces',
+      hiddenAtRest: true,
+      run: () => actions.beginRenameWorkspace(w.id, w.name)
+    })
+    out.push({
+      id: `workspace.delete.${w.id}`,
+      title: `Delete workspace “${w.name}”…`,
+      group: 'manage',
+      scope: 'workspaces',
+      hiddenAtRest: true,
+      destructive: true,
+      // Marked AND gated. A red row still runs on one Enter, so the mark is
+      // not the guard; the confirm (Task 6, in Canvas.tsx) is. Neither half
+      // replaces the other.
+      run: () => actions.deleteWorkspace(w.id, w.name, w.panelIds.length)
+    })
   }
 
   return out

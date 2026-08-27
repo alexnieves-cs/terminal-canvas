@@ -969,6 +969,23 @@ ok('70 a single-entry queue keeps returning that entry',
     id === 'n1', `got ${id}`)
 }
 
+// 73. restoreCamera (M7's fourth camera verb, after resetViewport,
+//     worldCentre and centreOn): a workspace switch restores x, y AND scale
+//     exactly. Scale is the half that separates it from centreOn (49-50
+//     above), which deliberately leaves scale untouched so framing a panel
+//     never discards the zoom the user chose — restoreCamera exists because
+//     a workspace's saved zoom is instead part of what it means to come back
+//     to it. The hook (useViewport.ts) that wires this into setViewport
+//     cannot run outside React, so the one property that matters — nothing
+//     here is dropped or coerced — is pinned as pure math instead.
+{
+  const camera = { x: -4880, y: -2880, scale: 0.401877572016461 }
+  const restored = V.restoreCamera(camera)
+  ok('73 restoreCamera reproduces x, y and scale exactly',
+    restored.x === camera.x && restored.y === camera.y && restored.scale === camera.scale,
+    JSON.stringify(restored))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

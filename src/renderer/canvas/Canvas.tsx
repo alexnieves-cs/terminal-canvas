@@ -14,7 +14,14 @@ import { applyAgentState, attentionIds, clearAgentState, useAttentionIds } from 
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
-import type { CapturedPanel, PresetTemplate, SessionBackendInfo, SettingRow } from '@shared/ipc-contract'
+import type {
+  ActivateResult,
+  CapturedPanel,
+  PresetTemplate,
+  SessionBackendInfo,
+  SettingRow,
+  WorkspaceRow
+} from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { cascadeCentre, firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
@@ -32,6 +39,10 @@ const EMPTY_PRESETS: PresetRow[] = []
 const EMPTY_PROMPTS: PromptRow[] = []
 const EMPTY_PANELS: PanelRow[] = []
 const EMPTY_SETTINGS: SettingRow[] = []
+// Initial value for workspaceRows before the mount-time reloadWorkspaces()
+// call below resolves. attentionIds has no equivalent placeholder — it
+// reads live off useAttentionIds(), which starts at its own empty snapshot.
+const EMPTY_WORKSPACES: WorkspaceRow[] = []
 
 /**
  * What the switcher calls a panel. This is always the command/cwd/id shape —
@@ -80,7 +91,8 @@ const registry = createRegistry({
 export function Canvas({
   initial,
   liveSessionIds,
-  defaultTemplate
+  defaultTemplate,
+  allPanelIds
 }: {
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
@@ -91,6 +103,14 @@ export function Canvas({
    * before any effect here runs — see renderer/main.tsx.
    */
   defaultTemplate?: PresetTemplate
+  /**
+   * Every panel id in every workspace, not just this one's — see
+   * renderer/main.tsx for why nextIdRef needs the whole set rather than
+   * `initial.panels` alone. A prop, and re-derived on every switch (below,
+   * from ActivateResult.allPanelIds) rather than fetched here again: main
+   * already answers with the up-to-date set as part of the switch itself.
+   */
+  allPanelIds: readonly string[]
 }): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
 
@@ -128,9 +148,18 @@ export function Canvas({
   // Restore a canvas holding n5, press Cmd+N five times, and the fifth panel is
   // n5 too — the same duplicate-id defect the comment above describes,
   // resurrected through a different door.
+  //
+  // M7: seeded from `allPanelIds` — EVERY workspace's ids, not just this
+  // one's (`initial.panels`) — for the same persistence reason, arriving
+  // through a different door. PanelId doubles as the tmux session name, so
+  // Cmd+N in workspace B minting an id workspace A already uses is two panels
+  // naming one session; the second to go live attaches to the first one's
+  // process, with nothing visibly wrong on either panel. `switchWorkspace`
+  // re-seeds this same ref from ActivateResult.allPanelIds on every switch,
+  // for the identical reason.
   const nextIdRef = useRef(
-    initial.panels.reduce((max, p) => {
-      const match = /^n(\d+)$/.exec(p.id)
+    allPanelIds.reduce((max, id) => {
+      const match = /^n(\d+)$/.exec(id)
       return match ? Math.max(max, Number(match[1]) + 1) : max
     }, 1)
   )
@@ -266,7 +295,23 @@ export function Canvas({
   // revive — registry.ensure (in the useMemo below) recreates the session
   // from scratch once the panel reappears in `panels`, and passing dormant:
   // true for it is what turns that into a card instead of a fresh spawn.
-  const applyHistory = useCallback((next: History<Panel[]>) => {
+  //
+  // Takes the PREVIOUS present array as its first argument, not just `next`.
+  // Before M7 the departing set was derived from the WHOLE registry (every
+  // session not in `next.present`), which was self-healing rather than a
+  // shortcut: the registry only ever held ids from this one canvas's own
+  // history, so "everything the registry has that `next` doesn't" and
+  // "everything THIS transition just dropped" were the same set. M7 breaks
+  // that equivalence — the registry now legitimately holds sessions for every
+  // OTHER workspace too (see switchWorkspace's "demote, not dispose" doc
+  // comment) — so a registry-wide diff would dispose every hidden workspace's
+  // sessions on ANY undo/redo in this one, including a genuine no-op (empty
+  // past/future, `next === previous`, nothing actually moved). Diffing
+  // against the specific state this transition left, instead, gives the
+  // right answer in both worlds: a real undo/redo still disposes exactly the
+  // panel(s) that vanished from `present`, and a no-op disposes nothing,
+  // because previousIds and ids are then identical.
+  const applyHistory = useCallback((previousPresent: Panel[], next: History<Panel[]>) => {
     const ids = new Set(next.present.map((p) => p.rect.id))
     // Undo of a spawn (or redo of a close) removes a panel from `present`
     // without ever routing through onClosePanel, so without this loop a
@@ -279,16 +324,13 @@ export function Canvas({
     // instead of a click. It does not add a caller of pty.kill: dispose(id)
     // and disposeAll() remain the only two (see session-registry.ts), and
     // routing through dispose() rather than calling pty.kill directly is
-    // exactly what keeps that count true. Deriving the departing set from
-    // the registry (rather than tracking it separately) is self-healing:
-    // the registry and `present` stay in step by construction after this
-    // call, no matter which direction history moved.
-    for (const session of registry.all()) {
-      if (!ids.has(session.id)) {
-        registry.dispose(session.id)
+    // exactly what keeps that count true.
+    for (const panel of previousPresent) {
+      if (!ids.has(panel.rect.id)) {
+        registry.dispose(panel.rect.id)
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
-        clearAgentState(session.id)
+        clearAgentState(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -416,7 +458,7 @@ export function Canvas({
     jumpAttentionImplRef.current(direction)
   }, [])
 
-  const { viewport, resetViewport, worldCentre, centreOn } = useViewport(
+  const { viewport, resetViewport, worldCentre, centreOn, restoreCamera } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
   )
   const version = useRegistryVersion(registry)
@@ -532,11 +574,11 @@ export function Canvas({
     // overlay, with no visible cause. verify:panels 37.
     const offUndo = window.canvas.edit.onUndo(() => {
       if (palette.isOpen()) return
-      setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
+      setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
       if (palette.isOpen()) return
-      setHistory((h) => { const next = redoHistory(h); applyHistory(next); return next })
+      setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
       offUndo()
@@ -601,15 +643,183 @@ export function Canvas({
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
 
+  /**
+   * A workspace switch is a SECOND BOOT — not merely shaped like one.
+   *
+   * Everything derived from the starting state is RE-DERIVED rather than
+   * carried: the id counter (from ActivateResult.allPanelIds, which spans
+   * every workspace — see nextIdRef's comment), the undo stack (cleared, for
+   * the reason applyHistory's own comment gives: an uncleared stack would let
+   * Cmd+Z apply the OTHER workspace's array here and dispose sessions this
+   * workspace still wants running), the camera, and the selection. What is
+   * deliberately NOT touched is the registry: unmounting these panels calls
+   * detachSlot (TerminalPanel's cleanup), which disposes the WebGL addon and
+   * pulls the host out of the DOM while the PanelSession, its PTY and its
+   * tmux session stay exactly where they are — "two lifetimes, not one"
+   * paying out at the scale of a whole canvas instead of one culled panel.
+   * There is no `registry.dispose` call anywhere in this function, and there
+   * must never be one: `verify:panels` 64 is the check that fails first if
+   * one creeps in, and it is the one no cheaper tier can catch (see
+   * CLAUDE.md's "Switching in a real renderer" task note).
+   *
+   * `pty.list()` is AWAITED BEFORE `next` is committed, and `dormantIds` is
+   * set in the SAME synchronous batch as `setPanels`. That ordering is not a
+   * style choice: renderer/main.tsx's boot() awaits pty:list before its
+   * FIRST render, which is the actual thing that makes "restored panels are
+   * dormant unless live" true there — an earlier draft of this function
+   * committed `next` first and corrected `dormantIds` afterward, once a
+   * second, independent pty:list promise resolved, and its comment claimed
+   * to reuse boot()'s rule while doing the opposite of what makes that rule
+   * hold. The tiering memo's `registry.ensure(id, spec, { dormant:
+   * dormantIds.has(id) })` runs on the FIRST render of the incoming panels,
+   * and `ensure` early-returns for a session that already exists — so a
+   * dormantIds correction arriving even one render late can never repair a
+   * session that was already created non-dormant. Both dormancy layers then
+   * agree for the wrong reason: lod.ts promotes the panel because
+   * dormantIds does not (yet) contain it, and the registry's own dormancy
+   * guard passes because session.dormant is already false. attachSlot spawns.
+   * Restoring focusedId makes it worse — assignTiers pins the focused panel
+   * live unconditionally. The result was up to LIVE_BUDGET agent CLIs
+   * launched by a workspace switch with no user gesture, exactly what
+   * "dormant until clicked" exists to prevent.
+   */
+  const switchWorkspace = useCallback(
+    (id: string) => {
+      const outgoing: CanvasState = {
+        panels: fromPanels(panelsRef.current),
+        camera: viewportRef.current,
+        selectedId,
+        focusedId
+      }
+      void (async (): Promise<void> => {
+        let result: ActivateResult | null
+        try {
+          result = await window.canvas.workspace.activate(id, outgoing)
+        } catch (error: unknown) {
+          // Unhandled otherwise: `void`ing the chain silences the lint, not
+          // the rejection. A throw here can land after main has already
+          // flipped activeWorkspaceId (activate is write-then-flip, not
+          // atomic across the IPC boundary) while this renderer keeps
+          // showing the outgoing canvas — the same shape boot()'s two
+          // try/catches exist to prevent, just on the switch path instead of
+          // the boot path.
+          console.warn('[workspace] could not activate workspace', id, error)
+          return
+        }
+        // Null means the id named nothing — a stale palette row, or a
+        // workspace deleted out from under an in-flight switch. Main changed
+        // nothing, so neither does this.
+        if (!result) return
+        const next = toPanels(result.state.panels)
+
+        // Every restored panel arrives DORMANT unless it already has a live
+        // session — the same rule boot() applies in renderer/main.tsx, for
+        // the same reason: a switch must spawn nothing. Resolved BEFORE
+        // `next` is committed (see this function's own doc comment above for
+        // why the ordering, not just the rule, is what boot() actually
+        // relies on) and reusing pty:list — main's authority on what is
+        // actually live — rather than restating the rule is what keeps a
+        // switch and a boot from disagreeing.
+        let dormant: Set<string>
+        try {
+          const sessions = await window.canvas.pty.list()
+          const live = new Set(sessions.map((s) => s.panelId))
+          dormant = new Set(next.map((p) => p.rect.id).filter((pid) => !live.has(pid)))
+        } catch (error: unknown) {
+          // The same failure DIRECTION boot() chooses, for the same reason:
+          // an empty set here means "spawn nothing", the safe side to fail
+          // toward. Leaving `dormant` unset and falling through to the old
+          // (outgoing) dormantIds would fail the OTHER way — every incoming
+          // panel reading as non-dormant — which is the mass-spawn this
+          // whole fix exists to prevent, arriving through an unhandled
+          // rejection instead of a wrong ordering.
+          console.warn(
+            '[workspace] could not list live sessions; restoring every panel dormant', error
+          )
+          dormant = new Set(next.map((p) => p.rect.id))
+        }
+
+        // Committed together, in one synchronous block with no `await`
+        // between them, so React batches them into a single render: `next`
+        // and its correct `dormant` set reach the tiering memo on the same
+        // pass, never `next` first and `dormant` a render later.
+        //
+        // setDormantIds here REPLACES the whole set rather than merging into
+        // it, so `dormantIds` is not a global fact spanning every workspace
+        // — it names only the incoming workspace's dormant panels. That is
+        // correct, not lossy: `registry.ensure` early-returns for a session
+        // that already exists, so a stale dormant id left over from a
+        // workspace no longer showing does nothing if it lingers, and this
+        // set is re-derived from a fresh pty:list every time a switch lands
+        // here, so nothing is lost by discarding the outgoing workspace's
+        // entries.
+        setPanels(next)
+        setDormantIds(dormant)
+        setSelectedId(result.state.selectedId)
+        setFocusedId(result.state.focusedId)
+        restoreCamera(result.state.camera)
+        // HISTORY IS CLEARED, not carried. history is ONE stack over ONE
+        // Panel[], and applyHistory disposes any panel the undone state no
+        // longer contains — which reaches pty.kill. An uncarried stack would
+        // let Cmd+Z apply the PREVIOUS workspace's array here and kill THIS
+        // workspace's sessions to restore panels that are not even on
+        // screen. Cmd+Z doing nothing right after a switch is the honest
+        // failure; doing something is the dangerous one. verify:panels 67.
+        //
+        // Per-workspace stacks are the tempting alternative and are YAGNI:
+        // undo is scoped to a gesture the user just made, and a per-workspace
+        // stack would have to be disposed alongside its workspace or a
+        // deleted workspace's history would hold Panel records whose
+        // sessions are gone.
+        setHistory(createHistory(next))
+        // Re-seeded from the GLOBAL maximum ActivateResult hands back, not
+        // from `next` alone — the same reason nextIdRef's own comment gives:
+        // a workspace can be switched TO while another workspace's ids are
+        // higher, and minting from this workspace's own panels would let
+        // Cmd+N here collide with an id a hidden workspace already owns.
+        // Math.max against the CURRENT counter, never a bare replace: the
+        // seed is only as complete as `allPanelIds`, which depends on every
+        // outgoing workspace having actually persisted its panels. A
+        // restore-settings-off save can leave that list short (see
+        // activateWorkspace's applyRestoreSettings:false), and a bare
+        // replace would then let the counter drop — minting an id `new-
+        // session -A` would attach to a session THIS run already has live
+        // elsewhere. Never letting the counter move backwards within a run
+        // holds regardless of what any future caller's seed contains.
+        nextIdRef.current = Math.max(
+          nextIdRef.current,
+          result.allPanelIds.reduce((max, pid) => {
+            const match = /^n(\d+)$/.exec(pid)
+            return match ? Math.max(max, Number(match[1]) + 1) : max
+          }, 1)
+        )
+      })()
+    },
+    [selectedId, focusedId, restoreCamera]
+  )
+
   // Corrects xterm's coordinates for the world transform. Reads the scale
   // through a ref so the listener is installed once and never resubscribes —
   // viewport changes on every wheel event.
   useEffect(() => installPointerCorrection(() => viewportRef.current.scale), [])
 
-  // Test hooks for verify:panels. The registry is a module-level closure with
-  // no global handle by design, and executeJavaScript has no other route into
-  // it. Kept to seven narrow reads/writes rather than exposing the registry
-  // itself, so the suite cannot quietly start depending on internals.
+  // Mirrors paletteActions.deleteWorkspace for the __m7aWorkspace test hook
+  // below, which is defined (and its effect runs) before `paletteActions`
+  // exists later in this component — referencing it directly would be a
+  // TDZ error, not merely a stale closure. The same mirror-into-a-ref move
+  // `focusedIdRef` and `viewportRef` already make in this file. Populated by
+  // an effect right after paletteActions is declared; read only from inside
+  // a callback the test hook itself doesn't invoke until well after mount.
+  const deleteWorkspaceRef = useRef<PaletteActions['deleteWorkspace'] | null>(null)
+
+  // Test hooks for verify:panels. The registry (and, since M7, the workspace
+  // surface) is a module-level/main-owned concept with no other route in for
+  // executeJavaScript. Kept to narrow, single-purpose reads/writes — named
+  // for what each one ANSWERS — rather than exposing the registry itself, so
+  // the suite cannot quietly start depending on internals. Grep `w\.__` in
+  // this effect for the current count rather than trusting a number here:
+  // it has already drifted once (an earlier comment said "seven" after the
+  // count had grown past a dozen).
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m4aScale = (): number => viewportRef.current.scale
@@ -675,7 +885,7 @@ export function Canvas({
      * verb verify:panels needs to exercise undo without one.
      */
     w.__m4bUndo = (): void =>
-      setHistory((h) => { const next = undoHistory(h); applyHistory(next); return next })
+      setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     /**
      * Drives the same reset path the confirmed "Reset canvas…" menu item
      * does, minus the native dialog executeJavaScript cannot reach. Exists
@@ -696,7 +906,51 @@ export function Canvas({
     }
     /** The template currently pushed as Cmd+N's default, or undefined. */
     w.__m5aDefaultSpec = (): PresetTemplate | undefined => defaultTemplateRef.current
-  }, [applyHistory, resetCanvas])
+    /**
+     * verify:panels' route into workspace switching, the same reason every
+     * other __m4a* hook exists: the registry (and now the workspace surface)
+     * is a module-level/main-owned concept executeJavaScript cannot reach any
+     * other way. Kept narrow and named for what each member ANSWERS.
+     */
+    w.__m7aWorkspace = (): {
+      switchTo: (workspaceId: string) => void
+      createAndSwitch: (name: string) => Promise<string>
+      allPanelIds: () => Promise<string[]>
+      deleteWorkspace: (workspaceId: string) => void
+    } => ({
+      switchTo: (workspaceId: string) => switchWorkspace(workspaceId),
+      // Returns the id the store actually minted, not just a fire-and-forget
+      // void: nextWorkspaceId() derives from the current maximum `w<n>`, so a
+      // caller has no honest way to predict it in advance. A check that
+      // hardcodes the id it EXPECTS createWorkspace to hand back is a check
+      // that never actually switched anywhere the day that assumption drifts
+      // — it would still read as green, just against the wrong workspace.
+      createAndSwitch: (name: string) =>
+        window.canvas.workspace.create(name).then((workspaceId) => {
+          switchWorkspace(workspaceId)
+          return workspaceId
+        }),
+      allPanelIds: () =>
+        window.canvas.workspace.list().then((rows) => rows.flatMap((row) => row.panelIds)),
+      // Drives the SAME gated action a real "Delete workspace…" palette row
+      // does — paletteActions.deleteWorkspace, reached through a ref because
+      // paletteActions is declared later in this component (see
+      // deleteWorkspaceRef's own comment). Not a bypass: this still opens
+      // the confirm and still waits on an Enter/Escape the way the real row
+      // does, which is what lets verify:panels prove the confirm is a real
+      // gate rather than only that a delete function exists. name/liveCount
+      // are read off main's own list rather than guessed, the same reason
+      // createAndSwitch above never hardcodes an id.
+      deleteWorkspace: (workspaceId: string) => {
+        void window.canvas.workspace.list().then((rows) => {
+          const row = rows.find((r) => r.id === workspaceId)
+          deleteWorkspaceRef.current?.(
+            workspaceId, row?.name ?? workspaceId, row?.panelIds.length ?? 0
+          )
+        })
+      }
+    })
+  }, [applyHistory, resetCanvas, switchWorkspace])
 
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
@@ -1099,6 +1353,29 @@ export function Canvas({
     if (palette.open) reloadSettings()
   }, [palette.open, reloadSettings])
 
+  // The workspace list, reloaded after every mutation the palette's own
+  // create/rename/delete commands drive below — the same "main is the only
+  // side that knows what the store now says" rule reloadPresets/
+  // reloadPrompts/reloadSettings already follow. It also reloads on mount
+  // and on every palette open, the same two occasions the sibling lists
+  // reload on below, and every row that needs `attentionIds` reads it from
+  // this same state and loader rather than a second one.
+  const [workspaceRows, setWorkspaceRows] = useState<WorkspaceRow[]>(EMPTY_WORKSPACES)
+  const reloadWorkspaces = useCallback(() => {
+    void window.canvas.workspace.list().then(setWorkspaceRows)
+  }, [])
+  // Mount (so the first Cmd+K sees real rows even if no mutation has run
+  // yet) and every palette open (so a workspace mutated while the palette
+  // was closed still shows up) — the two occasions reloadPresets/
+  // reloadSettings already cover for their own lists. Deliberately NOT a
+  // dependency of any agent-state effect: the ROWS change rarely, while the
+  // waiting COUNT is derived live below from attentionIds, so a bell must
+  // not reload this list on every agent:state message.
+  useEffect(() => { reloadWorkspaces() }, [reloadWorkspaces])
+  useEffect(() => {
+    if (palette.open) reloadWorkspaces()
+  }, [palette.open, reloadWorkspaces])
+
   // Read once at mount and again whenever a setting changes, so toggling the
   // glow off takes effect without a relaunch. settingRows is loaded only when
   // the palette OPENS, so it cannot be the source here — a panel must know
@@ -1396,10 +1673,231 @@ export function Canvas({
       }
 
       openEdit(String(current))
+    },
+    switchWorkspace,
+    beginCreateWorkspace: () => {
+      setInputMode({
+        kind: 'text',
+        label: 'Name the new workspace…',
+        initial: '',
+        submit: (value) => {
+          const name = value.trim()
+          // An empty trimmed value is a cancel, not "name this workspace
+          // the empty string" — parseWorkspace accepts '' and it would
+          // round-trip to disk, leaving the switch row and the admin rows
+          // rendering blank text with no way back to a real name short of
+          // deleting the workspace.
+          if (name.length === 0) {
+            setInputMode(null)
+            return
+          }
+          void window.canvas.workspace.create(name).then((id) => {
+            // Create then switch, as two calls rather than one store method.
+            // createWorkspace deliberately does NOT activate what it mints
+            // (a create that also switched would move the user somewhere
+            // they did not ask to go) — but this row is "new workspace",
+            // and arriving in it IS what the user asked for. The store
+            // keeps the two separable; the command composes them.
+            switchWorkspace(id)
+            reloadWorkspaces()
+            setInputMode(null)
+          }, (error: unknown) => {
+            // Unhandled otherwise: void-ing this chain silences the lint,
+            // not the rejection. Nothing has happened to the canvas yet at
+            // this point (create runs before switch), so failing here is
+            // the cheap, honest case — just tell the palette to stop
+            // waiting rather than leaving it hung on a promise that will
+            // never resolve.
+            console.warn('[workspace] could not create workspace', name, error)
+            setInputMode(null)
+          })
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without reopening, the mode would be set on a palette that is gone.
+      palette.openPalette()
+    },
+    beginRenameWorkspace: (id, currentName) => {
+      setInputMode({
+        kind: 'text',
+        label: 'Rename this workspace…',
+        initial: currentName,
+        submit: (value) => {
+          const name = value.trim()
+          // Same cancel rule as beginCreateWorkspace: an empty trimmed
+          // value must not reach the store, or the rename "succeeds" into
+          // a blank name that round-trips to disk.
+          if (name.length === 0) {
+            setInputMode(null)
+            return
+          }
+          void window.canvas.workspace.rename(id, name)
+            .catch((error: unknown) => {
+              // Unhandled otherwise. Refused or rejected, the palette still
+              // has to stop waiting — reloadWorkspaces() below reflects
+              // whichever name main actually kept either way.
+              console.warn('[workspace] could not rename workspace', id, error)
+            })
+            .finally(() => {
+              reloadWorkspaces()
+              setInputMode(null)
+            })
+        }
+      })
+      // Same reason beginCreateWorkspace/beginRenamePreset both do this.
+      palette.openPalette()
+    },
+    deleteWorkspace: (id, name, panelCount) => {
+      // Gated, not instant — the same reason deletePreset above is: a
+      // delete row sat one Enter away from destroying a workspace's worth
+      // of running agents, styled identically to "Go to n1".
+      //
+      // `panelCount` (commands.ts's `w.panelIds.length`) is a PANEL count,
+      // not a LIVE one — three dormant, never-spawned panels would read as
+      // "stop 3 running agents", which is false, in the one place a false
+      // claim is worst: a destructive confirm. Recomputed honestly below,
+      // before the question is ever shown, against main's own pty list
+      // rather than this renderer's local registry — the same reason
+      // dispose()'s own fix above exists: a panel this renderer holds no
+      // PanelSession for (another workspace's, or one surviving a reload)
+      // can still be genuinely running, so the registry alone would
+      // undercount exactly the panels most worth warning about.
+      void (async (): Promise<void> => {
+        let liveCount = panelCount
+        try {
+          const [rows, sessions] = await Promise.all([
+            window.canvas.workspace.list(),
+            window.canvas.pty.list()
+          ])
+          const row = rows.find((w) => w.id === id)
+          if (row) {
+            const liveIds = new Set(sessions.map((s) => s.panelId))
+            liveCount = row.panelIds.filter((pid) => liveIds.has(pid)).length
+          }
+        } catch (error: unknown) {
+          // Failing toward the ORIGINAL (panel) count is the safe direction
+          // for a destructive confirm: overstating what is about to stop is
+          // the honest side of a guess to be wrong on, understating it is
+          // not.
+          console.warn('[workspace] could not compute a live count for delete confirm', id, error)
+        }
+        setInputMode({
+          kind: 'confirm',
+          // The count is IN the question. "Delete this workspace?" and
+          // "stop 3 running agents?" are different questions, and only the
+          // second one is the one actually being asked.
+          label:
+            liveCount > 0
+              ? `Delete “${name}” and stop ${liveCount} running ${liveCount === 1 ? 'agent' : 'agents'}?`
+              : `Delete “${name}”?`,
+          initial: '',
+          submit: () => {
+            void (async (): Promise<void> => {
+              try {
+                const before = await window.canvas.workspace.list()
+                const doomed = before.find((w) => w.id === id)
+                // Re-read rather than trusting the row's captured
+                // panelIds: the palette's list is a snapshot from when it
+                // opened, and a panel may have been closed (or opened)
+                // since.
+                if (doomed) {
+                  // Deleting the ACTIVE workspace: switch away BEFORE
+                  // removing the record, never after. IPC.WORKSPACE_ACTIVATE's
+                  // own doc comment says why — activate() writes its
+                  // `outgoing` argument into whichever workspace main
+                  // considers active AT THE MOMENT IT RUNS, and main's own
+                  // remove() reassigns activeWorkspaceId to a neighbour the
+                  // instant this record is gone. An activate() issued AFTER
+                  // remove() would therefore write THIS (about-to-be-deleted)
+                  // workspace's own stale panels — captured before dispose()
+                  // below ever ran — into whatever main just made active,
+                  // silently resurrecting a disposed panel's id there. This
+                  // was caught by a failing check, not by reading the doc
+                  // comment first: verify:panels 69 disposed the session
+                  // correctly and then watched it reappear in the registry a
+                  // moment later, reintroduced by exactly this write.
+                  // Switching first means the outgoing write lands on the
+                  // record actually being left — this one, which we are
+                  // about to delete anyway, so it is harmless there.
+                  //
+                  // A workspace with no neighbour (this was the ONLY one)
+                  // gets the SAME treatment, not a special one: mint a
+                  // fresh replacement and switch to IT first, exactly as
+                  // though it were a neighbour that already existed. The
+                  // earlier shape of this branch let main's remove()
+                  // install its own fresh default and switched to THAT
+                  // afterward — which is the identical after-remove()
+                  // mistake this comment already rules out, just with the
+                  // neighbour missing rather than merely stale: the
+                  // outgoing write still landed on a real, currently-active
+                  // record (the fresh default) with this doomed workspace's
+                  // disposed panels, resurrecting them there. 'Canvas'
+                  // matches the name main's own defaultWorkspace() would
+                  // have installed, so the user sees the same thing either
+                  // way — the only difference is which process decided.
+                  let target = before.find((w) => w.id !== id)
+                  if (doomed.active && !target) {
+                    const freshId = await window.canvas.workspace.create('Canvas')
+                    target = { id: freshId, name: 'Canvas', panelIds: [], active: false }
+                  }
+                  if (doomed.active && target) switchWorkspace(target.id)
+                  for (const panelId of doomed.panelIds) {
+                    // THE FOURTH registry.dispose CALL SITE in this file
+                    // (after onClosePanel, applyHistory and onReset). It
+                    // adds no caller of pty.kill: dispose(id) and
+                    // disposeAll() remain the only two inside
+                    // session-registry.ts, and routing through dispose()
+                    // rather than reaching for pty.kill directly is exactly
+                    // what has kept that count true across four milestones.
+                    //
+                    // Disposing rather than detaching is deliberate. The
+                    // workspace RECORD is going, so a surviving session is
+                    // one no UI can ever reach or stop again — the backlog
+                    // item for recovering an orphan session does not exist
+                    // — which means an agent would burn tokens invisibly
+                    // until quit kill-servers the whole tmux socket. This
+                    // holds even for a panelId this renderer has no LOCAL
+                    // PanelSession for (a hidden workspace's own panel, or
+                    // one surviving a reload): dispose()'s own fix sends
+                    // pty.kill regardless, mirroring main's PtyManager.kill.
+                    registry.dispose(panelId)
+                    clearAgentState(panelId)
+                  }
+                }
+                await window.canvas.workspace.remove(id)
+              } catch (error: unknown) {
+                // Unhandled otherwise. By the time any of these awaits could
+                // reject, the sessions above may already be disposed — the
+                // worst case this action's brief calls out — so silence here
+                // would strand the user on a canvas full of dead panels with
+                // no path back and nothing in any log.
+                console.warn('[workspace] could not delete workspace', id, error)
+              } finally {
+                reloadWorkspaces()
+                setInputMode(null)
+              }
+            })()
+          }
+        })
+        // Palette.tsx closes the overlay BEFORE running a row's command, so
+        // without reopening, the mode would be set on a palette that is
+        // gone. Reopened here rather than before the count above, since
+        // this whole function is now async: opening early would show a
+        // confirm whose wording changes a beat later, which reads as the
+        // dialog glitching rather than as a deliberate wait.
+        palette.openPalette()
+      })()
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows])
+       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces])
+
+  // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
+  // declared earlier in this component — see that ref's own comment for why
+  // it exists instead of a direct reference.
+  useEffect(() => {
+    deleteWorkspaceRef.current = paletteActions.deleteWorkspace
+  }, [paletteActions])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -1479,6 +1977,13 @@ export function Canvas({
           prompts={promptRows}
           panels={panelRows}
           settings={settingRows}
+          workspaces={workspaceRows}
+          // The renderer's own attention set (agent-state-store.ts), not a
+          // second derivation: main never learns "which panels are
+          // wants-you" as a set, only individual agent:state transitions,
+          // and asking it to recompute one here would make it a second
+          // author of a fact this side already folds correctly.
+          attentionIds={waitingIds}
           hasSelection={hasSelection()}
           inputMode={inputMode}
         />

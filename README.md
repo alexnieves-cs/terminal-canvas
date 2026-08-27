@@ -221,6 +221,35 @@ landing three surfaces this codebase cannot verify under the same green
 `npm run verify` as the two it can would be coverage that reads as proof
 and isn't. They remain unbuilt, not merely undocumented.
 
+**Multiple named workspaces, switching without killing anything.** The
+canvas is no longer one persisted set of panels but a keyed collection of
+them — "startup", "school", whatever names fit — switched from the command
+palette's `Workspaces` section. A switch is a second boot: the outgoing
+canvas is written into the workspace being left, the incoming one is read
+back exactly as it would be at launch, and every derived piece of renderer
+state (the undo stack, the id counter, the camera, the selection) is
+re-derived rather than carried across. What does NOT happen on a switch is
+any process dying — a hidden workspace's panels lose their DOM and keep
+their tmux sessions, the same "two lifetimes, not one" split M4c already
+relies on for a reload, now paying out at the scale of a whole canvas
+instead of one culled panel. A workspace's row in the palette shows how many
+of its panels are currently waiting for you, even while it is hidden.
+
+Three things this milestone's design considered and deliberately did not
+build. **A merged, all-in-one view across every workspace** is the exact case
+that would try to exceed `LIVE_BUDGET` — a cap on live WebGL contexts that is
+global, not per-workspace, so a merged view has no natural budget of its own
+to spend. **Moving a panel from one workspace to another** has an obvious
+gesture — rubber-band select several panels, then reassign them — and that
+gesture, rubber-band selection, does not exist yet (`docs/ideas-backlog.md` #52);
+building the move without it would mean inventing a worse one-off
+picker for a feature that already has a natural home waiting. **A keyboard
+shortcut for switching workspaces** was left unassigned: `Cmd+0` and `Cmd+1`
+are already spoken for, and picking a new chord now would be a guess dressed
+up as a decision — nobody yet knows how often switching happens in practice,
+and a wrong guess is a worse outcome than a palette-only path for one more
+milestone.
+
 ## Milestones
 
 | | Scope | Status |
@@ -238,6 +267,7 @@ and isn't. They remain unbuilt, not merely undocumented.
 | M6b | Settings: a declarative schema, searchable in the palette | ✅ done |
 | M6c | Agent state: a border that says what each panel is doing | ✅ done |
 | M6d | Attention routing: edge pips for off-screen panels, Cmd+J to jump | ✅ done |
+| M7 | Workspaces: named canvases, switching without disposing | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

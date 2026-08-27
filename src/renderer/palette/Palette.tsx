@@ -25,7 +25,7 @@ import {
   type PresetRow,
   type PromptRow
 } from './commands'
-import type { SettingRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { PaletteController } from './usePalette'
 
 /**
@@ -82,6 +82,9 @@ export interface PaletteProps {
   prompts: PromptRow[]
   panels: PanelRow[]
   settings: SettingRow[]
+  workspaces: WorkspaceRow[]
+  /** Panel ids currently in wants-you, from the renderer's own attention set. */
+  attentionIds: readonly string[]
   hasSelection: boolean
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
@@ -90,7 +93,8 @@ export interface PaletteProps {
 const SCOPE_LABEL: Record<PaletteScope, string> = {
   presets: 'Presets',
   prompts: 'Prompts',
-  settings: 'Settings'
+  settings: 'Settings',
+  workspaces: 'Workspaces'
 }
 
 const sectionLabel = (id: SectionId): string =>
@@ -114,12 +118,14 @@ export function Palette(props: PaletteProps): JSX.Element {
         prompts: props.prompts,
         panels: props.panels,
         settings: props.settings,
+        workspaces: props.workspaces,
+        attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         actions: props.actions
       }),
-    [props.presets, props.prompts, props.panels, props.settings, controller.capturedId,
-     props.hasSelection, props.actions]
+    [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
+     props.attentionIds, controller.capturedId, props.hasSelection, props.actions]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 
@@ -427,6 +433,11 @@ export function Palette(props: PaletteProps): JSX.Element {
                         ? <mark key={si} className="palette__hit">{seg.text}</mark>
                         : <span key={si}>{seg.text}</span>
                     )}
+                    {/* Composed here, not baked into row.title: the count is
+                        transient state (agents finish, it changes), and
+                        row.title feeds haystack() unconditionally — see
+                        Command.waiting's doc comment in palette-model.ts. */}
+                    {row.waiting !== undefined && ` · ${row.waiting} waiting`}
                   </span>
                   {/* Says WHY it is disabled. A greyed-out row with no reason
                       is a bug report — the same rule menuLabel() states for

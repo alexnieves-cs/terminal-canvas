@@ -99,7 +99,25 @@ export const IPC = {
    * main owns, and the two would disagree the first time M6d fired a
    * notification for a panel the user had already read.
    */
-  AGENT_ACKNOWLEDGE: 'agent:acknowledge'
+  AGENT_ACKNOWLEDGE: 'agent:acknowledge',
+  /**
+   * The workspace surface. All five point renderer -> main for the reason
+   * M5b's preset mutations do: main owns layout.json, and the palette is the
+   * renderer's — so a mutation is an invoke, not an event.
+   *
+   * There is deliberately NO workspace attention channel. The renderer
+   * already receives every agent:state transition for every panel main knows
+   * about, so the attention set is folded renderer-side; WORKSPACE_LIST
+   * returns panelIds and the renderer intersects. Asking main to recompute a
+   * set the renderer already holds would make main a second author of a
+   * derived fact — the same reasoning M6d recorded for not adding a channel.
+   */
+  WORKSPACE_LIST: 'workspace:list',
+  /** Takes the outgoing canvas: the switch IS its last save. See the store. */
+  WORKSPACE_ACTIVATE: 'workspace:activate',
+  WORKSPACE_CREATE: 'workspace:create',
+  WORKSPACE_RENAME: 'workspace:rename',
+  WORKSPACE_DELETE: 'workspace:delete'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -198,6 +216,42 @@ export interface PromptBridgeRow {
   name: string
   source: 'saved' | 'project'
   body: string
+}
+
+/**
+ * One workspace as the palette needs it.
+ *
+ * An IPC payload shape, not an on-disk one — the same split PresetListRow
+ * draws against Preset, and it matters for the same reason: layout-schema.ts
+ * decides what is VALID on disk, and a field that exists only to render a row
+ * has no business in the format.
+ *
+ * `panelIds` rather than a waiting count. Main does not know which panels are
+ * in wants-you in a form the renderer should trust it for, and the renderer
+ * already receives every agent:state transition — so shipping a count here
+ * would put the derivation in the wrong process to no benefit. See M6d's
+ * "M7 added no IPC channel" reasoning, which this follows.
+ */
+export interface WorkspaceRow {
+  id: string
+  name: string
+  panelIds: string[]
+  active: boolean
+}
+
+/**
+ * What a switch hands back. A workspace switch is a SECOND BOOT — the same
+ * two facts boot() awaits, in one round trip instead of two.
+ *
+ * `allPanelIds` spans every workspace, deliberately. The renderer seeds
+ * nextIdRef from it, and PanelId doubles as the tmux session name: seeding
+ * from the ACTIVE workspace's ids alone would let Cmd+N in one workspace mint
+ * an id another workspace is already using, and the second panel to go live
+ * would attach to the first one's process.
+ */
+export interface ActivateResult {
+  state: CanvasState
+  allPanelIds: string[]
 }
 
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
@@ -307,6 +361,18 @@ export interface CanvasBridge {
     onState(listener: (update: AgentStateUpdate) => void): () => void
     /** Focus counts as reading it. See IPC.AGENT_ACKNOWLEDGE. */
     acknowledge(panelId: PanelId): Promise<void>
+  }
+  workspace: {
+    list(): Promise<WorkspaceRow[]>
+    /**
+     * `outgoing` is the canvas being left. Resolves null when the id names
+     * nothing, having changed nothing.
+     */
+    activate(id: string, outgoing: CanvasState): Promise<ActivateResult | null>
+    create(name: string): Promise<string>
+    rename(id: string, name: string): Promise<boolean>
+    /** `remove`, not `delete`: `delete` is reserved, as PresetBridge already found. */
+    remove(id: string): Promise<boolean>
   }
   platform: NodeJS.Platform
 }
