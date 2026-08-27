@@ -127,6 +127,31 @@ const zoomTo = (wc, key) =>
   )
 
 /**
+ * An unmodified keydown — Enter/Escape at the workspace confirm gate (checks
+ * 69-70), which must NOT carry metaKey the way every other synthetic key
+ * this suite dispatches does. zoomTo's name and shape are both wrong for
+ * that: it always sets metaKey, and a `true` value there would be a lie
+ * about what a real Enter/Escape press looks like.
+ *
+ * Dispatched on `document.activeElement`, never on `window`: React's own
+ * `onKeyDown` here is bound to the palette's `<input>` element, and an event
+ * only reaches a listener bound to a DESCENDANT of its dispatch target during
+ * the CAPTURE phase, which a plain `dispatchEvent` never runs — bubbling only
+ * ever climbs from the target toward the root, so a window-targeted dispatch
+ * reaches window's own listeners and nothing an input owns (the same shape
+ * of mistake CLAUDE.md's ".panel__slot never reaches xterm's listeners"
+ * documents for mouse events). Rule 1 of "who owns the keyboard" guarantees
+ * the palette's own input holds focus the instant it opens, which is what
+ * makes `document.activeElement` the right target rather than a guess.
+ */
+const pressPlain = (wc, key) =>
+  wc.executeJavaScript(`(() => {
+    const target = document.activeElement || document.body
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', bubbles: true }))
+    return true
+  })()`)
+
+/**
  * M7's workspace-switch checks (64-67) call this after every
  * __m7aWorkspace() action. switchWorkspace's own work is a fire-and-forget
  * chain of TWO local IPC round trips (workspace:activate, then a second
@@ -4148,6 +4173,74 @@ app.whenReady().then(async () => {
         spawned !== true && registered !== undefined &&
           registered.dormant === true && registered.spawned === false,
         `spawned=${spawned} registered=${JSON.stringify(registered)}`)
+    }
+
+    // 69-70 — Task 6. Create/rename/delete from the palette, and the fourth
+    //     registry.dispose call site. __m7aWorkspace().deleteWorkspace(id)
+    //     drives the SAME gated action a real "Delete workspace…" row does
+    //     (paletteActions.deleteWorkspace) rather than a bypass, which is
+    //     what lets these two checks tell a real confirm gate apart from a
+    //     delete function that runs unconditionally.
+    {
+      // 69. Deleting a workspace disposes its panels' sessions. Not detach —
+      //     the record is going, so a surviving session is one no UI can
+      //     ever reach or stop: backlog #61 (recover an orphan session) does
+      //     not exist, so it would burn tokens invisibly until quit
+      //     kill-servers the socket.
+      //
+      //     The plan's own check for this omitted the confirm step
+      //     entirely — it called deleteWorkspace(id) and expected the
+      //     session gone after a plain settle(), which only holds if the
+      //     confirm gate does nothing, i.e. against a BROKEN implementation.
+      //     Against the real gated action nothing is disposed until the
+      //     question is answered, so this check answers it with a real
+      //     Enter on the reopened palette's own input before reading
+      //     anything back — the same reason check 50 clicks a real row
+      //     rather than calling a store method directly.
+      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('doomed')`)
+      await settle()
+      await zoomTo(wc, 'n') // one panel in 'doomed', which goes live and spawns
+      await settle()
+      const before = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      const doomed = await wc.executeJavaScript(`
+        window.canvas.workspace.list().then((r) => (r.find((w) => w.name === 'doomed') || {}).id)
+      `)
+      await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(doomed)})`)
+      await settle()
+      await pressPlain(wc, 'Enter') // answers the confirm; see this block's own comment
+      await settle()
+      const after = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      const rows69 = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      ok('69 deleting a workspace disposes its sessions and its record',
+        after < before && !rows69.some((w) => w.name === 'doomed'),
+        `sessions ${before} -> ${after} rows=${rows69.length}`)
+
+      // 70. The confirm is a real gate: Escape leaves the workspace
+      //     UNDELETED, read back out of workspace.list() rather than off the
+      //     overlay. A confirm step that confirms unconditionally is
+      //     invisible — the same reason check 50 reads preset.list()
+      //     instead of the DOM.
+      //
+      //     The plan's own check dispatched Escape on `window`, which never
+      //     reaches Palette.tsx's onKeyDown at all — that handler is bound
+      //     to the palette's own `<input>`, and a window-targeted dispatch
+      //     only reaches window's own listeners, never a descendant's
+      //     (bubbling runs from the EVENT'S TARGET upward, and window has no
+      //     ancestors to bubble past its own target in the first place —
+      //     see CLAUDE.md's ".panel__slot never reaches xterm's listeners"
+      //     for the same shape of mistake). pressPlain instead dispatches on
+      //     `document.activeElement`, which the confirm input holds because
+      //     opening the palette always focuses it (rule 1 in Canvas.tsx's
+      //     "who owns the keyboard").
+      const keepId = await wc.executeJavaScript(`window.canvas.workspace.create('keepme')`)
+      await settle()
+      await wc.executeJavaScript(`window.__m7aWorkspace().deleteWorkspace(${JSON.stringify(keepId)})`)
+      await settle()
+      await pressPlain(wc, 'Escape')
+      await settle()
+      const rows70 = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      ok('70 Escape at the confirm leaves the workspace undeleted',
+        rows70.some((w) => w.id === keepId), `rows=${rows70.map((w) => w.name).join()}`)
     }
 
   } catch (error) {

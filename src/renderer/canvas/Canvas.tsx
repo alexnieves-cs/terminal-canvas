@@ -781,6 +781,15 @@ export function Canvas({
   // viewport changes on every wheel event.
   useEffect(() => installPointerCorrection(() => viewportRef.current.scale), [])
 
+  // Mirrors paletteActions.deleteWorkspace for the __m7aWorkspace test hook
+  // below, which is defined (and its effect runs) before `paletteActions`
+  // exists later in this component — referencing it directly would be a
+  // TDZ error, not merely a stale closure. The same mirror-into-a-ref move
+  // `focusedIdRef` and `viewportRef` already make in this file. Populated by
+  // an effect right after paletteActions is declared; read only from inside
+  // a callback the test hook itself doesn't invoke until well after mount.
+  const deleteWorkspaceRef = useRef<PaletteActions['deleteWorkspace'] | null>(null)
+
   // Test hooks for verify:panels. The registry (and, since M7, the workspace
   // surface) is a module-level/main-owned concept with no other route in for
   // executeJavaScript. Kept to narrow, single-purpose reads/writes — named
@@ -885,6 +894,7 @@ export function Canvas({
       switchTo: (workspaceId: string) => void
       createAndSwitch: (name: string) => Promise<string>
       allPanelIds: () => Promise<string[]>
+      deleteWorkspace: (workspaceId: string) => void
     } => ({
       switchTo: (workspaceId: string) => switchWorkspace(workspaceId),
       // Returns the id the store actually minted, not just a fire-and-forget
@@ -899,7 +909,24 @@ export function Canvas({
           return workspaceId
         }),
       allPanelIds: () =>
-        window.canvas.workspace.list().then((rows) => rows.flatMap((row) => row.panelIds))
+        window.canvas.workspace.list().then((rows) => rows.flatMap((row) => row.panelIds)),
+      // Drives the SAME gated action a real "Delete workspace…" palette row
+      // does — paletteActions.deleteWorkspace, reached through a ref because
+      // paletteActions is declared later in this component (see
+      // deleteWorkspaceRef's own comment). Not a bypass: this still opens
+      // the confirm and still waits on an Enter/Escape the way the real row
+      // does, which is what lets verify:panels prove the confirm is a real
+      // gate rather than only that a delete function exists. name/liveCount
+      // are read off main's own list rather than guessed, the same reason
+      // createAndSwitch above never hardcodes an id.
+      deleteWorkspace: (workspaceId: string) => {
+        void window.canvas.workspace.list().then((rows) => {
+          const row = rows.find((r) => r.id === workspaceId)
+          deleteWorkspaceRef.current?.(
+            workspaceId, row?.name ?? workspaceId, row?.panelIds.length ?? 0
+          )
+        })
+      }
     })
   }, [applyHistory, resetCanvas, switchWorkspace])
 
@@ -1304,6 +1331,18 @@ export function Canvas({
     if (palette.open) reloadSettings()
   }, [palette.open, reloadSettings])
 
+  // The workspace list, reloaded after every mutation the palette's own
+  // create/rename/delete commands drive below — the same "main is the only
+  // side that knows what the store now says" rule reloadPresets/
+  // reloadPrompts/reloadSettings already follow. Task 7 adds the other two
+  // occasions the sibling lists reload on (mount, and every palette open)
+  // plus the real `attentionIds` read; it consumes this same state and
+  // loader rather than declaring a second one.
+  const [workspaceRows, setWorkspaceRows] = useState<WorkspaceRow[]>(EMPTY_WORKSPACES)
+  const reloadWorkspaces = useCallback(() => {
+    void window.canvas.workspace.list().then(setWorkspaceRows)
+  }, [])
+
   // Read once at mount and again whenever a setting changes, so toggling the
   // glow off takes effect without a relaunch. settingRows is loaded only when
   // the palette OPENS, so it cannot be the source here — a panel must know
@@ -1603,18 +1642,175 @@ export function Canvas({
       openEdit(String(current))
     },
     switchWorkspace,
-    // Stub: Task 6 wires this to an input-mode prompt, the same shape as
-    // beginRenamePreset above.
-    beginCreateWorkspace: () => {},
-    // Stub: Task 6 wires this to an input-mode prompt, the same shape as
-    // beginRenamePreset above.
-    beginRenameWorkspace: () => {},
-    // Stub: Task 6 wires this to a confirm gate, the same shape as
-    // deletePreset above.
-    deleteWorkspace: () => {}
+    beginCreateWorkspace: () => {
+      setInputMode({
+        kind: 'text',
+        label: 'Name the new workspace…',
+        initial: '',
+        submit: (value) => {
+          const name = value.trim()
+          void window.canvas.workspace.create(name).then((id) => {
+            // Create then switch, as two calls rather than one store method.
+            // createWorkspace deliberately does NOT activate what it mints
+            // (a create that also switched would move the user somewhere
+            // they did not ask to go) — but this row is "new workspace",
+            // and arriving in it IS what the user asked for. The store
+            // keeps the two separable; the command composes them.
+            switchWorkspace(id)
+            reloadWorkspaces()
+            setInputMode(null)
+          }, (error: unknown) => {
+            // Unhandled otherwise: void-ing this chain silences the lint,
+            // not the rejection. Nothing has happened to the canvas yet at
+            // this point (create runs before switch), so failing here is
+            // the cheap, honest case — just tell the palette to stop
+            // waiting rather than leaving it hung on a promise that will
+            // never resolve.
+            console.warn('[workspace] could not create workspace', name, error)
+            setInputMode(null)
+          })
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without reopening, the mode would be set on a palette that is gone.
+      palette.openPalette()
+    },
+    beginRenameWorkspace: (id, currentName) => {
+      setInputMode({
+        kind: 'text',
+        label: 'Rename this workspace…',
+        initial: currentName,
+        submit: (value) => {
+          const name = value.trim()
+          void window.canvas.workspace.rename(id, name)
+            .catch((error: unknown) => {
+              // Unhandled otherwise. Refused or rejected, the palette still
+              // has to stop waiting — reloadWorkspaces() below reflects
+              // whichever name main actually kept either way.
+              console.warn('[workspace] could not rename workspace', id, error)
+            })
+            .finally(() => {
+              reloadWorkspaces()
+              setInputMode(null)
+            })
+        }
+      })
+      // Same reason beginCreateWorkspace/beginRenamePreset both do this.
+      palette.openPalette()
+    },
+    deleteWorkspace: (id, name, liveCount) => {
+      // Gated, not instant — the same reason deletePreset above is: a
+      // delete row sat one Enter away from destroying a workspace's worth
+      // of running agents, styled identically to "Go to n1".
+      setInputMode({
+        kind: 'confirm',
+        // The count is IN the question. "Delete this workspace?" and "stop
+        // 3 running agents?" are different questions, and only the second
+        // one is the one actually being asked.
+        label:
+          liveCount > 0
+            ? `Delete “${name}” and stop ${liveCount} running ${liveCount === 1 ? 'agent' : 'agents'}?`
+            : `Delete “${name}”?`,
+        initial: '',
+        submit: () => {
+          void (async (): Promise<void> => {
+            try {
+              const before = await window.canvas.workspace.list()
+              const doomed = before.find((w) => w.id === id)
+              // Re-read rather than trusting the row's captured panelIds:
+              // the palette's list is a snapshot from when it opened, and a
+              // panel may have been closed (or opened) since.
+              // Computed once, up front, and reused below rather than
+              // re-derived after remove(): a second `before.find` after the
+              // record is gone would still answer the same question, but
+              // computing it twice invites the two answers drifting apart
+              // if this function is ever edited to filter `before` in
+              // between.
+              const neighbour = before.find((w) => w.id !== id)
+              if (doomed) {
+                // Deleting the ACTIVE workspace: switch away BEFORE
+                // removing the record, never after. IPC.WORKSPACE_ACTIVATE's
+                // own doc comment says why — activate() writes its
+                // `outgoing` argument into whichever workspace main
+                // considers active AT THE MOMENT IT RUNS, and main's own
+                // remove() reassigns activeWorkspaceId to a neighbour the
+                // instant this record is gone. An activate() issued AFTER
+                // remove() would therefore write THIS (about-to-be-deleted)
+                // workspace's own stale panels — captured before dispose()
+                // below ever ran — into the NEIGHBOUR's record, silently
+                // resurrecting a disposed panel's id there. This was
+                // caught by a failing check, not by reading the doc
+                // comment first: verify:panels 69 disposed the session
+                // correctly and then watched it reappear in the registry a
+                // moment later, reintroduced by exactly this write.
+                // Switching first means the outgoing write lands on the
+                // record actually being left — this one, which we are
+                // about to delete anyway, so it is harmless there.
+                if (doomed.active && neighbour) switchWorkspace(neighbour.id)
+                // No neighbour and this was the active workspace: it was
+                // the only one. main's remove() below installs a fresh
+                // default and activates it on its own; there is nothing to
+                // pre-switch to, so the renderer catches up to that fresh
+                // workspace after remove() completes, in the one case where
+                // an activate() call after remove() is unavoidable — and
+                // safe, because the outgoing panels it carries are this
+                // now-deleted workspace's, landing on a brand new record
+                // with nothing in it yet to corrupt.
+                for (const panelId of doomed.panelIds) {
+                  // THE FOURTH registry.dispose CALL SITE in this file
+                  // (after onClosePanel, applyHistory and onReset). It adds
+                  // no caller of pty.kill: dispose(id) and disposeAll()
+                  // remain the only two inside session-registry.ts, and
+                  // routing through dispose() rather than reaching for
+                  // pty.kill directly is exactly what has kept that count
+                  // true across four milestones.
+                  //
+                  // Disposing rather than detaching is deliberate. The
+                  // workspace RECORD is going, so a surviving session is one
+                  // no UI can ever reach or stop again — the backlog item
+                  // for recovering an orphan session does not exist — which
+                  // means an agent would burn tokens invisibly until quit
+                  // kill-servers the whole tmux socket.
+                  registry.dispose(panelId)
+                  clearAgentState(panelId)
+                }
+              }
+              await window.canvas.workspace.remove(id)
+              // The only-workspace edge case from the comment above: nothing
+              // existed to switch to before removal, so main's own fresh
+              // default is picked up here instead.
+              if (doomed?.active && !neighbour) {
+                const after = await window.canvas.workspace.list()
+                const next = after.find((w) => w.active)
+                if (next) switchWorkspace(next.id)
+              }
+            } catch (error: unknown) {
+              // Unhandled otherwise. By the time any of these awaits could
+              // reject, the sessions above may already be disposed — the
+              // worst case this action's brief calls out — so silence here
+              // would strand the user on a canvas full of dead panels with
+              // no path back and nothing in any log.
+              console.warn('[workspace] could not delete workspace', id, error)
+            } finally {
+              reloadWorkspaces()
+              setInputMode(null)
+            }
+          })()
+        }
+      })
+      // Same reason beginCreateWorkspace/beginRenamePreset both do this.
+      palette.openPalette()
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows, switchWorkspace])
+       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces])
+
+  // Keeps deleteWorkspaceRef current for the __m7aWorkspace test hook
+  // declared earlier in this component — see that ref's own comment for why
+  // it exists instead of a direct reference.
+  useEffect(() => {
+    deleteWorkspaceRef.current = paletteActions.deleteWorkspace
+  }, [paletteActions])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -1694,8 +1890,7 @@ export function Canvas({
           prompts={promptRows}
           panels={panelRows}
           settings={settingRows}
-          // Stub: Task 7 loads the real list from window.canvas.workspace.list().
-          workspaces={EMPTY_WORKSPACES}
+          workspaces={workspaceRows}
           // Stub: Task 7 wires this to the renderer's real attention set.
           attentionIds={EMPTY_ATTENTION_IDS}
           hasSelection={hasSelection()}
