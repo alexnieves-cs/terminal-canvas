@@ -1,4 +1,5 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
+import { SettingValue, settingDef } from './settings-schema'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -150,6 +151,13 @@ export interface LayoutSnapshot {
    * here — see main/prompts.ts.
    */
   prompts: Prompt[]
+  /**
+   * Every setting the user has actually CHANGED, keyed by SettingDef.id.
+   * Sparse on purpose: an absent id means "still at the schema default", which
+   * is what stops this map growing an entry per toggle per user and what lets
+   * a default be changed later without rewriting anyone's file.
+   */
+  preferences: Record<string, SettingValue>
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -181,7 +189,10 @@ export function defaultSnapshot(): LayoutSnapshot {
     settings: defaultSettings(),
     presets: [],
     defaultPresetId: DEFAULT_PRESET_ID,
-    prompts: []
+    prompts: [],
+    // Empty means "everything at its schema default" — exactly what a default
+    // snapshot is.
+    preferences: {}
   }
 }
 
@@ -295,6 +306,46 @@ export function parsePresets(raw: unknown, warnings: string[]): Preset[] {
   return raw
     .map((p) => parsePreset(p, seen, warnings))
     .filter((p): p is Preset => p !== null)
+}
+
+/**
+ * The same ABSENT-vs-MALFORMED line parsePresets draws.
+ *
+ * A dropped entry costs that setting and nothing else — the same
+ * drop-individually rule the rest of this file obeys — and every drop warns,
+ * because the silent version of this function is a preference the user
+ * deliberately set that quietly stopped applying, with nothing anywhere
+ * saying why.
+ */
+export function parsePreferences(
+  raw: unknown,
+  warnings: string[]
+): Record<string, SettingValue> {
+  // Every file written before M6b has no preferences key. Warning about those
+  // would make the first launch after an upgrade shout about a file that is
+  // perfectly fine — the same reason parsePresets returns [] silently here.
+  if (raw === undefined) return {}
+  if (!isRecord(raw)) {
+    warnings.push('replaced a preferences field that was not an object')
+    return {}
+  }
+  const out: Record<string, SettingValue> = {}
+  for (const [id, value] of Object.entries(raw)) {
+    const def = settingDef(id)
+    if (def === undefined) {
+      // A setting this build does not know about. Dropping it is right —
+      // carrying it forward would let a typo persist forever — but it MUST
+      // warn, because this is also what a renamed id looks like.
+      warnings.push(`dropped an unknown setting: ${id}`)
+      continue
+    }
+    if (typeof value !== def.type) {
+      warnings.push(`dropped setting ${id}: expected ${def.type}, got ${typeof value}`)
+      continue
+    }
+    out[id] = value as SettingValue
+  }
+  return out
 }
 
 function parsePrompt(raw: unknown, seen: Set<string>, warnings: string[]): Prompt | null {
@@ -427,6 +478,32 @@ export function parseLayout(raw: string): {
       ? requested
       : workspaces[0].id
 
+  const preferences = parsePreferences(parsed.preferences, warnings)
+  // MIGRATION. A file written before M6b has `settings` and no `preferences`,
+  // and its three booleans are the schema's first three entries. Seeding them
+  // here — rather than leaving them to the defaults — is what stops an upgrade
+  // silently resetting a user's restore preferences, which would be
+  // indistinguishable from the app ignoring them. Only ids the preferences map
+  // does not already carry are seeded, so once written the new key wins.
+  //
+  // Guarded on `parsed.settings !== undefined` (deviating from a literal read
+  // of the migration, which would call parseSettings unconditionally):
+  // parseSettings applies ITS OWN defaults for a missing `settings` key, so an
+  // unconditional seed would write three redundant `true` entries into every
+  // file that never had a `settings` key at all — every fresh install, forever
+  // — making the map non-sparse and freezing those three defaults in place for
+  // files that hold no actual user choice to preserve.
+  if (parsed.settings !== undefined) {
+    const legacy = parseSettings(parsed.settings)
+    for (const [key, id] of [
+      ['layout', 'restore.layout'],
+      ['camera', 'restore.camera'],
+      ['focus', 'restore.focus']
+    ] as const) {
+      if (!(id in preferences)) preferences[id] = legacy[key]
+    }
+  }
+
   return {
     snapshot: {
       version: LAYOUT_VERSION,
@@ -441,7 +518,8 @@ export function parseLayout(raw: string): {
         isStr(parsed.defaultPresetId) && ID_PATTERN.test(parsed.defaultPresetId)
           ? parsed.defaultPresetId
           : DEFAULT_PRESET_ID,
-      prompts: parsePrompts(parsed.prompts, warnings)
+      prompts: parsePrompts(parsed.prompts, warnings),
+      preferences
     },
     warnings,
     futureVersion: false

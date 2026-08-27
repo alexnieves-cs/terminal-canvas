@@ -887,6 +887,50 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     bad.length === 0, bad.map((d) => d.id).join(','))
 }
 
+// 65-69 — M6b. The same ABSENT-vs-MALFORMED line parsePresets draws, and for
+//     the same reason: a file with no preferences key is every file written
+//     before M6b and is perfectly fine, while a present-but-wrong one is
+//     corruption whose silent version is a preference the user set that
+//     quietly stopped applying.
+{
+  const w = []
+  ok('65 no preferences key at all is silent',
+    Object.keys(L.parsePreferences(undefined, w)).length === 0 && w.length === 0,
+    w.join('|'))
+}
+{
+  const w = []
+  L.parsePreferences([], w)
+  ok('66 a preferences field that is not an object warns rather than vanishing',
+    w.length === 1, w.join('|'))
+}
+{
+  const w = []
+  const out = L.parsePreferences({ 'restore.layout': false, 'nope.gone': true }, w)
+  ok('67 an unknown setting id is dropped with a warning, and the rest survive',
+    out['restore.layout'] === false && !('nope.gone' in out) && w.length === 1,
+    JSON.stringify(out) + ' | ' + w.join('|'))
+}
+{
+  const w = []
+  const out = L.parsePreferences({ 'restore.layout': 'yes', 'restore.camera': false }, w)
+  ok('68 a value of the wrong type is dropped with a warning, not coerced',
+    !('restore.layout' in out) && out['restore.camera'] === false && w.length === 1,
+    JSON.stringify(out) + ' | ' + w.join('|'))
+}
+{
+  // The migration. A pre-M6b file has `settings` and no `preferences`, and its
+  // three booleans must survive verbatim — an upgrade that silently reset a
+  // user's restore preferences to the defaults would look exactly like the app
+  // ignoring them.
+  const snap = L.parseLayout(file({ settings: { layout: false, camera: true, focus: false } })).snapshot
+  ok('69 a pre-M6b file migrates its restore settings into preferences',
+    snap.preferences['restore.layout'] === false &&
+    snap.preferences['restore.camera'] === true &&
+    snap.preferences['restore.focus'] === false,
+    JSON.stringify(snap.preferences))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
