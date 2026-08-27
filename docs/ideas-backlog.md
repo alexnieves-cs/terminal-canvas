@@ -43,7 +43,7 @@ pick a cell, release to jump. Cells address either canvas regions or whole proje
   bookmarks, and nine workspaces are three different features wearing the same UI.
 - **Depends on:** nothing hard. Could land any time after M4b.
 
-## 2. Named, saved canvases (workspaces)
+## 2. Named, saved canvases (workspaces) — **landed in M7, partially**
 
 Multiple named canvases — "startup", "school" — each with its own panels. Plus: a
 merged all-in-one view, and rubber-band select several panels → right-click → *Move to
@@ -59,6 +59,19 @@ new workspace*.
   running).
 - **Action for M4b:** even if only one workspace ships, give the persisted file a
   workspace id and a name field. Cheap now, a migration later.
+- **What M7 actually shipped:** named, saved canvases with create/rename/delete from the
+  palette, switching that demotes rather than disposes (a hidden workspace keeps its
+  tmux sessions and loses only its DOM), a workspace's own waiting-panel count surfaced
+  on its palette row, and panel ids kept globally unique across every workspace because
+  `PanelId` doubles as a tmux session name. See `CLAUDE.md`'s "A workspace switch is a
+  second boot", "`activateWorkspace` takes the outgoing canvas, and that parameter IS
+  the mechanism", and "Panel ids are global, not per-workspace" for the mechanism.
+- **What M7 did NOT ship, from this entry's own "Plus":** the merged all-in-one view
+  (still the exact `LIVE_BUDGET` collision named above — nothing about M7 changed that
+  constraint, it only made switching between separate canvases cheap) and rubber-band
+  select → *Move to new workspace* (rubber-band selection itself does not exist yet —
+  see entry #52 — so there is no gesture to hang a move onto). A workspace-switching
+  keyboard shortcut was also left unassigned; see `README.md`'s M7 paragraph for why.
 
 ## 3. File tree / codebase browser (IDE-style left rail)
 
