@@ -70,12 +70,47 @@ const ok = (n, pass, detail) => {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/** Stands in for the real WebContents seam and records what main sent. */
-function makeHarness(backend) {
+/**
+ * Polls until predicate() is true, or gives up. Returns whether it became
+ * true rather than throwing, so a failure is reported as a FAIL line with the
+ * observed states attached rather than as a stack trace that says nothing
+ * about what the detector actually did.
+ *
+ * The M6c checks need this instead of a fixed sleep because the two signals
+ * they wait on have different latencies — a bell rides the next PTY read,
+ * while an idle transition waits on a 500ms tick — and a sleep long enough
+ * for the slower one makes the suite slower for no gain.
+ */
+async function waitFor(predicate, timeoutMs = 4000, stepMs = 25) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return true
+    await sleep(stepMs)
+  }
+  return predicate()
+}
+
+/**
+ * Stands in for the real WebContents seam and records what main sent.
+ *
+ * `options` threads M6c's two constructor getters through rather than letting
+ * each check construct a PtyManager inline: the getters exist precisely so a
+ * setting can change under a running manager, and three hand-rolled
+ * constructions would be three places to forget one.
+ */
+function makeHarness(backend, options = {}) {
   const events = []
   const manager = new PtyManager(
-    () => ({ isDestroyed: () => false, send: (channel, payload) => events.push({ channel, payload }) }),
-    () => backend ?? DIRECT
+    () => ({
+      isDestroyed: () => false,
+      send: (channel, payload) => {
+        events.push({ channel, payload })
+        if (options.onSend) options.onSend(channel, payload)
+      }
+    }),
+    () => backend ?? DIRECT,
+    () => options.idleAfterMs ?? 1500,
+    () => options.bellEnabled ?? true
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -196,6 +231,79 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     ok('10 list falls back to the manager map when the backend has no view',
       listed.length === 1 && listed[0] === 'd1', JSON.stringify(listed))
     h.manager.kill('d1')
+  }
+
+  // ---------------------------------------------------------------------
+  // M6c: the detector at the choke point. These three need no tmux — they
+  // are about PtyManager.enqueue, which every backend funnels through — so
+  // they sit ABOVE the `if (!TMUX)` split rather than inside its else, the
+  // same reasoning verify:panels 39 records for its own unconditional block:
+  // a check that skips for a reason unrelated to what it covers is a check
+  // that covers nothing on most machines.
+  // ---------------------------------------------------------------------
+
+  // 17. A panel that prints something reaches 'busy', and the state arrives on
+  //     AGENT_STATE — not on PTY_DATA, and not by bumping anything the renderer
+  //     already subscribes to.
+  {
+    const states = []
+    const h = makeHarness(DIRECT, {
+      onSend: (channel, payload) => {
+        if (channel === 'agent:state') states.push(payload)
+      },
+      idleAfterMs: 200
+    })
+    await h.manager.create(spec('a1', '/bin/sh', ['-c', 'printf hello; sleep 5']))
+    const seen = await waitFor(() => states.some((s) => s.panelId === 'a1' && s.state === 'busy'))
+    ok('17 output produces a busy state on agent:state', seen,
+      JSON.stringify(states))
+    h.manager.kill('a1')
+  }
+
+  // 18. THE TRAP, end to end. A window-title sequence must produce no
+  //     wants-you. This is the only check in the repo that proves the scanner
+  //     is actually wired to the byte stream rather than merely correct in
+  //     isolation — verify:agent-state 2 proves the function, this proves the
+  //     wiring.
+  {
+    const states = []
+    const h = makeHarness(DIRECT, {
+      onSend: (channel, payload) => {
+        if (channel === 'agent:state') states.push(payload)
+      },
+      idleAfterMs: 200
+    })
+    await h.manager.create(spec('a2', '/bin/sh', ['-c', "printf '\\033]0;a title\\007'; sleep 5"]))
+    await sleep(600)
+    ok('18 a window title produces no wants-you',
+      states.some((s) => s.panelId === 'a2') &&
+        !states.some((s) => s.panelId === 'a2' && s.state === 'wants-you'),
+      JSON.stringify(states))
+    h.manager.kill('a2')
+  }
+
+  // 19. A REAL bell does produce wants-you, and typing into the panel clears
+  //     it. Both halves matter: without the first the feature is inert, and
+  //     without the second the state is sticky forever and M6d's queue never
+  //     empties.
+  {
+    const states = []
+    const h = makeHarness(DIRECT, {
+      onSend: (channel, payload) => {
+        if (channel === 'agent:state') states.push(payload)
+      },
+      idleAfterMs: 200
+    })
+    await h.manager.create(spec('a3', '/bin/sh', ['-c', "printf '\\007'; cat"]))
+    const rang = await waitFor(() => states.some((s) => s.panelId === 'a3' && s.state === 'wants-you'))
+    const before = states.length
+    h.manager.write('a3', 'x')
+    const cleared = await waitFor(
+      () => states.length > before && states[states.length - 1].state !== 'wants-you'
+    )
+    ok('19 a real bell wants you, and typing clears it', rang && cleared,
+      JSON.stringify(states))
+    h.manager.kill('a3')
   }
 
   // 11-15 need a real tmux. Skipping is reported, never silent: a suite that
