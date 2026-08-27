@@ -1341,6 +1341,35 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify(ws))
 }
 
+// 94. A workspace switch must not obey restore.layout — that preference
+//     answers "what should the app show at launch", not "at a switch". With
+//     restore.layout OFF, activateWorkspace used to reuse the same doSave/
+//     doInitial the launch path uses (with the settings applied), which meant
+//     doSave skipped `w.panels = …` on the way OUT (the workspace being left
+//     never records the panels it had — their tmux sessions orphan, reachable
+//     from no workspace) and doInitial returned `panels: []` on the way IN
+//     (the workspace being entered reads empty regardless of what it holds on
+//     disk). Switch away from a workspace holding a panel, switch back, and
+//     the panel must still be there.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  s.setSetting('layout', false)
+  const other = s.createWorkspace('school')
+  const empty = { panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  // Leave w1 holding p1 (its own unmodified canvas, same fixture shape check
+  // 90 uses) and switch into the new, empty workspace.
+  const w1Now = { panels: [panel()], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  s.activateWorkspace(other, w1Now)
+  // Switch back. If restore.layout were being consulted here, doSave would
+  // have skipped writing p1 into w1's record on the way out, and doInitial
+  // would hand back `panels: []` on the way in regardless.
+  const res = s.activateWorkspace(L.DEFAULT_WORKSPACE_ID, empty)
+  ok('94 a workspace switch ignores restore.layout — panels survive a round trip with it off',
+    res !== null && res.state.panels.length === 1 && res.state.panels[0].id === 'p1',
+    JSON.stringify(res && res.state.panels))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

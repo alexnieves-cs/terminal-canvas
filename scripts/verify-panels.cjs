@@ -4173,6 +4173,10 @@ app.whenReady().then(async () => {
         spawned !== true && registered !== undefined &&
           registered.dormant === true && registered.spawned === false,
         `spawned=${spawned} registered=${JSON.stringify(registered)}`)
+      // This block leaves NEVER_RENDERED_WORKSPACE_ID active when it ends —
+      // there is no switch back to whatever was active before. Checks 69+
+      // run against whatever workspace this one left active, not against a
+      // known starting point.
     }
 
     // 69-70 — Task 6. Create/rename/delete from the palette, and the fourth
@@ -4357,6 +4361,10 @@ app.whenReady().then(async () => {
           freshActive !== undefined && !freshActive.panelIds.includes(solePanelId),
         `onlyOneLeft=${onlyOneLeft.length} sessions ${before71}->${after71} ` +
         `rowsFinal=${JSON.stringify(rowsFinal)} solePanelId=${solePanelId}`)
+      // This must remain the LAST workspace check in the suite: it deletes
+      // every fixture workspace, including the sole survivor, so anything
+      // appended after it inherits a one-workspace, zero-panel world with
+      // none of the earlier fixtures (w1, w2/'school', w9/w9p1) still around.
     }
 
   } catch (error) {

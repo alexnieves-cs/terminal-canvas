@@ -243,9 +243,22 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
   // and activateWorkspace call these same two functions, so the restore-
   // settings logic exists in exactly one place — duplicating it here is the
   // same second-storage failure M6b removed for settings.
-  function doInitial(): CanvasState {
+  // Both restore-settings consumers below take an `applyRestoreSettings` flag
+  // so activateWorkspace can opt out without a second copy of this logic.
+  // The three `restore.*` preferences answer "what should the app show me
+  // when it STARTS" — restore.layout's own schema description says so in
+  // those words — and a workspace switch is not a start. Applying them there
+  // means turning off restore.layout turns Cmd+K workspace switching into a
+  // silent canvas shredder: the outgoing workspace never records the panels
+  // it had (their tmux sessions orphan, reachable from no workspace) and the
+  // incoming workspace reads back empty regardless of what it holds on disk.
+  // Defaulting the flag to true keeps the public save()/initial() members
+  // (and every existing caller) behaving exactly as before.
+  function doInitial(applyRestoreSettings = true): CanvasState {
     const w = activeWorkspace()
-    const { layout, camera, focus } = resolvedSettings()
+    const { layout, camera, focus } = applyRestoreSettings
+      ? resolvedSettings()
+      : { layout: true, camera: true, focus: true }
     // Settings are applied HERE so the renderer never learns they exist —
     // the same shape as PanelSpec.command, where main resolves what only
     // main can know and the renderer consumes the answer.
@@ -261,9 +274,11 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     }
   }
 
-  function doSave(incoming: CanvasState): void {
+  function doSave(incoming: CanvasState, applyRestoreSettings = true): void {
     const w = activeWorkspace()
-    const { layout, camera, focus } = resolvedSettings()
+    const { layout, camera, focus } = applyRestoreSettings
+      ? resolvedSettings()
+      : { layout: true, camera: true, focus: true }
     // Symmetric with initial(): a restore setting that is OFF means "start
     // fresh each launch", not "discard on launch". initial() already hands
     // the renderer nothing for that field, so the renderer's snapshot never
@@ -455,21 +470,29 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       // no-op, because the caller has no way to tell it happened.
       if (!target) return null
 
-      // 1. Write the outgoing canvas into the workspace being LEFT, obeying
-      //    the same restore settings save() obeys. Calling the same function
-      //    save() itself calls is exactly right here: it merges into
-      //    activeWorkspace(), which is still the OLD one at this point in the
-      //    function. Ordering is the whole mechanism — moving this below the
-      //    flip is the save race.
-      doSave(outgoing)
+      // 1. Write the outgoing canvas into the workspace being LEFT. Calling
+      //    the same function save() itself calls is exactly right here: it
+      //    merges into activeWorkspace(), which is still the OLD one at this
+      //    point in the function. Ordering is the whole mechanism — moving
+      //    this below the flip is the save race. It does NOT obey the three
+      //    restore.* settings (applyRestoreSettings: false) — those answer
+      //    "what should the app show at launch", and a switch is not a
+      //    launch. With restore.layout off, applying them here would skip
+      //    `w.panels = …` and leave the workspace's panels un-recorded while
+      //    their tmux sessions keep running — reachable from no workspace,
+      //    the orphan outcome the delete design explicitly rejects.
+      doSave(outgoing, false)
 
       // 2. Flip.
       snapshot.activeWorkspaceId = id
       scheduleWrite()
 
-      // 3. Hand back the incoming canvas exactly as initial() would, so a
-      //    switch and a boot cannot answer differently.
-      return { state: doInitial(), allPanelIds: allPanelIds() }
+      // 3. Hand back the incoming canvas exactly as initial() would IN
+      //    ORDERING (await pty:list before committing panels stays load-
+      //    bearing — see the caller), but also restore-settings-free: the
+      //    read side must match the write side above, or a switch lands on
+      //    an empty canvas whose panels are sitting untouched on disk.
+      return { state: doInitial(false), allPanelIds: allPanelIds() }
     },
 
     reset() {

@@ -743,6 +743,16 @@ export function Canvas({
         // between them, so React batches them into a single render: `next`
         // and its correct `dormant` set reach the tiering memo on the same
         // pass, never `next` first and `dormant` a render later.
+        //
+        // setDormantIds here REPLACES the whole set rather than merging into
+        // it, so `dormantIds` is not a global fact spanning every workspace
+        // — it names only the incoming workspace's dormant panels. That is
+        // correct, not lossy: `registry.ensure` early-returns for a session
+        // that already exists, so a stale dormant id left over from a
+        // workspace no longer showing does nothing if it lingers, and this
+        // set is re-derived from a fresh pty:list every time a switch lands
+        // here, so nothing is lost by discarding the outgoing workspace's
+        // entries.
         setPanels(next)
         setDormantIds(dormant)
         setSelectedId(result.state.selectedId)
@@ -767,10 +777,22 @@ export function Canvas({
         // a workspace can be switched TO while another workspace's ids are
         // higher, and minting from this workspace's own panels would let
         // Cmd+N here collide with an id a hidden workspace already owns.
-        nextIdRef.current = result.allPanelIds.reduce((max, pid) => {
-          const match = /^n(\d+)$/.exec(pid)
-          return match ? Math.max(max, Number(match[1]) + 1) : max
-        }, 1)
+        // Math.max against the CURRENT counter, never a bare replace: the
+        // seed is only as complete as `allPanelIds`, which depends on every
+        // outgoing workspace having actually persisted its panels. A
+        // restore-settings-off save can leave that list short (see
+        // activateWorkspace's applyRestoreSettings:false), and a bare
+        // replace would then let the counter drop — minting an id `new-
+        // session -A` would attach to a session THIS run already has live
+        // elsewhere. Never letting the counter move backwards within a run
+        // holds regardless of what any future caller's seed contains.
+        nextIdRef.current = Math.max(
+          nextIdRef.current,
+          result.allPanelIds.reduce((max, pid) => {
+            const match = /^n(\d+)$/.exec(pid)
+            return match ? Math.max(max, Number(match[1]) + 1) : max
+          }, 1)
+        )
       })()
     },
     [selectedId, focusedId, restoreCamera]
@@ -1334,10 +1356,10 @@ export function Canvas({
   // The workspace list, reloaded after every mutation the palette's own
   // create/rename/delete commands drive below — the same "main is the only
   // side that knows what the store now says" rule reloadPresets/
-  // reloadPrompts/reloadSettings already follow. Task 7 adds the other two
-  // occasions the sibling lists reload on (mount, and every palette open)
-  // plus the real `attentionIds` read; it consumes this same state and
-  // loader rather than declaring a second one.
+  // reloadPrompts/reloadSettings already follow. It also reloads on mount
+  // and on every palette open, the same two occasions the sibling lists
+  // reload on below, and every row that needs `attentionIds` reads it from
+  // this same state and loader rather than a second one.
   const [workspaceRows, setWorkspaceRows] = useState<WorkspaceRow[]>(EMPTY_WORKSPACES)
   const reloadWorkspaces = useCallback(() => {
     void window.canvas.workspace.list().then(setWorkspaceRows)
@@ -1660,6 +1682,15 @@ export function Canvas({
         initial: '',
         submit: (value) => {
           const name = value.trim()
+          // An empty trimmed value is a cancel, not "name this workspace
+          // the empty string" — parseWorkspace accepts '' and it would
+          // round-trip to disk, leaving the switch row and the admin rows
+          // rendering blank text with no way back to a real name short of
+          // deleting the workspace.
+          if (name.length === 0) {
+            setInputMode(null)
+            return
+          }
           void window.canvas.workspace.create(name).then((id) => {
             // Create then switch, as two calls rather than one store method.
             // createWorkspace deliberately does NOT activate what it mints
@@ -1693,6 +1724,13 @@ export function Canvas({
         initial: currentName,
         submit: (value) => {
           const name = value.trim()
+          // Same cancel rule as beginCreateWorkspace: an empty trimmed
+          // value must not reach the store, or the rename "succeeds" into
+          // a blank name that round-trips to disk.
+          if (name.length === 0) {
+            setInputMode(null)
+            return
+          }
           void window.canvas.workspace.rename(id, name)
             .catch((error: unknown) => {
               // Unhandled otherwise. Refused or rejected, the palette still
