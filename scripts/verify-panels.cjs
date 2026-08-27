@@ -4739,22 +4739,52 @@ app.whenReady().then(async () => {
     //     because they are different verbs and a wiring that pointed both at
     //     resetViewport would still change the scale.
     //
-    //     The Fit clause is an inequality against backOut, NOT `fitted > 0`,
-    //     and the difference is the whole discrimination. `fitted > 0` is
-    //     satisfied by any non-zero scale: it passes against a Fit button
-    //     wired to resetViewport (scale 1), wired to zoomBy, and — worst —
-    //     wired to NOTHING AT ALL, since the scale then simply stays where the
-    //     steppers left it. Those are exactly the wirings the paragraph above
-    //     claims to separate, so the weaker form asserted nothing about Fit.
-    //     Requiring the scale to have MOVED off backOut is what pins that the
-    //     button ran and did something the steppers did not.
+    //     The Fit half is THREE clauses, and it takes all three. The obvious
+    //     one — `fitted > 0` — is satisfied by any non-zero scale at all, so
+    //     it passes against a Fit button wired to resetViewport, wired to
+    //     zoomBy, and, worst, wired to NOTHING (the scale simply stays where
+    //     the steppers left it). Each clause below kills one of those.
     //
-    //     Why not recompute fitTo's expected scale from __m4aViewport() and
-    //     assert equality: that means restating fitTo's padding and clamp
-    //     arithmetic here, i.e. a second copy of math verify:viewport already
-    //     pins purely, and a copy that drifts silently the first time the real
-    //     one changes. The inequality needs no copy and fails against all
-    //     three mis-wirings above.
+    //     (a) |fitted - backOut| > 0.001 kills "wired to nothing", and NOTHING
+    //         ELSE. It is emphatically NOT sufficient on its own, and the
+    //         numbers are worth writing down because they are close enough to
+    //         look like coverage: TopBar's ZOOM_STEP is 1.2 and this fixture's
+    //         real fit is ~1.194, so a Fit button carrying a copy-pasted
+    //         zoom-in handler (onZoomBy(ZOOM_STEP) — the easiest real mistake
+    //         on this bar) lands 1.2 against the correct 1.194. |1.2 - 1| =
+    //         0.2 and |1.194 - 1| = 0.194: both clear this bound just as
+    //         easily, and clause (a) cannot tell them apart.
+    //
+    //     (b) |fitTwice - fitted| < 0.001 is what separates a FIT from a
+    //         STEPPER, and it is the clause that actually kills the zoomBy
+    //         mis-wiring. fitAll is idempotent — fitting an unchanged world
+    //         twice lands the same scale — while zoomBy COMPOUNDS: 1.2 then
+    //         1.44. Clicking Fit a second time and demanding the scale did not
+    //         move is therefore a property of "this is a fit", and it needs
+    //         zero knowledge of what fitTo computes internally.
+    //
+    //         That is deliberately chosen over recomputing fitTo's expected
+    //         scale from __m4aViewport() and asserting equality. Recomputing
+    //         means restating fitTo's padding and clamp arithmetic here — a
+    //         second copy of math verify:viewport already pins purely, and one
+    //         that goes silently wrong the first time the real one changes.
+    //         The harness must never grow that copy.
+    //
+    //     (c) |fitted - 1| > 0.001 kills resetViewport DELIBERATELY rather
+    //         than by coincidence. INITIAL.scale is 1, and clause (a) only
+    //         happened to exclude a reset because backOut is also 1 in this
+    //         run's world — a coincidence of the fixture, not a property.
+    //
+    //         CLAUSE (c) IS FIXTURE-DEPENDENT and must not be "fixed" by
+    //         loosening its tolerance. It assumes this world's panels do not
+    //         happen to fit at exactly scale 1.0. A later task that changes
+    //         the world — panel count, sizes, positions, or the canvas's own
+    //         size, which the collapsed rail already affects — can make the
+    //         true fit land on 1.0, and this clause then goes red for a reason
+    //         that has nothing whatever to do with the Fit button. The right
+    //         response to that failure is to change the FIXTURE (or to state
+    //         the new expected scale), never to widen the bound: widening it
+    //         hands resetViewport back its free pass.
     {
       const start = await wc.executeJavaScript(`window.__m4aScale()`)
       await wc.executeJavaScript(`
@@ -4775,10 +4805,21 @@ app.whenReady().then(async () => {
       `)
       await sleep(200)
       const fitted = await wc.executeJavaScript(`window.__m4aScale()`)
+      // The second Fit, for clause (b). Nothing about the world changes
+      // between the two clicks, so a real fitAll must land on exactly the
+      // scale it just landed on — and a stepper cannot.
+      await wc.executeJavaScript(`
+        document.querySelector('.shell__fit').dispatchEvent(
+          new MouseEvent('click', { bubbles: true }))
+      `)
+      await sleep(200)
+      const fitTwice = await wc.executeJavaScript(`window.__m4aScale()`)
       ok('76 the zoom cluster steps in, steps out, and fits',
         zoomedIn > start + 0.01 && Math.abs(backOut - start) < 0.001 &&
-          Math.abs(fitted - backOut) > 0.001,
-        `start=${start} in=${zoomedIn} out=${backOut} fit=${fitted}`)
+          Math.abs(fitted - backOut) > 0.001 &&
+          Math.abs(fitTwice - fitted) < 0.001 &&
+          Math.abs(fitted - 1) > 0.001,
+        `start=${start} in=${zoomedIn} out=${backOut} fit=${fitted} fitTwice=${fitTwice}`)
     }
 
     // 77. SEARCH AND SETTINGS OPEN THE PALETTE, AND SETTINGS ARRIVES IN ITS SCOPE.
@@ -4825,7 +4866,10 @@ app.whenReady().then(async () => {
       // is real and is never undone. The camera is wherever `Fit` put it (a
       // fitTo over both panels), NOT at INITIAL — anything appended below that
       // reuses a screen coordinate captured earlier in this file is measuring
-      // against a camera that has moved. The rail is still collapsed and the
+      // against a camera that has moved. Check 76 clicks Fit TWICE, and the
+      // second click is asserted to leave the camera's scale exactly where the
+      // first put it (clause (b)), so "wherever Fit put it" is one place, not
+      // two — that idempotence is checked, not assumed. The rail is still collapsed and the
       // inspector still open, both untouched here. The palette is closed: the
       // two Escapes below pop the settings scope and then close the overlay,
       // because Escape inside a drill-in deliberately pops rather than closes
