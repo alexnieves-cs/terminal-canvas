@@ -346,6 +346,31 @@ body {
   color: #f0b429;
 }
 
+/* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
+   are world-space facts. Inside the transform they would zoom and pan away
+   with the panels they point at. */
+.edge-indicators {
+  position: absolute;
+  inset: 0;
+  /* Never a click target. A pip's mousedown would reach .canvas's background
+     handler, which clears focus, hit-tests a world point and wakes whatever
+     it finds — spawning a process from an arrow. */
+  pointer-events: none;
+}
+
+.edge-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  /* A triangle pointing right at rotation 0, matching edgeIndicator's
+     Math.atan2 convention. */
+  border-left: 12px solid var(--amber);
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+}
+
 /* The palette is in SCREEN space — a sibling of .world, never inside it. A
    scale() ancestor would shrink it at low zoom and would put it in the
    coordinate space xterm-pointer.ts rewrites during a drag. */

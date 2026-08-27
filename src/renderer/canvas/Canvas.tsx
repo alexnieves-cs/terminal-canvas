@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { EdgeIndicators } from './EdgeIndicators'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
@@ -8,7 +9,7 @@ import type { DragMode, DragState } from './panel-interaction'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
-import { applyAgentState, clearAgentState } from '@renderer/session/agent-state-store'
+import { applyAgentState, clearAgentState, useAttentionIds } from '@renderer/session/agent-state-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -1042,6 +1043,21 @@ export function Canvas({
     })
   }, [settingRows])
 
+  // Read the same way glowEnabled is, and for the same reason: settingRows is
+  // loaded only when the palette OPENS, so it cannot be the source — the pips
+  // must know this whether or not the palette has ever been opened.
+  const [pipsEnabled, setPipsEnabled] = useState(true)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'agent.edgeIndicators')
+      if (row) setPipsEnabled(row.value === true)
+    })
+  }, [settingRows])
+
+  // Named for what it holds, not for the store function it came from:
+  // Task 5 imports the store's `attentionIds` read into this same scope.
+  const waitingIds = useAttentionIds()
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -1383,6 +1399,9 @@ export function Canvas({
           )
         })}
       </div>
+      {pipsEnabled && (
+        <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
+      )}
       <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
       {palette.open && (
         <Palette

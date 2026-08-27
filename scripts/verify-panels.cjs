@@ -3659,6 +3659,169 @@ app.whenReady().then(async () => {
           `before=${before} active=${click.active} answered=${answered} ` +
             `after=${await agentStateOf(shellId)}`)
       }
+
+      // Where a pip for `id` is actually painted, in canvas-local pixels,
+      // read out of the DOM rather than off a data- attribute: an attribute
+      // would let a pip rendered in the wrong place — or inside .world, where
+      // it pans away with the panel — report the right number.
+      const pipAt = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.edge-indicator[data-panel-id=${JSON.stringify(id)}]')
+        if (!el) return null
+        const host = document.querySelector('.canvas').getBoundingClientRect()
+        const r = el.getBoundingClientRect()
+        return { x: r.left + r.width / 2 - host.left, y: r.top + r.height / 2 - host.top }
+      })()`)
+
+      // 58. A wants-you panel that is OFF SCREEN gets a pip, at the position
+      //     viewport.ts's own arithmetic says. Recomputed here rather than
+      //     imported, the way check 39 recomputes centreOn: this suite loads
+      //     the built renderer and has no module to import from.
+      //
+      //     Asserting WHERE and not merely THAT is the whole value of this
+      //     check. "A pip exists" is satisfied by a pip pinned to a corner for
+      //     every direction, which is exactly what an independent per-axis
+      //     clamp produces (verify:viewport 62 pins the same property in the
+      //     pure tier) — and a canvas where every arrow points the same way
+      //     tells the user nothing while looking entirely functional.
+      {
+        // Ring the bell first, while the panel is still on screen and its PTY
+        // is known live, THEN pan away. The other order races: a panel panned
+        // out of the cull region can be demoted before the write lands.
+        ptyManager.write(shellId, BELL_LINE)
+        const rang = await waitUntil(
+          async () => (await agentStateOf(shellId)) === 'wants-you', 6000)
+        if (rang !== true) throw new Error('58: the panel never reached wants-you')
+
+        await clickBackground()
+        await panBy(-1800, -1200)
+        await sleep(400)
+
+        const expected = await wc.executeJavaScript(`(() => {
+          const rect = window.__m5aSpecOf(${JSON.stringify(shellId)}).rect
+          const host = document.querySelector('.canvas').getBoundingClientRect()
+          const vp = window.__m4aViewport()
+          const size = { width: host.width, height: host.height }
+          const M = 24
+          const tl = { x: rect.x * vp.scale + vp.x, y: rect.y * vp.scale + vp.y }
+          const br = { x: (rect.x + rect.w) * vp.scale + vp.x, y: (rect.y + rect.h) * vp.scale + vp.y }
+          if (br.x > 0 && tl.x < size.width && br.y > 0 && tl.y < size.height) return null
+          const cx = size.width / 2, cy = size.height / 2
+          const dx = (tl.x + br.x) / 2 - cx, dy = (tl.y + br.y) / 2 - cy
+          const t = Math.min(
+            dx === 0 ? Infinity : Math.max(0, cx - M) / Math.abs(dx),
+            dy === 0 ? Infinity : Math.max(0, cy - M) / Math.abs(dy))
+          return { x: cx + dx * t, y: cy + dy * t }
+        })()`)
+        if (expected === null) throw new Error('58: the panel is still on screen after the pan')
+        const at = await pipAt(shellId)
+        // Sub-pixel: getBoundingClientRect returns fractional boxes. A pip in
+        // the wrong place is off by hundreds of pixels, so nothing this
+        // tolerance admits is a defect this check could otherwise catch.
+        const placed = at !== null &&
+          Math.abs(at.x - expected.x) < 2 && Math.abs(at.y - expected.y) < 2
+        ok('58 an off-screen wants-you panel gets a pip where edgeIndicator says',
+          placed, `${JSON.stringify(at)} expected=${JSON.stringify(expected)}`)
+      }
+
+      // 59. Panning the panel back into view removes its pip, WITHOUT the
+      //     state changing. The panel still wants you — nothing acknowledged
+      //     it — so this is the visibility half of the rule on its own, and
+      //     the pip layer must be recomputing against the live camera rather
+      //     than latching a set of arrows when the bell rang.
+      {
+        await panBy(1800, 1200)
+        const gone = await waitUntil(async () => (await pipAt(shellId)) === null, 3000)
+        ok('59 a pip disappears when its panel comes back into view, state unchanged',
+          gone === true && (await agentStateOf(shellId)) === 'wants-you',
+          `pip=${JSON.stringify(await pipAt(shellId))} state=${await agentStateOf(shellId)}`)
+      }
+
+      // 60. THE SETTING DOES SOMETHING, driven the way a user drives it.
+      //     Toggled through the real palette — found by a KEYWORD it does not
+      //     display, then run — because that is the production path: main's
+      //     settings:list maps over SETTINGS, so the row is generated and the
+      //     thing that can actually be wrong is the RENDERER never reading the
+      //     value. A setting that lists, toggles, persists and changes nothing
+      //     on screen is the quietest failure this surface has, and it is
+      //     invisible to verify:palette, whose settings checks build rows from
+      //     hand-written fixtures and never import SETTINGS at all.
+      //
+      //     This block is also the only place the new def's keywords are
+      //     exercised: check 52 proves that property for a different setting,
+      //     and a keyword list that never matched anything would leave the
+      //     switch reachable only by someone who already knew its label.
+      {
+        await clickBackground()
+        await panBy(-1800, -1200)
+        await sleep(300)
+        const shown = await waitUntil(async () => (await pipAt(shellId)) !== null, 3000)
+
+        // openPalette/closePalette from the 48-53 block above are out of
+        // scope here (that block's `{ ... }` already closed), so this is a
+        // local pair rather than a second drift-prone spelling reaching
+        // across a closed scope — the bodies are copied verbatim from there.
+        const openPalette = async () => {
+          await wc.executeJavaScript(`
+            if (document.querySelector('.palette') === null) {
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+            }
+          `)
+          return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        }
+        const closePalette = async () => {
+          await wc.executeJavaScript(`(() => {
+            const input = document.querySelector('.palette__input')
+            if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          })()`)
+          await sleep(80)
+          await wc.executeJavaScript(`(() => {
+            const input = document.querySelector('.palette__input')
+            if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          })()`)
+          return sleep(80)
+        }
+        // closePalette is defined for symmetry with openPalette but never
+        // called here: runRow closes the palette BEFORE running a command
+        // (see the comment on toggleEdgeIndicators' waitUntil below), so
+        // toggling the setting already leaves nothing open to close.
+
+        const toggleEdgeIndicators = async () => {
+          await openPalette()
+          const picked = await wc.executeJavaScript(`(async () => {
+            const setter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value').set
+            const input = document.querySelector('.palette__input')
+            setter.call(input, 'off-screen')
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            await new Promise((r) => setTimeout(r, 100))
+            const row = [...document.querySelectorAll('.palette__row')]
+              .find((r) => r.textContent.includes('off-screen panels'))
+            if (!row) return 'not found'
+            row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            return 'ok'
+          })()`)
+          if (picked !== 'ok') throw new Error(`60: the setting row was ${picked}`)
+          // Running a row closes the palette (runRow closes BEFORE running),
+          // but assert it rather than assuming — a left-open overlay would
+          // swallow the next check's keys.
+          await waitUntil(() => wc.executeJavaScript(
+            `document.querySelector('.palette') === null`), 2000)
+        }
+
+        await toggleEdgeIndicators()
+        const hidden = await waitUntil(async () => (await pipAt(shellId)) === null, 4000)
+        const storedOff = await wc.executeJavaScript(
+          `window.canvas.settings.list().then((s) =>
+             s.find((x) => x.id === 'agent.edgeIndicators').value)`)
+        await toggleEdgeIndicators()
+        const back = await waitUntil(async () => (await pipAt(shellId)) !== null, 4000)
+
+        ok('60 the edge-indicator setting is findable by keyword and actually hides the pips',
+          shown === true && hidden === true && storedOff === false && back === true,
+          `shown=${shown} hidden=${hidden} stored=${storedOff} back=${back}`)
+        await panBy(1800, 1200)
+        await sleep(300)
+      }
     }
 
   } catch (error) {
