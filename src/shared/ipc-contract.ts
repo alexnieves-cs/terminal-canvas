@@ -221,6 +221,21 @@ export interface WorkspaceRow {
   active: boolean
 }
 
+/**
+ * What a switch hands back. A workspace switch is a SECOND BOOT — the same
+ * two facts boot() awaits, in one round trip instead of two.
+ *
+ * `allPanelIds` spans every workspace, deliberately. The renderer seeds
+ * nextIdRef from it, and PanelId doubles as the tmux session name: seeding
+ * from the ACTIVE workspace's ids alone would let Cmd+N in one workspace mint
+ * an id another workspace is already using, and the second panel to go live
+ * would attach to the first one's process.
+ */
+export interface ActivateResult {
+  state: CanvasState
+  allPanelIds: string[]
+}
+
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
   id: string

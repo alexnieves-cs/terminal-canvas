@@ -1227,6 +1227,120 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify(ws))
 }
 
+// 89. THE SAVE RACE. activate writes the OUTGOING state into the OLD record
+//     before flipping the active id. save() merges into whatever is active AT
+//     THE MOMENT IT RUNS, on a 500ms coalescing debounce — so a switch that
+//     merely flips the id has a window in which workspace A's panels are
+//     written into workspace B. The file stays well-formed. This is the whole
+//     reason activate takes a parameter it looks like it should not need.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const other = s.createWorkspace('school')
+  const outgoing = {
+    panels: [panel({ id: 'a1' })],
+    camera: { x: 7, y: 8, scale: 3 },
+    selectedId: 'a1',
+    focusedId: 'a1'
+  }
+  const res = s.activateWorkspace(other, outgoing)
+  const ws = s.workspaces()
+  const old = ws.find((w) => w.id === L.DEFAULT_WORKSPACE_ID)
+  const now = ws.find((w) => w.id === other)
+  ok('89 activate writes the outgoing state into the OLD record',
+    res !== null && old !== undefined && old.panelIds.join() === 'a1' &&
+      now !== undefined && now.active === true && now.panelIds.length === 0,
+    `old=${old && old.panelIds.join()} new=${now && now.panelIds.join()}`)
+}
+
+// 90. activate returns the INCOMING workspace's state, with the restore
+//     settings applied the same way initial() applies them — a switch is a
+//     second boot, so the two must not answer differently.
+{
+  const path = tmp()
+  writeFileSync(path, file(), 'utf8')
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  const other = s.createWorkspace('school')
+  const empty = { panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  // Check 89 already proves `outgoing` is written into whichever workspace is
+  // ACTIVE at the moment of the call (the one being left) — so leaving w1
+  // with `empty` as outgoing would overwrite w1's own p1/camera with empty,
+  // and the assertion below could never see p1 again on the way back. A real
+  // switch-away passes whatever the renderer actually holds; here that is
+  // w1's own unmodified canvas, so the write is a faithful no-op.
+  const w1Now = { panels: [panel()], camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null }
+  // Into the new one...
+  s.activateWorkspace(other, w1Now)
+  // ...and back, which must hand p1 (and its camera) straight back.
+  const res = s.activateWorkspace(L.DEFAULT_WORKSPACE_ID, empty)
+  ok('90 activate returns the incoming workspace’s own state',
+    res !== null && res.state.panels.length === 1 && res.state.panels[0].id === 'p1' &&
+      res.state.camera.x === 10 && res.state.camera.scale === 2,
+    JSON.stringify(res && res.state.camera))
+}
+
+// 91. allPanelIds spans EVERY workspace, not the active one. nextIdRef seeds
+//     from this, and PanelId doubles as the tmux session name — so a partial
+//     view here is two panels naming one session, where the second to go live
+//     attaches to the first one's process. This is the id-collision defect
+//     M4a fixed by removing length-derived ids, resurrected through a door
+//     M4a could not see.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const other = s.createWorkspace('school')
+  const empty = { panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }
+  s.activateWorkspace(other, {
+    ...empty, panels: [panel({ id: 'n3' }), panel({ id: 'n7' })]
+  })
+  const res = s.activateWorkspace(other, { ...empty, panels: [panel({ id: 'n1' })] })
+  const ids = res === null ? [] : [...res.allPanelIds].sort()
+  ok('91 allPanelIds spans every workspace',
+    ids.join() === 'n1,n3,n7', ids.join())
+}
+
+// 92. An unknown id returns null and changes NOTHING — in particular it must
+//     not have written the outgoing state anywhere. A switch to a workspace
+//     that is gone (a stale palette row, a second window) must be a no-op,
+//     not a half-applied transaction.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const res = s.activateWorkspace('nope', {
+    panels: [panel({ id: 'zz' })],
+    camera: { x: 1, y: 1, scale: 1 }, selectedId: null, focusedId: null
+  })
+  const ws = s.workspaces()
+  ok('92 activating an unknown id is null and changes nothing',
+    res === null && ws.length === 1 && ws[0].panelIds.length === 0,
+    `res=${res} ${JSON.stringify(ws)}`)
+}
+
+// 93. The whole transaction survives a write and a reopen. 89 proves the
+//     in-memory ordering; this proves it reached disk, which is where the
+//     save race actually hurts.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  const other = a.createWorkspace('school')
+  a.activateWorkspace(other, {
+    panels: [panel({ id: 'a1' })],
+    camera: { x: 5, y: 6, scale: 1 }, selectedId: null, focusedId: null
+  })
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  const ws = b.workspaces()
+  const old = ws.find((w) => w.id === L.DEFAULT_WORKSPACE_ID)
+  const now = ws.find((w) => w.id === other)
+  ok('93 the activate transaction survives a reopen',
+    old !== undefined && old.panelIds.join() === 'a1' &&
+      now !== undefined && now.active === true,
+    JSON.stringify(ws))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

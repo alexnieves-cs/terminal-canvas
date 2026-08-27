@@ -12,7 +12,7 @@ import {
   type Workspace
 } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
-import type { WorkspaceRow } from '../shared/ipc-contract'
+import type { ActivateResult, WorkspaceRow } from '../shared/ipc-contract'
 
 /**
  * Owns layout.json.
@@ -104,6 +104,20 @@ export interface LayoutStore {
    * renderer's registry and are disposed there, before this is called.
    */
   deleteWorkspace(id: string): boolean
+  /**
+   * Switch the active workspace, and write the outgoing canvas into the one
+   * being left. Null when the id names nothing, having changed nothing.
+   *
+   * It takes `outgoing` — a parameter it looks like it should not need — for
+   * one reason: save() merges into whatever is active AT THE MOMENT IT RUNS,
+   * and writes are coalesced on a WRITE_DEBOUNCE_MS timer. A switch that
+   * merely flipped the id would leave a window in which the outgoing canvas's
+   * next save lands in the INCOMING workspace's record. The file stays
+   * well-formed and simply holds the wrong panels, which the user discovers
+   * launches later with nothing in any log. This call IS the outgoing
+   * canvas's last save.
+   */
+  activateWorkspace(id: string, outgoing: CanvasState): ActivateResult | null
   /** Return the active workspace to an empty canvas. */
   reset(): void
   /** Write now, synchronously. Never throws. */
@@ -214,6 +228,64 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     }, WRITE_DEBOUNCE_MS)
   }
 
+  // Every id in every workspace. The renderer seeds nextIdRef from this, and
+  // the reason it must not be the active workspace's ids alone is that
+  // PanelId doubles as a tmux session name — see ActivateResult.
+  function allPanelIds(): string[] {
+    return snapshot.workspaces.flatMap((w) => w.panels.map((p) => p.id))
+  }
+
+  // Hoisted out of the returned object literal so activateWorkspace can call
+  // both without going through `this` — a method-shorthand call would work
+  // (JS binds `this` at call time), but it would break the moment a caller
+  // destructures the store (`const { activateWorkspace } = store`), and nowhere
+  // else in this file relies on `this`. Both the public save()/initial() below
+  // and activateWorkspace call these same two functions, so the restore-
+  // settings logic exists in exactly one place — duplicating it here is the
+  // same second-storage failure M6b removed for settings.
+  function doInitial(): CanvasState {
+    const w = activeWorkspace()
+    const { layout, camera, focus } = resolvedSettings()
+    // Settings are applied HERE so the renderer never learns they exist —
+    // the same shape as PanelSpec.command, where main resolves what only
+    // main can know and the renderer consumes the answer.
+    const panels = layout ? w.panels.map((p) => ({ ...p })) : []
+    // With no panels there is nothing for a selection to name, so it goes
+    // regardless of the focus setting.
+    const keepSelection = layout && focus
+    return {
+      panels,
+      camera: camera ? { ...w.camera } : { ...defaultWorkspace().camera },
+      selectedId: keepSelection ? w.selectedId : null,
+      focusedId: keepSelection ? w.focusedId : null
+    }
+  }
+
+  function doSave(incoming: CanvasState): void {
+    const w = activeWorkspace()
+    const { layout, camera, focus } = resolvedSettings()
+    // Symmetric with initial(): a restore setting that is OFF means "start
+    // fresh each launch", not "discard on launch". initial() already hands
+    // the renderer nothing for that field, so the renderer's snapshot never
+    // reflects the stored value — writing it back unconditionally would let
+    // an unrelated save (any panel move, any camera pan) overwrite real data
+    // with whatever the fresh-start renderer invented instead. Leaving the
+    // field untouched freezes the stored value at whatever it was when the
+    // setting was last on; re-checking the box gives it back. Preserving is
+    // strictly better than destroying, and it is the only reading under
+    // which "restore on launch" is not secretly "discard on launch".
+    if (layout) w.panels = incoming.panels.map((p) => ({ ...p }))
+    // selectedId/focusedId name panels, so they ride with `layout` (whether
+    // there is anything to select) as well as `focus` (whether selection
+    // itself restores) — either OFF is a reason to leave them alone.
+    if (layout && focus) {
+      w.selectedId = incoming.selectedId
+      w.focusedId = incoming.focusedId
+    }
+    if (camera) w.camera = { ...incoming.camera }
+    scheduleWrite()
+  }
+
   return {
     load() {
       if (!existsSync(filePath)) return
@@ -244,48 +316,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       snapshot = parsed
     },
 
-    initial() {
-      const w = activeWorkspace()
-      const { layout, camera, focus } = resolvedSettings()
-      // Settings are applied HERE so the renderer never learns they exist —
-      // the same shape as PanelSpec.command, where main resolves what only
-      // main can know and the renderer consumes the answer.
-      const panels = layout ? w.panels.map((p) => ({ ...p })) : []
-      // With no panels there is nothing for a selection to name, so it goes
-      // regardless of the focus setting.
-      const keepSelection = layout && focus
-      return {
-        panels,
-        camera: camera ? { ...w.camera } : { ...defaultWorkspace().camera },
-        selectedId: keepSelection ? w.selectedId : null,
-        focusedId: keepSelection ? w.focusedId : null
-      }
-    },
+    initial: doInitial,
 
-    save(incoming) {
-      const w = activeWorkspace()
-      const { layout, camera, focus } = resolvedSettings()
-      // Symmetric with initial(): a restore setting that is OFF means "start
-      // fresh each launch", not "discard on launch". initial() already hands
-      // the renderer nothing for that field, so the renderer's snapshot never
-      // reflects the stored value — writing it back unconditionally would let
-      // an unrelated save (any panel move, any camera pan) overwrite real data
-      // with whatever the fresh-start renderer invented instead. Leaving the
-      // field untouched freezes the stored value at whatever it was when the
-      // setting was last on; re-checking the box gives it back. Preserving is
-      // strictly better than destroying, and it is the only reading under
-      // which "restore on launch" is not secretly "discard on launch".
-      if (layout) w.panels = incoming.panels.map((p) => ({ ...p }))
-      // selectedId/focusedId name panels, so they ride with `layout` (whether
-      // there is anything to select) as well as `focus` (whether selection
-      // itself restores) — either OFF is a reason to leave them alone.
-      if (layout && focus) {
-        w.selectedId = incoming.selectedId
-        w.focusedId = incoming.focusedId
-      }
-      if (camera) w.camera = { ...incoming.camera }
-      scheduleWrite()
-    },
+    save: doSave,
 
     // The typed view of the three `restore.*` schema entries. It stays because
     // initial()'s restore logic is written in terms of RestoreSettings and
@@ -413,6 +446,30 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       }
       scheduleWrite()
       return true
+    },
+
+    activateWorkspace(id, outgoing) {
+      const target = snapshot.workspaces.find((w) => w.id === id)
+      // Nothing is written for an unknown id. A half-applied transaction — the
+      // outgoing state saved, the switch refused — is strictly worse than a
+      // no-op, because the caller has no way to tell it happened.
+      if (!target) return null
+
+      // 1. Write the outgoing canvas into the workspace being LEFT, obeying
+      //    the same restore settings save() obeys. Calling the same function
+      //    save() itself calls is exactly right here: it merges into
+      //    activeWorkspace(), which is still the OLD one at this point in the
+      //    function. Ordering is the whole mechanism — moving this below the
+      //    flip is the save race.
+      doSave(outgoing)
+
+      // 2. Flip.
+      snapshot.activeWorkspaceId = id
+      scheduleWrite()
+
+      // 3. Hand back the incoming canvas exactly as initial() would, so a
+      //    switch and a boot cannot answer differently.
+      return { state: doInitial(), allPanelIds: allPanelIds() }
     },
 
     reset() {
