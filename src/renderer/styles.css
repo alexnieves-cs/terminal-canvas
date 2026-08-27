@@ -311,23 +311,68 @@ body {
   font-size: 13px;
 }
 
+/* The input and the scope chip share a row, so entering a drill-in reads as
+   the field gaining a token rather than as the whole overlay changing. */
+.palette__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid #343747;
+}
+
+.palette__scope {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: #2f3346;
+  color: #b9bed6;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .palette__input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
-  padding: 14px 16px;
+  padding: 14px 0;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid #343747;
   color: #e6e8f0;
   font: inherit;
   font-size: 15px;
   outline: none;
 }
 
+/* Confirm mode has no text to edit, but the field is still what holds DOM
+   focus away from xterm — the same job xterm's own hidden textarea does. So it
+   is made invisible rather than removed: display:none or visibility:hidden
+   would make it unfocusable and hand the keyboard straight back to the agent
+   with a destructive question on screen. `top` pins it inside the palette so
+   focusing it cannot scroll an ancestor. */
+.palette__input--ghost {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.palette__confirm {
+  padding: 20px 16px;
+  color: #e6e8f0;
+  font-size: 15px;
+  /* Marked the same red the row that opened it was, so the question reads as
+     the continuation of that row rather than as a generic prompt. */
+  box-shadow: inset 3px 0 0 #e8807f;
+}
+
 .palette__list {
   list-style: none;
   margin: 0;
-  padding: 6px 0;
+  padding: 0 0 6px;
   max-height: 46vh;
   /* The palette's wheel is yielded by Canvas.tsx's shouldYieldWheel, so this
      scrolls natively. `contain` stops a scroll past either end from chaining
@@ -336,37 +381,122 @@ body {
   overscroll-behavior: contain;
 }
 
+/* Sticky, so the section a row belongs to is still readable after scrolling
+   into the middle of a long one. Its height is duplicated as scroll-margin-top
+   on .palette__row below, and the two MUST agree — see there. */
+.palette__section {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 16px 4px;
+  background: #1b1d27;
+  color: #7d8199;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .palette__row {
-  display: grid;
-  grid-template-columns: 68px 1fr auto;
-  gap: 10px;
+  display: flex;
   align-items: baseline;
+  gap: 10px;
   padding: 7px 16px;
   color: #c8cbdb;
   cursor: default;
+  /* Load-bearing, and it must match .palette__section's rendered height.
+     scrollIntoView({ block: 'nearest' }) considers a row "visible" when it is
+     inside the scrollport — including when a sticky header is painted on top
+     of it. Without this margin, arrowing down into a new section parks the
+     selected row UNDERNEATH its own header, which looks exactly like the
+     selection having jumped somewhere off screen. */
+  scroll-margin-top: 28px;
+  scroll-margin-bottom: 6px;
 }
 
+/* An accent bar as well as a background shift: at 13px on a dark ground the
+   background alone is a subtle enough change that the eye loses the selection
+   while scanning, which matters more here than usual because Enter acts on it. */
 .palette__row--selected {
   background: #2a2d3d;
+  box-shadow: inset 2px 0 0 #6b8afd;
 }
 
 .palette__row--disabled {
   color: #6b6f85;
 }
 
-.palette__group {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #7d8199;
+/* Destructive rows are marked as well as gated (Canvas.tsx confirms them).
+   The colour is the warning; the confirm is the safety. Neither replaces the
+   other — a red row still runs on one Enter, and an unmarked confirm is a
+   question the user did not expect to be asked. */
+.palette__row--destructive .palette__title {
+  color: #e8807f;
+}
+
+.palette__row--destructive.palette__row--disabled .palette__title {
+  color: #8f6570;
+}
+
+.palette__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* <mark>'s user-agent style is black-on-yellow, which is unreadable here and
+   would be the loudest thing on screen. Reset it and carry the emphasis with
+   weight and the accent colour instead. */
+.palette__hit {
+  background: transparent;
+  color: #9db4ff;
+  font-weight: 600;
 }
 
 .palette__hint {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   color: #7d8199;
+}
+
+.palette__chevron {
+  flex: none;
+  color: #7d8199;
+}
+
+/* Shown only where a shortcut genuinely exists — the default preset's spawn
+   row and Reset zoom. See commands.ts: a hint on every row would be a lie on
+   all but those two. */
+.palette__kbd {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid #3d4157;
+  border-radius: 4px;
+  background: #232637;
+  color: #9095ad;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .palette__empty {
   padding: 10px 16px;
   color: #7d8199;
+}
+
+/* The palette's only self-documentation. Every key it names is one the
+   overlay swallows rather than passes to the agent, and "esc back" vs
+   "esc close" is the only place the two-stage Escape is visible at all. */
+.palette__footer {
+  padding: 7px 16px;
+  border-top: 1px solid #343747;
+  background: #181a23;
+  color: #6b6f85;
+  font-size: 11px;
 }

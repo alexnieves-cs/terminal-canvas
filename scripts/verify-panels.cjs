@@ -2459,7 +2459,10 @@ app.whenReady().then(async () => {
         input.dispatchEvent(new Event('input', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 80))
         const row = [...document.querySelectorAll('.palette__row')]
-          .find((r) => r.textContent.includes('New panel from echo -v'))
+          // M6p retitled spawn rows to the preset name alone — the words
+          // "New panel from" are the section header now, and live on in the
+          // row's searchText so the query above still finds it.
+          .find((r) => r.textContent.includes('echo -v'))
         if (!row) return false
         row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         return true
@@ -2527,7 +2530,8 @@ app.whenReady().then(async () => {
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 120))
           const selected = document.querySelector('.palette__row--selected')
-          if (!selected || !selected.textContent.includes('Insert prompt: two liner')) {
+          // M6p: the title is the prompt's name alone under a PROMPTS header.
+          if (!selected || !selected.textContent.includes('two liner')) {
             return selected ? selected.textContent : 'no row'
           }
           input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
@@ -2740,7 +2744,7 @@ app.whenReady().then(async () => {
           // SOURCE label (a swapped label is the silent half of this defect —
           // the row still runs, it just tells the user the wrong story about
           // where the text they are about to paste came from).
-          if (!text.includes('Insert prompt: ${PROJECT_PROMPT_NAME}') ||
+          if (!text.includes('${PROJECT_PROMPT_NAME}') ||
               !text.includes('project — .claude/commands')) return text
           input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
           return true
@@ -3045,6 +3049,166 @@ app.whenReady().then(async () => {
         `transform: ${result && result.before} -> palette ${result && result.transformAfterPalette} ` +
         `-> background ${result && result.transformAfterBackground}`)
       await zoomTo(wc, '0')
+    }
+
+    // 48-50. M6p — the palette's structure, end to end. The pure suite proves
+    //     the model; these three prove the model reached the screen, which is
+    //     the half that has silently failed before in this codebase (check 32
+    //     exists because a correct default-preset feature sat inert behind a
+    //     subscription that never fired).
+    //
+    //     Every one of them opens the palette defensively rather than sending
+    //     a blind Cmd+K: the chord TOGGLES, and earlier checks do not all
+    //     leave it closed — check 39 already had to learn this the hard way.
+    {
+      const openPalette = async () => {
+        await wc.executeJavaScript(`
+          if (document.querySelector('.palette') === null) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          }
+        `)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      }
+      // An IIFE, not a bare `const`. executeJavaScript evaluates each call as
+      // a top-level SCRIPT, so a top-level `const` lands in the page's global
+      // lexical scope and survives the call — calling this helper twice then
+      // throws "Identifier 'i' has already been declared" before the script
+      // runs at all, which surfaces as an opaque "Script failed to execute"
+      // that aborts the whole suite rather than failing one check.
+      const escape = () => wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      })()`)
+      const closePalette = async () => {
+        await escape()
+        await sleep(80)
+        // Escape is now TWO-STAGE: inside a scope it pops the scope and the
+        // palette stays open. One press is therefore not a guaranteed close,
+        // and a helper that assumed it was would leave every later check
+        // acting on an overlay it thought was gone.
+        await escape()
+        return sleep(80)
+      }
+
+      // 48. Section headers exist in the DOM, appear ONCE each, and are in
+      //     SECTIONS order. The old per-row group chip rendered on every row
+      //     and was the thing that made a twenty-row list unreadable; a
+      //     regression that brought it back — or that emitted a header per row
+      //     — looks almost identical in a screenshot and is obvious here.
+      {
+        await openPalette()
+        const headers = await wc.executeJavaScript(`
+          [...document.querySelectorAll('.palette__section')].map((h) => h.textContent.trim())
+        `)
+        const ORDER = ['Panels', 'New panel', 'Prompts', 'Canvas', 'Manage']
+        const unique = headers.length === new Set(headers).size
+        const ordered = headers.join(',') ===
+          ORDER.filter((label) => headers.includes(label)).join(',')
+        ok('48 section headers render once each, in SECTIONS order',
+          headers.length >= 3 && unique && ordered, headers.join(','))
+        await closePalette()
+      }
+
+      // 49. The drill-in, and its exit. Two halves, and the SECOND is the one
+      //     worth writing: Escape inside a scope must pop back to the top
+      //     level and leave the palette OPEN. If it closed instead, the
+      //     drill-in would be a trap the user escapes only by reopening —
+      //     and every assertion about narrowing would still pass.
+      {
+        await openPalette()
+        const result = await wc.executeJavaScript(`(async () => { try {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'manage presets')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 80))
+          const door = [...document.querySelectorAll('.palette__row')]
+            .find((r) => r.textContent.includes('Manage presets'))
+          if (!door) return { error: 'no Manage presets row' }
+          door.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const rowsInside = [...document.querySelectorAll('.palette__row')].map((r) => r.textContent)
+          const scoped = {
+            chip: (document.querySelector('.palette__scope') || {}).textContent || null,
+            // Every row inside the presets scope is a preset row. "Go to" is
+            // the cheapest proof the filter is real: the panel switcher is
+            // always populated at this point in the run.
+            leaked: rowsInside.filter((t) => t.includes('Go to')).length,
+            // The administration rows the resting list hides are exactly what
+            // the user drilled in FOR.
+            hasDelete: rowsInside.some((t) => t.includes('Delete preset')),
+            count: rowsInside.length
+          }
+          const input2 = document.querySelector('.palette__input')
+          input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          return {
+            scoped,
+            stillOpen: document.querySelector('.palette') !== null,
+            chipGone: document.querySelector('.palette__scope') === null,
+            backAtTop: [...document.querySelectorAll('.palette__row')]
+              .some((r) => r.textContent.includes('Go to'))
+          }
+        } catch (e) { return { error: String(e && e.message || e) } } })()`)
+        ok('49 a drill-in narrows to its own rows and Escape pops back without closing',
+          result && !result.error &&
+            result.scoped.leaked === 0 &&
+            result.scoped.hasDelete === true &&
+            result.scoped.count > 0 &&
+            result.stillOpen === true &&
+            result.chipGone === true &&
+            result.backAtTop === true,
+          JSON.stringify(result))
+        await closePalette()
+      }
+
+      // 50. A delete is gated, and Escape CANCELS it. The assertion that
+      //     matters is the last one: a confirm step that confirms
+      //     unconditionally is invisible — the dialog appears, the user says
+      //     no, and the preset is gone anyway. So this reads the store back
+      //     through preset.list() rather than trusting the overlay's state.
+      //
+      //     Targets the seeded user preset (renamed by check 38), because the
+      //     built-ins refuse deletion with a reason and would make a disabled
+      //     row look like a working confirm gate.
+      {
+        await openPalette()
+        const result = await wc.executeJavaScript(`(async () => { try {
+          const before = (await window.canvas.preset.list()).map((p) => p.name)
+          const victim = before.find((n) => n.includes('renamed by palette') || n.includes('harness'))
+          if (!victim) return { error: 'no user preset to try deleting: ' + before.join('|') }
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'delete preset ' + victim)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 100))
+          const row = [...document.querySelectorAll('.palette__row')]
+            .find((r) => r.textContent.includes('Delete preset ' + victim))
+          if (!row) return { error: 'no delete row for ' + victim }
+          const wasRed = row.className.includes('palette__row--destructive')
+          row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          // Confirm mode: the palette is still up, the list is gone, and the
+          // question names what is about to be destroyed.
+          const confirming = document.querySelector('.palette__confirm') !== null &&
+            document.querySelector('.palette__list') === null
+          const named = confirming &&
+            document.querySelector('.palette__confirm').textContent.includes(victim)
+          const input2 = document.querySelector('.palette__input')
+          if (input2) input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 250))
+          const after = (await window.canvas.preset.list()).map((p) => p.name)
+          return { wasRed, confirming, named, survived: after.includes(victim), victim }
+        } catch (e) { return { error: String(e && e.message || e) } } })()`)
+        ok('50 a destructive row is marked, gated by a confirm, and Escape leaves the preset alone',
+          result && !result.error &&
+            result.wasRed === true &&
+            result.confirming === true &&
+            result.named === true &&
+            result.survived === true,
+          JSON.stringify(result))
+        await closePalette()
+      }
     }
 
   } catch (error) {

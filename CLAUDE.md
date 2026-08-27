@@ -36,7 +36,7 @@ work is done. Individual suites:
 | `verify:viewport` | plain node | 50 checks: `viewport.ts`'s pure canvas math (1–11b), `lod.ts`'s pure tiering (20–25), `panel-interaction.ts` + `panels.ts` drag/z math (26–34), `pointer-correct.ts` (35–39), the undo `history.ts` stack (40–45), dormancy outranking focus in `lod.ts` (46–47), `makePanel`'s spec/size arguments (48), and `centreOn` framing a rect without touching the scale (49–50) |
 | `verify:registry` | plain node | 25 assertions against `session-registry.ts`'s lifecycle, using a fake bridge and fake terminal factory — numbered 1–19 with lettered sub-checks (`3b`, `3c`, `7b`, `7c`, `7d`), including explicit close (13–15), dormant attach/wake (16–18), and closing a never-spawned panel (19). M6a adds check 20: `PanelStatus.running` widens to carry `command`/`cwd`/`reattached`, so the header chain has something besides the spec to read for a login-shell panel |
 | `verify:layout` | plain node | 60 checks: `shared/layout-schema.ts`'s on-disk format validation and `layout-store.ts`'s coalescing, atomic write, and settings resolution, plus `shared/layout-schema.ts`'s preset parsing (27–34), `layout-store.ts`'s preset accessors (35), and `main/presets.ts`'s pure helpers (36–40), and a `presets` key that is present but not an array warning rather than vanishing (41). M5b adds the preset mutations the palette drives — rename, delete, and the default falling back when the default itself is deleted (42–46) — `parsePrompts` and the store's prompt members (47–52), and `main/prompts.ts`'s project-prompt reading, its two caps, and the never-deduping merge (53–57). M6a adds `Panel.title` round-tripping through `layout-adapt.ts` — parsed in on the way from disk (58), written back out on the way to disk (59), and an untitled panel writing no `title` key at all rather than a saved absent-marker (60) |
-| `verify:palette` | plain node | 32 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–30) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list. M6a adds the `panel.rename` row itself: runnable only with a `capturedId` and disabled with its reason otherwise (31), and the row's label echoing the panel's current title rather than a generic "Rename panel" (32) |
+| `verify:palette` | plain node | 51 checks: `fuzzy.ts`'s matching and ranking (1–7), `palette-model.ts`'s filtering, tie stability and runnable-row selection (8–18), and `commands.ts`'s list construction (19–33) — including the disabled *reasons*, which is the half worth checking: a built-in refusing rename, an unavailable preset, a prompt insert with no captured panel, and a project prompt refusing deletion all stay VISIBLE with their reason rather than disappearing from the list. M6a added the `panel.rename` row (31–32) and a titled panel being findable by its title (33). M6p adds the structure: section-first sorting outranking a better score in a later section and score still deciding inside one (34–35), `bestMatchIndex` skipping disabled rows (36–38), `hiddenAtRest` in BOTH directions (39–40), `searchText` including the whole phrase (41, 41b), `splitHighlight` (42–43), the two retitles (44–45), what is hidden versus what is not (46), exactly-two-destructive (47), `⌘N` on the default preset alone (48), and the drill-in doors and what a scope shows (49–50). **Check 30 was rewritten**: it derives its expectation from `SECTIONS` and runs through `filterCommands`, because construction order stopped being the grouping the moment sorting became section-first — see "Sections are data" below |
 | `verify:tmux` | plain node | 27 checks: `tmux-args.ts`'s argv, config text, version parsing and list parsing (1–13), `tmux-probe.ts`'s pure backend selection (14–17b), the quoting of the pane-died redirect target against a spaced `exitDir` (18), and the exact-match `=` on every kill-session target (19). M5c adds `resolveSocket`: dev and packaged landing on different sockets (20), the dev socket unchanged from its historic value (21), an explicit override beating both defaults (22), a blank or whitespace override falling back to the default rather than leaking through to tmux's own default socket (23), and `buildStartServerArgs` — the one tmux argv that used to be hand-rolled — defaulting to the private socket and threading an explicit one (24–25). M6a adds check 26: `buildHasSessionArgs`'s argv, including the same exact-match `=` on its target that every kill-session target already obeys, so panel `n1`'s probe doesn't read `n12` as its own surviving session. The count is 27 while the last number is 26, because of the lettered sub-check `17b` |
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value: `node-pty` unpacked from the asar and the pattern depth-independent (1–2), `asar` actually on (3), the `files` globs (4–5), app identity and output dir (6–7), signing explicitly *decided* rather than unmentioned (8), targets and architecture (9), and the arch being a parameter rather than a constant (10) |
 | `verify:packaged` | real Electron, **not in `npm run verify`** | 9 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped `PATH`, a throwaway `--user-data-dir` and a scratch `TC_TMUX_SOCKET`. Asserts the app survives startup (3 — the asar/`node-pty` proof), reports itself packaged (4), recovered a PATH launchd never gave it (5 — the first time `shell-env.ts`'s reason for existing has ever been observed), used the scratch socket (6), actually used the throwaway `--user-data-dir` rather than silently falling back to the real one (7), named a backend and a reason (8), and actually spawned a PTY (9). Kept out of the default chain because it rebuilds native modules and reaches electron-builder's cache — minutes, plus a network dependency — and the repo's one green-or-not signal must stay fast and offline. It is the **pre-release gate**; run it before cutting a build |
@@ -46,7 +46,7 @@ work is done. Individual suites:
 | `verify:ipc` | real Electron | 1 check: every contract channel has a handler — 17 channels as of M5b, nine of them the palette's |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 6 checks: an xterm `Terminal` survives its host being detached and reattached |
-| `verify:panels` | real Electron | 51 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. The count is 51 while the last number is 47, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
+| `verify:panels` | real Electron | 54 checks: tiering, the pointer corrector, drag, resize, wheel ownership, close, z-order, id uniqueness, dormant restore/wake (18), layout persistence (19), undo/redo (20–22), reset (23), boot reconcile (24), one end-to-end invocation of `session:backend` through the real bridge (25), a real renderer reload leaving its tmux session running (26), and preset spawn, undo-disposes, the pushed default, capture, and the command-less case (27–31). Check 32 is the only preset check the harness does NOT drive by hand: it seeds `layout.json` with a non-shell `defaultPresetId`, installs the same `did-finish-load` push production installs, and reads the template back out of the renderer — see "The default preset is caught at module scope" below. M5b adds the palette: opening it and the focus rules (33–36), the undo guard (37), a rename reaching the store and the input mode clearing afterwards (38, 38b), the switcher framing a dormant panel without waking it (39), `preset:spawn-by-id` end to end (40a), a prompt insert arriving as a bracketed paste rather than a raw write (40), a mouse-picked row not releasing the focused panel (41), a click OUTSIDE the palette closing it and still focusing the panel it hit (42), and the project half of the prompt list end to end — a real `.claude/commands/*.md` under the captured panel's own cwd, listed with its source label and inserted into that panel (43). M6a adds the header chain end to end: a fresh spawn's header names what main actually resolved rather than a hardcoded stand-in (44), a rename typed into the palette reaching the panel's own header, not just the store (45), and one `Cmd+Z` undoing the whole rename in a single step, matching "one history entry per committed gesture" (46). Check 47 is the palette's wheel: a wheel over the open palette — plain and pinch alike — is left uncancelled and moves no camera, while the same wheel on the background is still cancelled and still pans. It asserts CANCELLATION rather than `scrollTop` on purpose; see "Scrolling the palette is a yield" below for why a `scrollTop` check would fail a correct implementation. Two sub-checks cover OS key auto-repeat, the one input this suite had never simulated: five `repeat: true` Cmd+N keydowns spawn nothing further (7b) and five `repeat: true` Cmd+K keydowns do not re-toggle the palette (33b) — see "Auto-repeat is one gesture, not fifteen" below, including what they deliberately cannot prove. M6p adds the palette's structure in a real renderer: section headers rendering once each in `SECTIONS` order (48), a drill-in narrowing to its own rows with Escape popping back **without closing** (49), and a destructive row that is marked, gated by a confirm, and left un-deleted by Escape — read back out of `preset.list()`, not off the overlay (50). The count is 54 while the last number is 50, because of the lettered sub-checks `7b`, `33b`, `38b` and `40a` |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -199,14 +199,16 @@ src/renderer/canvas/
 
 src/renderer/palette/
   fuzzy.ts          pure subsequence match + score + match positions — no DOM, no React
-  palette-model.ts  pure filter/sort and runnable-row stepping over a Command[]
+  palette-model.ts  SECTIONS (ordered data, not a union), the Command shape, section-first
+                    filter/sort, bestMatchIndex, splitHighlight, runnable-row stepping
   commands.ts       pure list construction: rows in, Command[] with disabled reasons out.
                     Takes preset/prompt/panel rows and a captured id as plain data, so the
                     whole command surface is testable without mounting anything.
   usePalette.ts     open/close state, the Cmd+K toggle, and the captured focus id — the
                     hook that decides who owns the keyboard (see below)
-  Palette.tsx       the overlay: the input, the rows, its own edit:copy/edit:paste
-                    subscriptions, and the mousedown guard that keeps the canvas out
+  Palette.tsx       the overlay: the input, the scope chip, the sectioned rows, the footer,
+                    confirm mode, its own edit:copy/edit:paste subscriptions, and the
+                    mousedown guard that keeps the canvas out
 
 src/renderer/session/
   panel-session.ts      the PanelSession/SessionHandle/SessionFactory interfaces — what the
@@ -979,6 +981,105 @@ break with the whole suite still green, the same shape as `verify:panels` 32 and
 The rest of the suite is a useful accomplice here, and worth knowing about before
 "fixing" an unrelated-looking failure: with the guard removed, 7b's five stray panels
 also fail check 8, and 33b's odd toggle count takes 34, 35, 36, 45 and 46 down with it.
+
+**Sections are data, and section-first sorting is why the grouping is real
+(`palette-model.ts`'s `SECTIONS` and `filterCommands`).** Until M6p the palette
+sorted `(b.score - a.score) || (a.order - b.order)`, and `commands.ts`'s header
+comment called construction order "the grouping" on the strength of that stable
+tiebreak. It was not. Score won OUTRIGHT, so construction order survived only
+for the EMPTY query — one keystroke interleaved the groups, and "Delete preset
+Claude" could sit directly above "New panel from Claude" with nothing but a
+repeated 68px uppercase chip to tell them apart. `filterCommands` now sorts by
+`SECTIONS` index first, then score, then construction order, which is what lets
+the rendered headers be true while the user types and makes a destructive row
+structurally incapable of leapfrogging its benign sibling. Two consequences
+worth not undoing. **`SECTIONS` is an ordered array rather than a union**: the
+old closed `CommandGroup` hardcoded its order in the type AND in `verify:palette`
+check 30, which is why M6b's plan needed a written section explaining that adding
+one section meant editing both — appending an object literal is the whole
+operation now, and check 30 derives its expectation from `SECTIONS` rather than
+restating it. And **the selection seeds from `bestMatchIndex`, not
+`firstRunnable`**: with rows ordered by section, "the first runnable row" is the
+top of Panels no matter what was typed, so `Enter` would run something unrelated
+to the query. `bestMatchIndex` ignores sections and picks the best-scoring
+RUNNABLE row — runnable being the half that matters, since a best match parked on
+a disabled row makes `Enter` a silent no-op. For an empty query every score ties
+at 0 and it degenerates to exactly `firstRunnable`, so one function serves both
+states.
+
+**Hidden at rest is two rules, and shipping one is the bug
+(`Command.hiddenAtRest`).** Every preset emits four rows and there are three
+built-ins, so the resting list was twelve preset rows before the user added
+anything — about seventeen rows total, of which three were verbs. The four
+administration row kinds (preset rename/delete/make-default, prompt delete) now
+carry `hiddenAtRest` and are dropped when the query is empty AND no scope is
+active. **They are not hidden from search**: type "delete" and they are back, in
+the `Manage` section. The rule `verify:palette` check 31 states in its own
+comment applies here — *a row that disappears is indistinguishable from a feature
+that is missing* — so an implementation that only hides is one that quietly
+deleted four commands from the app. `verify:palette` 39 and 40 are the two halves
+and neither is redundant. The two always-visible `Manage presets…` /
+`Manage prompts…` rows are the door for anyone not guessing a query.
+
+**`searchText` leads the haystack, and the order is load-bearing
+(`palette-model.ts`'s `haystack`).** M6p retitled two row kinds to the bare noun
+the section header no longer needs repeated — `New panel from Claude` became
+`Claude`, `Insert prompt: review` became `review` — and `searchText` is where the
+dropped words went so the old phrasing still finds them. It must come **first**.
+`fuzzyMatch` is a single ordered subsequence over one concatenated string, so
+with the title spliced in front, typing "new panel from claude" consumes "new
+panel from" out of the trailing terms and then has to find "claude" AFTER it,
+which is not there — the row stays in the list and silently stops answering the
+query `searchText` exists to answer. This was caught by `verify:panels` 40a going
+red, not by reasoning, and `verify:palette` 41b is the check that pins it. The
+cost is a few points of `fuzzy.ts`'s earliness bonus on the title, which only
+reorders rows within a section.
+
+**Escape is two-stage, and the drill-in is declarative (`Palette.tsx`).** Inside
+a scope, `Escape` pops back to the top level and the palette STAYS OPEN; only at
+the top level does it close. Escape always closing would make the drill-in a trap
+the user leaves only by reopening the palette — losing `capturedId` — and would
+make going back and giving up the same key. `Backspace` on an empty query pops
+too. Input mode is deliberately not a third stage: closing clears it
+(`Canvas.tsx`'s `if (!palette.open) setInputMode(null)`), which is what makes
+Escape a real cancel for a rename and a delete alike. Separately, a door row
+announces itself with the FIELD `Command.entersScope`, never by calling back
+during `run()`: `runRow` closes the palette BEFORE running a command (a command
+may focus a panel or open a dialog, and restoring focus afterwards would steal it
+straight back), so a row that wants the overlay to stay up has to be readable
+before it is run.
+
+**A destructive row is marked AND gated, and the gate is `InputMode`
+(`commands.ts`'s `destructive`, `Canvas.tsx`'s `deletePreset`/`deletePrompt`).**
+Neither half replaces the other: a red row still runs on one `Enter`, and an
+unmarked confirm is a question the user did not expect to be asked. The gate
+reuses input mode rather than adding a dialog, and that is not a shortcut — M5a
+deferred preset editing entirely because "building a preset-manager dialog now
+would be the first modal in this app, and it would collide with xterm's keyboard
+focus". Input mode is that problem already solved, so a confirm inherits all four
+of `usePalette`'s focus rules. It follows `beginRenamePreset`'s two-step shape
+including the reopen that looks redundant and is not. `verify:panels` 50 asserts
+the cancel by reading `preset.list()` back, not by reading the overlay: a confirm
+step that confirms unconditionally is invisible.
+
+**Sticky headers oblige `scroll-margin-top` (`styles.css`).**
+`.palette__section` is `position: sticky`, and `.palette__row` carries
+`scroll-margin-top: 28px` to match its rendered height. The two MUST agree.
+`scrollIntoView({ block: 'nearest' })` considers a row visible when it is inside
+the scrollport — including when a sticky header is painted on top of it — so
+without the margin, arrowing into a new section parks the selected row
+UNDERNEATH its own header, which looks exactly like the selection jumping off
+screen. No check can catch this: a synthetic `WheelEvent` performs no default
+scroll in Chromium, the same limit `verify:panels` 47 documents. It was verified
+by hand.
+
+**Confirm mode keeps an invisible input, and it must stay focusable
+(`Palette.tsx`, `.palette__input--ghost`).** There is no text to edit, but the
+field is still what holds DOM focus away from xterm — the same job xterm's own
+hidden textarea does. So it is positioned off-view at `opacity: 0` rather than
+removed: `display: none` or `visibility: hidden` would make it unfocusable and
+hand the keyboard straight back to the agent with a destructive question on
+screen and no key able to answer it.
 
 **The header's honest chain, and the backfill that must never happen
 (`TerminalPanel.tsx`).** The label is

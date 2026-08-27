@@ -992,6 +992,7 @@ export function Canvas({
     },
     beginRenamePreset: (id, currentName) => {
       setInputMode({
+        kind: 'text',
         label: `Rename \u201c${currentName}\u201d to\u2026`,
         initial: currentName,
         submit: (value) => {
@@ -1009,7 +1010,30 @@ export function Canvas({
       palette.openPalette()
     },
     deletePreset: (id) => {
-      void window.canvas.preset.remove(id).then(reloadPresets)
+      // Gated, not instant. A delete row sat one Enter away from destroying a
+      // preset, styled identically to "Go to n1", and the fuzzy matcher will
+      // happily put it under a query the user aimed somewhere else.
+      //
+      // The gate is input mode rather than a dialog, and that is not a
+      // shortcut: M5a deferred preset editing entirely because "building a
+      // preset-manager dialog now would be the first modal in this app, and it
+      // would collide with xterm's keyboard focus". Input mode is that problem
+      // already solved, so a confirm inherits all four of usePalette's focus
+      // rules instead of reopening the question.
+      const name = presetRows.find((p) => p.id === id)?.name ?? id
+      setInputMode({
+        kind: 'confirm',
+        label: `Delete preset \u201c${name}\u201d?`,
+        initial: '',
+        submit: () => {
+          void window.canvas.preset.remove(id).then(reloadPresets)
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without this the mode would be set on a palette that is already gone
+      // and the clear-on-close effect would wipe it again — the same pairing
+      // beginRenamePreset makes, for the same reason.
+      palette.openPalette()
     },
     setDefaultPreset: (id) => {
       // No local bookkeeping: main answers by pushing PRESET_DEFAULT, which
@@ -1065,6 +1089,7 @@ export function Canvas({
       // while the palette was open.
       if (!selection) return
       setInputMode({
+        kind: 'text',
         label: 'Name this prompt\u2026',
         initial: '',
         submit: (name) => {
@@ -1078,13 +1103,30 @@ export function Canvas({
       palette.openPalette()
     },
     deletePrompt: (id) => {
-      // Reloaded rather than filtered locally: main is the only side that
-      // knows what the store now says, and a project prompt refuses deletion
-      // there (the row is disabled, but a stale list could still reach here).
-      void window.canvas.prompt.remove(id).then(() => reloadPrompts(palette.capturedId))
+      // Confirmed for the same reason deletePreset is; see there.
+      const name = promptRows.find((p) => p.id === id)?.name ?? id
+      const captured = palette.capturedId
+      setInputMode({
+        kind: 'confirm',
+        label: `Delete prompt \u201c${name}\u201d?`,
+        initial: '',
+        submit: () => {
+          // Reloaded rather than filtered locally: main is the only side that
+          // knows what the store now says, and a project prompt refuses
+          // deletion there (the row is disabled, but a stale list could still
+          // reach here). Reloaded against the id captured when the row RAN,
+          // not against palette.capturedId at confirm time: the confirm step
+          // reopens the palette, which re-captures — and re-capturing while
+          // the input holds DOM focus can hand back a different panel, whose
+          // project prompts are a different directory's.
+          void window.canvas.prompt.remove(id).then(() => reloadPrompts(captured))
+        }
+      })
+      palette.openPalette()
     },
     beginRenamePanel: (id, currentTitle) => {
       setInputMode({
+        kind: 'text',
         label: 'Name this panel…',
         initial: currentTitle,
         submit: (value) => {
@@ -1131,8 +1173,8 @@ export function Canvas({
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport()
-  }), [resetViewport, centreOn, selectAndRaise, presetRows, reloadPresets, palette.openPalette,
-       palette.capturedId, reloadPrompts, commitHistory])
+  }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
+       palette.openPalette, palette.capturedId, reloadPrompts, commitHistory])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and

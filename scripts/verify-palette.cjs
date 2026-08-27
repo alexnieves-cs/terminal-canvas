@@ -36,7 +36,7 @@ const ok = (n, pass, detail) => {
 const cmd = (id, title, extra = {}) => ({
   id,
   title,
-  group: 'Canvas',
+  group: 'canvas',
   run: () => {},
   ...extra
 })
@@ -354,10 +354,19 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     prompts: [{ id: 'p1', name: 'review', source: 'saved' }],
     capturedId: 'n1'
   }))
-  const order = []
-  for (const r of rows) if (order[order.length - 1] !== r.group) order.push(r.group)
-  ok('30 groups are built in a fixed order',
-    order.join(',') === 'Panel,Preset,Prompt,Canvas', order.join(','))
+  // Through filterCommands, NOT straight off buildCommands. Construction order
+  // stopped being the grouping the moment sorting became section-first, and
+  // the property worth pinning is the one the user actually sees: whatever
+  // else moves, each section appears ONCE and they appear in SECTIONS order.
+  // Asserting the built array instead would pass forever while the rendered
+  // list interleaved, which is exactly how the old defect survived M5b.
+  const seen = []
+  for (const r of P.filterCommands(rows, '')) {
+    if (seen[seen.length - 1] !== r.group) seen.push(r.group)
+  }
+  const expected = P.SECTIONS.map((s) => s.id).filter((id) => seen.includes(id))
+  ok('30 sections render once each, in SECTIONS order',
+    seen.join(',') === expected.join(','), seen.join(',') + ' vs ' + expected.join(','))
 }
 
 // 31-32 — M6a. The rename row is aimed at capturedId, NOT at the row's own
@@ -405,6 +414,252 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   const found = P.filterCommands(rows, 'auth')
   ok('33 a titled panel is findable in the palette by its title',
     found.length === 1 && found[0].id === 'panel.goto.p1', found.map((c) => c.id).join(','))
+}
+
+
+// --- M6p: sections, at-rest hiding, best-match selection, highlighting ------
+
+// 34-35. Section-first sorting is the fix for the defect M5b shipped: the old
+//     comparator was `(b.score - a.score) || (a.order - b.order)`, so score won
+//     OUTRIGHT and construction order — which commands.ts's header comment
+//     calls "the grouping" — only ever survived the EMPTY query. One keystroke
+//     and the groups interleaved, which is how "Delete preset Claude" came to
+//     sit above "New panel from Claude" with nothing but a repeated uppercase
+//     chip to tell them apart. 34 is the half that catches a regression to the
+//     old comparator: the manage row scores strictly higher and must still
+//     come second. 35 is the half that stops the fix going too far — inside a
+//     section, score must STILL decide, or the whole ranker is dead.
+{
+  // 'del' is contiguous and word-initial in the manage row, and a scattered
+  // subsequence in the panel row, so score alone would invert these two.
+  const list = [
+    cmd('a', 'Go to double-check ledger', { group: 'panel' }),
+    cmd('b', 'Delete preset X', { group: 'manage' })
+  ]
+  const out = P.filterCommands(list, 'del')
+  ok('34 a section earlier in SECTIONS outranks a better score in a later one',
+    out.length === 2 && out[0].id === 'a' && out[1].id === 'b',
+    out.map((c) => c.id).join(','))
+}
+{
+  const list = [
+    cmd('scattered', 'c l a u d e', { group: 'spawn' }),
+    cmd('exact', 'Claude', { group: 'spawn' })
+  ]
+  const out = P.filterCommands(list, 'cla')
+  ok('35 inside one section, score still decides',
+    out.length === 2 && out[0].id === 'exact', out.map((c) => c.id).join(','))
+}
+
+// 36-38. Section-first sorting would, on its own, point Enter at the first
+//     runnable row of the FIRST section rather than at what the user was
+//     typing towards — so the seed becomes bestMatchIndex, which re-scores the
+//     already-filtered rows and ignores their sections entirely. 37 is the one
+//     that matters: a "best match" that lands on a disabled row makes Enter a
+//     no-op, and a silent no-op reads as a broken palette.
+{
+  const list = [
+    cmd('a', 'Go to zsh', { group: 'panel' }),
+    cmd('b', 'Claude', { group: 'spawn' })
+  ]
+  const out = P.filterCommands(list, 'cla')
+  ok('36 bestMatchIndex points at the best match, not the first section',
+    P.bestMatchIndex(out, 'cla') === out.findIndex((c) => c.id === 'b'),
+    String(P.bestMatchIndex(out, 'cla')))
+}
+{
+  const list = [
+    cmd('best', 'Claude', { group: 'spawn', disabledReason: 'not found on PATH' }),
+    cmd('worse', 'c l a', { group: 'spawn' })
+  ]
+  const out = P.filterCommands(list, 'cla')
+  ok('37 bestMatchIndex skips a disabled row even when it scores highest',
+    P.bestMatchIndex(out, 'cla') === out.findIndex((c) => c.id === 'worse'),
+    String(P.bestMatchIndex(out, 'cla')))
+}
+{
+  const list = [cmd('a', 'Claude', { group: 'spawn', disabledReason: 'nope' })]
+  ok('38 bestMatchIndex is -1 when nothing is runnable',
+    P.bestMatchIndex(P.filterCommands(list, 'cla'), 'cla') === -1)
+}
+
+// 39-40. hiddenAtRest is the row-count fix, and it is TWO rules, not one.
+//     Hiding admin errands from the resting list is the point; hiding them
+//     from SEARCH would be the bug — verify:palette 31 already states the rule
+//     in its own comment ("a row that disappears is indistinguishable from a
+//     feature that is missing"), and a half-implemented hide satisfies 39 while
+//     quietly deleting four commands from the app. Both halves, always.
+{
+  const list = [
+    cmd('keep', 'Claude', { group: 'spawn' }),
+    cmd('admin', 'Delete preset Claude', { group: 'manage', hiddenAtRest: true })
+  ]
+  const out = P.filterCommands(list, '')
+  ok('39 a hiddenAtRest row is dropped from the resting list',
+    out.length === 1 && out[0].id === 'keep', out.map((c) => c.id).join(','))
+}
+{
+  const list = [
+    cmd('keep', 'Claude', { group: 'spawn' }),
+    cmd('admin', 'Delete preset Claude', { group: 'manage', hiddenAtRest: true })
+  ]
+  ok('40 a hiddenAtRest row comes back as soon as the user types',
+    P.filterCommands(list, 'delete').some((c) => c.id === 'admin'))
+}
+
+// 41. searchText is what makes the retitles safe. Dropping "New panel from"
+//     from a spawn row's title is a clear win under a NEW PANEL header, but
+//     haystack() is title + subtitle — so without a place to put the dropped
+//     words, "new panel" silently stops finding the rows it has always found.
+//     The row would still be there; it would just no longer be reachable the
+//     way people reach it. (M6b's plan schedules this same field for its
+//     keyword search, so it lands once, here.)
+{
+  const list = [cmd('a', 'Claude', { group: 'spawn', searchText: 'new panel from spawn' })]
+  ok('41 searchText is searchable without being rendered',
+    P.filterCommands(list, 'new panel').length === 1 &&
+    P.filterCommands(list, 'zzz').length === 0)
+}
+// 41b. The whole phrase, generic half AND specific half, in the order a
+//     person types them. This is the case that a naive haystack loses:
+//     fuzzyMatch is one ordered subsequence over one concatenated string, so
+//     with the title spliced in FRONT of searchText the matcher consumes
+//     "new panel from" out of the trailing terms and then has to find
+//     "claude" after it — which is not there. The row would stay in the list
+//     and silently stop answering the query searchText exists to answer.
+{
+  const list = [cmd('a', 'Claude', { group: 'spawn', subtitle: '~', searchText: 'new panel from spawn' })]
+  ok('41b the generic words and the specific name match as one phrase',
+    P.filterCommands(list, 'new panel from claude').length === 1 &&
+    P.filterCommands(list, 'claude').length === 1)
+}
+
+// 42-43. splitHighlight finally spends what fuzzy.ts has been computing and
+//     throwing away since M5b — its own comment says positions are "indices
+//     into the ORIGINAL target, so the view can highlight them", and no view
+//     ever did. Adjacent characters must MERGE into one segment: a span per
+//     character would render fine and then break sub-pixel letter-spacing
+//     across the whole title.
+{
+  const seg = P.splitHighlight('New panel', 'np')
+  ok('42 splitHighlight marks the matched characters and merges runs',
+    JSON.stringify(seg) === JSON.stringify([
+      { text: 'N', hit: true },
+      { text: 'ew ', hit: false },
+      { text: 'p', hit: true },
+      { text: 'anel', hit: false }
+    ]), JSON.stringify(seg))
+}
+{
+  // The resting list is the common case, and it must not pay for a highlight
+  // pass or render a title chopped into segments for no reason.
+  const empty = P.splitHighlight('Claude', '')
+  const miss = P.splitHighlight('Claude', 'zzz')
+  ok('43 an empty or non-matching query is one unhighlighted segment',
+    JSON.stringify(empty) === JSON.stringify([{ text: 'Claude', hit: false }]) &&
+    JSON.stringify(miss) === JSON.stringify([{ text: 'Claude', hit: false }]),
+    JSON.stringify(empty) + ' ' + JSON.stringify(miss))
+}
+// 44-45. The two retitles, and the one thing that makes them safe. Under a
+//     NEW PANEL header "New panel from Claude" says "new panel" twice, and
+//     under a PROMPTS header so does "Insert prompt: review" — but haystack()
+//     is title + subtitle, so dropping those words would also drop the search
+//     term people already type. Both halves in one check each: the title is
+//     the bare noun AND the old phrasing still finds it.
+{
+  const rows = P.buildCommands(ctx({ presets: [CLAUDE] }))
+  const row = byId(rows, 'preset.spawn.claude')
+  ok('44 a spawn row is titled with the preset alone and still found by "new panel"',
+    row.title === 'Claude' &&
+    P.filterCommands(rows, 'new panel').some((c) => c.id === 'preset.spawn.claude'),
+    row.title)
+}
+{
+  const rows = P.buildCommands(ctx({
+    prompts: [{ id: 'p1', name: 'review', source: 'saved' }],
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'n1' }]
+  }))
+  const row = byId(rows, 'prompt.insert.p1')
+  ok('45 a prompt row is titled with the prompt alone and still found by "insert prompt"',
+    row.title === 'review' &&
+    P.filterCommands(rows, 'insert prompt').some((c) => c.id === 'prompt.insert.p1'),
+    row.title)
+}
+
+// 46. The row-count fix, stated as the two facts that define it: the errands
+//     are hidden at rest, and the verbs are NOT. Checking only the first half
+//     would pass just as well against an implementation that hid the whole
+//     preset section, which is the failure worth catching — the resting list
+//     would be tidy and the app would have lost its spawn rows.
+{
+  const rows = P.buildCommands(ctx({ presets: [MINE], prompts: [{ id: 'p1', name: 'r', source: 'saved' }],
+    capturedId: 'n1', panels: [{ id: 'n1', label: 'n1' }] }))
+  const hidden = (id) => byId(rows, id).hiddenAtRest === true
+  const shown = (id) => byId(rows, id).hiddenAtRest === undefined
+  ok('46 administration is hidden at rest; the verbs are not',
+    hidden('preset.rename.u1') && hidden('preset.delete.u1') && hidden('preset.default.u1') &&
+    hidden('prompt.delete.p1') &&
+    shown('preset.spawn.u1') && shown('prompt.insert.p1') &&
+    shown('panel.rename') && shown('canvas.fit'))
+}
+
+// 47. Both deletes are marked destructive, and NOTHING else is. The flag
+//     drives red styling and the confirm gate, so a flag that spread to a
+//     benign row would put a confirm step in front of spawning a panel.
+{
+  const rows = P.buildCommands(ctx({ presets: [MINE], prompts: [{ id: 'p1', name: 'r', source: 'saved' }],
+    capturedId: 'n1', panels: [{ id: 'n1', label: 'n1' }] }))
+  const marked = rows.filter((r) => r.destructive === true).map((r) => r.id).sort()
+  ok('47 exactly the two delete rows are destructive',
+    marked.join(',') === 'preset.delete.u1,prompt.delete.p1', marked.join(','))
+}
+
+// 48. The Cmd+N hint, on the DEFAULT preset's spawn row and no other. This is
+//     worth more than its size: CLAUDE.md records that the default-preset
+//     feature sat inert for an entire milestone because nothing anywhere said
+//     what Cmd+N would spawn — the out-of-the-box canvas looked correct and
+//     only a user who hand-edited defaultPresetId could tell. A hint on every
+//     row would say it just as loudly and be a lie on all but one.
+{
+  const rows = P.buildCommands(ctx({ presets: [SHELL, MINE] }))
+  const withHint = rows.filter((r) => r.shortcut !== undefined).map((r) => r.id + '=' + r.shortcut)
+  ok('48 only the default preset advertises Cmd+N',
+    withHint.sort().join(',') === 'canvas.fit=\u23180,preset.spawn.shell=\u2318N',
+    withHint.join(','))
+}
+
+// 49. The drill-in doors. They must be visible AT REST — the whole design
+//     rests on administration being one keystroke away rather than one guess
+//     away, and a door that only appears once you have already typed "manage"
+//     is not a door. They carry no scope of their own, so entering `presets`
+//     does not show the row you entered it through.
+{
+  const rows = P.buildCommands(ctx({ presets: [SHELL], prompts: [{ id: 'p1', name: 'r', source: 'saved' }] }))
+  const resting = P.filterCommands(rows, '').map((r) => r.id)
+  const inside = P.filterCommands(rows, '', 'presets').map((r) => r.id)
+  ok('49 both drill-in doors rest in Manage, and are not shown inside a scope',
+    resting.includes('manage.presets') && resting.includes('manage.prompts') &&
+    !inside.includes('manage.presets') &&
+    byId(rows, 'manage.presets').group === 'manage' &&
+    byId(rows, 'manage.presets').entersScope === 'presets' &&
+    byId(rows, 'manage.prompts').entersScope === 'prompts',
+    resting.filter((id) => id.startsWith('manage.')).join(','))
+}
+
+// 50. What a scope actually shows: every row of its own kind INCLUDING the
+//     hidden ones (that is what the user came here for), and nothing from any
+//     other kind. A scope that leaked the panel switcher in would be a filter
+//     that filters nothing.
+{
+  const rows = P.buildCommands(ctx({
+    presets: [MINE], prompts: [{ id: 'p1', name: 'r', source: 'saved' }],
+    panels: [{ id: 'n1', label: 'n1' }], capturedId: 'n1'
+  }))
+  const inside = P.filterCommands(rows, '', 'presets').map((r) => r.id).sort()
+  ok('50 a scope shows its own rows, hidden ones included, and nothing else',
+    inside.join(',') === 'preset.default.u1,preset.delete.u1,preset.rename.u1,preset.spawn.u1',
+    inside.join(','))
 }
 
 const failed = results.filter((r) => !r.pass)

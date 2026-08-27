@@ -15,7 +15,12 @@
 Read these before Task 1; both would otherwise be discovered mid-task.
 
 1. **`parseSettings` is already taken.** The spec proposes a `parseSettings` function, but `src/shared/layout-schema.ts:374` already has a private `parseSettings` that parses `RestoreSettings`. **The new function is `parsePreferences`**, and the new storage key is `preferences`, not `settings` — the `settings` key already exists in `layout.json` and holds the three restore booleans.
-2. **`CommandGroup` is a closed union and its order is asserted.** `palette-model.ts:9` is `'Panel' | 'Preset' | 'Prompt' | 'Canvas'`, and `verify:palette` check 30 asserts the built order is exactly `'Panel,Preset,Prompt,Canvas'`. M6b adds `'Setting'` **last**, and check 30 must be updated to `'Panel,Preset,Prompt,Canvas,Setting'`. Last is deliberate: a settings toggle is a rare errand, and putting it ahead of the panel switcher would push the frequent rows down.
+2. **~~`CommandGroup` is a closed union and its order is asserted.~~ RESOLVED by M6p — read this replacement instead.** That collision described the palette as it was at M6a. M6p (`docs/superpowers/plans/2026-08-26-m6p-palette-structure.md`) restructured it, and both halves of the problem are gone:
+
+   - **Sections are data now.** `palette-model.ts` exports `SECTIONS: readonly SectionDef[]`, and array order *is* display order and the primary sort key. Adding the settings section is **one object literal**: `{ id: 'setting', label: 'Settings' }`, inserted before `manage`. There is no union to widen. `verify:palette` check 30 no longer hardcodes an order — it derives the expectation from `SECTIONS` itself and asserts each section renders once, so it needs **no edit at all**.
+   - **`Command.searchText` already exists.** M6p added it (to keep "new panel from …" finding the retitled spawn rows) and it is already in `haystack()`, **first**, ahead of the title — that ordering is load-bearing, see the comment there. #11's keyword search is therefore just a matter of populating the field on settings rows.
+
+   **What M6b must decide instead:** whether settings rows are `hiddenAtRest`. They probably should not be — a settings row the user cannot see without typing is the "silently missing feature" problem — but there are potentially dozens of them, and the resting list is now ~8 rows on purpose. The likely answer is a `Manage settings…` drill-in row (`entersScope: 'settings'`) with the individual toggles carrying `hiddenAtRest` and `scope: 'settings'`, which is exactly the shape presets and prompts already use. That costs one entry in `PaletteScope` and one in `SCOPE_LABEL`.
 
 ## Global Constraints
 
@@ -31,7 +36,16 @@ Every task's requirements implicitly include these. Each is copied from the spec
 - **Commits:** conventional format scoped by milestone — `feat(m6b):`, `fix(m6b):`, `docs(m6b):`.
 - **`npm run verify` must be green before any task is called done.**
 
-**Baseline check counts (measured at M6a's merge, `b2c63fd`):** viewport 50 · registry 25 · layout 60 · palette 33 · tmux 27 · package 10 · pty 10 · pty-manager 20 · window 4 · ipc 1 · canvas 6 · xterm 6 · panels 48. New checks continue from those numbers. Note `verify-palette.cjs` prints `"N/N checks passed"` while every other suite prints `"N/N passed"`.
+**Prerequisite:** M6p (palette structure) lands first. Its plan is
+`docs/superpowers/plans/2026-08-26-m6p-palette-structure.md`.
+
+**Baseline check counts — RE-DERIVE THESE, do not trust the line below.** The
+figures recorded here at M6a's merge included a wrong one (panels 48; it was
+already 51), and CLAUDE.md's table carried a different wrong one (palette 32;
+it was 33). Run the suites. **After M6p:** viewport 50 · registry 25 · layout
+60 · palette 51 · tmux 27 · package 10 · pty 10 · pty-manager 20 · window 4 ·
+ipc 1 · canvas 6 · xterm 6 · panels 54. New checks continue from those
+numbers. Note `verify-palette.cjs` prints `"N/N checks passed"` while every other suite prints `"N/N passed"`.
 
 ---
 

@@ -73,41 +73,64 @@ export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
 export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_ALREADY_DEFAULT = 'already the default'
+export const REASON_NO_PROMPTS = 'no prompts saved yet'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
   reason === undefined ? command : { ...command, disabledReason: reason }
 
 /**
- * Build the whole list, in the order the user sees it with an empty query.
+ * The words a section header now supplies, kept searchable.
  *
- * Group order is Panel, Preset, Prompt, Canvas and it is load-bearing:
- * filterCommands sorts stably, so construction order IS the grouping.
+ * A spawn row reads "Claude" under NEW PANEL and a prompt row reads "review"
+ * under PROMPTS, which is the whole readability win — but haystack() is
+ * title + subtitle + searchText, so without somewhere to put the dropped
+ * phrasing, "new panel" and "insert prompt" would stop finding rows they have
+ * always found. The rows would still be there; they would simply stop being
+ * reachable the way people reach them, which is the quietest kind of
+ * regression this palette can have.
+ */
+const SPAWN_TERMS = 'new panel from preset spawn'
+const INSERT_TERMS = 'insert prompt paste'
+
+/**
+ * Build the whole list. Section membership — not position — is what orders it:
+ * filterCommands sorts by SECTIONS index first, so unlike M5b this function no
+ * longer carries the grouping in its construction order. It is still written
+ * in display order, because a reader who has to jump around the file to work
+ * out what the palette looks like is a reader who will put a row in the wrong
+ * section.
  */
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
 
+  // --- Panels --------------------------------------------------------------
+
   for (const panel of ctx.panels) {
-    // The row's TITLE stays the command/cwd/id label — verify:panels check 39
-    // targets the row by that text, so it can't move. A user-set title rides
-    // as the SUBTITLE instead: haystack() in palette-model.ts is
-    // `${title} ${subtitle}`, so this is what makes a panel named "auth
-    // refactor" findable by typing "auth" into Cmd+K, not just by its command
-    // and cwd. Conditional, not `subtitle: panel.title`, so an untitled panel
-    // gets no subtitle key at all rather than one holding undefined.
+    // "Go to" KEEPS its verb, asymmetrically: the other two rows lost the
+    // prefix their header now supplies, and this one does not. Two reasons.
+    // The Panels section holds goto rows AND "Rename panel…", so the verb is
+    // still doing work — and verify:panels 39 finds this row by the literal
+    // text "Go to" before recomputing centreOn's arithmetic to prove WHERE the
+    // camera landed, which is the most delicate assertion in that suite.
+    //
+    // A user-set title rides as the SUBTITLE: haystack() includes it, so this
+    // is what makes a panel named "auth refactor" findable by typing "auth".
+    // Conditional, not `subtitle: panel.title`, so an untitled panel gets no
+    // subtitle key at all rather than one holding undefined.
     out.push(panel.title !== undefined
       ? {
           id: `panel.goto.${panel.id}`,
           title: `Go to ${panel.label}`,
           subtitle: panel.title,
-          group: 'Panel',
+          group: 'panel',
           run: () => actions.goToPanel(panel.id)
         }
       : {
           id: `panel.goto.${panel.id}`,
           title: `Go to ${panel.label}`,
-          group: 'Panel',
+          group: 'panel',
           run: () => actions.goToPanel(panel.id)
         })
   }
@@ -120,7 +143,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           id: 'panel.rename',
           title: 'Rename panel…',
           subtitle: target ? (target.title ?? target.label) : 'no panel',
-          group: 'Panel',
+          group: 'panel',
           run: () => actions.beginRenamePanel(ctx.capturedId!, target?.title ?? '')
         },
         // Aimed at the CAPTURED panel, not at a row's own panel: opening the
@@ -132,53 +155,32 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   }
 
+  // --- New panel -----------------------------------------------------------
+
   for (const preset of ctx.presets) {
     out.push(
       withReason(
         {
           id: `preset.spawn.${preset.id}`,
-          title: `New panel from ${preset.name}`,
+          title: preset.name,
           subtitle: preset.subtitle,
-          group: 'Preset',
+          searchText: SPAWN_TERMS,
+          group: 'spawn',
+          scope: 'presets',
+          // On the DEFAULT preset's row and no other. CLAUDE.md records that
+          // this feature sat inert for a whole milestone because nothing
+          // anywhere said what Cmd+N would spawn — the stock canvas looked
+          // correct and only a user who hand-edited defaultPresetId could
+          // tell. A hint on every row would be a lie on all but one.
+          ...(preset.isDefault ? { shortcut: '⌘N' } : {}),
           run: () => actions.spawnPreset(preset.id)
         },
         preset.available ? undefined : REASON_NOT_ON_PATH
       )
     )
-    out.push(
-      withReason(
-        {
-          id: `preset.rename.${preset.id}`,
-          title: `Rename preset ${preset.name}`,
-          group: 'Preset',
-          run: () => actions.beginRenamePreset(preset.id, preset.name)
-        },
-        preset.builtIn ? REASON_BUILT_IN_RENAME : undefined
-      )
-    )
-    out.push(
-      withReason(
-        {
-          id: `preset.delete.${preset.id}`,
-          title: `Delete preset ${preset.name}`,
-          group: 'Preset',
-          run: () => actions.deletePreset(preset.id)
-        },
-        preset.builtIn ? REASON_BUILT_IN_DELETE : undefined
-      )
-    )
-    out.push(
-      withReason(
-        {
-          id: `preset.default.${preset.id}`,
-          title: `Make ${preset.name} the Cmd+N default`,
-          group: 'Preset',
-          run: () => actions.setDefaultPreset(preset.id)
-        },
-        preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
-      )
-    )
   }
+
+  // --- Prompts -------------------------------------------------------------
 
   for (const prompt of ctx.prompts) {
     // The source is on the ROW, and same-named prompts are never merged:
@@ -188,24 +190,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: `prompt.insert.${prompt.id}`,
-          title: `Insert prompt: ${prompt.name}`,
+          title: prompt.name,
           subtitle,
-          group: 'Prompt',
+          searchText: INSERT_TERMS,
+          group: 'prompt',
+          scope: 'prompts',
           run: () => actions.insertPrompt(prompt.id)
         },
         ctx.capturedId === null ? REASON_NO_FOCUS : undefined
-      )
-    )
-    out.push(
-      withReason(
-        {
-          id: `prompt.delete.${prompt.id}`,
-          title: `Delete prompt: ${prompt.name}`,
-          subtitle,
-          group: 'Prompt',
-          run: () => actions.deletePrompt(prompt.id)
-        },
-        prompt.source === 'project' ? REASON_PROJECT_PROMPT : undefined
       )
     )
   }
@@ -215,7 +207,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       {
         id: 'prompt.save',
         title: 'Save selection as prompt',
-        group: 'Prompt',
+        group: 'prompt',
+        scope: 'prompts',
         run: () => actions.beginSavePrompt()
       },
       // Which one is missing, not just that something is: "no focused panel"
@@ -228,6 +221,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
 
+  // --- Canvas --------------------------------------------------------------
+
   out.push({
     // "Reset zoom", not "Zoom to fit": useViewport exposes resetViewport
     // (Cmd+0's INITIAL) and deliberately not fitTo (Cmd+1), because the camera
@@ -235,16 +230,111 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // does rather than what the spec first called it.
     id: 'canvas.fit',
     title: 'Reset zoom',
-    subtitle: 'Cmd+0',
-    group: 'Canvas',
+    group: 'canvas',
+    shortcut: '⌘0',
     run: () => actions.zoomToFit()
   })
   out.push({
     id: 'canvas.reset',
     title: 'Reset canvas…',
-    group: 'Canvas',
+    group: 'canvas',
     run: () => actions.resetCanvas()
   })
+
+  // --- Manage --------------------------------------------------------------
+  //
+  // Everything below is hiddenAtRest except the two doors, and the doors are
+  // why the hiding is honest. Administration stays one keystroke away (type
+  // "delete" and it is back, in this section) rather than one guess away.
+
+  // The doors. `entersScope` rather than a callback, and `run` is genuinely a
+  // no-op: entering a drill-in is view state that never leaves Palette.tsx, so
+  // routing it through Canvas.tsx would make the canvas a stakeholder in which
+  // rows the palette is currently showing — and the view has to know BEFORE it
+  // runs the row, because running one normally closes the overlay.
+  out.push({
+    id: 'manage.presets',
+    title: 'Manage presets…',
+    subtitle: `${ctx.presets.length} preset${ctx.presets.length === 1 ? '' : 's'}`,
+    group: 'manage',
+    entersScope: 'presets',
+    run: () => {}
+  })
+  out.push(
+    withReason(
+      {
+        id: 'manage.prompts',
+        title: 'Manage prompts…',
+        subtitle: `${ctx.prompts.length} prompt${ctx.prompts.length === 1 ? '' : 's'}`,
+        group: 'manage',
+        entersScope: 'prompts',
+        run: () => {}
+      },
+      ctx.prompts.length === 0 ? REASON_NO_PROMPTS : undefined
+    )
+  )
+
+  for (const preset of ctx.presets) {
+    out.push(
+      withReason(
+        {
+          id: `preset.rename.${preset.id}`,
+          title: `Rename preset ${preset.name}`,
+          group: 'manage',
+          scope: 'presets',
+          hiddenAtRest: true,
+          run: () => actions.beginRenamePreset(preset.id, preset.name)
+        },
+        preset.builtIn ? REASON_BUILT_IN_RENAME : undefined
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: `preset.delete.${preset.id}`,
+          title: `Delete preset ${preset.name}`,
+          group: 'manage',
+          scope: 'presets',
+          hiddenAtRest: true,
+          destructive: true,
+          run: () => actions.deletePreset(preset.id)
+        },
+        preset.builtIn ? REASON_BUILT_IN_DELETE : undefined
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: `preset.default.${preset.id}`,
+          title: `Make ${preset.name} the Cmd+N default`,
+          group: 'manage',
+          scope: 'presets',
+          hiddenAtRest: true,
+          run: () => actions.setDefaultPreset(preset.id)
+        },
+        preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
+      )
+    )
+  }
+
+  for (const prompt of ctx.prompts) {
+    const subtitle = prompt.source === 'project' ? 'project — .claude/commands' : 'saved'
+    out.push(
+      withReason(
+        {
+          id: `prompt.delete.${prompt.id}`,
+          title: `Delete prompt: ${prompt.name}`,
+          subtitle,
+          group: 'manage',
+          scope: 'prompts',
+          hiddenAtRest: true,
+          destructive: true,
+          run: () => actions.deletePrompt(prompt.id)
+        },
+        prompt.source === 'project' ? REASON_PROJECT_PROMPT : undefined
+      )
+    )
+  }
 
   return out
 }
