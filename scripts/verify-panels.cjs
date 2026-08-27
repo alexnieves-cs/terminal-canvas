@@ -4478,6 +4478,113 @@ app.whenReady().then(async () => {
       // none of the earlier fixtures (w1, w2/'school', w9/w9p1) still around.
     }
 
+    // 72. Hovering a palette row moves the SELECTION, and the two things that
+    //     must not move it.
+    //
+    //     Until this landed, .palette__row had no :hover rule anywhere and no
+    //     pointer handler but onMouseDown — so the mouse could not tell the
+    //     user which row Enter was pointed at until the click had already run
+    //     something. Hover now drives the same `index` the arrow keys drive,
+    //     which is why there is no second highlight class to assert on: the
+    //     probe is .palette__row--selected, exactly as it is for the keyboard.
+    //
+    //     This has to live in verify:panels rather than verify:palette: the
+    //     plain-node suite has no DOM and cannot dispatch a mouse event at all.
+    //
+    //     72c is the one that separates the shipped implementation from the
+    //     obvious one. Blink re-dispatches a mousemove at the UNCHANGED cursor
+    //     position after a scroll, to refresh :hover — so without the
+    //     coordinate check in Palette.tsx's lastPointerRef, an ArrowDown that
+    //     scrolls the list "hovers" whichever row slid under a stationary
+    //     cursor and drags the selection straight back, making the arrow keys
+    //     useless whenever the pointer happens to rest over the list. That is
+    //     a real scroll, which no synthetic WheelEvent can produce here (the
+    //     limit check 47 already records) — so this check reproduces the
+    //     SIGNAL instead: a second mousemove at coordinates identical to the
+    //     previous one, on a different row, must change nothing.
+    {
+      await wc.executeJavaScript(`
+        if (document.querySelector('.palette') === null) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        }
+      `)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const hover = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        // "preset" is chosen because it reliably yields BOTH kinds of row with
+        // no fixture setup: "Manage presets…" is always runnable, and the
+        // rename/delete rows for the three built-ins are always disabled
+        // (REASON_BUILT_IN_RENAME). Neither depends on panels or workspaces,
+        // which check 71 has just left at zero.
+        setter.call(input, 'preset')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 120))
+
+        const all = () => [...document.querySelectorAll('.palette__row')]
+        const selectedText = () => {
+          const el = document.querySelector('.palette__row--selected')
+          return el ? el.textContent : null
+        }
+        const isDisabled = (el) => el.className.includes('palette__row--disabled')
+        const move = (el, x, y) =>
+          el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }))
+        const settleFrame = () => new Promise((r) => setTimeout(r, 60))
+
+        const rows = all()
+        const before = selectedText()
+        // A runnable row that is NOT already selected, or the hover would have
+        // nothing to prove.
+        const target = rows.find((r) => !isDisabled(r) && r.textContent !== before)
+        const disabled = rows.find((r) => isDisabled(r))
+        // A SECOND runnable row, distinct from target, for the 72c probe.
+        const other = rows.find((r) => !isDisabled(r) && r !== target && r.textContent !== before)
+        if (!target || !disabled || !other) {
+          return { error: 'fixture: rows=' + rows.length +
+            ' target=' + !!target + ' disabled=' + !!disabled + ' other=' + !!other }
+        }
+        const targetText = target.textContent
+        const disabledText = disabled.textContent
+
+        // 72: a real move over a runnable row selects it.
+        move(target, 100, 100)
+        await settleFrame()
+        const afterHover = selectedText()
+
+        // 72b: a real move over a DISABLED row leaves the selection alone —
+        // the same rule stepRunnable states for the arrow keys.
+        move(disabled, 100, 200)
+        await settleFrame()
+        const afterDisabled = selectedText()
+
+        // 72c: an IDENTICAL-coordinate move on a different row is the
+        // post-scroll synthetic, and must change nothing. (The disabled move
+        // above is what left lastPointerRef at 100,200 — the handler records
+        // the position before it bails on disabledReason.)
+        move(other, 100, 200)
+        await settleFrame()
+        const afterSynthetic = selectedText()
+
+        return { before, targetText, disabledText, afterHover, afterDisabled, afterSynthetic }
+      })()`)
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+      `)
+      await settle()
+      ok('72 hovering a runnable palette row selects it',
+        hover.error === undefined && hover.afterHover === hover.targetText &&
+          hover.afterHover !== hover.before,
+        JSON.stringify(hover))
+      ok('72b hovering a DISABLED palette row leaves the selection where it was',
+        hover.error === undefined && hover.afterDisabled === hover.targetText &&
+          hover.afterDisabled !== hover.disabledText,
+        JSON.stringify(hover))
+      ok("72c a mousemove at the previous move's exact coordinates is the " +
+         'post-scroll synthetic and moves nothing',
+        hover.error === undefined && hover.afterSynthetic === hover.targetText,
+        JSON.stringify(hover))
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

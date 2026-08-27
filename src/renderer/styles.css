@@ -502,7 +502,9 @@ body {
   gap: 10px;
   padding: 7px 16px;
   color: #c8cbdb;
-  cursor: default;
+  /* A row answers the pointer — hovering selects it and a mousedown runs it —
+     so it must not read as inert text the way `default` makes it. */
+  cursor: pointer;
   /* Load-bearing, and it must match .palette__section's rendered height.
      scrollIntoView({ block: 'nearest' }) considers a row "visible" when it is
      inside the scrollport — including when a sticky header is painted on top
@@ -523,6 +525,9 @@ body {
 
 .palette__row--disabled {
   color: #6b6f85;
+  /* Back to default: a disabled row takes neither the hover selection nor a
+     click, and a pointer cursor over it would promise both. */
+  cursor: default;
 }
 
 /* Destructive rows are marked as well as gated (Canvas.tsx confirms them).

@@ -110,6 +110,19 @@ export function Palette(props: PaletteProps): JSX.Element {
   const [scope, setScope] = useState<PaletteScope | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const selectedRef = useRef<HTMLLIElement>(null)
+  // The last position a REAL mouse move reported. Blink re-dispatches a
+  // mousemove at the UNCHANGED cursor position after a scroll, to refresh
+  // :hover state — so an ArrowDown that scrolls the list would otherwise
+  // "hover" whichever row slid under a stationary cursor and snatch the
+  // selection straight back, making the arrow keys useless the moment the
+  // pointer happens to be resting over the list. Identical coordinates mean
+  // the pointer did not move and the event is not the user's.
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
+  // Set by the hover handler and consumed by the scroll effect below. A row
+  // under the cursor is by definition already on screen; scrolling it FULLY
+  // into view would shift every other row out from under the pointer, which
+  // is the same feedback loop from the other direction.
+  const pointerSelectRef = useRef(false)
 
   const commands = useMemo(
     () =>
@@ -184,7 +197,13 @@ export function Palette(props: PaletteProps): JSX.Element {
   // at all — and .palette__row carries a scroll-margin-top matching the sticky
   // header's height, or 'nearest' parks the row UNDER a header it considers
   // perfectly visible.
+  //
+  // Except when the pointer is what moved the selection: see pointerSelectRef.
   useEffect(() => {
+    if (pointerSelectRef.current) {
+      pointerSelectRef.current = false
+      return
+    }
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
   }, [index, rows])
 
@@ -469,6 +488,24 @@ export function Palette(props: PaletteProps): JSX.Element {
                   onMouseDown={(e: MouseEvent<HTMLLIElement>) => {
                     e.preventDefault()
                     runRow(row)
+                  }}
+                  // Hovering moves the SELECTION rather than painting a second,
+                  // parallel highlight: .palette__row--selected is the only
+                  // thing telling the user what Enter will run, and two of them
+                  // on screen at once is a question, not an answer. Disabled
+                  // rows are skipped for the same reason stepRunnable skips
+                  // them — a selection Enter cannot act on is a dead key.
+                  //
+                  // onMouseMove, not onMouseEnter: the synthetic post-scroll
+                  // move fires either way, and only comparing coordinates can
+                  // tell it apart from a real one. See lastPointerRef.
+                  onMouseMove={(e: MouseEvent<HTMLLIElement>) => {
+                    const last = lastPointerRef.current
+                    if (last && last.x === e.clientX && last.y === e.clientY) return
+                    lastPointerRef.current = { x: e.clientX, y: e.clientY }
+                    if (row.disabledReason !== undefined || i === index) return
+                    pointerSelectRef.current = true
+                    setIndex(i)
                   }}
                 >
                   <span className="palette__title">
