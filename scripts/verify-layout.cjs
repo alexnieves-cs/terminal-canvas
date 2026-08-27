@@ -1253,9 +1253,15 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `old=${old && old.panelIds.join()} new=${now && now.panelIds.join()}`)
 }
 
-// 90. activate returns the INCOMING workspace's state, with the restore
-//     settings applied the same way initial() applies them — a switch is a
-//     second boot, so the two must not answer differently.
+// 90. activate returns the INCOMING workspace's own state, round-tripped
+//     with the restore.* preferences NOT applied — a switch deliberately
+//     ignores them, because they answer "what should the app show me when
+//     it starts" and a switch is not a start (see check 94 and "A workspace
+//     switch is a second boot, but not in preference semantics" in
+//     CLAUDE.md). The fixture below is unaffected either way: it never
+//     touches restore.*, so this check passes whether or not settings are
+//     applied, and its real job is proving p1/its camera survive the round
+//     trip at all, not exercising the settings path.
 {
   const path = tmp()
   writeFileSync(path, file(), 'utf8')
