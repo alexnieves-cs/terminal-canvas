@@ -31,6 +31,7 @@ export function applyAgentState(panelId: PanelId, state: AgentState): void {
   if (states.get(panelId) === state) return
   states.set(panelId, state)
   notify(panelId)
+  syncAttention(panelId, state)
 }
 
 /**
@@ -42,10 +43,40 @@ export function clearAgentState(panelId: PanelId): void {
   if (!states.has(panelId)) return
   states.delete(panelId)
   notify(panelId)
+  syncAttention(panelId, undefined)
 }
 
 export function getAgentState(panelId: PanelId): AgentState | undefined {
   return states.get(panelId)
+}
+
+/**
+ * Who is waiting, in ENTRY order — a Set iterates in insertion order, which is
+ * exactly the queue Cmd+J steps through: longest-waiting first.
+ *
+ * A SECOND subscription rather than a second store. The per-id subscription
+ * above answers "what is panel n3 doing"; this answers "who wants me", which
+ * is a set-valued question no per-id hook can serve without every panel
+ * subscribing to every other panel — the fan-out this module exists to avoid.
+ *
+ * It notifies only on MEMBERSHIP change. busy/idle churn on a chatty agent
+ * moves through applyAgentState constantly and must not reach here, or the
+ * pip layer re-renders at the flush rate for panels whose pips did not move.
+ */
+const wanting = new Set<PanelId>()
+const attentionListeners = new Set<() => void>()
+// useSyncExternalStore compares snapshots by identity, so this must be a
+// cached array rebuilt only when membership actually changed. Returning a
+// fresh array per call makes React re-render forever.
+let attentionSnapshot: PanelId[] = []
+
+function syncAttention(panelId: PanelId, state: AgentState | undefined): void {
+  const should = state === 'wants-you'
+  if (should === wanting.has(panelId)) return
+  if (should) wanting.add(panelId)
+  else wanting.delete(panelId)
+  attentionSnapshot = [...wanting]
+  for (const listener of attentionListeners) listener()
 }
 
 function subscribe(panelId: PanelId, listener: () => void): () => void {
@@ -71,5 +102,34 @@ export function useAgentState(panelId: PanelId): AgentState | undefined {
     (listener) => subscribe(panelId, listener),
     () => states.get(panelId),
     () => states.get(panelId)
+  )
+}
+
+/**
+ * The queue as a plain read, for the Cmd+J handler: a keydown wants the
+ * current answer at press time, not a subscription.
+ */
+export function attentionIds(): PanelId[] {
+  return attentionSnapshot
+}
+
+/**
+ * The queue can only ever hold panels with a LIVE process, and that falls out
+ * of where the states come from rather than needing a filter here: main emits
+ * agent state only for sessions in PtyManager's map, which has no dormant
+ * entries. A restored canvas full of never-spawned panels therefore draws no
+ * pips at all — the spec's "indicators drawn for dormant panels" failure is
+ * unreachable by construction, and adding a defensive filter would create a
+ * second place that decides what "waiting" means.
+ */
+/** The same queue, as a subscription, for the pip layer. */
+export function useAttentionIds(): PanelId[] {
+  return useSyncExternalStore(
+    (listener) => {
+      attentionListeners.add(listener)
+      return () => attentionListeners.delete(listener)
+    },
+    () => attentionSnapshot,
+    () => attentionSnapshot
   )
 }

@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { EdgeIndicators } from './EdgeIndicators'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
 import { usePanelDrag } from './usePanelDrag'
 import type { DragMode, DragState } from './panel-interaction'
+import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
-import { applyAgentState, clearAgentState } from '@renderer/session/agent-state-store'
+import { applyAgentState, attentionIds, clearAgentState, useAttentionIds } from '@renderer/session/agent-state-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -398,8 +400,24 @@ export function Canvas({
     if (!palette.open) setInputMode(null)
   }, [palette.open])
 
+  // Cmd+J needs `centreOn` (returned BY this very useViewport call) and
+  // `selectAndRaise` (defined further below, near goToPanel) as closures, but
+  // must ALSO be passed INTO this call as its seventh argument — a genuine
+  // circular dependency, not just an ordering inconvenience: the value this
+  // callback needs does not exist until after the call it is an argument to
+  // returns. jumpAttentionImplRef is the indirection every other "must be
+  // stable but needs current data" case in this file already uses (see
+  // panelsRef/focusedIdRef above) — the OUTER callback below has a fixed,
+  // empty-deps identity for useViewport's dep array, while the actual jump
+  // logic is assigned into the ref once centreOn and selectAndRaise exist and
+  // is refreshed every render so it never runs against a stale closure.
+  const jumpAttentionImplRef = useRef<(direction: JumpDirection) => void>(() => {})
+  const onJumpAttention = useCallback((direction: JumpDirection) => {
+    jumpAttentionImplRef.current(direction)
+  }, [])
+
   const { viewport, resetViewport, worldCentre, centreOn } = useViewport(
-    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
   )
   const version = useRegistryVersion(registry)
 
@@ -785,6 +803,57 @@ export function Canvas({
     })
   }, [commitHistory])
 
+  // Which panel the jump key last visited. A ref, not state: it is a cursor
+  // for a keydown handler and nothing renders from it, so putting it in state
+  // would re-render the canvas on every press for no visible reason.
+  const jumpCursorRef = useRef<string | null>(null)
+
+  /**
+   * Cmd+J. centreOn + selectAndRaise, and deliberately NOTHING ELSE — no
+   * registry.wake, no registry.focus, no agent:acknowledge. Focus is the
+   * renderer's single trigger for acknowledgement (see onFocusPanel), and
+   * routing a second one through navigation would make the renderer a second
+   * author of a state main owns. The panel therefore keeps its amber border
+   * after you land on it, which is why styles.css lets wants-you outrank
+   * .panel--selected.
+   *
+   * Assigned into jumpAttentionImplRef (declared above, before useViewport)
+   * rather than being the callback passed to useViewport directly — see that
+   * ref's own comment for why the two cannot be the same binding. Reassigned
+   * every render so the closure below always sees the CURRENT centreOn and
+   * selectAndRaise, never a stale one from the render that first set it.
+   */
+  jumpAttentionImplRef.current = (direction: JumpDirection) => {
+    // panelsRef, not `panels`: this reads at keypress time and must not put a
+    // 60Hz-changing array into a useCallback's dep list (the same mirror-into-
+    // a-ref move focusedIdRef makes).
+    //
+    // The attention store and the panel list can disagree: closing a panel
+    // disposes its session and clears its agent state synchronously while
+    // pty:kill is still in flight to main, and one more agent:state for that
+    // id in that window (an idle tick, a bell) re-inserts it into the queue
+    // with nothing left to clear it afterward (M6c's session.killed guard
+    // suppresses the matching `exited`). reachableQueue drops any such
+    // phantom BEFORE it can seat the cursor — seating it there first and
+    // bailing out on a missing panel would leave the cursor stuck on an id it
+    // can never leave, killing the key rather than skipping one press.
+    const known = new Set(panelsRef.current.map((p) => p.rect.id))
+    const queue = reachableQueue(attentionIds(), known)
+    const id = nextAttentionId(queue, jumpCursorRef.current, direction)
+    // Nothing is waiting: the key does nothing at all. Moving the camera
+    // "somewhere" would be worse than silence — the user asked to be taken to
+    // a panel that wants them, and there isn't one.
+    if (id === null) return
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    // Belt-and-braces: a panel can still vanish between the filter above and
+    // this lookup in principle. It must never be the ONLY thing standing
+    // between the user and a working key, which is why the filter exists.
+    if (!panel) return
+    jumpCursorRef.current = id
+    centreOn(panel.rect)
+    selectAndRaise(id)
+  }
+
   const onSelectPanel = useCallback((id: string) => {
     selectAndRaise(id)
     // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
@@ -1041,6 +1110,21 @@ export function Canvas({
       if (row) setGlowEnabled(row.value === true)
     })
   }, [settingRows])
+
+  // Read the same way glowEnabled is, and for the same reason: settingRows is
+  // loaded only when the palette OPENS, so it cannot be the source — the pips
+  // must know this whether or not the palette has ever been opened.
+  const [pipsEnabled, setPipsEnabled] = useState(true)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'agent.edgeIndicators')
+      if (row) setPipsEnabled(row.value === true)
+    })
+  }, [settingRows])
+
+  // Named for what it holds, not for the store function it came from:
+  // Task 5 imports the store's `attentionIds` read into this same scope.
+  const waitingIds = useAttentionIds()
 
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
@@ -1383,6 +1467,9 @@ export function Canvas({
           )
         })}
       </div>
+      {pipsEnabled && (
+        <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
+      )}
       <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
       {palette.open && (
         <Palette

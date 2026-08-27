@@ -6,6 +6,7 @@ module.exports = {
   ...require('../src/renderer/canvas/lod'),
   ...require('../src/renderer/canvas/panel-interaction'),
   ...require('../src/renderer/canvas/pointer-correct'),
+  ...require('../src/renderer/canvas/attention'),
   ...require('../src/renderer/panels/panels'),
   ...require('../src/renderer/panels/history')
 }

@@ -1086,6 +1086,31 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify(out) + ' | ' + w.join('|'))
 }
 
+// 81. M6d's one setting. Declared like every other def — a label, a
+//     description and keywords — and round-tripping through a write and a
+//     reopen. The keywords matter as much as the toggle: ideas-backlog #11's
+//     argument for a searchable settings surface is that a user who does not
+//     know a feature's name can still find its switch, and "arrow" and
+//     "off-screen" are what someone would actually type for this one.
+{
+  const def = L.settingDef('agent.edgeIndicators')
+  const declared = def !== undefined && def.type === 'boolean' && def.default === true &&
+    def.category === L.AGENT_CATEGORY &&
+    typeof def.label === 'string' && def.label.length > 0 &&
+    typeof def.description === 'string' && def.description.length > 0 &&
+    Array.isArray(def.keywords) && def.keywords.length > 0
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('agent.edgeIndicators', false)
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('81 agent.edgeIndicators is declared and round-trips',
+    declared && b.getSetting('agent.edgeIndicators') === false,
+    `declared=${declared} reopened=${b.getSetting('agent.edgeIndicators')}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

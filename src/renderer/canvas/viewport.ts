@@ -100,6 +100,70 @@ export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
   }
 }
 
+/**
+ * How far inside the viewport edge a pip sits, in screen pixels. A pip drawn
+ * exactly on the boundary is half clipped by the window.
+ */
+export const EDGE_INDICATOR_MARGIN = 24
+
+/** A point on the viewport edge and the direction to draw an arrow at. */
+export interface EdgeIndicator {
+  x: number
+  y: number
+  /** Radians, `Math.atan2` convention: 0 points right, PI/2 points down. */
+  angle: number
+}
+
+/**
+ * Where to draw a pip pointing at `rect`, or null when it needs no pip.
+ *
+ * The visibility test is in SCREEN space, which is the whole reason this is
+ * here and not in the component: `worldToScreen` folds in both the camera
+ * translation and the scale, and an implementation that compares world
+ * coordinates against a screen-sized box is correct only at scale 1 and
+ * translation 0 — it then silently emits no pips at all when zoomed in, which
+ * is indistinguishable from the feature not existing (verify:viewport 65).
+ *
+ * PARTIALLY visible counts as visible. A pip aimed at something already on
+ * screen is noise on the one surface whose job is to be believed, and the
+ * user can see the panel's own border for that (verify:viewport 57).
+ */
+export function edgeIndicator(
+  rect: WorldRect,
+  vp: Viewport,
+  size: Size,
+  margin = EDGE_INDICATOR_MARGIN
+): EdgeIndicator | null {
+  const topLeft = worldToScreen({ x: rect.x, y: rect.y }, vp)
+  const bottomRight = worldToScreen({ x: rect.x + rect.w, y: rect.y + rect.h }, vp)
+  const overlaps =
+    bottomRight.x > 0 && topLeft.x < size.width &&
+    bottomRight.y > 0 && topLeft.y < size.height
+  if (overlaps) return null
+
+  const centreX = size.width / 2
+  const centreY = size.height / 2
+  const dx = (topLeft.x + bottomRight.x) / 2 - centreX
+  const dy = (topLeft.y + bottomRight.y) / 2 - centreY
+  // Unreachable while the rect is off screen (a rect centred on the viewport
+  // centre overlaps it), but a zero-length ray has no direction and would
+  // emit NaN, so it is refused rather than divided by.
+  if (dx === 0 && dy === 0) return null
+
+  // Clip the ray from the viewport centre toward the panel against the inset
+  // box, by finding the smaller of the two per-axis crossings. Clamping each
+  // axis INDEPENDENTLY is the tempting shorthand and is wrong: it parks every
+  // diagonal in the same corner, so direction stops carrying information
+  // (verify:viewport 62).
+  const halfW = Math.max(0, centreX - margin)
+  const halfH = Math.max(0, centreY - margin)
+  const tx = dx === 0 ? Infinity : halfW / Math.abs(dx)
+  const ty = dy === 0 ? Infinity : halfH / Math.abs(dy)
+  const t = Math.min(tx, ty)
+
+  return { x: centreX + dx * t, y: centreY + dy * t, angle: Math.atan2(dy, dx) }
+}
+
 /** Largest clamped scale at which every rect fits with a margin, centred. */
 export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
   if (rects.length === 0) return { x: 0, y: 0, scale: 1 }

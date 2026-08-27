@@ -781,6 +781,194 @@ const SLOT = { left: 300, top: 200 }
     `${JSON.stringify(r)} centre=${JSON.stringify(centre)} reach=${reach}`)
 }
 
+// 56-65. edgeIndicator: where on the viewport edge to draw a pip pointing at
+//     an off-screen panel, and which way to rotate it. This lives in
+//     viewport.ts rather than in the component for one reason: the arithmetic
+//     is wrong at scale !== 1 in a way that is invisible in a screenshot taken
+//     at 100%, and only the plain-node tier can sweep scales cheaply.
+const EDGE_SIZE = { width: 1400, height: 900 }
+// A camera centred on the world origin at a chosen scale, built with the
+// canvas's own verb rather than by hand so these checks cannot drift from
+// what centreOn actually produces.
+const cameraAt = (scale) =>
+  V.centreOn({ x: 0, y: 0, scale }, { id: 'origin', x: -1, y: -1, w: 2, h: 2 }, EDGE_SIZE)
+const M = V.EDGE_INDICATOR_MARGIN
+
+// 56. A panel fully on screen gets no pip.
+{
+  const vp = cameraAt(1)
+  const r = V.edgeIndicator({ id: 'a', x: -100, y: -80, w: 200, h: 160 }, vp, EDGE_SIZE)
+  ok('56 an on-screen panel gets no edge indicator', r === null, JSON.stringify(r))
+}
+
+// 57. PARTIALLY on screen also gets no pip. This is the rule most likely to be
+//     "simplified" into a fully-visible test, and the cost of getting it wrong
+//     is a pip pointing at a panel the user is already looking at — noise on
+//     the one surface whose whole job is to be believed.
+{
+  const vp = cameraAt(1)
+  // Straddles the right edge: left half visible, right half off.
+  const r = V.edgeIndicator({ id: 'a', x: 640, y: -80, w: 200, h: 160 }, vp, EDGE_SIZE)
+  ok('57 a partially visible panel gets no edge indicator', r === null, JSON.stringify(r))
+}
+
+// 58-61. The four cardinal directions. The pip sits ON the inset box, and the
+//     angle points from the viewport centre toward the panel.
+{
+  const vp = cameraAt(1)
+  const right = V.edgeIndicator({ id: 'a', x: 5000, y: -80, w: 200, h: 160 }, vp, EDGE_SIZE)
+  ok('58 a panel off the right edge pips at the right margin, pointing right',
+    right !== null && near(right.x, EDGE_SIZE.width - M) && near(right.angle, 0),
+    JSON.stringify(right))
+
+  const left = V.edgeIndicator({ id: 'a', x: -5200, y: -80, w: 200, h: 160 }, vp, EDGE_SIZE)
+  ok('59 a panel off the left edge pips at the left margin, pointing left',
+    left !== null && near(left.x, M) && near(Math.abs(left.angle), Math.PI),
+    JSON.stringify(left))
+
+  const up = V.edgeIndicator({ id: 'a', x: -100, y: -5200, w: 200, h: 160 }, vp, EDGE_SIZE)
+  ok('60 a panel off the top edge pips at the top margin, pointing up',
+    up !== null && near(up.y, M) && near(up.angle, -Math.PI / 2),
+    JSON.stringify(up))
+
+  const down = V.edgeIndicator({ id: 'a', x: -100, y: 5000, w: 200, h: 160 }, vp, EDGE_SIZE)
+  ok('61 a panel off the bottom edge pips at the bottom margin, pointing down',
+    down !== null && near(down.y, EDGE_SIZE.height - M) && near(down.angle, Math.PI / 2),
+    JSON.stringify(down))
+}
+
+// 62. A diagonal panel lands on whichever inset edge the ray leaves through,
+//     and NEVER outside the box. A clamp-per-axis implementation (clamp x,
+//     then clamp y, independently) puts the pip in the corner for every
+//     diagonal, so every off-screen panel to the upper right points at the
+//     same spot and the direction stops carrying information.
+{
+  const vp = cameraAt(1)
+  const r = V.edgeIndicator({ id: 'a', x: 5000, y: -2000, w: 200, h: 160 }, vp, EDGE_SIZE)
+  const inBox = r !== null &&
+    r.x >= M - EPS && r.x <= EDGE_SIZE.width - M + EPS &&
+    r.y >= M - EPS && r.y <= EDGE_SIZE.height - M + EPS
+  // The ray leaves through the RIGHT edge here (the panel is much further out
+  // horizontally than vertically), so x is pinned and y is not.
+  const onRightEdge = r !== null && near(r.x, EDGE_SIZE.width - M) &&
+    r.y > M + EPS && r.y < EDGE_SIZE.height / 2 - EPS
+  ok('62 a diagonal panel pips on the edge its ray leaves through, inside the box',
+    inBox && onRightEdge && r.angle > -Math.PI / 2 && r.angle < 0, JSON.stringify(r))
+}
+
+// 63. The pip is always ON the inset boundary — one coordinate pinned to a
+//     margin — for a sweep of directions. A pip drawn at the panel's own
+//     projected centre is off screen entirely and therefore invisible, which
+//     looks exactly like the feature not being built.
+{
+  const vp = cameraAt(1)
+  let worst = null
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2
+    const rect = { id: 'a', x: Math.cos(a) * 6000, y: Math.sin(a) * 6000, w: 200, h: 160 }
+    const r = V.edgeIndicator(rect, vp, EDGE_SIZE)
+    const pinned = r !== null && (
+      near(r.x, M) || near(r.x, EDGE_SIZE.width - M) ||
+      near(r.y, M) || near(r.y, EDGE_SIZE.height - M))
+    if (!pinned) worst = { a, r }
+  }
+  ok('63 every direction pips on the inset boundary', worst === null, JSON.stringify(worst))
+}
+
+// 64. DIRECTION IS SCALE-INVARIANT. The camera is centred on the same world
+//     point at two very different zooms; the panel is off screen at both, so
+//     the arrow must point the same way. An implementation that mixed world
+//     units into the angle passes at scale 1 and is wrong everywhere else.
+{
+  const a = V.edgeIndicator({ id: 'a', x: 4000, y: -3000, w: 200, h: 160 }, cameraAt(0.25), EDGE_SIZE)
+  const b = V.edgeIndicator({ id: 'a', x: 4000, y: -3000, w: 200, h: 160 }, cameraAt(2.75), EDGE_SIZE)
+  ok('64 the pip direction is the same at scale 0.25 and 2.75',
+    a !== null && b !== null && near(a.angle, b.angle),
+    `${JSON.stringify(a)} vs ${JSON.stringify(b)}`)
+}
+
+// 65. VISIBILITY IS NOT. The same panel is on screen zoomed out and off screen
+//     zoomed in, and this is the check that separates a scale-aware
+//     implementation from one testing world coordinates against a screen-sized
+//     box. That mistake yields no pips at all when zoomed in — the state the
+//     whole feature is indistinguishable from.
+{
+  const rect = { id: 'a', x: 900, y: 0, w: 200, h: 160 }
+  const out = V.edgeIndicator(rect, cameraAt(0.25), EDGE_SIZE)
+  const inn = V.edgeIndicator(rect, cameraAt(2.75), EDGE_SIZE)
+  ok('65 visibility is decided in screen space: on screen at 0.25, off at 2.75',
+    out === null && inn !== null, `0.25 -> ${JSON.stringify(out)}, 2.75 -> ${JSON.stringify(inn)}`)
+}
+
+// 66-70. nextAttentionId: which panel Cmd+J visits next. Pure, and separated
+//     from the store on purpose — every failure here is a keypress that lands
+//     somewhere the user did not expect, which reads as the key being flaky
+//     rather than as an off-by-one.
+const Q = ['n1', 'n2', 'n3']
+
+// 66. Nothing wants you: the key does nothing at all. Not "jump to the first
+//     panel", which would make Cmd+J a random-navigation key on a quiet canvas.
+ok('66 an empty queue has no next id',
+  V.nextAttentionId([], null, 1) === null && V.nextAttentionId([], 'n1', -1) === null)
+
+// 67. No cursor yet — the first press of the run. Forward starts at the head
+//     (the panel that has been waiting longest, since the queue is in entry
+//     order); backward starts at the tail.
+ok('67 with no cursor, forward starts at the head and backward at the tail',
+  V.nextAttentionId(Q, null, 1) === 'n1' && V.nextAttentionId(Q, null, -1) === 'n3')
+
+// 68. It wraps at BOTH ends. A cycle that stops at the last entry strands the
+//     user on one panel with no indication the key is still working.
+ok('68 the cycle wraps in both directions',
+  V.nextAttentionId(Q, 'n3', 1) === 'n1' && V.nextAttentionId(Q, 'n1', -1) === 'n3')
+
+// 69. The cursor names a panel that has since left the queue — acknowledged,
+//     closed, or exited between two presses. This is the common case, not an
+//     exotic one: visiting a panel is what makes the user deal with it. It
+//     must restart from the end the direction implies rather than returning
+//     null, which would make the second press a silent no-op.
+ok('69 a stale cursor restarts the cycle rather than dead-ending',
+  V.nextAttentionId(Q, 'gone', 1) === 'n1' && V.nextAttentionId(Q, 'gone', -1) === 'n3')
+
+// 70. One waiting panel, and the cursor is already on it. Returning the same
+//     id is right: the camera re-frames the panel the user asked for. Skipping
+//     it (returning null) would make Cmd+J do nothing in the single most
+//     common state this feature has.
+ok('70 a single-entry queue keeps returning that entry',
+  V.nextAttentionId(['n1'], 'n1', 1) === 'n1' && V.nextAttentionId(['n1'], 'n1', -1) === 'n1')
+
+// 71-72. reachableQueue: filters a phantom id out of the attention queue
+//     before it ever reaches nextAttentionId. See attention.ts's own comment
+//     for the failure this exists to prevent — a stale entry with no live
+//     panel behind it seats the cursor on an id the user can never leave,
+//     which is not "skip one press" but "the key is dead for the rest of the
+//     renderer's life".
+
+// 71. The filter itself: an unknown id is dropped, order and the known ids
+//     are preserved.
+{
+  const known = new Set(['n1', 'n3'])
+  const out = V.reachableQueue(['n1', 'n2', 'n3'], known)
+  ok('71 reachableQueue drops an unknown id and preserves order',
+    JSON.stringify(out) === JSON.stringify(['n1', 'n3']), JSON.stringify(out))
+}
+
+// 72. The actual regression: a queue whose HEAD is a phantom id (present in
+//     the queue, absent from the known panel set) must still advance to a
+//     real panel rather than sticking there forever. Composing reachableQueue
+//     with nextAttentionId is what the call site is required to do — passing
+//     the unfiltered queue straight to nextAttentionId reproduces the bug
+//     this check exists to catch: the cursor seats on the phantom and every
+//     later press re-picks it, because nothing ever removes it from the
+//     queue nextAttentionId sees.
+{
+  const known = new Set(['n1', 'n2'])
+  const filtered = V.reachableQueue(['ghost', 'n1', 'n2'], known)
+  const id = V.nextAttentionId(filtered, null, 1)
+  ok('72 a phantom at the head does not disable the jump',
+    id === 'n1', `got ${id}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

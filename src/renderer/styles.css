@@ -100,10 +100,21 @@ body {
 .panel--selected.panel--agent-starting,
 .panel--selected.panel--agent-busy,
 .panel--selected.panel--agent-idle,
-.panel--selected.panel--agent-wants-you,
 .panel--selected.panel--agent-exited {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px var(--blue);
+}
+
+/* M6d inverts exactly one half of the rule above. wants-you is the only state
+   that carries INTENT — a panel asking you something — and Cmd+J deliberately
+   does not acknowledge, so landing on a panel selects it while it is still
+   waiting. If selection painted over the amber here, the jump key would take
+   you to a panel and hide the very reason it took you there, leaving it in the
+   queue with nothing on screen saying so. The other four states stay below
+   selection: none of them is asking for anything. */
+.panel--selected.panel--agent-wants-you {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 2px var(--amber);
 }
 
 .panel__chrome {
@@ -344,6 +355,31 @@ body {
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
   color: #f0b429;
+}
+
+/* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
+   are world-space facts. Inside the transform they would zoom and pan away
+   with the panels they point at. */
+.edge-indicators {
+  position: absolute;
+  inset: 0;
+  /* Never a click target. A pip's mousedown would reach .canvas's background
+     handler, which clears focus, hit-tests a world point and wakes whatever
+     it finds — spawning a process from an arrow. */
+  pointer-events: none;
+}
+
+.edge-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  /* A triangle pointing right at rotation 0, matching edgeIndicator's
+     Math.atan2 convention. */
+  border-left: 12px solid var(--amber);
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
 }
 
 /* The palette is in SCREEN space — a sibling of .world, never inside it. A

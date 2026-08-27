@@ -202,6 +202,25 @@ sequence never reaches this app at all — tmux consumes it for its own pane
 title before this app's PTY layer ever sees it, so it was never a candidate
 signal on that path in the first place.
 
+**A panel that wants you and is off screen gets an arrow, and `Cmd+J` visits
+it.** A small arrow appears at the edge of the viewport, pointing toward any
+panel that is both `wants-you` and out of view — a panel merely scrolled
+half off screen gets no arrow, because a pip for something already visible
+is noise. `Cmd+J` (`Shift+Cmd+J` to go backward) steps through the waiting
+panels oldest-first and frames each one, the same `centreOn` the panel
+switcher uses. It deliberately does not acknowledge what it lands you on:
+focus is still the only thing that clears `wants-you`, so a panel you jumped
+to keeps its amber border until you actually click into it, and the arrow
+that brought you there is one you can trust. The design for this milestone
+named five surfaces for getting a user's attention — the edge arrows, the
+jump key, an OS notification, a dock badge, and a sound. Only the first two
+shipped. The other three need main-process or asset-level plumbing this repo
+has no automated way to exercise — nothing here can drive a real
+`Notification`, read `app.dock`, or confirm a sound actually played — and
+landing three surfaces this codebase cannot verify under the same green
+`npm run verify` as the two it can would be coverage that reads as proof
+and isn't. They remain unbuilt, not merely undocumented.
+
 ## Milestones
 
 | | Scope | Status |
@@ -218,6 +237,7 @@ signal on that path in the first place.
 | M6a | Panel identity: user titles, and chrome that says what main resolved | ✅ done |
 | M6b | Settings: a declarative schema, searchable in the palette | ✅ done |
 | M6c | Agent state: a border that says what each panel is doing | ✅ done |
+| M6d | Attention routing: edge pips for off-screen panels, Cmd+J to jump | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
