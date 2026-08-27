@@ -129,14 +129,26 @@ rather than left to review.
    acts on. Shell buttons therefore blur back to the focused session's terminal
    after acting (`SessionHandle.focus()`, the same call `restoreFocus` makes),
    and no shell element swallows a bare key.
-3. **Shell mousedowns stop propagating.** The shell mounts as a sibling of
-   `.canvas`, so its own regions are outside the background handler's subtree —
-   but `Canvas.tsx`'s outside-click listener for the palette is a **capture**
-   listener on the canvas host's ancestor path and any shell popover that
-   renders inside `.canvas` (a dropdown menu, for instance) needs the same
-   `stopPropagation` plus `closest()` containment test `Palette.tsx` documents.
-   Prefer rendering popovers inside the shell's own regions so the question
-   does not arise.
+3. **The palette's outside-click exit must be raised to the shell — this is a
+   defect M8a introduces if it is not.** `onMouseDownCapture` is a prop on the
+   `.canvas` div, and the shell's regions are **siblings** of it. So a click on
+   a shell control while the palette is open never reaches that listener: the
+   overlay stays up, looking ready to take a query, while DOM focus sits on a
+   button and every bare key goes to the agent — a fourth, un-audited exit,
+   precisely the state "Three ways out of the palette" was written to remove,
+   and `Escape` cannot even undo it because the key no longer reaches the
+   palette's `onKeyDown`.
+
+   The fix is to move that capture listener from `.canvas` to `.app`, keeping
+   the `closest('.palette')` containment test and `dismissPalette()` (which
+   deliberately does **not** restore focus, because the click itself is the
+   focus gesture) exactly as they are. `verify:panels` 42 must still pass
+   unchanged — it asserts both halves of the canvas case — and M8a adds the
+   shell case beside it. The shell's own regions additionally
+   `stopPropagation` on mousedown, and any popover rendered inside `.canvas`
+   needs the same `stopPropagation` plus `closest()` treatment `Palette.tsx`
+   documents; prefer rendering popovers inside the shell's own regions so that
+   question does not arise.
 
 ### The shell owns no modality
 
@@ -224,6 +236,9 @@ repeat rate is the `Cmd+K` auto-repeat defect exactly.
   `settings:list` (the shape check 53 already uses).
 - `verify:panels`: `Cmd+\` held with `repeat: true` toggles once, not fifteen
   times.
+- `verify:panels`: with the palette open, a mousedown on a shell control
+  dismisses it — the raised capture listener — while check 42's existing
+  canvas-case assertions stay green.
 
 ## M8b — The panel outline
 
