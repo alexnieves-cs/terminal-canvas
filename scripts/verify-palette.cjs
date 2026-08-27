@@ -770,6 +770,26 @@ const IDLE_AFTER_MS = {
     row.hiddenAtRest === true && row.scope === 'settings')
 }
 
+// 58b — fix round 1. Canvas.tsx's beginEditSetting rejects an out-of-range
+// edit by looking up the row's min/max in the SAME ctx.settings list
+// buildCommands was given (its own `settingRows` state), not from the
+// Command object itself — this suite is pure and never mounts Canvas.tsx, so
+// what it CAN prove is that nothing about buildCommands stops that lookup
+// from working: a SettingRow's min/max survive unmutated after buildCommands
+// runs over it, and the row it produces has an id that strips back (via the
+// `setting.<id>` convention every setting row already uses) to exactly that
+// SettingRow. This is NOT a check on the re-prompt behaviour itself — see
+// the report for what remains unproven.
+{
+  const bounded = { ...IDLE_AFTER_MS, min: 250, max: 60000 }
+  const c = ctx({ settings: [bounded] })
+  const row = byId(P.buildCommands(c), 'setting.agent.idleAfterMs')
+  const recovered = c.settings.find((s) => s.id === row.id.slice('setting.'.length))
+  ok('58b a number row’s id recovers the SettingRow carrying its range',
+    row !== undefined && recovered !== undefined &&
+    recovered.min === 250 && recovered.max === 60000)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

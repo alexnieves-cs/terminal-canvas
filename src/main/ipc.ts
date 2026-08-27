@@ -93,7 +93,11 @@ export function registerIpcHandlers(
       keywords: [...def.keywords],
       type: def.type,
       value: layoutStore.getSetting(def.id),
-      category: def.category
+      category: def.category,
+      // Passed through so the palette can reject an out-of-range edit before
+      // it ever reaches this process's own (silent) range check below.
+      min: def.min,
+      max: def.max
     }))
   )
   ipcMain.handle(IPC.SETTINGS_SET, (_event, id: string, value: SettingValue) => {

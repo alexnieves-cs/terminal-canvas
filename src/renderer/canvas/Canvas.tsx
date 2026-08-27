@@ -1209,35 +1209,65 @@ export function Canvas({
       void window.canvas.settings.set(id, value).then(reloadSettings)
     },
     beginEditSetting: (id, label, current) => {
-      setInputMode({
-        kind: 'number',
-        label: `${label} (ms)…`,
-        initial: String(current),
-        submit: (value) => {
-          const parsed = Number(value)
-          // A non-number is a cancel, not a write of NaN. main's setPreference
-          // would refuse NaN anyway — it is the range check that lives there
-          // that makes this safe — but bouncing it here means the palette
-          // does not close on a typo and then silently change nothing.
-          if (!Number.isFinite(parsed)) {
-            setInputMode(null)
-            return
+      // Read off the row we already loaded, rather than hardcoding 250/60000
+      // (or any other bound): the schema is the single source of truth for
+      // min/max, and a renderer-side constant would silently drift from it
+      // the day a range changes. Absent for a row with no bound.
+      const row = settingRows.find((s) => s.id === id)
+      const { min, max } = row ?? {}
+
+      // Re-entrant so an out-of-range refusal can reopen the same edit with
+      // the bad value still visible, rather than starting over from `current`.
+      const openEdit = (initial: string, refused?: string): void => {
+        setInputMode({
+          kind: 'number',
+          label: refused ? `${label} (ms) — ${refused}` : `${label} (ms)…`,
+          initial,
+          submit: (value) => {
+            const parsed = Number(value)
+            // A non-number is a cancel, not a write of NaN. main's
+            // setPreference would refuse NaN anyway, but bouncing it here
+            // means a typo does not close the palette and silently change
+            // nothing.
+            if (!Number.isFinite(parsed)) {
+              setInputMode(null)
+              return
+            }
+            // Checked here too, even though main enforces the SAME bound in
+            // setPreference. main's check is the last line of defence for a
+            // file it did not write; it is not enough on its own, because a
+            // refusal that happens only there is INVISIBLE — the palette
+            // closes exactly as it does on success, SETTINGS_SET's handler
+            // resolves regardless, and reloadSettings() re-fetches the
+            // unchanged value with nothing anywhere saying the edit was
+            // dropped. Re-opening here is what makes the refusal visible to
+            // the user; it does not replace main's check, which still catches
+            // a value that reached this process by some other route.
+            if ((min !== undefined && parsed < min) || (max !== undefined && parsed > max)) {
+              openEdit(value, `must be ${min ?? '−∞'}–${max ?? '∞'}, got ${parsed}`)
+              return
+            }
+            void window.canvas.settings.set(id, parsed).then(() => {
+              setInputMode(null)
+              reloadSettings()
+            })
           }
-          void window.canvas.settings.set(id, parsed).then(() => {
-            setInputMode(null)
-            reloadSettings()
-          })
-        }
-      })
-      // Palette.tsx closes the overlay BEFORE running a row's command, so
-      // without this the mode would be set on a palette that is already gone
-      // and the clear-on-close effect would wipe it — the same pairing
-      // beginRenamePreset and deletePreset both make.
-      palette.openPalette()
+        })
+        // Palette.tsx closes the overlay BEFORE running a row's command (and
+        // before calling an input mode's submit), so without this the mode
+        // would be set on a palette that is already gone and the
+        // clear-on-close effect would wipe it — the same pairing
+        // beginRenamePreset and deletePreset both make, and the reason the
+        // out-of-range branch above must call openEdit (which reopens) rather
+        // than just setInputMode.
+        palette.openPalette()
+      }
+
+      openEdit(String(current))
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings])
+       reloadSettings, settingRows])
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and

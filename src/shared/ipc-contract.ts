@@ -220,6 +220,16 @@ export interface SettingRow {
   type: SettingDef['type']
   value: SettingValue
   category: string
+  /**
+   * Inclusive bounds for a `number` setting, mirrored from `SettingDef`.
+   * Absent for a boolean. The palette needs these to reject an out-of-range
+   * edit BEFORE sending it — main's own range check in `setPreference` is the
+   * last line of defence for a file it did not write, but a refusal that
+   * happens only there is invisible: the palette closes as if the write
+   * succeeded, and nothing tells the user their edit was silently dropped.
+   */
+  min?: number
+  max?: number
 }
 
 /** Shape of the bridge the preload exposes on window.canvas. */
