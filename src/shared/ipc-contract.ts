@@ -99,7 +99,25 @@ export const IPC = {
    * main owns, and the two would disagree the first time M6d fired a
    * notification for a panel the user had already read.
    */
-  AGENT_ACKNOWLEDGE: 'agent:acknowledge'
+  AGENT_ACKNOWLEDGE: 'agent:acknowledge',
+  /**
+   * The workspace surface. All five point renderer -> main for the reason
+   * M5b's preset mutations do: main owns layout.json, and the palette is the
+   * renderer's — so a mutation is an invoke, not an event.
+   *
+   * There is deliberately NO workspace attention channel. The renderer
+   * already receives every agent:state transition for every panel main knows
+   * about, so the attention set is folded renderer-side; WORKSPACE_LIST
+   * returns panelIds and the renderer intersects. Asking main to recompute a
+   * set the renderer already holds would make main a second author of a
+   * derived fact — the same reasoning M6d recorded for not adding a channel.
+   */
+  WORKSPACE_LIST: 'workspace:list',
+  /** Takes the outgoing canvas: the switch IS its last save. See the store. */
+  WORKSPACE_ACTIVATE: 'workspace:activate',
+  WORKSPACE_CREATE: 'workspace:create',
+  WORKSPACE_RENAME: 'workspace:rename',
+  WORKSPACE_DELETE: 'workspace:delete'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -343,6 +361,18 @@ export interface CanvasBridge {
     onState(listener: (update: AgentStateUpdate) => void): () => void
     /** Focus counts as reading it. See IPC.AGENT_ACKNOWLEDGE. */
     acknowledge(panelId: PanelId): Promise<void>
+  }
+  workspace: {
+    list(): Promise<WorkspaceRow[]>
+    /**
+     * `outgoing` is the canvas being left. Resolves null when the id names
+     * nothing, having changed nothing.
+     */
+    activate(id: string, outgoing: CanvasState): Promise<ActivateResult | null>
+    create(name: string): Promise<string>
+    rename(id: string, name: string): Promise<boolean>
+    /** `remove`, not `delete`: `delete` is reserved, as PresetBridge already found. */
+    remove(id: string): Promise<boolean>
   }
   platform: NodeJS.Platform
 }
