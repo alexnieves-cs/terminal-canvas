@@ -14,7 +14,7 @@ import { applyAgentState, attentionIds, clearAgentState, useAttentionIds } from 
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
-import type { CapturedPanel, PresetTemplate, SessionBackendInfo, SettingRow } from '@shared/ipc-contract'
+import type { CapturedPanel, PresetTemplate, SessionBackendInfo, SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { cascadeCentre, firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
@@ -32,6 +32,10 @@ const EMPTY_PRESETS: PresetRow[] = []
 const EMPTY_PROMPTS: PromptRow[] = []
 const EMPTY_PANELS: PanelRow[] = []
 const EMPTY_SETTINGS: SettingRow[] = []
+// Stub placeholders until Task 5 wires the real store: see the two props on
+// <Palette> below.
+const EMPTY_WORKSPACES: WorkspaceRow[] = []
+const EMPTY_ATTENTION_IDS: readonly string[] = []
 
 /**
  * What the switcher calls a panel. This is always the command/cwd/id shape —
@@ -1396,7 +1400,19 @@ export function Canvas({
       }
 
       openEdit(String(current))
-    }
+    },
+    // Stub: Task 5 wires this to window.canvas.workspace.activate and the
+    // second-boot reconcile it drives.
+    switchWorkspace: () => {},
+    // Stub: Task 6 wires this to an input-mode prompt, the same shape as
+    // beginRenamePreset above.
+    beginCreateWorkspace: () => {},
+    // Stub: Task 6 wires this to an input-mode prompt, the same shape as
+    // beginRenamePreset above.
+    beginRenameWorkspace: () => {},
+    // Stub: Task 6 wires this to a confirm gate, the same shape as
+    // deletePreset above.
+    deleteWorkspace: () => {}
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows])
@@ -1479,6 +1495,10 @@ export function Canvas({
           prompts={promptRows}
           panels={panelRows}
           settings={settingRows}
+          // Stub: Task 5 loads the real list from window.canvas.workspace.list().
+          workspaces={EMPTY_WORKSPACES}
+          // Stub: Task 5 wires this to the renderer's real attention set.
+          attentionIds={EMPTY_ATTENTION_IDS}
           hasSelection={hasSelection()}
           inputMode={inputMode}
         />
