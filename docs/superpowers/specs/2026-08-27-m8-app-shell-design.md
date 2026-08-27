@@ -324,15 +324,31 @@ so the fix is structural:
   pattern and `pty.kill`'s two-caller count is untouched. (`CLAUDE.md` records
   that this count has already gone stale once; re-derive it after M8c, which
   does change it.)
+- **The two new verbs join the actions object and emit no palette rows.**
+  `closePanel(id)` and `startPanel(id)` are required members of
+  `PaletteActions`, per rule 1 — the shell reaches the app only through that
+  object, and a rail that closed over `onClosePanel` directly would be a second
+  implementation of a verb the palette already has an authority for. They are
+  deliberately NOT given `Command` rows, which is the one place M8b declines
+  something the shell/palette symmetry would otherwise hand it for free: both
+  verbs already have a gesture (the panel's own `×`, and clicking the panel to
+  wake it), and M6p sized the resting palette list to roughly eight rows on
+  purpose. `restartPanel` in M8c is the verb that DOES earn a row, because it
+  has no other gesture at all.
 - **No drag-to-reorder.** `Panel.z` is stacking and array order is deliberately
   not; reordering the rendered list would move DOM nodes, and a move is
   remove-then-insert, which momentarily detaches a live terminal's WebGL host.
 
 **Checks.**
 
-- New plain-node coverage for `rail-rows.ts` (the `verify:viewport` tier): the
-  signature ignores rect changes and reacts to a title change; the honest chain
-  resolves in the documented order.
+- New plain-node coverage for `rail-rows.ts` in a **new `verify:rail` suite**,
+  not appended to an existing one: the signature ignores rect changes and
+  reacts to a title change and to a status change; the honest chain resolves in
+  the documented order. It gets its own script, esbuild entry and `npm run
+  verify` slot rather than joining `verify:viewport` — that suite is already a
+  six-module grab-bag named for canvas math, and `verify:rail` is where M8c's
+  inspector rows and M8d's workspace and attention rows land too, so the cost
+  is paid once for three sub-milestones.
 - `verify:panels`: a row exists per panel; a rename typed into the palette
   changes the row (one title source, not two); clicking a dormant row frames it
   and leaves it dormant, confirmed through `__m4aSessions` (no spawn); a real
