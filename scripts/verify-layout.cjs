@@ -853,6 +853,40 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   ok('60 an untitled panel writes no title key at all', !('title' in out))
 }
 
+// 61-64 — M6b. The schema is DATA, and these checks are what stop it drifting
+//     from the code that consumes it. 61 pins the three ids main/menu.ts and
+//     layout-store.ts both address by name; 62 is the rule that makes a
+//     sparse map safe to store; 63 is what makes #11's synonym search
+//     possible at all; 64 is the guard against a duplicate id, which would
+//     make one row silently shadow another in the palette.
+{
+  const ids = L.SETTINGS.map((d) => d.id)
+  ok('61 the schema declares the three restore settings by their exact ids',
+    ids.includes('restore.layout') && ids.includes('restore.camera') &&
+    ids.includes('restore.focus'), ids.join(','))
+}
+{
+  // An id with no persisted entry resolves to the schema default. This is what
+  // lets the stored map be SPARSE — only what the user actually changed —
+  // rather than a full copy rewritten on every save.
+  ok('62 an unset setting resolves to its schema default',
+    L.resolveSetting({}, 'restore.layout') === true &&
+    L.resolveSetting({ 'restore.layout': false }, 'restore.layout') === false)
+}
+{
+  const ids = L.SETTINGS.map((d) => d.id)
+  ok('63 setting ids are unique', new Set(ids).size === ids.length)
+}
+{
+  // Every entry needs a non-empty label, description and keyword list. The
+  // keywords are not decoration: they are the only reason a user typing
+  // "panels" finds a setting labelled "Panel layout".
+  const bad = L.SETTINGS.filter((d) =>
+    !d.label || !d.description || !Array.isArray(d.keywords) || d.keywords.length === 0)
+  ok('64 every setting carries a label, a description and at least one keyword',
+    bad.length === 0, bad.map((d) => d.id).join(','))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
