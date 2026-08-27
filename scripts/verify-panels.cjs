@@ -4575,26 +4575,57 @@ app.whenReady().then(async () => {
         `opened=${opened} dismissed=${dismissed}`)
     }
 
-    // 74. COLLAPSE IS REAL LAYOUT, AND IT PERSISTS TO MAIN'S STORE.
+    // 74. COLLAPSE IS REAL LAYOUT, IT PERSISTS TO MAIN'S STORE, AND IT DEMOTES
+    //     NOTHING.
     //     Read back through settings:list rather than off the shell's own class,
     //     for the same reason check 53 does: a toggle that only flips a local
     //     boolean looks identical on screen and is gone on the next launch.
+    //
+    //     The `stillLive` clause is the spec's own conjunction, which until now
+    //     shipped as two checks that never met: check 72 asserts `.xterm` but
+    //     collapses nothing, and this check collapsed but never looked at
+    //     promotion, so success criterion 3 ("no panel that was live before the
+    //     collapse is demoted by it") was asserted nowhere.
+    //
+    //     BE HONEST ABOUT ITS POWER TODAY: the clause is close to tautological.
+    //     Nothing in the renderer observes the canvas host's SIZE — the tiering
+    //     effect depends on [rects, viewport, focusedId, version, dormantIds]
+    //     and reads getBoundingClientRect() only when one of those changes, and
+    //     the single ResizeObserver in the renderer belongs to EdgeIndicators
+    //     and re-renders the pip layer alone. So a collapse does not re-run
+    //     assignTiers at all and nothing could demote here. The clause exists
+    //     for the future in which that stops being true: the moment anything
+    //     makes a width change re-tier (a ResizeObserver on the host, a window
+    //     size in Canvas state), a collapse becomes able to demote the panel
+    //     the user was looking at into a card with nothing in any log, and this
+    //     is the check that would go red. It is cheap insurance on a real
+    //     criterion, not a proof of one.
     {
       const before = await wc.executeJavaScript(
         `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const liveBefore = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel .xterm').length`)
       await wc.executeJavaScript(`
         document.querySelector('.shell__rail-toggle').dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
-      await sleep(150)
+      // Longer than the 150ms this used to wait: DEMOTE_DELAY_MS is 250, so a
+      // demotion triggered by the collapse would be APPLIED after the old
+      // wait, not before it, and the .xterm probe would read the pre-demotion
+      // DOM and pass against exactly the future regression it is here for.
+      await sleep(500)
       const after = await wc.executeJavaScript(
         `document.querySelector('.canvas').getBoundingClientRect().width`)
+      const liveAfter = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel .xterm').length`)
       const stored = await wc.executeJavaScript(
         `window.canvas.settings.list().then((rows) =>
            rows.find((r) => r.id === 'shell.railOpen').value)`)
-      ok('74 collapsing the rail widens the canvas and reaches main\'s store',
-        after > before + 100 && stored === false,
-        `before=${before} after=${after} stored=${stored}`)
+      ok('74 collapsing the rail widens the canvas, reaches main\'s store, and demotes nothing',
+        after > before + 100 && stored === false &&
+          liveBefore > 0 && liveAfter >= liveBefore,
+        `before=${before} after=${after} stored=${stored} ` +
+          `live ${liveBefore} -> ${liveAfter}`)
     }
 
     // 74b. AUTO-REPEAT IS ONE GESTURE. A held Cmd+\ toggles once, not fifteen
@@ -4603,9 +4634,12 @@ app.whenReady().then(async () => {
     //      Like checks 7b and 33b this supplies repeat:true by hand, so it proves
     //      the guard READS the flag and says nothing about who sets it.
     {
-      const open = () => wc.executeJavaScript(
+      // Named for what it ANSWERS. It was `open()` and returned whether the
+      // rail is COLLAPSED, so the detail string below read backwards: a
+      // passing run printed start=true for a rail that was shut.
+      const collapsed = () => wc.executeJavaScript(
         `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
-      const start = await open()
+      const start = await collapsed()
       await wc.executeJavaScript(`
         for (let i = 0; i < 5; i++) {
           window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -4613,16 +4647,16 @@ app.whenReady().then(async () => {
         }
       `)
       await sleep(200)
-      const afterRepeats = await open()
+      const afterRepeats = await collapsed()
       await wc.executeJavaScript(`
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: '\\\\', code: 'Backslash', metaKey: true, repeat: false, bubbles: true }))
       `)
       await sleep(200)
-      const afterReal = await open()
+      const afterReal = await collapsed()
       ok('74b a held Cmd+\\ toggles the rail once, not once per repeat',
         afterRepeats === start && afterReal !== start,
-        `start=${start} afterRepeats=${afterRepeats} afterReal=${afterReal}`)
+        `collapsed: start=${start} afterRepeats=${afterRepeats} afterReal=${afterReal}`)
     }
 
     // 74c. A SHELL CONTROL NEVER TAKES THE KEYBOARD.
@@ -4656,9 +4690,17 @@ app.whenReady().then(async () => {
     //      button that never calls onSelectPanel, and closing the gap would mean
     //      a new __m8a* hook for a fact nothing else needs.
     //
-    //      (2) There is no top-level `clickPanel(id)` helper in this file; the
-    //      real-OS-click idiom is copied in locally below, the way checks 60 and
-    //      73 define their own local helpers rather than reaching across scopes.
+    //      (2) There is no top-level `clickPanel(id)` helper in this file. The
+    //      real-OS-click idiom is copied in locally below, and NOT because the
+    //      original is out of reach: `clickPanelBody` (~line 761) is declared in
+    //      the same enclosing try block and is perfectly in scope here. The copy
+    //      is deliberate, and what it buys is narrowness — this check needs a
+    //      click at the centre of an arbitrary SELECTOR (it clicks a shell
+    //      button, which is not a panel body at all), and widening
+    //      `clickPanelBody` to serve that would put a second caller with
+    //      different needs on a helper a dozen earlier checks depend on. The
+    //      duplication is four lines of sendInputEvent; the alternative is a
+    //      shared helper that goes wrong for checks nobody was editing.
     //      A DISPATCHED mousedown would not serve: it sets focusedId, but the
     //      browser moves no DOM focus for a synthetic event, so `insideBefore`
     //      would be false and the check would prove nothing about the half it
@@ -4838,6 +4880,12 @@ app.whenReady().then(async () => {
       `)
       const searchOpened = await waitUntil(
         () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      // Read the chip here too, not only after the gear. See the note on the
+      // ok() below for what this second read is the only thing that can catch.
+      const searchChip = await wc.executeJavaScript(`(() => {
+        const chip = document.querySelector('.palette__scope')
+        return chip ? chip.textContent.trim() : null
+      })()`)
       await wc.executeJavaScript(`(() => {
         const input = document.querySelector('.palette__input')
         if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -4858,9 +4906,25 @@ app.whenReady().then(async () => {
           sawASetting: rows.some((r) => r.textContent.includes('Idle after'))
         }
       })()`)
-      ok('77 search opens the palette and settings opens it in the settings scope',
-        searchOpened === true && inScope.sawASetting === true,
-        `search=${searchOpened} scope=${JSON.stringify(inScope)}`)
+      // The chip is now ASSERTED at BOTH clicks, not collected into the detail
+      // string and left out of the condition.
+      //
+      // `inScope.chip === 'Settings'` is the gear's half. `sawASetting` alone
+      // does not pin it: a gear that opened the palette with the query
+      // pre-filled — a plausible alternative implementation — would surface a
+      // setting row with no scope at all, and the scope is what makes the
+      // button honest, because a scope survives the user clearing the query
+      // while a pre-filled search does not.
+      //
+      // `searchChip === null` is Search's half, and it is the ONLY clause that
+      // can fail against a Search button mis-wired to openSettingsScope. Note
+      // what the gear-side read cannot do here: it is taken after the GEAR was
+      // clicked, so it reads 'Settings' whether or not Search is also
+      // scope-opening. The two reads are at two different moments on purpose.
+      ok('77 search opens the palette unscoped and settings opens it in the settings scope',
+        searchOpened === true && searchChip === null &&
+          inScope.sawASetting === true && inScope.chip === 'Settings',
+        `search=${searchOpened} searchChip=${searchChip} scope=${JSON.stringify(inScope)}`)
       // What 75/76/77 LEAVE BEHIND, in the spirit of 72's and 74c's closing
       // notes. The world now holds TWO live panels, not one: check 75's spawn
       // is real and is never undone. The camera is wherever `Fit` put it (a
