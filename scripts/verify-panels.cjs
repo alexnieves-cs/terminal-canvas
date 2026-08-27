@@ -4243,6 +4243,69 @@ app.whenReady().then(async () => {
         rows70.some((w) => w.id === keepId), `rows=${rows70.map((w) => w.name).join()}`)
     }
 
+    // 70b — Task 7. M6d's premise applied to the strongest case of "an agent
+    //     you cannot see": a wants-you panel whose whole CANVAS is hidden,
+    //     not merely off screen. The count on its workspace row is read off
+    //     a real rendered palette row, through main's real store — the same
+    //     end-to-end shape checks 54-63 already used for the pip layer.
+    //
+    //     A fresh workspace, never hardcoded: createAndSwitch mints its own
+    //     id the way checks 64-68 insist on, and this check reads it back
+    //     rather than guessing a literal.
+    {
+      const BELL_LINE = "printf '\\007'\n"
+      await wc.executeJavaScript(
+        `window.__m7aWorkspace().createAndSwitch('waitroom')`)
+      await settle()
+      // A real shell, not Cmd+N's default `cat`: cat only ECHOES what it is
+      // given, so writing BELL_LINE's literal backslash-escaped text to one
+      // produces no actual 0x07 byte at all — the same reason checks 54-63
+      // spawn through PRESET_SPAWN with an explicit /bin/sh rather than
+      // using zoomTo(wc, 'n'). PRESET_SPAWN lands in whichever workspace is
+      // currently active, which 'waitroom' now is.
+      const idsBefore70b = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const panelId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !idsBefore70b.includes(id)) || false
+      }, 4000)
+      if (!panelId) throw new Error('70b: PRESET_SPAWN produced no new panel')
+      // Lazy spawn: the PTY exists only once the panel has gone live and been
+      // laid out, so nothing may be written to it until pty:list admits it.
+      const spawned = await waitUntil(
+        async () => (await settledSessionMap(wc)).has(panelId), 8000)
+      if (!spawned) throw new Error(`70b: panel ${panelId} never got a PTY`)
+
+      // Ring a real bell while the panel is still on screen and known live,
+      // THEN leave — the same ordering check 58 uses and for the same
+      // reason: switching away first would demote/unmount the panel before
+      // the write could land.
+      ptyManager.write(panelId, BELL_LINE)
+      const rang = await waitUntil(async () => wc.executeJavaScript(`
+        document.querySelector('.panel[data-panel-id=${JSON.stringify(panelId)}]')
+          ?.dataset.agentState
+      `).then((s) => s === 'wants-you'), 6000)
+      if (rang !== true) throw new Error('70b: the panel never reached wants-you')
+
+      // Leave — 'waitroom' is now hidden, its panel gone from the DOM, its
+      // session and its agent state both still alive underneath.
+      await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+      await settle()
+
+      await zoomTo(wc, 'k') // open the palette
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+      const titles70b = await wc.executeJavaScript(`
+        Array.from(document.querySelectorAll('.palette__row')).map((e) => e.textContent)
+      `)
+      ok('70b a hidden workspace with a waiting panel says so on its row',
+        titles70b.some((t) => t.includes('waiting')), titles70b.join(' | '))
+
+      await pressPlain(wc, 'Escape')
+      await settle()
+    }
+
     // 71 — fix round 1, finding #1/#2. Deleting the workspace you are IN when
     //     it is the ONLY one left must not resurrect its disposed panels in
     //     the fresh replacement main installs. Checks 69/70 only ever

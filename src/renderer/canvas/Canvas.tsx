@@ -39,10 +39,10 @@ const EMPTY_PRESETS: PresetRow[] = []
 const EMPTY_PROMPTS: PromptRow[] = []
 const EMPTY_PANELS: PanelRow[] = []
 const EMPTY_SETTINGS: SettingRow[] = []
-// Stub placeholders until Task 5 wires the real store: see the two props on
-// <Palette> below.
+// Initial value for workspaceRows before the mount-time reloadWorkspaces()
+// call below resolves. attentionIds has no equivalent placeholder — it
+// reads live off useAttentionIds(), which starts at its own empty snapshot.
 const EMPTY_WORKSPACES: WorkspaceRow[] = []
-const EMPTY_ATTENTION_IDS: readonly string[] = []
 
 /**
  * What the switcher calls a panel. This is always the command/cwd/id shape —
@@ -1342,6 +1342,17 @@ export function Canvas({
   const reloadWorkspaces = useCallback(() => {
     void window.canvas.workspace.list().then(setWorkspaceRows)
   }, [])
+  // Mount (so the first Cmd+K sees real rows even if no mutation has run
+  // yet) and every palette open (so a workspace mutated while the palette
+  // was closed still shows up) — the two occasions reloadPresets/
+  // reloadSettings already cover for their own lists. Deliberately NOT a
+  // dependency of any agent-state effect: the ROWS change rarely, while the
+  // waiting COUNT is derived live below from attentionIds, so a bell must
+  // not reload this list on every agent:state message.
+  useEffect(() => { reloadWorkspaces() }, [reloadWorkspaces])
+  useEffect(() => {
+    if (palette.open) reloadWorkspaces()
+  }, [palette.open, reloadWorkspaces])
 
   // Read once at mount and again whenever a setting changes, so toggling the
   // glow off takes effect without a relaunch. settingRows is loaded only when
@@ -1929,8 +1940,12 @@ export function Canvas({
           panels={panelRows}
           settings={settingRows}
           workspaces={workspaceRows}
-          // Stub: Task 7 wires this to the renderer's real attention set.
-          attentionIds={EMPTY_ATTENTION_IDS}
+          // The renderer's own attention set (agent-state-store.ts), not a
+          // second derivation: main never learns "which panels are
+          // wants-you" as a set, only individual agent:state transitions,
+          // and asking it to recompute one here would make it a second
+          // author of a fact this side already folds correctly.
+          attentionIds={waitingIds}
           hasSelection={hasSelection()}
           inputMode={inputMode}
         />
