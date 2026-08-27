@@ -102,6 +102,114 @@ ok(9, scanWhole(ESC + '[1;31m' + BEL).bells === 1, 'CSI does not swallow a bell'
 //     does not merely detect. The state machine dedupes, not this.
 ok(10, scanWhole(BEL + BEL + BEL).bells === 3, 'counts every bell')
 
+const IDLE_MS = 1500
+
+/* Every state-machine check runs against an explicit clock. Nothing here calls
+   Date.now(): the machine takes `now` as a parameter precisely so idleness is
+   testable without a timer, which is the same reason layout-store.ts takes its
+   paths as constructor arguments. */
+
+// 11. A fresh detector is 'starting'. Not 'idle': a panel that has never
+//     emitted a byte has not finished anything.
+ok(11, A.initialDetector(0).state === 'starting', 'fresh detector starts at starting')
+
+// 12. First bytes move starting -> busy.
+{
+  const d = A.nextState(A.initialDetector(0), { kind: 'output' }, 10, IDLE_MS)
+  ok(12, d.state === 'busy' && d.lastOutputAt === 10, 'first output goes busy')
+}
+
+// 13. A tick BEFORE the threshold leaves it busy.
+{
+  let d = A.nextState(A.initialDetector(0), { kind: 'output' }, 0, IDLE_MS)
+  d = A.nextState(d, { kind: 'tick' }, IDLE_MS - 1, IDLE_MS)
+  ok(13, d.state === 'busy', 'tick under the threshold stays busy')
+}
+
+// 14. A tick AT or past the threshold goes idle.
+{
+  let d = A.nextState(A.initialDetector(0), { kind: 'output' }, 0, IDLE_MS)
+  d = A.nextState(d, { kind: 'tick' }, IDLE_MS, IDLE_MS)
+  ok(14, d.state === 'idle', 'tick at the threshold goes idle')
+}
+
+// 15. Output while idle goes back to busy.
+{
+  let d = { state: 'idle', lastOutputAt: 0, scan: A.INITIAL_SCAN }
+  d = A.nextState(d, { kind: 'output' }, 9000, IDLE_MS)
+  ok(15, d.state === 'busy', 'output revives idle to busy')
+}
+
+// 16. A bell from busy goes to wants-you.
+{
+  let d = A.nextState(A.initialDetector(0), { kind: 'output' }, 0, IDLE_MS)
+  d = A.nextState(d, { kind: 'bell' }, 100, IDLE_MS)
+  ok(16, d.state === 'wants-you', 'bell from busy wants you')
+}
+
+// 17. A bell from idle goes to wants-you too — an agent that finished and
+//     THEN asked a question is the common case.
+{
+  const d = A.nextState({ state: 'idle', lastOutputAt: 0, scan: A.INITIAL_SCAN }, { kind: 'bell' }, 5000, IDLE_MS)
+  ok(17, d.state === 'wants-you', 'bell from idle wants you')
+}
+
+// 18. STICKY. More agent output does NOT clear wants-you. Without this rule a
+//     bell followed by one more repaint — which every TUI does — clears the
+//     state before the user has looked, and the feature is invisible.
+{
+  let d = { state: 'wants-you', lastOutputAt: 0, scan: A.INITIAL_SCAN }
+  d = A.nextState(d, { kind: 'output' }, 100, IDLE_MS)
+  ok(18, d.state === 'wants-you', 'output does not clear wants-you')
+}
+
+// 19. STICKY over time. A tick does not clear it either — it is cleared by the
+//     user acting, never by the clock, or the pips would empty themselves.
+{
+  let d = { state: 'wants-you', lastOutputAt: 0, scan: A.INITIAL_SCAN }
+  d = A.nextState(d, { kind: 'tick' }, 60 * 60 * 1000, IDLE_MS)
+  ok(19, d.state === 'wants-you', 'an hour of ticks does not clear wants-you')
+}
+
+// 20. Acknowledge clears it — to BUSY when output is recent.
+{
+  let d = { state: 'wants-you', lastOutputAt: 1000, scan: A.INITIAL_SCAN }
+  d = A.nextState(d, { kind: 'acknowledge' }, 1100, IDLE_MS)
+  ok(20, d.state === 'busy', 'acknowledge with recent output goes busy')
+}
+
+// 21. ...and to IDLE when it is not. The two are not interchangeable: landing
+//     on busy for a finished agent would paint it working forever, because
+//     nothing further arrives to move it.
+{
+  let d = { state: 'wants-you', lastOutputAt: 0, scan: A.INITIAL_SCAN }
+  d = A.nextState(d, { kind: 'acknowledge' }, IDLE_MS + 1, IDLE_MS)
+  ok(21, d.state === 'idle', 'acknowledge with stale output goes idle')
+}
+
+// 22. Acknowledge on a panel that does not want you changes nothing. It is
+//     sent on every focus, so it must be idempotent and cheap.
+{
+  const d = A.nextState({ state: 'busy', lastOutputAt: 0, scan: A.INITIAL_SCAN }, { kind: 'acknowledge' }, 1, IDLE_MS)
+  ok(22, d.state === 'busy', 'acknowledge is a no-op when not wanting you')
+}
+
+// 23. Exit wins from anywhere.
+{
+  const d = A.nextState({ state: 'wants-you', lastOutputAt: 0, scan: A.INITIAL_SCAN }, { kind: 'exit' }, 1, IDLE_MS)
+  ok(23, d.state === 'exited', 'exit wins from wants-you')
+}
+
+// 24. 'exited' is TERMINAL. A dying process emits its last bytes after the
+//     exit is known, and a detector that revived on them would leave a dead
+//     panel glowing busy for the rest of the run.
+{
+  let d = { state: 'exited', lastOutputAt: 0, scan: A.INITIAL_SCAN }
+  d = A.nextState(d, { kind: 'output' }, 10, IDLE_MS)
+  const afterBell = A.nextState(d, { kind: 'bell' }, 20, IDLE_MS)
+  ok(24, d.state === 'exited' && afterBell.state === 'exited', 'exited is terminal')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

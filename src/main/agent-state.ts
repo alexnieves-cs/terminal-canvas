@@ -85,3 +85,93 @@ export function scanForBell(
   }
   return { state: s, bells }
 }
+
+import type { AgentState } from '../shared/types'
+
+/**
+ * The detector's whole memory for one panel.
+ *
+ * `lastOutputAt` is why this is a record rather than the bare AgentState the
+ * design sketch named: "no bytes for idleAfterMs" is a claim about WHEN the
+ * last byte arrived, and a function handed only the current state cannot make
+ * it. Carrying the scanner's position here too means one object per session
+ * rather than two parallel maps that can fall out of step.
+ */
+export interface Detector {
+  state: AgentState
+  lastOutputAt: number
+  scan: ScanState
+}
+
+export type AgentEvent =
+  | { kind: 'output' }
+  | { kind: 'bell' }
+  /** The slow tick. Idleness is the absence of output, so only a clock can see it. */
+  | { kind: 'tick' }
+  /** The user acted on this panel: typed into it, or looked at it. */
+  | { kind: 'acknowledge' }
+  | { kind: 'exit' }
+
+export function initialDetector(now: number): Detector {
+  // 'starting', not 'idle': a panel that has never emitted a byte has not
+  // finished anything, and painting it idle at spawn would make the very first
+  // thing the user sees a lie.
+  return { state: 'starting', lastOutputAt: now, scan: INITIAL_SCAN }
+}
+
+/**
+ * The state machine:
+ *
+ *   starting --first bytes--> busy
+ *   busy --no bytes for idleAfterMs--> idle
+ *   (busy | idle) --bell--> wants-you
+ *   wants-you --user input to this panel, or focus--> busy | idle
+ *   any --pty exit--> exited
+ *
+ * Pure, and takes `now` as a parameter, so every transition above is testable
+ * under plain node without a timer.
+ */
+export function nextState(
+  prev: Detector,
+  event: AgentEvent,
+  now: number,
+  idleAfterMs: number
+): Detector {
+  // Terminal. A dying process emits its last bytes AFTER onExit is known —
+  // pty-manager flushes the pending buffer before announcing the exit — and a
+  // detector that revived on them would leave a dead panel glowing busy for
+  // the rest of the run.
+  if (prev.state === 'exited') return prev
+  if (event.kind === 'exit') return { ...prev, state: 'exited' }
+
+  switch (event.kind) {
+    case 'output':
+      // wants-you is STICKY: it survives further output. A TUI repaints after
+      // asking its question, so clearing on output would clear the state
+      // milliseconds after setting it and the feature would never be seen.
+      return {
+        ...prev,
+        lastOutputAt: now,
+        state: prev.state === 'wants-you' ? 'wants-you' : 'busy'
+      }
+    case 'bell':
+      // The bell is the only signal that carries INTENT. Idleness cannot tell
+      // "finished" from "asked a question"; this can, which is why M6d's
+      // notification will be gated on this state and not on idleness.
+      return { ...prev, lastOutputAt: now, state: 'wants-you' }
+    case 'tick':
+      if (prev.state !== 'busy') return prev
+      return now - prev.lastOutputAt >= idleAfterMs ? { ...prev, state: 'idle' } : prev
+    case 'acknowledge':
+      // Cleared by the user acting on the panel, never by the clock — without
+      // that rule a bell from an hour ago still glows and the attention set
+      // never empties. Which state it lands in is not a detail: landing on
+      // busy for an agent that has finished would paint it working forever,
+      // since nothing further arrives to move it along.
+      if (prev.state !== 'wants-you') return prev
+      return {
+        ...prev,
+        state: now - prev.lastOutputAt >= idleAfterMs ? 'idle' : 'busy'
+      }
+  }
+}
