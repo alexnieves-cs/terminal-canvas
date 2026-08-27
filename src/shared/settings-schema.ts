@@ -75,6 +75,11 @@ export function settingDef(id: string): SettingDef | undefined {
   return SETTINGS.find((d) => d.id === id)
 }
 
+/** Declaration order within a category is menu and palette order. */
+export function settingsInCategory(category: string): SettingDef[] {
+  return SETTINGS.filter((d) => d.category === category)
+}
+
 /**
  * The stored map is SPARSE — it holds only what the user changed — so every
  * read goes through here. A missing entry is not a missing setting; it is a

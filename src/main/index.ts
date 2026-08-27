@@ -115,8 +115,8 @@ function onSpawnPreset(id: string): void {
 
 function rebuildMenu(): void {
   buildAppMenu({
-    settings: layoutStore.settings(),
-    onToggle: (key, value) => layoutStore.setSetting(key, value),
+    settingValue: (id) => layoutStore.getSetting(id),
+    onToggleSetting: (id, value) => layoutStore.setPreference(id, value),
     onReset: () => {
       void confirmReset()
     },

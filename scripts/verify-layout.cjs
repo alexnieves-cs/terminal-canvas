@@ -981,6 +981,17 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     viaId === false && viaTyped === false, `viaId=${viaId} viaTyped=${viaTyped}`)
 }
 
+// 74 — M6b. The Restore submenu is now DERIVED from this query rather than
+//     hand-listed in menu.ts, which is the whole point: two lists of the same
+//     three settings drift, and the drift shows up as a menu that silently
+//     stops offering something the palette still offers.
+{
+  const restore = L.settingsInCategory('Restore on launch')
+  ok('74 the Restore submenu query returns exactly the three restore settings',
+    restore.length === 3 && restore.every((d) => d.id.startsWith('restore.')),
+    restore.map((d) => d.id).join(','))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
