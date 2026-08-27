@@ -12,6 +12,7 @@ import {
   type Workspace
 } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
+import type { WorkspaceRow } from '../shared/ipc-contract'
 
 /**
  * Owns layout.json.
@@ -84,6 +85,25 @@ export interface LayoutStore {
   addPrompt(prompt: Prompt): void
   /** False when the id names nothing — including any project prompt id. */
   deletePrompt(id: string): boolean
+  /** Every workspace, with the active one flagged. Copied out, like presets(). */
+  workspaces(): WorkspaceRow[]
+  /**
+   * Mint one and return its id. Does NOT activate it: a create that also
+   * switched would move the user somewhere they did not ask to go, and
+   * switching is a transaction with its own rules (see activateWorkspace).
+   */
+  createWorkspace(name: string): string
+  /** False when the id names nothing, like renamePreset. */
+  renameWorkspace(id: string, name: string): boolean
+  /**
+   * False when the id names nothing. Deleting the ACTIVE workspace activates
+   * a neighbour, and deleting the LAST one installs a fresh default — there
+   * is never zero workspaces, which parseLayout guarantees only on load.
+   *
+   * NOTE: this removes the RECORD. The panels' sessions belong to the
+   * renderer's registry and are disposed there, before this is called.
+   */
+  deleteWorkspace(id: string): boolean
   /** Return the active workspace to an empty canvas. */
   reset(): void
   /** Write now, synchronously. Never throws. */
@@ -114,6 +134,18 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     snapshot.workspaces = [fresh]
     snapshot.activeWorkspaceId = fresh.id
     return fresh
+  }
+
+  // Ids are `w<n>` above the current maximum, the same shape parseWorkspace's
+  // own fallback already assumes (`w${index + 1}`). Derived from the existing
+  // ids rather than from the count, so deleting w2 out of [w1, w2, w3] cannot
+  // mint a second w3.
+  function nextWorkspaceId(): string {
+    const max = snapshot.workspaces.reduce((n, w) => {
+      const match = /^w(\d+)$/.exec(w.id)
+      return match ? Math.max(n, Number(match[1])) : n
+    }, 0)
+    return `w${max + 1}`
   }
 
   function writeNow(): void {
@@ -324,6 +356,59 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       const before = snapshot.prompts.length
       snapshot.prompts = snapshot.prompts.filter((p) => p.id !== id)
       if (snapshot.prompts.length === before) return false
+      scheduleWrite()
+      return true
+    },
+
+    workspaces: () =>
+      snapshot.workspaces.map((w) => ({
+        id: w.id,
+        name: w.name,
+        // Copied out for the reason presets() copies: a caller must not be
+        // able to mutate the snapshot the store is about to serialise.
+        panelIds: w.panels.map((p) => p.id),
+        active: w.id === snapshot.activeWorkspaceId
+      })),
+
+    createWorkspace(name) {
+      const id = nextWorkspaceId()
+      // Built field by field off defaultWorkspace() rather than spread with an
+      // override, so a future field added to Workspace gets its default here
+      // instead of silently arriving as undefined.
+      snapshot.workspaces = [...snapshot.workspaces, { ...defaultWorkspace(), id, name }]
+      scheduleWrite()
+      return id
+    },
+
+    renameWorkspace(id, name) {
+      const found = snapshot.workspaces.find((w) => w.id === id)
+      if (!found) return false
+      snapshot.workspaces = snapshot.workspaces.map((w) =>
+        w.id === id ? { ...w, name } : w
+      )
+      scheduleWrite()
+      return true
+    },
+
+    deleteWorkspace(id) {
+      const before = snapshot.workspaces.length
+      snapshot.workspaces = snapshot.workspaces.filter((w) => w.id !== id)
+      if (snapshot.workspaces.length === before) return false
+      // NEVER ZERO. parseLayout guarantees at least one workspace on LOAD, but
+      // that is the read path; this is a write path that did not exist when it
+      // was written. With an empty array, activeWorkspace()'s repair branch —
+      // documented as unreachable from a parsed file — fires on the next save
+      // and repairs by discarding whatever the caller had.
+      if (snapshot.workspaces.length === 0) {
+        snapshot.workspaces = [defaultWorkspace()]
+      }
+      // An activeWorkspaceId naming a record that is gone is the same class of
+      // fact-on-disk-that-outlives-this-run as a defaultPresetId naming a
+      // deleted preset: recoverable at read time, but only HERE is the moment
+      // the workspace goes away visible.
+      if (snapshot.activeWorkspaceId === id) {
+        snapshot.activeWorkspaceId = snapshot.workspaces[0].id
+      }
       scheduleWrite()
       return true
     },

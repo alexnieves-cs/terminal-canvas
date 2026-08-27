@@ -1111,6 +1111,122 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `declared=${declared} reopened=${b.getSetting('agent.edgeIndicators')}`)
 }
 
+// M7. Workspaces. The format has carried them since M4b (Workspace extends
+// CanvasState, keyed by activeWorkspaceId) — these checks are about the STORE,
+// which until now could only ever see one of them.
+
+// 82. A fresh store answers one workspace, and it is the active one.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const ws = s.workspaces()
+  ok('82 a fresh store has exactly one active workspace',
+    ws.length === 1 && ws[0].active === true && ws[0].id === L.DEFAULT_WORKSPACE_ID,
+    JSON.stringify(ws))
+}
+
+// 83. createWorkspace mints an ID_PATTERN-valid id, does NOT activate it, and
+//     returns an id the list then contains. Not activating is the point: a
+//     create that also switched would make "new workspace" a destination
+//     change the user did not ask for, and Task 2 owns switching.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const id = s.createWorkspace('school')
+  const ws = s.workspaces()
+  const made = ws.find((w) => w.id === id)
+  ok('83 createWorkspace mints a valid id and does not activate it',
+    L.ID_PATTERN.test(id) && ws.length === 2 && made !== undefined &&
+      made.name === 'school' && made.active === false &&
+      made.panelIds.length === 0,
+    `id=${id} ${JSON.stringify(ws)}`)
+}
+
+// 84. panelIds reports the workspace's own panels. This is what the renderer
+//     intersects with attentionIds() — a wrong answer here is a waiting count
+//     attributed to the wrong canvas.
+{
+  const path = tmp()
+  writeFileSync(path, file(), 'utf8')
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  const ws = s.workspaces()
+  ok('84 panelIds reports the workspace’s own panels',
+    ws.length === 1 && ws[0].panelIds.length === 1 && ws[0].panelIds[0] === 'p1',
+    JSON.stringify(ws[0].panelIds))
+}
+
+// 85. Rename round-trips through a write and a reopen; an unknown id is false
+//     and changes nothing — the same "false when the id names nothing" rule
+//     renamePreset and deletePrompt already obey.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  const id = a.createWorkspace('school')
+  const renamed = a.renameWorkspace(id, 'university')
+  const missing = a.renameWorkspace('nope', 'x')
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  const found = b.workspaces().find((w) => w.id === id)
+  ok('85 renameWorkspace round-trips, and an unknown id is false',
+    renamed === true && missing === false && found !== undefined &&
+      found.name === 'university',
+    `renamed=${renamed} missing=${missing} name=${found && found.name}`)
+}
+
+// 86. Deleting a NON-active workspace removes it and leaves the active id
+//     alone.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const id = s.createWorkspace('school')
+  const gone = s.deleteWorkspace(id)
+  const ws = s.workspaces()
+  ok('86 deleting a non-active workspace leaves the active one alone',
+    gone === true && ws.length === 1 &&
+      ws[0].id === L.DEFAULT_WORKSPACE_ID && ws[0].active === true,
+    JSON.stringify(ws))
+}
+
+// 87. Deleting the ACTIVE workspace activates a neighbour. Leaving
+//     activeWorkspaceId naming a record that is gone would send
+//     activeWorkspace() into its repair branch — a branch written for a
+//     snapshot built in code and documented as unreachable from a parsed
+//     file, which repairs by silently discarding whatever the caller thought
+//     it was working with.
+{
+  const s = L.createLayoutStore({ filePath: tmp() })
+  s.load()
+  const other = s.createWorkspace('school')
+  const gone = s.deleteWorkspace(L.DEFAULT_WORKSPACE_ID)
+  const ws = s.workspaces()
+  ok('87 deleting the active workspace activates a neighbour',
+    gone === true && ws.length === 1 && ws[0].id === other && ws[0].active === true,
+    JSON.stringify(ws))
+}
+
+// 88. NEVER ZERO WORKSPACES. parseLayout guarantees at least one ON LOAD, but
+//     that is a read-path guarantee and deleteWorkspace is a write path that
+//     did not exist when it was written. Deleting the last one installs a
+//     fresh default and activates it — and it must survive a reopen, because
+//     the failure this guards is a file with an empty workspaces array.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  const gone = a.deleteWorkspace(L.DEFAULT_WORKSPACE_ID)
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  const ws = b.workspaces()
+  ok('88 deleting the last workspace installs a fresh one',
+    gone === true && ws.length === 1 && ws[0].active === true &&
+      ws[0].panelIds.length === 0,
+    JSON.stringify(ws))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

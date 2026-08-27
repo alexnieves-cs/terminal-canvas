@@ -200,6 +200,27 @@ export interface PromptBridgeRow {
   body: string
 }
 
+/**
+ * One workspace as the palette needs it.
+ *
+ * An IPC payload shape, not an on-disk one — the same split PresetListRow
+ * draws against Preset, and it matters for the same reason: layout-schema.ts
+ * decides what is VALID on disk, and a field that exists only to render a row
+ * has no business in the format.
+ *
+ * `panelIds` rather than a waiting count. Main does not know which panels are
+ * in wants-you in a form the renderer should trust it for, and the renderer
+ * already receives every agent:state transition — so shipping a count here
+ * would put the derivation in the wrong process to no benefit. See M6d's
+ * "M7 added no IPC channel" reasoning, which this follows.
+ */
+export interface WorkspaceRow {
+  id: string
+  name: string
+  panelIds: string[]
+  active: boolean
+}
+
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
   id: string
