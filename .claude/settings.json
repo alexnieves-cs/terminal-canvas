@@ -3,7 +3,8 @@
     "allow": [
       "Bash(tmux -V)",
       "Bash(gh repo *)",
-      "Bash(grep -n \"verify:panels\\\\` 41 is the check that fails if it is removed\" CLAUDE.md)"
+      "Bash(grep -n \"verify:panels\\\\` 41 is the check that fails if it is removed\" CLAUDE.md)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); Object.entries\\(p.scripts\\).filter\\(\\([k]\\)=>k.startsWith\\('verify'\\)\\).forEach\\(\\([k,v]\\)=>console.log\\(k.padEnd\\(22\\), v\\)\\)\")"
     ]
   }
 }
