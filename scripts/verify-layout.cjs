@@ -391,10 +391,13 @@ const CANVAS = {
   store.flushSync()
   const written = JSON.parse(readFileSync(path, 'utf8'))
   const w = written.workspaces[0]
+  // M6b: `settings` is no longer written to disk at all (it is now a derived
+  // view over `preferences` — see layout-store.ts's writeNow), so what
+  // survives reset() is the `restore.camera` entry in the preferences map.
   ok('25 reset empties the canvas but preserves settings and workspace identity',
     w.panels.length === 0 && w.selectedId === null && w.focusedId === null &&
-    w.id === L.DEFAULT_WORKSPACE_ID && written.settings.camera === false,
-    JSON.stringify({ panels: w.panels.length, id: w.id, camera: written.settings.camera }))
+    w.id === L.DEFAULT_WORKSPACE_ID && written.preferences['restore.camera'] === false,
+    JSON.stringify({ panels: w.panels.length, id: w.id, camera: written.preferences['restore.camera'] }))
 }
 
 // 26. THE CRITICAL ONE. Unchecking "Panel layout" must never destroy the
@@ -851,6 +854,152 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     z: 1
   }])
   ok('60 an untitled panel writes no title key at all', !('title' in out))
+}
+
+// 61-64 — M6b. The schema is DATA, and these checks are what stop it drifting
+//     from the code that consumes it. 61 pins the three ids main/menu.ts and
+//     layout-store.ts both address by name; 62 is the rule that makes a
+//     sparse map safe to store; 63 is what makes #11's synonym search
+//     possible at all; 64 is the guard against a duplicate id, which would
+//     make one row silently shadow another in the palette.
+{
+  const ids = L.SETTINGS.map((d) => d.id)
+  ok('61 the schema declares the three restore settings by their exact ids',
+    ids.includes('restore.layout') && ids.includes('restore.camera') &&
+    ids.includes('restore.focus'), ids.join(','))
+}
+{
+  // An id with no persisted entry resolves to the schema default. This is what
+  // lets the stored map be SPARSE — only what the user actually changed —
+  // rather than a full copy rewritten on every save.
+  ok('62 an unset setting resolves to its schema default',
+    L.resolveSetting({}, 'restore.layout') === true &&
+    L.resolveSetting({ 'restore.layout': false }, 'restore.layout') === false)
+}
+{
+  const ids = L.SETTINGS.map((d) => d.id)
+  ok('63 setting ids are unique', new Set(ids).size === ids.length)
+}
+{
+  // Every entry needs a non-empty label, description and keyword list. The
+  // keywords are not decoration: they are the only reason a user typing
+  // "panels" finds a setting labelled "Panel layout".
+  const bad = L.SETTINGS.filter((d) =>
+    !d.label || !d.description || !Array.isArray(d.keywords) || d.keywords.length === 0)
+  ok('64 every setting carries a label, a description and at least one keyword',
+    bad.length === 0, bad.map((d) => d.id).join(','))
+}
+
+// 65-69 — M6b. The same ABSENT-vs-MALFORMED line parsePresets draws, and for
+//     the same reason: a file with no preferences key is every file written
+//     before M6b and is perfectly fine, while a present-but-wrong one is
+//     corruption whose silent version is a preference the user set that
+//     quietly stopped applying.
+{
+  const w = []
+  ok('65 no preferences key at all is silent',
+    Object.keys(L.parsePreferences(undefined, w)).length === 0 && w.length === 0,
+    w.join('|'))
+}
+{
+  const w = []
+  L.parsePreferences([], w)
+  ok('66 a preferences field that is not an object warns rather than vanishing',
+    w.length === 1, w.join('|'))
+}
+{
+  const w = []
+  const out = L.parsePreferences({ 'restore.layout': false, 'nope.gone': true }, w)
+  ok('67 an unknown setting id is dropped with a warning, and the rest survive',
+    out['restore.layout'] === false && !('nope.gone' in out) && w.length === 1,
+    JSON.stringify(out) + ' | ' + w.join('|'))
+}
+{
+  const w = []
+  const out = L.parsePreferences({ 'restore.layout': 'yes', 'restore.camera': false }, w)
+  ok('68 a value of the wrong type is dropped with a warning, not coerced',
+    !('restore.layout' in out) && out['restore.camera'] === false && w.length === 1,
+    JSON.stringify(out) + ' | ' + w.join('|'))
+}
+{
+  // The migration. A pre-M6b file has `settings` and no `preferences`, and its
+  // three booleans must survive verbatim — an upgrade that silently reset a
+  // user's restore preferences to the defaults would look exactly like the app
+  // ignoring them.
+  const snap = L.parseLayout(file({ settings: { layout: false, camera: true, focus: false } })).snapshot
+  ok('69 a pre-M6b file migrates its restore settings into preferences',
+    snap.preferences['restore.layout'] === false &&
+    snap.preferences['restore.camera'] === true &&
+    snap.preferences['restore.focus'] === false,
+    JSON.stringify(snap.preferences))
+}
+
+// 70-73 — M6b. The store is the one place a setting is read or written, and
+//     73 is the check that matters most: settings() and setSetting() are now a
+//     typed VIEW over the preferences map rather than a second storage, so a
+//     write through either API must be visible through the other. Two
+//     storages that agree on the day they are written and drift later is the
+//     exact failure this milestone exists to prevent.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  ok('70 an untouched store reports the schema defaults',
+    store.getSetting('restore.layout') === true &&
+    Object.keys(store.preferences()).length === 0,
+    JSON.stringify(store.preferences()))
+}
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.setPreference('restore.camera', false)
+  store.save(CANVAS)
+  store.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  ok('71 a preference survives a write and a reopen',
+    reopened.getSetting('restore.camera') === false &&
+    reopened.getSetting('restore.layout') === true)
+}
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setPreference('nope.gone', true)
+  ok('72 setting an id the schema does not declare is refused',
+    !('nope.gone' in store.preferences()))
+}
+{
+  // The type union tracks `typeof`'s tags now ('enum' is gone), so this path
+  // is genuinely reachable: a known id given a value of the wrong type must
+  // still be refused, not merely an unknown id.
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setPreference('restore.layout', 'yes')
+  ok('72b setting a known id with the wrong type is refused',
+    !('restore.layout' in store.preferences()))
+}
+{
+  // The view, both directions. This is the check that makes "one map, two
+  // accessor shapes" a fact rather than a claim.
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setSetting('focus', false)
+  const viaId = store.getSetting('restore.focus')
+  store.setPreference('restore.layout', false)
+  const viaTyped = store.settings().layout
+  ok('73 settings() and setSetting() are a view over the same map, not a second store',
+    viaId === false && viaTyped === false, `viaId=${viaId} viaTyped=${viaTyped}`)
+}
+
+// 74 — M6b. The Restore submenu is now DERIVED from this query rather than
+//     hand-listed in menu.ts, which is the whole point: two lists of the same
+//     three settings drift, and the drift shows up as a menu that silently
+//     stops offering something the palette still offers.
+{
+  const restore = L.settingsInCategory(L.RESTORE_CATEGORY)
+  ok('74 the Restore submenu query returns exactly the three restore settings',
+    restore.length === 3 && restore.every((d) => d.id.startsWith('restore.')),
+    restore.map((d) => d.id).join(','))
 }
 
 console.log('\n' + '='.repeat(60))

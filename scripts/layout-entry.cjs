@@ -3,6 +3,10 @@
    what keeps this suite in the cheap plain-node tier. */
 module.exports = {
   ...require('../src/shared/layout-schema'),
+  /* M6b: the settings schema is pure data with no imports at all, so it costs
+     this tier nothing and gets covered by the suite that already owns the
+     on-disk format it is stored in. */
+  ...require('../src/shared/settings-schema'),
   ...require('../src/shared/panel-geometry'),
   ...require('../src/renderer/panels/layout-adapt'),
   ...require('../src/main/layout-store'),

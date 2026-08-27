@@ -25,6 +25,7 @@ import {
   type PresetRow,
   type PromptRow
 } from './commands'
+import type { SettingRow } from '@shared/ipc-contract'
 import type { PaletteController } from './usePalette'
 
 /**
@@ -56,6 +57,7 @@ export interface PaletteProps {
   presets: PresetRow[]
   prompts: PromptRow[]
   panels: PanelRow[]
+  settings: SettingRow[]
   hasSelection: boolean
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
@@ -63,7 +65,8 @@ export interface PaletteProps {
 
 const SCOPE_LABEL: Record<PaletteScope, string> = {
   presets: 'Presets',
-  prompts: 'Prompts'
+  prompts: 'Prompts',
+  settings: 'Settings'
 }
 
 const sectionLabel = (id: SectionId): string =>
@@ -86,11 +89,13 @@ export function Palette(props: PaletteProps): JSX.Element {
         presets: props.presets,
         prompts: props.prompts,
         panels: props.panels,
+        settings: props.settings,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         actions: props.actions
       }),
-    [props.presets, props.prompts, props.panels, controller.capturedId, props.hasSelection, props.actions]
+    [props.presets, props.prompts, props.panels, props.settings, controller.capturedId,
+     props.hasSelection, props.actions]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 

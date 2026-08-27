@@ -1,11 +1,12 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
-import type { RestoreSettings } from '../shared/layout-schema'
+import { RESTORE_CATEGORY, settingsInCategory, type SettingValue } from '../shared/settings-schema'
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
-  settings: RestoreSettings
-  onToggle(key: keyof RestoreSettings, value: boolean): void
+  /** Resolved current values, keyed by SettingDef.id. */
+  settingValue(id: string): SettingValue
+  onToggleSetting(id: string, value: boolean): void
   onReset(): void
   /** Built-ins and user presets together, each already resolved for availability. */
   presets: PresetAvailability[]
@@ -38,20 +39,17 @@ export function buildAppMenu(options: AppMenuOptions): void {
         { role: 'about' },
         { type: 'separator' },
         {
-          label: 'Restore on launch',
-          submenu: (
-            [
-              ['layout', 'Panel layout'],
-              ['camera', 'Camera position'],
-              ['focus', 'Selection & focus']
-            ] as [keyof RestoreSettings, string][]
-          ).map(([key, label]) => ({
-            label,
+          label: RESTORE_CATEGORY,
+          // Built from the schema, not a hand-written list. A second list of
+          // the same settings is a list that drifts, and the symptom is a menu
+          // that silently stops offering something the palette still offers.
+          submenu: settingsInCategory(RESTORE_CATEGORY).map((def) => ({
+            label: def.label,
             type: 'checkbox' as const,
-            checked: options.settings[key],
+            checked: options.settingValue(def.id) === true,
             // Nothing in the running session changes: these affect boot only,
             // which is exactly why they need no IPC event of their own.
-            click: (item) => options.onToggle(key, item.checked)
+            click: (item) => options.onToggleSetting(def.id, item.checked)
           }))
         },
         {

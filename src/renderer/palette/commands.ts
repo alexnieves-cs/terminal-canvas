@@ -1,4 +1,10 @@
 import type { Command } from './palette-model'
+// Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
+// Erased by esbuild, so it costs verify:palette nothing that the bundle
+// otherwise has no @shared import at all (the alias is wired pre-emptively
+// for exactly this day).
+import type { SettingRow } from '@shared/ipc-contract'
+import type { SettingValue } from '@shared/settings-schema'
 
 /**
  * The palette's command list, built from PLAIN DATA and callbacks.
@@ -48,12 +54,32 @@ export interface PaletteActions {
   beginRenamePanel(id: string, currentTitle: string): void
   resetCanvas(): void
   zoomToFit(): void
+  /**
+   * Task 7 implements the real wiring (main's settings:set, then a reload of
+   * the row list from the answer it gives back — never an optimistic local
+   * flip, because main can refuse an id or a type). REQUIRED, not optional:
+   * an optional member here would let Canvas.tsx's paletteActions object
+   * satisfy this interface while wiring only the `settings` prop and
+   * forgetting this callback (or vice versa), and tsc would say nothing — the
+   * exact silent gap "a row that disappears is indistinguishable from a
+   * feature that is missing" warns about elsewhere in this file. Required
+   * forces a type-satisfying stub at both call sites until Task 7 replaces
+   * them with the real thing; see Palette.tsx and Canvas.tsx.
+   */
+  toggleSetting(id: string, value: SettingValue): void
 }
 
 export interface PaletteContext {
   presets: PresetRow[]
   prompts: PromptRow[]
   panels: PanelRow[]
+  /**
+   * Empty until Task 7 loads it from `window.canvas.settings.list()`.
+   * REQUIRED for the same reason toggleSetting is required above — leaving it
+   * optional is a compile-time hole a half-finished Task 7 wiring could pass
+   * straight through.
+   */
+  settings: SettingRow[]
   /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and
@@ -241,6 +267,35 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     run: () => actions.resetCanvas()
   })
 
+  // --- Settings ------------------------------------------------------------
+  //
+  // hiddenAtRest, like every administration row: M6c/M6d add more toggles, and
+  // the resting list stays the ~8 rows M6p sized it to rather than growing one
+  // row per setting. The door below is the always-visible way in.
+
+  for (const setting of ctx.settings) {
+    // Only booleans get a row in M6b, because only booleans exist. An enum or
+    // number needs an input mode rather than a toggle, and building that
+    // before a setting needs it would be an abstraction with no customer —
+    // the same trap ideas-backlog #11 warns about for the schema itself.
+    if (setting.type !== 'boolean') continue
+    const on = setting.value === true
+    out.push({
+      id: `setting.${setting.id}`,
+      title: `${setting.label}: ${on ? 'On' : 'Off'}`,
+      subtitle: setting.description,
+      // The synonyms, where the matcher can see them and the row cannot show
+      // them. Without this the row is findable only by its own label — and
+      // ideas-backlog #11's whole argument for a searchable settings surface
+      // is that a user looking for the theme types "dark", not "theme".
+      searchText: setting.keywords.join(' '),
+      group: 'setting',
+      scope: 'settings',
+      hiddenAtRest: true,
+      run: () => actions.toggleSetting(setting.id, !on)
+    })
+  }
+
   // --- Manage --------------------------------------------------------------
   //
   // Everything below is hiddenAtRest except the two doors, and the doors are
@@ -273,6 +328,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       ctx.prompts.length === 0 ? REASON_NO_PROMPTS : undefined
     )
   )
+  {
+    // Only counts settings that actually produce a row above (booleans, for
+    // now) — ctx.settings.length would count a future non-boolean setting the
+    // loop above `continue`s past, so the door would say "5 settings" while
+    // the scope it opens shows 3.
+    const settingCount = ctx.settings.filter((s) => s.type === 'boolean').length
+    out.push({
+      id: 'manage.settings',
+      title: 'Manage settings…',
+      subtitle: `${settingCount} setting${settingCount === 1 ? '' : 's'}`,
+      group: 'manage',
+      entersScope: 'settings',
+      run: () => {}
+    })
+  }
 
   for (const preset of ctx.presets) {
     out.push(
