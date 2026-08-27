@@ -372,9 +372,11 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
 
     createWorkspace(name) {
       const id = nextWorkspaceId()
-      // Built field by field off defaultWorkspace() rather than spread with an
-      // override, so a future field added to Workspace gets its default here
-      // instead of silently arriving as undefined.
+      // Every field of a Workspace is populated by defaultWorkspace(), so the
+      // spread cannot lose an absent-vs-undefined distinction the way
+      // spreading a Preset can (see "An absent command must stay absent" in
+      // CLAUDE.md). A future optional field on Workspace would make this a
+      // hazard and should be set explicitly rather than spread.
       snapshot.workspaces = [...snapshot.workspaces, { ...defaultWorkspace(), id, name }]
       scheduleWrite()
       return id
