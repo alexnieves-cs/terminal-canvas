@@ -131,19 +131,27 @@ ok('9 starting says so', R.railTail({ kind: 'starting' }, false) === 'starting�
     R.railSignature(R.buildRailRows([panel('n1')], map, new Set(['n1']))) !== base)
 }
 
-// 14. FIELD SEPARATION. A label is USER TEXT. Under the obvious
-//     implementation — `id + '|' + label + '|' + tail` — a title containing
-//     the separator forges a field boundary, two genuinely different lists
-//     produce one string, and the rail freezes on the wrong rows: for the
-//     users whose titles happen to contain that character, and nobody else.
-//     This is the check that makes JSON.stringify the answer rather than a
-//     chosen separator, and it must keep failing against any implementation
-//     that goes back to concatenating with one.
+// 14. FIELD SEPARATION. A label is USER TEXT, and `railTail`'s 'error' case
+//     returns `status.message` VERBATIM — the one tail value a fixture can
+//     set to arbitrary text, which is what lets the separator itself move
+//     between fields. Under the naive `id + '|' + label + '|' + tail + '|' +
+//     dormant`, set a's row is 'n1|x|y|t|false' and set b's row is
+//     'n1|x|y|t|false' too: the pipe that used to separate label from tail in
+//     set a is now sitting one field to the right in set b, and the flattened
+//     strings collide even though the two rows hold genuinely different
+//     labels and tails. JSON.stringify keeps the two fields quoted and
+//     distinct, so it does not collide. This is the check that makes
+//     JSON.stringify the answer rather than a chosen separator, and it must
+//     keep failing against any implementation that goes back to concatenating
+//     with one — see the fix report in task-1-report.md for the fault
+//     injection that proves it does.
 {
-  const a = R.buildRailRows([panel('n1', { title: 'x|y' }), panel('n2', { title: 'z' })],
-    statuses({}), NONE)
-  const b = R.buildRailRows([panel('n1', { title: 'x' }), panel('n2', { title: 'y|z' })],
-    statuses({}), NONE)
+  const a = R.buildRailRows(
+    [panel('n1', { title: 'x|y' })],
+    statuses({ n1: { kind: 'error', message: 't' } }), NONE)
+  const b = R.buildRailRows(
+    [panel('n1', { title: 'x' })],
+    statuses({ n1: { kind: 'error', message: 'y|t' } }), NONE)
   ok('14 a title cannot forge a field boundary', R.railSignature(a) !== R.railSignature(b))
 }
 
