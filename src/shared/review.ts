@@ -81,4 +81,38 @@ export type ReviewResult =
    */
   | { kind: 'repo-unreadable'; detail: string }
 
+/**
+ * One rendered line of a unified diff. `text` is the raw line INCLUDING its
+ * leading marker, because a review pane that stripped the +/- would be
+ * unreadable when copied out of, and the node colours from `kind` anyway.
+ */
+export interface DiffLine {
+  kind: 'add' | 'del' | 'context' | 'hunk' | 'meta'
+  text: string
+}
+
+/**
+ * `unavailable` is a designed state, not an error path — the same rule the
+ * ReviewResult arms follow. It is what a failed or refused diff says, and it
+ * is deliberately NOT an empty `diff`: reporting "nothing changed in this
+ * file" for a file the numstat just said changed is exactly the confident
+ * wrong answer this feature exists to refuse.
+ */
+export type ReviewDiff =
+  | { kind: 'diff'; lines: DiffLine[]; truncated: number }
+  | { kind: 'binary' }
+  | { kind: 'unavailable' }
+
+/**
+ * Addressed by BASELINE, never by panel id — see ReviewSubject on why a node
+ * must be able to ask this question after its subject is gone.
+ */
+export interface ReviewDiffRequest {
+  repoRoot: string
+  baselineSha: string
+  path: string
+  /** Untracked files need --no-index; they appear in no diff against a commit. */
+  untracked: boolean
+}
+
 export type { PanelId }

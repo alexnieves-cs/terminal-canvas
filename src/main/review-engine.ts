@@ -1,15 +1,18 @@
 import {
   buildBaselineArgs,
+  buildFileDiffArgs,
   buildHeadArgs,
+  buildNewFileDiffArgs,
   buildNumstatArgs,
   buildObjectExistsArgs,
   buildRepoRootArgs,
   buildUntrackedArgs,
+  parseDiffLines,
   parseNulList,
   parseNumstat,
   parseRepoRoot
 } from './git-args'
-import type { ReviewBaseline, ReviewFile, ReviewResult } from '@shared/review'
+import type { ReviewBaseline, ReviewDiff, ReviewDiffRequest, ReviewFile, ReviewResult } from '@shared/review'
 
 export interface GitResult {
   stdout: string
@@ -62,7 +65,15 @@ export interface ReviewEngineDeps {
 export interface ReviewEngine {
   resolveRepo(cwd: string): Promise<RepoAnswer>
   captureBaseline(root: string): Promise<string | null>
+  /** The panel-addressed question: resolve this panel's baseline, then ask. */
   review(panelId: string): Promise<ReviewResult>
+  /**
+   * The baseline-addressed question, and the ONE a review node asks. It must
+   * never consult baselineOf: main drops a panel's baseline on kill, and a
+   * node has to keep answering after its subject is dismissed.
+   */
+  reviewAt(baseline: ReviewBaseline, subjectId: string): Promise<ReviewResult>
+  fileDiff(req: ReviewDiffRequest): Promise<ReviewDiff>
 }
 
 /**
@@ -161,21 +172,9 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return head.ok ? trimmed(head.stdout) : null
   }
 
-  const review = async (panelId: string): Promise<ReviewResult> => {
+  const reviewAt = async (baseline: ReviewBaseline, subjectId: string): Promise<ReviewResult> => {
     if (gitMissing) return { kind: 'git-missing' }
 
-    const baseline = deps.baselineOf(panelId)
-    if (baseline === undefined) {
-      // Three answers, not two, since M9b — see RepoAnswer's own doc comment.
-      // This can only ever fire for a panel with no CAPTURED baseline: none
-      // of the three verdicts can be produced once a baseline exists, since
-      // this whole branch is gated on `baseline === undefined`. The
-      // unreadable check runs FIRST because it is the specific answer and
-      // the other two are the general ones.
-      const detail = deps.repoUnreadable?.(panelId)
-      if (detail !== undefined) return { kind: 'repo-unreadable', detail }
-      return deps.notARepo?.(panelId) === true ? { kind: 'not-a-repo' } : { kind: 'never-started' }
-    }
     const { root, sha } = baseline
 
     // Validated FIRST, and before the shared check: "we cannot attribute
@@ -223,7 +222,7 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     // manufactured ambiguity rather than a real one.
     if (files.length === 0) return { kind: 'clean', root }
 
-    const peers = deps.peersInRepo(root, panelId)
+    const peers = deps.peersInRepo(root, subjectId)
     if (peers > 0) return { kind: 'shared', root, panelCount: peers + 1, files }
 
     return {
@@ -235,5 +234,43 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     }
   }
 
-  return { resolveRepo, captureBaseline, review }
+  const review = async (panelId: string): Promise<ReviewResult> => {
+    if (gitMissing) return { kind: 'git-missing' }
+
+    const baseline = deps.baselineOf(panelId)
+    if (baseline === undefined) {
+      // Three answers, not two, since M9b — see RepoAnswer's own doc comment.
+      // This can only ever fire for a panel with no CAPTURED baseline: none
+      // of the three verdicts can be produced once a baseline exists, since
+      // this whole branch is gated on `baseline === undefined`. The
+      // unreadable check runs FIRST because it is the specific answer and
+      // the other two are the general ones.
+      const detail = deps.repoUnreadable?.(panelId)
+      if (detail !== undefined) return { kind: 'repo-unreadable', detail }
+      return deps.notARepo?.(panelId) === true ? { kind: 'not-a-repo' } : { kind: 'never-started' }
+    }
+    return reviewAt(baseline, panelId)
+  }
+
+  const fileDiff = async (req: ReviewDiffRequest): Promise<ReviewDiff> => {
+    if (gitMissing) return { kind: 'unavailable' }
+    const result = req.untracked
+      ? await run(buildNewFileDiffArgs(req.repoRoot, req.path))
+      : await run(buildFileDiffArgs(req.repoRoot, req.baselineSha, req.path))
+    // --no-index exits 1 precisely WHEN IT FINDS DIFFERENCES, which is the
+    // expected outcome for every untracked file. Treating that as a failure
+    // makes the feature broken for the commonest thing an agent produces,
+    // while modified files keep working — the shape of bug nobody reports
+    // because the app "mostly works". verify:review 48.
+    const acceptable = result.ok || (req.untracked && result.code === 1)
+    if (!acceptable) return { kind: 'unavailable' }
+    // git's own report, and the only honest answer for it: there is nothing
+    // to render, and rendering the sentence as source would be a lie about
+    // the file's contents.
+    if (/^Binary files .* differ$/m.test(result.stdout)) return { kind: 'binary' }
+    const { lines, truncated } = parseDiffLines(result.stdout)
+    return { kind: 'diff', lines, truncated }
+  }
+
+  return { resolveRepo, captureBaseline, review, reviewAt, fileDiff }
 }

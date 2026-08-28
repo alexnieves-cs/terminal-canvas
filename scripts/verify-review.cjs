@@ -757,6 +757,116 @@ const gitFail = (code, stderr) => ({ stdout: '', ok: false, notFound: false, cod
       capture.isNotARepo('p1') === false)
 }
 
+// 42. THE ONE TO KNOW BY NUMBER. A unified diff's file headers begin '---'
+//     and '+++', so a parser that tests '+' before '+++' paints the header
+//     of every file as an ADDED line — a green "+++ b/src/app.ts" at the top
+//     of every hunk, which looks like a rendering quirk and is a
+//     classification bug. Order of tests, asserted directly.
+{
+  const { lines } = R.parseDiffLines('--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-old\n+new\n ctx\n')
+  ok('42 file headers are meta, not additions',
+    lines[0].kind === 'meta' && lines[1].kind === 'meta' && lines[2].kind === 'hunk' &&
+      lines[3].kind === 'del' && lines[4].kind === 'add' && lines[5].kind === 'context')
+}
+
+// 43. The preamble git prints before the first hunk is meta too, and the
+//     "\ No newline at end of file" marker is meta rather than context — it
+//     is a note ABOUT the diff, and rendering it as an unchanged source line
+//     puts text on screen that is not in the file.
+{
+  const { lines } = R.parseDiffLines(
+    'diff --git a/x b/x\nindex 1..2 100644\nnew file mode 100644\n@@ -0,0 +1 @@\n+hi\n\\ No newline at end of file\n')
+  ok('43 the preamble and the no-newline marker are meta',
+    lines.slice(0, 3).every((l) => l.kind === 'meta') &&
+      lines[lines.length - 1].kind === 'meta')
+}
+
+// 44. The cap TRUNCATES and SAYS SO. A node that silently rendered the first
+//     600 lines of a 5000-line diff is a review tool that lies by omission,
+//     which is the one thing this milestone's honest-degradation rule
+//     forbids; the count is what the view renders as "+N more lines".
+{
+  const patch = Array.from({ length: 50 }, (_, i) => `+line ${i}`).join('\n')
+  const out = R.parseDiffLines(patch, 10)
+  ok('44 the line cap truncates and reports the remainder',
+    out.lines.length === 10 && out.truncated === 40)
+}
+
+// 45. THE OUTLIVES-THE-SUBJECT PROPERTY, and the only place it is provable
+//     cheaply. reviewAt takes a BASELINE, so it must never consult
+//     baselineOf — main drops a panel's stored baseline the moment its
+//     session is killed, so an implementation that looked the subject up
+//     would go blank exactly when the agent is dismissed, which is when a
+//     review of finished work is most useful. The fake throws rather than
+//     returning undefined, so a lookup fails loudly instead of degrading
+//     into a plausible never-started.
+{
+  const engine = R.createReviewEngine({
+    run: async (args) => args.includes('--numstat')
+      ? gitOk('3\t1\tsrc/app.ts\0')
+      : gitOk(''),
+    baselineOf: () => { throw new Error('reviewAt must not look up a panel') },
+    peersInRepo: () => 0
+  })
+  const result = await engine.reviewAt({ root: '/r', sha: 'abc' }, 'n4')
+  ok('45 reviewAt answers from the baseline alone',
+    result.kind === 'changes' && result.files[0].path === 'src/app.ts' &&
+      result.added === 3 && result.removed === 1)
+}
+
+// 46. …and it still reports `shared` rather than a confident wrong
+//     attribution, excluding its own subject from the peer count. A node
+//     that dropped the exclusion would report every single-panel repository
+//     as shared with itself.
+{
+  const engine = R.createReviewEngine({
+    run: async (args) => args.includes('--numstat') ? gitOk('1\t0\tx\0') : gitOk(''),
+    baselineOf: () => undefined,
+    peersInRepo: (root, except) => (except === 'n4' ? 1 : 99)
+  })
+  const result = await engine.reviewAt({ root: '/r', sha: 'abc' }, 'n4')
+  ok('46 reviewAt excludes its own subject from the peer count',
+    result.kind === 'shared' && result.panelCount === 2)
+}
+
+// 47. fileDiff's three answers. `binary` is git's own report and must not be
+//     parsed as source; a failed diff is `unavailable`, never an EMPTY diff
+//     — "this file did not change" for a file the numstat just said changed
+//     is the confident wrong answer this whole feature is built to refuse.
+{
+  const mk = (result) => R.createReviewEngine({
+    run: async () => result, baselineOf: () => undefined, peersInRepo: () => 0
+  })
+  const text = await mk(gitOk('@@ -1 +1 @@\n-a\n+b\n')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
+  const bin = await mk(gitOk('Binary files a/x.png and b/x.png differ\n')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.png', untracked: false })
+  const bad = await mk(gitFail(128, 'fatal: bad object')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
+  ok('47 fileDiff answers diff / binary / unavailable',
+    text.kind === 'diff' && text.lines.length === 3 &&
+      bin.kind === 'binary' && bad.kind === 'unavailable')
+}
+
+// 48. An UNTRACKED file — the commonest thing an agent produces — has no
+//     entry in `git diff <baseline>` at all, so it needs --no-index against
+//     /dev/null. That call EXITS 1 whenever it finds differences, which is
+//     every successful call; treating exit 1 as failure here means every new
+//     file a user opens reads "unavailable", i.e. the feature is broken for
+//     its most common input while looking correct on modified files.
+{
+  const engine = R.createReviewEngine({
+    run: async (args) => args.includes('--no-index')
+      ? { stdout: '@@ -0,0 +1 @@\n+hello\n', ok: false, notFound: false, code: 1, stderr: '' }
+      : gitOk(''),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  const out = await engine.fileDiff({ repoRoot: '/r', baselineSha: 'abc', path: 'new.txt', untracked: true })
+  ok('48 an untracked file diffs against /dev/null, and exit 1 is success',
+    out.kind === 'diff' && out.lines.some((l) => l.kind === 'add' && l.text.includes('hello')))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -14,6 +14,7 @@
  * unquoted pane-died redirect made EVERY panel report exit code 1, silently,
  * because every fixture used a space-free path.
  */
+import type { DiffLine } from '@shared/review'
 
 export interface NumstatEntry {
   path: string
@@ -73,6 +74,60 @@ export function buildUntrackedArgs(root: string): string[] {
 /** Declared here, first called in M9b — the review node renders hunks. */
 export function buildFileDiffArgs(root: string, baseline: string, path: string): string[] {
   return ['-C', root, 'diff', baseline, '--', path]
+}
+
+/**
+ * A patch larger than this is sliced before parsing. Not a correctness
+ * bound — a cap on how much text crosses IPC and lands in a DOM node inside
+ * .world, where it is also being scaled by the canvas transform.
+ */
+export const DIFF_MAX_BYTES = 512 * 1024
+
+/** How many lines of ONE file's diff a review node renders before "+N more". */
+export const DIFF_MAX_LINES = 600
+
+/**
+ * An untracked file appears in no diff against a commit, so it is diffed
+ * against /dev/null instead. `--no-index` exits 1 whenever it finds
+ * differences — which is every successful call here — so the caller must
+ * treat a non-zero exit as ordinary. verify:review 48.
+ */
+export function buildNewFileDiffArgs(root: string, path: string): string[] {
+  return ['-C', root, 'diff', '--no-index', '--', '/dev/null', path]
+}
+
+/**
+ * Unified diff text into classified lines.
+ *
+ * The ORDER of the tests is the whole function. '+++' and '---' are file
+ * headers and must be matched BEFORE the single-character '+' and '-', or
+ * every file header in every diff renders as an added or removed source
+ * line. The remaining preamble git prints (`diff --git`, `index`, `new file
+ * mode`, `similarity index`, `rename from/to`) is meta for the same reason,
+ * and so is the '\' no-newline marker, which is a note ABOUT the file rather
+ * than a line IN it.
+ */
+export function parseDiffLines(
+  patch: string,
+  maxLines: number = DIFF_MAX_LINES
+): { lines: DiffLine[]; truncated: number } {
+  const source = patch.length > DIFF_MAX_BYTES ? patch.slice(0, DIFF_MAX_BYTES) : patch
+  // A trailing newline produces one empty final entry, which is not a line.
+  const raw = source.split('\n')
+  if (raw.length > 0 && raw[raw.length - 1] === '') raw.pop()
+  const lines: DiffLine[] = []
+  for (const text of raw.slice(0, maxLines)) {
+    let kind: DiffLine['kind']
+    if (text.startsWith('+++') || text.startsWith('---')) kind = 'meta'
+    else if (text.startsWith('@@')) kind = 'hunk'
+    else if (text.startsWith('+')) kind = 'add'
+    else if (text.startsWith('-')) kind = 'del'
+    else if (text.startsWith('\\')) kind = 'meta'
+    else if (/^(diff --git|index |new file mode|deleted file mode|old mode|new mode|similarity index|rename (from|to)|Binary files )/.test(text)) kind = 'meta'
+    else kind = 'context'
+    lines.push({ kind, text })
+  }
+  return { lines, truncated: Math.max(0, raw.length - lines.length) }
 }
 
 export function parseRepoRoot(stdout: string): string | null {
