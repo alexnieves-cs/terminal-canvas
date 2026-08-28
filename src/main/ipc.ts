@@ -12,6 +12,7 @@ import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
+import type { ReviewEngine } from './review-engine'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -54,7 +55,13 @@ export function registerIpcHandlers(
   // Its own parameter, not a PaletteHandlers member: SETTINGS_SET needs it to
   // redraw the Restore submenu's checkbox state, the same collaborator
   // getBackendInfo already is rather than something routed through palette.
-  rebuildMenu: () => void
+  rebuildMenu: () => void,
+  // Appended last so no existing positional call site shifts. Its own
+  // parameter rather than a PaletteHandlers member for the same reason
+  // getBackendInfo and rebuildMenu already are: it is main/index.ts's own
+  // collaborator, constructed once at module scope, not something the
+  // palette surface owns.
+  reviewEngine: ReviewEngine
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -148,6 +155,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.WORKSPACE_DELETE, (_event, id: string) =>
     layoutStore.deleteWorkspace(id)
   )
+
+  ipcMain.handle(IPC.REVIEW_PANEL, (_event, panelId: PanelId) => reviewEngine.review(panelId))
 }
 
 /**

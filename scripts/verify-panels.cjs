@@ -48,7 +48,9 @@ const {
   mergePrompts,
   readProjectPrompts,
   resolveCwd,
-  IPC_EVENTS
+  IPC_EVENTS,
+  createReviewEngine,
+  createGitRunner
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -395,6 +397,16 @@ app.whenReady().then(async () => {
     preferences: { 'agent.idleAfterMs': 250 }
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
+  // Real engine over a real git runner, mirroring main/index.ts's own
+  // construction exactly (createReviewEngine + createGitRunner, baselineOf
+  // and peersInRepo closing over THIS run's layoutStore) — a stub here would
+  // leave review:panel proven no further than the preload, the reasoning
+  // every other real export in this harness already follows.
+  const reviewEngine = createReviewEngine({
+    run: createGitRunner(),
+    baselineOf: (panelId) => layoutStore.baseline(panelId),
+    peersInRepo: (root, except) => layoutStore.baselinePeers(root, except)
+  })
   // main/index.ts calls this at whenReady; without it the store would start
   // from defaultSnapshot() and the seeded presets above would never be read.
   layoutStore.load()
@@ -497,7 +509,7 @@ app.whenReady().then(async () => {
     // still has to reach a callable fifth argument or a real settings-palette
     // exercise here would throw "rebuildMenu is not a function" instead of
     // testing what it means to.
-  })
+  }, reviewEngine)
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends

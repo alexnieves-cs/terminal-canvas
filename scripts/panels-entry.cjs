@@ -71,5 +71,13 @@ module.exports = {
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,
-  IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS
+  IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS,
+  /* Task 9's end-to-end review:panel check needs registerIpcHandlers wired to
+     a REAL engine over a REAL git runner — a stub here would prove nothing
+     past the preload, the same reasoning every other real export in this file
+     already states. The harness builds the engine itself (verify-panels.cjs),
+     since createReviewEngine's baselineOf/peersInRepo deps close over that
+     file's own LayoutStore instance; only the two constructors are exported. */
+  createReviewEngine: require('../src/main/review-engine').createReviewEngine,
+  createGitRunner: require('../src/main/git-runner').createGitRunner
 }

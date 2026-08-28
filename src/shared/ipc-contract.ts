@@ -16,6 +16,7 @@ import type {
 } from './types'
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
+import type { ReviewResult } from './review'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -134,7 +135,18 @@ export const IPC = {
   WORKSPACE_ACTIVATE: 'workspace:activate',
   WORKSPACE_CREATE: 'workspace:create',
   WORKSPACE_RENAME: 'workspace:rename',
-  WORKSPACE_DELETE: 'workspace:delete'
+  WORKSPACE_DELETE: 'workspace:delete',
+  /**
+   * What has changed in this panel's repository since its session started.
+   *
+   * An invoke, and pull-only: no watcher and no push channel. The renderer
+   * already holds every signal that says "now is a good moment to ask" —
+   * selection changed, and M6c's agent-state transition to `idle`, which
+   * means precisely "this agent stopped producing output". A push channel
+   * would make main a second author of a timing decision the renderer
+   * already makes correctly, the same call M6d and M7 both made and recorded.
+   */
+  REVIEW_PANEL: 'review:panel'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -392,6 +404,9 @@ export interface CanvasBridge {
     rename(id: string, name: string): Promise<boolean>
     /** `remove`, not `delete`: `delete` is reserved, as PresetBridge already found. */
     remove(id: string): Promise<boolean>
+  }
+  review: {
+    panel(panelId: PanelId): Promise<ReviewResult>
   }
   platform: NodeJS.Platform
 }

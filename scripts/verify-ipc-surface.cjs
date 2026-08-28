@@ -80,11 +80,22 @@ app.whenReady().then(() => {
     savePrompt: () => {},
     removePrompt: () => false
   }
+  // Never invoked here — this suite only asserts every channel is REGISTERED,
+  // never drives review:panel — but registerIpcHandlers' body reaches into it
+  // to build the handler closure, so it has to be a real object rather than
+  // undefined.
+  const reviewEngineStub = {
+    resolveRepo: async () => null,
+    captureBaseline: async () => null,
+    review: async () => ({ kind: 'not-a-repo' })
+  }
   registerIpcHandlers(
     stub,
     layoutStoreStub,
     () => ({ kind: 'direct', reason: 'verify: direct', hasSession: () => false }),
-    presetsStub
+    presetsStub,
+    () => {},
+    reviewEngineStub
   )
 
   const channels = Object.values(IPC)

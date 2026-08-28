@@ -412,7 +412,8 @@ app.whenReady().then(async () => {
       },
       removePrompt: (id) => layoutStore.deletePrompt(id)
     },
-    rebuildMenu
+    rebuildMenu,
+    reviewEngine
   )
   createWindow()
 

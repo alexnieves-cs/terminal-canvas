@@ -107,6 +107,9 @@ const bridge: CanvasBridge = {
       ipcRenderer.invoke(IPC.WORKSPACE_RENAME, id, name),
     remove: (id: string) => ipcRenderer.invoke(IPC.WORKSPACE_DELETE, id)
   },
+  review: {
+    panel: (panelId: PanelId) => ipcRenderer.invoke(IPC.REVIEW_PANEL, panelId)
+  },
   platform: process.platform
 }
 
