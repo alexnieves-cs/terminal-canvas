@@ -5316,6 +5316,116 @@ app.whenReady().then(async () => {
       // untouched, and the palette is closed.
     }
 
+    /* ---- M8b: the panel outline rail ---- */
+
+    // World state inherited from 80: the RAIL IS OPEN (79 reopened it), the
+    // inspector is collapsed, two live panels, palette closed. The rail being
+    // open is a precondition for everything below — a collapsed rail hides the
+    // list — so it is asserted rather than assumed.
+
+    // 81. A ROW PER PANEL, WITH THE HONEST LABEL AND A REAL PID.
+    //     The pid half is what makes this more than a count: a row rendering
+    //     the panel id, or a hardcoded stand-in, would satisfy "there are N
+    //     rows" while telling the user nothing main actually resolved. And a
+    //     label of '' — the shape a dropped honest chain produces — is checked
+    //     explicitly, because an empty row is indistinguishable from a styling
+    //     bug at a glance.
+    {
+      const railOpen = await wc.executeJavaScript(
+        `!document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+      const rows = await wc.executeJavaScript(`
+        [...document.querySelectorAll('.rail-row')].map((r) => ({
+          id: r.getAttribute('data-rail-row'),
+          label: r.querySelector('.rail-row__label').textContent,
+          tail: r.querySelector('.rail-row__tail').textContent
+        }))`)
+      const panelIdsNow = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      const sameSet = rows.length === panelIdsNow.length &&
+        panelIdsNow.every((id) => rows.some((r) => r.id === id))
+      const labelled = rows.every((r) => typeof r.label === 'string' && r.label.length > 0)
+      const pidTail = rows.every((r) => /^pid \d+$/.test(r.tail))
+      ok('81 the rail renders one labelled row per panel, with a real pid',
+        railOpen === true && sameSet && labelled && pidTail,
+        `railOpen=${railOpen} rows=${JSON.stringify(rows)} panels=${JSON.stringify(panelIdsNow)}`)
+    }
+
+    // 82. ONE TITLE SOURCE, NOT TWO. A rename typed into the palette has to
+    //     reach the rail row, because the rail reads Panel.title through the
+    //     same honest chain the header does. The failure this catches is a rail
+    //     that snapshotted its labels once and froze — a LIVE hazard here and
+    //     nowhere else, since railRows is deliberately frozen on a signature:
+    //     get that signature's fields wrong and the rows never rebuild, with
+    //     nothing throwing and the panel's own header still correct beside a
+    //     stale row.
+    //
+    //     Spawns its own panel with Cmd+N rather than renaming one of 81's,
+    //     because the rename row targets `capturedId` — focusedId as it was
+    //     when the palette opened. Spawning does not focus (check 40's note),
+    //     so the panel is clicked first, the same step check 45 takes and for
+    //     the same reason. Check 86 closes this panel again through the rail's
+    //     own close control.
+    let renamedId = null
+    {
+      const idsBefore = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      await zoomTo(wc, 'n')
+      const idsAfter = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore.size ? now : false
+      }, 4000)
+      renamedId = idsAfter ? idsAfter.find((id) => !idsBefore.has(id)) : null
+      if (!renamedId) throw new Error('82: Cmd+N produced no new panel')
+
+      // Spawning does not focus (check 40's note): the palette captures
+      // focusedId at OPEN time, so without this click the rename row would be
+      // aimed at whatever panel was focused before, not the one just spawned.
+      await waitUntil(async () => {
+        await wc.executeJavaScript(`(() => {
+          const slot = document.querySelector('[data-panel-id=${JSON.stringify(renamedId)}] .panel__slot')
+          if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        })()`)
+        return wc.executeJavaScript(`window.__m4aGrid() !== null`)
+      }, 5000, 200)
+
+      await wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(
+        `document.querySelector('.palette__input') !== null`), 2000)
+      const ran = await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        nativeSet(document.querySelector('.palette__input'), 'rename panel')
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Rename panel'))
+        if (!row) return 'no rename-panel row'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 100))
+        const field = document.querySelector('.palette__input')
+        if (!field) return 'no input after entering rename mode'
+        nativeSet(field, 'outline probe')
+        await new Promise((r) => setTimeout(r, 50))
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        return 'ok'
+      })()`)
+      const rowLabel = () => wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-row[data-rail-row=${JSON.stringify(renamedId)}]')
+        return row ? row.querySelector('.rail-row__label').textContent : null
+      })()`)
+      const landed = ran === 'ok' &&
+        Boolean(await waitUntil(async () => (await rowLabel()) === 'outline probe', 3000))
+      ok('82 a rename typed into the palette reaches the rail row',
+        landed, `ran=${ran} id=${renamedId} label=${await rowLabel()}`)
+      // What 82 LEAVES BEHIND: a THIRD panel, titled "outline probe", focused
+      // and selected; the palette is closed. Check 86 closes it again.
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

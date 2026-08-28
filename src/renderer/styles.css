@@ -115,6 +115,7 @@ body {
 .shell--rail-collapsed { --shell-rail-w: 22px; }
 .shell--inspector-collapsed { --shell-inspector-w: 22px; }
 
+.shell--rail-collapsed .shell__rail .rail-list,
 .shell--rail-collapsed .shell__rail .shell__region-title,
 .shell--inspector-collapsed .shell__inspector .shell__region-title {
   display: none;
@@ -152,6 +153,94 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* The panel outline. Scrolls on its own rather than growing the rail: the
+   canvas can hold far more panels than the rail is tall, and a rail that grew
+   would push its own toggle off screen — the one control that is the way back
+   from a collapse. */
+.rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px;
+  overflow-y: auto;
+  max-height: calc(100% - 60px);
+}
+
+.rail-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+}
+
+.rail-row--selected { background: rgba(255, 255, 255, 0.08); }
+
+/* The row body is a button, not the <li>: three sibling controls rather than
+   nested interactive elements, which are invalid HTML and give the browser no
+   defensible answer about which one a click meant. */
+.rail-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-row__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+/* The same colours the panel border and the card stripe already use, so a
+   glance at the rail and a glance at the canvas cannot disagree about what a
+   panel is doing. `starting` and `idle` deliberately keep the neutral default:
+   neither is asking for anything. */
+.rail-row__dot[data-agent-state="busy"] { background: var(--blue); }
+.rail-row__dot[data-agent-state="wants-you"] { background: var(--amber); }
+.rail-row__dot[data-agent-state="exited"] { background: var(--red); }
+
+/* min-width: 0 on the flex item, or a long resolved command refuses to shrink
+   and pushes the tail and both controls out of the rail entirely — the same
+   min-width:auto failure the .canvas grid cell's own comment records. */
+.rail-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-row__tail {
+  flex: none;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.rail-row__start,
+.rail-row__close {
+  flex: none;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.rail-row__start:hover,
+.rail-row__close:hover { color: var(--text); }
 
 /* The fixed viewport. Clips the world and catches every canvas event. */
 .canvas {

@@ -38,6 +38,7 @@ import { TopBar } from '../shell/TopBar'
 import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
+import { buildRailRows, railSignature } from '../shell/rail-rows'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -1927,10 +1928,18 @@ export function Canvas({
         // dialog glitching rather than as a deliberate wait.
         palette.openPalette()
       })()
-    }
+    },
+    // Not a new dispose call site — this IS onClosePanel, the one the panel's
+    // own × already uses. See PaletteActions.closePanel for why it is reached
+    // through this object rather than closed over directly by the rail.
+    closePanel: (id) => onClosePanel(id),
+    // The wake path, and deliberately not what a row CLICK does. See
+    // PaletteActions.startPanel.
+    startPanel: (id) => onSelectPanel(id)
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces])
+       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
+       onClosePanel, onSelectPanel])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -1984,6 +1993,35 @@ export function Canvas({
     [palette.open]
   )
 
+  /**
+   * The rail's rows, and the one defence that makes an always-open list
+   * affordable.
+   *
+   * `panels` is a fresh array on every setPanelRect — i.e. every frame of a
+   * drag. `panelRows` above escapes that by keying on `palette.open` and
+   * reading panelsRef, which works only because the palette is a surface that
+   * is usually closed. The rail has no such escape: it is never closed. So the
+   * rows are rebuilt on EVERY render (cheap — N panels, no IO, no allocation
+   * that matters) and their ARRAY IDENTITY is then frozen on a signature of
+   * only the fields a row renders. A drag moves rects, the signature is
+   * byte-identical, `railRows` keeps its identity, and memo'd SideRail and
+   * RailPanelRow re-render nothing.
+   *
+   * The dep array is the SIGNATURE, not `railBuilt`, and that is the whole
+   * mechanism rather than a lint workaround: when the signature is equal,
+   * `railBuilt` is equal by construction, so returning the previous array is
+   * not a stale read.
+   *
+   * The status is read straight off the registry rather than from React state,
+   * the same way TerminalPanel reads it. `version` — already in this render —
+   * is what makes a status change (idle -> running, with a pid) re-run this at
+   * all; registry.version() bumps on tier/status/focus/exit and nothing
+   * higher-frequency, which is exactly the rate the rail wants.
+   */
+  const railBuilt = buildRailRows(panels, (id) => registry.get(id)?.status, dormantIds)
+  const railSig = railSignature(railBuilt)
+  const railRows = useMemo(() => railBuilt, [railSig])
+
   // Cheap, and read once per render of the palette: getSelection() is a string
   // copy out of xterm's buffer, not a repaint.
   const hasSelection = (): boolean => {
@@ -2006,7 +2044,14 @@ export function Canvas({
         onSearch={palette.openPalette}
         onSettings={openSettingsScope}
       />
-      <SideRail onToggle={chrome.toggleRail} />
+      <SideRail
+        onToggle={chrome.toggleRail}
+        rows={railRows}
+        selectedId={selectedId}
+        onGoToPanel={paletteActions.goToPanel}
+        onStartPanel={paletteActions.startPanel}
+        onClosePanel={paletteActions.closePanel}
+      />
       <div
         className="canvas"
         ref={hostRef}

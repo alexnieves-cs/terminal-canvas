@@ -82,6 +82,32 @@ export interface PaletteActions {
    * renderer's session set.
    */
   deleteWorkspace(id: string, name: string, liveCount: number): void
+  /**
+   * The rail's close control. NOT a new dispose call site: it is the same
+   * onClosePanel the panel's own × already uses, reached through this object
+   * because the shell reaches the app only through it (spec rule 1). A rail
+   * that closed over registry.dispose directly would be a second
+   * implementation of a verb that already has an authority, and pty.kill's
+   * two-caller count inside session-registry.ts would stop being re-derivable
+   * from one place.
+   *
+   * Deliberately emits no Command row: closing already has a gesture on every
+   * panel, and M6p sized the resting list on purpose.
+   */
+  closePanel(id: string): void
+  /**
+   * The rail's start control, rendered on a dormant row only. This is
+   * onSelectPanel — the path that clears the dormant id and calls
+   * registry.wake — and it is deliberately NOT what a row CLICK does.
+   * goToPanel navigates without waking (rule 1), so the wake stays a separate,
+   * visible affordance rather than a side effect of browsing a list: on a
+   * restored twelve-panel canvas, a list whose rows wake is twelve agent CLIs
+   * launched by scrolling it.
+   *
+   * Emits no Command row either — waking already has a gesture: clicking the
+   * card that says "click to start".
+   */
+  startPanel(id: string): void
 }
 
 export interface PaletteContext {
