@@ -311,6 +311,21 @@ ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).k
     r.files.length === 1)
 }
 
+// 27b. A repository where nothing has changed is unambiguously clean, however
+//      many panels share it — there is nothing to fail to attribute, so the
+//      honest arms exist to explain a real ambiguity, not to decorate an
+//      empty result. This is the ONLY check that separates the two possible
+//      orderings of the clean/shared branches: 22 has no peers, and 27 has
+//      files, so neither can fail against a `shared`-before-`clean`
+//      implementation the way this one does.
+{
+  const r = await engineWith({
+    ...EXISTS, ...NO_UNTRACKED,
+    '-C /r diff --numstat -z b1': { stdout: '' }
+  }, { peers: 3 }).review('p1')
+  ok('27b clean outranks shared when nothing changed', r.kind === 'clean')
+}
+
 // 28. shared is checked BEFORE the diff is interpreted but AFTER the baseline
 //     is validated: a lost baseline in a shared repo is still baseline-lost,
 //     because "we cannot attribute" and "we have nothing to diff against" are
