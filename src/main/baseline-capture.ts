@@ -1,4 +1,5 @@
 import type { ReviewBaseline } from '@shared/review'
+import type { RepoAnswer } from './review-engine'
 
 /**
  * The once-only guard's dependencies, injected rather than imported: this
@@ -10,7 +11,7 @@ import type { ReviewBaseline } from '@shared/review'
 export interface BaselineCaptureDeps {
   baselineOf: (panelId: string) => ReviewBaseline | undefined
   setBaseline: (panelId: string, baseline: ReviewBaseline) => void
-  resolveRepo: (cwd: string) => Promise<string | null>
+  resolveRepo: (cwd: string) => Promise<RepoAnswer>
   captureBaseline: (root: string) => Promise<string | null>
 }
 
@@ -30,6 +31,11 @@ export interface BaselineCapture {
    * before it.
    */
   isNotARepo(panelId: string): boolean
+  /**
+   * The detail of a capture that resolved a cwd git DECLINED to open, or
+   * undefined. The sibling of `isNotARepo`, cleared by `drop` the same way.
+   */
+  unreadableDetail(panelId: string): string | undefined
 }
 
 export function createBaselineCapture(deps: BaselineCaptureDeps): BaselineCapture {
@@ -52,20 +58,29 @@ export function createBaselineCapture(deps: BaselineCaptureDeps): BaselineCaptur
   // capture() call finishes, for as long as reviewEngine.review() keeps
   // asking about this panel.
   const notARepoIds = new Set<string>()
+  // The sibling of notARepoIds, for the second verdict RepoAnswer can carry.
+  // A Map rather than a Set because this one has a payload — git's own
+  // words, for the pane to show.
+  const unreadableDetails = new Map<string, string>()
 
   return {
     capture(panelId, cwd) {
       if (deps.baselineOf(panelId) !== undefined) return
       const atCall = epoch.get(panelId) ?? 0
       void (async () => {
-        const root = await deps.resolveRepo(cwd)
-        if (root === null) {
-          // Same epoch discipline as the sha write below: a kill landing
-          // mid-resolve must not leave a stale "not a repo" verdict for
+        const answer = await deps.resolveRepo(cwd)
+        if (answer.kind !== 'root') {
+          // Same epoch discipline as the sha write below, and now covering
+          // TWO verdicts rather than one: a kill landing mid-resolve must not
+          // leave either a stale "not a repo" or a stale "git refused" for
           // whichever panel recycles this id next.
-          if ((epoch.get(panelId) ?? 0) === atCall) notARepoIds.add(panelId)
+          if ((epoch.get(panelId) ?? 0) === atCall) {
+            if (answer.kind === 'not-a-repo') notARepoIds.add(panelId)
+            else unreadableDetails.set(panelId, answer.detail)
+          }
           return
         }
+        const root = answer.root
         // Two panels can spawn in the same tick and both pass the first
         // check above before either await resolves; this second check is
         // what stops the second one from overwriting the first's
@@ -87,9 +102,13 @@ export function createBaselineCapture(deps: BaselineCaptureDeps): BaselineCaptur
     drop(panelId) {
       epoch.set(panelId, (epoch.get(panelId) ?? 0) + 1)
       notARepoIds.delete(panelId)
+      unreadableDetails.delete(panelId)
     },
     isNotARepo(panelId) {
       return notARepoIds.has(panelId)
+    },
+    unreadableDetail(panelId) {
+      return unreadableDetails.get(panelId)
     }
   }
 }

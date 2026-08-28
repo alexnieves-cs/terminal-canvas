@@ -71,5 +71,14 @@ export type ReviewResult =
    * says instead of a name.
    */
   | { kind: 'shared'; root: string; panelCount: number; files: ReviewFile[] }
+  /**
+   * The cwd IS (or may be) a repository, and git declined to open it — the
+   * Command Line Tools stub, safe.directory, an unreadable .git, a vanished
+   * checkout. Distinct from `not-a-repo`, which is the ordinary quiet answer
+   * for a panel in the home directory: this one is rendered, with `detail`
+   * naming what git said, because a user whose repository is invisible to
+   * the app needs to be told rather than shown an empty pane.
+   */
+  | { kind: 'repo-unreadable'; detail: string }
 
 export type { PanelId }

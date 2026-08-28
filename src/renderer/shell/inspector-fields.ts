@@ -277,6 +277,18 @@ export function buildReviewFields(result: ReviewResult | undefined): ReviewField
   if (result.kind === 'git-missing') {
     return { hidden: false, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0 }
   }
+  if (result.kind === 'repo-unreadable') {
+    // The detail is git's own words, and it is the whole value of this arm:
+    // "unavailable" alone is what M9a rendered for git-missing, and a user
+    // who has git installed would have no idea why this panel says it.
+    return {
+      hidden: false,
+      summary: 'unavailable',
+      note: `git could not open this repository — ${result.detail}`,
+      files: [],
+      more: 0
+    }
+  }
   if (result.kind === 'baseline-lost') {
     // A DIFFERENT note from never-started: two situations, two fixes. Telling
     // a user whose agent has run for an hour that it "has not started" sends

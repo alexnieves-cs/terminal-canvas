@@ -611,6 +611,24 @@ ok('45 git-missing is visible with its own summary and note',
     return m.hidden === false && m.summary === 'unavailable' && m.note === 'no git binary was found'
   })())
 
+// 46. The new arm RENDERS, with a note naming the cause. `hidden` would be
+//     the wrong answer here for the same reason `clean` is not hidden: a
+//     panel the feature is broken for and a panel with nothing to report
+//     must not look identical.
+{
+  const m = R.buildReviewFields({ kind: 'repo-unreadable', detail: 'xcrun: error: invalid active developer path' })
+  ok('46 repo-unreadable renders a note, not nothing',
+    m.hidden === false && m.summary === 'unavailable' &&
+      typeof m.note === 'string' && m.note.includes('xcrun'))
+}
+
+// 47. The boundary the new arm exists to draw, from the other side:
+//     not-a-repo is STILL hidden. It is the ordinary answer for a panel in
+//     the home directory, and a permanent error row on most panels teaches
+//     the user to stop reading the section. Asserting 46 alone passes
+//     against an implementation that stopped hiding anything.
+ok('47 not-a-repo is still hidden', R.buildReviewFields({ kind: 'not-a-repo' }).hidden === true)
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

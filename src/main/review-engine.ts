@@ -17,6 +17,15 @@ export interface GitResult {
   ok: boolean
   /** The git binary itself could not be spawned (ENOENT). */
   notFound: boolean
+  /**
+   * The process's exit status, or -1 when it never ran (notFound, or a
+   * timeout that killed it with a signal). Carried since M9b for exactly one
+   * decision: 128 is git's own "fatal:" status, and it is what separates
+   * "this directory is not a repository" from "git declined to open it".
+   */
+  code: number
+  /** First use: the detail repo-unreadable reports. Capped by the caller. */
+  stderr: string
 }
 
 export type GitRunner = (args: string[]) => Promise<GitResult>
@@ -41,13 +50,49 @@ export interface ReviewEngineDeps {
    * the same trade PtyManager's captureBaseline/dropBaseline make.
    */
   notARepo?: (panelId: string) => boolean
+  /**
+   * The detail of a capture that resolved a cwd git DECLINED to open, or
+   * undefined. The sibling of `notARepo`, and optional for the same reason:
+   * every existing fixture that builds an engine without it keeps compiling
+   * and keeps its prior behaviour.
+   */
+  repoUnreadable?: (panelId: string) => string | undefined
 }
 
 export interface ReviewEngine {
-  resolveRepo(cwd: string): Promise<string | null>
+  resolveRepo(cwd: string): Promise<RepoAnswer>
   captureBaseline(root: string): Promise<string | null>
   review(panelId: string): Promise<ReviewResult>
 }
+
+/**
+ * What a cwd turned out to be. Three answers, not two, since M9b.
+ *
+ * The discriminator is git's own exit status plus what it said. 128 is git's
+ * "fatal:" status, and `rev-parse --show-toplevel` outside a repository exits
+ * 128 saying "not a git repository" — the ordinary case, and the one that
+ * must stay quiet, because it is the answer for most panels. Everything else
+ * is a repository git DECLINED to open: the macOS Command Line Tools stub
+ * (exists, spawns, exits 1 on everything), safe.directory refusing an unowned
+ * checkout, an unreadable .git, a cwd that vanished under a running panel.
+ * M9a answered null for all of them alike, so the Changes section simply
+ * rendered nothing with no note — invisible as a bug, because it is the same
+ * shape as the ordinary case.
+ *
+ * BOTH conditions are required for not-a-repo. Testing the status alone is
+ * wrong in the direction that matters: git exits 128 for plenty of fatals
+ * that are not "you are outside a repository".
+ */
+export type RepoAnswer =
+  | { kind: 'root'; root: string }
+  | { kind: 'not-a-repo' }
+  | { kind: 'unreadable'; detail: string }
+
+/** stderr is a whole process's output; the pane shows one line. */
+const DETAIL_MAX = 200
+
+const firstLine = (text: string): string =>
+  text.split('\n').find((l) => l.trim() !== '')?.trim().slice(0, DETAIL_MAX) ?? 'git exited non-zero'
 
 export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
   /**
@@ -74,42 +119,21 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return t === '' ? null : t
   }
 
-  /**
-   * NOT covered yet, and the gap is deferred to M9b specifically rather than
-   * to "whichever milestone next touches this function" — a deferral with no
-   * owner is a deferral to nobody. Read it as a known limit, not an
-   * oversight:
-   *
-   *   - `result.ok === false` conflates "not a repository" with "git refused
-   *     to answer". The concrete, ORDINARY case is the macOS
-   *     `/usr/bin/git` Command Line Tools stub: with no CLT installed it
-   *     exists, spawns fine (so it is not the ENOENT `git-missing` covers,
-   *     even now that git is resolved by absolute path from the login env)
-   *     and exits non-zero on every invocation. An earlier draft of this
-   *     comment named only exotic causes — `safe.directory` refusing an
-   *     unowned checkout, a `.git` that exists but is unreadable, a cwd that
-   *     vanished under a still-running panel — which understated how often
-   *     this branch is actually taken. Every
-   *     one of those is a genuine repository git is declining to open, not
-   *     the ordinary "most panels aren't in one" case `not-a-repo` exists
-   *     for — and this function currently answers `null` for all of them
-   *     alike. The user-visible effect is silent: the Changes section simply
-   *     renders nothing for that panel, with no note explaining why, which
-   *     is the same shape as `not-a-repo`'s intended case and therefore
-   *     invisible as a bug.
-   *   - Separating them means plumbing git's actual exit status (or stderr)
-   *     back out of `GitResult` and minting a distinct `ReviewResult` arm for
-   *     it — a change to the seven-arm union, which an earlier ruling this
-   *     milestone already declined for a different eighth-arm proposal. Left
-   *     open deliberately rather than reopened here, at the last task: this
-   *     is the quieter of the two wrong answers under "no heuristic
-   *     attribution" — reporting nothing is preferable to a confident wrong
-   *     count, so the conflation is safe to leave unresolved, just not safe
-   *     to leave unrecorded. Reconsidered in M9b, which owns it.
-   */
-  const resolveRepo = async (cwd: string): Promise<string | null> => {
+  const resolveRepo = async (cwd: string): Promise<RepoAnswer> => {
     const result = await run(buildRepoRootArgs(cwd))
-    return result.ok ? parseRepoRoot(result.stdout) : null
+    if (result.ok) {
+      const root = parseRepoRoot(result.stdout)
+      return root === null
+        // ok, and nothing on stdout: git answered, and answered nothing.
+        // Not a repository is the only reading, and it is the quiet one.
+        ? { kind: 'not-a-repo' }
+        : { kind: 'root', root }
+    }
+    if (result.notFound) return { kind: 'unreadable', detail: 'git could not be run' }
+    if (result.code === 128 && /not a git repository/i.test(result.stderr)) {
+      return { kind: 'not-a-repo' }
+    }
+    return { kind: 'unreadable', detail: firstLine(result.stderr) }
   }
 
   const captureBaseline = async (root: string): Promise<string | null> => {
@@ -142,26 +166,14 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
 
     const baseline = deps.baselineOf(panelId)
     if (baseline === undefined) {
-      // Both read as "no baseline stored" and only notARepo tells them
-      // apart — see this dep's own doc comment above.
-      //
-      // Known limit, not yet covered: `notARepo` is only ever set from
-      // `resolveRepo` returning null, and that null is itself conflated
-      // (see resolveRepo's own comment above — safe.directory, an unreadable
-      // .git, and a vanished cwd all read the same as "not a repository").
-      // So `not-a-repo` can be produced for a panel whose cwd genuinely IS a
-      // repository that git merely refused to open, and the user sees no
-      // Changes section with no explanation, same as the ordinary case. The
-      // concrete case is ordinary rather than exotic — the /usr/bin/git
-      // Command Line Tools stub, which spawns and then fails everything; see
-      // resolveRepo's comment above.
-      // This can only ever fire for a panel with no CAPTURED baseline —
-      // `not-a-repo` cannot be produced once a baseline exists, since this
-      // whole branch is gated on `baseline === undefined`. Left open for the
-      // same reason resolveRepo's comment gives: separating the two means a
-      // new ReviewResult arm, at the last task of the milestone, and
-      // reporting nothing is the quieter wrong answer under "no heuristic
-      // attribution" either way. Owned by M9b, not by whoever passes next.
+      // Three answers, not two, since M9b — see RepoAnswer's own doc comment.
+      // This can only ever fire for a panel with no CAPTURED baseline: none
+      // of the three verdicts can be produced once a baseline exists, since
+      // this whole branch is gated on `baseline === undefined`. The
+      // unreadable check runs FIRST because it is the specific answer and
+      // the other two are the general ones.
+      const detail = deps.repoUnreadable?.(panelId)
+      if (detail !== undefined) return { kind: 'repo-unreadable', detail }
       return deps.notARepo?.(panelId) === true ? { kind: 'not-a-repo' } : { kind: 'never-started' }
     }
     const { root, sha } = baseline

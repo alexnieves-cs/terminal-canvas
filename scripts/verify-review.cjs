@@ -134,8 +134,15 @@ ok('13b buildHeadArgs argv', JSON.stringify(R.buildHeadArgs('/r')) ===
 const fakeRunner = (table) => async (args) => {
   const key = args.join(' ')
   const hit = table[key]
-  if (hit === undefined) return { stdout: '', ok: false, notFound: false }
-  return { stdout: hit.stdout ?? '', ok: hit.ok !== false, notFound: hit.notFound === true }
+  if (hit === undefined) return { stdout: '', ok: false, notFound: false, code: -1, stderr: '' }
+  const ok = hit.ok !== false
+  return {
+    stdout: hit.stdout ?? '',
+    ok,
+    notFound: hit.notFound === true,
+    code: hit.code ?? (ok ? 0 : -1),
+    stderr: hit.stderr ?? ''
+  }
 }
 
 // 14. resolveRepo returns the root for a cwd inside a repository.
@@ -145,19 +152,27 @@ const fakeRunner = (table) => async (args) => {
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('14 resolveRepo finds the root', (await e.resolveRepo('/a/b')) === '/a')
+  const answer = await e.resolveRepo('/a/b')
+  ok('14 resolveRepo finds the root', answer.kind === 'root' && answer.root === '/a')
 }
 
-// 15. Outside a repository git exits non-zero. Null, and NOT an exception:
-//     a panel in ~ is the ordinary case, not an error, and a throw here would
-//     take the pty:create it is called from down with it.
+// 15. Outside a repository git exits non-zero, saying so on stderr with its
+//     own "fatal:" status. not-a-repo, and NOT an exception: a panel in ~ is
+//     the ordinary case, not an error, and a throw here would take the
+//     pty:create it is called from down with it.
 {
   const e = R.createReviewEngine({
-    run: fakeRunner({ '-C /tmp rev-parse --show-toplevel': { stdout: '', ok: false } }),
+    run: fakeRunner({
+      '-C /tmp rev-parse --show-toplevel': {
+        ok: false,
+        code: 128,
+        stderr: 'fatal: not a git repository (or any of the parent directories): .git\n'
+      }
+    }),
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('15 resolveRepo outside a repo is null', (await e.resolveRepo('/tmp')) === null)
+  ok('15 resolveRepo outside a repo is not-a-repo', (await e.resolveRepo('/tmp')).kind === 'not-a-repo')
 }
 
 // 16. captureBaseline prefers the stash-create sha.
@@ -233,11 +248,11 @@ const fakeRunner = (table) => async (args) => {
 //     "not a repository", which would silently hide the real cause.
 {
   const e = R.createReviewEngine({
-    run: async () => ({ stdout: '', ok: false, notFound: true }),
+    run: async () => ({ stdout: '', ok: false, notFound: true, code: -1, stderr: '' }),
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('19 resolveRepo reports a missing git', (await e.resolveRepo('/a')) === null &&
+  ok('19 resolveRepo reports a missing git', (await e.resolveRepo('/a')).kind === 'unreadable' &&
     (await e.review('p1')).kind === 'git-missing')
 }
 
@@ -309,8 +324,10 @@ const fakeRunner = (table) => async (args) => {
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('20 resolveRepo is per-cwd', (await e.resolveRepo('/a')) === '/a' &&
-    (await e.resolveRepo('/b')) === '/b')
+  const a = await e.resolveRepo('/a')
+  const b = await e.resolveRepo('/b')
+  ok('20 resolveRepo is per-cwd', a.kind === 'root' && a.root === '/a' &&
+    b.kind === 'root' && b.root === '/b')
 }
 
 /* One builder for the arm checks, so each states only what it varies. */
@@ -487,8 +504,9 @@ if (!GIT) {
   })()
 
   // 30. resolveRepo against a real repository in a spaced path.
-  const root = await engine.e.resolveRepo(repo)
-  ok('30 real resolveRepo', typeof root === 'string' && root.endsWith(repo.split('/').pop()))
+  const repoAnswer = await engine.e.resolveRepo(repo)
+  ok('30 real resolveRepo', repoAnswer.kind === 'root' && repoAnswer.root.endsWith(repo.split('/').pop()))
+  const root = repoAnswer.root
 
   // 31. stash create leaves the worktree and the stash list ALONE. If this
   //     ever fails, the app is stashing a working agent's edits out from
@@ -560,7 +578,7 @@ const flush = async (times = 5) => {
   })
   bc.capture('p1', '/repo')
   bc.drop('p1') // the kill, arriving before resolveRepo has even settled
-  releaseResolveRepo('/repo')
+  releaseResolveRepo({ kind: 'root', root: '/repo' })
   await flush()
   ok('35 a killed panel drops its in-flight capture', baselines.get('p1') === undefined,
     `baselines=${JSON.stringify([...baselines])}`)
@@ -576,7 +594,7 @@ const flush = async (times = 5) => {
   const bc = R.createBaselineCapture({
     baselineOf: (id) => baselines.get(id),
     setBaseline: (id, b) => baselines.set(id, b),
-    resolveRepo: async () => '/repo',
+    resolveRepo: async () => ({ kind: 'root', root: '/repo' }),
     captureBaseline: async () => 'deadbeef'
   })
   bc.capture('p1', '/repo')
@@ -598,7 +616,7 @@ const flush = async (times = 5) => {
   const bc = R.createBaselineCapture({
     baselineOf: (id) => baselines.get(id),
     setBaseline: (id, b) => baselines.set(id, b),
-    resolveRepo: async () => null,
+    resolveRepo: async () => ({ kind: 'not-a-repo' }),
     captureBaseline: async () => 'unreached'
   })
   bc.capture('p1', '/home/nobody')
@@ -664,6 +682,80 @@ ok('37 baselines whose session did not survive are stale',
 ok('37b a surviving session keeps its baseline',
   typeof R.staleBaselineIds === 'function' &&
     R.staleBaselineIds(['p1', 'p2'], ['p1', 'p2']).length === 0)
+
+const gitOk = (stdout) => ({ stdout, ok: true, notFound: false, code: 0, stderr: '' })
+const gitFail = (code, stderr) => ({ stdout: '', ok: false, notFound: false, code, stderr })
+
+// 38. The ordinary "this is not a repository" answer, which must stay
+//     exactly what it was: git exits 128 and says so on stderr. This arm is
+//     the answer for a panel in the home directory — i.e. most panels — and
+//     turning it into an error would put a red field on nearly every panel.
+{
+  const engine = R.createReviewEngine({
+    run: async () => gitFail(128, 'fatal: not a git repository (or any of the parent directories): .git\n'),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  const answer = await engine.resolveRepo('/home/u')
+  ok('38 exit 128 + "not a git repository" is not-a-repo', answer.kind === 'not-a-repo')
+}
+
+// 39. THE CASE THIS TASK EXISTS FOR. The Command Line Tools stub exits 1 and
+//     prints its own error; git's own fatals exit 128. Anything that is not
+//     the 128-and-says-so pair is a repository git DECLINED to open, and the
+//     detail is carried so the user is told which. Conflating it with 38 is
+//     what M9a shipped, and it renders as nothing at all on screen.
+{
+  const engine = R.createReviewEngine({
+    run: async () => gitFail(1, 'xcrun: error: invalid active developer path\n'),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  const answer = await engine.resolveRepo('/home/u/proj')
+  ok('39 a non-128 git failure is unreadable, with a detail',
+    answer.kind === 'unreadable' && answer.detail.includes('xcrun'))
+}
+
+// 40. The three-way split at the panel level, asserted in ONE check because
+//     each pair is individually satisfiable by the wrong implementation:
+//     "no baseline" alone is never-started, "no baseline + not a repo" is
+//     not-a-repo, and "no baseline + git refused" is now its own arm. An
+//     implementation that folded the third into either of the first two
+//     passes any two of these three clauses.
+{
+  const mk = (extra) => R.createReviewEngine({
+    run: async () => gitOk(''),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0,
+    ...extra
+  })
+  const plain = await mk({}).review('p1')
+  const notRepo = await mk({ notARepo: () => true }).review('p1')
+  const unreadable = await mk({ repoUnreadable: () => 'xcrun: error' }).review('p1')
+  ok('40 never-started / not-a-repo / repo-unreadable are three answers',
+    plain.kind === 'never-started' && notRepo.kind === 'not-a-repo' &&
+      unreadable.kind === 'repo-unreadable' && unreadable.detail === 'xcrun: error')
+}
+
+// 41. The capture records WHICH failure it saw, and drop() clears it — the
+//     rule isNotARepo already obeys, extended to the second verdict. Without
+//     the clear, onReset()'s recycled FIRST_RUN_ID inherits a stranger's
+//     "git refused" verdict and reports it against a perfectly good repo.
+{
+  const capture = R.createBaselineCapture({
+    baselineOf: () => undefined,
+    setBaseline: () => {},
+    resolveRepo: async () => ({ kind: 'unreadable', detail: 'xcrun: error' }),
+    captureBaseline: async () => null
+  })
+  capture.capture('p1', '/home/u/proj')
+  await new Promise((r) => setImmediate(r))
+  const before = capture.unreadableDetail('p1')
+  capture.drop('p1')
+  ok('41 an unreadable verdict is recorded and cleared by drop',
+    before === 'xcrun: error' && capture.unreadableDetail('p1') === undefined &&
+      capture.isNotARepo('p1') === false)
+}
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
