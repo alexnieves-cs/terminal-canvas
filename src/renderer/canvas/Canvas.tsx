@@ -1593,20 +1593,32 @@ export function Canvas({
       // kill. Minting a node with no baseline would produce a panel that can
       // never answer anything.
       if (baseline === null) return
+      // RE-READ, never the captured `subject`: the await is a real gap, and
+      // it is not only "the panel got closed" (dispose drops the baseline
+      // too, which the null check above already catches). A WORKSPACE
+      // SWITCH landing in this gap replaces the whole `panels` array while
+      // leaving the subject's session — and therefore its baseline —
+      // perfectly intact (demote, not dispose), so `baseline` comes back
+      // non-null for a panel that is no longer in THIS canvas. Using the
+      // captured `subject.rect` would place the node by a rect that only
+      // meant something in the workspace that is no longer on screen, and
+      // the node would carry a subjectId nothing here answers to.
+      const current = panelsRef.current.find((p) => p.rect.id === subjectId)
+      if (current === undefined || isReviewPanel(current)) return
       // `r`, from the SAME counter `n` comes from. PanelId doubles as a tmux
       // session name, so a review node minting an id a terminal panel in any
       // workspace already owns is M7's invisible collision through a new
       // door — the second panel to go live attaches to the first one's
       // session and the user simply sees one agent through two panels.
       const id = `r${nextIdRef.current++}`
-      setPanels((current) => {
+      setPanels((existing) => {
         // cascadeCentre for the reason onSpawn uses it: opening two reviews
         // of one panel must not stack them byte-identically, which is a
         // canvas that looks like it holds one node while holding two.
-        const centre = cascadeCentre(reviewCentre(subject.rect), current)
+        const centre = cascadeCentre(reviewCentre(current.rect), existing)
         const next = [
-          ...current,
-          makeReviewPanel(id, centre, nextZ(current), {
+          ...existing,
+          makeReviewPanel(id, centre, nextZ(existing), {
             subjectId,
             repoRoot: baseline.root,
             baselineSha: baseline.sha,

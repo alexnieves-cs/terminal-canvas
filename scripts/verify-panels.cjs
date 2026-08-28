@@ -7115,22 +7115,98 @@ app.whenReady().then(async () => {
           `node=${node} heading=${heading}`)
       }
 
-      // 107. THE ID CHECK. A review node draws from the same counter as
-      //      Cmd+N, so the next terminal panel must not reuse its number —
-      //      PanelId doubles as a tmux session name, and two panels naming
-      //      one session is the failure with no visible symptom at all (the
-      //      second to go live attaches to the first one's process). Read
-      //      across EVERY workspace, not just this one, for the same reason
-      //      check 66 does.
-      {
-        await zoomTo(wc, 'n')
-        await settle()
-        const ids = await wc.executeJavaScript(
-          `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
-        const numbers = ids.map((id) => /^[nr](\d+)$/.exec(id)).filter(Boolean).map((m) => m[1])
-        ok('107 review nodes and panels never share a number',
-          new Set(numbers).size === numbers.length, JSON.stringify(ids))
+      // 107. THE ID CHECK, RETARGETED after fix round 1. `n6` and `r6`
+      //      cannot collide — they are different strings, and only
+      //      SAME-PREFIX ids collide as tmux session names — so comparing
+      //      bare numbers across prefixes (the original form of this check)
+      //      flagged n34/r34 coexisting as though it were a defect, and it
+      //      passed identically under either regex besides: the reload below
+      //      seeds the counter from an n-max nowhere near the seeded r-node's
+      //      own number, so neither regex ever had a reason to disagree.
+      //
+      //      The REAL hazard is review node versus review node. A persisted
+      //      `r<N>` is invisible to a NARROW seeding regex, so a later
+      //      review gesture can mint that exact id a SECOND time — a literal
+      //      duplicate panel id, which parseLayout drops silently on the
+      //      next load and which React keys collide on today. This seeds a
+      //      review node whose number is exactly the NEXT one a narrow
+      //      reseed would compute (today's n-max plus one), reloads so the
+      //      reseed actually runs, then opens a review on that SAME subject
+      //      through the real gesture — the first id-minting action after
+      //      the reload — and asserts the minted id collides with nothing
+      //      the canvas already holds, across every workspace.
+      const subjectPanel = first ? await spawnAt(repo) : null
+      if (subjectPanel) {
+        await waitUntil(async () => (await sessionMap(wc)).has(subjectPanel), 8000)
       }
+      const idsForSeed = subjectPanel
+        ? await wc.executeJavaScript(
+            `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+        : []
+      const maxN = idsForSeed.reduce((max, id) => {
+        const m = /^n(\d+)$/.exec(id)
+        return m ? Math.max(max, Number(m[1])) : max
+      }, 0)
+      // Exactly the id a NARROW regex's reseed would hand out next: it never
+      // sees this r-node at all, so it recomputes the same n-max-plus-one it
+      // would have without this node existing.
+      const collideId = `r${maxN + 1}`
+      const seedBaseline = subjectPanel
+        ? await wc.executeJavaScript(
+            `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
+        : null
+      let minted = null
+      let idsAfterReload = null
+      if (seedBaseline) {
+        const saved = layoutStore.initial()
+        const seededPanels = saved.panels.concat([{
+          id: collideId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
+          subject: {
+            subjectId: subjectPanel, repoRoot: seedBaseline.root,
+            baselineSha: seedBaseline.sha, label: 'claude'
+          }
+        }])
+        // Camera near the ORIGIN, deliberately unlike seedReviewNode's own
+        // far-off one above: this check has to click the SUBJECT panel after
+        // the reload through a real sendInputEvent, which needs real screen
+        // coordinates — not a panel 60,000 world units from wherever the
+        // camera happens to sit.
+        layoutStore.save({ panels: seededPanels, camera: { x: 0, y: 0, scale: 1 },
+          selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="${collideId}"]') !== null`),
+        10000)
+        idsAfterReload = await wc.executeJavaScript(
+          `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+        // The subject's own session reattaching (tmux) is what keeps its
+        // baseline alive in main, exactly the mechanism check 91 already
+        // proves for the inspector's reattached badge.
+        const reattached = await waitUntil(
+          async () => (await sessionMap(wc)).has(subjectPanel), 8000)
+        if (reattached) {
+          await selectPanel(subjectPanel)
+          await waitUntil(async () => wc.executeJavaScript(
+            `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+          await clickShell('[data-inspector-action="review"]')
+          await settle()
+          minted = await waitUntil(async () => {
+            const ids = await wc.executeJavaScript(
+              `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+            const fresh = ids.filter((id) => !idsAfterReload.includes(id))
+            return fresh.length === 1 ? fresh[0] : false
+          }, 8000)
+        }
+      }
+      const finalIds = await wc.executeJavaScript(
+        `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+      ok('107 a review node cannot mint an id a persisted node already owns',
+        subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
+          minted !== collideId && new Set(finalIds).size === finalIds.length,
+        `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
 
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
