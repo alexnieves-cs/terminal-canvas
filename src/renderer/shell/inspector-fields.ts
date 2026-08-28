@@ -1,4 +1,5 @@
 import type { AgentState } from '@shared/types'
+import type { ReviewResult } from '@shared/review'
 import type { Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 
@@ -204,5 +205,118 @@ export function buildInspectorSummary(
  * RailPanelRow makes.
  */
 export function inspectorSignature(model: InspectorModel | null): string {
+  return JSON.stringify(model)
+}
+
+/** Ten, because the pane is 260px wide and this section is not a scroll host. */
+export const REVIEW_FILE_CAP = 10
+
+export interface ReviewFieldRow {
+  path: string
+  added: number
+  removed: number
+  binary: boolean
+  untracked: boolean
+}
+
+export interface ReviewFieldModel {
+  /** True when the section renders nothing at all. */
+  hidden: boolean
+  summary: string
+  /** The honest arms' explanation. Absent when there is nothing to explain. */
+  note?: string
+  files: ReviewFieldRow[]
+  /** Files beyond the cap. Zero when everything fits. */
+  more: number
+}
+
+const HIDDEN: ReviewFieldModel = { hidden: true, summary: '', files: [], more: 0 }
+
+/**
+ * The Changes section, as plain data.
+ *
+ * `undefined` is an ordinary input, not an error: every selection change
+ * passes through it while the invoke is in flight, and so does every panel
+ * before the first query. `not-a-repo` is hidden for a sharper reason — it is
+ * the answer for a panel in the home directory, i.e. most panels, and a
+ * permanent error row on most panels teaches the user to stop reading the
+ * section.
+ *
+ * `clean` is deliberately NOT hidden. A panel that genuinely changed nothing
+ * and a panel the feature is broken for must not look the same.
+ */
+export function buildReviewFields(result: ReviewResult | undefined): ReviewFieldModel {
+  if (result === undefined || result.kind === 'not-a-repo') return HIDDEN
+
+  if (result.kind === 'never-started') {
+    return { hidden: false, summary: 'not started', note: 'this panel has no session yet', files: [], more: 0 }
+  }
+  if (result.kind === 'git-missing') {
+    return { hidden: false, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0 }
+  }
+  if (result.kind === 'baseline-lost') {
+    // A DIFFERENT note from never-started: two situations, two fixes. Telling
+    // a user whose agent has run for an hour that it "has not started" sends
+    // them to the wrong control.
+    //
+    // NOT "the baseline commit is gone" — that was this arm's ORIGINAL,
+    // narrower meaning, and the text below is deliberately wider than it.
+    // review-engine.ts now reports baseline-lost for a failed `ls-files` too
+    // (see its comment on the untracked-files read), so this arm now means
+    // "this repository cannot be read against its baseline" — its realistic
+    // cause is the repository becoming unreadable or vanishing mid-review,
+    // not only the baseline commit itself disappearing. Naming the baseline
+    // as the sole cause would misdescribe the untracked-files failure case.
+    return {
+      hidden: false,
+      summary: 'unattributable',
+      note: 'this repository could not be read against its baseline — restart the panel to start a new one',
+      files: [],
+      more: 0
+    }
+  }
+  if (result.kind === 'clean') {
+    return { hidden: false, summary: 'no changes', files: [], more: 0 }
+  }
+
+  const rows = result.files.slice(0, REVIEW_FILE_CAP).map((f) => ({
+    path: f.path,
+    added: f.added,
+    removed: f.removed,
+    binary: f.binary,
+    untracked: f.untracked
+  }))
+  const more = Math.max(0, result.files.length - REVIEW_FILE_CAP)
+
+  if (result.kind === 'shared') {
+    return {
+      hidden: false,
+      summary: `${plural(result.files.length, 'file')} changed`,
+      note: `${result.panelCount} panels share this repo — changes can't be attributed`,
+      files: rows,
+      more
+    }
+  }
+
+  return {
+    hidden: false,
+    summary: `${plural(result.files.length, 'file')} changed · +${result.added} −${result.removed}`,
+    files: rows,
+    more
+  }
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+/**
+ * The same 60Hz defence inspectorSignature gives the pane's other half, kept
+ * as its OWN function rather than a second parameter on that one: the review
+ * result arrives asynchronously and changes on a different clock from the
+ * panel model, and widening the existing signature would mean revisiting
+ * verify:rail 26/27, whose subject is a different fact.
+ */
+export function reviewSignature(model: ReviewFieldModel | null): string {
   return JSON.stringify(model)
 }

@@ -518,6 +518,84 @@ ok('36b the empty queue signs as a stable, distinct string',
       R.attentionSignature(R.buildAttentionRows(
         ['n1'], [railRowFor('n1', panel('n1'), running(1, '/bin/zsh'))])))
 
+// 37. not-a-repo renders NOTHING — hidden, not an error row. It is the
+//     ordinary answer for a panel in the home directory, i.e. most panels,
+//     and a red field on most panels most of the time trains the user to
+//     ignore the section entirely.
+ok('37 not-a-repo is hidden, not an error',
+  R.buildReviewFields({ kind: 'not-a-repo' }).hidden === true)
+
+// 38. An absent result — the query has not answered yet — is also hidden, and
+//     must not throw. Every selection change passes through this state.
+ok('38 an absent result is hidden and does not throw',
+  R.buildReviewFields(undefined).hidden === true)
+
+// 39. The real answer names files and both totals, with the counts as the
+//     numbers they are rather than pre-formatted text.
+{
+  const m = R.buildReviewFields({
+    kind: 'changes', root: '/r', added: 12, removed: 3,
+    files: [{ path: 'a.ts', added: 12, removed: 3, binary: false, untracked: false }]
+  })
+  ok('39 changes names files and both totals',
+    m.hidden === false && m.files.length === 1 &&
+      m.summary.includes('1 file') && m.summary.includes('12') && m.summary.includes('3'))
+}
+
+// 40. Ten files, then a `+N more` tail. The pane is 260px wide and an
+//     unbounded list turns the inspector into a scrolling surface it has
+//     never been.
+{
+  const files = Array.from({ length: 14 }, (_, i) =>
+    ({ path: `f${i}.ts`, added: 1, removed: 0, binary: false, untracked: false }))
+  const m = R.buildReviewFields({ kind: 'changes', root: '/r', added: 14, removed: 0, files })
+  ok('40 the file list caps at REVIEW_FILE_CAP with a more count',
+    m.files.length === R.REVIEW_FILE_CAP && m.more === 4)
+}
+
+// 41. `shared` says the COUNT and says it cannot attribute. The files are
+//     still listed — repository-level truth is still truth — so a check that
+//     only asserted "files is empty" would pin the wrong design.
+{
+  const m = R.buildReviewFields({
+    kind: 'shared', root: '/r', panelCount: 4,
+    files: [{ path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }]
+  })
+  ok('41 shared lists its files and names the panel count',
+    m.files.length === 1 && m.note !== undefined && m.note.includes('4'))
+}
+
+// 42. baseline-lost and never-started are DIFFERENT notes. They are two
+//     situations with two different fixes — "restart this panel" versus
+//     "start it" — and collapsing them tells a user whose agent has been
+//     running for an hour that it has not started.
+{
+  const lost = R.buildReviewFields({ kind: 'baseline-lost', root: '/r' })
+  const never = R.buildReviewFields({ kind: 'never-started' })
+  ok('42 baseline-lost and never-started carry different notes',
+    lost.note !== undefined && never.note !== undefined && lost.note !== never.note)
+}
+
+// 43. `clean` is a VISIBLE "no changes", not hidden. Hiding it makes a panel
+//     that has genuinely changed nothing indistinguishable from one the
+//     feature is not working for.
+{
+  const m = R.buildReviewFields({ kind: 'clean', root: '/r' })
+  ok('43 clean is visible and says so',
+    m.hidden === false && m.files.length === 0 && m.summary.toLowerCase().includes('no change'))
+}
+
+// 44. The signature moves on a change and is stable otherwise — the same 60Hz
+//     defence inspectorSignature gives the pane's other half.
+{
+  const a = { kind: 'changes', root: '/r', added: 1, removed: 0,
+    files: [{ path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }] }
+  const b = { kind: 'changes', root: '/r', added: 2, removed: 0,
+    files: [{ path: 'a.ts', added: 2, removed: 0, binary: false, untracked: false }] }
+  ok('44 reviewSignature is stable and moves on a change',
+    R.reviewSignature(R.buildReviewFields(a)) === R.reviewSignature(R.buildReviewFields(a)) &&
+      R.reviewSignature(R.buildReviewFields(a)) !== R.reviewSignature(R.buildReviewFields(b)))
+}
 
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
