@@ -6946,10 +6946,12 @@ app.whenReady().then(async () => {
           id: nodeId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
           subject: { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: 'claude' }
         }])
-        // Camera parked ON the node, so it is rendered rather than culled:
-        // a review node is never promoted (it has no tier at all), but it is
-        // still an ordinary DOM child of .world and still only rendered when
-        // the canvas is looking at it.
+        // The camera is set for legibility if anyone ever watches this run,
+        // and for nothing else: a review node is never CULLED, because
+        // culling is tiering and Canvas.tsx keeps nodes out of the array
+        // assignTiers is given, so React renders it wherever it sits. Check
+        // 104's own output says so — it reads the node at screen x 60360,
+        // some 60,000px off screen, and still finds it in the DOM.
         layoutStore.save({ panels, camera: { x: -60000 + 200, y: 100, scale: 1 },
           selectedId: null, focusedId: null })
         layoutStore.flushSync()

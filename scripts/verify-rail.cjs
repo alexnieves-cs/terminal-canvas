@@ -685,21 +685,37 @@ ok('49 not-a-repo: hidden in the pane, rendered in the node',
     R.NODE_FILE_CAP > R.REVIEW_FILE_CAP && m.files.length === R.NODE_FILE_CAP && m.more === 5)
 }
 
-// 52. The 60Hz defence, in the shape this surface needs it. Canvas re-renders
-//     on every mousemove and every frame of a drag, and a review node holds
-//     up to 600 lines of diff text — so the node's own memo has to be able
-//     to see "nothing about what I render changed". Three movers, because an
-//     implementation that hashed only the file list passes the first clause.
+// 52. The model is a pure function of its inputs, which is what lets
+//     ReviewNode.tsx memo the BUILD on those inputs and carry no signature of
+//     its own — unlike rail-rows.ts, which needs one.
+//
+//     The distinction is the point of this check's shape. buildRailRows is
+//     handed `panels.map(...)`, freshly allocated every render, so nothing
+//     there is identity-stable and only a content hash can answer "did
+//     anything I render change". Every input here survives a rect change by
+//     reference, so React's dependency comparison answers it for free — and
+//     a signature over a model carrying up to 600 lines of diff text would
+//     have to be recomputed on every frame of a drag to save one object
+//     allocation, imposing the exact cost it exists to prevent.
+//
+//     So the serialization happens HERE, in the check, where it is free and
+//     runs once. Equal inputs must produce a DEEP-equal model; the expanded
+//     path and the title must each change what is rendered; and so must the
+//     diff, which is not an input to this function at all but is the other
+//     half of what the node paints, so the pair is what gets compared. Three
+//     movers, because an implementation that carried only the file list
+//     passes the first clause alone.
 {
   const result = { kind: 'changes', root: '/r', added: 1, removed: 0, files: [
     { path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }] }
   const diff = { kind: 'diff', truncated: 0, lines: [{ kind: 'add', text: '+x' }] }
-  const a = R.reviewNodeSignature(nodeModel(result), diff)
-  const b = R.reviewNodeSignature(nodeModel(result), diff)
-  const expanded = R.reviewNodeSignature(nodeModel(result, 'a.ts'), diff)
-  const otherDiff = R.reviewNodeSignature(nodeModel(result), { kind: 'binary' })
-  const renamed = R.reviewNodeSignature(nodeModel(result, null, 'my review'), diff)
-  ok('52 the signature is stable, and moves on expansion, diff and title',
+  const painted = (model, d) => JSON.stringify([model, d])
+  const a = painted(nodeModel(result), diff)
+  const b = painted(nodeModel(result), diff)
+  const expanded = painted(nodeModel(result, 'a.ts'), diff)
+  const otherDiff = painted(nodeModel(result), { kind: 'binary' })
+  const renamed = painted(nodeModel(result, null, 'my review'), diff)
+  ok('52 the model is pure in its inputs, and expansion, diff and title all move it',
     a === b && expanded !== a && otherDiff !== a && renamed !== a)
 }
 

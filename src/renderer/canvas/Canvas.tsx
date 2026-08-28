@@ -369,6 +369,12 @@ export function Canvas({
     // and disposeAll() remain the only two (see session-registry.ts), and
     // routing through dispose() rather than calling pty.kill directly is
     // exactly what keeps that count true.
+    // STILL UNGUARDED FOR REVIEW NODES, unlike onClosePanel's own branch:
+    // a node undone out of existence routes through here and sends a kill
+    // for a panel that never had a session. Harmless today (main tolerates
+    // destroying a session it never spawned) and reachable the moment the
+    // creation gesture lands; the kind guard belongs to the task that adds
+    // it, not to this one. Same for the reset and workspace-delete loops.
     for (const panel of previousPresent) {
       if (!ids.has(panel.rect.id)) {
         registry.dispose(panel.rect.id)
@@ -656,6 +662,10 @@ export function Canvas({
     // both numbers; it regex-counts the call over this whole file, comments
     // included, which is why this comment does not spell it with its
     // parentheses.
+    // Review nodes are NOT filtered out here, which is the same open edge
+    // applyHistory's loop carries — see its comment. Reset drops every panel
+    // whatever its kind, and a node's dispose is a stray kill rather than a
+    // wrong one; the guard is a later task's.
     for (const panel of panelsRef.current) {
       registry.dispose(panel.rect.id)
       // Same reason as the undo/redo site above: reset drops every panel at
@@ -2026,6 +2036,10 @@ export function Canvas({
                     // PanelSession for (a hidden workspace's own panel, or
                     // one surviving a reload): dispose()'s own fix sends
                     // pty.kill regardless, mirroring main's PtyManager.kill.
+                    // And, like the reset and undo loops, this makes no
+                    // exception for a review node's id — a stray kill for a
+                    // panel that never had a session, left for the task that
+                    // adds the kind guard everywhere at once.
                     registry.dispose(panelId)
                     clearAgentState(panelId)
                   }

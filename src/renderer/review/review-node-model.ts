@@ -1,4 +1,4 @@
-import type { ReviewDiff, ReviewResult, ReviewSubject } from '@shared/review'
+import type { ReviewResult, ReviewSubject } from '@shared/review'
 
 /**
  * A review node's rendered content, as plain data.
@@ -116,20 +116,19 @@ export function buildReviewNodeModel(input: {
   }
 }
 
-/**
- * The same 60Hz defence railSignature and inspectorSignature give their own
- * surfaces, and the node needs it more than either: Canvas re-renders on every
- * mousemove over the canvas and on every frame of a drag, and a node holds up
- * to DIFF_MAX_LINES lines of text inside .world, where the browser is also
- * applying the canvas transform to all of it.
+/*
+ * There is deliberately NO reviewNodeSignature here, and the absence is worth
+ * a note because rail-rows.ts and inspector-fields.ts both carry one.
  *
- * The DIFF is part of the signature rather than a second one, because it is
- * part of what this surface renders — the split inspectorSignature made
- * (model and review on different clocks) does not apply here, where one memo
- * guards both. JSON.stringify for the reason railSignature gives: a path and
- * a diff line are user text, and a hand-rolled separator is one a file name
- * is free to contain.
+ * A signature exists to answer "did anything I render change" when the
+ * INPUTS cannot answer it: buildRailRows is handed `panels.map(...)`, a
+ * freshly-allocated array of freshly-allocated objects on every render, so
+ * identity there is meaningless and only content can be compared. Every
+ * input to buildReviewNodeModel survives a rect change by reference instead
+ * (see ReviewNode.tsx's memo), so React's own dependency comparison already
+ * answers it — and serializing a model that carries up to DIFF_MAX_LINES
+ * lines of diff text, once per frame of a drag, would impose exactly the
+ * 60Hz cost a signature is supposed to remove. verify:rail 52 pins the
+ * property that actually matters (this function is pure in its inputs) and
+ * does its own serializing, where it is free.
  */
-export function reviewNodeSignature(model: ReviewNodeModel, diff: ReviewDiff | null): string {
-  return JSON.stringify([model, diff])
-}

@@ -3,7 +3,7 @@ import type { ReviewPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import { buildReviewNodeModel, reviewNodeSignature } from './review-node-model'
+import { buildReviewNodeModel } from './review-node-model'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -87,14 +87,30 @@ function ReviewNodeImpl({
     return () => { live = false }
   }, [expandedPath, subject, result])
 
-  const built = buildReviewNodeModel({ subject, title: panel.title, result, expandedPath })
-  const sig = reviewNodeSignature(built, diff)
-  // Frozen on the signature for the reason Canvas freezes inspectorModel:
-  // this component re-renders whenever Canvas hands it a new `panel` object
-  // — every frame of a drag — and rebuilding up to DIFF_MAX_LINES worth of
-  // rendered rows for a rect change is the cost this whole architecture
-  // exists to refuse.
-  const model = useMemo(() => built, [sig])
+  // The BUILD is memoized, keyed on its four inputs — never on a serialized
+  // signature of its own output. Canvas hands this component a new `panel`
+  // object on every frame of a drag, so the rebuild genuinely has to be
+  // skipped; the question is what the key is.
+  //
+  // The rail cannot key on identity and this can, and the difference is worth
+  // stating because the two modules otherwise look like the same problem.
+  // `railSignature` exists because `buildRailRows` is fed a freshly-mapped
+  // array — `panels.map(...)` produces new objects every render, so no
+  // identity there is stable and only the CONTENT can be compared. Here every
+  // input already survives a rect change unchanged: `subject` and
+  // `panel.title` are carried by reference through `setPanelRect`'s
+  // `{ ...p, rect }`, and `result`/`expandedPath` are this component's own
+  // state, which a drag does not touch. So React's dependency comparison
+  // answers the same question for free.
+  //
+  // Serializing instead would impose the very cost it was meant to prevent:
+  // the signature was `JSON.stringify` over the model AND the diff, so a drag
+  // with a large file expanded stringified up to DIFF_MAX_LINES line objects
+  // per frame to avoid one object allocation.
+  const model = useMemo(
+    () => buildReviewNodeModel({ subject, title: panel.title, result, expandedPath }),
+    [subject, panel.title, result, expandedPath]
+  )
   const { rect, z } = panel
 
   return (
