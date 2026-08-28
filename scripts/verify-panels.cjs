@@ -5426,15 +5426,44 @@ app.whenReady().then(async () => {
       // and selected; the palette is closed. Check 86 closes it again.
     }
 
-    // 83. A REAL BELL REACHES ONE ROW, AND ONLY ONE.
-    //     Check 54 already proves a bell reaches the PANEL. What this adds is
-    //     the half only the rail can be wrong about: every row is fed from one
-    //     `rows` array, so an implementation that subscribed the LIST to agent
-    //     state — rather than each row to its own id — would paint the right
-    //     dot and still be the fan-out agent-state-store.ts exists to refuse.
-    //     Asserting the OTHER rows did not move is the only thing that
-    //     separates the two, and it is why this reads every dot rather than
-    //     one.
+    // 83. A REAL BELL MOVES ONE ROW'S DOT, AND THE OTHERS STAY REAL.
+    //     What this proves: a real bell, through a real PTY, moves the
+    //     TARGET row's dot to 'wants-you'; the other rows' dots do not move
+    //     with it; and those other dots are carrying genuine per-panel agent
+    //     state (e.g. 'starting') rather than a degenerate stand-in — not
+    //     merely holding still at some arbitrary placeholder. Check 54
+    //     already proves a bell reaches the PANEL; this is the half only the
+    //     rail can be wrong about, because every row here is fed from one
+    //     `rows` array.
+    //
+    //     What this does NOT prove: that each row subscribes to agent state
+    //     INDIVIDUALLY, the property `RailPanelRowImpl`'s own doc comment
+    //     claims. That was the plan going in, and fault injection found it
+    //     false — see the report for the fix that produced this comment.
+    //     Rerouting `RailPanelRow` to take `state` as a prop and having
+    //     `SideRail` derive it from one list-level `useAttentionIds()` read
+    //     paints IDENTICAL attributes to the correct per-row subscription in
+    //     every case this check can observe: both are reactive, so both
+    //     recompute correctly on the relevant change, and a DOM snapshot
+    //     cannot tell "one subscription drives N re-renders" apart from "N
+    //     subscriptions drive one re-render each" when the painted values
+    //     agree. The only thing that COULD tell them apart is a render
+    //     counter inside `RailPanelRowImpl` — a side effect during render,
+    //     the exact impurity `Canvas.tsx`'s own `commitHistory` comment warns
+    //     against, added to production code whose only consumer would be a
+    //     check. That trade was declined; the gap is recorded in CLAUDE.md
+    //     instead, the same way this file already names what check 32 and
+    //     the auto-repeat checks (7b/33b) do not prove.
+    //
+    //     The non-vacuity clause below (`othersAreReal`) catches exactly one
+    //     shape of that undiscriminated fault, not every one: an
+    //     attention-set-only derivation, which only knows "is this panel
+    //     waiting" and so collapses every non-waiting row to a single
+    //     placeholder value. It does NOT catch a list-level subscription that
+    //     reads the full per-id state map and passes the real value down —
+    //     that hypothetical still paints 'starting' on the other rows and
+    //     would pass this check too. Do not read a green 83 as proof of
+    //     subscription shape in general.
     //
     //     The attribute, not the class: a class is a styling decision a
     //     restyle may rename, the same split check 54 draws for the panel.
@@ -5481,9 +5510,19 @@ app.whenReady().then(async () => {
         ? Object.keys(rang).filter((id) => id !== target)
             .every((id) => rang[id] === before[id])
         : false
-      ok('83 a real bell changes that panel\'s row dot and no other',
-        rang !== false && others === true,
-        `target=${target} before=${JSON.stringify(before)} after=${JSON.stringify(rang)}`)
+      // Non-vacuity: at least one non-target row must carry a REAL agent
+      // state (i.e. something other than 'none') rather than a degenerate
+      // placeholder every row could share regardless of what is actually
+      // happening. This is the same shape verify:pty-manager check 18 already
+      // uses — its first clause must keep naming 'busy' because "no
+      // wants-you" is satisfied just as well by bytes that never arrived.
+      const othersAreReal = rang
+        ? Object.keys(rang).filter((id) => id !== target).some((id) => rang[id] !== 'none')
+        : false
+      ok('83 a real bell changes that panel\'s row dot, no other, and the others stay real',
+        rang !== false && others === true && othersAreReal === true,
+        `target=${target} before=${JSON.stringify(before)} after=${JSON.stringify(rang)} ` +
+          `others=${others} othersAreReal=${othersAreReal}`)
       // What 83 LEAVES BEHIND: an extra sh panel in wants-you, in main's
       // store and on its row, alongside renamedId (still 'starting', untouched
       // by this check). Nothing below acknowledges either; check 86 closes
