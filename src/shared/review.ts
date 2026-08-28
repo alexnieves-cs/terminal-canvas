@@ -14,6 +14,32 @@ export interface ReviewBaseline {
   sha: string
 }
 
+/**
+ * What a review NODE stores about the panel it reviews: everything needed to
+ * ask git the question again, with no live pointer into the panel array.
+ *
+ * In shared/ beside ReviewBaseline because all three processes hold it — the
+ * renderer builds it, layout-schema.ts persists it, and main answers
+ * review:at from it.
+ *
+ * It carries a COPY of the baseline (repoRoot + baselineSha) rather than the
+ * subject's id alone, and that is the whole design of the node: main DROPS a
+ * panel's stored baseline when its session is killed (see main/index.ts's
+ * dropBaseline), so a node that asked `review:panel(subjectId)` would go
+ * blank the moment its agent was dismissed — which is exactly the moment a
+ * review of finished work is most useful. `label` is a snapshot of the
+ * honest chain's answer at creation time for the same reason: the panel it
+ * names may not exist any more.
+ */
+export interface ReviewSubject {
+  /** The panel this reviews. Kept for peer attribution, NOT as a live pointer. */
+  subjectId: PanelId
+  repoRoot: string
+  baselineSha: string
+  /** The subject's label when the node was made — see above. */
+  label: string
+}
+
 export interface ReviewFile {
   path: string
   added: number
