@@ -1,6 +1,6 @@
 import { memo, type JSX } from 'react'
 import type { RailRow } from './rail-rows'
-import type { RailWorkspace } from './rail-sections'
+import type { RailAttention, RailWorkspace } from './rail-sections'
 import { RailPanelRow } from './RailPanelRow'
 import { RailWorkspaceRow } from './RailWorkspaceRow'
 import { shellControl } from './shell-control'
@@ -17,6 +17,7 @@ export interface SideRailProps {
   onGoToPanel: (id: string) => void
   onStartPanel: (id: string) => void
   onClosePanel: (id: string) => void
+  attention: RailAttention[]
 }
 
 /**
@@ -47,7 +48,7 @@ export interface SideRailProps {
 function SideRailImpl({
   onToggle, workspaces, onSwitchWorkspace, onCreateWorkspace,
   onRenameWorkspace, onDeleteWorkspace,
-  rows, selectedId, onGoToPanel, onStartPanel, onClosePanel
+  rows, selectedId, onGoToPanel, onStartPanel, onClosePanel, attention
 }: SideRailProps): JSX.Element {
   return (
     <aside className="shell__rail" aria-label="Side rail">
@@ -103,6 +104,55 @@ function SideRailImpl({
             onClose={onClosePanel}
           />
         ))}
+      </ul>
+
+      <div className="shell__region-title">Attention</div>
+      <ul className="rail-list rail-list--attention" aria-label="Attention">
+        {attention.length === 0 ? (
+          // Not an absent list. This section is empty nearly all the time, and
+          // a header with a void under it reads as a broken list rather than
+          // as "nobody needs you" — the same argument hiddenAtRest makes in
+          // the palette, where a row that disappears is indistinguishable from
+          // a feature that was never built.
+          <li className="rail-empty">nothing waiting</li>
+        ) : (
+          attention.map((row) => (
+            <li
+              key={row.id}
+              className="rail-row rail-attention"
+              data-rail-attention={row.id}
+            >
+              {/*
+                goToPanel and NOTHING else. Not onSelectPanel (which wakes —
+                check 84), and emphatically not an acknowledge: focus is the
+                renderer's single acknowledgement trigger and main is the sole
+                author of the state, so a row that cleared it here would make
+                the renderer a second author of a fact main owns. The panel
+                therefore stays amber after the jump, which is what
+                .panel--selected.panel--agent-wants-you exists for.
+              */}
+              <button
+                type="button"
+                className="rail-row__main"
+                title={`Go to ${row.label}`}
+                {...shellControl(() => onGoToPanel(row.id))}
+              >
+                {/*
+                  Static, not a useAgentState subscription: every row in this
+                  section is wants-you by construction — that is what put it
+                  here — so subscribing would be asking a question whose answer
+                  is already the reason the row exists.
+                */}
+                <span
+                  className="rail-row__dot"
+                  data-agent-state="wants-you"
+                  aria-hidden="true"
+                />
+                <span className="rail-row__label">{row.label}</span>
+              </button>
+            </li>
+          ))
+        )}
       </ul>
     </aside>
   )

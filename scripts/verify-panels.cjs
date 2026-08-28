@@ -6390,6 +6390,145 @@ app.whenReady().then(async () => {
         tail !== null && tail.includes('1 waiting'), `tail=${JSON.stringify(tail)}`)
     }
 
+    // 97. A WAITING PANEL APPEARS IN THE QUEUE, AND CLICKING IT NAVIGATES
+    //     WITHOUT ACKNOWLEDGING.
+    //     Three facts in one read, and each alone passes against a different
+    //     wrong rail. The ROW existing is satisfied by a section that lists
+    //     every panel rather than the queue. The CAMERA moving is satisfied by
+    //     a row wired to onSelectPanel — which would also wake a dormant panel
+    //     and is the exact shape check 84 exists to reject. And the amber
+    //     surviving is the one that pins the spec's rule that the shell never
+    //     acknowledges: focus is the renderer's single acknowledgement
+    //     trigger and main is the sole author of the state, so a row that
+    //     cleared it locally would make the renderer a second author of a
+    //     fact main owns.
+    //
+    //     The COLOUR is read, not the state, for check 62's reason: the
+    //     failure this guards is purely visual. Main can hold wants-you
+    //     perfectly while .panel--selected paints over it in blue, and a check
+    //     asking only "is the state still wants-you" passes against exactly
+    //     that regression.
+    let attentionPanelId = null
+    {
+      const BELL_LINE = "printf '\\007'\n"
+      const idsBefore = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      attentionPanelId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !idsBefore.includes(id)) || false
+      }, 4000)
+      if (!attentionPanelId) throw new Error('97: PRESET_SPAWN produced no new panel')
+      const spawned = await waitUntil(
+        async () => (await settledSessionMap(wc)).has(attentionPanelId), 8000)
+      if (!spawned) throw new Error(`97: panel ${attentionPanelId} never got a PTY`)
+      ptyManager.write(attentionPanelId, BELL_LINE)
+      const rang = await waitUntil(
+        async () => (await railAgentState(attentionPanelId)) === 'wants-you', 6000)
+      if (rang !== true) throw new Error('97: the panel never reached wants-you')
+
+      // Built once rather than quoted inline at each use. Threading a
+      // selector through two template layers is how a check ends up matching
+      // nothing and reporting a pass; 98 builds its own for the same reason,
+      // since this one is block-scoped to check 97.
+      const attentionRowSel =
+        `.rail-attention[data-rail-attention=${JSON.stringify(attentionPanelId)}]`
+      const rowAppeared = await waitUntil(() => wc.executeJavaScript(
+        `document.querySelector(${JSON.stringify(attentionRowSel)}) !== null`), 4000)
+
+      // Pan the panel away first, so "the click framed it" is a claim the
+      // camera can actually falsify. Clicking a row for a panel already
+      // centred moves nothing and would pass against a row wired to nothing.
+      await railPan(-1800, -1200)
+      await settle()
+      const before97 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      const clicked = await clickRail(`${attentionRowSel} .rail-row__main`)
+      await settle()
+      const after97 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      const colour = await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id=${JSON.stringify(attentionPanelId)}]')
+        if (!el) return null
+        const amber = getComputedStyle(document.documentElement).getPropertyValue('--amber').trim()
+        const probe = document.createElement('div')
+        probe.style.color = amber
+        document.body.appendChild(probe)
+        const want = getComputedStyle(probe).color
+        probe.remove()
+        return { border: getComputedStyle(el).borderTopColor, want }
+      })()`)
+      ok('97 the attention row navigates to its panel and leaves it amber',
+        rowAppeared === true && clicked === true &&
+          (after97.x !== before97.x || after97.y !== before97.y) &&
+          after97.scale === before97.scale &&
+          colour !== null && colour.border === colour.want,
+        `row=${rowAppeared} clicked=${clicked} ` +
+          `${JSON.stringify(before97)} -> ${JSON.stringify(after97)} ${JSON.stringify(colour)}`)
+    }
+
+    // 98. FOCUS IS STILL WHAT ACKNOWLEDGES, AND THE ROW LEAVES WITH THE STATE.
+    //     The other half of 97, and the half that proves the section is a VIEW
+    //     over the attention set rather than a list with a life of its own: a
+    //     row that survived the state clearing would navigate to a panel with
+    //     nothing to say, and the queue would only ever grow.
+    //
+    //     Clicking the PANEL (now on screen, because 97 framed it) is the
+    //     gesture — not a rail control, which by design takes neither DOM
+    //     focus nor focusedId and therefore acknowledges nothing.
+    {
+      const point = await wc.executeJavaScript(`(() => {
+        const el = document.querySelector(
+          '[data-panel-id=${JSON.stringify(attentionPanelId)}] .panel__slot')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
+      })()`)
+      // NOT a throw, unlike 96/97's fixture guards. At the RED step 97's
+      // click does nothing, so the panel is still off screen and may be a
+      // card with no .panel__slot at all — and a throw here would end the run
+      // and take 98b's RED with it. A missing slot is a real failure of this
+      // check, so it is reported as one.
+      if (!point) {
+        ok('98 focusing the panel clears the state and its attention row',
+          false, 'no .panel__slot to click — the panel was never framed')
+      } else {
+      wc.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+      wc.sendInputEvent({ type: 'mouseUp', x: point.x, y: point.y, button: 'left', clickCount: 1 })
+      // One selector string, built once. Nesting JSON.stringify inside a
+      // template inside executeJavaScript is exactly the kind of quoting that
+      // silently matches nothing and reports a pass.
+      const rowSel = JSON.stringify(
+        `.rail-attention[data-rail-attention=${JSON.stringify(attentionPanelId)}]`)
+      const panelSel = JSON.stringify(`[data-panel-id=${JSON.stringify(attentionPanelId)}]`)
+      const gone = await waitUntil(async () => {
+        const state = await wc.executeJavaScript(`(() => {
+          const panel = document.querySelector(${panelSel})
+          return {
+            agent: panel ? panel.getAttribute('data-agent-state') : null,
+            row: document.querySelector(${rowSel}) !== null
+          }
+        })()`)
+        return (state.agent !== 'wants-you' && state.row === false) ? state : false
+      }, 6000)
+      ok('98 focusing the panel clears the state and its attention row',
+        gone !== false, `state=${JSON.stringify(gone)}`)
+      }
+    }
+
+    // The empty state, read once now that 98 has emptied the queue. It is the
+    // state this section is in nearly all the time, which is exactly why it is
+    // the one most likely to have been left rendering nothing at all — and a
+    // section header with a void under it reads as a broken list rather than
+    // as "nobody needs you".
+    {
+      const empty = await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.rail-list--attention .rail-empty')
+        return el ? el.textContent : null
+      })()`)
+      ok('98b an empty attention queue says so rather than rendering nothing',
+        typeof empty === 'string' && empty.trim().length > 0, `empty=${JSON.stringify(empty)}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

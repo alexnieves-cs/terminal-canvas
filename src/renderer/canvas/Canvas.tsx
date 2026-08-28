@@ -39,7 +39,9 @@ import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
-import { buildWorkspaceRows, workspaceSignature } from '../shell/rail-sections'
+import {
+  attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature
+} from '../shell/rail-sections'
 import {
   buildInspectorModel, buildInspectorSummary, inspectorSignature, isRestartable, isRunning
 } from '../shell/inspector-fields'
@@ -2211,6 +2213,22 @@ export function Canvas({
   const railWorkspaces = useMemo(() => workspaceBuilt, [workspaceSig])
 
   /**
+   * The attention queue, frozen like every other list this rail renders.
+   *
+   * Built from `railBuilt` — the CURRENT rows, not the frozen `railRows` — so
+   * the two are read in one pass; they are equal whenever the signature is,
+   * and reading the fresh one keeps the dependency obvious rather than subtle.
+   *
+   * Passing the built ROWS rather than `panels` is what gives the phantom
+   * filter and the shared label in one operation: an id with no panel row is
+   * an orphan (agent state survives a panel's closure by design) and must not
+   * become a row that navigates nowhere.
+   */
+  const attentionBuilt = buildAttentionRows(waitingIds, railBuilt)
+  const attentionSig = attentionSignature(attentionBuilt)
+  const railAttention = useMemo(() => attentionBuilt, [attentionSig])
+
+  /**
    * The inspector's model, frozen the same way the rail's rows are and for the
    * same reason: the selected panel comes straight out of `panels`, a fresh
    * array on every setPanelRect — i.e. every frame of a drag — and this pane
@@ -2270,6 +2288,7 @@ export function Canvas({
         onGoToPanel={paletteActions.goToPanel}
         onStartPanel={paletteActions.startPanel}
         onClosePanel={paletteActions.closePanel}
+        attention={railAttention}
       />
       <div
         className="canvas"

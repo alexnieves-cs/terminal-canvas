@@ -402,6 +402,12 @@ body {
    paint amber. */
 .rail-row__waiting { color: var(--amber); }
 
+.rail-empty {
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* The fixed viewport. Clips the world and catches every canvas event. */
 .canvas {
   position: relative;
