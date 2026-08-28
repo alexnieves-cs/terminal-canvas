@@ -364,6 +364,80 @@ ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).k
   ok('29b a failed ls-files is not silent emptiness', r.kind === 'baseline-lost')
 }
 
+/* The real-git block. Pure parsers can be perfectly correct while the actual
+   invocation is wrong, and this is the only thing in the repo that can see it.
+
+   The temp directory contains a SPACE on purpose. Production baselines are
+   taken in whatever directory a user keeps code in, and this repo has already
+   shipped one total, silent failure from a space-free fixture. */
+const { execFileSync } = require('node:child_process')
+const { mkdtempSync, writeFileSync, appendFileSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+
+let GIT = true
+try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT = false }
+
+if (!GIT) {
+  console.log('SKIP  30-34 — no git binary found (loudly, not silently)')
+} else {
+  const repo = mkdtempSync(join(tmpdir(), 'tc review '))
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+  git('init', '-q', '.')
+  git('config', 'user.email', 'verify@example.com')
+  git('config', 'user.name', 'verify')
+  writeFileSync(join(repo, 'a.txt'), 'base\n')
+  git('add', '-A')
+  git('commit', '-qm', 'init')
+  // Dirt that exists BEFORE the panel spawns. The agent must not be blamed
+  // for it, and this is the only check that can prove it is not.
+  appendFileSync(join(repo, 'a.txt'), 'pre-existing\n')
+
+  const engine = (() => {
+    let baseline
+    const runner = R.createGitRunner()
+    const e = R.createReviewEngine({
+      run: runner,
+      baselineOf: () => baseline,
+      peersInRepo: () => 0
+    })
+    return { e, set: (b) => { baseline = b }, runner }
+  })()
+
+  // 30. resolveRepo against a real repository in a spaced path.
+  const root = await engine.e.resolveRepo(repo)
+  ok('30 real resolveRepo', typeof root === 'string' && root.endsWith(repo.split('/').pop()))
+
+  // 31. stash create leaves the worktree and the stash list ALONE. If this
+  //     ever fails, the app is stashing a working agent's edits out from
+  //     under it, which is the worst thing in this milestone.
+  const sha = await engine.e.captureBaseline(root)
+  ok('31 baseline does not disturb the tree',
+    typeof sha === 'string' && sha.length > 0 &&
+    git('stash', 'list').trim() === '' &&
+    require('node:fs').readFileSync(join(repo, 'a.txt'), 'utf8') === 'base\npre-existing\n')
+
+  engine.set({ root, sha })
+
+  // 32. The agent's edits, and ONLY the agent's edits. a.txt must report ONE
+  //     added line, not two: the pre-existing dirty line was in the baseline.
+  appendFileSync(join(repo, 'a.txt'), 'agent\n')
+  writeFileSync(join(repo, 'new file.txt'), 'made by the agent\n')
+  const r = await engine.e.review('p1')
+  const a = r.files && r.files.find((f) => f.path === 'a.txt')
+  ok('32 pre-existing dirt is excluded', r.kind === 'changes' && a && a.added === 1)
+
+  // 33. The untracked file — with a SPACE in its name — is reported.
+  ok('33 untracked spaced file reported',
+    r.kind === 'changes' && r.files.some((f) => f.path === 'new file.txt' && f.untracked))
+
+  // 34. A pruned baseline really does produce baseline-lost against real git,
+  //     not merely against the fake. gc --prune=now is what a user's own
+  //     maintenance run does.
+  git('gc', '--prune=now', '-q')
+  const lost = await engine.e.review('p1')
+  ok('34 real gc produces baseline-lost', lost.kind === 'baseline-lost')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

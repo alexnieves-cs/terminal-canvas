@@ -10,5 +10,11 @@
    first draft of this plan. */
 module.exports = {
   ...require('../src/main/git-args'),
-  ...require('../src/main/review-engine')
+  ...require('../src/main/review-engine'),
+  // The impure one. It joins the bundle — rather than the suite requiring the
+  // .ts directly, which plain node cannot load — and needs no `external`
+  // entry: node:child_process is a builtin, which esbuild leaves alone under
+  // platform:'node'. If this ever needs external:['node-pty'], something has
+  // leaked that belongs elsewhere.
+  ...require('../src/main/git-runner')
 }
