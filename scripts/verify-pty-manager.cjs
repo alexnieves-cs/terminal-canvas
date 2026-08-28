@@ -608,6 +608,15 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
     //     `new-session -A` reattaching to the surviving session — the user
     //     presses Restart, the agent keeps running, and nothing anywhere says
     //     the verb did not happen.
+    //
+    //     This is a CHARACTERISATION check: it pins behaviour PtyManager.kill
+    //     has had since M4c (its has-a-local-session branch already calls
+    //     backend.destroy), which Task 6's restart-in-place is about to
+    //     depend on. It passes on first write and was never red in normal
+    //     development — it earns its place by fault injection (commenting
+    //     out that destroy() call reproduces the same pid and a session
+    //     still present between kill and create), not by having failed on
+    //     its own.
     {
       const h = makeHarness(tmuxBackend)
       await h.manager.create(spec('r1'))
@@ -630,6 +639,25 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
           after.includes('r1'),
         `pid ${beforePid} -> ${afterPid}, session between: ${JSON.stringify(between.trim())}`)
       h.manager.kill('r1')
+      // Check 15, the previous last action in this block, always ended with
+      // shutdown() — a definite kill-server, so every run left the socket
+      // with no server at all. This check now runs after it, and kill('r1')
+      // only ends the SESSION, not the server: the server is left running,
+      // session-less. buildTmuxConf never sets exit-empty (tmux defaults it
+      // on), so the leftover server *usually* exits on its own, but that is
+      // a race, not a guarantee — kill()'s execFileSync returns as soon as
+      // kill-session does, not once the server's own exit-empty shutdown
+      // finishes. A -f confPath is applied only when a client STARTS the
+      // server; against one already running it is silently ignored. So a
+      // later run that begins before the stale server exits attaches to a
+      // server still wired to the PREVIOUS run's pane-died hook, including
+      // its now-deleted exitDir — and check 14, the one tmux check whose
+      // assertion is sourced from a file that hook writes, silently falls
+      // back to the client's own exit code instead of the real one. This
+      // shutdown() restores the invariant check 15 used to provide as the
+      // tmux block's last action; whoever appends the next check after this
+      // one inherits the same obligation.
+      tmuxBackend.shutdown()
     }
   }
 
