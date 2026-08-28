@@ -593,6 +593,44 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
         !afterKill.includes('t3') && afterShutdown.trim() === '',
         `afterKill=${JSON.stringify(afterKill.trim())} afterShutdown=${JSON.stringify(afterShutdown.trim())}`)
     }
+
+    // 20. THE MIRROR OF CHECK 12, and the single assertion that separates a
+    //     real restart from a reattach.
+    //
+    //     Check 12 pins that detach-then-create is the SAME pid — that is the
+    //     whole of M4c's reload survival. Restart is the opposite claim about
+    //     the same two calls with kill() in the middle instead of detachAll(),
+    //     and every OTHER observable is identical between the two: the session
+    //     name is the same, the client count returns to 1, list() reports one
+    //     session either way. Only the pane pid tells them apart.
+    //
+    //     Without this check, a restart that forgot backend.destroy would show
+    //     `new-session -A` reattaching to the surviving session — the user
+    //     presses Restart, the agent keeps running, and nothing anywhere says
+    //     the verb did not happen.
+    {
+      const h = makeHarness(tmuxBackend)
+      await h.manager.create(spec('r1'))
+      await sleep(700)
+      const before = tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+      const beforePid = (/r1 (\d+)/.exec(before) ?? [])[1]
+
+      h.manager.kill('r1')
+      await sleep(500)
+      const between = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+
+      await h.manager.create(spec('r1'))
+      await sleep(700)
+      const after = tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+      const afterPid = (/r1 (\d+)/.exec(after) ?? [])[1]
+
+      ok('20 restarting kills the session and respawns a DIFFERENT process at the same panel id',
+        beforePid && afterPid && beforePid !== afterPid &&
+          between.includes('r1') === false &&
+          after.includes('r1'),
+        `pid ${beforePid} -> ${afterPid}, session between: ${JSON.stringify(between.trim())}`)
+      h.manager.kill('r1')
+    }
   }
 
   console.log('\n' + '='.repeat(60))
