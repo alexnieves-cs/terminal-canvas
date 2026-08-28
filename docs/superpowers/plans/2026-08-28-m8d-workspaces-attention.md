@@ -206,8 +206,12 @@ ok('29 waitingCount ignores an id this workspace does not own',
   const rows = R.buildWorkspaceRows(
     [ws('w1', 'Main', ['n1'], true), ws('w2', 'Scratch', ['n2'])],
     ['n1'])
+  // Length-guarded, and not for tidiness: at the RED step buildWorkspaceRows
+  // is a stub returning [], so an unguarded rows[0].waiting is a TypeError —
+  // which ENDS THE RUN and takes every check below it with it (CLAUDE.md, "A
+  // check that THROWS aborts the run").
   ok('31 the waiting count is per workspace, not global',
-    rows[0].waiting === 1 && rows[1].waiting === 0)
+    rows.length === 2 && rows[0].waiting === 1 && rows[1].waiting === 0)
 }
 
 // 32. THE 60Hz DEFENCE, in the shape this section actually needs it. There is
@@ -244,14 +248,21 @@ ok('29 waitingCount ignores an id this workspace does not own',
 Run: `npm run verify:rail`
 
 Expected: the run reaches the summary (no `TypeError`, nothing aborted) and
-reports `29/35 passed` with `FAILED: 28, 29, 30, 31, 32, 33`. All six new
-checks must appear in that list. If fewer than six are listed, something
-aborted — fix that before continuing, because an unlisted check has not been
-watched failing.
+reports `30/35 passed` with `FAILED: 28, 29, 30, 31, 33`.
 
-Note for the record: check 29's second clause (`waitingCount([], [...]) === 0`)
+**Check 32 passes at this step, and that is expected rather than a problem.**
+It asserts that the signature IGNORES identity, which any constant satisfies —
+the stub's `() => ''` included. A stub cannot be built that fails both 32 and
+33, because they assert opposite things about the same function, and that is
+precisely why 33 exists: 32 alone is satisfied by a degenerate signature, and
+only 33's three separate movers rule that out. If you see 32 in the FAILED
+list, the stub is not what this step specified.
+
+The other four must all appear. If fewer than four are listed, something
+aborted — fix that before continuing, because an unlisted check has not been
+watched failing. Check 29's second clause (`waitingCount([], [...]) === 0`)
 would pass against a stub returning `0`; the stub returns `-1` precisely so no
-new check can go green for the wrong reason at this step.
+new check can go green for the wrong reason here.
 
 - [ ] **Step 5: Write the real implementation**
 
@@ -1319,7 +1330,15 @@ the `} catch (error) {` line:
         const r = el.getBoundingClientRect()
         return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
       })()`)
-      if (!point) throw new Error('98: the framed panel has no slot to click')
+      // NOT a throw, unlike 96/97's fixture guards. At the RED step 97's
+      // click does nothing, so the panel is still off screen and may be a
+      // card with no .panel__slot at all — and a throw here would end the run
+      // and take 98b's RED with it. A missing slot is a real failure of this
+      // check, so it is reported as one.
+      if (!point) {
+        ok('98 focusing the panel clears the state and its attention row',
+          false, 'no .panel__slot to click — the panel was never framed')
+      } else {
       wc.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1 })
       wc.sendInputEvent({ type: 'mouseUp', x: point.x, y: point.y, button: 'left', clickCount: 1 })
       // One selector string, built once. Nesting JSON.stringify inside a
@@ -1340,6 +1359,7 @@ the `} catch (error) {` line:
       }, 6000)
       ok('98 focusing the panel clears the state and its attention row',
         gone !== false, `state=${JSON.stringify(gone)}`)
+      }
     }
 
     // The empty state, read once now that 98 has emptied the queue. It is the
@@ -1496,16 +1516,32 @@ Expected: typecheck clean; `113/113 passed`.
 
 Check 97's amber clause is the only thing in the repo asserting that the rail
 does not acknowledge, and a clause that cannot fail is worse than no clause.
-Temporarily change the attention row's handler in `SideRail.tsx` from
-`onGoToPanel(row.id)` to something that also focuses — the quickest honest
-injection is to swap it to `onStartPanel(row.id)`, which selects and wakes:
+
+The injection has to be an actual acknowledge. Note what does NOT work:
+swapping the handler to `onStartPanel` looks like the obvious "make it focus"
+change and is not one — `startPanel` is `onSelectPanel(id)`, which is
+`selectAndRaise` + clear-dormant + `registry.wake` and never calls
+`setFocusedId`, so it acknowledges nothing. It would turn 97 red for the
+CAMERA clause instead (it does not `centreOn`), which tells you nothing about
+the clause under test.
+
+Temporarily change the attention row's handler in `SideRail.tsx` to:
+
+```tsx
+                {...shellControl(() => {
+                  onGoToPanel(row.id)
+                  void window.canvas.agent.acknowledge(row.id) // INJECTION — revert
+                })}
+```
 
 Run: `npm run build && npm run verify:panels`
-Expected: **97 fails.** Record the failure line in the commit message.
+Expected: **97 fails, on the colour clause specifically** — the camera still
+moves and the row still existed, so the detail line shows a `border` that is
+no longer the `want` amber. Record that line in the commit message. If 97
+fails on some other clause, the injection did not do what this step intends.
 
-Then revert the injection (`git checkout -- src/renderer/shell/SideRail.tsx`
-would lose Task 4's work — undo the one line by hand), rebuild, and confirm
-`113/113 passed` again before committing.
+Then remove the injected line by hand (`git checkout --` would lose the rest
+of Task 4's work), rebuild, and confirm `113/113 passed` before committing.
 
 - [ ] **Step 8: Commit**
 
