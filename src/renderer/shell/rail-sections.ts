@@ -1,4 +1,5 @@
 import type { WorkspaceRow } from '@shared/ipc-contract'
+import type { RailRow } from './rail-rows'
 
 /**
  * The rail's Workspaces and Attention sections, as plain data.
@@ -94,5 +95,61 @@ export function buildWorkspaceRows(
  * ORDER, the same way buildRailRows' does.
  */
 export function workspaceSignature(rows: readonly RailWorkspace[]): string {
+  return JSON.stringify(rows)
+}
+
+/**
+ * One row of the Attention section. No agent state field, because every row in
+ * this section is `wants-you` by construction — that is what put it here.
+ */
+export interface RailAttention {
+  id: string
+  label: string
+}
+
+/**
+ * The wants-you queue, filtered to panels that actually exist on this canvas.
+ *
+ * It takes the ALREADY-BUILT RailRow[] rather than the panel list, and that is
+ * the load-bearing part of the signature: filtering the queue down to ids that
+ * have a panel row IS reachableQueue's phantom filter, and reading the label
+ * off that same row is what stops the two sections rendering two different
+ * names for one panel. One lookup, both guarantees.
+ *
+ * Iterating the QUEUE and looking up the row — never iterating the rows and
+ * testing membership — is what preserves entry order, longest-waiting first.
+ * The other direction renders the canvas's order instead and looks entirely
+ * correct until two agents ring in the wrong sequence.
+ *
+ * The phantom it drops is the one agent-state-store can legitimately hold: a
+ * closed panel's state survives its closure, and under M6c's session.killed
+ * guard nothing ever clears it — so an unfiltered section renders a row that
+ * navigates nowhere, on a canvas with nothing to go to.
+ *
+ * Because it filters against the RENDERED panel rows rather than main's stored
+ * panelIds, it is also strictly tighter than waitingCount above, which can lag
+ * by one save debounce. A count may lag; a navigation target may not.
+ */
+export function buildAttentionRows(
+  queue: readonly string[],
+  panelRows: readonly RailRow[]
+): RailAttention[] {
+  const byId = new Map(panelRows.map((row) => [row.id, row]))
+  const out: RailAttention[] = []
+  for (const id of queue) {
+    const row = byId.get(id)
+    if (row !== undefined) out.push({ id, label: row.label })
+  }
+  return out
+}
+
+/**
+ * Same defence, same means, as workspaceSignature above — and ORDER is part of
+ * what it covers, because JSON.stringify over an array is order-sensitive and
+ * two queues holding the same ids in a different sequence are different lists.
+ * A signature blind to order would freeze the section on a stale sequence with
+ * every id in it still correct, which is the hardest kind of wrong to see.
+ */
+export function attentionSignature(rows: readonly RailAttention[]): string {
   return JSON.stringify(rows)
 }

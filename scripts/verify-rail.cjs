@@ -445,6 +445,74 @@ ok('29 waitingCount ignores an id this workspace does not own',
       sig(base) !== sig(waiting))
 }
 
+/* ---- The attention section (M8d) ---- */
+
+// A RailRow as buildRailRows produces one, trimmed to what buildAttentionRows
+// reads. Built through the real railLabel so the label under test is the same
+// one the Panels section renders, not a literal that could drift from it.
+const railRowFor = (id, panel, status) => ({
+  id, label: R.railLabel(panel, status), tail: 'x', dormant: false
+})
+
+// 34. Queue ORDER survives, and a phantom does not. The queue is ENTRY order —
+//     longest-waiting first — which is the whole of what makes this a queue
+//     rather than a set; an implementation that mapped over panelRows and
+//     filtered by membership would render the CANVAS's order instead and look
+//     entirely correct until two agents ring in the wrong sequence.
+//
+//     The phantom is the same orphan reachableQueue drops: agent state
+//     survives a panel's closure by design, so an id here can name a panel
+//     that no longer exists, and a row for it navigates nowhere.
+{
+  const rows = R.buildAttentionRows(
+    ['n3', 'ghost', 'n1'],
+    [railRowFor('n1', panel('n1'), running(1, '/bin/zsh')),
+     railRowFor('n3', panel('n3'), running(3, '/bin/zsh'))])
+  ok('34 the attention rows keep queue order and drop a phantom',
+    rows.length === 2 && rows[0].id === 'n3' && rows[1].id === 'n1')
+}
+
+// 35. ONE LABEL PER PANEL, and this is why the builder takes the built
+//     RailRow[] rather than the panels: looking the label up off the row the
+//     Panels section already renders is what stops the two sections showing
+//     two different names for one panel. The fixture is a TITLED panel, so a
+//     builder that re-derived from spec.command would say "/bin/zsh" here
+//     while the Panels row three lines up said "auth refactor".
+{
+  const p = panel('n1', { title: 'auth refactor' })
+  const rows = R.buildAttentionRows(['n1'], [railRowFor('n1', p, running(1, '/bin/zsh'))])
+  ok('35 an attention row shows the Panels row\'s label for the same id',
+    rows.length === 1 && rows[0].label === R.railLabel(p, running(1, '/bin/zsh')) &&
+      rows[0].label === 'auth refactor')
+}
+
+// 36. The signature ignores identity and moves on both things a row shows.
+//     ORDER is one of them and is easy to miss: two queues holding the same
+//     ids in a different sequence are genuinely different lists, and a
+//     signature blind to order would freeze the section on a stale sequence
+//     while every id in it was still correct.
+{
+  const rows = (queue, title) => R.buildAttentionRows(
+    queue,
+    [railRowFor('n1', panel('n1', title ? { title } : {}), running(1, '/bin/zsh')),
+     railRowFor('n2', panel('n2'), running(2, '/bin/sh'))])
+  const sig = R.attentionSignature
+  const base = rows(['n1', 'n2'])
+  ok('36 the attention signature ignores identity and moves on order and label',
+    sig(base) === sig(rows(['n1', 'n2'])) && base !== rows(['n1', 'n2']) &&
+      sig(base) !== sig(rows(['n2', 'n1'])) &&
+      sig(base) !== sig(rows(['n1', 'n2'], 'renamed')))
+}
+
+// 36b. The empty queue is a first-class state, not a crash — and it is the
+//      state this section is in nearly all the time, which is exactly why it
+//      is the one an implementation is least likely to have looked at.
+ok('36b the empty queue signs as a stable, distinct string',
+  typeof R.attentionSignature(R.buildAttentionRows([], [])) === 'string' &&
+    R.attentionSignature(R.buildAttentionRows([], [])) !==
+      R.attentionSignature(R.buildAttentionRows(
+        ['n1'], [railRowFor('n1', panel('n1'), running(1, '/bin/zsh'))])))
+
 
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
