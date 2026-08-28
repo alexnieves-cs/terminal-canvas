@@ -5568,13 +5568,32 @@ app.whenReady().then(async () => {
     }
 
     // 84. CLICKING A ROW FRAMES ITS PANEL AND DOES NOT START IT.
-    //     Rule 1 of the spec, and the one failure a screenshot cannot show: a
-    //     row wired to onSelectPanel instead of goToPanel frames the panel just
-    //     as correctly and ALSO clears the dormant id and calls registry.wake.
-    //     On a restored twelve-panel canvas that is twelve agent CLIs launched
-    //     by browsing a list. Both assertions are required: the camera clause
-    //     alone passes against the wake, and the no-spawn clause alone passes
-    //     against a row wired to nothing at all.
+    //     Rule 1 of the spec, and the one failure a screenshot cannot show: on
+    //     a restored twelve-panel canvas, a row that wakes on click is twelve
+    //     agent CLIs launched by browsing a list. Both clauses are required,
+    //     and for two different reasons — neither is a restatement of the
+    //     other.
+    //
+    //     The CAMERA clause rejects a row wired to nothing at all (no
+    //     onClick, or a dead handler): the no-spawn clause alone passes
+    //     against that implementation, because a panel nobody touched is
+    //     indeed still dormant.
+    //
+    //     The DORMANCY clause is the one that matters, because it is the only
+    //     clause that would catch a row wired to CENTRE AND WAKE — the
+    //     genuinely dangerous shape, since the camera moves exactly as this
+    //     check expects and the row looks completely correct on screen while
+    //     quietly launching a process.
+    //
+    //     A row wired to `onSelectPanel` as this codebase actually defines it
+    //     (Canvas.tsx: selectAndRaise + clear dormant id + registry.wake, and
+    //     no centreOn anywhere in it) fails BOTH clauses at once — it never
+    //     frames, so the camera clause fails on its own, independent of the
+    //     wake. Don't read that combination as proof either clause is
+    //     load-bearing alone; it is a coincidence of what onSelectPanel
+    //     happens to do today, not a property either half of this check
+    //     relies on. The centre-and-wake shape above is the one the dormancy
+    //     clause exists for.
     {
       const rowState = () => wc.executeJavaScript(`(() => {
         const row = document.querySelector('.rail-row[data-rail-row=${JSON.stringify(RAIL_DORMANT_ID)}]')
