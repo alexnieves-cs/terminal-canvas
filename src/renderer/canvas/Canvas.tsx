@@ -40,7 +40,7 @@ import { Inspector } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
 import {
-  buildInspectorModel, buildInspectorSummary, inspectorSignature, isRunning
+  buildInspectorModel, buildInspectorSummary, inspectorSignature, isRestartable, isRunning
 } from '../shell/inspector-fields'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
@@ -1958,6 +1958,74 @@ export function Canvas({
       // be. Built field by field for the same reason onCapture is.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
       void window.canvas.preset.savePanel(captured).then(reloadPresets)
+    },
+    /**
+     * Restart in place: end this panel's process and start a fresh one at the
+     * same id, the same rect and the same spec.
+     *
+     * THE FIFTH registry.dispose CALL SITE in this file, and — like the other
+     * four — it adds no caller of pty.kill: dispose() is still exactly one of
+     * the two, both inside session-registry.ts. verify:panels 94 pins both
+     * numbers by reading the source, because no runtime behaviour can observe
+     * how many callers a function has and CLAUDE.md records this exact count
+     * going stale once already.
+     *
+     * Four things about the sequence are load-bearing.
+     *
+     * clearAgentState FIRST, before the dispose. Agent state survives a
+     * panel's closure by design — main sends the transition and the
+     * renderer's store keeps it until something clears it — so without this a
+     * panel restarted out of wants-you keeps its amber border: a fresh agent
+     * wearing a dead one's question, and nothing will ever clear it, because
+     * only focus or a write acknowledges and neither says anything about the
+     * PREVIOUS process. main's `create` sends `starting` directly (it is the
+     * one state nothing transitions into, so a change-gated send would never
+     * emit it), which is what re-seeds the panel a moment later.
+     *
+     * AWAIT the dispose. Under tmux the session must be DESTROYED before the
+     * respawn, or `new-session -A` attaches to the very session this was meant
+     * to replace and the whole verb becomes a silent no-op — the panel blinks
+     * and comes back with the same process in it. dispose() returns the
+     * kill's promise for exactly this caller.
+     *
+     * ensure with dormant FALSE, explicitly rather than inherited. A dormant
+     * re-ensure leaves the panel refusing to spawn, which on screen is
+     * indistinguishable from a restart that did nothing at all.
+     *
+     * bumpVersion at the end. ensure() deliberately does not bump — it is
+     * normally called during render, where notifying a useSyncExternalStore
+     * subscriber makes React warn — so from an event handler nothing else
+     * would re-render to mount the new handle's slot or re-run the tiering
+     * effect, and the panel would show literally nothing with no error
+     * anywhere. dispose() did bump, but that bump is a tick stale by the time
+     * this resolves. NOT focus(): it bumps too, but it also moves the
+     * keyboard, which a shell control must never do (shell-control.ts).
+     *
+     * No history entry — the panel array does not change, so there is no
+     * gesture to undo. No confirm — the process this ends is precisely the one
+     * the user asked to replace; the control's own title is where the warning
+     * lives instead.
+     */
+    restartPanel: (id) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (!panel) return
+      // The same gate the Restart row and the inspector button render, read
+      // from the same function rather than re-expressed here: a verb that
+      // acted on a never-started panel would end a process that does not
+      // exist and then ensure a session the user never asked to start —
+      // waking a panel from a verb whose name says the opposite.
+      if (!isRestartable(registry.get(id)?.status)) return
+      clearAgentState(id)
+      void registry.dispose(id).then(() => {
+        // RE-CHECKED, never captured: the await is a real gap and the panel
+        // can be closed inside it (the × and the rail's close control are
+        // both one click away). Re-ensuring a closed panel would mint a
+        // session no UI can ever reach or stop again — the orphan dispose()'s
+        // own comment exists to prevent, arriving through a new door.
+        if (!panelsRef.current.some((p) => p.rect.id === id)) return
+        registry.ensure(id, panel.spec, { dormant: false })
+        registry.bumpVersion()
+      })
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
@@ -2008,9 +2076,35 @@ export function Canvas({
           // Renderer-internal only (no structured clone here to carry the
           // undefined across), but this is the one rule the rest of the
           // branch is careful about everywhere else — stay consistent.
+          // `restartable` is on BOTH branches, not folded in afterwards: the
+          // branch exists only so an untitled panel gets no `title` key at
+          // all, and a required field added to one arm and forgotten on the
+          // other is a compile error rather than a silently always-disabled
+          // row — which is why PanelRow.restartable is required.
+          //
+          // It is also the first field here derived from a panel's STATUS
+          // rather than from its spec, so it inherits this memo's tradeoff:
+          // computed once when the palette opens, and not recomputed if a
+          // spawn lands while the overlay is up. That is deliberate, not an
+          // oversight — the alternative is a dependency on registry.version(),
+          // which changes on every tier/status/focus/exit and would re-seat
+          // the palette's selected row underneath the user, the defect
+          // "The palette's selection moves only when the user moves it"
+          // exists to prevent. The cost is one stale row for a panel whose
+          // pty:create resolved during the moment the palette was open; the
+          // inspector, which has no such constraint, is always current.
           p.title !== undefined
-            ? { id: p.rect.id, label: panelLabel(p), title: p.title }
-            : { id: p.rect.id, label: panelLabel(p) }
+            ? {
+                id: p.rect.id,
+                label: panelLabel(p),
+                title: p.title,
+                restartable: isRestartable(registry.get(p.rect.id)?.status)
+              }
+            : {
+                id: p.rect.id,
+                label: panelLabel(p),
+                restartable: isRestartable(registry.get(p.rect.id)?.status)
+              }
         )
       : EMPTY_PANELS),
     [palette.open]
@@ -2165,6 +2259,7 @@ export function Canvas({
         onRename={paletteActions.beginRenamePanel}
         onClose={paletteActions.closePanel}
         onSavePreset={paletteActions.savePanelAsPreset}
+        onRestart={paletteActions.restartPanel}
       />
     </div>
   )

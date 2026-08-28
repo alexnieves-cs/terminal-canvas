@@ -212,7 +212,13 @@ const pidsPreserved = (before, after) => {
 
 app.on('window-all-closed', () => {})
 
-const WATCHDOG_MS = 60000
+// Raised from 60s at M8c. Check 91 adds a full renderer RELOAD plus the
+// reattach round trip that follows it (restore, promote, spawn, has-session
+// probe), and check 92 adds a spawn, a bell and a restart on top — together
+// comfortably more than the headroom the old bound had left. A watchdog that
+// fires on a healthy run reports a hang that is not there, and the run's real
+// failures never print at all.
+const WATCHDOG_MS = 120000
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -536,6 +542,26 @@ app.whenReady().then(async () => {
     ptyManager.killAll()
     app.exit(1)
   }, WATCHDOG_MS)
+
+  // A crashed or watchdog-killed run leaves sessions behind on PANELS_SOCKET:
+  // the watchdog exits without ever reaching the tmuxBackend.shutdown() in the
+  // finally below. Panel ids are minted deterministically (n1, n2, …), so the
+  // NEXT run's `new-session -A` then attaches panel n27 to the previous run's
+  // n27 — pty:list reports a pid this run never started, and check 91's
+  // same-pid-across-a-reload assertion silently reads a corpse. Killing the
+  // server first costs nothing (nothing on this socket is ours yet: check 26
+  // creates the first one, much later) and makes the suite idempotent after a
+  // crash instead of failing in a way that only reproduces on the second run.
+  {
+    const tmuxForCleanup = findTmux()
+    if (tmuxForCleanup) {
+      try {
+        execFileSync(tmuxForCleanup, ['-L', PANELS_SOCKET, 'kill-server'], { stdio: 'ignore' })
+      } catch {
+        // No server on this socket is the normal case and exits non-zero.
+      }
+    }
+  }
 
   try {
     await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
@@ -5915,6 +5941,316 @@ app.whenReady().then(async () => {
           added.length === 1 && observed.cwd !== null &&
           added[0].subtitle.endsWith(observed.cwd),
         `${JSON.stringify(observed)} added=${JSON.stringify(added)}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // M8c's restart block (91-94). Check 91 RELOADS the renderer, so
+    // everything below it reasons about the RESTORED canvas rather than the
+    // one checks 87-90 built — the same "runs last on purpose" caution check
+    // 26 carries further up this file. 92 and 93 therefore spawn or find
+    // their own targets rather than inheriting an id from above.
+    // ---------------------------------------------------------------------
+
+    // 91. THE REATTACHED BADGE — M6a's outstanding success criterion, met.
+    //     CLAUDE.md records PanelStatus.running.reattached as a live field
+    //     with ZERO readers, and the spec's "a reattached panel visibly says
+    //     so" criterion as deliberately unmet. Task 2 shipped the reader; this
+    //     is the check that observes it end to end, through a real reload of a
+    //     real tmux-backed session.
+    //
+    //     It runs its OWN reload rather than borrowing check 26's, for the
+    //     reason check 39's comment gives about the same temptation: coupling
+    //     to another check's setup makes this one fail for reasons that have
+    //     nothing to do with the badge. It also has to put the manager BACK on
+    //     the tmux backend — the M6c fixture block (checks 54-57) deliberately
+    //     swapped it to the direct one, and DirectBackend.hasSession() answers
+    //     false unconditionally by design, so reattachment is not merely
+    //     unlikely there but unreachable.
+    //
+    //     Skipped LOUDLY without tmux, never silently: the direct backend has
+    //     no reattachment to display at all, so a green here on a tmux-free
+    //     machine would be a lie about coverage.
+    //
+    //     The badge and the pid are both needed, and neither implies the
+    //     other. The badge alone is satisfied by a pane that hardcodes it; the
+    //     SAME PANE PID either side of the reload is what says the session
+    //     genuinely outlived its client rather than being silently respawned —
+    //     the identical discriminator check 64 relies on for a workspace
+    //     switch. The badge is read together with WHICH panel is selected,
+    //     because the inspector renders one panel at a time and a count of 1
+    //     taken alone could belong to a stale selection.
+    {
+      const TMUX_91 = findTmux()
+      if (!TMUX_91 || !tmuxBackend) {
+        ok('91 the reattached badge (SKIPPED — no tmux binary found)', true,
+          'install tmux to cover this')
+      } else {
+        // Back onto the real tmux backend. Every session spawned since the
+        // M6c fixture block is a plain node-pty process and stays one; those
+        // die with the reload below and their panels simply restore dormant,
+        // which is exactly what check 93 then needs.
+        backend = tmuxBackend
+        const idsBefore91 = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        // A REAL shell through PRESET_SPAWN, the same substitution checks
+        // 54-63 and 83 make: Cmd+N's default here is `/bin/cat -v`, which is
+        // not a session worth reattaching to and rings no bell for 92 either.
+        win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+        const idsAfter91 = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > idsBefore91.size ? now : false
+        }, 4000)
+        const targetId = idsAfter91 ? idsAfter91.find((id) => !idsBefore91.has(id)) : null
+        if (!targetId) throw new Error('91: PRESET_SPAWN produced no new panel')
+        // tmux's OWN answer, not pty:create resolving: the assertion below is
+        // about what survives on the socket, so that is what has to be waited
+        // on here too.
+        const before = await waitUntil(async () => {
+          const m = await sessionMap(wc)
+          return m.has(targetId) ? m : false
+        }, 10000)
+        if (!before) throw new Error(`91: panel ${targetId} never reached pty:list`)
+
+        // The panel has to be ON DISK before the reload, or the restored
+        // canvas has no panel to reattach and this fails as "no badge" with
+        // nothing pointing at the 500ms save debounce.
+        flushLayoutStore()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        // Restored, promoted, and spawned again — the reattach itself. The
+        // xterm is the signal that attachSlot ran, which is what calls
+        // pty:create and therefore what asks main the has-session question.
+        // The rail row FIRST, and it is not merely a way to open the inspector
+        // on this panel — it is what brings the panel back into the cull
+        // region. A restored panel is only promoted (and therefore only
+        // reattached) once it is somewhere the camera can see, and this one
+        // lands off screen: PRESET_SPAWN cascades away from the panel check 90
+        // left centred, far enough that the restored camera does not cover it.
+        // Waiting for the reattach BEFORE framing it waits forever, and reads
+        // as a broken reattach rather than as a carded panel — which is what
+        // an earlier draft of this check did.
+        //
+        // Clicking it is also the honest user story: reload the app, click the
+        // panel in the rail, and the inspector says the session survived.
+        // goToPanel centres and selects without WAKING, so a genuinely dormant
+        // panel would stay dormant here — this one is reattachable, not
+        // dormant, which is exactly the distinction CLAUDE.md's "Dormancy is
+        // about spawning, not attaching" draws.
+        const rowClicked = await waitUntil(async () => await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(targetId)} + '"] .rail-row__main')
+          if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`), 15000)
+        // The REATTACH ITSELF: the panel promoted and spawning again, which is
+        // the only thing that asks main the has-session question the badge
+        // reports. Guarded on the hook EXISTING — it is installed by a Canvas
+        // effect, so for the first moments after did-finish-load a bare call
+        // throws, which in this suite aborts the whole run rather than failing
+        // one check.
+        const spawnedAgain = await waitUntil(async () => await wc.executeJavaScript(
+          `((window.__m4aSessions ? window.__m4aSessions() : []).find(
+             (s) => s.id === ${JSON.stringify(targetId)}) || {}).spawned === true`),
+          20000)
+        await settle()
+        // The SELECTED panel is read alongside the badge, never the badge
+        // alone. The inspector renders whichever panel is selected, so a
+        // count of 1 taken by itself would be satisfied by a stale selection
+        // left over from check 90 — the badge would be real and would be
+        // about a different panel entirely.
+        const shown = await wc.executeJavaScript(`(() => {
+          const sel = document.querySelector('.panel--selected')
+          return {
+            selected: sel ? sel.dataset.panelId : null,
+            badge: document.querySelectorAll('[data-inspector-badge="reattached"]').length
+          }
+        })()`)
+        const after = await sessionMap(wc)
+        ok('91 a panel whose session survived a reload says so in the inspector',
+          rowClicked === true && spawnedAgain === true &&
+            shown.selected === targetId && shown.badge === 1 &&
+            after.get(targetId) !== undefined && after.get(targetId) === before.get(targetId),
+          `target=${targetId} row=${rowClicked} spawned=${spawnedAgain} ` +
+            `shown=${JSON.stringify(shown)} pid ${before.get(targetId)} -> ${after.get(targetId)}`)
+      }
+    }
+
+    // 92. RESTART: A DIFFERENT PROCESS, AND NO INHERITED QUESTION.
+    //     Both halves in one read, because each alone passes against a real
+    //     bug. The pid alone is satisfied by a restart that leaves the old
+    //     amber border in place — a fresh agent wearing a dead one's question,
+    //     which is exactly what clearAgentState is there to prevent, since
+    //     agent state survives a panel's closure BY DESIGN. The cleared state
+    //     alone is satisfied by a "restart" that only calls clearAgentState
+    //     and never touches the process at all.
+    //
+    //     The third clause is the respawn: an .xterm back under the panel.
+    //     Restart mints a NEW handle at the same id, so React tears the old
+    //     host out and mounts the new one — and nothing in the verb itself
+    //     re-renders except bumpVersion(). Without that bump the panel shows
+    //     literally nothing, with no error anywhere; the pid clause cannot
+    //     see it, because the pid changes whether or not anyone rendered.
+    //
+    //     Spawns its OWN /bin/sh through PRESET_SPAWN rather than reusing a
+    //     panel the run already has, for the reason check 83's comment
+    //     records at length: the boot default here is `/bin/cat -v`, which
+    //     echoes the literal bytes `printf '\007'\n` and never emits a 0x07,
+    //     so the bell could never ring and the check could never pass —
+    //     against correct code or broken. The bell mechanism itself is check
+    //     54's, unchanged; inventing a second one would let a bell that never
+    //     reaches main make this check green for a reason that has nothing to
+    //     do with restart.
+    //
+    //     Runs on whichever backend check 91 left installed — the TMUX one on
+    //     any machine that has tmux, which is the configuration that matters
+    //     most here: `new-session -A` attaches rather than creates, so a
+    //     restart that respawned before the kill landed would come back with
+    //     the same pane pid and this check's own pid clause is what would say
+    //     so. On a tmux-free machine 91 skips, the direct backend stays, and
+    //     this still covers the dispose-then-ensure sequence — just not the
+    //     ordering hazard that only tmux has.
+    {
+      const BELL_LINE_92 = "printf '\\007'\n"
+      const idsBefore92 = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const idsAfter92 = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore92.size ? now : false
+      }, 4000)
+      const targetId = idsAfter92 ? idsAfter92.find((id) => !idsBefore92.has(id)) : null
+      if (!targetId) throw new Error('92: PRESET_SPAWN produced no new panel')
+      // LIVE, and asserted rather than assumed: LIVE_BUDGET caps live panels
+      // at eight while this canvas is larger, so "the newest session" is not
+      // by itself "a panel with an .xterm under it" — and a restart driven
+      // against a carded panel would prove nothing about the respawn.
+      const live92 = await waitUntil(async () => await wc.executeJavaScript(
+        `document.querySelectorAll('.panel[data-panel-id="' + ${JSON.stringify(targetId)} + '"] .xterm').length === 1`),
+        10000)
+      const hasPty92 = await waitUntil(async () => (await sessionMap(wc)).has(targetId), 10000)
+      // The rail row selects and raises WITHOUT focusing or acknowledging
+      // (rule 1), so the inspector points at this panel while the wants-you
+      // rung below survives — a click into the terminal would acknowledge it.
+      await wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(targetId)} + '"] .rail-row__main')
+        if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return row !== null
+      })()`)
+      await settle()
+      ptyManager.write(targetId, BELL_LINE_92)
+      const waiting = await waitUntil(async () => await wc.executeJavaScript(
+        `(() => {
+          const p = document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(targetId)} + '"]')
+          return p !== null && p.getAttribute('data-agent-state') === 'wants-you'
+        })()`), 8000)
+      const pidBefore = (await sessionMap(wc)).get(targetId)
+      // Guarded rather than a bare dispatch: an ABSENT control must fail this
+      // check, not throw. A throw in this single-script suite aborts the run,
+      // and checks 93 and 94 below would never execute at all.
+      const clicked = await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-inspector-action="restart"]')
+        if (!el) return false
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true
+      })()`)
+      // READ IMMEDIATELY, with nothing awaited in between — this is the clause
+      // that makes clearAgentState observable at all, and it was added after a
+      // fault injection showed the settled read below is NOT discriminating:
+      // delete clearAgentState(id) and the settled state is still 'busy',
+      // because main's `create` sends `starting` directly at spawn and
+      // re-seeds the entry a moment later. The end states are identical; only
+      // the WINDOW differs, and the window is the whole point — a panel
+      // restarted out of wants-you must not keep its amber border while the
+      // new process is coming up.
+      //
+      // The margin is wide rather than tight. clearAgentState notifies the
+      // store inside the click handler, so React has flushed before this next
+      // IPC round trip arrives. Without it the state can only change once the
+      // kill has resolved, ensure has run, a render has mounted a slot,
+      // attachSlot has issued pty:create and main has answered with
+      // `starting` — four more round trips, one of them a tmux spawn.
+      const immediate = await wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(targetId)} + '"]')
+        return p === null ? 'MISSING' : p.getAttribute('data-agent-state')
+      })()`)
+      const respawned = await waitUntil(async () => {
+        const pid = (await sessionMap(wc)).get(targetId)
+        return pid !== undefined && pid !== pidBefore ? pid : false
+      }, 15000)
+      await settle()
+      const state = await wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(targetId)} + '"]')
+        return p === null ? 'MISSING' : p.getAttribute('data-agent-state')
+      })()`)
+      const relive = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel[data-panel-id="' + ${JSON.stringify(targetId)} + '"] .xterm').length`)
+      ok('92 restart replaces the process and does not inherit the old wants-you',
+        live92 === true && hasPty92 === true && waiting === true && clicked === true &&
+          respawned !== false && respawned !== pidBefore &&
+          immediate !== 'wants-you' && state !== 'wants-you' && relive === 1,
+        `target=${targetId} live=${live92} waiting=${waiting} clicked=${clicked} ` +
+          `pid ${pidBefore} -> ${respawned} immediate=${immediate} state=${state} xterm=${relive}`)
+    }
+
+    // 93. DISABLED, NOT ABSENT, ON A PANEL THAT NEVER STARTED. A restart
+    //     control that vanished would read as a feature that is missing — the
+    //     rule verify:palette 31 states — and one that RAN would end a process
+    //     that does not exist and then re-ensure a session the user never
+    //     asked to start, waking a panel from a verb whose name says the
+    //     opposite.
+    //
+    //     The target is FOUND at run time, never named. The obvious fixture is
+    //     the dormant panel check 84 seeds — but check 85 immediately clicks
+    //     its start control and asserts it wakes, so by the time this runs it
+    //     is spawned and `restartable` is legitimately true; the check would
+    //     fail against a fixture that no longer describes it and read as a
+    //     broken disabled-gate. Asserting the panel was FOUND is half the
+    //     check: without it, a null id flows into the selector and the failure
+    //     says nothing at all.
+    {
+      const dormantId = await wc.executeJavaScript(
+        `(window.__m4aSessions().find((s) => s.dormant === true || s.spawned === false) || {}).id || null`)
+      const selected = await wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(dormantId)} + '"] .rail-row__main')
+        if (!row) return false
+        row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true
+      })()`)
+      await settle()
+      const control = await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-inspector-action="restart"]')
+        return el ? { present: true, disabled: el.disabled } : { present: false }
+      })()`)
+      ok('93 restart is present and disabled for a panel that never started',
+        dormantId !== null && selected === true &&
+          control.present === true && control.disabled === true,
+        `dormantId=${dormantId} selected=${selected} control=${JSON.stringify(control)}`)
+    }
+
+    // 94. THE TWO COUNTS THIS MILESTONE MOVES, RE-DERIVED RATHER THAN TRUSTED.
+    //     CLAUDE.md records that the dispose call-site count went stale once
+    //     already — it said two while the reset handler had made it three —
+    //     so M8c pins both numbers in a check instead of in prose alone.
+    //     Reading the SOURCE is the point, not a shortcut: no runtime
+    //     behaviour can observe how many callers a function has, and the
+    //     invariant ("pty.kill has exactly two callers, both inside
+    //     session-registry.ts") is a fact about the source text.
+    //
+    //     When a later milestone legitimately adds a dispose call site this
+    //     goes red, and the number is then updated DELIBERATELY with the
+    //     reason in the commit message. That is the whole mechanism.
+    {
+      const registrySrc = readFileSync(
+        join(__dirname, '..', 'src', 'renderer', 'session', 'session-registry.ts'), 'utf8')
+      const canvasSrc = readFileSync(
+        join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+      const kills = (registrySrc.match(/bridge\.pty\.kill\(/g) ?? []).length
+      const disposes = (canvasSrc.match(/registry\.dispose\(/g) ?? []).length
+      ok('94 pty.kill still has exactly two callers, and Canvas has five dispose sites',
+        kills === 2 && disposes === 5, `kills=${kills} disposes=${disposes}`)
     }
 
   } catch (error) {

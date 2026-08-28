@@ -40,6 +40,16 @@ export interface PanelRow {
   label: string
   /** The user's name for it, if set. Shown so the rename row can echo it. */
   title?: string
+  /**
+   * isRestartable(status) — computed in Canvas, where the registry is, and
+   * passed in as plain data like everything else this module reads.
+   *
+   * REQUIRED, not optional, for the reason toggleSetting's comment below
+   * gives: an optional flag lets a half-finished wiring compile while the
+   * Restart row is silently always-disabled (undefined !== true) or always
+   * enabled, and tsc says nothing at all about it.
+   */
+  restartable: boolean
 }
 
 export interface PaletteActions {
@@ -117,6 +127,17 @@ export interface PaletteActions {
    * and M6p sized the resting list on purpose.
    */
   savePanelAsPreset(id: string): void
+  /**
+   * Restart in place: end this panel's process and start a fresh one at the
+   * same id, rect and spec. See Canvas.tsx for why the sequence is what it is.
+   *
+   * The ONE verb M8 adds that earns a Command row of its own. Close, start and
+   * save-as-preset each already have a gesture somewhere else (the panel's ×,
+   * the card that says "click to start", the Presets menu), and M6p sized the
+   * resting list on purpose — but restart has no other gesture anywhere, so a
+   * row is the only way to reach it without the inspector open.
+   */
+  restartPanel(id: string): void
 }
 
 export interface PaletteContext {
@@ -158,6 +179,7 @@ export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
+export const REASON_NOT_STARTED = 'that panel has not started'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -235,6 +257,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         // focusedId alone, and that captured id is what every panel-acting
         // command targets.
         ctx.capturedId === null ? REASON_NO_FOCUS : undefined
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: 'panel.restart',
+          title: 'Restart panel…',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          group: 'panel',
+          run: () => actions.restartPanel(ctx.capturedId!)
+        },
+        // TWO different blocked situations with two different fixes: "click a
+        // panel first" and "this panel has not started". Collapsing them into
+        // one reason tells a user who HAS focused a panel to focus a panel,
+        // which is worse than no reason at all — it sends them to do the one
+        // thing they already did. Not hiddenAtRest, and a plain withReason
+        // call, both matching the Rename row directly above: two adjacent rows
+        // aimed at the same captured panel that behaved differently would read
+        // as a surprise rather than as a design.
+        ctx.capturedId === null
+          ? REASON_NO_FOCUS
+          : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
       )
     )
   }

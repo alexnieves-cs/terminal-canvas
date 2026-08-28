@@ -74,6 +74,32 @@ export function isRunning(status: PanelStatus | undefined): boolean {
 }
 
 /**
+ * Can this panel be restarted? Every SPAWNED state — running, starting,
+ * exited, and errored — and nothing else.
+ *
+ * Exported rather than inlined into buildInspectorModel because the palette's
+ * Restart row needs the SAME answer: two copies of "can this be restarted"
+ * would let the inspector offer the verb while the palette refused it for the
+ * same panel, both on screen at the same time. That is the drift isRunning's
+ * own comment describes, and here it would be visibly wrong rather than merely
+ * wrong.
+ *
+ * `exited` is deliberately included — "run that again" is most of why the verb
+ * exists — and so is `error`: a spawn that failed is the second most natural
+ * target there is, and an implementation written to the phrase "running,
+ * starting or exited" would exclude it while looking entirely correct. The
+ * expression is written as "not idle, not absent" rather than as a list of
+ * four kinds for exactly that reason: the two never-started cases are the
+ * short half, and they are the half that has a rule behind it. `idle` and
+ * `undefined` already have their own verb with its own affordance (M8b's
+ * start control, and the card that says "click to start"); a second one here
+ * would undo the separation M8b's rule 1 draws between navigating and waking.
+ */
+export function isRestartable(status: PanelStatus | undefined): boolean {
+  return status !== undefined && status.kind !== 'idle'
+}
+
+/**
  * The collapsed chain — identical to railLabel's, deliberately. Two labels for
  * one panel that differ only in the common case is the defect railLabel's own
  * comment describes, and the inspector sits directly beside the rail on
@@ -96,11 +122,9 @@ function heading(panel: Panel, status: PanelStatus | undefined): string {
  * row would look tidier, render the same string in the common case, and delete
  * the feature.
  *
- * `restartable` is spawned-only — running, starting or exited. Exited is the
- * most natural target the verb has; a never-started panel already has its own
- * verb with its own affordance (M8b's start control, and the card that says
- * "click to start"), and offering a second one here would undo the separation
- * M8b's rule 1 draws between navigating and waking.
+ * `restartable` is isRestartable's answer, not a second copy of it — see that
+ * function for why the gate is shared with the palette rather than written
+ * twice.
  */
 export function buildInspectorModel(
   panel: Panel,
@@ -132,7 +156,7 @@ export function buildInspectorModel(
     heading: heading(panel, status),
     fields,
     reattached: running?.reattached === true,
-    restartable: status !== undefined && status.kind !== 'idle'
+    restartable: isRestartable(status)
   }
 }
 

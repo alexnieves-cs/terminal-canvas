@@ -12,6 +12,7 @@ export interface InspectorProps {
   onRename: (id: string, currentTitle: string) => void
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
+  onRestart: (id: string) => void
 }
 
 /**
@@ -27,7 +28,9 @@ export interface InspectorProps {
  * The toggle stays mounted when the inspector is collapsed, for the same
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
-function InspectorImpl({ onToggle, model, summary, onRename, onClose, onSavePreset }: InspectorProps): JSX.Element {
+function InspectorImpl({
+  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart
+}: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
       <button
@@ -42,7 +45,13 @@ function InspectorImpl({ onToggle, model, summary, onRename, onClose, onSavePres
       <div className="shell__region-title">Panel</div>
       {model === null
         ? <InspectorEmpty summary={summary} />
-        : <InspectorPanel model={model} onRename={onRename} onClose={onClose} onSavePreset={onSavePreset} />}
+        : <InspectorPanel
+            model={model}
+            onRename={onRename}
+            onClose={onClose}
+            onSavePreset={onSavePreset}
+            onRestart={onRestart}
+          />}
     </aside>
   )
 }
@@ -87,12 +96,13 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, onRename, onClose, onSavePreset
+  model, onRename, onClose, onSavePreset, onRestart
 }: {
   model: InspectorModel
   onRename: (id: string, title: string) => void
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
+  onRestart: (id: string) => void
 }): JSX.Element {
   const state = useAgentState(model.id)
   return (
@@ -126,6 +136,29 @@ function InspectorPanel({
         ))}
       </dl>
       <div className="inspector__actions">
+        {/*
+          FIRST, and DISABLED rather than absent when the panel never started:
+          a control that vanished would read as a feature that was never
+          built, the rule verify:palette 31 states for rows.
+
+          There is no confirm — decided, not deferred — so the `title` is
+          where the whole warning lives. It has to say that this ENDS the
+          running process, because the moment a user most wants to restart is
+          the one where the agent is mid-question, and that is exactly the
+          moment the loss is largest.
+        */}
+        <button
+          type="button"
+          className="inspector__action"
+          data-inspector-action="restart"
+          disabled={!model.restartable}
+          title={model.restartable
+            ? `Restart ${model.heading} — ends the running process and starts it again`
+            : `${model.heading} has not started yet`}
+          {...shellControl(() => onRestart(model.id))}
+        >
+          Restart
+        </button>
         <button
           type="button"
           className="inspector__action"

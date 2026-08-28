@@ -309,6 +309,25 @@ ok('17 isRunning counts starting as running, and nothing else as running',
       of(undefined) === false)
 }
 
+// 25b. THE SAME GATE, AS AN EXPORTED PREDICATE. Canvas's panelRows needs this
+//      exact answer for the palette's Restart row, and two copies of "can this
+//      be restarted" would let the inspector offer the verb while the palette
+//      refused it for the same panel, both on screen at the same time — the
+//      drift isRunning's own comment describes one function up.
+//
+//      `error` is asserted here and NOT in check 25 above, which reads the
+//      model rather than the predicate: restarting after a spawn that errored
+//      is the second most natural target the verb has, and an implementation
+//      written to the phrase "running, starting or exited" would exclude it
+//      while looking entirely correct.
+ok('25b isRestartable is the gate, exported',
+  R.isRestartable(running(1, '/bin/zsh')) === true &&
+    R.isRestartable({ kind: 'starting' }) === true &&
+    R.isRestartable({ kind: 'exited', code: 0 }) === true &&
+    R.isRestartable({ kind: 'error', message: 'x' }) === true &&
+    R.isRestartable({ kind: 'idle' }) === false &&
+    R.isRestartable(undefined) === false)
+
 // 26. THE 60Hz DEFENCE, and the reason this module exists rather than a .map()
 //     in Canvas.tsx. The selected panel comes out of `panels`, which is a
 //     fresh array on every setPanelRect — every frame of a drag. The rect is

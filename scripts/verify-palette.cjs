@@ -208,9 +208,15 @@ const spyActions = () => {
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
-    // No row uses this yet (Task 6 adds one) — kept here anyway so the
-    // fixture stays honest about the full PaletteActions shape.
-    savePanelAsPreset: record('savePanelAsPreset')
+    // The inspector's own action, reached from no Command row: closing and
+    // saving already have gestures elsewhere. Kept here anyway so the fixture
+    // stays honest about the full PaletteActions shape.
+    savePanelAsPreset: record('savePanelAsPreset'),
+    // Restart IS reached from a row (checks 66/66b), so this recorder is not
+    // merely for shape: without it `row.run()` calls undefined and the check
+    // dies with a TypeError instead of failing an assertion — and a THROW in
+    // this single-script suite aborts every check written after it.
+    restartPanel: record('restartPanel')
   }
 }
 
@@ -948,6 +954,57 @@ const WS = [
     door !== undefined && door.disabledReason !== undefined &&
       P.doorIndex(rows, 'prompts') === -1,
     `present=${door !== undefined} reason=${door && door.disabledReason} i=${P.doorIndex(rows, 'prompts')}`)
+}
+
+// 66. THE RESTART ROW exists, is enabled, and is aimed at the CAPTURED panel.
+//     Captured rather than "the row's own panel" for the reason panel.rename
+//     already obeys: opening the palette moves DOM focus to the input but
+//     deliberately leaves focusedId alone, and that captured id is what every
+//     panel-acting command targets.
+//
+//     `run()` is guarded on the row existing rather than called bare. A throw
+//     in this single-script suite aborts the run, so an absent row would take
+//     66b down with it and its RED would never actually be observed.
+{
+  const c = ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true }]
+  })
+  const row = byId(P.buildCommands(c), 'panel.restart')
+  if (row) row.run()
+  ok('66 the restart row is present, enabled, and aimed at the captured panel',
+    row !== undefined && row.disabledReason === undefined &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'restartPanel' &&
+      c.actions.calls[0][1] === 'n1',
+    JSON.stringify(c.actions.calls))
+}
+
+// 66b. DISABLED, NOT ABSENT, when the captured panel never started — and with
+//      the not-started reason, NOT the no-focus one. Those are two different
+//      situations with two different fixes ("click a panel" vs "start this
+//      panel"), and collapsing them tells a user who HAS focused a panel to
+//      focus a panel. A row that vanished instead would be indistinguishable
+//      from a feature that was never built, the rule check 31 states.
+//
+//      The reasons are compared against the EXPORTED constants, never against
+//      string literals: a literal here would keep passing while the constant
+//      the user actually reads said something else entirely. The third clause
+//      is what stops both constants being the same string.
+{
+  const notStarted = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: false }]
+  })), 'panel.restart')
+  const noFocus = byId(P.buildCommands(ctx({
+    capturedId: null,
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true }]
+  })), 'panel.restart')
+  ok('66b restart is disabled with the RIGHT reason in each of its two blocked cases',
+    notStarted !== undefined && notStarted.disabledReason === P.REASON_NOT_STARTED &&
+      noFocus !== undefined && noFocus.disabledReason === P.REASON_NO_FOCUS &&
+      notStarted.disabledReason !== noFocus.disabledReason,
+    JSON.stringify([notStarted && notStarted.disabledReason, noFocus && noFocus.disabledReason]))
 }
 
 const failed = results.filter((r) => !r.pass)
