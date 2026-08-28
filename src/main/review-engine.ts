@@ -74,6 +74,33 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return t === '' ? null : t
   }
 
+  /**
+   * NOT covered yet, and the gap belongs to whichever milestone next touches
+   * this function's error handling — read it as a known limit, not an
+   * oversight:
+   *
+   *   - `result.ok === false` conflates "not a repository" with "git refused
+   *     to answer". `rev-parse --show-toplevel` also exits non-zero for
+   *     `safe.directory` refusing an unowned checkout, a `.git` directory
+   *     that exists but is unreadable (permissions, a half-deleted repo), and
+   *     a cwd that has vanished out from under a still-running panel. Every
+   *     one of those is a genuine repository git is declining to open, not
+   *     the ordinary "most panels aren't in one" case `not-a-repo` exists
+   *     for — and this function currently answers `null` for all of them
+   *     alike. The user-visible effect is silent: the Changes section simply
+   *     renders nothing for that panel, with no note explaining why, which
+   *     is the same shape as `not-a-repo`'s intended case and therefore
+   *     invisible as a bug.
+   *   - Separating them means plumbing git's actual exit status (or stderr)
+   *     back out of `GitResult` and minting a distinct `ReviewResult` arm for
+   *     it — a change to the seven-arm union, which an earlier ruling this
+   *     milestone already declined for a different eighth-arm proposal. Left
+   *     open deliberately rather than reopened here, at the last task: this
+   *     is the quieter of the two wrong answers under "no heuristic
+   *     attribution" — reporting nothing is preferable to a confident wrong
+   *     count, so the conflation is safe to leave unresolved, just not safe
+   *     to leave unrecorded.
+   */
   const resolveRepo = async (cwd: string): Promise<string | null> => {
     const result = await run(buildRepoRootArgs(cwd))
     return result.ok ? parseRepoRoot(result.stdout) : null
@@ -96,6 +123,21 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     if (baseline === undefined) {
       // Both read as "no baseline stored" and only notARepo tells them
       // apart — see this dep's own doc comment above.
+      //
+      // Known limit, not yet covered: `notARepo` is only ever set from
+      // `resolveRepo` returning null, and that null is itself conflated
+      // (see resolveRepo's own comment above — safe.directory, an unreadable
+      // .git, and a vanished cwd all read the same as "not a repository").
+      // So `not-a-repo` can be produced for a panel whose cwd genuinely IS a
+      // repository that git merely refused to open, and the user sees no
+      // Changes section with no explanation, same as the ordinary case.
+      // This can only ever fire for a panel with no CAPTURED baseline —
+      // `not-a-repo` cannot be produced once a baseline exists, since this
+      // whole branch is gated on `baseline === undefined`. Left open for the
+      // same reason resolveRepo's comment gives: separating the two means a
+      // new ReviewResult arm, at the last task of the milestone, and
+      // reporting nothing is the quieter wrong answer under "no heuristic
+      // attribution" either way.
       return deps.notARepo?.(panelId) === true ? { kind: 'not-a-repo' } : { kind: 'never-started' }
     }
     const { root, sha } = baseline

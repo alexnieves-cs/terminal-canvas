@@ -6757,12 +6757,20 @@ app.whenReady().then(async () => {
       // bare read right after the click can catch the OUTGOING panel's
       // section still on screen and fail for a reason that has nothing to
       // do with whether this panel's own answer is correctly hidden.
-      const present = await waitUntil(async () =>
+      //
+      // Named `absent`, true once the element is gone: an earlier draft
+      // named this `present` while polling for its OPPOSITE (absence), which
+      // is a naming defect worth heeding even though the check passed either
+      // way — a later reader "simplifying" this to a bare, unwaited read
+      // would silently invert what the identifier already claimed to hold,
+      // and an inverted end-to-end check is one that passes against the very
+      // regression it exists to catch.
+      const absent = await waitUntil(async () =>
         await wc.executeJavaScript(`document.querySelector('[data-review-summary]') !== null`)
           ? false // still present: keep polling
           : true, // absent: the state this check wants
         5000)
-      ok('100 no section for a panel outside a repository', homePanel !== null && present === true)
+      ok('100 no section for a panel outside a repository', homePanel !== null && absent === true)
 
       // 101. Two panels in ONE repository report shared rather than a
       //      confident wrong attribution — the only place the mixed-checkout
