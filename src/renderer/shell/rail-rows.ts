@@ -96,8 +96,14 @@ export function buildRailRows(
  *
  * `panels` is a fresh array on every setPanelRect — i.e. every frame of a drag
  * — and the palette's escape hatch for exactly this (key the memo on
- * `palette.open`, read out of panelsRef) is unavailable to the rail, which is
- * never closed. So Canvas rebuilds the rows every render and freezes their
+ * `palette.open`, read out of panelsRef) has no equivalent here. Note the
+ * reason, because the obvious one is wrong: the rail DOES collapse
+ * (shell.railOpen, Cmd+\, the 22px strip). But Canvas renders <SideRail>
+ * unconditionally and the collapse is a CSS class — .shell--rail-collapsed
+ * narrows the region and display:none's .rail-list — so every row stays
+ * mounted and reconciled while the user cannot see one, and a memo keyed on
+ * railOpen would be keyed on a value that changes nothing about what React
+ * has to build. So Canvas rebuilds the rows every render and freezes their
  * ARRAY IDENTITY on this string: a drag moves rects, the signature is
  * byte-identical, and memo'd SideRail/RailPanelRow re-render nothing.
  *
