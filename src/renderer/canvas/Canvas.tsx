@@ -39,6 +39,9 @@ import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
+import {
+  buildInspectorModel, buildInspectorSummary, inspectorSignature, isRunning
+} from '../shell/inspector-fields'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
@@ -636,10 +639,12 @@ export function Canvas({
   useEffect(() => {
     const offCounts = window.canvas.canvas.onCounts(() => ({
       panels: panelsRef.current.length,
-      running: panelsRef.current.filter((p) => {
-        const kind = registry.get(p.rect.id)?.status.kind
-        return kind === 'running' || kind === 'starting'
-      }).length
+      // The SAME predicate the inspector's summary uses. It was written inline
+      // here until M8c; two derivations of "how many agents are running" agree
+      // the day they are written and drift the first time one is wrong, and
+      // the drift window here is exactly the moment a spawn is in flight —
+      // which no check would ever happen to sample.
+      running: panelsRef.current.filter((p) => isRunning(registry.get(p.rect.id)?.status)).length
     }))
     const offReset = window.canvas.canvas.onReset(resetCanvas)
     return () => {
@@ -2022,6 +2027,32 @@ export function Canvas({
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 
+  /**
+   * The inspector's model, frozen the same way the rail's rows are and for the
+   * same reason: the selected panel comes straight out of `panels`, a fresh
+   * array on every setPanelRect — i.e. every frame of a drag — and this pane
+   * renders nothing about a rect.
+   *
+   * The dep array is the SIGNATURE, not the model: when the signature is
+   * equal, the model is equal by construction, so returning the previous
+   * object is not a stale read.
+   */
+  const selectedPanel = selectedId === null
+    ? undefined
+    : panels.find((p) => p.rect.id === selectedId)
+  const inspectorBuilt = selectedPanel === undefined
+    ? null
+    : buildInspectorModel(selectedPanel, registry.get(selectedPanel.rect.id)?.status)
+  const inspectorSig = inspectorSignature(inspectorBuilt)
+  const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
+
+  // Frozen on its three numbers for the same reason: a fresh object every
+  // render defeats Inspector's memo on its own, whatever the model does.
+  const summaryBuilt = buildInspectorSummary(
+    panels, (id) => registry.get(id)?.status, waitingIds)
+  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}`
+  const inspectorSummary = useMemo(() => summaryBuilt, [summarySig])
+
   // Cheap, and read once per render of the palette: getSelection() is a string
   // copy out of xterm's buffer, not a repaint.
   const hasSelection = (): boolean => {
@@ -2109,7 +2140,13 @@ export function Canvas({
           />
         )}
       </div>
-      <Inspector onToggle={chrome.toggleInspector} />
+      <Inspector
+        onToggle={chrome.toggleInspector}
+        model={inspectorModel}
+        summary={inspectorSummary}
+        onRename={paletteActions.beginRenamePanel}
+        onClose={paletteActions.closePanel}
+      />
     </div>
   )
 }

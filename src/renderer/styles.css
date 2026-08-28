@@ -117,7 +117,8 @@ body {
 
 .shell--rail-collapsed .shell__rail .rail-list,
 .shell--rail-collapsed .shell__rail .shell__region-title,
-.shell--inspector-collapsed .shell__inspector .shell__region-title {
+.shell--inspector-collapsed .shell__inspector .shell__region-title,
+.shell--inspector-collapsed .shell__inspector .inspector__body {
   display: none;
 }
 
@@ -239,6 +240,111 @@ body {
   color: var(--muted);
   font-size: 10px;
 }
+
+/* The inspector's body. Scrolls on its own for the same reason .rail-list
+   does: a long cwd plus an error message can exceed the pane's height, and a
+   body that grew would push the collapse toggle off screen — the one control
+   that is the way back from a collapse. */
+.inspector__body {
+  padding: 4px 12px 12px;
+  overflow-y: auto;
+  max-height: calc(100% - 60px);
+}
+
+.inspector__heading {
+  color: var(--fg);
+  font-size: 13px;
+  margin-bottom: 8px;
+  /* A resolved command is an absolute path and a title is user text; neither
+     is bounded, and the pane is 260px. Break rather than overflow: the rail
+     next door clips, but a path the user cannot read at all defeats the one
+     question this pane exists to answer. */
+  overflow-wrap: anywhere;
+}
+
+.inspector__state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.inspector__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+/* The same four colours the rail's dot uses. Kept as its own selector list
+   rather than a shared class, because .rail-row__dot is 5px and this is 7px —
+   sharing the rule would couple two sizes that have no reason to agree. */
+.inspector__dot[data-agent-state="busy"] { background: var(--blue); }
+.inspector__dot[data-agent-state="wants-you"] { background: var(--amber); }
+.inspector__dot[data-agent-state="exited"] { background: var(--red); }
+
+.inspector__state-label { color: var(--muted); font-size: 11px; }
+
+.inspector__badge {
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspector__fields { margin: 0; }
+
+.inspector__field { margin-bottom: 8px; }
+
+.inspector__label {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inspector__value {
+  margin: 1px 0 0;
+  color: var(--fg);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.inspector__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.inspector__action {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+}
+
+.inspector__action:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* Disabled is the restart control's resting state on a panel that never
+   started (Task 6). Kept visible rather than hidden, per the rule
+   verify:palette 31 states: a control that disappears is indistinguishable
+   from a feature that is missing. */
+.inspector__action:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.55;
+}
+.inspector__action:disabled:hover { background: transparent; }
 
 .rail-row__start,
 .rail-row__close {

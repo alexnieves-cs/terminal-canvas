@@ -121,6 +121,31 @@ const settledSessionMap = async (wc, timeoutMs = 10000, intervalMs = 200) => {
   return map
 }
 
+/**
+ * Clicks a point on the canvas background that no panel covers, so the
+ * background handler clears the selection instead of selecting something.
+ *
+ * A fixed corner is not safe and the reason is the whole helper: a cascaded
+ * spawn (check 51) or a restored layout can put a panel anywhere, and a click
+ * that lands on one SELECTS it — the exact opposite of what a check about the
+ * empty state needs, and it would fail as "the summary did not render" with
+ * nothing pointing at the coordinates.
+ */
+const clickEmptyCanvas = (wc) => wc.executeJavaScript(`(() => {
+  const host = document.querySelector('.canvas')
+  const box = host.getBoundingClientRect()
+  const rects = [...document.querySelectorAll('.panel')].map((p) => p.getBoundingClientRect())
+  for (let y = box.top + 20; y < box.bottom - 20; y += 40) {
+    for (let x = box.left + 20; x < box.right - 20; x += 40) {
+      if (!rects.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) {
+        host.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y }))
+        return { x, y }
+      }
+    }
+  }
+  return null
+})()`)
+
 const zoomTo = (wc, key) =>
   wc.executeJavaScript(
     `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
@@ -5677,6 +5702,117 @@ app.whenReady().then(async () => {
       }, 6000)
       ok('86 the row\'s close control closes the panel, its DOM and its session',
         gone !== false, `target=${target} state=${JSON.stringify(gone)}`)
+    }
+
+    // 87. THE READ HALF, AND THE CRITERION IT CLOSES.
+    //     The inspector must show what MAIN RESOLVED, not what the spec asked
+    //     for. For a login-shell panel spec.command is ABSENT — only main can
+    //     name the user's shell — so a pane that read the spec would render the
+    //     stand-in 'login shell' for every default panel and look entirely
+    //     plausible doing it. Asserting `command` is an absolute path is what
+    //     separates the two; asserting merely that it is non-empty does not.
+    //
+    //     The SECOND clause is the pane's stated reason to exist: the spec link
+    //     is shown SEPARATELY, so "why does this say login shell" is answerable.
+    //     A merged single-command implementation passes the first clause alone.
+    {
+      const sessions = await settledSessionMap(wc)
+      const targetId = [...sessions.keys()][0]
+      await wc.executeJavaScript(`
+        document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(targetId)} + '"] .rail-row__main')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      await settle()
+      const read = await wc.executeJavaScript(`(() => {
+        const f = (k) => document.querySelector('[data-inspector-field="' + k + '"] .inspector__value')
+        const g = (k) => { const el = f(k); return el ? el.textContent : null }
+        return { command: g('command'), spec: g('spec-command'), cwd: g('cwd'), pid: g('pid') }
+      })()`)
+      ok('87 the inspector shows the RESOLVED command and the spec link separately',
+        read.command !== null && read.command.startsWith('/') &&
+          read.spec !== null && read.spec !== read.command &&
+          read.pid === String(sessions.get(targetId)),
+        JSON.stringify(read) + ` expected pid ${sessions.get(targetId)}`)
+    }
+
+    // 88. The empty state. Nothing selected is not "nothing to show": it is the
+    //     canvas's own summary, and it is the state the app launches in and
+    //     returns to on every background click.
+    //
+    //     The running count is read back out of pty:list rather than restated,
+    //     because a hardcoded number here would go stale the first time a fixture
+    //     panel is added — the same staleness CLAUDE.md records for verify:panels
+    //     48's ORDER array.
+    {
+      const clicked = await clickEmptyCanvas(wc)
+      await settle()
+      const summary = await wc.executeJavaScript(`(() => {
+        const root = document.querySelector('[data-inspector-summary]')
+        if (!root) return null
+        const g = (k) => { const el = root.querySelector('[data-summary="' + k + '"]'); return el ? el.textContent : null }
+        return { panels: g('panels'), running: g('running'), waiting: g('waiting'),
+                 fields: document.querySelectorAll('[data-inspector-field]').length }
+      })()`)
+      const panelCount = await wc.executeJavaScript(`window.__m4aSessions().length`)
+      // CONTROLLER RULING (pre-flight CONFLICT-2): derived, never hardcoded to '0'.
+      // Checks 54/57/63 ring and acknowledge real bells earlier in this same run,
+      // so whether the attention set is empty here depends on their cleanup, which
+      // nothing guarantees. A hardcoded 0 fails as "0 !== 1" and points nowhere.
+      const waitingNow = await wc.executeJavaScript(
+        `String(document.querySelectorAll('.panel[data-agent-state="wants-you"]').length)`)
+      ok('88 with nothing selected the inspector summarises the canvas instead',
+        clicked !== null && summary !== null &&
+          summary.panels === String(panelCount) &&
+          summary.waiting === waitingNow &&
+          summary.fields === 0,
+        `clicked=${JSON.stringify(clicked)} summary=${JSON.stringify(summary)} panels=${panelCount} waiting=${waitingNow}`)
+    }
+
+    // 89. ONE TITLE SOURCE, THREE VIEWS.
+    //     The inspector's rename must reach the palette's InputMode — the shell
+    //     owns no modality — and the name it commits must appear in the panel's
+    //     own header, its rail row AND the inspector's heading. Asserting only
+    //     the inspector would pass against a pane holding a private copy of the
+    //     title, which is the drift the honest chain exists to prevent, and it
+    //     would show up as two names for one panel sitting side by side on
+    //     screen.
+    {
+      const sessions = await settledSessionMap(wc)
+      const targetId = [...sessions.keys()][0]
+      await wc.executeJavaScript(`
+        document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(targetId)} + '"] .rail-row__main')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      await settle()
+      await wc.executeJavaScript(`
+        document.querySelector('[data-inspector-action="rename"]')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      await settle()
+      const opened = await wc.executeJavaScript(
+        `document.querySelectorAll('.palette').length === 1 &&
+         document.activeElement === document.querySelector('.palette__input')`)
+      await wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'inspector rename')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        return true
+      })()`)
+      await pressPlain(wc, 'Enter')
+      await settle()
+      const names = await wc.executeJavaScript(`(() => {
+        const id = ${JSON.stringify(targetId)}
+        const header = document.querySelector('.panel[data-panel-id="' + id + '"] .panel__title')
+        const rail = document.querySelector('.rail-row[data-rail-row="' + id + '"] .rail-row__label')
+        const heading = document.querySelector('[data-inspector-heading]')
+        return {
+          header: header ? header.textContent : null,
+          rail: rail ? rail.textContent : null,
+          heading: heading ? heading.textContent : null
+        }
+      })()`)
+      ok('89 an inspector rename opens the palette and reaches all three views',
+        opened === true && names.header === 'inspector rename' &&
+          names.rail === 'inspector rename' && names.heading === 'inspector rename',
+        `opened=${opened} ${JSON.stringify(names)}`)
     }
 
   } catch (error) {
