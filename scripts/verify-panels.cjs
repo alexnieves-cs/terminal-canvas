@@ -5429,9 +5429,10 @@ app.whenReady().then(async () => {
     // 83. A REAL BELL MOVES ONE ROW'S DOT, AND THE OTHERS STAY REAL.
     //     What this proves: a real bell, through a real PTY, moves the
     //     TARGET row's dot to 'wants-you'; the other rows' dots do not move
-    //     with it; and those other dots are carrying genuine per-panel agent
-    //     state (e.g. 'starting') rather than a degenerate stand-in — not
-    //     merely holding still at some arbitrary placeholder. Check 54
+    //     with it; and AT LEAST ONE of those other dots is carrying a real
+    //     per-panel agent state (e.g. 'starting') rather than every one
+    //     reading a degenerate stand-in — not merely holding still at some
+    //     arbitrary placeholder. Check 54
     //     already proves a bell reaches the PANEL; this is the half only the
     //     rail can be wrong about, because every row here is fed from one
     //     `rows` array.
