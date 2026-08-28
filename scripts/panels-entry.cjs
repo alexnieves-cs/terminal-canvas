@@ -79,5 +79,15 @@ module.exports = {
      since createReviewEngine's baselineOf/peersInRepo deps close over that
      file's own LayoutStore instance; only the two constructors are exported. */
   createReviewEngine: require('../src/main/review-engine').createReviewEngine,
-  createGitRunner: require('../src/main/git-runner').createGitRunner
+  createGitRunner: require('../src/main/git-runner').createGitRunner,
+  /* Check 99-101's baselines are captured at spawn, not invented in the
+     harness: PtyManager's captureBaseline/dropBaseline hooks default to
+     no-ops (see pty-manager.ts's constructor comment — "the verify harnesses
+     construct this manager directly and must keep compiling"), so without
+     this export every review:panel query in this suite would answer
+     never-started forever, on a correctly-wired engine. main/index.ts's own
+     baselineCapture is built from this same constructor over the same
+     layoutStore the harness already owns; only the constructor is exported,
+     the same trade createReviewEngine/createGitRunner already make. */
+  createBaselineCapture: require('../src/main/baseline-capture').createBaselineCapture
 }

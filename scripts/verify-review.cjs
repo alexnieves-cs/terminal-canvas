@@ -497,6 +497,49 @@ const flush = async (times = 5) => {
     JSON.stringify({ root: '/repo', sha: 'deadbeef' }))
 }
 
+// 36. baselineOf alone cannot tell "spawned into a non-repo directory" apart
+//     from "never spawned" — a non-repo capture finds nothing to store, so
+//     baselineOf stays undefined FOREVER either way. notARepo is the second
+//     fact the engine needs to answer correctly, and this pins that a real
+//     capture()-then-review() round trip (not a hand-set stub) produces it:
+//     a panel whose capture resolved no repository reports not-a-repo, not
+//     never-started, which is the ordinary case for most panels per
+//     review.ts's own comment on that arm.
+{
+  const baselines = new Map()
+  const bc = R.createBaselineCapture({
+    baselineOf: (id) => baselines.get(id),
+    setBaseline: (id, b) => baselines.set(id, b),
+    resolveRepo: async () => null,
+    captureBaseline: async () => 'unreached'
+  })
+  bc.capture('p1', '/home/nobody')
+  await flush()
+  const e = R.createReviewEngine({
+    run: async () => ({ stdout: '', ok: true, notFound: false }),
+    baselineOf: (id) => baselines.get(id),
+    peersInRepo: () => 0,
+    notARepo: (id) => bc.isNotARepo(id)
+  })
+  ok('36 a capture that found no repository reports not-a-repo', (await e.review('p1')).kind === 'not-a-repo')
+}
+
+// 36b. The companion negative, and the one that guards the OPTIONAL default:
+//      every fixture in this file built before this task constructs an
+//      engine with no notARepo dep at all (checks 19-34 above), and every
+//      one of them must keep reading never-started exactly as before — a
+//      dep that silently changed their meaning would be indistinguishable
+//      from a passing suite that stopped testing what its title says. It
+//      also covers a genuinely never-spawned panel (no capture call at all,
+//      so isNotARepo is false too), which is the ordinary "no session yet"
+//      case check 21 already pins with a hand-set baselineOf.
+ok('36b a panel with no baseline and no notARepo dep is still never-started',
+  (await R.createReviewEngine({
+    run: async () => ({ stdout: '', ok: true, notFound: false }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  }).review('p1')).kind === 'never-started')
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

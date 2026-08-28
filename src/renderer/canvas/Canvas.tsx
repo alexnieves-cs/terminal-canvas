@@ -10,7 +10,9 @@ import { nextAttentionId, reachableQueue, type JumpDirection } from './attention
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
-import { applyAgentState, attentionIds, clearAgentState, useAttentionIds } from '@renderer/session/agent-state-store'
+import {
+  applyAgentState, attentionIds, clearAgentState, useAgentState, useAttentionIds
+} from '@renderer/session/agent-state-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -43,7 +45,8 @@ import {
   attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature
 } from '../shell/rail-sections'
 import {
-  buildInspectorModel, buildInspectorSummary, inspectorSignature, isRestartable, isRunning
+  buildInspectorModel, buildInspectorSummary, buildReviewFields, inspectorSignature,
+  isRestartable, isRunning, reviewSignature, type ReviewFieldModel
 } from '../shell/inspector-fields'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
@@ -2287,6 +2290,36 @@ export function Canvas({
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
 
+  // The Changes section's own data, queried through review:panel rather than
+  // computed here — the engine (main-side, real git) is the sole authority,
+  // the same "no second author of a fact one side already derives correctly"
+  // rule M6d and M7 both state in CLAUDE.md.
+  const [review, setReview] = useState<ReviewFieldModel | null>(null)
+  const selectedAgentState = useAgentState(selectedId ?? '')
+  useEffect(() => {
+    if (selectedId === null) { setReview(null); return }
+    let live = true
+    void window.canvas.review.panel(selectedId).then((result) => {
+      // The guard is not defensiveness: an invoke issued for panel A can
+      // resolve AFTER the user has selected panel B, and writing it then
+      // would show A's changes under B's name — the wrong-panel attribution
+      // this milestone exists to prevent, arriving through the renderer
+      // instead of through git.
+      if (live) setReview(buildReviewFields(result))
+    })
+    return () => { live = false }
+    // selectedAgentState is a dependency, not a stray: M6c's transition to
+    // `idle` means exactly "this agent stopped producing output", which is
+    // the moment its work is worth re-reading. That is why M9a needs no
+    // watcher of its own.
+  }, [selectedId, selectedAgentState])
+  const reviewSig = reviewSignature(review)
+  // Frozen on reviewSignature for the identical reason inspectorModel is
+  // frozen on inspectorSig above: buildReviewFields returns a fresh object on
+  // six of its eight arms, and an unfrozen prop here defeats Inspector's memo
+  // outright — see Inspector.tsx's own doc comment.
+  const reviewModel = useMemo(() => review, [reviewSig])
+
   // Frozen on its three numbers for the same reason: a fresh object every
   // render defeats Inspector's memo on its own, whatever the model does.
   const summaryBuilt = buildInspectorSummary(
@@ -2395,6 +2428,7 @@ export function Canvas({
         onClose={paletteActions.closePanel}
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
+        review={reviewModel}
       />
     </div>
   )

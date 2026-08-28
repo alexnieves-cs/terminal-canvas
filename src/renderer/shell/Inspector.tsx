@@ -1,6 +1,6 @@
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import type { InspectorModel, InspectorSummary } from './inspector-fields'
+import type { InspectorModel, InspectorSummary, ReviewFieldModel } from './inspector-fields'
 import { agentStateLabel } from './inspector-fields'
 import { shellControl } from './shell-control'
 
@@ -13,23 +13,38 @@ export interface InspectorProps {
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  /**
+   * null while nothing is selected or the review invoke has not resolved
+   * yet — a distinct state from `hidden`, which is the engine's own answer
+   * of "render nothing" for a panel outside a repository. Canvas freezes
+   * this on reviewSignature(review) the same way it freezes `model` on
+   * inspectorSignature: see this component's own doc comment below for why
+   * an unfrozen prop here defeats the memo outright.
+   */
+  review: ReviewFieldModel | null
 }
 
 /**
  * The right inspector: what the selected panel actually is, and what the
  * canvas holds when nothing is selected.
  *
- * memo'd, and both its data props are frozen by Canvas — `model` on
- * inspectorSignature, `summary` on its own three numbers. Canvas re-renders on
- * every mousemove over the canvas (setCursor) and on every frame of a drag
- * (setPanelRect); without both halves this pane would rebuild at 60Hz for
- * rect changes it displays nothing about, the same trap SideRail documents.
+ * memo'd, and ALL THREE of its data props are frozen by Canvas — `model` on
+ * inspectorSignature, `summary` on its own three numbers, and (since M9a)
+ * `review` on reviewSignature(review). Canvas re-renders on every mousemove
+ * over the canvas (setCursor) and on every frame of a drag (setPanelRect);
+ * without all three halves this pane would rebuild at 60Hz for rect changes
+ * it displays nothing about, the same trap SideRail documents. `review` is
+ * the sharper case of the three: buildReviewFields returns a FRESH object on
+ * six of its eight arms, so an unfrozen prop here is not a hypothetical
+ * regression — it is the DEFAULT outcome of wiring the query the obvious way,
+ * and the failure is silent: nothing throws, nothing looks wrong in a
+ * screenshot, the app just gets heavy while a panel is dragged.
  *
  * The toggle stays mounted when the inspector is collapsed, for the same
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart
+  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, review
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -47,6 +62,7 @@ function InspectorImpl({
         ? <InspectorEmpty summary={summary} />
         : <InspectorPanel
             model={model}
+            review={review}
             onRename={onRename}
             onClose={onClose}
             onSavePreset={onSavePreset}
@@ -96,9 +112,10 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, onRename, onClose, onSavePreset, onRestart
+  model, review, onRename, onClose, onSavePreset, onRestart
 }: {
   model: InspectorModel
+  review: ReviewFieldModel | null
   onRename: (id: string, title: string) => void
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
@@ -187,6 +204,34 @@ function InspectorPanel({
           Close panel
         </button>
       </div>
+      {review !== null && !review.hidden && (
+        /*
+          `hidden` (not-a-repo, or the invoke hasn't resolved yet) renders
+          nothing at all rather than an empty section — see ReviewFieldModel's
+          own doc comment in inspector-fields.ts: an empty-but-present section
+          is a visible blank gap in a 260px pane, and a permanent placeholder
+          on most panels (most cwds are not repositories) teaches the user to
+          stop reading this part of the pane.
+        */
+        <section className="inspector__section">
+          <h3 className="inspector__section-heading">Changes</h3>
+          <p className="inspector__review-summary" data-review-summary>{review.summary}</p>
+          {review.note !== undefined && (
+            <p className="inspector__review-note" data-review-note>{review.note}</p>
+          )}
+          <ul className="inspector__review-files">
+            {review.files.map((f) => (
+              <li key={f.path} className="inspector__review-file" data-review-file={f.path}>
+                <span className="inspector__review-path">{f.path}</span>
+                <span className="inspector__review-counts">
+                  {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {review.more > 0 && <p className="inspector__review-more">+{review.more} more</p>}
+        </section>
+      )}
     </div>
   )
 }

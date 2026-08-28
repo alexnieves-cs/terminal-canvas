@@ -50,7 +50,8 @@ const {
   resolveCwd,
   IPC_EVENTS,
   createReviewEngine,
-  createGitRunner
+  createGitRunner,
+  createBaselineCapture
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -264,11 +265,23 @@ app.whenReady().then(async () => {
   // that reads no setting at all — so a regression that broke the getters
   // (a frozen boot value, a missing store read) would be invisible here,
   // which is exactly the seam this file exists to watch.
+  // The last two arguments (captureBaseline/dropBaseline) close over
+  // baselineCapture, built further below alongside reviewEngine — the exact
+  // same forward-closure this constructor already relies on for layoutStore
+  // one line up. Neither is ever CALLED until a real pty:create runs, which
+  // is long after the whole setup function below has finished executing, so
+  // there is no temporal-dead-zone hazard in reading a later `const` here.
+  // Without these two, checks 99-101 would query a review engine that never
+  // received a baseline for any panel — every result reads never-started,
+  // on an engine that is otherwise wired correctly, which looks exactly like
+  // a broken engine and points nowhere near the real cause.
   const ptyManager = new PtyManager(
     () => win.webContents,
     () => backend,
     () => Number(layoutStore.getSetting('agent.idleAfterMs')),
-    () => layoutStore.getSetting('agent.bell') === true
+    () => layoutStore.getSetting('agent.bell') === true,
+    (panelId, cwd) => baselineCapture.capture(panelId, cwd),
+    (panelId) => baselineCapture.drop(panelId)
   )
 
   // A real store, not a stub: the built renderer now calls and awaits
@@ -405,7 +418,25 @@ app.whenReady().then(async () => {
   const reviewEngine = createReviewEngine({
     run: createGitRunner(),
     baselineOf: (panelId) => layoutStore.baseline(panelId),
-    peersInRepo: (root, except) => layoutStore.baselinePeers(root, except)
+    peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
+    // Mirrors main/index.ts's identical forward-closure over baselineCapture,
+    // declared below. Without this, checks 100's homePanel (a genuinely
+    // spawned panel whose cwd is not a repository) reads never-started
+    // forever instead of not-a-repo, because baselineOf alone cannot tell
+    // the two apart — see review-engine.ts's own doc comment on this dep.
+    notARepo: (panelId) => baselineCapture.isNotARepo(panelId)
+  })
+  // main/index.ts's own baselineCapture, built the identical way: the guard
+  // that fires captureBaseline exactly once per panel id (pty-manager.ts's
+  // capturedBaselineIds) is a SEPARATE, in-memory guard one layer up, so this
+  // object's own once-only check (deps.baselineOf(panelId) !== undefined)
+  // is not redundant with it — it is what makes a captureBaseline call safe
+  // to fire unconditionally in the first place.
+  const baselineCapture = createBaselineCapture({
+    baselineOf: (panelId) => layoutStore.baseline(panelId),
+    setBaseline: (panelId, baseline) => layoutStore.setBaseline(panelId, baseline),
+    resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
+    captureBaseline: (root) => reviewEngine.captureBaseline(root)
   })
   // main/index.ts calls this at whenReady; without it the store would start
   // from defaultSnapshot() and the seeded presets above would never be read.
@@ -6631,6 +6662,138 @@ app.whenReady().then(async () => {
       })()`)
       ok('98b an empty attention queue says so rather than rendering nothing',
         typeof empty === 'string' && empty.trim().length > 0, `empty=${JSON.stringify(empty)}`)
+    }
+
+    // 99-101 share one fixture repository and one block. This is the only
+    // place in the milestone where a real panel, in a real renderer, is
+    // driven against a real git repository — everything in verify:review is
+    // argued against a fake runner, and everything else in this suite never
+    // touches git at all.
+    {
+      const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
+      const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+      git('init', '-q', '.')
+      git('config', 'user.email', 'v@example.com')
+      git('config', 'user.name', 'v')
+      writeFileSync(join(repo, 'seed.txt'), 'seed\n')
+      git('add', '-A')
+      git('commit', '-qm', 'init')
+
+      /* Spawns through the SAME PRESET_SPAWN event check 27 uses, and returns
+         the id that appeared. /bin/sh rather than the default: this block
+         writes real shell commands, and Cmd+N's default here is
+         `/bin/cat -v`, which ECHOES bytes rather than interpreting them — the
+         substitution checks 54-63 and 83 already make for the same reason. */
+      const spawnInRepo = async () => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: repo, command: '/bin/sh', args: [], w: 400, h: 300 })
+        const ids = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > before.size ? now : false
+        }, 3000)
+        return ids ? ids.find((id) => !before.has(id)) : undefined
+      }
+
+      /* A real sendInputEvent click, not a dispatched MouseEvent: check 75c
+         records why a synthetic one proves nothing about focus, and selection
+         here has to be the real thing for the inspector to follow it. */
+      const selectPanel = async (id) => {
+        const box = await wc.executeJavaScript(
+          `(() => { const p = document.querySelector('[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']');
+                    if (!p) return null;
+                    const r = p.getBoundingClientRect();
+                    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 24) } })()`)
+        if (!box) return false
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        await settle()
+        return true
+      }
+
+      const first = await spawnInRepo()
+      // The write must not overtake the spawn: a panel's PTY does not exist
+      // until it goes live and the registry's lazy spawn actually creates it
+      // (see "Lazy spawn" in CLAUDE.md), so a write issued right after
+      // PRESET_SPAWN can land before there is a session, do nothing, and
+      // leave the repository clean — a failure that looks like a broken
+      // engine rather than a racing fixture. sessionMap is the same wait
+      // check 83 uses for the identical reason.
+      if (first) await waitUntil(async () => (await sessionMap(wc)).has(first), 8000)
+      // Through the REAL PTY, not from node. A file main wrote itself would
+      // prove the engine works and say nothing about whether the PANEL'S cwd
+      // is what got reviewed, which is the one thing this check exists for.
+      if (first) ptyManager.write(first, "printf 'x' > agent.txt\n")
+      await settle()
+      const selected = first ? await selectPanel(first) : false
+
+      const summary = await waitUntil(async () => {
+        const text = await wc.executeJavaScript(
+          `(document.querySelector('[data-review-summary]') || {}).textContent || null`)
+        return text && text.includes('file') ? text : false
+      }, 5000)
+      const files = await wc.executeJavaScript(
+        `[...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file'))`)
+      ok('99 the inspector names the file the panel\'s own agent wrote',
+        selected && typeof summary === 'string' && summary.includes('1 file') &&
+          files.includes('agent.txt'),
+        `summary=${summary} files=${JSON.stringify(files)}`)
+
+      // 100. A panel whose cwd is NOT a repository renders no section at all
+      //      — asserted as the element being ABSENT, not as empty text,
+      //      because an empty-but-present section is a visible blank gap in
+      //      a 260px pane. Weak on its own: it passes vacuously before the
+      //      section exists, so it is evidence only once 99 has been watched
+      //      red.
+      const homePanel = await wc.executeJavaScript(
+        `(() => { const p = [...document.querySelectorAll('.panel')]
+            .find((e) => e.getAttribute('data-panel-id') !== ${JSON.stringify(JSON.stringify(first))});
+          return p ? p.getAttribute('data-panel-id') : null })()`)
+      if (homePanel) await selectPanel(homePanel)
+      // waitUntil, not one immediate read: Canvas's review query is async
+      // (an IPC round trip plus a real git process), and the previous
+      // selection's model is still the frozen prop until that resolves — a
+      // bare read right after the click can catch the OUTGOING panel's
+      // section still on screen and fail for a reason that has nothing to
+      // do with whether this panel's own answer is correctly hidden.
+      const present = await waitUntil(async () =>
+        await wc.executeJavaScript(`document.querySelector('[data-review-summary]') !== null`)
+          ? false // still present: keep polling
+          : true, // absent: the state this check wants
+        5000)
+      ok('100 no section for a panel outside a repository', homePanel !== null && present === true)
+
+      // 101. Two panels in ONE repository report shared rather than a
+      //      confident wrong attribution — the only place the mixed-checkout
+      //      rule is proven against a real store, a real engine and real git
+      //      rather than a fake.
+      const second = await spawnInRepo()
+      // Two races stacked here, not one. sessionMap alone (first's fix,
+      // above) only proves the PTY exists — captureBaseline is ITSELF
+      // fire-and-forget on top of that (a spawn must never be delayed by a
+      // git process), so a query issued right after the session appears can
+      // still land before the baseline write and read back never-started,
+      // which looks like a broken shared-repo detector and is actually a
+      // fixture racing its own spawn. Poll review:panel directly rather than
+      // sessionMap a second time: the baseline is the fact this block
+      // actually needs settled, and sessionMap cannot see it.
+      if (second) {
+        await waitUntil(async () => (await sessionMap(wc)).has(second), 8000)
+        await waitUntil(async () => {
+          const kind = await wc.executeJavaScript(
+            `window.canvas.review.panel(${JSON.stringify(second)}).then((r) => r.kind)`)
+          return kind !== 'never-started' ? kind : false
+        }, 8000)
+        await selectPanel(second)
+      }
+      const note = await waitUntil(async () => {
+        const text = await wc.executeJavaScript(
+          `(document.querySelector('[data-review-note]') || {}).textContent || null`)
+        return text ? text : false
+      }, 5000)
+      ok('101 two panels in one repo are reported as unattributable',
+        typeof note === 'string' && note.includes("can't be attributed"), `note=${note}`)
     }
 
   } catch (error) {

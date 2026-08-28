@@ -391,6 +391,81 @@ body {
 }
 .inspector__action:disabled:hover { background: transparent; }
 
+/* M9a's Changes section, following the existing .inspector__* rules above. */
+
+.inspector__section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.inspector__section-heading {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+.inspector__review-summary {
+  margin: 0 0 4px;
+  color: var(--fg);
+  font-size: 11px;
+}
+
+/* The honest arms' explanation — never-started, git-missing, baseline-lost,
+   shared — reads as prose, not as a value, so it gets the muted colour the
+   labels use rather than the value colour the summary above uses. */
+.inspector__review-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.inspector__review-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inspector__review-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.inspector__review-path {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* A long path truncates at its FRONT, not its end: rtl reverses which side
+     the ellipsis lands on, and text-align: left keeps the (now
+     right-to-left-flowing) glyphs reading normally rather than mirrored.
+     The filename — the informative end of a path — is what survives. */
+  direction: rtl;
+  text-align: left;
+}
+
+.inspector__review-counts {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector__review-more {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .rail-row__start,
 .rail-row__rename,
 .rail-row__close {

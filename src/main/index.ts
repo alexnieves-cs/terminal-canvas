@@ -51,7 +51,12 @@ const layoutStore = createLayoutStore({
 const reviewEngine = createReviewEngine({
   run: createGitRunner(),
   baselineOf: (panelId) => layoutStore.baseline(panelId),
-  peersInRepo: (root, except) => layoutStore.baselinePeers(root, except)
+  peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
+  // Closes over baselineCapture, declared below — the same forward-closure
+  // this manager already relies on for layoutStore one line up. Never
+  // called until a real review:panel invoke lands, long after both consts
+  // have been initialised.
+  notARepo: (panelId) => baselineCapture.isNotARepo(panelId)
 })
 
 // The once-only guard. Written here rather than inside PtyManager because the

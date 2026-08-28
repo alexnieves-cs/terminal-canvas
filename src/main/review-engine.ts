@@ -27,6 +27,20 @@ export interface ReviewEngineDeps {
   baselineOf: (panelId: string) => ReviewBaseline | undefined
   /** How many OTHER panels hold a baseline in this root. */
   peersInRepo: (root: string, exceptPanelId: string) => number
+  /**
+   * True once a capture for this panel resolved a cwd that is NOT a
+   * repository. `baselineOf` alone cannot distinguish "spawned into a
+   * non-repo directory" from "has not spawned at all" — a non-repo capture
+   * finds nothing to store, so baselineOf stays undefined FOREVER either
+   * way, and without this the pane would report "not started" for the rest
+   * of a panel's life the moment it spawned somewhere other than a
+   * repository, which review.ts's own comment on 'not-a-repo' calls "the
+   * ordinary answer... i.e. most panels". Optional and defaulted to `false`
+   * so every existing fixture that builds an engine without this dep keeps
+   * compiling and keeps its prior behaviour (never-started) unchanged —
+   * the same trade PtyManager's captureBaseline/dropBaseline make.
+   */
+  notARepo?: (panelId: string) => boolean
 }
 
 export interface ReviewEngine {
@@ -79,7 +93,11 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     if (gitMissing) return { kind: 'git-missing' }
 
     const baseline = deps.baselineOf(panelId)
-    if (baseline === undefined) return { kind: 'never-started' }
+    if (baseline === undefined) {
+      // Both read as "no baseline stored" and only notARepo tells them
+      // apart — see this dep's own doc comment above.
+      return deps.notARepo?.(panelId) === true ? { kind: 'not-a-repo' } : { kind: 'never-started' }
+    }
     const { root, sha } = baseline
 
     // Validated FIRST, and before the shared check: "we cannot attribute
