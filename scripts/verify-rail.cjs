@@ -597,6 +597,20 @@ ok('38 an absent result is hidden and does not throw',
       R.reviewSignature(R.buildReviewFields(a)) !== R.reviewSignature(R.buildReviewFields(b)))
 }
 
+// 45. git-missing is the one arm 37-44 left uncovered, and it is the branch a
+//     user hits when the app cannot find git at all. It must assert the
+//     arm's actual content, not merely that it differs from some other arm —
+//     a regression that swapped it with baseline-lost's model, or that left
+//     it hidden like not-a-repo, would still pass "differs from X" and would
+//     read on screen as the Changes section silently rendering nothing on
+//     every panel, which looks like a feature that was never built rather
+//     than a bug.
+ok('45 git-missing is visible with its own summary and note',
+  (() => {
+    const m = R.buildReviewFields({ kind: 'git-missing' })
+    return m.hidden === false && m.summary === 'unavailable' && m.note === 'no git binary was found'
+  })())
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

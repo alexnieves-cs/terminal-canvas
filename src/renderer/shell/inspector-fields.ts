@@ -230,7 +230,30 @@ export interface ReviewFieldModel {
   more: number
 }
 
-const HIDDEN: ReviewFieldModel = { hidden: true, summary: '', files: [], more: 0 }
+/**
+ * The single hidden-state instance, returned by reference for BOTH `undefined`
+ * and `not-a-repo` (see buildReviewFields below). Frozen, and its `files`
+ * array frozen separately, because a shared instance is an aliasing hazard
+ * the moment a caller treats the returned model as its own to mutate — Task 9
+ * is the very next task and the one that actually renders this model, so a
+ * consumer reaching in to tack on, say, a per-instance UI flag would corrupt
+ * every OTHER call site's "hidden" result silently, since they are all the
+ * same object. Freezing preserves the identity-sharing this instance exists
+ * for (a consumer CAN compare by reference) while making that mutation throw
+ * in strict mode instead of leaking across calls.
+ */
+// `as ReviewFieldRow[]`/`as ReviewFieldModel` rather than typing HIDDEN's
+// fields as readonly: ReviewFieldModel is the PUBLIC shape every branch below
+// returns, and widening it to `readonly ReviewFieldRow[]` for this one shared
+// instance would force every fresh-object branch to satisfy a readonly type
+// too, for no reason of its own. Object.freeze still enforces the real
+// immutability at runtime regardless of what the static type says.
+const HIDDEN: ReviewFieldModel = Object.freeze({
+  hidden: true,
+  summary: '',
+  files: Object.freeze([] as ReviewFieldRow[]) as ReviewFieldRow[],
+  more: 0
+}) as ReviewFieldModel
 
 /**
  * The Changes section, as plain data.
