@@ -629,6 +629,80 @@ ok('45 git-missing is visible with its own summary and note',
 //     against an implementation that stopped hiding anything.
 ok('47 not-a-repo is still hidden', R.buildReviewFields({ kind: 'not-a-repo' }).hidden === true)
 
+const SUBJ = { subjectId: 'n4', repoRoot: '/tmp/repo', baselineSha: 'abc', label: 'claude' }
+const nodeModel = (result, expandedPath = null, title) =>
+  R.buildReviewNodeModel({ subject: SUBJ, title, result, expandedPath })
+
+// 48. An UNRESOLVED query still renders. This is the first of the two places
+//     the node deliberately disagrees with the inspector: buildReviewFields
+//     returns HIDDEN for `undefined`, because the pane flickers through that
+//     state on every selection change. A node is a panel the user opened on
+//     purpose, and one that renders nothing while its invoke is in flight is
+//     indistinguishable from one that is broken.
+{
+  const m = nodeModel(undefined)
+  ok('48 an in-flight query still renders a heading and a summary',
+    m.heading.includes('claude') && m.summary !== '' && m.files.length === 0)
+}
+
+// 49. THE ONE TO KNOW BY NUMBER. not-a-repo is HIDDEN in the pane and
+//     RENDERED in the node, and both halves are asserted in one condition —
+//     asserting only the node half passes against an implementation that
+//     simply called buildReviewFields and ignored `hidden`, which is the
+//     obvious "don't repeat yourself" move and is wrong: it would render a
+//     deliberately-opened panel as an empty box.
+ok('49 not-a-repo: hidden in the pane, rendered in the node',
+  R.buildReviewFields({ kind: 'not-a-repo' }).hidden === true &&
+    nodeModel({ kind: 'not-a-repo' }).summary !== '')
+
+// 50. Exactly one row is expanded, and it is the one named. `expanded` lives
+//     on the ROW rather than as a separate id on the model so the view can
+//     render without a second lookup — and so a path that is no longer in
+//     the list (the file was reverted between queries) expands nothing at
+//     all rather than leaving a dangling open panel.
+{
+  const result = { kind: 'changes', root: '/r', added: 4, removed: 1, files: [
+    { path: 'a.ts', added: 3, removed: 1, binary: false, untracked: false },
+    { path: 'b.ts', added: 1, removed: 0, binary: false, untracked: false }
+  ] }
+  const m = nodeModel(result, 'b.ts')
+  const gone = nodeModel(result, 'deleted.ts')
+  ok('50 exactly the named row is expanded',
+    m.files[0].expanded === false && m.files[1].expanded === true &&
+      gone.files.every((f) => f.expanded === false))
+}
+
+// 51. The node's cap is its own, and it is LARGER than the pane's: the node
+//     is a scroll host in world space, the 260px inspector is not. Sharing
+//     REVIEW_FILE_CAP would silently truncate a review of a large change to
+//     ten files, which is the omission this feature's honest-degradation
+//     rule forbids — so `more` reports the remainder either way.
+{
+  const files = Array.from({ length: R.NODE_FILE_CAP + 5 }, (_, i) =>
+    ({ path: `f${i}.ts`, added: 1, removed: 0, binary: false, untracked: false }))
+  const m = nodeModel({ kind: 'changes', root: '/r', added: 65, removed: 0, files })
+  ok('51 the node caps at its own, larger cap and reports the rest',
+    R.NODE_FILE_CAP > R.REVIEW_FILE_CAP && m.files.length === R.NODE_FILE_CAP && m.more === 5)
+}
+
+// 52. The 60Hz defence, in the shape this surface needs it. Canvas re-renders
+//     on every mousemove and every frame of a drag, and a review node holds
+//     up to 600 lines of diff text — so the node's own memo has to be able
+//     to see "nothing about what I render changed". Three movers, because an
+//     implementation that hashed only the file list passes the first clause.
+{
+  const result = { kind: 'changes', root: '/r', added: 1, removed: 0, files: [
+    { path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }] }
+  const diff = { kind: 'diff', truncated: 0, lines: [{ kind: 'add', text: '+x' }] }
+  const a = R.reviewNodeSignature(nodeModel(result), diff)
+  const b = R.reviewNodeSignature(nodeModel(result), diff)
+  const expanded = R.reviewNodeSignature(nodeModel(result, 'a.ts'), diff)
+  const otherDiff = R.reviewNodeSignature(nodeModel(result), { kind: 'binary' })
+  const renamed = R.reviewNodeSignature(nodeModel(result, null, 'my review'), diff)
+  ok('52 the signature is stable, and moves on expansion, diff and title',
+    a === b && expanded !== a && otherDiff !== a && renamed !== a)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
