@@ -2333,12 +2333,12 @@ export function Canvas({
                 id: p.rect.id,
                 label: panelLabel(p),
                 title: p.title,
-                restartable: isRestartable(registry.get(p.rect.id)?.status)
+                restartable: isReviewPanel(p) ? false : isRestartable(registry.get(p.rect.id)?.status)
               }
             : {
                 id: p.rect.id,
                 label: panelLabel(p),
-                restartable: isRestartable(registry.get(p.rect.id)?.status)
+                restartable: isReviewPanel(p) ? false : isRestartable(registry.get(p.rect.id)?.status)
               }
         )
       : EMPTY_PANELS),
@@ -2370,12 +2370,11 @@ export function Canvas({
    * all; registry.version() bumps on tier/status/focus/exit and nothing
    * higher-frequency, which is exactly the rate the rail wants.
    */
-  // terminalPanels, for now: railLabel walks the honest chain through
-  // `spec.command`, which a review node does not have. Giving a node its own
-  // rail row — with the label it already carries — is the shell task's job,
-  // not this one's; until then a node is a panel on the canvas and absent
-  // from the outline, which is a gap rather than a crash.
-  const railBuilt = buildRailRows(terminalPanels, (id) => registry.get(id)?.status, dormantIds)
+  // The full `panels` array, not `terminalPanels`: a review node is a Panel
+  // like any other, and railLabel/railTail/buildRailRows now branch on kind
+  // themselves (M9b's shell task) — an off-screen node has to stay reachable
+  // from the rail for the identical reason M8b's rows exist at all.
+  const railBuilt = buildRailRows(panels, (id) => registry.get(id)?.status, dormantIds)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 
@@ -2433,12 +2432,12 @@ export function Canvas({
   const selectedPanel = selectedId === null
     ? undefined
     : panels.find((p) => p.rect.id === selectedId)
-  // A selected review node renders the pane's EMPTY state rather than a
-  // model, for the same reason the rail skips it: buildInspectorModel reads
-  // `spec.command`, and the pane's own review-node fields are the shell
-  // task's subject. The empty selection is a first-class state here
-  // (verify:rail 27b), so this is a gap and not a crash.
-  const inspectorBuilt = selectedPanel === undefined || isReviewPanel(selectedPanel)
+  // buildInspectorModel now branches on kind itself (M9b's shell task), so a
+  // selected review node gets a real model — its own fields, Restart and
+  // Save-as-preset disabled with a reason — rather than the pane's empty
+  // state. The empty selection stays a first-class state (verify:rail 27b)
+  // for the genuinely-no-selection case.
+  const inspectorBuilt = selectedPanel === undefined
     ? null
     : buildInspectorModel(selectedPanel, registry.get(selectedPanel.rect.id)?.status)
   const inspectorSig = inspectorSignature(inspectorBuilt)

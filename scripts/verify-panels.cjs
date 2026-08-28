@@ -7224,6 +7224,37 @@ app.whenReady().then(async () => {
           `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
       }
 
+      // 108. The node is in the rail, and its row NAVIGATES — the rule
+      //      M8b's rows already obey. The camera clause is what rejects a
+      //      row wired to nothing; the session clause is what rejects a row
+      //      that reached onSelectPanel, whose wake path has no meaning here
+      //      and whose real cost is that it is the app's spawn gesture.
+      {
+        const panBy108 = (dx, dy) => wc.executeJavaScript(`
+          document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+            bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+            deltaX: ${dx}, deltaY: ${dy}, deltaMode: 0
+          }))
+          true
+        `)
+        const clickRail108 = (id) => wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-rail-row=${JSON.stringify(id)}] .rail-row__main')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await panBy108(900, 600)
+        await settle()
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const clicked = node !== null ? await clickRail108('r90') : false
+        await settle()
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const sessions = await sessionMap(wc)
+        ok('108 the rail lists a review node and its row frames it',
+          node !== null && clicked === true && (after.x !== before.x || after.y !== before.y) &&
+            sessions.has('r90') === false)
+      }
+
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
       // up must never turn a green suite red.

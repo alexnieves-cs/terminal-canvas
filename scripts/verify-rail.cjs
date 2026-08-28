@@ -719,6 +719,49 @@ ok('49 not-a-repo: hidden in the pane, rendered in the node',
     a === b && expanded !== a && otherDiff !== a && renamed !== a)
 }
 
+const reviewPanel = (id, over = {}) => ({
+  kind: 'review', rect: { id, x: 0, y: 0, w: 640, h: 520 }, z: 1,
+  subject: { ...SUBJ }, ...over
+})
+
+// 53. A review row names its SUBJECT, not itself: "review" alone tells
+//     nobody which agent's work it is, on a rail whose entire job is telling
+//     panels apart. Its tail is 'review' rather than a status — it has no
+//     process, and railTail's status vocabulary ('not started', 'exited 0')
+//     would be a lie in every one of its words.
+{
+  const row = R.buildRailRows([reviewPanel('r1')], () => undefined, NONE)[0]
+  ok('53 a review row names its subject and says review',
+    row.label === 'review: claude' && row.tail === 'review' && row.dormant === false)
+}
+
+// 54. A user's own title still outranks it — the first link of the honest
+//     chain, which is not a terminal-only rule.
+ok('54 a titled review node uses its title',
+  R.buildRailRows([reviewPanel('r1', { title: 'auth diff' })], () => undefined, NONE)[0].label === 'auth diff')
+
+// 55. `dormant: false` is load-bearing rather than incidental: the rail's
+//     start control renders on dormant rows only, and a review node that
+//     reported dormant would offer a "start" arrow for a panel that has
+//     nothing to start — a control that cannot work, on the surface whose
+//     rule is that a visible control does something.
+ok('55 a review row is never dormant', R.buildRailRows(
+  [reviewPanel('r1')], () => undefined, new Set(['r1']))[0].dormant === false)
+
+// 56. The inspector model for a review node: it names the subject, and both
+//     process verbs are refused. `restartable: false` is the clause that
+//     matters — Restart is rendered disabled rather than absent, and a
+//     review node that reported restartable would offer to end a process it
+//     does not have, which reaches restartPanel and disposes nothing while
+//     looking like it worked.
+{
+  const m = R.buildInspectorModel(reviewPanel('r1'), undefined)
+  ok('56 a review node\'s inspector model refuses the process verbs',
+    m.kind === 'review' && m.restartable === false && m.reattached === false &&
+      m.fields.some((f) => f.key === 'subject' && f.value === 'n4') &&
+      m.fields.some((f) => f.key === 'repo' && f.value === '/tmp/repo'))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

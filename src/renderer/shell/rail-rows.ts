@@ -1,4 +1,4 @@
-import type { Panel } from '@renderer/panels/panels'
+import { isReviewPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 
 /**
@@ -36,8 +36,15 @@ export interface RailRow {
  * every command-less preset would start spawning a hardcoded shell.
  */
 export function railLabel(panel: Panel, status: PanelStatus | undefined): string {
-  return panel.title
-    ?? (status?.kind === 'running' ? status.command : undefined)
+  // The user's own title is the first link for BOTH kinds — it is the one
+  // link the user chose.
+  if (panel.title !== undefined) return panel.title
+  // A review node names its SUBJECT. The label is the snapshot taken when
+  // the node was created (see ReviewSubject): the subject panel may be gone,
+  // and re-deriving from a live lookup here is exactly what would blank the
+  // row at the moment the node is most useful.
+  if (isReviewPanel(panel)) return `review: ${panel.subject.label}`
+  return (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
     ?? 'login shell'
 }
@@ -53,8 +60,16 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
  * The exited case is a template rather than a truthiness test on purpose.
  * `code` is 0 for a successful exit, the single most common exit there is, and
  * `code || ...` would print the wrong tail for exactly it.
+ *
+ * `kind` is defaulted to `'terminal'` so the pre-M9b two-argument call —
+ * every existing `verify:rail` fixture, checks 5–9 included — keeps compiling
+ * and keeps meaning what it meant.
  */
-export function railTail(status: PanelStatus | undefined, dormant: boolean): string {
+export function railTail(status: PanelStatus | undefined, dormant: boolean, kind: Panel['kind'] = 'terminal'): string {
+  // Before the dormant test, because a review node is never dormant and the
+  // whole status vocabulary below ('not started', 'exited 0', 'pid 4821') is
+  // a sentence about a process it does not have.
+  if (kind === 'review') return 'review'
   if (dormant) return 'dormant'
   if (status === undefined) return 'not started'
   switch (status.kind) {
@@ -86,8 +101,12 @@ export function buildRailRows(
   return panels.map((panel) => {
     const id = panel.rect.id
     const status = statusOf(id)
-    const dormant = dormantIds.has(id)
-    return { id, label: railLabel(panel, status), tail: railTail(status, dormant), dormant }
+    // A review node is never dormant: the rail's start control renders on
+    // dormant rows only, and a node reporting dormant would offer a "start"
+    // arrow for a panel with nothing to start — a visible control that
+    // cannot work.
+    const dormant = isReviewPanel(panel) ? false : dormantIds.has(id)
+    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, panel.kind), dormant }
   })
 }
 

@@ -1055,6 +1055,21 @@ const WS = [
     JSON.stringify([never && never.disabledReason, none && none.disabledReason]))
 }
 
+// 69. A review node is in the Panels section like any other panel — an
+//     off-screen node must be reachable by keyboard — and the verbs it
+//     cannot do are DISABLED there, not missing. Restart is the case: its
+//     row is aimed at the captured panel, and a captured review node has no
+//     process to restart.
+{
+  const rows = P.buildCommands(ctx({
+    panels: [{ id: 'r1', label: 'review: claude', restartable: false }],
+    capturedId: 'r1'
+  }))
+  ok('69 a review node is navigable and its process verbs are disabled',
+    rows.some((r) => r.id === 'panel.goto.r1' && r.disabledReason === undefined) &&
+      rows.find((r) => r.id === 'panel.restart')?.disabledReason === P.REASON_NOT_STARTED)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)
