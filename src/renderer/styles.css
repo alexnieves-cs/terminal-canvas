@@ -221,8 +221,21 @@ body {
   white-space: nowrap;
 }
 
+/* Bounded the same way .rail-row__label is bounded, above. Every OTHER tail
+   value (`pid 48213`, `dormant`, `exited 1`, `starting…`) is short by
+   construction, but railTail's 'error' case returns status.message VERBATIM —
+   an arbitrary-length spawn error, e.g. an ENOENT path — and flex:none with no
+   width bound lets that one case squeeze .rail-row__label to zero width and
+   still overflow the row, since neither .rail-row nor .rail-list clips the x
+   axis. max-width caps how much of the row a long error can claim; the
+   ellipsis/overflow trio then behaves exactly like the label's own. */
 .rail-row__tail {
   flex: none;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 10px;
 }

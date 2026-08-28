@@ -160,9 +160,19 @@ ok('9 starting says so', R.railTail({ kind: 'starting' }, false) === 'startingâ€
 //     by z would move DOM nodes on every raise, and a move is
 //     remove-then-insert; the rail holds no live terminal, but the rule is the
 //     one panels.ts states and there is no reason for the two lists to
-//     disagree about what order means.
+//     disagree about what order means. The three fixture panels are given
+//     DISTINCT, deliberately out-of-step z values (n3:3, n1:1, n2:2) â€” every
+//     other fixture in this file leans on `panel()`'s default `z: 1` for
+//     every row, which makes a z-sort a no-op and this check pass identically
+//     against `[...panels].sort((a, b) => a.z - b.z)` inserted into
+//     `buildRailRows` (confirmed by fault injection: 15/15 either way with a
+//     uniform z). With z spread out, array order ('n3,n1,n2') and a z-sort
+//     ('n1,n2,n3') diverge, so the assertion below only passes against the
+//     array-order implementation the comment above actually describes. Do not
+//     "tidy" these back to a uniform z.
 {
-  const rows = R.buildRailRows([panel('n3'), panel('n1'), panel('n2')], statuses({}), NONE)
+  const rows = R.buildRailRows(
+    [panel('n3', { z: 3 }), panel('n1', { z: 1 }), panel('n2', { z: 2 })], statuses({}), NONE)
   ok('15 one row per panel, in array order',
     rows.length === 3 && rows.map((r) => r.id).join(',') === 'n3,n1,n2')
 }
