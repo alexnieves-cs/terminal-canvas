@@ -7135,78 +7135,94 @@ app.whenReady().then(async () => {
       //      through the real gesture — the first id-minting action after
       //      the reload — and asserts the minted id collides with nothing
       //      the canvas already holds, across every workspace.
-      const subjectPanel = first ? await spawnAt(repo) : null
-      if (subjectPanel) {
-        await waitUntil(async () => (await sessionMap(wc)).has(subjectPanel), 8000)
-      }
-      const idsForSeed = subjectPanel
-        ? await wc.executeJavaScript(
-            `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
-        : []
-      const maxN = idsForSeed.reduce((max, id) => {
-        const m = /^n(\d+)$/.exec(id)
-        return m ? Math.max(max, Number(m[1])) : max
-      }, 0)
-      // Exactly the id a NARROW regex's reseed would hand out next: it never
-      // sees this r-node at all, so it recomputes the same n-max-plus-one it
-      // would have without this node existing.
-      const collideId = `r${maxN + 1}`
-      const seedBaseline = subjectPanel
-        ? await wc.executeJavaScript(
-            `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
-        : null
-      let minted = null
-      let idsAfterReload = null
-      if (seedBaseline) {
-        const saved = layoutStore.initial()
-        const seededPanels = saved.panels.concat([{
-          id: collideId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
-          subject: {
-            subjectId: subjectPanel, repoRoot: seedBaseline.root,
-            baselineSha: seedBaseline.sha, label: 'claude'
-          }
-        }])
-        // Camera near the ORIGIN, deliberately unlike seedReviewNode's own
-        // far-off one above: this check has to click the SUBJECT panel after
-        // the reload through a real sendInputEvent, which needs real screen
-        // coordinates — not a panel 60,000 world units from wherever the
-        // camera happens to sit.
-        layoutStore.save({ panels: seededPanels, camera: { x: 0, y: 0, scale: 1 },
-          selectedId: null, focusedId: null })
-        layoutStore.flushSync()
-        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
-        wc.reload()
-        await reloaded
-        await waitUntil(async () => wc.executeJavaScript(
-          `document.querySelector('.review-node[data-panel-id="${collideId}"]') !== null`),
-        10000)
-        idsAfterReload = await wc.executeJavaScript(
-          `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
-        // The subject's own session reattaching (tmux) is what keeps its
-        // baseline alive in main, exactly the mechanism check 91 already
-        // proves for the inspector's reattached badge.
-        const reattached = await waitUntil(
-          async () => (await sessionMap(wc)).has(subjectPanel), 8000)
-        if (reattached) {
-          await selectPanel(subjectPanel)
-          await waitUntil(async () => wc.executeJavaScript(
-            `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
-          await clickShell('[data-inspector-action="review"]')
-          await settle()
-          minted = await waitUntil(async () => {
-            const ids = await wc.executeJavaScript(
-              `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
-            const fresh = ids.filter((id) => !idsAfterReload.includes(id))
-            return fresh.length === 1 ? fresh[0] : false
-          }, 8000)
+      // Session survival across wc.reload() is a TMUX property — the
+      // direct backend kills the process outright on reload, so the subject
+      // would never reattach, `minted` would stay null, and a tmux-free
+      // machine would see a RED that has nothing to do with the id-collision
+      // defect this check exists to prove. Skipped LOUDLY, never silently,
+      // the same shape and wording as check 91 — and gating BEFORE the
+      // spawn/seed/reload, not merely around the assertion, so a skip leaves
+      // no half-built fixture (an extra subject panel, a seeded collide-id
+      // node on disk) for anything appended after this block to trip over.
+      const TMUX_107 = findTmux()
+      if (!TMUX_107 || !tmuxBackend) {
+        ok('107 a review node cannot mint an id a persisted node already owns (SKIPPED — no tmux binary found)',
+          true, 'install tmux to cover this')
+      } else {
+        backend = tmuxBackend
+        const subjectPanel = first ? await spawnAt(repo) : null
+        if (subjectPanel) {
+          await waitUntil(async () => (await sessionMap(wc)).has(subjectPanel), 8000)
         }
+        const idsForSeed = subjectPanel
+          ? await wc.executeJavaScript(
+              `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+          : []
+        const maxN = idsForSeed.reduce((max, id) => {
+          const m = /^n(\d+)$/.exec(id)
+          return m ? Math.max(max, Number(m[1])) : max
+        }, 0)
+        // Exactly the id a NARROW regex's reseed would hand out next: it
+        // never sees this r-node at all, so it recomputes the same
+        // n-max-plus-one it would have without this node existing.
+        const collideId = `r${maxN + 1}`
+        const seedBaseline = subjectPanel
+          ? await wc.executeJavaScript(
+              `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
+          : null
+        let minted = null
+        let idsAfterReload = null
+        if (seedBaseline) {
+          const saved = layoutStore.initial()
+          const seededPanels = saved.panels.concat([{
+            id: collideId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
+            subject: {
+              subjectId: subjectPanel, repoRoot: seedBaseline.root,
+              baselineSha: seedBaseline.sha, label: 'claude'
+            }
+          }])
+          // Camera near the ORIGIN, deliberately unlike seedReviewNode's own
+          // far-off one above: this check has to click the SUBJECT panel
+          // after the reload through a real sendInputEvent, which needs real
+          // screen coordinates — not a panel 60,000 world units from
+          // wherever the camera happens to sit.
+          layoutStore.save({ panels: seededPanels, camera: { x: 0, y: 0, scale: 1 },
+            selectedId: null, focusedId: null })
+          layoutStore.flushSync()
+          const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload()
+          await reloaded
+          await waitUntil(async () => wc.executeJavaScript(
+            `document.querySelector('.review-node[data-panel-id="${collideId}"]') !== null`),
+          10000)
+          idsAfterReload = await wc.executeJavaScript(
+            `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+          // The subject's own session reattaching (tmux) is what keeps its
+          // baseline alive in main, exactly the mechanism check 91 already
+          // proves for the inspector's reattached badge.
+          const reattached = await waitUntil(
+            async () => (await sessionMap(wc)).has(subjectPanel), 8000)
+          if (reattached) {
+            await selectPanel(subjectPanel)
+            await waitUntil(async () => wc.executeJavaScript(
+              `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+            await clickShell('[data-inspector-action="review"]')
+            await settle()
+            minted = await waitUntil(async () => {
+              const ids = await wc.executeJavaScript(
+                `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+              const fresh = ids.filter((id) => !idsAfterReload.includes(id))
+              return fresh.length === 1 ? fresh[0] : false
+            }, 8000)
+          }
+        }
+        const finalIds = await wc.executeJavaScript(
+          `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+        ok('107 a review node cannot mint an id a persisted node already owns',
+          subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
+            minted !== collideId && new Set(finalIds).size === finalIds.length,
+          `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
       }
-      const finalIds = await wc.executeJavaScript(
-        `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
-      ok('107 a review node cannot mint an id a persisted node already owns',
-        subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
-          minted !== collideId && new Set(finalIds).size === finalIds.length,
-        `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
 
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
