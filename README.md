@@ -296,6 +296,7 @@ one layer built to absorb it.
 | M6d | Attention routing: edge pips for off-screen panels, Cmd+J to jump | ✅ done |
 | M7 | Workspaces: named canvases, switching without disposing | ✅ done |
 | M8a | The app shell: a frame, collapsible rail and inspector, a visible toolbar | ✅ done |
+| M8b | The panel outline: a rail row per panel, navigate without waking | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
