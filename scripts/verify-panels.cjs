@@ -285,8 +285,45 @@ app.whenReady().then(async () => {
     () => Number(layoutStore.getSetting('agent.idleAfterMs')),
     () => layoutStore.getSetting('agent.bell') === true,
     (panelId, cwd) => baselineCapture.capture(panelId, cwd),
-    (panelId) => baselineCapture.drop(panelId)
+    // BOTH halves, exactly as main/index.ts's own dropBaseline does them:
+    // poison any in-flight capture AND drop the persisted record. Dropping
+    // only the first is a harness that keeps answering review:panel for a
+    // panel it has just killed — which is the precise state check 110's
+    // fault injection has to be able to see, and with the store half missing
+    // that injection stayed GREEN (observed, not argued: swapping the node
+    // to review:panel left 110 passing until this line grew its second
+    // half). A harness that mirrors production loosely proves the app works
+    // for a configuration nobody ships.
+    (panelId) => {
+      baselineCapture.drop(panelId)
+      layoutStore.dropBaseline(panelId)
+    }
   )
+
+  /**
+   * Every panel id main was ever ASKED to kill, in order — the one fact
+   * checks 111 and 111b need and the one no renderer can read back.
+   *
+   * A kill aimed at an id that names no session is swallowed at every layer
+   * below this line: the direct backend's destroy() is a no-op, tmux's cli()
+   * eats a non-zero exit, dropBaseline for an unknown id drops nothing. So
+   * "a review node was routed through registry.dispose" has NO observable
+   * consequence in the DOM, in pty:list, or in any pid — confirmed by
+   * injection, with both guards removed and both checks still green. The
+   * only place the mistake is visible is at the door itself, which is here.
+   *
+   * An own property shadowing the prototype method, installed BEFORE
+   * registerIpcHandlers, so the pty:kill handler and killAll() alike route
+   * through it.
+   */
+  const killedPanelIds = []
+  {
+    const realKill = ptyManager.kill.bind(ptyManager)
+    ptyManager.kill = (panelId) => {
+      killedPanelIds.push(panelId)
+      realKill(panelId)
+    }
+  }
 
   // A real store, not a stub: the built renderer now calls and awaits
   // window.canvas.layout.load() before React mounts, so an unhandled channel
@@ -7253,6 +7290,212 @@ app.whenReady().then(async () => {
         ok('108 the rail lists a review node and its row frames it',
           node !== null && clicked === true && (after.x !== before.x || after.y !== before.y) &&
             sessions.has('r90') === false)
+      }
+
+      // 109. Success criterion 4's last clause: a review node survives a
+      //      relaunch. Driven through a REAL reload rather than a parse
+      //      check — Task 2 already pins the on-disk format, and what this
+      //      adds is that the restored node still ANSWERS. Its subject's
+      //      session is gone on the direct backend and merely detached under
+      //      tmux, and the node must not care either way: it asks review:at
+      //      with the baseline it carries, so the only thing that has to
+      //      have survived the reload is the node's own `subject` record.
+      {
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        const back = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="r90"]') !== null`), 10000)
+        // waitUntil on the FILE ROWS, not on the node: boot awaits two IPC
+        // round trips before its first render and the node's own query
+        // resolves after that, so the summary reads "reading…" for a moment
+        // on a perfectly healthy restore. An immediate read would fail
+        // against correct code.
+        const files = await waitUntil(async () => {
+          const f = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]')]
+               .map((e) => e.getAttribute('data-review-node-file'))`)
+          return f.length > 0 ? f : false
+        }, 10000)
+        ok('109 a review node survives a reload and still reports its files',
+          back === true && Array.isArray(files) && files.includes('agent.txt'),
+          `back=${back} files=${JSON.stringify(files)}`)
+      }
+
+      // 110. SUCCESS CRITERION 5, and the check the node's whole design
+      //      exists for. Closing the subject panel drops its baseline in
+      //      main (PtyManager.kill -> dropBaseline, on every close) — so a
+      //      node that had asked review:panel(subjectId) would go blank
+      //      exactly here, at the moment a review of finished work is most
+      //      useful. This node keeps answering because it carries the
+      //      baseline itself and asks review:at.
+      //
+      //      It cannot be watched failing against correct code, and was
+      //      proven by FAULT INJECTION instead: swapping ReviewNode's query
+      //      to window.canvas.review.panel(subject.subjectId) turns this
+      //      RED while check 102 — the same node, rendering the same files,
+      //      with its subject still alive — stays GREEN. That contrast is
+      //      the whole point of this check: 102 proves the node renders,
+      //      and only 110 proves it OUTLIVES.
+      {
+        // The rail's close control, not the panel's own ×: a terminal panel
+        // running a process ARMS on the first × click and needs a second
+        // one, so a single dispatched mousedown there would leave the panel
+        // open and this check would pass for the wrong reason (a subject
+        // that was never closed cannot demonstrate outliving anything).
+        // The rail row closes outright — check 86's own gesture.
+        const closed = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.rail-row[data-rail-row=' +
+            ${JSON.stringify(JSON.stringify(first))} + '] .rail-row__close')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true })()`)
+        const subjectGone = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=' +
+             ${JSON.stringify(JSON.stringify(first))} + ']') === null`), 8000)
+        const stillThere = await waitUntil(async () => {
+          const f = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]')]
+               .map((e) => e.getAttribute('data-review-node-file'))`)
+          return f.includes('agent.txt') ? f : false
+        }, 8000)
+        // Re-QUERIED, not merely still painted. The clause above is
+        // satisfied by a DOM left over from before the close, which is
+        // exactly what a broken node would show for as long as nobody asked
+        // it anything; the refresh control sends a fresh review:at through
+        // main, and only an answer to THAT proves the node can still read
+        // its repository with its subject gone.
+        const requeried = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id="r90"] .review-node__refresh')
+          if (!n) return false
+          n.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        // A SUSTAINED hold, never a waitUntil, and this is the one thing
+        // about check 110 that had to be learned the hard way. The node does
+        // not clear `result` while a refresh is in flight (it would flicker
+        // the file list on every re-read), so there is no DOM state meaning
+        // "re-querying" — which makes a waitUntil here satisfied INSTANTLY
+        // by the rows that were already painted, long before the new answer
+        // lands. The first draft was exactly that, and it passed against the
+        // fault-injected node roughly half the time: whether the check saw
+        // the defect depended on which of two promises won a race. Holding
+        // the condition for two seconds instead is what makes a
+        // never-started answer arriving mid-window turn this red rather than
+        // slipping in behind a green assertion.
+        const after = await (async () => {
+          const deadline = Date.now() + 2000
+          let last = null
+          while (Date.now() < deadline) {
+            last = await wc.executeJavaScript(
+              `[...document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]')]
+                 .map((e) => e.getAttribute('data-review-node-file'))`)
+            if (!last.includes('agent.txt')) return false
+            await sleep(100)
+          }
+          return last
+        })()
+        ok('110 a review node outlives the panel it reviews',
+          closed === true && subjectGone === true && stillThere !== false &&
+            requeried === true && after !== false,
+          `closed=${closed} gone=${subjectGone} still=${JSON.stringify(stillThere)} after=${JSON.stringify(after)}`)
+      }
+
+      // 111. Closing the NODE kills nothing. onClosePanel branches on the
+      //      kind before it disposes, and this is the only check that can
+      //      see the branch: dispose(id) sends pty.kill even for an id this
+      //      renderer holds no session for, so routing a node through it
+      //      would send a tmux kill-session named after a panel that never
+      //      had one — and drop the baseline of whatever panel later
+      //      recycles that id.
+      {
+        const before = await sessionMap(wc)
+        const killsBefore = killedPanelIds.length
+        const closed = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.review-node[data-panel-id="r90"] .panel__close')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        const gone = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="r90"]') === null`), 6000)
+        await settle()
+        const after = await sessionMap(wc)
+        const preserved = pidsPreserved(before, after)
+        // THE CLAUSE THAT DISCRIMINATES. The two before it are worth having
+        // and cannot fail on their own: a stray kill for an id that names no
+        // session changes no pid and removes no row, so an unguarded close
+        // is invisible from the renderer. `kills` is read at main's own
+        // door, where it is the only place the mistake exists at all.
+        const kills = killedPanelIds.slice(killsBefore)
+        ok('111 closing a review node ends no session',
+          closed === true && gone === true && after.size === before.size && preserved.ok &&
+            kills.includes('r90') === false,
+          `sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
+      }
+
+      // 111b. The UNDO path, which Task 9's creation gesture made reachable:
+      //       applyHistory's dispose loop removes whatever the undone state
+      //       no longer contains, and until this milestone's guard it made
+      //       no exception for a kind that owns no session. Cmd+N then
+      //       Cmd+Z is one gesture away from being how most nodes are
+      //       closed, so the loop needs the same branch onClosePanel has.
+      //
+      //       Its `kills` clause is the one that discriminates, for the
+      //       reason check 111 states above: with the guard removed, every
+      //       renderer-visible fact here is unchanged — the node still
+      //       leaves the DOM (applyHistory removes it either way) and every
+      //       pid is still preserved (a kill aimed at an id naming no
+      //       session is swallowed at every layer). Confirmed by injection:
+      //       both guards deleted, both checks green, until the kill probe
+      //       existed. The DOM and pid clauses stay because each rejects a
+      //       different wrong undo — one that disposes the SUBJECT, one that
+      //       leaves the node on screen.
+      {
+        const subject = await spawnAt(repo)
+        // The baseline, not merely the session: captureBaseline is
+        // fire-and-forget on top of the spawn (a spawn must never wait on a
+        // git process), so the inspector's review button is present-but-
+        // useless for a moment after the panel appears, and openReview
+        // returns early on a null baseline — a node that never gets minted,
+        // read here as a check that fails for a racing fixture rather than
+        // for a defect. Check 101 above states the same two-stacked-races
+        // problem in full.
+        if (subject) {
+          await waitUntil(async () => (await sessionMap(wc)).has(subject), 8000)
+          await waitUntil(async () => wc.executeJavaScript(
+            `window.canvas.review.baseline(${JSON.stringify(subject)}).then((b) => b !== null)`), 8000)
+          await selectPanel(subject)
+        }
+        const beforeIds = await panelIds()
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        await clickShell('[data-inspector-action="review"]')
+        const node = await waitUntil(async () => {
+          const ids = await panelIds()
+          const fresh = ids.filter((id) => !beforeIds.includes(id))
+          return fresh.length === 1 ? fresh[0] : false
+        }, 8000)
+        // Captured with the node ON SCREEN, so `after` is compared against
+        // the state the undo actually acted on rather than against a
+        // snapshot from before the subject panel even spawned.
+        const before = await sessionMap(wc)
+        const killsBefore = killedPanelIds.length
+        // __m4bUndo(), not a 'z' keydown: Cmd+Z is a main-process menu
+        // accelerator and this harness has no menu — check 67's comment
+        // states it in full.
+        await wc.executeJavaScript(`window.__m4bUndo()`)
+        const gone = typeof node === 'string'
+          ? await waitUntil(async () => wc.executeJavaScript(
+              `document.querySelector('[data-panel-id=' +
+                 ${JSON.stringify(JSON.stringify(node))} + ']') === null`), 6000)
+          : false
+        await settle()
+        const after = await sessionMap(wc)
+        const preserved = pidsPreserved(before, after)
+        const kills = killedPanelIds.slice(killsBefore)
+        ok('111b undoing a review node ends no session',
+          typeof node === 'string' && gone === true && preserved.ok &&
+            kills.includes(node) === false,
+          `node=${node} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
       }
 
       // Fixture repositories are not free — a git repo per run accumulated in

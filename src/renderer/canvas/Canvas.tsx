@@ -373,13 +373,20 @@ export function Canvas({
     // and disposeAll() remain the only two (see session-registry.ts), and
     // routing through dispose() rather than calling pty.kill directly is
     // exactly what keeps that count true.
-    // STILL UNGUARDED FOR REVIEW NODES, unlike onClosePanel's own branch:
-    // a node undone out of existence routes through here and sends a kill
-    // for a panel that never had a session. Harmless today (main tolerates
-    // destroying a session it never spawned) and reachable the moment the
-    // creation gesture lands; the kind guard belongs to the task that adds
-    // it, not to this one. Same for the reset and workspace-delete loops.
+    // GUARDED FOR REVIEW NODES, the same branch onClosePanel takes one
+    // screenful of reasons further down. A node owns no PanelSession, and
+    // the registry's dispose sends pty.kill even for an id this renderer
+    // holds no local session for (see CLAUDE.md, "dispose(id) sends pty.kill
+    // even when this renderer holds no local session for that id") — so an
+    // unguarded node undone out of existence sends a tmux kill-session named
+    // after a panel that never had one, and drops in main the baseline of
+    // whatever panel later recycles that id. The test is POSITIVE
+    // (isReviewPanel), never `!isTerminalPanel`, so a third kind added later
+    // is treated as a terminal panel by default rather than silently losing
+    // its teardown. The guard is on the ITERATION rather than on the call,
+    // which is what keeps verify:panels 94's dispose-call-site count at five.
     for (const panel of previousPresent) {
+      if (isReviewPanel(panel)) continue
       if (!ids.has(panel.rect.id)) {
         registry.dispose(panel.rect.id)
         // Without this the agent-state map grows for the life of the
@@ -664,11 +671,17 @@ export function Canvas({
     // both numbers; it regex-counts the call over this whole file, comments
     // included, which is why this comment does not spell it with its
     // parentheses.
-    // Review nodes are NOT filtered out here, which is the same open edge
-    // applyHistory's loop carries — see its comment. Reset drops every panel
-    // whatever its kind, and a node's dispose is a stray kill rather than a
-    // wrong one; the guard is a later task's.
+    // Reset drops every panel whatever its kind, but only a terminal panel
+    // has anything to TEAR DOWN. A review node holds no PanelSession, and
+    // the registry's dispose reaches pty.kill even for an id this renderer
+    // holds no local session for — so skipping the node here is what stops a
+    // reset sending a tmux kill-session named after a panel that never had
+    // one, and dropping in main the baseline of whatever panel later
+    // recycles that id (FIRST_RUN_ID makes recycled ids reachable from this
+    // very function). Positive test, and on the iteration rather than on the
+    // call, for the two reasons applyHistory's own guard states.
     for (const panel of panelsRef.current) {
+      if (isReviewPanel(panel)) continue
       registry.dispose(panel.rect.id)
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
@@ -2071,6 +2084,28 @@ export function Canvas({
                   // matches the name main's own defaultWorkspace() would
                   // have installed, so the user sees the same thing either
                   // way — the only difference is which process decided.
+                  // Captured BEFORE the switch below, and out of this
+                  // canvas's own panel array, because that array is the only
+                  // place a KIND is knowable here: main's workspace rows
+                  // carry ids and nothing else. A review node holds no
+                  // PanelSession, and dispose() reaches pty.kill regardless
+                  // (see the loop's own comment), so an unguarded node id
+                  // here sends a kill for a panel that never had a session
+                  // and drops the baseline of whatever panel recycles that
+                  // id. Positive test, as everywhere else.
+                  //
+                  // Honest about its reach: this covers the ACTIVE
+                  // workspace, which is the only one whose panels this
+                  // renderer holds objects for. Deleting a HIDDEN workspace
+                  // that contains a review node still sends that stray kill
+                  // — harmless in the same way it was harmless everywhere
+                  // before this guard (main tolerates destroying a session it
+                  // never spawned), and closable only by teaching
+                  // WORKSPACE_LIST to carry a kind, which is a channel
+                  // change this milestone did not scope.
+                  const doomedReviewIds = doomed.active
+                    ? new Set(panelsRef.current.filter(isReviewPanel).map((p) => p.rect.id))
+                    : new Set<string>()
                   let target = before.find((w) => w.id !== id)
                   if (doomed.active && !target) {
                     const freshId = await window.canvas.workspace.create('Canvas')
@@ -2096,10 +2131,10 @@ export function Canvas({
                     // PanelSession for (a hidden workspace's own panel, or
                     // one surviving a reload): dispose()'s own fix sends
                     // pty.kill regardless, mirroring main's PtyManager.kill.
-                    // And, like the reset and undo loops, this makes no
-                    // exception for a review node's id — a stray kill for a
-                    // panel that never had a session, left for the task that
-                    // adds the kind guard everywhere at once.
+                    // And, like the reset and undo loops, it skips a review
+                    // node's id — see doomedReviewIds above for what the skip
+                    // buys and exactly how far it reaches.
+                    if (doomedReviewIds.has(panelId)) continue
                     registry.dispose(panelId)
                     clearAgentState(panelId)
                   }
