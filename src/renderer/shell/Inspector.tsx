@@ -11,6 +11,7 @@ export interface InspectorProps {
   summary: InspectorSummary
   onRename: (id: string, currentTitle: string) => void
   onClose: (id: string) => void
+  onSavePreset: (id: string) => void
 }
 
 /**
@@ -26,7 +27,7 @@ export interface InspectorProps {
  * The toggle stays mounted when the inspector is collapsed, for the same
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
-function InspectorImpl({ onToggle, model, summary, onRename, onClose }: InspectorProps): JSX.Element {
+function InspectorImpl({ onToggle, model, summary, onRename, onClose, onSavePreset }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
       <button
@@ -41,7 +42,7 @@ function InspectorImpl({ onToggle, model, summary, onRename, onClose }: Inspecto
       <div className="shell__region-title">Panel</div>
       {model === null
         ? <InspectorEmpty summary={summary} />
-        : <InspectorPanel model={model} onRename={onRename} onClose={onClose} />}
+        : <InspectorPanel model={model} onRename={onRename} onClose={onClose} onSavePreset={onSavePreset} />}
     </aside>
   )
 }
@@ -86,8 +87,13 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, onRename, onClose
-}: { model: InspectorModel; onRename: (id: string, title: string) => void; onClose: (id: string) => void }): JSX.Element {
+  model, onRename, onClose, onSavePreset
+}: {
+  model: InspectorModel
+  onRename: (id: string, title: string) => void
+  onClose: (id: string) => void
+  onSavePreset: (id: string) => void
+}): JSX.Element {
   const state = useAgentState(model.id)
   return (
     <div className="inspector__body">
@@ -128,6 +134,15 @@ function InspectorPanel({
           {...shellControl(() => onRename(model.id, model.title ?? ''))}
         >
           Rename…
+        </button>
+        <button
+          type="button"
+          className="inspector__action"
+          data-inspector-action="save-preset"
+          title={`Save ${model.heading} as a preset`}
+          {...shellControl(() => onSavePreset(model.id))}
+        >
+          Save as preset
         </button>
         <button
           type="button"

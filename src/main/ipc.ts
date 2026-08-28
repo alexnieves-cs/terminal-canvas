@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel } from '../shared/ipc-contract'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
@@ -33,6 +33,12 @@ export interface PaletteHandlers {
    * pick does, so the two cannot drift apart.
    */
   spawn(id: string): void
+  /**
+   * The inspector's save. Handed in for the same reason `spawn` is: minting a
+   * preset needs the layout store and a menu rebuild, both of which are
+   * main/index.ts's.
+   */
+  savePanel(captured: CapturedPanel): void
   requestReset(): void
   listPrompts(cwd: string | null): PromptListRow[]
   savePrompt(name: string, body: string): void
@@ -86,6 +92,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PRESET_DELETE, (_event, id: string) => palette.remove(id))
   ipcMain.handle(IPC.PRESET_SET_DEFAULT, (_event, id: string) => palette.setDefault(id))
   ipcMain.handle(IPC.PRESET_SPAWN_BY_ID, (_event, id: string) => palette.spawn(id))
+  ipcMain.handle(IPC.PRESET_SAVE_PANEL, (_event, captured: CapturedPanel) => {
+    palette.savePanel(captured)
+  })
   ipcMain.handle(IPC.CANVAS_REQUEST_RESET, () => palette.requestReset())
 
   ipcMain.handle(IPC.PROMPT_LIST, (_event, cwd: string | null) => palette.listPrompts(cwd))

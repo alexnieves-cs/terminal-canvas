@@ -207,7 +207,10 @@ const spyActions = () => {
     resetCanvas: record('resetCanvas'),
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
-    beginEditSetting: record('beginEditSetting')
+    beginEditSetting: record('beginEditSetting'),
+    // No row uses this yet (Task 6 adds one) — kept here anyway so the
+    // fixture stays honest about the full PaletteActions shape.
+    savePanelAsPreset: record('savePanelAsPreset')
   }
 }
 

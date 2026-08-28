@@ -63,6 +63,23 @@ export const IPC = {
    */
   PRESET_SPAWN_BY_ID: 'preset:spawn-by-id',
   /**
+   * Save a preset from a panel the RENDERER picked, rather than from whichever
+   * panel is focused.
+   *
+   * The distinction is the whole reason this channel exists. PRESET_CAPTURE is
+   * a main -> renderer request answered off focusedIdRef, which is right for
+   * the menu item (there is no other panel a menu could mean) and wrong for
+   * the inspector, which describes the SELECTED panel — an id this app keeps
+   * deliberately distinct from the focused one, since a rail row selects
+   * without focusing. Reusing capture there would save a different panel than
+   * the pane is describing, and the preset it wrote would be well-formed and
+   * merely wrong.
+   *
+   * Main still mints the id and the name (presetFromCapture): the renderer
+   * can see neither the built-in ids nor the existing names.
+   */
+  PRESET_SAVE_PANEL: 'preset:save-panel',
+  /**
    * "Reset canvas…" asked for from the palette rather than the menu. Main owns
    * the confirmation dialog and the counts request, so the renderer asks main
    * to run the flow it already has instead of growing a second one.
@@ -342,6 +359,8 @@ export interface CanvasBridge {
      * spawn the ordinary undo behaviour rather than a second spawn path.
      */
     spawnById(id: string): Promise<void>
+    /** Save THIS panel as a preset. See PRESET_SAVE_PANEL. */
+    savePanel(captured: CapturedPanel): Promise<void>
   }
   prompt: {
     list(cwd: string | null): Promise<PromptBridgeRow[]>

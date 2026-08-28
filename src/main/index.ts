@@ -12,9 +12,8 @@ import { createLayoutStore } from './layout-store'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import {
   allPresets,
-  autoName,
-  mintPresetId,
   mintPromptId,
+  presetFromCapture,
   presetRows,
   pushDefaultPreset,
   resolveAvailability,
@@ -170,17 +169,7 @@ async function savePresetFromFocusedPanel(): Promise<void> {
     })
     return
   }
-  const user = layoutStore.presets()
-  const preset = {
-    id: mintPresetId(user),
-    name: autoName(captured, allPresets(user)),
-    cwd: captured.cwd,
-    // Absent stays absent, all the way to resolveCommand.
-    ...(captured.command !== undefined ? { command: captured.command } : {}),
-    args: [...captured.args],
-    w: captured.w,
-    h: captured.h
-  }
+  const preset = presetFromCapture(layoutStore.presets(), captured)
   layoutStore.addPreset(preset)
   rebuildMenu()
 }
@@ -367,6 +356,10 @@ app.whenReady().then(async () => {
       },
       spawn: (id) => {
         onSpawnPreset(id)
+      },
+      savePanel: (captured) => {
+        layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
+        rebuildMenu()
       },
       requestReset: () => {
         void confirmReset()

@@ -108,6 +108,15 @@ export interface PaletteActions {
    * card that says "click to start".
    */
   startPanel(id: string): void
+  /**
+   * Save one panel as a preset. Takes an id rather than reading the focused
+   * panel, because the inspector acts on the SELECTED one and those are
+   * deliberately different ids.
+   *
+   * Emits no Command row: the menu item already covers the focused-panel case,
+   * and M6p sized the resting list on purpose.
+   */
+  savePanelAsPreset(id: string): void
 }
 
 export interface PaletteContext {

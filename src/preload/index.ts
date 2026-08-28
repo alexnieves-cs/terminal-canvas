@@ -79,7 +79,8 @@ const bridge: CanvasBridge = {
     rename: (id: string, name: string) => ipcRenderer.invoke(IPC.PRESET_RENAME, id, name),
     remove: (id: string) => ipcRenderer.invoke(IPC.PRESET_DELETE, id),
     setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id),
-    spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id)
+    spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id),
+    savePanel: (captured: CapturedPanel) => ipcRenderer.invoke(IPC.PRESET_SAVE_PANEL, captured)
   },
   prompt: {
     list: (cwd: string | null) => ipcRenderer.invoke(IPC.PROMPT_LIST, cwd),

@@ -1425,6 +1425,34 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     `declared=${declared} inspector=${b.getSetting('shell.inspectorOpen')} rail=${b.getSetting('shell.railOpen')}`)
 }
 
+// 97. THE SHARED MINT. Both save surfaces — the menu's focused-panel path and
+//     M8c's preset:save-panel invoke — go through this one function, so they
+//     cannot disagree about what a saved preset is called or what id it gets.
+//     Two copies would agree the day they were written and diverge the first
+//     time one was edited, and the user's evidence would be two presets named
+//     differently for the same panel depending on which surface saved it.
+//
+//     The absent-command clause is the one that matters most and is asserted
+//     with `in`, not with a truthiness test: `command: undefined` is a
+//     DIFFERENT fact from the key being absent, and it is the fact that
+//     survives an IPC structured clone as `'command' in preset === true`.
+//     Losing it makes every command-less preset spawn a hardcoded shell
+//     instead of resolving the user's real login shell.
+{
+  const captured = { cwd: '/Users/x/proj', args: ['--foo'], w: 700, h: 400 }
+  const p = L.presetFromCapture([], captured)
+  const withCommand = L.presetFromCapture([p], { ...captured, command: '/opt/homebrew/bin/fish' })
+  ok('97 presetFromCapture mints, names, and keeps an absent command absent',
+    typeof p.id === 'string' && p.id.length > 0 &&
+      p.id !== withCommand.id &&
+      ('command' in p) === false &&
+      withCommand.command === '/opt/homebrew/bin/fish' &&
+      p.name.includes('login shell') && p.name.includes('proj') &&
+      p.cwd === '/Users/x/proj' && p.args.length === 1 && p.args[0] === '--foo' &&
+      p.w === 700 && p.h === 400,
+    JSON.stringify([p, withCommand]))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

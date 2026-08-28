@@ -1,6 +1,11 @@
 import { basename } from 'node:path'
 import { DEFAULT_PRESET_ID, type Preset } from '../shared/layout-schema'
-import { IPC_EVENTS, type PresetTemplate, type PresetListRow } from '../shared/ipc-contract'
+import {
+  IPC_EVENTS,
+  type CapturedPanel,
+  type PresetTemplate,
+  type PresetListRow
+} from '../shared/ipc-contract'
 
 /**
  * The preset helpers, and deliberately NOTHING that touches the disk, the
@@ -123,6 +128,34 @@ export function autoName(
   let n = 2
   while (taken.has(`${base} ${n}`)) n += 1
   return `${base} ${n}`
+}
+
+/**
+ * The one place a captured panel becomes a preset.
+ *
+ * Both save surfaces call this: the menu's focused-panel path and M8c's
+ * preset:save-panel invoke from the inspector. It is main's because both of
+ * its decisions are main's — `mintPresetId` has to see every existing id
+ * including the built-ins, and `autoName` has to see every existing NAME to
+ * de-duplicate. A renderer-side reconstruction would see neither.
+ *
+ * Rebuilt field by field rather than spread, the fourth site to obey the
+ * absent-command rule: spreading `captured` would carry `command: undefined`
+ * into the object, where `'command' in preset` then reads TRUE — a different
+ * fact from the field being absent, and the one that survives an IPC
+ * structured clone. Every command-less preset would start spawning a
+ * hardcoded shell instead of the user's real login shell.
+ */
+export function presetFromCapture(user: Preset[], captured: CapturedPanel): Preset {
+  return {
+    id: mintPresetId(user),
+    name: autoName(captured, allPresets(user)),
+    cwd: captured.cwd,
+    ...(captured.command !== undefined ? { command: captured.command } : {}),
+    args: [...captured.args],
+    w: captured.w,
+    h: captured.h
+  }
 }
 
 export interface PresetAvailability {

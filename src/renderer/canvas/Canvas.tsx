@@ -1940,7 +1940,25 @@ export function Canvas({
     closePanel: (id) => onClosePanel(id),
     // The wake path, and deliberately not what a row CLICK does. See
     // PaletteActions.startPanel.
-    startPanel: (id) => onSelectPanel(id)
+    startPanel: (id) => onSelectPanel(id),
+    savePanelAsPreset: (id) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (!panel) return
+      // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
+      // to — the same limit onCapture records; reading the real one means
+      // asking the pid (ideas-backlog #4).
+      const captured: CapturedPanel = {
+        cwd: panel.spec.cwd,
+        args: [...panel.spec.args],
+        w: panel.rect.w,
+        h: panel.rect.h
+      }
+      // Absent stays absent: a captured login-shell panel must save as a
+      // login-shell preset, not as whatever this machine's shell happens to
+      // be. Built field by field for the same reason onCapture is.
+      if (panel.spec.command !== undefined) captured.command = panel.spec.command
+      void window.canvas.preset.savePanel(captured).then(reloadPresets)
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
@@ -2146,6 +2164,7 @@ export function Canvas({
         summary={inspectorSummary}
         onRename={paletteActions.beginRenamePanel}
         onClose={paletteActions.closePanel}
+        onSavePreset={paletteActions.savePanelAsPreset}
       />
     </div>
   )

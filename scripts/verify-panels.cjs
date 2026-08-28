@@ -44,6 +44,7 @@ const {
   resolveAvailability,
   presetRows,
   templateOf,
+  presetFromCapture,
   mergePrompts,
   readProjectPrompts,
   resolveCwd,
@@ -446,6 +447,13 @@ app.whenReady().then(async () => {
     spawn: (id) => {
       const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
       if (found) win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+    },
+    // Real, mirroring main/index.ts's palette.savePanel: mints through
+    // presetFromCapture, the same shared function check 90 exists to prove is
+    // the only implementation. A stub here would leave check 90 exercising
+    // nothing past the preload.
+    savePanel: (captured) => {
+      layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
     },
     requestReset: () => {},
     // main/index.ts's listPrompts, project half included — check 43 is the
@@ -5813,6 +5821,100 @@ app.whenReady().then(async () => {
         opened === true && names.header === 'inspector rename' &&
           names.rail === 'inspector rename' && names.heading === 'inspector rename',
         `opened=${opened} ${JSON.stringify(names)}`)
+    }
+
+    // 90. SAVES THE SELECTED PANEL, NOT THE FOCUSED ONE.
+    //     Driven with the two ids DELIBERATELY DIFFERENT, which is the entire
+    //     check: taken with them equal it passes against the defect this channel
+    //     exists to remove — main's own preset:capture path, which answers off
+    //     focusedIdRef and would have saved the wrong panel every time the user
+    //     reached the inspector by clicking a rail row (the one gesture that
+    //     selects without focusing).
+    //
+    //     Every panel still alive at this point in the run shares one cwd
+    //     ('/tmp' — check 73's Cmd+N spawn, off the boot default template, is
+    //     the sole survivor of check 71's full workspace wipe). A same-cwd pair
+    //     cannot discriminate the SELECTED preset's subtitle from the FOCUSED
+    //     one's, so this check spawns a second panel at a DISTINCT, spaced cwd
+    //     — a feature and not an accident, per CLAUDE.md's tmux exitDir note —
+    //     rather than adding a third panel to the SEED_PANELS fixture every
+    //     earlier count-based check would then have to account for.
+    //
+    //     Both ids are read out of PRODUCTION MARKUP rather than through a test
+    //     hook, because neither hook answers this: __m4aSelection() returns the
+    //     focused terminal's TEXT selection (not an id, despite the name) and
+    //     __m4aSessions() reports {id, dormant, spawned} and no cwd. Widening
+    //     either one for this check would be adding a hook to observe something
+    //     the DOM already states — .panel--selected IS the selection, and DOM
+    //     focus living inside a panel IS that panel being focused.
+    //
+    //     The preset's subtitle carries its full cwd (presetRows builds it as
+    //     `command — cwd`), and the cwd is read off the inspector's own field
+    //     BEFORE saving. That field is already pinned by check 87, so it is a
+    //     legitimate source here rather than a second derivation.
+    {
+      const SAVE_PRESET_DIR = mkdtempSync(join(tmpdir(), 'tc panels save-preset '))
+      const idsBefore90 = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: SAVE_PRESET_DIR, command: '/bin/cat', args: [] })
+      const idsAfter90 = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore90.size ? now : false
+      }, 4000)
+      const newId = idsAfter90 ? idsAfter90.find((id) => !idsBefore90.has(id)) : null
+      if (!newId) throw new Error('90: PRESET_SPAWN produced no new panel')
+      const hasPty90 = await waitUntil(async () => (await sessionMap(wc)).has(newId), 8000)
+      if (!hasPty90) throw new Error(`90: panel ${newId} never got a PTY`)
+
+      const ids = await waitUntil(async () => {
+        const live = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].filter((p) => p.querySelector('.xterm')).map((p) => p.dataset.panelId)`)
+        return live.includes(newId) ? live : false
+      }, 8000)
+      if (!ids || ids.length < 2) throw new Error(`90: fewer than two live panels — ${JSON.stringify(ids)}`)
+      const focusId = ids.find((id) => id !== newId)
+      const selectId = newId
+
+      const before = await wc.executeJavaScript(`window.canvas.preset.list()`)
+      // Focus one panel by clicking into its terminal, the way a user does.
+      // Dispatched on .xterm-screen, never on .panel__slot: xterm binds its
+      // listeners on .xterm, one level BELOW the slot, and capture-toward-target
+      // traversal never visits a target's own descendants — the mistake CLAUDE.md
+      // records as costing two fix rounds during M4a.
+      await wc.executeJavaScript(`
+        document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(focusId)} + '"] .xterm-screen')
+          .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`)
+      await settle()
+      // Select the DIFFERENT, distinct-cwd one from the rail — selects and
+      // raises, never focuses.
+      await wc.executeJavaScript(`
+        document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(selectId)} + '"] .rail-row__main')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      await settle()
+      const observed = await wc.executeJavaScript(`(() => {
+        const focusedEl = document.activeElement
+        const focusedPanel = focusedEl && focusedEl.closest ? focusedEl.closest('.panel') : null
+        const selectedPanel = document.querySelector('.panel--selected')
+        const cwdEl = document.querySelector('[data-inspector-field="cwd"] .inspector__value')
+        return {
+          focused: focusedPanel ? focusedPanel.dataset.panelId : null,
+          selected: selectedPanel ? selectedPanel.dataset.panelId : null,
+          cwd: cwdEl ? cwdEl.textContent : null
+        }
+      })()`)
+      await wc.executeJavaScript(`
+        document.querySelector('[data-inspector-action="save-preset"]')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      await settle()
+      const after = await wc.executeJavaScript(`window.canvas.preset.list()`)
+      const added = after.filter((p) => !before.some((b) => b.id === p.id))
+      ok('90 the inspector saves the SELECTED panel, with focus deliberately elsewhere',
+        observed.focused === focusId && observed.selected === selectId &&
+          observed.focused !== observed.selected &&
+          added.length === 1 && observed.cwd !== null &&
+          added[0].subtitle.endsWith(observed.cwd),
+        `${JSON.stringify(observed)} added=${JSON.stringify(added)}`)
     }
 
   } catch (error) {
