@@ -43,6 +43,13 @@ export interface Registry {
   focus(id: PanelId): void
   lastFocusedAt(): Record<PanelId, number>
   /**
+   * Clear dormancy and, if the slot is already attached, spawn. Called when
+   * the user clicks a restored panel — via onSelectPanel, not onFocusPanel: a
+   * carded panel has no .panel__slot and therefore no focus handler at all.
+   */
+  wake(id: PanelId): void
+  version(): number
+  /**
    * Advance version() and notify, and do nothing else.
    *
    * Exists for exactly one caller: restart, which calls ensure() from an EVENT
@@ -60,13 +67,6 @@ export interface Registry {
    * keystroke goes somewhere they did not choose.
    */
   bumpVersion(): void
-  /**
-   * Clear dormancy and, if the slot is already attached, spawn. Called when
-   * the user clicks a restored panel — via onSelectPanel, not onFocusPanel: a
-   * carded panel has no .panel__slot and therefore no focus handler at all.
-   */
-  wake(id: PanelId): void
-  version(): number
   subscribe(listener: () => void): () => void
   /**
    * Close one panel: free its terminal and kill its process. One of exactly
