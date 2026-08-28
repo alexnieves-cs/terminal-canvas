@@ -1453,6 +1453,75 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify([p, withCommand]))
 }
 
+// 98. A pre-M9a file has no `baselines` key at all. That warns NOTHING — it
+//     is every file in existence — and resolves to an empty map. The
+//     absent-versus-malformed line parsePresets already draws.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({ version: 1, workspaces: [] }))
+  // Guarded on `!== undefined` rather than indexing straight into it: before
+  // the field exists this line would THROW, aborting the run and taking
+  // 99-103's RED with it, so the test-first step would prove nothing about
+  // five of its six checks.
+  ok(98, snapshot.baselines !== undefined &&
+    Object.keys(snapshot.baselines).length === 0 &&
+    !warnings.some((w) => w.includes('baseline')))
+}
+
+// 99. A present-but-malformed `baselines` WARNS rather than vanishing. A
+//     silently dropped map is a user's whole review history disappearing with
+//     nothing said.
+{
+  const { warnings } = L.parseLayout(JSON.stringify({ version: 1, baselines: [] }))
+  ok(99, warnings.some((w) => w.includes('baseline')))
+}
+
+// 100. An entry missing `sha` is dropped INDIVIDUALLY; its neighbours survive.
+{
+  const { snapshot } = L.parseLayout(JSON.stringify({
+    version: 1,
+    baselines: { p1: { root: '/r', sha: 'a' }, p2: { root: '/r' } }
+  }))
+  ok(100, snapshot.baselines.p1 !== undefined && snapshot.baselines.p2 === undefined)
+}
+
+// 101. A baseline survives a write and a reopen.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.setBaseline('p1', { root: '/r', sha: 'abc' })
+  store.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  const back = reopened.baseline('p1')
+  ok(101, back !== undefined && back.sha === 'abc' && back.root === '/r')
+}
+
+// 102. baselinePeers counts OTHER panels in the same root and excludes the
+//      asking panel. Counting itself would make every single-panel repo
+//      report as shared, i.e. the feature would never once produce an
+//      attributed answer.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setBaseline('p1', { root: '/r', sha: 'a' })
+  store.setBaseline('p2', { root: '/r', sha: 'b' })
+  store.setBaseline('p3', { root: '/other', sha: 'c' })
+  ok(102, store.baselinePeers('/r', 'p1') === 1 && store.baselinePeers('/other', 'p3') === 0)
+}
+
+// 103. dropBaseline removes it. Without this the map grows for the life of
+//      the install, and a recycled panel id inherits a dead panel's baseline
+//      — which would attribute a fresh agent's first diff to a repository
+//      state from weeks ago.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setBaseline('p1', { root: '/r', sha: 'a' })
+  store.dropBaseline('p1')
+  ok(103, store.baseline('p1') === undefined)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

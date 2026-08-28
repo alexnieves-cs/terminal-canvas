@@ -1,5 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { SettingValue, settingDef } from './settings-schema'
+import type { ReviewBaseline } from './review'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -167,6 +168,15 @@ export interface LayoutSnapshot {
    * a default be changed later without rewriting anyone's file.
    */
   preferences: Record<string, SettingValue>
+  /**
+   * Per-panel review baselines, keyed by PanelId.
+   *
+   * A SIBLING of `workspaces` rather than a member of one, because PanelId is
+   * global rather than per-workspace — M7's rule, and for M7's reason: the id
+   * doubles as a tmux session name, so one id means one panel across the whole
+   * install.
+   */
+  baselines: Record<string, ReviewBaseline>
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -201,7 +211,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     prompts: [],
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
-    preferences: {}
+    preferences: {},
+    baselines: {}
   }
 }
 
@@ -371,6 +382,45 @@ export function parsePreferences(
       }
     }
     out[id] = value as SettingValue
+  }
+  return out
+}
+
+/**
+ * The same ABSENT-vs-MALFORMED line parsePresets and parsePreferences draw.
+ *
+ * Baselines are keyed by PanelId GLOBALLY (a sibling of `workspaces` rather
+ * than a member of one — see LayoutSnapshot.baselines), so each entry is
+ * dropped INDIVIDUALLY rather than the whole map failing together: one panel
+ * with a malformed baseline costs that panel's review history, not
+ * everyone's.
+ */
+export function parseBaselines(
+  raw: unknown,
+  warnings: string[]
+): Record<string, ReviewBaseline> {
+  // Every file written before M9a has no baselines key. Warning about those
+  // would make the first launch after an upgrade shout about a file that is
+  // perfectly fine — the same reason parsePresets/parsePreferences return
+  // empty silently here.
+  if (raw === undefined) return {}
+  if (!isRecord(raw)) {
+    // Present but wrong warns rather than vanishing: a silently dropped map
+    // is a user's whole review history gone with nothing said.
+    warnings.push('baselines was not an object; ignoring it')
+    return {}
+  }
+  const out: Record<string, ReviewBaseline> = {}
+  for (const [id, value] of Object.entries(raw)) {
+    if (!ID_PATTERN.test(id)) {
+      warnings.push(`baseline for ${id} has an unusable panel id; dropped`)
+      continue
+    }
+    if (!isRecord(value) || !isStr(value.root) || !isStr(value.sha)) {
+      warnings.push(`baseline for ${id} was malformed; dropped`)
+      continue
+    }
+    out[id] = { root: value.root, sha: value.sha }
   }
   return out
 }
@@ -546,7 +596,8 @@ export function parseLayout(raw: string): {
           ? parsed.defaultPresetId
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
-      preferences
+      preferences,
+      baselines: parseBaselines(parsed.baselines, warnings)
     },
     warnings,
     futureVersion: false

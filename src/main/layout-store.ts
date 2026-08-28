@@ -13,6 +13,7 @@ import {
 } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 import type { ActivateResult, WorkspaceRow } from '../shared/ipc-contract'
+import type { ReviewBaseline } from '../shared/review'
 
 /**
  * Owns layout.json.
@@ -122,6 +123,17 @@ export interface LayoutStore {
   reset(): void
   /** Write now, synchronously. Never throws. */
   flushSync(): void
+  /** The panel's session-start snapshot, or undefined if it never spawned. */
+  baseline(panelId: string): ReviewBaseline | undefined
+  setBaseline(panelId: string, baseline: ReviewBaseline): void
+  dropBaseline(panelId: string): void
+  /**
+   * How many OTHER panels hold a baseline in this root. Excluding the asker is
+   * the whole point: counting itself would make every single-panel repository
+   * report as `shared`, and the feature would never once produce an
+   * attributed answer.
+   */
+  baselinePeers(root: string, exceptPanelId: string): number
 }
 
 const defaultSchedule = (fn: () => void, ms: number): Cancel => {
@@ -511,6 +523,23 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
         cancelPending = null
       }
       if (dirty) writeNow()
+    },
+
+    baseline(panelId) {
+      return snapshot.baselines[panelId]
+    },
+    setBaseline(panelId, baseline) {
+      snapshot.baselines[panelId] = baseline
+      scheduleWrite()
+    },
+    dropBaseline(panelId) {
+      if (snapshot.baselines[panelId] === undefined) return
+      delete snapshot.baselines[panelId]
+      scheduleWrite()
+    },
+    baselinePeers(root, exceptPanelId) {
+      return Object.entries(snapshot.baselines)
+        .filter(([id, b]) => id !== exceptPanelId && b.root === root).length
     }
   }
 }
