@@ -326,10 +326,11 @@ ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).k
   ok('27b clean outranks shared when nothing changed', r.kind === 'clean')
 }
 
-// 28. shared is checked BEFORE the diff is interpreted but AFTER the baseline
-//     is validated: a lost baseline in a shared repo is still baseline-lost,
-//     because "we cannot attribute" and "we have nothing to diff against" are
-//     different sentences and the second one is the actionable one.
+// 28. shared is checked AFTER the baseline is validated AND after both reads
+//     that build the file list have already succeeded: a lost baseline in a
+//     shared repo is still baseline-lost, because "we cannot attribute" and
+//     "we have nothing to diff against" are different sentences and the
+//     second one is the actionable one.
 {
   const r = await engineWith({
     '-C /r cat-file -e b1': { stdout: '', ok: false }
@@ -346,6 +347,21 @@ ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).k
     '-C /r diff --numstat -z b1': { stdout: '', ok: false }
   }).review('p1')
   ok('29 a failed diff is not silent emptiness', r.kind === 'baseline-lost')
+}
+
+// 29b. Check 29's rule, applied to the SECOND read: the numstat call can
+//      succeed while the ls-files call fails a moment later, because a
+//      repository can vanish between them. Treating that failure like a
+//      successful empty list would report "no changes" for an agent that
+//      just created files — the same confident wrong answer 29 forbids one
+//      call earlier, reached through the other read.
+{
+  const r = await engineWith({
+    ...EXISTS,
+    '-C /r diff --numstat -z b1': { stdout: '' },
+    '-C /r ls-files -z --others --exclude-standard': { stdout: '', ok: false }
+  }).review('p1')
+  ok('29b a failed ls-files is not silent emptiness', r.kind === 'baseline-lost')
 }
 
 const failed = results.filter((r) => !r.pass)

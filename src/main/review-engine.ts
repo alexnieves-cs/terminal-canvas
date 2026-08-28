@@ -96,6 +96,14 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     if (!numstat.ok) return { kind: 'baseline-lost', root }
 
     const untracked = await run(buildUntrackedArgs(root))
+    // The same rule check 29 already states, applied to the SECOND read: the
+    // two calls can disagree, because a repository can vanish between them.
+    // Treating a failed ls-files like a successful empty one would report
+    // "clean", or "changes" with a short list, for a panel whose agent
+    // created new files the instant before its checkout became unreadable —
+    // the confident wrong answer this milestone exists to avoid, one call
+    // later than check 29 already forbids it.
+    if (!untracked.ok) return { kind: 'baseline-lost', root }
 
     const files: ReviewFile[] = parseNumstat(numstat.stdout).map((e) => ({
       path: e.path,
@@ -108,7 +116,7 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     // A brand-new file is the commonest thing an agent produces and it never
     // appears in `git diff`. Enumerated rather than reached with `add -N`,
     // which would mutate an index the agent may be using right now.
-    for (const path of untracked.ok ? parseNulList(untracked.stdout) : []) {
+    for (const path of parseNulList(untracked.stdout)) {
       files.push({ path, added: 0, removed: 0, binary: false, untracked: true })
     }
 
