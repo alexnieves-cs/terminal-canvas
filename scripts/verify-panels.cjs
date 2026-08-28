@@ -5531,6 +5531,135 @@ app.whenReady().then(async () => {
       // by this check's own leftover panel.
     }
 
+    // 84-85. THE DORMANCY PAIR, on a fixture seeded for it.
+    //     Check 39's NEVER_WOKEN_ID does not survive M7's workspace churn —
+    //     check 71 deletes the last workspace and installs a fresh one — so a
+    //     dormant panel has to be seeded again here. The mechanism is the one
+    //     check 39's own seeding uses, and its comment explains each step:
+    //     append to the on-disk layout, re-load the store (layout:load answers
+    //     from the in-memory snapshot, not a fresh disk read), and reload the
+    //     renderer. A panel with no live session restores dormant under EITHER
+    //     backend, so this needs nothing tmux set up.
+    //
+    //     Parked at world (60000, 60000): far outside anything any check above
+    //     frames or clicks, and distinct from check 39's (50000, 50000) so a
+    //     stale fixture cannot be mistaken for this one.
+    const RAIL_DORMANT_ID = 'rail-dormant'
+    {
+      flushLayoutStore()
+      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+      const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+      ws.panels.push({
+        id: RAIL_DORMANT_ID,
+        x: 60000, y: 60000, w: 720, h: 460, z: maxZ + 1,
+        cwd: '~', args: ['-l']
+      })
+      writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+      layoutStore.load()
+      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload()
+      await reloaded
+      await waitUntil(async () => {
+        const sessions = await wc.executeJavaScript(
+          `window.__m4aSessions ? window.__m4aSessions() : []`)
+        return sessions.some((s) => s.id === RAIL_DORMANT_ID) || false
+      }, 4000)
+    }
+
+    // 84. CLICKING A ROW FRAMES ITS PANEL AND DOES NOT START IT.
+    //     Rule 1 of the spec, and the one failure a screenshot cannot show: a
+    //     row wired to onSelectPanel instead of goToPanel frames the panel just
+    //     as correctly and ALSO clears the dormant id and calls registry.wake.
+    //     On a restored twelve-panel canvas that is twelve agent CLIs launched
+    //     by browsing a list. Both assertions are required: the camera clause
+    //     alone passes against the wake, and the no-spawn clause alone passes
+    //     against a row wired to nothing at all.
+    {
+      const rowState = () => wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-row[data-rail-row=${JSON.stringify(RAIL_DORMANT_ID)}]')
+        return row ? {
+          tail: row.querySelector('.rail-row__tail').textContent,
+          hasStart: row.querySelector('.rail-row__start') !== null
+        } : null
+      })()`)
+      const seeded = await waitUntil(async () => {
+        const s = await rowState()
+        return s && s.tail === 'dormant' ? s : false
+      }, 4000)
+      const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+      await wc.executeJavaScript(`
+        document.querySelector('.rail-row[data-rail-row=${JSON.stringify(RAIL_DORMANT_ID)}] .rail-row__main')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      await sleep(400)
+      const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+      const sessions = await wc.executeJavaScript(`window.__m4aSessions()`)
+      const still = sessions.find((s) => s.id === RAIL_DORMANT_ID)
+      ok('84 a rail row frames its panel and leaves a dormant one dormant',
+        seeded !== false && seeded.hasStart === true &&
+          (after.x !== before.x || after.y !== before.y) &&
+          still !== undefined && still.dormant === true && still.spawned === false,
+        `seeded=${JSON.stringify(seeded)} camera ${JSON.stringify(before)} -> ` +
+          `${JSON.stringify(after)} session=${JSON.stringify(still)}`)
+    }
+
+    // 85. THE START CONTROL IS THE ONLY THING THAT WAKES.
+    //     The other half of 84, and it has to be asserted or "never wakes"
+    //     would be satisfied just as well by a rail that CANNOT wake — a
+    //     dormant panel reachable from the rail but unstartable from it, with
+    //     the arrow rendered and inert.
+    {
+      await wc.executeJavaScript(`
+        document.querySelector('.rail-row[data-rail-row=${JSON.stringify(RAIL_DORMANT_ID)}] .rail-row__start')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      const woke = await waitUntil(async () => {
+        const sessions = await wc.executeJavaScript(`window.__m4aSessions()`)
+        const s = sessions.find((x) => x.id === RAIL_DORMANT_ID)
+        return s && s.dormant === false ? s : false
+      }, 6000)
+      const tail = await wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-row[data-rail-row=${JSON.stringify(RAIL_DORMANT_ID)}]')
+        return row ? row.querySelector('.rail-row__tail').textContent : null
+      })()`)
+      ok('85 the start control wakes the panel the row click would not',
+        woke !== false && tail !== 'dormant',
+        `session=${JSON.stringify(woke)} tail=${tail}`)
+    }
+
+    // 86. THE ROW'S CLOSE CONTROL CLOSES THE PANEL.
+    //     Asserted through THREE reads, because each alone passes against a
+    //     different wrong implementation: the row going is satisfied by a rail
+    //     that filtered its own list locally, the .panel going is satisfied by
+    //     a close that left the session running, and the session going is what
+    //     proves the control reached onClosePanel — the one call site that
+    //     disposes. Together they pin that the rail added no fourth way to
+    //     remove a panel.
+    //
+    //     Note on this fixture: the reload in the 84/85 seeding block restores
+    //     renamedId from disk along with everything else, so it is still
+    //     present here — but under the DIRECT backend it comes back dormant,
+    //     with no session. If the three-clause read is ever seen failing only
+    //     on `session`, check which backend the run took before assuming a
+    //     regression: `!state.session` is trivially true for a panel that
+    //     never respawned, and the clause that carries the weight there is the
+    //     row and the `.panel` both going.
+    {
+      const target = renamedId
+      await wc.executeJavaScript(`
+        document.querySelector('.rail-row[data-rail-row=${JSON.stringify(target)}] .rail-row__close')
+          .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+      const gone = await waitUntil(async () => {
+        const state = await wc.executeJavaScript(`(() => ({
+          row: document.querySelector('.rail-row[data-rail-row=${JSON.stringify(target)}]') !== null,
+          panel: document.querySelector('.panel[data-panel-id=${JSON.stringify(target)}]') !== null,
+          session: window.__m4aSessions().some((s) => s.id === ${JSON.stringify(target)})
+        }))()`)
+        return (!state.row && !state.panel && !state.session) ? state : false
+      }, 6000)
+      ok('86 the row\'s close control closes the panel, its DOM and its session',
+        gone !== false, `target=${target} state=${JSON.stringify(gone)}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
