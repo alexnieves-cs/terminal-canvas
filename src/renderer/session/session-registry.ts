@@ -43,6 +43,24 @@ export interface Registry {
   focus(id: PanelId): void
   lastFocusedAt(): Record<PanelId, number>
   /**
+   * Advance version() and notify, and do nothing else.
+   *
+   * Exists for exactly one caller: restart, which calls ensure() from an EVENT
+   * HANDLER rather than during render. ensure() deliberately does not bump —
+   * see its own comment: it normally runs while Canvas renders, and notifying a
+   * useSyncExternalStore subscriber mid-render makes React warn about updating
+   * one component while rendering another. Outside render that protection
+   * becomes a gap: nothing re-renders, so the new handle's host is never
+   * mounted and the restarted panel shows nothing at all, with no error.
+   *
+   * focus(id) would also bump, and is the tempting one-liner — but it sets
+   * lastFocusedAt and calls handle.focus(), moving the keyboard. A shell
+   * control that moves focus violates the rule shell-control.ts exists to
+   * enforce, and it fails silently: the panel looks right and the user's next
+   * keystroke goes somewhere they did not choose.
+   */
+  bumpVersion(): void
+  /**
    * Clear dormancy and, if the slot is already attached, spawn. Called when
    * the user clicks a restored panel — via onSelectPanel, not onFocusPanel: a
    * carded panel has no .panel__slot and therefore no focus handler at all.
@@ -54,8 +72,19 @@ export interface Registry {
    * Close one panel: free its terminal and kill its process. One of exactly
    * TWO places pty.kill is called in the renderer, the other being disposeAll.
    * Tiering must never reach either.
+   *
+   * Returns the kill's promise rather than discarding it, and that is M8c's
+   * one change here. Restart is dispose-then-ensure at the same id, and under
+   * tmux the destroy MUST complete before the respawn or `new-session -A`
+   * reattaches to the very session the restart meant to replace. That ordering
+   * happens to hold today anyway — ipcMain.handle(PTY_KILL) is synchronous
+   * down to an execFileSync — but every link in that chain is incidental to
+   * this file, and the failure it guards is completely silent: the restart
+   * appears to do nothing at all. Returning the promise makes the ordering a
+   * property of the caller that needs it. The four call sites that do not
+   * respawn ignore the result, correctly.
    */
-  dispose(id: PanelId): void
+  dispose(id: PanelId): Promise<void>
   /**
    * Kill EVERY panel's process. Since M4c this has no production call site:
    * renderer teardown used to call it from a `beforeunload` listener, and
@@ -284,12 +313,14 @@ export function createRegistry(deps: RegistryDeps): Registry {
 
     version: () => version,
 
+    bumpVersion: () => bump(),
+
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
 
-    dispose(id) {
+    async dispose(id) {
       const session = sessions.get(id)
       // Local cleanup only when there is a local session to clean up.
       if (session) {
@@ -330,8 +361,16 @@ export function createRegistry(deps: RegistryDeps): Registry {
       // is still exactly ONE of the two `pty.kill` call sites in this file
       // (disposeAll is the other); nothing here adds a third caller
       // anywhere else, in particular not in Canvas.tsx.
-      void bridge.pty.kill(id)
+      //
+      // The promise is returned, not discarded, so restart can await it. bump()
+      // still runs BEFORE the await: the local teardown above is already
+      // done, and subscribers need to hear about it on the same tick they
+      // always have — moving the bump behind the await would delay every
+      // close by one IPC round trip and make verify:panels' close checks
+      // flaky for a reason nothing points at.
+      const killed = bridge.pty.kill(id)
       if (session) bump()
+      await killed
     },
 
     disposeAll() {

@@ -503,6 +503,126 @@ const tick = () => new Promise((r) => setImmediate(r))
       JSON.stringify(st))
   }
 
+  // 21. THE RESTART SEQUENCE. Restart is dispose-then-ensure at ONE id, and
+  //     this is that sequence driven directly, without a renderer.
+  //
+  //     The clauses that carry weight are the ones about IDENTITY: the new
+  //     session must be a DIFFERENT object with a DIFFERENT handle, because
+  //     term.open() runs at most once ever and a reused Terminal is a panel
+  //     that renders nothing with no error anywhere. And it must be NOT
+  //     dormant — an ensure that inherited dormancy would leave a restarted
+  //     panel refusing to spawn, which looks exactly like a restart that did
+  //     nothing.
+  {
+    const { bridge, factory, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const first = registry.get('p1')
+    const firstHandle = first.handle
+
+    await registry.dispose('p1')
+    registry.ensure('p1', SPEC, { dormant: false })
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const second = registry.get('p1')
+
+    ok('21 restart disposes and re-ensures at the same id, with a fresh handle and no dormancy',
+      first !== second && second.id === 'p1' &&
+        second.handle !== firstHandle &&
+        second.dormant === false && second.spawned === true &&
+        bridge.calls.kill.length === 1 && bridge.calls.kill[0] === 'p1' &&
+        bridge.calls.create.length === 2 &&
+        bridge.calls.create[0].panelId === 'p1' && bridge.calls.create[1].panelId === 'p1',
+      `kills=${JSON.stringify(bridge.calls.kill)} creates=${bridge.calls.create.length}`)
+  }
+
+  // 22. THE ORDERING GUARANTEE restart depends on. dispose() must RESOLVE
+  //     after the bridge's kill has resolved, or awaiting it buys nothing and
+  //     the respawn can overtake the destroy — under tmux, `new-session -A`
+  //     then reattaches to the very session the restart meant to replace and
+  //     the whole verb becomes a silent no-op.
+  //
+  //     The fake kill is deliberately made SLOW and the create is recorded
+  //     against a flag the kill flips. A check that only awaited dispose()
+  //     and asserted "it resolved" passes against `dispose(id) { …; void
+  //     bridge.pty.kill(id) }` returning undefined, because `await undefined`
+  //     resolves immediately and truthfully.
+  {
+    const { bridge, registry } = setup()
+    let killFinished = false
+    bridge.pty.kill = async (id) => {
+      bridge.calls.kill.push(id)
+      await new Promise((r) => setTimeout(r, 20))
+      killFinished = true
+    }
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    await registry.dispose('p1')
+    ok('22 dispose resolves only after main has confirmed the kill',
+      killFinished === true, `killFinished=${killFinished}`)
+  }
+
+  // 24. bumpVersion advances version() and does NOTHING else.
+  //     The "nothing else" half is the whole reason it exists rather than
+  //     reusing focus(), which also bumps: focus() moves the keyboard, and a
+  //     restart that stole focus would violate the shell's rule 2 — silently,
+  //     because the panel would look right and the next keystroke would land
+  //     somewhere the user did not choose.
+  {
+    const { factory, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const state = factory.made.get('p1')
+    const focusedBefore = state.focused
+    const stampBefore = registry.lastFocusedAt().p1
+    let notified = 0
+    const off = registry.subscribe(() => { notified += 1 })
+    const before = registry.version()
+    registry.bumpVersion()
+    const after = registry.version()
+    off()
+    ok('24 bumpVersion advances version and notifies, without touching focus',
+      after === before + 1 && notified === 1 &&
+        state.focused === focusedBefore &&
+        registry.lastFocusedAt().p1 === stampBefore,
+      `version ${before} -> ${after}, notified=${notified}, focused ${focusedBefore} -> ${state.focused}`)
+  }
+
+  // 23. The OLD handle is never written to again. pty:data arrives on one
+  //     subscription for the whole canvas, keyed by panel id, so a restart
+  //     that left the disposed handle reachable would route the NEW process's
+  //     output into a disposed terminal — a restarted panel that stays blank
+  //     while its agent runs perfectly well, with nothing in any log.
+  {
+    const { bridge, factory, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const oldState = factory.made.get('p1')
+    const writtenBefore = oldState.written.length
+
+    await registry.dispose('p1')
+    registry.ensure('p1', SPEC, { dormant: false })
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    bridge.emitData({ panelId: 'p1', data: 'after restart' })
+
+    ok('23 output after a restart reaches the new handle, never the disposed one',
+      oldState.disposed === true &&
+        oldState.written.length === writtenBefore &&
+        registry.get('p1').handle !== undefined,
+      `disposed=${oldState.disposed} writes ${writtenBefore} -> ${oldState.written.length}`)
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
