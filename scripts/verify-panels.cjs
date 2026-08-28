@@ -5426,6 +5426,71 @@ app.whenReady().then(async () => {
       // and selected; the palette is closed. Check 86 closes it again.
     }
 
+    // 83. A REAL BELL REACHES ONE ROW, AND ONLY ONE.
+    //     Check 54 already proves a bell reaches the PANEL. What this adds is
+    //     the half only the rail can be wrong about: every row is fed from one
+    //     `rows` array, so an implementation that subscribed the LIST to agent
+    //     state — rather than each row to its own id — would paint the right
+    //     dot and still be the fan-out agent-state-store.ts exists to refuse.
+    //     Asserting the OTHER rows did not move is the only thing that
+    //     separates the two, and it is why this reads every dot rather than
+    //     one.
+    //
+    //     The attribute, not the class: a class is a styling decision a
+    //     restyle may rename, the same split check 54 draws for the panel.
+    //
+    //     Deviation from the brief's literal source: the brief's draft rings
+    //     the bell on `renamedId`, check 82's Cmd+N spawn. Cmd+N's default
+    //     here is BOOT_DEFAULT_PRESET, `/bin/cat -v` (checks 44 and 70b's own
+    //     comment both document this) — cat only ECHOES the literal bytes
+    //     `printf '\007'\n` it is handed, so no actual 0x07 ever reaches its
+    //     output and the check could never pass, on correct rail code or
+    //     broken. Confirmed empirically: run against the brief's literal
+    //     source first and it failed with `after=false` even though
+    //     `RailPanelRow` subscribes correctly. So this spawns a REAL shell
+    //     through PRESET_SPAWN instead — the exact substitution checks 54-63
+    //     and 70b already make for the identical reason — and rings the bell
+    //     there, while still reading every row's dot (cat panels, `renamedId`
+    //     included) to prove the others never moved.
+    {
+      const BELL_LINE = "printf '\\007'\n"
+      const dots = () => wc.executeJavaScript(`
+        Object.fromEntries([...document.querySelectorAll('.rail-row')].map((r) => [
+          r.getAttribute('data-rail-row'),
+          r.querySelector('.rail-row__dot').getAttribute('data-agent-state')
+        ]))`)
+      const idsBefore83 = new Set(await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const idsAfter83 = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.length > idsBefore83.size ? now : false
+      }, 4000)
+      const target = idsAfter83 ? idsAfter83.find((id) => !idsBefore83.has(id)) : null
+      if (!target) throw new Error('83: PRESET_SPAWN produced no new panel')
+      const hasPty = await waitUntil(async () => (await sessionMap(wc)).has(target), 8000)
+      if (!hasPty) throw new Error(`83: panel ${target} never got a PTY`)
+      const before = await dots()
+      ptyManager.write(target, BELL_LINE)
+      const rang = await waitUntil(async () => {
+        const now = await dots()
+        return now[target] === 'wants-you' ? now : false
+      }, 6000)
+      const others = rang
+        ? Object.keys(rang).filter((id) => id !== target)
+            .every((id) => rang[id] === before[id])
+        : false
+      ok('83 a real bell changes that panel\'s row dot and no other',
+        rang !== false && others === true,
+        `target=${target} before=${JSON.stringify(before)} after=${JSON.stringify(rang)}`)
+      // What 83 LEAVES BEHIND: an extra sh panel in wants-you, in main's
+      // store and on its row, alongside renamedId (still 'starting', untouched
+      // by this check). Nothing below acknowledges either; check 86 closes
+      // renamedId through the rail's own close control, which is unaffected
+      // by this check's own leftover panel.
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
