@@ -8,6 +8,7 @@ import { usePanelDrag } from './usePanelDrag'
 import type { DragMode, DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
+import { ReviewNode } from '@renderer/review/ReviewNode'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
@@ -26,7 +27,10 @@ import type {
 } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { cascadeCentre, firstRunPanels, makePanel, nextZ, raisePanel, removePanel, setPanelRect, type Panel } from '@renderer/panels/panels'
+import {
+  cascadeCentre, firstRunPanels, isReviewPanel, makePanel, nextZ, raisePanel, removePanel,
+  setPanelRect, type Panel, type TerminalPanel as TerminalPanelModel
+} from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
@@ -72,6 +76,11 @@ const EMPTY_WORKSPACES: WorkspaceRow[] = []
  * commands.ts), which is what actually makes it findable in the palette.
  */
 function panelLabel(panel: Panel): string {
+  // A review node has no command and no cwd of its own — its subject's repo
+  // root is what identifies it, and the label snapshot is what names the
+  // agent it reviews. Same shape as the terminal case (a name, then the id)
+  // so the switcher's rows stay one kind of row.
+  if (isReviewPanel(panel)) return `review: ${panel.subject.label} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   return `${command} — ${panel.spec.cwd} (${panel.rect.id})`
 }
@@ -141,7 +150,23 @@ export function Canvas({
   const [panels, setPanels] = useState<Panel[]>(() =>
     initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
   )
+  // Hit testing and the pip layer keep the WHOLE array: a review node is a
+  // real, clickable panel and an off-screen one is a real thing to point at.
   const rects = useMemo(() => panels.map((p) => p.rect), [panels])
+
+  /**
+   * Tiering's input, and the reason a review node cannot take a LIVE_BUDGET
+   * slot or a WebGL context: it is not in the array assignTiers is given, so
+   * the guarantee is structural rather than a rule assignTiers has to obey.
+   * The same filter gates registry.ensure below — a review node has no spec
+   * to ensure with, and minting a PanelSession for one would put a terminal
+   * in the map with nothing to run in it.
+   */
+  const terminalPanels = useMemo(
+    () => panels.filter((p): p is TerminalPanelModel => !isReviewPanel(p)),
+    [panels]
+  )
+  const terminalRects = useMemo(() => terminalPanels.map((p) => p.rect), [terminalPanels])
   // hitTest returns the LAST match, so paint order and pick order agree only
   // if the array it receives is in paint order. Paint order is z now, not
   // array position — see the note on Panel.z.
@@ -438,7 +463,13 @@ export function Canvas({
     // frozen until the user clicks elsewhere. Requiring the slot is what lets
     // the camera claim the wheel over a card the way it does over any other
     // non-live panel.
-    return panel.querySelector('.panel__slot') !== null
+    // Or its scroll host, for a kind whose body is not a terminal: a review
+    // node renders [data-scroll-host] on the element that actually scrolls
+    // (see ReviewNode.tsx), so what a kind RENDERS answers "does this panel
+    // own its wheel" rather than a second branch on kind inside this
+    // predicate. A terminal panel carries no such attribute, so the terminal
+    // half of this rule is unchanged.
+    return panel.querySelector('.panel__slot, [data-scroll-host]') !== null
   }, [])
 
   // The palette owns the keyboard while it is open; see usePalette's four
@@ -492,10 +523,10 @@ export function Canvas({
   // component" warning is about. The panel list living in React state is
   // already what triggers this render, so nothing is lost by not bumping.
   useMemo(() => {
-    for (const panel of panels) {
+    for (const panel of terminalPanels) {
       registry.ensure(panel.rect.id, panel.spec, { dormant: dormantIds.has(panel.rect.id) })
     }
-  }, [panels, dormantIds])
+  }, [terminalPanels, dormantIds])
 
   // Menu-driven clipboard. The old per-panel TerminalPanel used to own this
   // subscription directly against xterm; now that TerminalPanel is a dumb
@@ -560,7 +591,10 @@ export function Canvas({
       const id = focusedIdRef.current
       if (!id) return null
       const panel = panelsRef.current.find((p) => p.rect.id === id)
-      if (!panel) return null
+      // A review node has no spec to capture, so it saves as no preset. It
+      // cannot be the focused panel today (nothing focuses one but its own
+      // body), and it answers null rather than throwing if that ever changes.
+      if (!panel || isReviewPanel(panel)) return null
       // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
       // to — reading the real one means asking the pid, which is its own piece
       // of machinery (ideas-backlog #4) and deliberately not in M5a.
@@ -942,7 +976,7 @@ export function Canvas({
      */
     w.__m5aSpecOf = (id: string): { spec: PanelSpecTemplate; rect: WorldRect } | null => {
       const panel = panelsRef.current.find((p) => p.rect.id === id)
-      return panel ? { spec: panel.spec, rect: panel.rect } : null
+      return panel && !isReviewPanel(panel) ? { spec: panel.spec, rect: panel.rect } : null
     }
     /** The template currently pushed as Cmd+N's default, or undefined. */
     w.__m5aDefaultSpec = (): PresetTemplate | undefined => defaultTemplateRef.current
@@ -1048,6 +1082,23 @@ export function Canvas({
   const onSlotMount = useCallback((id: string) => registry.attachSlot(id), [])
   const onSlotUnmount = useCallback((id: string) => registry.detachSlot(id), [])
   const onClosePanel = useCallback((id: string) => {
+    // A review node owns no session, so it is dropped from the array and
+    // nothing else. This is NOT a sixth dispose call site and must not
+    // become one: the registry's dispose sends pty.kill even for an id this
+    // renderer holds no session for (see CLAUDE.md), so routing a review
+    // node through it would send a tmux kill-session for a panel that never
+    // had one — and, worse, drop the baseline of whatever panel later
+    // recycles that id.
+    if (panelsRef.current.some((p) => p.rect.id === id && isReviewPanel(p))) {
+      setPanels((current) => {
+        const next = removePanel(current, id)
+        commitHistory(next)
+        return next
+      })
+      setSelectedId((current) => (current === id ? null : current))
+      setFocusedId((current) => (current === id ? null : current))
+      return
+    }
     // What actually matters is that dispose runs SYNCHRONOUSLY inside this
     // handler, killing the pty on the click that asked for it. The ordering
     // against setPanels is not load-bearing: this is a React synthetic
@@ -1202,7 +1253,9 @@ export function Canvas({
     if (!host) return
     const bounds = host.getBoundingClientRect()
     const tiers = assignTiers({
-      rects,
+      // terminalRects, not rects: a review node has no tier at all, and this
+      // is the one line that makes that structural. See terminalPanels above.
+      rects: terminalRects,
       viewport,
       size: { width: bounds.width, height: bounds.height },
       focusedId,
@@ -1263,7 +1316,7 @@ export function Canvas({
       heldSinceRef.current.clear()
       registry.applyTiers(tiersRef.current)
     }, DEMOTE_DELAY_MS)
-  }, [rects, viewport, focusedId, version, dormantIds])
+  }, [terminalRects, viewport, focusedId, version, dormantIds])
 
   // Persist on every change. Unthrottled on purpose, including the ~60/sec a
   // drag produces: main coalesces to one write per 500ms and keeps only the
@@ -1390,7 +1443,10 @@ export function Canvas({
     // user has since cd'd to is only knowable from the pid, and that is
     // explicitly out of this milestone — so a panel that has wandered lists
     // the prompts of where it started, not of where it is.
-    void window.canvas.prompt.list(panel?.spec.cwd ?? null).then((rows) => {
+    // A review node has no cwd of its own, so it lists the saved prompts
+    // alone — the same answer a null captured id already gives.
+    const cwd = panel !== undefined && !isReviewPanel(panel) ? panel.spec.cwd : null
+    void window.canvas.prompt.list(cwd).then((rows) => {
       promptBodiesRef.current = new Map(rows.map((r) => [r.id, r.body]))
       setPromptRows(rows.map(({ id, name, source }) => ({ id, name, source })))
     })
@@ -1680,9 +1736,16 @@ export function Canvas({
             // same absent-stays-absent rule fromPanels obeys, so a future
             // caller that DOES want to clear a title can't get there by
             // accidentally spreading `title: undefined` through.
-            const next = prev.map((p) =>
-              p.rect.id === id ? { rect: p.rect, spec: p.spec, z: p.z, title: name } : p
-            )
+            // Both kinds are rebuilt, and `kind` is carried explicitly by
+            // each arm rather than spread: a rename that dropped it would
+            // turn a review node back into a terminal panel on the next
+            // parse, which reads its absent spec and empties the canvas.
+            const next: Panel[] = prev.map((p) => {
+              if (p.rect.id !== id) return p
+              return isReviewPanel(p)
+                ? { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name }
+                : { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name }
+            })
             // One entry for the whole gesture, on commit — the rule a drag
             // already follows. Pushing per keystroke would make one rename
             // take a dozen Cmd+Z presses to unwind.
@@ -2000,7 +2063,9 @@ export function Canvas({
     startPanel: (id) => onSelectPanel(id),
     savePanelAsPreset: (id) => {
       const panel = panelsRef.current.find((p) => p.rect.id === id)
-      if (!panel) return
+      // Nothing to save for a review node: it has no spec, and the preset it
+      // would produce is a shell in a directory it never named.
+      if (!panel || isReviewPanel(panel)) return
       // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
       // to — the same limit onCapture records; reading the real one means
       // asking the pid (ideas-backlog #4).
@@ -2065,7 +2130,11 @@ export function Canvas({
      */
     restartPanel: (id) => {
       const panel = panelsRef.current.find((p) => p.rect.id === id)
-      if (!panel) return
+      // A review node has no process to restart. The isRestartable gate below
+      // would refuse it anyway (it holds no session, so its status is
+      // undefined), but the narrowing has to happen before `panel.spec` is
+      // read at all.
+      if (!panel || isReviewPanel(panel)) return
       // The same gate the Restart row and the inspector button render, read
       // from the same function rather than re-expressed here: a verb that
       // acted on a never-started panel would end a process that does not
@@ -2226,7 +2295,12 @@ export function Canvas({
    * all; registry.version() bumps on tier/status/focus/exit and nothing
    * higher-frequency, which is exactly the rate the rail wants.
    */
-  const railBuilt = buildRailRows(panels, (id) => registry.get(id)?.status, dormantIds)
+  // terminalPanels, for now: railLabel walks the honest chain through
+  // `spec.command`, which a review node does not have. Giving a node its own
+  // rail row — with the label it already carries — is the shell task's job,
+  // not this one's; until then a node is a panel on the canvas and absent
+  // from the outline, which is a gap rather than a crash.
+  const railBuilt = buildRailRows(terminalPanels, (id) => registry.get(id)?.status, dormantIds)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 
@@ -2284,7 +2358,12 @@ export function Canvas({
   const selectedPanel = selectedId === null
     ? undefined
     : panels.find((p) => p.rect.id === selectedId)
-  const inspectorBuilt = selectedPanel === undefined
+  // A selected review node renders the pane's EMPTY state rather than a
+  // model, for the same reason the rail skips it: buildInspectorModel reads
+  // `spec.command`, and the pane's own review-node fields are the shell
+  // task's subject. The empty selection is a first-class state here
+  // (verify:rail 27b), so this is a gap and not a crash.
+  const inspectorBuilt = selectedPanel === undefined || isReviewPanel(selectedPanel)
     ? null
     : buildInspectorModel(selectedPanel, registry.get(selectedPanel.rect.id)?.status)
   const inspectorSig = inspectorSignature(inspectorBuilt)
@@ -2406,6 +2485,24 @@ export function Canvas({
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
           {panels.map((panel) => {
+            // The partition, at the last hop. onSelect is selectAndRaise and
+            // NOT onSelectPanel: the latter clears the dormant id and calls
+            // registry.wake, which is the app's spawn gesture and means
+            // nothing for a panel with no process — the same distinction the
+            // rail draws between navigating and starting.
+            if (isReviewPanel(panel)) {
+              return (
+                <ReviewNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={panel.rect.id === selectedId}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                />
+              )
+            }
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

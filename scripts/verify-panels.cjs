@@ -6929,6 +6929,124 @@ app.whenReady().then(async () => {
       ok('101 two panels in one repo are reported as unattributable',
         typeof note === 'string' && note.includes("can't be attributed"), `note=${note}`)
 
+
+      /* A review node is seeded through DISK + RELOAD rather than through a
+         gesture, and deliberately: the creation gesture is Task 9's subject,
+         and a node that can only exist because a button worked would make
+         these three checks fail for that button's reasons. The route is the
+         one checks 39 and 84 already use for a dormant panel — append to the
+         saved canvas, reload, read what came back. It needs a REAL baseline
+         sha, so it asks main for the subject panel's own. */
+      const seedReviewNode = async (subjectId, nodeId) => {
+        const baseline = await wc.executeJavaScript(
+          `window.canvas.review.baseline(${JSON.stringify(subjectId)})`)
+        if (!baseline) return null
+        const saved = layoutStore.initial()
+        const panels = saved.panels.concat([{
+          id: nodeId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
+          subject: { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: 'claude' }
+        }])
+        // Camera parked ON the node, so it is rendered rather than culled:
+        // a review node is never promoted (it has no tier at all), but it is
+        // still an ordinary DOM child of .world and still only rendered when
+        // the canvas is looking at it.
+        layoutStore.save({ panels, camera: { x: -60000 + 200, y: 100, scale: 1 },
+          selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        // waitUntil on the DOM rather than a guessed sleep: boot awaits two
+        // IPC round trips (layout:load, then pty:list) before the first
+        // render, and the node's own review:at query resolves after that.
+        const appeared = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="${nodeId}"]') !== null`), 10000)
+        return appeared === true ? nodeId : null
+      }
+      const xtermCount = () => wc.executeJavaScript(
+        `document.querySelectorAll('.xterm').length`)
+      const beforeXterms = await xtermCount()
+      const node = first ? await seedReviewNode(first, 'r90') : null
+
+      // 102. The node renders REAL content — the file its subject's agent
+      //      actually wrote, read through review:at with no panel id
+      //      involved — and there is no terminal machinery underneath it.
+      //      Both halves in one read: a node that rendered a file list AND
+      //      an empty xterm host would satisfy either half alone, and the
+      //      empty host is precisely what a copy-pasted TerminalPanel gives.
+      {
+        // The summary starts at "reading…" and becomes "1 file changed" one
+        // IPC round trip later, so the file rows are what this waits on —
+        // reading immediately would fail against a correct implementation.
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]').length > 0`),
+        8000)
+        const body = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id="r90"]')
+          if (!n) return null
+          return {
+            summary: (n.querySelector('[data-review-node-summary]') || {}).textContent || '',
+            files: [...n.querySelectorAll('[data-review-node-file]')]
+              .map((e) => e.getAttribute('data-review-node-file')),
+            slots: n.querySelectorAll('.panel__slot').length,
+            xterms: n.querySelectorAll('.xterm').length
+          } })()`)
+        ok('102 a review node renders its subject\'s files and no terminal',
+          node !== null && body !== null && body.files.includes('agent.txt') &&
+            body.summary.includes('file') && body.slots === 0 && body.xterms === 0,
+          JSON.stringify(body))
+      }
+
+      // 103. THE ONE TO KNOW BY NUMBER — success criterion 4's teeth. The
+      //      node holds no PanelSession and consumes no WebGL context, and
+      //      both are asserted against the registry and the DOM rather than
+      //      argued from the code. The xterm count is compared to the count
+      //      BEFORE the node existed, because "the node has no xterm" (102)
+      //      is satisfied by an implementation that quietly promoted some
+      //      OTHER panel to pay for it.
+      {
+        // __m4aSessions, not sessionMap: the claim is about the RENDERER's
+        // registry — "no PanelSession was minted for this id" — and main's
+        // pty:list would answer `false` for a node that had a session and
+        // simply had not spawned yet.
+        const sessions = await wc.executeJavaScript(
+          `(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+        const afterXterms = await xtermCount()
+        ok('103 a review node has no session and costs no WebGL context',
+          node !== null && sessions.includes('r90') === false && afterXterms <= beforeXterms,
+          `xterms ${beforeXterms} -> ${afterXterms} sessions=${JSON.stringify(sessions)}`)
+      }
+
+      // 104. It is a child of .world, which is what makes semantic zoom free
+      //      rather than a feature: it pans and zooms with the panel it
+      //      reviews. Asserted as a real camera move changing its screen
+      //      position, not merely as a CSS ancestor — a node re-parented to
+      //      the screen-space chrome layer would still match a selector and
+      //      would sit still while the canvas moved under it.
+      {
+        // Its own pan helper: the panBy in the M6c/M6d blocks above is a
+        // block-local of theirs and is not in scope here.
+        const panReview = (dx, dy) => wc.executeJavaScript(`
+          document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+            bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+            deltaX: ${dx}, deltaY: ${dy}, deltaMode: 0
+          }))
+          true
+        `)
+        const boxOf = () => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id="r90"]')
+          return n ? n.getBoundingClientRect().left : null })()`)
+        const inWorld = await wc.executeJavaScript(
+          `document.querySelector('.world .review-node[data-panel-id="r90"]') !== null`)
+        const before = await boxOf()
+        await panReview(120, 0)
+        await settle()
+        const after = await boxOf()
+        ok('104 the node lives in .world and moves with the camera',
+          inWorld === true && before !== null && after !== null && Math.abs(after - before) > 50,
+          `${before} -> ${after}`)
+      }
+
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
       // up must never turn a green suite red.

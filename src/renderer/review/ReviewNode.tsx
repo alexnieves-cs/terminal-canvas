@@ -1,0 +1,236 @@
+import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import type { ReviewPanel } from '@renderer/panels/panels'
+import type { DragState } from '@renderer/canvas/panel-interaction'
+import type { ReviewDiff, ReviewResult } from '@shared/review'
+import { useAgentState } from '@renderer/session/agent-state-store'
+import { buildReviewNodeModel, reviewNodeSignature } from './review-node-model'
+
+export interface ReviewNodeProps {
+  panel: ReviewPanel
+  selected: boolean
+  onSelect: (id: string) => void
+  /**
+   * The same onFocus a terminal panel's body calls. Focus here buys one
+   * thing and costs nothing: shouldYieldWheel's rule 3 gives the wheel to
+   * the FOCUSED panel, so an unfocused node would pan the canvas instead of
+   * scrolling its diff. It costs nothing because assignTiers never sees this
+   * panel at all — a focused id that names no rect consumes no LIVE_BUDGET
+   * slot, which is exactly what the partition in Canvas.tsx guarantees.
+   */
+  onFocus: (id: string) => void
+  onBeginDrag: (state: DragState) => void
+  onClose: (id: string) => void
+}
+
+/**
+ * One review node, in world space.
+ *
+ * It owns its OWN query, rather than receiving a result from Canvas, for the
+ * reason RailPanelRow owns its own agent-state subscription: a canvas can
+ * hold several nodes, and lifting their queries into Canvas would make every
+ * node's refresh a Canvas re-render — the 60Hz cascade the memo architecture
+ * exists to prevent, arriving through a new door.
+ *
+ * It reuses the `.panel` class deliberately. Drag, resize, selection, the
+ * pointer corrector and shouldYieldWheel's `closest('.panel')` all key off
+ * that class and `data-panel-id`; a private class name here would mean four
+ * surfaces each growing a second case for a panel that is a panel in every
+ * way that matters to them.
+ */
+function ReviewNodeImpl({
+  panel, selected, onSelect, onFocus, onBeginDrag, onClose
+}: ReviewNodeProps): JSX.Element {
+  const { subject } = panel
+  const [result, setResult] = useState<ReviewResult | undefined>(undefined)
+  const [expandedPath, setExpandedPath] = useState<string | null>(null)
+  const [diff, setDiff] = useState<ReviewDiff | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
+
+  // review:at, never review:panel: the node asks about a BASELINE it stores,
+  // so it keeps answering after main has dropped the subject panel's own
+  // baseline on kill. See ReviewSubject in shared/review.ts.
+  useEffect(() => {
+    let live = true
+    void window.canvas.review.at(subject).then((r) => { if (live) setResult(r) })
+    return () => { live = false }
+  }, [subject, refreshToken])
+
+  // The subject's agent going quiet is the one signal worth re-reading on —
+  // the same choice Canvas's inspector query makes, and for the same reason
+  // IPC.REVIEW_PANEL's own comment gives: `idle` means "this agent stopped
+  // producing output". A COUNTER of arrivals rather than the state itself,
+  // so leaving idle does not fire a second round of git processes. The
+  // subject may be gone entirely, in which case this is simply never true.
+  const subjectState = useAgentState(subject.subjectId)
+  const prevStateRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevStateRef.current
+    prevStateRef.current = subjectState
+    if (subjectState === 'idle' && prev !== 'idle') setRefreshToken((n) => n + 1)
+  }, [subjectState])
+
+  // One file at a time. Fetching every file's hunks up front is megabytes of
+  // text inside .world for a node the user may only glance at.
+  useEffect(() => {
+    if (expandedPath === null) { setDiff(null); return }
+    const row = result !== undefined && (result.kind === 'changes' || result.kind === 'shared')
+      ? result.files.find((f) => f.path === expandedPath)
+      : undefined
+    let live = true
+    setDiff(null)
+    void window.canvas.review.diff({
+      repoRoot: subject.repoRoot,
+      baselineSha: subject.baselineSha,
+      path: expandedPath,
+      untracked: row?.untracked === true
+    }).then((d) => { if (live) setDiff(d) })
+    return () => { live = false }
+  }, [expandedPath, subject, result])
+
+  const built = buildReviewNodeModel({ subject, title: panel.title, result, expandedPath })
+  const sig = reviewNodeSignature(built, diff)
+  // Frozen on the signature for the reason Canvas freezes inspectorModel:
+  // this component re-renders whenever Canvas hands it a new `panel` object
+  // — every frame of a drag — and rebuilding up to DIFF_MAX_LINES worth of
+  // rendered rows for a rect change is the cost this whole architecture
+  // exists to refuse.
+  const model = useMemo(() => built, [sig])
+  const { rect, z } = panel
+
+  return (
+    <div
+      className={`panel review-node${selected ? ' panel--selected' : ''}`}
+      data-panel-id={rect.id}
+      data-review-node
+      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
+    >
+      <header
+        className="panel__chrome"
+        onMouseDown={(event: ReactMouseEvent) => {
+          event.stopPropagation()
+          event.preventDefault()
+          onSelect(rect.id)
+          onBeginDrag({
+            panelId: rect.id,
+            mode: { kind: 'move' },
+            originRect: rect,
+            originWorld: { x: event.clientX, y: event.clientY }
+          })
+        }}
+      >
+        <span className="panel__title">{model.heading}</span>
+        <button
+          type="button"
+          className="review-node__refresh"
+          title="Read this repository again"
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            event.preventDefault()
+            setRefreshToken((n) => n + 1)
+          }}
+        >
+          ⟳
+        </button>
+        {/* No arming step, unlike a terminal panel's ×: there is no process
+            to lose. Closing a review node throws away a query, and the same
+            button reopens it. */}
+        <button
+          type="button"
+          className="panel__close"
+          title="Close this review"
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            event.preventDefault()
+            onClose(rect.id)
+          }}
+        >
+          ×
+        </button>
+      </header>
+
+      <div
+        className="review-node__body"
+        // The marker shouldYieldWheel looks for. It is an ATTRIBUTE on the
+        // element that actually scrolls, so "does this panel own its wheel"
+        // is answered by what the KIND renders rather than by a branch inside
+        // the predicate — see Canvas.tsx's rule 3.
+        data-scroll-host
+        onMouseDown={(event) => {
+          event.stopPropagation()
+          onFocus(rect.id)
+        }}
+      >
+        <p className="review-node__summary" data-review-node-summary>{model.summary}</p>
+        <p className="review-node__root">{model.root}</p>
+        {model.note !== undefined && (
+          <p className="review-node__note" data-review-node-note>{model.note}</p>
+        )}
+        <ul className="review-node__files">
+          {model.files.map((f) => (
+            <li key={f.path} className="review-node__file" data-review-node-file={f.path}>
+              <button
+                type="button"
+                className={`review-node__file-button${f.expanded ? ' review-node__file-button--open' : ''}`}
+                onMouseDown={(event) => {
+                  event.stopPropagation()
+                  event.preventDefault()
+                  onFocus(rect.id)
+                  setExpandedPath(f.expanded ? null : f.path)
+                }}
+              >
+                <span className="review-node__path">{f.path}</span>
+                <span className="review-node__counts">
+                  {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
+                </span>
+              </button>
+              {f.expanded && <Hunks diff={diff} />}
+            </li>
+          ))}
+        </ul>
+        {model.more > 0 && <p className="review-node__more">+{model.more} more files</p>}
+      </div>
+
+      {(['e', 's', 'se'] as const).map((edge) => (
+        <div
+          key={edge}
+          className={`panel__resize panel__resize--${edge}`}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            event.preventDefault()
+            onSelect(rect.id)
+            onBeginDrag({
+              panelId: rect.id,
+              mode: { kind: 'resize', edge },
+              originRect: rect,
+              originWorld: { x: event.clientX, y: event.clientY }
+            })
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * `null` is "still reading", which is a different sentence from
+ * `unavailable` — and both are different from an empty diff, which this
+ * component can never render, because review-engine.ts refuses to produce
+ * one (see fileDiff's own comment).
+ */
+function Hunks({ diff }: { diff: ReviewDiff | null }): JSX.Element {
+  if (diff === null) return <p className="review-node__hunk-note">reading…</p>
+  if (diff.kind === 'binary') return <p className="review-node__hunk-note">binary file</p>
+  if (diff.kind === 'unavailable') return <p className="review-node__hunk-note">this diff could not be read</p>
+  return (
+    <div className="review-node__hunks" data-review-node-hunks>
+      {diff.lines.map((line, i) => (
+        <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>
+      ))}
+      {diff.truncated > 0 && (
+        <div className="review-node__hunk-note">+{diff.truncated} more lines</div>
+      )}
+    </div>
+  )
+}
+
+export const ReviewNode = memo(ReviewNodeImpl)

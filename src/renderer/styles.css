@@ -817,6 +817,80 @@ body {
   z-index: 3;
 }
 
+/* M9b. A review node reuses .panel for its box, its chrome and its resize
+   handles — see ReviewNode.tsx — and adds only what a scrollable text body
+   needs. The body is the ONE element carrying data-scroll-host, which is
+   what gives this kind the wheel over itself. */
+.review-node__body {
+  flex: 1;
+  min-height: 0;          /* or the list refuses to shrink and the box overflows */
+  overflow-y: auto;
+  padding: 8px 10px;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  background: var(--panel-bg);
+}
+
+.review-node__summary { margin: 0 0 2px; color: var(--text); }
+.review-node__root { margin: 0 0 8px; opacity: 0.6; word-break: break-all; }
+.review-node__note { margin: 0 0 8px; color: var(--amber); }
+.review-node__files { list-style: none; margin: 0; padding: 0; }
+
+.review-node__file-button {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.review-node__file-button:hover,
+.review-node__file-button--open { background: var(--border); }
+
+.review-node__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-node__counts { flex: none; opacity: 0.7; }
+
+.review-node__hunks {
+  margin: 2px 0 8px;
+  padding: 4px 0;
+  border-left: 2px solid var(--border);
+}
+
+.review-node__line { padding: 0 6px; white-space: pre; }
+
+/* Added/removed/context only. Syntax highlighting is a tokenizer for N
+   languages, which is a dependency and a milestone of its own — the spec's
+   own out-of-scope line. */
+.review-node__line--add { color: var(--green); background: rgba(158, 206, 106, 0.08); }
+.review-node__line--del { color: var(--red); background: rgba(247, 118, 142, 0.08); }
+.review-node__line--hunk { color: var(--blue); opacity: 0.9; }
+.review-node__line--meta { opacity: 0.5; }
+
+.review-node__hunk-note,
+.review-node__more { margin: 4px; opacity: 0.6; }
+
+.review-node__refresh {
+  /* Never shrunk to make room for a long heading — the same rule
+     .panel__close obeys, and it shares that button's chrome row. */
+  flex: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.review-node__refresh:hover { opacity: 1; }
+
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
