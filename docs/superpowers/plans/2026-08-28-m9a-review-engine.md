@@ -65,13 +65,17 @@
 
 ```js
 /* esbuild entry for the review suite. git-args.ts is pure — no child_process,
-   no electron, no node-pty — and review-engine.ts takes its runner as an
-   injected dependency, which is what keeps this suite in the cheap plain-node
-   tier. If this entry ever needs `external: ['node-pty']`, something impure
-   has leaked in and belongs in git-runner.ts instead. */
+   no electron, no node-pty — which is what keeps this suite in the cheap
+   plain-node tier. If this entry ever needs `external: ['node-pty']`,
+   something impure has leaked in and belongs in git-runner.ts instead.
+
+   It grows ONE spread per task, as each module comes into existence: Task 2
+   adds review-engine, Task 4 adds git-runner. Naming a module before the task
+   that creates it makes esbuild fail to resolve the whole bundle, so NO check
+   runs and the suite cannot go green — which is exactly what happened to the
+   first draft of this plan. */
 module.exports = {
-  ...require('../src/main/git-args'),
-  ...require('../src/main/review-engine')
+  ...require('../src/main/git-args')
 }
 ```
 
@@ -507,7 +511,18 @@ const fakeRunner = (table) => async (args) => {
 Run: `npm run verify:review`
 Expected: `TypeError: R.createReviewEngine is not a function` — the run **aborts at check 14** and checks 15–20 never execute. Confirm their RED separately after the module exists by temporarily returning a stub.
 
-- [ ] **Step 3: Write `src/shared/review.ts`**
+- [ ] **Step 3: Add `review-engine` to the esbuild entry**
+
+`scripts/review-entry.cjs` re-exports only `git-args` after Task 1. Add the second spread, or every `R.createReviewEngine` below is undefined:
+
+```js
+module.exports = {
+  ...require('../src/main/git-args'),
+  ...require('../src/main/review-engine')
+}
+```
+
+- [ ] **Step 4: Write `src/shared/review.ts`**
 
 ```ts
 import type { PanelId } from './types'
@@ -561,7 +576,7 @@ export type ReviewResult =
 export type { PanelId }
 ```
 
-- [ ] **Step 4: Write `src/main/review-engine.ts` (repo/baseline half)**
+- [ ] **Step 5: Write `src/main/review-engine.ts` (repo/baseline half)**
 
 ```ts
 import {
@@ -649,12 +664,12 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
 
 `review()` is deliberately a stub here — Task 3 is its own test cycle.
 
-- [ ] **Step 5: Run the suite**
+- [ ] **Step 6: Run the suite**
 
 Run: `npm run verify:review`
 Expected: `20/20 passed`, exit 0.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/shared/review.ts src/main/review-engine.ts scripts/verify-review.cjs
