@@ -7049,6 +7049,33 @@ app.whenReady().then(async () => {
           `${before} -> ${after}`)
       }
 
+      // 105. A wheel over a FOCUSED review node's body is left uncancelled
+      //      (the browser scrolls the diff) and moves no camera, while the
+      //      same wheel over the canvas background still pans — the two
+      //      halves check 47 already pins for the palette, on a second
+      //      surface. Cancellation, not scrollTop: a synthetic WheelEvent is
+      //      untrusted and Chromium performs no default action for one, so a
+      //      scrollTop assertion would fail the correct implementation. The
+      //      camera clause is what makes it more than a tautology.
+      {
+        const focused = await wc.executeJavaScript(`(() => {
+          const body = document.querySelector('.review-node[data-panel-id="r90"] .review-node__body')
+          if (!body) return null
+          body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        await settle()
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const cancelled = await wc.executeJavaScript(`(() => {
+          const body = document.querySelector('.review-node[data-panel-id="r90"] .review-node__body')
+          const e = new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })
+          return body.dispatchEvent(e) === false })()`)
+        await settle()
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        ok('105 a wheel over a focused review node is the node\'s, not the camera\'s',
+          focused === true && cancelled === false && after.x === before.x && after.y === before.y,
+          `cancelled=${cancelled} ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+      }
+
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
       // up must never turn a green suite red.

@@ -454,28 +454,26 @@ export function Canvas({
     // requires, the one thing the canvas ignores here.
     if (event.ctrlKey || event.metaKey) return false
 
-    // 3. A wheel belongs to a terminal only when it is over the FOCUSED panel.
-    // Focus is explicit — the user clicked in — which makes the rule
-    // predictable without having to be explained.
+    // 3. A wheel belongs to a PANEL only when it is over the FOCUSED one AND
+    // that panel owns internal scroll. Which panels do is answered by the
+    // KIND, through what it renders: a live terminal's slot and a review
+    // node's diff body both carry data-scroll-host, and a card carries
+    // nothing. Deliberately NOT an `if (panel.kind === …)` here — this
+    // predicate is the sole authority on wheel ownership, and every future
+    // kind that scrolls would otherwise mean editing it again, in a function
+    // whose whole recorded history is about how easily it can be narrowed
+    // by accident.
+    //
+    // The old test was `.panel__slot`, which was this same question asked in
+    // terminal-only vocabulary: a restored focusedId can name a panel lod.ts
+    // still refuses to promote (dormancy beats focus), and a card has no
+    // xterm to hand the event to — yielding there means the wheel reaches
+    // nothing at all and the app reads as frozen.
     const id = focusedIdRef.current
     if (!id) return false
     const panel = target?.closest?.('.panel')
     if (panel?.getAttribute('data-panel-id') !== id) return false
-    // A restored focusedId can name a panel lod.ts still refuses to promote
-    // (dormant beats even focus) — that panel is a CARD, not a live slot, and
-    // a card has no xterm underneath to hand the wheel event to. Yielding
-    // anyway means the event reaches nothing: it doesn't scroll (no
-    // terminal) and doesn't pan (the camera deferred), so the app reads as
-    // frozen until the user clicks elsewhere. Requiring the slot is what lets
-    // the camera claim the wheel over a card the way it does over any other
-    // non-live panel.
-    // Or its scroll host, for a kind whose body is not a terminal: a review
-    // node renders [data-scroll-host] on the element that actually scrolls
-    // (see ReviewNode.tsx), so what a kind RENDERS answers "does this panel
-    // own its wheel" rather than a second branch on kind inside this
-    // predicate. A terminal panel carries no such attribute, so the terminal
-    // half of this rule is unchanged.
-    return panel.querySelector('.panel__slot, [data-scroll-host]') !== null
+    return panel.querySelector('[data-scroll-host]') !== null
   }, [])
 
   // The palette owns the keyboard while it is open; see usePalette's four
