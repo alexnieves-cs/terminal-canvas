@@ -380,8 +380,31 @@ many live, how many waiting. This is also where M8d's cross-workspace counts
 land naturally.
 
 **Act half.** Rename (through `beginRenamePanel`, so one `Cmd+Z` still undoes
-the whole gesture — "one history entry per committed gesture"); Save as preset
-(the existing `preset:capture` path); Close panel (`onClosePanel`); Restart.
+the whole gesture — "one history entry per committed gesture"); Save as preset;
+Close panel (`onClosePanel`); Restart.
+
+*Amended before M8c was planned.* This line originally said Save as preset went
+through "the existing `preset:capture` path". **There is no such path reachable
+from the renderer.** `preset:capture` is a main→renderer *request* — main asks,
+the renderer answers, exactly as `canvas:counts` does — and the answer it gives
+is read off `focusedIdRef.current` (`Canvas.tsx`'s `onCapture` provider). The
+inspector, however, describes the **selected** panel, and this app keeps
+`selectedId` and `focusedId` deliberately distinct: a rail row selects without
+focusing, and a background click clears `focusedId` alone. Wiring the
+inspector's button to the existing path would therefore save a *different panel
+than the one the inspector is describing* whenever the two diverge — which is
+most of the time the button is worth pressing — and it would fail silently,
+because the preset it writes is perfectly well-formed and merely wrong.
+
+M8c adds a renderer→main invoke instead, `preset:save-panel`, carrying the
+selected panel's `CapturedPanel`. Main stays the sole author of preset identity:
+`mintPresetId` and `autoName` do not move, and the mint-add-`rebuildMenu` tail of
+`savePresetFromFocusedPanel` is **extracted and shared** with the new handler
+rather than copied. A second copy would be a second implementation of preset
+naming, which is the drift "The shell is a second view over one verb surface"
+exists to prevent — and it would show up as two presets named differently for
+the same panel depending on which surface saved it. This is the milestone's one
+new IPC channel; `verify:ipc`'s documented channel count moves 25 → 26.
 
 **Restart in place (backlog #29).** This is the one new capability in M8, and
 it is a task with its own checks, not a button:
@@ -396,9 +419,41 @@ it is a task with its own checks, not a button:
   `new-session -A` reattaches to the very session the restart was meant to
   replace. `PtyManager.kill` already reaches `backend.destroy(panelId)`, which
   is the behaviour to rely on.
+
+  *Amended before M8c was planned, after reading the path end to end.* That
+  ordering holds today **for a reason nothing states and nothing checks**:
+  `ipcMain.handle(PTY_KILL)` is a synchronous handler, `PtyManager.kill` is
+  synchronous, and the tmux backend's `destroy` bottoms out in `execFileSync`
+  — so main finishes killing before it dequeues the `pty:create` the restart
+  sends next. Every link in that chain is incidental. Make `destroy` async, or
+  await anything inside that handler, and the create overtakes the kill:
+  `new-session -A` finds the doomed session still alive, attaches to it, and
+  the restart silently becomes a no-op that returns the user to the same agent
+  they asked to replace. Nothing throws, and the pid check named below is the
+  only thing that would notice.
+
+  M8c therefore does not rely on it. `Registry.dispose(id)` **returns** the
+  `pty.kill` promise instead of `void`-ing it, and `restartPanel` awaits it
+  before re-ensuring. This adds no `pty.kill` call site — it is the same single
+  call, with its result no longer discarded — and it makes the ordering a
+  property of the restart code rather than of main's current synchrony. The
+  four existing `dispose` call sites ignore the returned promise, as they
+  should: none of them respawns anything.
 - The `Terminal` cannot be reused: `term.open()` runs at most once ever. A
   restart disposes the `SessionHandle` and creates a new one — the path
   close-then-new already exercises.
+
+  *Added before M8c was planned:* the re-attach this implies needs **no new
+  code**, and the reason is worth recording because it makes an existing line
+  load-bearing for a second, undocumented purpose. `TerminalPanel`'s slot
+  effect lists `session.handle.host` in its dependency array. A fresh `ensure`
+  mints a new handle and therefore a new host **element**, so React tears the
+  old host out of the slot and runs the effect again — which calls
+  `onSlotMount`, i.e. `attachSlot`, i.e. `spawn`. Restart rides the path
+  promotion already takes. Removing `session.handle.host` from that dep array
+  (it reads like a redundant sibling of `session.id`, which never changes here)
+  would leave a restarted panel showing a dead terminal with no process and no
+  error anywhere.
 - Agent state must be cleared and re-seeded. `create` sends `starting`
   directly, so the respawn produces it; the dispose site must call
   `clearAgentState(id)` so a restarted panel cannot inherit the dead one's
@@ -406,19 +461,58 @@ it is a task with its own checks, not a button:
 - It is **not** destructive in the palette's sense (no confirm), because the
   process it ends is the one the user is asking to replace — but a restart of a
   panel in `wants-you` discards a question the agent asked. The inspector's
-  button says what it will do; the confirm question is deferred, not decided.
+  button says what it will do.
+
+  *Decided before M8c was planned:* **no confirm, in any state**, including
+  `wants-you`. The alternative considered was a confirm that appears only for a
+  waiting panel, reusing the palette's `InputMode` so it would inherit all four
+  focus rules at no architectural cost. It was rejected on the shape of the
+  gate rather than its cost: a confirm the user meets on one restart in twenty
+  is a gate they have no model for, and an unexpected question is answered
+  reflexively rather than read — which buys none of the protection it charges
+  for. The button's own label carries the warning instead.
+
+- **Restart is offered for a SPAWNED panel only — running or exited — and is
+  disabled, never hidden, otherwise.** Exited is the most natural target the
+  verb has, not an edge case: "run that again" is most of why anyone wants it.
+  A dormant or never-started panel is the opposite case, and it already has its
+  own verb with its own visible affordance (M8b's start control, and the card
+  that says "click to start"); collapsing the two would undo the separation
+  M8b's rule 1 draws between navigating and waking. Disabled with a reason
+  rather than absent, per the rule `verify:palette` 31 states in its own
+  comment: a row that disappears is indistinguishable from a feature that is
+  missing. The palette's `Restart panel…` row carries the same gate, which is
+  what puts a `restartable` flag on `PanelRow` — without it the row would be
+  runnable on a dormant captured panel and would silently do nothing.
 
 **Checks.**
 
+- `verify:rail`: the inspector's own pure module joins M8b's suite through the
+  entry that already predicts it. The fields resolve each link of the honest
+  chain **separately** rather than collapsing it (the read half's whole point);
+  the summary counts panels, live and waiting; and the signature ignores a rect
+  change while reacting to a title, status and dormancy change — M8b's 60Hz
+  trap reaches the inspector unchanged, since the selected panel comes out of
+  the same `panels` array that is fresh on every drag frame.
 - `verify:registry`: restart disposes and re-ensures at the same panel id, and
   the new session is not dormant.
 - `verify:pty-manager`: restarting a live tmux-backed session yields a
   **different** pid — the mirror of check 12's "detach and reattach is the same
   pid", and the one assertion that separates a real restart from a reattach.
+  This is also the only check that would notice the ordering hazard amended
+  into the restart bullets above.
+- `verify:layout`: main's extracted mint-add path, exercised once, so the menu
+  and the new invoke are provably one implementation rather than two that agree
+  today.
+- `verify:ipc`: 26 channels.
 - `verify:panels`: the inspector renders the resolved command for a login-shell
   panel (not `'login shell'`, which would mean it read the spec); a reattached
-  panel shows the badge; restart clears a `wants-you` state; the `pty.kill`
-  caller count is still two.
+  panel shows the badge; restart clears a `wants-you` state; save-as-preset
+  saves the **selected** panel rather than the focused one, driven with the two
+  ids deliberately different (a check taken with them equal passes against the
+  defect this decision exists to remove); and the `pty.kill` caller count is
+  still two while `registry.dispose`'s call-site count in `Canvas.tsx` is
+  re-derived, not trusted.
 
 ## M8d — Workspaces and attention in the rail
 
