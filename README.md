@@ -331,6 +331,7 @@ badge is the reader, and it closes M6a's one outstanding success criterion.
 | M8a | The app shell: a frame, collapsible rail and inspector, a visible toolbar | ✅ done |
 | M8b | The panel outline: a rail row per panel, navigate without waking | ✅ done |
 | M8c | The inspector: what a panel is, and restart in place | ✅ done |
+| M8d | Workspaces and attention in the rail | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

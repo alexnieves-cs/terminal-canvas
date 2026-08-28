@@ -21,7 +21,7 @@ export interface SideRailProps {
 }
 
 /**
- * The left rail: Workspaces, Panels, and (from Task 4) Attention.
+ * The left rail's three sections: Workspaces, Panels, Attention.
  *
  * Presentational by construction — every prop is derived data or a
  * CanvasActions member. A rail that reached into Canvas for its own copy of a

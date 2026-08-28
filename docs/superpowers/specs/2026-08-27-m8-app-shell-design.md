@@ -1,8 +1,6 @@
 # M8: The App Shell — Design
 
-**Status:** M8a, M8b and M8c implemented and landed. M8d's section amended
-2026-08-28 with the decisions its own brainstorming settled; not yet
-implemented.
+**Status:** implemented and landed — M8a, M8b, M8c and M8d.
 **Predecessor:** `2026-08-27-m7-workspaces-design.md`
 **Backlog entries:** #11 (a real settings surface — the visible half), #17
 (attention routing, second surface), #29 (restart a panel in place), #32
