@@ -380,8 +380,13 @@ ok('28 waitingCount counts this workspace\'s panels that are waiting',
 //     nothing. That covers both real cases at once: a panel waiting in some
 //     OTHER workspace, and a phantom — an id whose panel is gone but whose
 //     agent state survived the closure, the same orphan reachableQueue drops.
-//     An implementation reaching for attentionIds.length passes 28 and fails
-//     here.
+//
+//     28 already exercises ONE foreign id inside a partial overlap, so this is
+//     the no-overlap boundary rather than the first sighting of the fault; a
+//     plain attentionIds.length is caught earlier and louder, by 28, 30 and 31
+//     alike. The second clause is the one this check adds that nothing else
+//     covers: an EMPTY workspace must read 0 however many agents are waiting
+//     elsewhere, which is the row a just-created workspace renders.
 ok('29 waitingCount ignores an id this workspace does not own',
   R.waitingCount(['a'], ['zz', 'yy']) === 0 &&
     R.waitingCount([], ['a', 'b']) === 0)

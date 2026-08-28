@@ -36,7 +36,7 @@ npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/point
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
-npm run verify:rail          # the rail's rows and the inspector's read model, plain node
+npm run verify:rail          # the rail's three sections and the inspector's read model, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:canvas        # real input into the built renderer
