@@ -232,6 +232,107 @@ const fakeRunner = (table) => async (args) => {
     (await e.resolveRepo('/b')) === '/b')
 }
 
+/* One builder for the arm checks, so each states only what it varies. */
+const engineWith = (table, opts = {}) => R.createReviewEngine({
+  run: fakeRunner(table),
+  baselineOf: () => opts.baseline === null ? undefined : (opts.baseline ?? { root: '/r', sha: 'b1' }),
+  peersInRepo: () => opts.peers ?? 0
+})
+
+const EXISTS = { '-C /r cat-file -e b1': { stdout: '' } }
+const NO_UNTRACKED = { '-C /r ls-files -z --others --exclude-standard': { stdout: '' } }
+
+// 21. A panel with no baseline has never spawned.
+ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).kind === 'never-started')
+
+// 22. A valid baseline and an empty diff is CLEAN, and clean carries the root
+//     so the pane can still say which repository it is talking about.
+{
+  const r = await engineWith({
+    ...EXISTS, ...NO_UNTRACKED,
+    '-C /r diff --numstat -z b1': { stdout: '' }
+  }).review('p1')
+  ok('22 clean', r.kind === 'clean' && r.root === '/r')
+}
+
+// 23. The real answer: files, and totals summed across them.
+{
+  const r = await engineWith({
+    ...EXISTS, ...NO_UNTRACKED,
+    '-C /r diff --numstat -z b1': { stdout: ['3\t1\ta.ts', '10\t0\tb.ts', ''].join('\0') }
+  }).review('p1')
+  ok('23 changes and totals', r.kind === 'changes' && r.files.length === 2 &&
+    r.added === 13 && r.removed === 1)
+}
+
+// 24. Untracked files are REPORTED, with untracked:true and no counts. A
+//     brand-new file is the single most common thing an agent produces, and a
+//     diff-only implementation shows "no changes" for a panel that wrote ten
+//     new modules.
+{
+  const r = await engineWith({
+    ...EXISTS,
+    '-C /r diff --numstat -z b1': { stdout: '' },
+    '-C /r ls-files -z --others --exclude-standard': { stdout: 'new.ts\0' }
+  }).review('p1')
+  ok('24 untracked reported', r.kind === 'changes' && r.files.length === 1 &&
+    r.files[0].untracked === true && r.files[0].path === 'new.ts')
+}
+
+// 25. Binary files carry binary:true and contribute nothing to the totals,
+//     rather than NaN, which would render the whole summary as "NaN".
+{
+  const r = await engineWith({
+    ...EXISTS, ...NO_UNTRACKED,
+    '-C /r diff --numstat -z b1': { stdout: '-\t-\timg.png\0' }
+  }).review('p1')
+  ok('25 binary does not poison totals', r.kind === 'changes' &&
+    r.files[0].binary === true && r.added === 0 && r.removed === 0)
+}
+
+// 26. A pruned baseline object is baseline-lost, NOT a fallback to HEAD.
+//     Falling back would silently start attributing pre-existing changes to
+//     this agent, which is a confident wrong answer.
+{
+  const r = await engineWith({
+    '-C /r cat-file -e b1': { stdout: '', ok: false }
+  }).review('p1')
+  ok('26 baseline-lost', r.kind === 'baseline-lost' && r.root === '/r')
+}
+
+// 27. Two panels that have run in one repository: shared, with the count, and
+//     the files still listed because repository-level truth is still truth.
+{
+  const r = await engineWith({
+    ...EXISTS, ...NO_UNTRACKED,
+    '-C /r diff --numstat -z b1': { stdout: '1\t0\ta.ts\0' }
+  }, { peers: 3 }).review('p1')
+  ok('27 shared names the count', r.kind === 'shared' && r.panelCount === 4 &&
+    r.files.length === 1)
+}
+
+// 28. shared is checked BEFORE the diff is interpreted but AFTER the baseline
+//     is validated: a lost baseline in a shared repo is still baseline-lost,
+//     because "we cannot attribute" and "we have nothing to diff against" are
+//     different sentences and the second one is the actionable one.
+{
+  const r = await engineWith({
+    '-C /r cat-file -e b1': { stdout: '', ok: false }
+  }, { peers: 2 }).review('p1')
+  ok('28 lost outranks shared', r.kind === 'baseline-lost')
+}
+
+// 29. A panel whose baseline exists but whose repo is gone from disk — the
+//     user deleted or moved the checkout. The diff call fails; that is
+//     baseline-lost too, not a crash and not a silent empty list.
+{
+  const r = await engineWith({
+    ...EXISTS, ...NO_UNTRACKED,
+    '-C /r diff --numstat -z b1': { stdout: '', ok: false }
+  }).review('p1')
+  ok('29 a failed diff is not silent emptiness', r.kind === 'baseline-lost')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)
