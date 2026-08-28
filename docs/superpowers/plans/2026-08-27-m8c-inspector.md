@@ -240,7 +240,7 @@ ok('27b the signature accepts the empty selection',
 - [ ] **Step 2: Run the checks and watch them fail**
 
 Run: `npm run verify:rail`
-Expected: the esbuild step **fails outright** — `rail-entry.cjs` does not yet re-export the module, so `R.agentStateLabel` and its siblings are `undefined`. Add the entry line first (below), re-run, and expect `15/27 passed` with `FAILED: 16, 17, 18, …, 27b` — every new check red because the module does not exist. **Watch this output. Do not proceed on a bundle error alone**; a bundle error proves the file is missing, not that the checks discriminate.
+Expected: the esbuild step **fails outright** — `rail-entry.cjs` does not yet re-export the module, so `R.agentStateLabel` and its siblings are `undefined`. Add the entry line first (below), re-run, and expect `15/28 passed` with `FAILED: 16, 17, 18, …, 27b` — every new check red because the module does not exist. **Watch this output. Do not proceed on a bundle error alone**; a bundle error proves the file is missing, not that the checks discriminate.
 
 Modify `scripts/rail-entry.cjs`:
 
@@ -449,14 +449,14 @@ export function inspectorSignature(model: InspectorModel | null): string {
 - [ ] **Step 4: Run the checks and verify they pass**
 
 Run: `npm run verify:rail`
-Expected: `27/27 passed`.
+Expected: `28/28 passed` — 15 pre-existing plus 13 new (16-27 and the lettered 27b). The total exceeds the last check NUMBER because of the sub-check, which is this repo's own convention.
 
 Then run: `npm run typecheck`
 Expected: clean.
 
 - [ ] **Step 5: Fault-inject check 21, the one that carries the milestone's purpose**
 
-Temporarily merge the two command fields into one (delete the `spec-command` entry). Run `npm run verify:rail`. Expected: **21 red, 20 green** — that is the proof 21 discriminates the collapsed implementation from the link-by-link one. Restore, re-run, confirm `27/27`.
+Temporarily merge the two command fields into one (delete the `spec-command` entry). Run `npm run verify:rail`. Expected: **21 red, 20 green** — that is the proof 21 discriminates the collapsed implementation from the link-by-link one. Restore, re-run, confirm `28/28`.
 
 - [ ] **Step 6: Commit**
 
@@ -566,12 +566,18 @@ Then the checks:
              fields: document.querySelectorAll('[data-inspector-field]').length }
   })()`)
   const panelCount = await wc.executeJavaScript(`window.__m4aSessions().length`)
+  // CONTROLLER RULING (pre-flight CONFLICT-2): derived, never hardcoded to '0'.
+  // Checks 54/57/63 ring and acknowledge real bells earlier in this same run,
+  // so whether the attention set is empty here depends on their cleanup, which
+  // nothing guarantees. A hardcoded 0 fails as "0 !== 1" and points nowhere.
+  const waitingNow = await wc.executeJavaScript(
+    `String(document.querySelectorAll('.panel[data-agent-state="wants-you"]').length)`)
   ok('88 with nothing selected the inspector summarises the canvas instead',
     clicked !== null && summary !== null &&
       summary.panels === String(panelCount) &&
-      summary.waiting === '0' &&
+      summary.waiting === waitingNow &&
       summary.fields === 0,
-    `clicked=${JSON.stringify(clicked)} summary=${JSON.stringify(summary)} panels=${panelCount}`)
+    `clicked=${JSON.stringify(clicked)} summary=${JSON.stringify(summary)} panels=${panelCount} waiting=${waitingNow}`)
 }
 
 // 89. ONE TITLE SOURCE, THREE VIEWS.
@@ -986,7 +992,7 @@ Run: `npm run typecheck && npm run build && npm run verify:panels`
 Expected: `87, 88, 89` green; every pre-existing check still green. **Check 42 and check 73 especially** — both are about the palette's outside-click exit, and check 89 opens the palette from a shell control for the first time.
 
 Run: `npm run verify:rail`
-Expected: still `27/27`.
+Expected: still `28/28`.
 
 - [ ] **Step 8: Commit**
 
@@ -1314,7 +1320,7 @@ Append to `scripts/verify-panels.cjs`:
 
 **Three prerequisites — verify each before writing the check, and fix whichever is missing:**
 
-1. **The two fixture panels must have different cwds**, or `subtitle.endsWith(observed.cwd)` cannot discriminate. Run `grep -n "cwd" scripts/panels-entry.cjs`. If every seeded panel is `~`, seed one with a distinct cwd; check 43 already seeds a spaced temp directory and is the pattern to copy. **The spaced path is a feature, not an accident** — `CLAUDE.md` records that a space-free fixture is exactly how the `pane-died` quoting bug survived eight reviews.
+1. **The two fixture panels must have different cwds**, or `subtitle.endsWith(observed.cwd)` cannot discriminate. Run `grep -n "cwd" scripts/panels-entry.cjs`. **CONTROLLER RULING (pre-flight CONFLICT-4): reuse an existing panel with a distinct cwd before considering a new one** — check 43 already points one at a spaced temp directory. Adding a fixture panel changes the canvas's panel count, which several existing checks read, and an unrelated count check going red for a fixture reason is expensive to diagnose. Seed a new one only if no two LIVE panels differ, and say so in your report if you had to. **If you do seed one, the spaced path is a feature, not an accident** — `CLAUDE.md` records that a space-free fixture is exactly how the `pane-died` quoting bug survived eight reviews.
 2. **`.panel--selected` must be the class a selected panel actually carries.** Run `grep -n "panel--selected" src/renderer/components/TerminalPanel.tsx`. If the selected state is expressed some other way, read it that way instead.
 3. **Both panels must be LIVE**, or `.xterm-screen` is absent for the one being focused. `LIVE_BUDGET` is 8 and the fixture canvas is larger; pick the two ids from panels that currently have an `.xterm` under them:
    ```js
@@ -1347,7 +1353,25 @@ git commit -m "feat(m8c): save the selected panel as a preset, through main's ow
 
 **Interfaces:**
 - Produces: `Registry.dispose(id: PanelId): Promise<void>` — resolves when main has confirmed the kill. `disposeAll()` stays `void`; it has no production caller and nothing respawns after it.
+- Produces: `Registry.bumpVersion(): void` — advances `version()` and notifies subscribers, and does nothing else.
 - Consumed by: Task 6's `restartPanel`.
+
+**`bumpVersion` is a controller ruling, added to this task after the pre-flight scan.**
+The plan originally left Task 6 to solve this and flagged it as unresolved. It belongs here
+instead, because it is a change to the registry's surface and this is the registry's task.
+
+The problem it solves: `ensure()` deliberately does **not** `bump()` — its own comment says why,
+namely that it is normally called while `Canvas` renders, and notifying a `useSyncExternalStore`
+subscriber mid-render makes React warn about updating a component while rendering another. Restart
+calls `ensure` from an **event handler**, outside render, where nothing else will trigger the
+re-render that mounts the new handle's slot. So the restarted panel would sit there showing
+nothing, with no error anywhere, until some unrelated interaction re-rendered the canvas.
+
+The obvious existing member does not work: `focus(id)` bumps, but it also sets `lastFocusedAt` and
+calls `handle.focus()`, which moves the keyboard — violating the shell's rule 2 ("shell controls
+never take DOM focus"). Solving it by calling `ensure` during render does not work either: the
+tiering memo's `ensure` early-returns for an existing session, so the fresh one would never be
+created there at all.
 
 **Why this changes at all.** The spec told M8c to rely on `PtyManager.kill` reaching `backend.destroy(panelId)` before the respawn. It does — but only because `ipcMain.handle(PTY_KILL)` is a synchronous handler, `PtyManager.kill` is synchronous, and the tmux backend's `destroy` bottoms out in `execFileSync`. Every link there is incidental. Make any of them async and the create overtakes the kill: `new-session -A` finds the doomed session still alive, attaches, and restart silently becomes a no-op returning the user to the agent they asked to replace. Returning the promise adds **no `pty.kill` call site** — it is the same single call with its result no longer discarded — and moves the ordering into the restart code where it can be read.
 
@@ -1418,6 +1442,34 @@ Append to `scripts/verify-registry.cjs`, before the summary block, inside the ex
     await registry.dispose('p1')
     ok('22 dispose resolves only after main has confirmed the kill',
       killFinished === true, `killFinished=${killFinished}`)
+  }
+
+  // 24. bumpVersion advances version() and does NOTHING else.
+  //     The "nothing else" half is the whole reason it exists rather than
+  //     reusing focus(), which also bumps: focus() moves the keyboard, and a
+  //     restart that stole focus would violate the shell's rule 2 — silently,
+  //     because the panel would look right and the next keystroke would land
+  //     somewhere the user did not choose.
+  {
+    const { factory, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const state = factory.made.get('p1')
+    const focusedBefore = state.focused
+    const stampBefore = registry.lastFocusedAt().p1
+    let notified = 0
+    const off = registry.subscribe(() => { notified += 1 })
+    const before = registry.version()
+    registry.bumpVersion()
+    const after = registry.version()
+    off()
+    ok('24 bumpVersion advances version and notifies, without touching focus',
+      after === before + 1 && notified === 1 &&
+        state.focused === focusedBefore &&
+        registry.lastFocusedAt().p1 === stampBefore,
+      `version ${before} -> ${after}, notified=${notified}, focused ${focusedBefore} -> ${state.focused}`)
   }
 
   // 23. The OLD handle is never written to again. pty:data arrives on one
@@ -1493,10 +1545,35 @@ In `src/renderer/session/session-registry.ts`, change the interface declaration:
 
 **Note the ordering inside:** `bump()` must still run before the await, not after. The local teardown is already done at that point and the subscribers need to hear about it on the same tick they always have; moving the bump behind the await would delay every close by one IPC round trip and make `verify:panels`' close checks flaky for a reason nothing points at.
 
+Add the member beside `version` in both the interface and the returned object:
+
+```ts
+  /**
+   * Advance version() and notify, and do nothing else.
+   *
+   * Exists for exactly one caller: restart, which calls ensure() from an EVENT
+   * HANDLER rather than during render. ensure() deliberately does not bump —
+   * see its own comment: it normally runs while Canvas renders, and notifying a
+   * useSyncExternalStore subscriber mid-render makes React warn about updating
+   * one component while rendering another. Outside render that protection
+   * becomes a gap: nothing re-renders, so the new handle's host is never
+   * mounted and the restarted panel shows nothing at all, with no error.
+   *
+   * focus(id) would also bump, and is the tempting one-liner — but it sets
+   * lastFocusedAt and calls handle.focus(), moving the keyboard. A shell
+   * control that moves focus violates the rule shell-control.ts exists to
+   * enforce, and it fails silently: the panel looks right and the user's next
+   * keystroke goes somewhere they did not choose.
+   */
+  bumpVersion(): void
+```
+
+…implemented as `bumpVersion: () => bump(),` in the returned object.
+
 - [ ] **Step 4: Run and verify**
 
 Run: `npm run verify:registry`
-Expected: `28/28 passed` (25 before, plus 21–23).
+Expected: `29/29 passed` (25 before, plus 21–24).
 
 Run: `npm run typecheck`
 Expected: clean. If `Canvas.tsx`'s four existing `registry.dispose(id)` statements now trip a "floating promise" complaint, they will not — the repo has no linter and `tsc` does not flag unawaited promises. Leave them unawaited; none of them respawns.
@@ -1641,16 +1718,17 @@ Append to `scripts/verify-palette.cjs`, before its summary block (the file's las
 //     palette moves DOM focus to the input but deliberately leaves focusedId
 //     alone, and that captured id is what every panel-acting command targets.
 {
-  const ran = []
-  const rows = buildCommands(ctxWith({
-    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true }],
-    capturedId: 'n1'
-  }, { restartPanel: (id) => ran.push(id) }))
-  const row = rows.find((r) => r.id === 'panel.restart')
+  const c = ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true }]
+  })
+  const row = byId(P.buildCommands(c), 'panel.restart')
+  row.run()
   ok('66 the restart row is present, enabled, and aimed at the captured panel',
     row !== undefined && row.disabledReason === undefined &&
-      (row.run(), ran.length === 1 && ran[0] === 'n1'),
-    JSON.stringify({ row: row && row.id, ran }))
+      c.actions.calls[0][0] === 'restartPanel' &&
+      c.actions.calls[0][1] === 'n1',
+    JSON.stringify(c.actions.calls))
 }
 
 // 66b. DISABLED, NOT ABSENT, when the captured panel never started — and the
@@ -1659,24 +1737,44 @@ Append to `scripts/verify-palette.cjs`, before its summary block (the file's las
 //      this panel"), and collapsing them tells the user to do the thing they
 //      already did. A row that vanished instead would be indistinguishable
 //      from a feature that was never built — the rule check 31 states.
+//
+//      The two reasons are compared against the EXPORTED constants, never
+//      against string literals: a literal here would keep passing while the
+//      constant said something else entirely.
 {
-  const notStarted = buildCommands(ctxWith({
-    panels: [{ id: 'n1', label: '/bin/zsh', restartable: false }],
-    capturedId: 'n1'
-  })).find((r) => r.id === 'panel.restart')
-  const noFocus = buildCommands(ctxWith({
-    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true }],
-    capturedId: null
-  })).find((r) => r.id === 'panel.restart')
+  const notStarted = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: false }]
+  })), 'panel.restart')
+  const noFocus = byId(P.buildCommands(ctx({
+    capturedId: null,
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true }]
+  })), 'panel.restart')
   ok('66b restart is disabled with the RIGHT reason in each of its two blocked cases',
-    notStarted !== undefined && notStarted.disabledReason === REASON_NOT_STARTED &&
-      noFocus !== undefined && noFocus.disabledReason === REASON_NO_FOCUS &&
+    notStarted !== undefined && notStarted.disabledReason === P.REASON_NOT_STARTED &&
+      noFocus !== undefined && noFocus.disabledReason === P.REASON_NO_FOCUS &&
       notStarted.disabledReason !== noFocus.disabledReason,
     JSON.stringify([notStarted && notStarted.disabledReason, noFocus && noFocus.disabledReason]))
 }
 ```
 
-> **Adapt to the file's own fixture idiom.** `verify-palette.cjs` builds its context somehow already — read checks 31–33 and copy that shape exactly rather than introducing `ctxWith`/`buildCommands` names that may not exist. `REASON_NOT_STARTED` and `REASON_NO_FOCUS` must be imported from the bundled `commands.ts` (the suite already imports `REASON_NO_FOCUS` for its existing disabled-reason checks), never restated as string literals — a literal here would pass while the exported constant said something else.
+**The fixture idiom above is the file's real one, verified against `verify-palette.cjs` before this
+plan was written** — `ctx(over)` builds a full `PaletteContext` with `actions: spyActions()`,
+`byId(list, id)` finds a row, `P.` is the bundle handle, and `c.actions.calls[i]` is
+`[methodName, ...args]`. Do not invent `buildCommands`/`ctxWith` helpers; they do not exist.
+
+**CONTROLLER RULING (pre-flight CONFLICT-1): `spyActions()` needs a `restartPanel` recorder, added
+in this same commit.** `PaletteActions` members are required by global constraint, and `spyActions()`
+builds its object by hand — so a row whose `run()` calls a missing `actions.restartPanel` throws a
+TypeError rather than failing an assertion. Add `restartPanel: record('restartPanel')` beside its
+siblings. (Task 3 does the same for `savePanelAsPreset`; if that recorder is missing when you get
+here, add it too rather than leaving the fixture half-wired.)
+
+**CONTROLLER RULING (row placement): `Restart panel…` is NOT `hiddenAtRest`, and it uses the
+`withReason(row, reason)` wrapper.** Its sibling `Rename panel…` is neither hidden nor pushed as a
+bare two-argument call — read that push at `commands.ts:212-231` and mirror it exactly. Both rows
+are single rows aimed at `capturedId` in the `panel` section, and an asymmetry between two adjacent
+rows is a surprise rather than a design.
 
 - [ ] **Step 2: Run both and watch them fail**
 
@@ -1712,24 +1810,32 @@ In `commands.ts`: add `restartable: boolean` to `PanelRow` (**required**, for th
 
 ```ts
     out.push(
-      {
-        id: 'panel.restart',
-        title: 'Restart panel…',
-        subtitle: target ? (target.title ?? target.label) : 'no panel',
-        group: 'panel',
-        hiddenAtRest: true,
-        run: () => actions.restartPanel(ctx.capturedId!)
-      },
-      // Two different blocked situations with two different fixes: "click a
-      // panel first" and "this panel has not started". Collapsing them into
-      // one reason tells a user who HAS focused a panel to focus a panel.
-      ctx.capturedId === null
-        ? REASON_NO_FOCUS
-        : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
+      withReason(
+        {
+          id: 'panel.restart',
+          title: 'Restart panel…',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          group: 'panel',
+          run: () => actions.restartPanel(ctx.capturedId!)
+        },
+        // Two different blocked situations with two different fixes: "click a
+        // panel first" and "this panel has not started". Collapsing them into
+        // one reason tells a user who HAS focused a panel to focus a panel.
+        ctx.capturedId === null
+          ? REASON_NO_FOCUS
+          : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
+      )
     )
 ```
 
-> Match `out.push`'s real arity and the `hiddenAtRest` convention by reading the `panel.rename` push directly above it. If `Rename panel…` is **not** `hiddenAtRest`, do not make Restart `hiddenAtRest` either — the two are siblings in the same section and an asymmetry there is a surprise, not a design. **Whichever way this lands, a `SECTIONS`-adjacent change means running `verify:panels` too, not only `verify:palette`** — `CLAUDE.md` records M7 leaving check 48 red for two whole tasks by running only the plain-node suite.
+Note the shape: `withReason(row, reason)`, exactly as the `panel.rename` push directly above it
+does, and **no `hiddenAtRest`** — see the row-placement ruling above. Reuse the `target` const the
+rename block already computes if the two pushes end up in one block; do not compute it twice.
+
+**This adds a row to an existing section rather than a new section, so `SECTIONS` is untouched** —
+but run `npm run build && npm run verify:panels` anyway before calling the task done. `CLAUDE.md`
+records M7 leaving `verify:panels` 48 red for two whole tasks because a palette change was verified
+only in the plain-node tier, and check 48 asserts the rendered section headers.
 
 - [ ] **Step 4: Implement the verb**
 
@@ -1775,14 +1881,16 @@ In `Canvas.tsx`'s `paletteActions` memo, beside `savePanelAsPreset`:
         if (!panelsRef.current.some((p) => p.rect.id === id)) return
         registry.ensure(id, panel.spec, { dormant: false })
         // ensure() deliberately does not bump — it is normally called during
-        // render — so nothing would re-render to mount the new handle's slot.
-        // dispose() already bumped, but that bump is one tick stale by now.
-        registry.focus(id)
+        // render, where notifying a subscriber makes React warn — so nothing
+        // here would re-render to mount the new handle's slot, and the panel
+        // would show nothing at all with no error anywhere. dispose() already
+        // bumped, but that bump is a tick stale by the time this resolves.
+        // NOT focus(): it bumps too, but it also moves the keyboard, which a
+        // shell control must never do (shell-control.ts's whole purpose).
+        registry.bumpVersion()
       })
     },
 ```
-
-> **`registry.focus(id)` is a stand-in for "make React look again" and must be replaced with the right call.** Read `session-registry.ts` for a member that bumps `version()` without side effects. `focus()` bumps but also sets `lastFocusedAt` and calls `handle.focus()`, which would steal the keyboard — **unacceptable**, it violates rule 2. If no such member exists, add a `bumpVersion()` to the registry with a comment saying it exists because `ensure` is render-safe by design and an out-of-render ensure therefore has no notifier. Do **not** solve it by calling `ensure` during render instead: the tiering memo's `ensure` early-returns for an existing session, so the fresh one would never be created there.
 
 Add `restartable` to the `panelRows` memo's row construction:
 
@@ -1893,15 +2001,25 @@ if (!TMUX) {
     `pid ${pidBefore} -> ${respawned} state=${state} xterm=${relive}`)
 }
 
-// 93. DISABLED, NOT ABSENT, on a panel that never started. The dormant panel
-//     check 39 seeds is still on this canvas and is exactly this case. A
-//     restart control that vanished would read as a feature that is missing;
-//     one that ran would end a process that does not exist and re-ensure a
-//     session the user never asked to start, waking a panel from a verb whose
-//     name says the opposite.
+// 93. DISABLED, NOT ABSENT, on a panel that never started. A restart control
+//     that vanished would read as a feature that is missing; one that ran
+//     would end a process that does not exist and re-ensure a session the
+//     user never asked to start — waking a panel from a verb whose name says
+//     the opposite.
+//
+//     CONTROLLER RULING (pre-flight CONFLICT-5): the target is FOUND at run
+//     time, not named. The plan first pointed this at the dormant panel check
+//     39 seeds — but M8b's check 85 clicks that panel's start control and
+//     asserts it wakes, so by the time this check runs it is spawned and
+//     `restartable` is legitimately true. The check would then fail against a
+//     fixture that no longer describes it, and read as a broken disabled-gate.
+//     Asserting that a never-started panel was FOUND is half the check: without
+//     it, `undefined` flows into the selector and the failure says nothing.
 {
+  const dormantId = await wc.executeJavaScript(
+    `(window.__m4aSessions().find((s) => s.dormant === true || s.spawned === false) || {}).id || null`)
   await wc.executeJavaScript(`
-    document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify('RAIL_DORMANT_ID placeholder')} + '"] .rail-row__main')
+    document.querySelector('.rail-row[data-rail-row="' + ${'${JSON.stringify(dormantId)}'} + '"] .rail-row__main')
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
   await settle()
   const control = await wc.executeJavaScript(`(() => {
@@ -1909,7 +2027,8 @@ if (!TMUX) {
     return el ? { present: true, disabled: el.disabled } : { present: false }
   })()`)
   ok('93 restart is present and disabled for a panel that never started',
-    control.present === true && control.disabled === true, JSON.stringify(control))
+    dormantId !== null && control.present === true && control.disabled === true,
+    `dormantId=${'${dormantId}'} control=${'${JSON.stringify(control)}'}`)
 }
 
 // 94. THE TWO COUNTS THIS MILESTONE MOVES, re-derived rather than trusted.
@@ -1937,7 +2056,7 @@ if (!TMUX) {
 **Three things to settle while writing these:**
 - Check 92's `targetId` selection is a stub — pick a panel that is **live** (has an `.xterm`), the same way Task 3's check 90 prerequisite 3 describes, and assert you found one rather than letting `undefined` flow into a selector.
 - Check 92's bell: read check 54 and reuse its exact mechanism. Do not invent one.
-- Check 93 references the dormant panel check 39 seeds; use that check's own id constant (`grep -n "RAIL_DORMANT_ID\|dormant" scripts/verify-panels.cjs`) rather than the placeholder string.
+- Check 93 finds its target at run time per the ruling in its own comment. If `__m4aSessions()` returns no never-started panel at that point in the run, seed one the way check 39 does — that check already establishes seeding a dormant panel with its own reload as the supported pattern — and say in your report that you had to.
 - Check 94 needs `readFileSync` and `join` in scope; both are likely already imported at the top of the file — confirm with `grep -n "require('node:fs')\|readFileSync" scripts/verify-panels.cjs` and add to the existing import rather than a second one.
 
 - [ ] **Step 6: Run everything**
@@ -2051,6 +2170,6 @@ Run against the spec's M8c section after the plan is complete:
 - **Type consistency** — `InspectorModel`/`InspectorSummary`/`InspectorField` defined in Task 1 and used unchanged in Tasks 2, 3, 6; `isRestartable` introduced in Task 6 and back-fitted into `buildInspectorModel` in the same task; `PaletteActions.savePanelAsPreset` and `.restartPanel` named identically at every call site. ✅
 
 **Known soft spots, flagged rather than hidden:**
-- Task 6 Step 4 leaves `registry.focus(id)` as an explicit stand-in with instructions to replace it. That is a real unresolved question — whether the registry needs a side-effect-free `bumpVersion()` — and it is called out in the step rather than papered over, because guessing here would either steal the keyboard (violating rule 2) or leave the restarted panel unmounted.
+- ~~Task 6's post-`ensure` notifier was left as an unresolved stand-in.~~ **Resolved by controller ruling before execution:** `Registry.bumpVersion()`, implemented in Task 4 with its own check 24. The two wrong answers it avoids — `focus()` steals the keyboard, calling `ensure` during render never creates the session because the tiering memo early-returns — are both recorded at Task 4.
 - Task 5's check 20 passes on first write. It is a characterisation check by design, and Step 3's fault injection is what earns it.
 - Check 91 needs tmux. Without it the milestone's headline criterion is unproven on that machine.
