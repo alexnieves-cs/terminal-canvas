@@ -9,5 +9,6 @@
    runs and the suite cannot go green — which is exactly what happened to the
    first draft of this plan. */
 module.exports = {
-  ...require('../src/main/git-args')
+  ...require('../src/main/git-args'),
+  ...require('../src/main/review-engine')
 }

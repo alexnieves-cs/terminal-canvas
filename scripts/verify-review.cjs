@@ -123,6 +123,115 @@ ok('8 parseNulList drops the trailing empty',
 //     commonest input this parser sees.
 ok('13 numstat empty', R.parseNumstat('').length === 0)
 
+// 13b. buildHeadArgs' argv, untested by Task 1. captureBaseline's HEAD
+//      fallback depends on this exact argv, so this check has a real customer.
+ok('13b buildHeadArgs argv', JSON.stringify(R.buildHeadArgs('/r')) ===
+  JSON.stringify(['-C', '/r', 'rev-parse', 'HEAD']))
+
+/* A fake runner. Keyed by the JOINED argv so a check states exactly which git
+   invocation it is answering — a runner keyed on a substring would answer the
+   wrong call the day two argvs share a word. */
+const fakeRunner = (table) => async (args) => {
+  const key = args.join(' ')
+  const hit = table[key]
+  if (hit === undefined) return { stdout: '', ok: false, notFound: false }
+  return { stdout: hit.stdout ?? '', ok: hit.ok !== false, notFound: hit.notFound === true }
+}
+
+// 14. resolveRepo returns the root for a cwd inside a repository.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({ '-C /a/b rev-parse --show-toplevel': { stdout: '/a\n' } }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('14 resolveRepo finds the root', (await e.resolveRepo('/a/b')) === '/a')
+}
+
+// 15. Outside a repository git exits non-zero. Null, and NOT an exception:
+//     a panel in ~ is the ordinary case, not an error, and a throw here would
+//     take the pty:create it is called from down with it.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({ '-C /tmp rev-parse --show-toplevel': { stdout: '', ok: false } }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('15 resolveRepo outside a repo is null', (await e.resolveRepo('/tmp')) === null)
+}
+
+// 16. captureBaseline prefers the stash-create sha.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({ '-C /r stash create': { stdout: 'deadbee\n' } }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('16 captureBaseline uses stash create', (await e.captureBaseline('/r')) === 'deadbee')
+}
+
+// 17. On a CLEAN tree stash create prints nothing and the baseline is HEAD.
+//     Without this fallback every panel spawned in a clean repo would have no
+//     baseline at all and would report never-started forever.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({
+      '-C /r stash create': { stdout: '\n' },
+      '-C /r rev-parse HEAD': { stdout: 'headsha\n' }
+    }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('17 captureBaseline falls back to HEAD', (await e.captureBaseline('/r')) === 'headsha')
+}
+
+// 18. An EMPTY repository has no HEAD either — git init and nothing committed.
+//     Null rather than a thrown error or the literal string 'HEAD'.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({
+      '-C /r stash create': { stdout: '' },
+      '-C /r rev-parse HEAD': { stdout: '', ok: false }
+    }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('18 captureBaseline in an empty repo is null', (await e.captureBaseline('/r')) === null)
+}
+
+// 19. No git binary at all: notFound propagates rather than reading as
+//     "not a repository", which would silently hide the real cause.
+{
+  const e = R.createReviewEngine({
+    run: async () => ({ stdout: '', ok: false, notFound: true }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('19 resolveRepo reports a missing git', (await e.resolveRepo('/a')) === null &&
+    (await e.review('p1')).kind === 'git-missing')
+}
+
+// 20. resolveRepo does not cache across DIFFERENT cwds. A single-slot cache
+//     would answer panel B with panel A's repository, which is the wrong-repo
+//     attribution this whole milestone exists to avoid.
+//
+//     This is a CHARACTERISATION check: resolveRepo has no cache today, so
+//     this passes on first write and was never red. It earns its place
+//     against a FUTURE single-slot cache, not against anything that exists
+//     now — the same shape as verify:pty-manager check 20.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({
+      '-C /a rev-parse --show-toplevel': { stdout: '/a\n' },
+      '-C /b rev-parse --show-toplevel': { stdout: '/b\n' }
+    }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('20 resolveRepo is per-cwd', (await e.resolveRepo('/a')) === '/a' &&
+    (await e.resolveRepo('/b')) === '/b')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

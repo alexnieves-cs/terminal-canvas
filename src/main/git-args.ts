@@ -80,7 +80,11 @@ export function parseRepoRoot(stdout: string): string | null {
   return trimmed === '' ? null : trimmed
 }
 
-/** Git terminates the LAST entry with NUL too, so the split has a trailing ''. */
+/**
+ * Git terminates every entry with NUL, including the last, so a plain split
+ * produces one trailing '' — and filtering on emptiness drops it along with
+ * any other empty field the split produces, not only that trailing one.
+ */
 export function parseNulList(stdout: string): string[] {
   return stdout.split('\0').filter((s) => s !== '')
 }
