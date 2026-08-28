@@ -177,6 +177,173 @@ ok('9 starting says so', R.railTail({ kind: 'starting' }, false) === 'starting�
     rows.length === 3 && rows.map((r) => r.id).join(',') === 'n3,n1,n2')
 }
 
+/* ---- The inspector's read model (M8c) ---- */
+
+// 16. Every agent state gets a human label, and the ABSENT state gets one too.
+//     Undefined is the ordinary case for a panel that has never spawned, not
+//     an error, so a bare `state.toUpperCase()` would throw on the most common
+//     input the inspector sees.
+{
+  const labels = ['starting', 'busy', 'idle', 'wants-you', 'exited']
+    .map((s) => R.agentStateLabel(s))
+  ok('16 every agent state has a label, and so does the absent one',
+    labels.every((l) => typeof l === 'string' && l.length > 0) &&
+      new Set(labels).size === 5 &&
+      typeof R.agentStateLabel(undefined) === 'string' &&
+      R.agentStateLabel(undefined).length > 0,
+    JSON.stringify(labels) + ' / ' + JSON.stringify(R.agentStateLabel(undefined)))
+}
+
+// 17. THE SHARED PREDICATE. `starting` counts as running.
+//     This is not a detail: Canvas.tsx's canvas:counts provider has counted
+//     'running' || 'starting' since M5b, because a panel whose pty:create has
+//     not resolved yet is emphatically a process the user has started — and
+//     main's reset confirm names that number. The inspector's summary must not
+//     invent a second answer to the same question, so both read THIS. A
+//     'starting'-excluding implementation passes every other check here and
+//     makes two surfaces disagree only in the window a spawn is in flight.
+ok('17 isRunning counts starting as running, and nothing else as running',
+  R.isRunning({ kind: 'starting' }) === true &&
+    R.isRunning(running(1, '/bin/zsh')) === true &&
+    R.isRunning({ kind: 'idle' }) === false &&
+    R.isRunning({ kind: 'exited', code: 0 }) === false &&
+    R.isRunning({ kind: 'error', message: 'x' }) === false &&
+    R.isRunning(undefined) === false)
+
+// 18. The empty state's summary.
+{
+  const panels = [panel('n1'), panel('n2'), panel('n3')]
+  const st = statuses({ n1: running(1, '/bin/zsh'), n2: { kind: 'starting' } })
+  const s = R.buildInspectorSummary(panels, st, ['n1'])
+  ok('18 the summary counts panels, running and waiting',
+    s.panels === 3 && s.running === 2 && s.waiting === 1, JSON.stringify(s))
+}
+
+// 19. PHANTOM FILTER. An id in the attention set whose panel is gone must not
+//     be counted. Agent state survives a panel's closure (main sends the
+//     transition, the renderer's store keeps it until something clears it), so
+//     the waiting set can legitimately name an id no panel answers to — the
+//     same orphan reachableQueue drops at the head of the jump queue. Counting
+//     it gives a summary that says "1 waiting" on a canvas with nothing to go
+//     to, and the user hunts for a panel that does not exist.
+{
+  const s = R.buildInspectorSummary([panel('n1')], statuses({}), ['n1', 'ghost'])
+  ok('19 the summary ignores a waiting id no panel answers to',
+    s.waiting === 1, JSON.stringify(s))
+}
+
+// 20. The heading is the SAME honest chain the rail and the header walk.
+//     Two labels for one panel differing only in the common case is the defect
+//     railLabel's own comment describes; the inspector must not reopen it.
+{
+  const m = R.buildInspectorModel(panel('n1'), running(48213, '/bin/zsh'))
+  ok('20 the heading resolves the honest chain, not the spec',
+    m.heading === '/bin/zsh' && m.id === 'n1', JSON.stringify(m.heading))
+}
+
+// 21. THE CHECK THIS PANE EXISTS FOR. The links are shown SEPARATELY, not
+//     collapsed. "Why does this say login shell" is only answerable if the
+//     user can see that the spec asked for nothing AND that main resolved
+//     /bin/zsh. A model that rendered one merged `command` field would satisfy
+//     check 20 and leave the question unanswerable, which is the whole read
+//     half's stated purpose.
+{
+  const m = R.buildInspectorModel(panel('n1'), running(48213, '/bin/zsh'))
+  const f = (k) => m.fields.find((x) => x.key === k)
+  ok('21 the resolved command and the spec\'s absence are separate fields',
+    f('command') !== undefined && f('command').value === '/bin/zsh' &&
+      f('spec-command') !== undefined && f('spec-command').value !== '/bin/zsh' &&
+      f('spec-command').value.length > 0,
+    JSON.stringify(m.fields))
+}
+
+// 22. cwd comes from what main resolved while running, and falls back to the
+//     spec's when there is no resolved answer yet. Both halves: a
+//     status-only implementation renders an empty cwd for every panel that has
+//     not spawned, which is every panel on a restored canvas.
+{
+  const runningCwd = R.buildInspectorModel(
+    panel('n1'), { kind: 'running', pid: 1, command: '/bin/zsh', cwd: '/Users/x/proj', reattached: false })
+  const idleCwd = R.buildInspectorModel(panel('n1', { spec: { cwd: '~/fallback', args: [] } }), undefined)
+  const f = (m, k) => m.fields.find((x) => x.key === k).value
+  ok('22 cwd is the resolved one while running, the spec\'s otherwise',
+    f(runningCwd, 'cwd') === '/Users/x/proj' && f(idleCwd, 'cwd') === '~/fallback',
+    `${f(runningCwd, 'cwd')} / ${f(idleCwd, 'cwd')}`)
+}
+
+// 23. Exit code 0 must RENDER. It is the single most common exit there is, and
+//     `code || '—'` prints the wrong thing for exactly it — the same lesson
+//     railTail's comment records one screenful up. Asserted with 0 explicitly,
+//     because a check written with a non-zero code passes either way.
+{
+  const m = R.buildInspectorModel(panel('n1'), { kind: 'exited', code: 0 })
+  const f = m.fields.find((x) => x.key === 'exit')
+  ok('23 an exit code of 0 is rendered, not swallowed',
+    f !== undefined && f.value.includes('0'), JSON.stringify(f))
+}
+
+// 24. The reattached badge — M6a carried this field with ZERO readers and
+//     CLAUDE.md records the spec's "a reattached panel visibly says so"
+//     criterion as deliberately unmet. This is the first reader.
+{
+  const fresh = R.buildInspectorModel(panel('n1'), running(1, '/bin/zsh'))
+  const back = R.buildInspectorModel(panel('n1'),
+    { kind: 'running', pid: 1, command: '/bin/zsh', cwd: '~', reattached: true })
+  ok('24 reattached is carried from the status, both ways',
+    fresh.reattached === false && back.reattached === true)
+}
+
+// 25. THE RESTART GATE. Offered for a SPAWNED panel only — running or exited.
+//     Exited is the most natural target the verb has ("run that again"), so an
+//     implementation gating on `kind === 'running'` alone reads as correct and
+//     removes the verb from the case that wants it most. A never-started panel
+//     has its own verb with its own affordance (M8b's start control) and must
+//     not get a second one here.
+{
+  const of = (status) => R.buildInspectorModel(panel('n1'), status).restartable
+  ok('25 restartable for running and exited, not for a panel that never started',
+    of(running(1, '/bin/zsh')) === true &&
+      of({ kind: 'exited', code: 1 }) === true &&
+      of({ kind: 'starting' }) === true &&
+      of({ kind: 'idle' }) === false &&
+      of(undefined) === false)
+}
+
+// 26. THE 60Hz DEFENCE, and the reason this module exists rather than a .map()
+//     in Canvas.tsx. The selected panel comes out of `panels`, which is a
+//     fresh array on every setPanelRect — every frame of a drag. The rect is
+//     carried in the fixture BECAUSE this check moves it; a model that ignored
+//     rects by construction would make this vacuous.
+{
+  const a = R.buildInspectorModel(panel('n1'), running(1, '/bin/zsh'))
+  const b = R.buildInspectorModel(
+    { ...panel('n1'), rect: { id: 'n1', x: 900, y: -400, w: 500, h: 300 } },
+    running(1, '/bin/zsh'))
+  ok('26 the signature ignores a rect change',
+    R.inspectorSignature(a) === R.inspectorSignature(b))
+}
+
+// 27. …and moves for everything a field actually renders. Three separate
+//     movers, because an implementation that hashed only the id passes 26.
+{
+  const base = R.buildInspectorModel(panel('n1'), running(1, '/bin/zsh'))
+  const titled = R.buildInspectorModel(panel('n1', { title: 'auth' }), running(1, '/bin/zsh'))
+  const repid = R.buildInspectorModel(panel('n1'), running(2, '/bin/zsh'))
+  const gone = R.buildInspectorModel(panel('n1'), { kind: 'exited', code: 3 })
+  const sig = R.inspectorSignature
+  ok('27 the signature moves on a title, a pid and a status change',
+    sig(base) !== sig(titled) && sig(base) !== sig(repid) && sig(base) !== sig(gone))
+}
+
+// 27b. Nothing selected is a first-class state, not a crash. Canvas passes
+//      null when selectedId is null — which is every launch before the first
+//      click, and every background click after one.
+ok('27b the signature accepts the empty selection',
+  typeof R.inspectorSignature(null) === 'string' &&
+    R.inspectorSignature(null) !== R.inspectorSignature(
+      R.buildInspectorModel(panel('n1'), undefined)))
+
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
