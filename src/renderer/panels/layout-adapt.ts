@@ -1,5 +1,5 @@
 import type { PersistedPanel } from '@shared/layout-schema'
-import type { Panel } from './panels'
+import { isReviewPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -59,7 +59,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // A review record carrying an explicit undefined cwd fails its own parse
     // on the next launch (the terminal branch's cwd check), which is a canvas
     // that loses every review node on every relaunch, silently.
-    if (panel.kind === 'review') return { ...base, kind: 'review' as const, subject: { ...panel.subject } }
+    if (isReviewPanel(panel)) return { ...base, kind: 'review' as const, subject: { ...panel.subject } }
     return {
       ...base,
       kind: 'terminal' as const,

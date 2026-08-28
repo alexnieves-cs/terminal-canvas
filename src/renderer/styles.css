@@ -829,6 +829,13 @@ body {
   font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--muted);
   background: var(--panel-bg);
+  /* `.panel` sets user-select: none so a drag on the chrome never leaves a
+     text selection behind. This is the one surface in the app built for
+     READING, and inheriting that rule makes a path or a hunk impossible to
+     copy out of the only place it is rendered. The body's onMouseDown
+     stopPropagation's (so the canvas never sees it) but deliberately does not
+     preventDefault, so native selection works the moment the rule is lifted. */
+  user-select: text;
 }
 
 .review-node__summary { margin: 0 0 2px; color: var(--text); }

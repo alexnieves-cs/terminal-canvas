@@ -319,7 +319,8 @@ node are two kinds of the same shape, sharing a rect, a z, a title and every
 gesture that acts on one (drag, resize, close, select, the rail row, the panel
 switcher), and differing in exactly what they render and what they own. You
 open one from the inspector's Changes heading, or from the palette's
-`Review changes` row, on a panel that has started inside a repository.
+`Open review of <panel>` row (findable by typing "review changes"), on a panel
+that has started inside a repository.
 
 **It costs no `LIVE_BUDGET` slot and no WebGL context.** `Canvas.tsx` partitions
 the panel array before tiering, so a node never reaches `assignTiers` or the

@@ -228,17 +228,35 @@ function InspectorPanel({
             <p className="inspector__review-note" data-review-note>{review.note}</p>
           )}
           {/*
-            Inside the section rather than beside Restart, and that placement
-            IS the gate: the section renders only when the review model is
-            not hidden, so the button exists exactly when there is something
-            to open — no disabled state to explain, and no button at all on
-            the panels (most of them) that are not in a repository.
+            Inside the section rather than beside Restart, so it sits with the
+            thing it acts on — but the SECTION IS NOT THE GATE, and reading it
+            as one is what shipped a dead button. `hidden` answers "is this
+            panel in a repository", which is a different question from "is
+            there anything to open": several of ReviewResult's visible arms
+            are unopenable, and `never-started` is by far the commonest of
+            them — a panel with no session has no baseline, so openReview
+            correctly returns on the null and the button does nothing, ever.
+
+            So it gates on `restartable` — the SAME field the palette's
+            panel.review row gates on, and the same one Restart above gates
+            on, deliberately not a second boolean. "Has this panel ever
+            spawned" is one fact, and it is exactly the question both verbs
+            ask. Disabled with a reason rather than hidden, the rule
+            verify:palette 31 states for rows: a control that vanishes reads
+            as a feature that was never built, and this one sits where a user
+            has just been told there are changes.
+
+            A review NODE never reaches here at all — Canvas leaves `review`
+            null for one, so the section does not render (verify:panels 112).
           */}
           <button
             type="button"
             className="inspector__action"
             data-inspector-action="review"
-            title={`Open a review node for ${model.heading}`}
+            disabled={!model.restartable}
+            title={model.restartable
+              ? `Open a review node for ${model.heading}`
+              : `${model.heading} has not started yet, so there is no baseline to review against`}
             {...shellControl(() => onOpenReview(model.id))}
           >
             Open review

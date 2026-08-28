@@ -833,6 +833,14 @@ const gitFail = (code, stderr) => ({ stdout: '', ok: false, notFound: false, cod
 //     parsed as source; a failed diff is `unavailable`, never an EMPTY diff
 //     — "this file did not change" for a file the numstat just said changed
 //     is the confident wrong answer this whole feature is built to refuse.
+//
+//     The EMPTY-stdout clause is the second half of that same sentence, and
+//     it is the one a reader is likeliest to think is covered by the failure
+//     clause above when it is not: git exiting 0 with nothing to say is a
+//     SUCCESS, so it flows straight past the `acceptable` test. It is
+//     reachable — the file was reverted between the numstat that listed it
+//     and the click that expanded it — and without this clause the node
+//     renders an empty expanded box with no note at all.
 {
   const mk = (result) => R.createReviewEngine({
     run: async () => result, baselineOf: () => undefined, peersInRepo: () => 0
@@ -843,9 +851,12 @@ const gitFail = (code, stderr) => ({ stdout: '', ok: false, notFound: false, cod
     { repoRoot: '/r', baselineSha: 'abc', path: 'x.png', untracked: false })
   const bad = await mk(gitFail(128, 'fatal: bad object')).fileDiff(
     { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
-  ok('47 fileDiff answers diff / binary / unavailable',
+  const empty = await mk(gitOk('')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
+  ok('47 fileDiff answers diff / binary / unavailable, and an empty diff is unavailable',
     text.kind === 'diff' && text.lines.length === 3 &&
-      bin.kind === 'binary' && bad.kind === 'unavailable')
+      bin.kind === 'binary' && bad.kind === 'unavailable' &&
+      empty.kind === 'unavailable')
 }
 
 // 48. An UNTRACKED file — the commonest thing an agent produces — has no

@@ -264,6 +264,16 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     // because the app "mostly works". verify:review 48.
     const acceptable = result.ok || (req.untracked && result.code === 1)
     if (!acceptable) return { kind: 'unavailable' }
+    // git exited 0 and said NOTHING, which is reachable rather than
+    // hypothetical: the file was reverted between the numstat that listed it
+    // and the click that expanded it. Returning `{ kind: 'diff', lines: [] }`
+    // renders an empty box with no explanation — "this file did not change",
+    // stated confidently about a file the list beside it says did — which is
+    // exactly the wrong answer `unavailable` exists to give instead. This is
+    // also what lets ReviewNode.tsx's Hunks say an empty diff is
+    // unrenderable: it is unrenderable because this line refuses to produce
+    // one. verify:review 47.
+    if (result.stdout.trim() === '') return { kind: 'unavailable' }
     // git's own report, and the only honest answer for it: there is nothing
     // to render, and rendering the sentence as source would be a lie about
     // the file's contents.

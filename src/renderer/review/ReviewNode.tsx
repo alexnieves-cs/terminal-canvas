@@ -51,7 +51,20 @@ function ReviewNodeImpl({
   // baseline on kill. See ReviewSubject in shared/review.ts.
   useEffect(() => {
     let live = true
-    void window.canvas.review.at(subject).then((r) => { if (live) setResult(r) })
+    void window.canvas.review.at(subject)
+      .then((r) => { if (live) setResult(r) })
+      // A rejected invoke must LAND IN AN ARM, never be swallowed. `result`
+      // staying undefined leaves the node reading "reading…" for the rest of
+      // the run — a permanent spinner, which is the one state this feature's
+      // honest-degradation rule forbids: every other failure has a sentence.
+      // `repo-unreadable` is the arm that already renders "git could not open
+      // this repository — <detail>", which is exactly what an IPC failure at
+      // this door means to a user. The `live` guard is repeated rather than
+      // shared, because a rejection arriving after unmount must not set state
+      // either.
+      .catch((error: unknown) => {
+        if (live) setResult({ kind: 'repo-unreadable', detail: String(error) })
+      })
     return () => { live = false }
   }, [subject, refreshToken])
 
@@ -62,11 +75,23 @@ function ReviewNodeImpl({
   // so leaving idle does not fire a second round of git processes. The
   // subject may be gone entirely, in which case this is simply never true.
   const subjectState = useAgentState(subject.subjectId)
-  const prevStateRef = useRef<string | undefined>(undefined)
+  // SEEDED from the first observed state, never left at `undefined`. A node
+  // mounted beside a subject that is ALREADY idle would otherwise read its
+  // first observation as `undefined -> 'idle'`, i.e. as an arrival, and fire a
+  // second review:at on top of the one the mount effect above already issued —
+  // two rounds of git subprocesses for one mount, on every reload and every
+  // switch back to this workspace, which is the commonest way a node is
+  // mounted at all. `seen` rather than comparing against a sentinel state,
+  // because `undefined` is itself a real value here (a subject that never
+  // spawned) and would collide with any string chosen to mean "not yet".
+  const prevStateRef = useRef<{ seen: boolean; state: string | undefined }>(
+    { seen: false, state: undefined })
   useEffect(() => {
     const prev = prevStateRef.current
-    prevStateRef.current = subjectState
-    if (subjectState === 'idle' && prev !== 'idle') setRefreshToken((n) => n + 1)
+    prevStateRef.current = { seen: true, state: subjectState }
+    if (prev.seen && subjectState === 'idle' && prev.state !== 'idle') {
+      setRefreshToken((n) => n + 1)
+    }
   }, [subjectState])
 
   // One file at a time. Fetching every file's hunks up front is megabytes of
@@ -83,7 +108,13 @@ function ReviewNodeImpl({
       baselineSha: subject.baselineSha,
       path: expandedPath,
       untracked: row?.untracked === true
-    }).then((d) => { if (live) setDiff(d) })
+    })
+      .then((d) => { if (live) setDiff(d) })
+      // Same rule as the query above, one layer in: `diff` staying null is
+      // rendered by Hunks as "reading…", so a rejection here leaves an
+      // expanded file spinning forever. `unavailable` is the arm that already
+      // says "this diff could not be read".
+      .catch(() => { if (live) setDiff({ kind: 'unavailable' }) })
     return () => { live = false }
   }, [expandedPath, subject, result])
 

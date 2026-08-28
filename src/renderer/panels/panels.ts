@@ -55,7 +55,13 @@ export interface ReviewPanel extends PanelBase {
 export type Panel = TerminalPanel | ReviewPanel
 
 /**
- * The ONLY kind test in the codebase, and it is deliberately positive.
+ * The only kind test written against a `Panel` anywhere, and it is
+ * deliberately positive. (Other reads of a `kind` field exist and are not
+ * this: `layout-schema.ts` and `layout-adapt.ts`'s toPanels branch on the
+ * PERSISTED record on the way in from disk, before a `Panel` exists at all;
+ * `Inspector.tsx` branches on `InspectorModel.kind`, an already-built view
+ * model; and `railTail` branches on a bare `Panel['kind']` argument it was
+ * handed. Nothing but this function asks a live `Panel` what it is.)
  *
  * Never write `kind === 'terminal'` anywhere: `kind` is absent in every
  * layout.json written before M9b (see parsePanel) and in every verify

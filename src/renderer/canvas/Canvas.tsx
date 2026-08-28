@@ -2477,6 +2477,12 @@ export function Canvas({
     : buildInspectorModel(selectedPanel, registry.get(selectedPanel.rect.id)?.status)
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
+  // A BOOLEAN, never `selectedPanel` itself, and that is the whole reason it
+  // is derived here instead of inside the effect: `panels` is a fresh array on
+  // every setPanelRect, so `selectedPanel` is a fresh find() result on every
+  // frame of a drag, and putting it in the dep array below would re-fire the
+  // query — and its git subprocesses — at 60Hz. A boolean is equal to itself.
+  const selectedIsReview = selectedPanel !== undefined && isReviewPanel(selectedPanel)
 
   // The Changes section's own data, queried through review:panel rather than
   // computed here — the engine (main-side, real git) is the sole authority,
@@ -2522,7 +2528,15 @@ export function Canvas({
     // exists to prevent, arriving from the renderer rather than from git.
     // verify:panels 100b.
     setReview(null)
-    if (selectedId === null) return
+    // A review NODE is skipped outright, leaving `review` null so the Changes
+    // section never renders for it. Main holds no baseline for a node's own
+    // id, so the engine answers `never-started` — a perfectly correct answer
+    // to a question nobody should be asking — and the pane rendered "this
+    // panel has no session yet" under a heading for a panel that will never
+    // have one, plus an Open-review button whose handler refuses a node as a
+    // subject and returns. Both are one wrong query, not two bugs.
+    // verify:panels 112.
+    if (selectedId === null || selectedIsReview) return
     let live = true
     void window.canvas.review.panel(selectedId).then((result) => {
       // The guard is not defensiveness: an invoke issued for panel A can
@@ -2532,7 +2546,7 @@ export function Canvas({
       if (live) setReview(buildReviewFields(result))
     })
     return () => { live = false }
-  }, [selectedId, idleArrivals])
+  }, [selectedId, selectedIsReview, idleArrivals])
   const reviewSig = reviewSignature(review)
   // Frozen on reviewSignature for the identical reason inspectorModel is
   // frozen on inspectorSig above: buildReviewFields returns a fresh object on

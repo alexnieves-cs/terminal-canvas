@@ -7564,6 +7564,78 @@ app.whenReady().then(async () => {
           `node=${node} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
       }
 
+      // 112. A selected review NODE renders no Changes section at all, and
+      //      therefore no review button. The effect that feeds the section
+      //      fired review:panel(selectedId) for WHATEVER was selected, and
+      //      main holds no baseline for a node's own id — so the engine
+      //      answered `never-started`, buildReviewFields returned
+      //      `hidden: false`, and the pane rendered the note "this panel has
+      //      no session yet" under a heading for a panel that will never have
+      //      a session, above an "Open review" button whose handler refuses a
+      //      review node as a subject and returns immediately. A control that
+      //      can never do anything is worse than an absent one: it is a
+      //      promise the app cannot keep, and the note beside it is a
+      //      confidently wrong sentence about what the selected thing IS.
+      //
+      //      THE NON-VACUITY CLAUSE IS THE WHOLE REASON THIS CAN FAIL
+      //      HONESTLY. Both assertions are negatives, and the inspector's
+      //      EMPTY state — exactly what a selection that never landed
+      //      produces — satisfies both of them completely. So the read also
+      //      demands the node's own `reviews` field, which only
+      //      buildInspectorModel's review arm emits, in the SAME read.
+      //
+      //      It is selected through the RAIL ROW rather than by clicking the
+      //      node, because goToPanel centres before it selects: this block
+      //      has panned the camera several times by now, and where
+      //      cascadeCentre put the node relative to it is not something this
+      //      check should have to know. Check 108 already pins that the row
+      //      frames and selects.
+      {
+        const subject = await spawnAt(repo)
+        if (subject) {
+          await waitUntil(async () => (await sessionMap(wc)).has(subject), 8000)
+          // The baseline, not merely the session — check 111b's comment
+          // states the two-stacked-races problem in full: openReview returns
+          // early on a null baseline, so a racing fixture would mint no node
+          // and this check would fail for the fixture rather than the defect.
+          await waitUntil(async () => wc.executeJavaScript(
+            `window.canvas.review.baseline(${JSON.stringify(subject)}).then((b) => b !== null)`), 8000)
+          await selectPanel(subject)
+        }
+        const beforeIds = await panelIds()
+        const armed = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        if (armed) await clickShell('[data-inspector-action="review"]')
+        const nodeId = armed
+          ? await waitUntil(async () => {
+              const ids = await panelIds()
+              const fresh = ids.filter((id) => !beforeIds.includes(id))
+              return fresh.length === 1 ? fresh[0] : false
+            }, 8000)
+          : false
+        // Guarded rather than built bare: an absent row would make this a
+        // TypeError, which ends the whole script and takes every later
+        // check's result with it.
+        const selected = typeof nodeId === 'string'
+          ? await wc.executeJavaScript(`(() => {
+              const el = document.querySelector('.rail-row[data-rail-row=' +
+                ${JSON.stringify(JSON.stringify(nodeId))} + '] .rail-row__main')
+              if (!el) return false
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+              return true })()`)
+          : false
+        await settle()
+        const pane = await wc.executeJavaScript(`(() => ({
+          reviews: document.querySelector('[data-inspector-field="reviews"]') !== null,
+          reviewButton: document.querySelector('[data-inspector-action="review"]') !== null,
+          note: document.querySelector('[data-review-note]') !== null
+        }))()`)
+        ok('112 a selected review node gets no Changes section and no dead review button',
+          typeof nodeId === 'string' && selected === true && pane !== null &&
+            pane.reviews === true && pane.reviewButton === false && pane.note === false,
+          `node=${nodeId} selected=${selected} pane=${JSON.stringify(pane)}`)
+      }
+
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
       // up must never turn a green suite red.

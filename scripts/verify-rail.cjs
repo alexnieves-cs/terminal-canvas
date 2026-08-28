@@ -699,12 +699,19 @@ ok('49 not-a-repo: hidden in the pane, rendered in the node',
 //     allocation, imposing the exact cost it exists to prevent.
 //
 //     So the serialization happens HERE, in the check, where it is free and
-//     runs once. Equal inputs must produce a DEEP-equal model; the expanded
-//     path and the title must each change what is rendered; and so must the
-//     diff, which is not an input to this function at all but is the other
-//     half of what the node paints, so the pair is what gets compared. Three
-//     movers, because an implementation that carried only the file list
+//     runs once. Equal inputs must produce a DEEP-equal model, and three
+//     separate INPUTS must each move it — the result, the expanded path and
+//     the title — because an implementation that carried only the file list
 //     passes the first clause alone.
+//
+//     The `diff` travelling in the painted pair is FIXTURE BOOKKEEPING, not a
+//     fourth mover, and the distinction cost this check a clause. It is what
+//     the node paints beneath the model, so painting the pair is what the
+//     component actually renders — but it is not an input to
+//     buildReviewNodeModel, so an assertion that varying it changes the
+//     string is true of EVERY implementation, a constant-returning one
+//     included. It is therefore held IDENTICAL across all four paintings, so
+//     that any difference observed is the model's and nothing else's.
 {
   const result = { kind: 'changes', root: '/r', added: 1, removed: 0, files: [
     { path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }] }
@@ -713,10 +720,14 @@ ok('49 not-a-repo: hidden in the pane, rendered in the node',
   const a = painted(nodeModel(result), diff)
   const b = painted(nodeModel(result), diff)
   const expanded = painted(nodeModel(result, 'a.ts'), diff)
-  const otherDiff = painted(nodeModel(result), { kind: 'binary' })
+  // A DIFFERENT ReviewResult, which is the input the decorative diff clause
+  // used to stand in for: `clean` and `changes` are the two arms a user is
+  // most often looking at, and a model that ignored `result` entirely would
+  // still satisfy the expansion and title clauses.
+  const otherResult = painted(nodeModel({ kind: 'clean', root: '/r' }), diff)
   const renamed = painted(nodeModel(result, null, 'my review'), diff)
-  ok('52 the model is pure in its inputs, and expansion, diff and title all move it',
-    a === b && expanded !== a && otherDiff !== a && renamed !== a)
+  ok('52 the model is pure in its inputs, and result, expansion and title all move it',
+    a === b && expanded !== a && otherResult !== a && renamed !== a)
 }
 
 const reviewPanel = (id, over = {}) => ({
