@@ -28,8 +28,8 @@ import type {
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
-  cascadeCentre, firstRunPanels, isReviewPanel, makePanel, nextZ, raisePanel, removePanel,
-  setPanelRect, type Panel, type TerminalPanel as TerminalPanelModel
+  cascadeCentre, firstRunPanels, isReviewPanel, makePanel, makeReviewPanel, nextZ, raisePanel,
+  removePanel, reviewCentre, setPanelRect, type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
@@ -44,7 +44,7 @@ import { TopBar } from '../shell/TopBar'
 import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
-import { buildRailRows, railSignature } from '../shell/rail-rows'
+import { buildRailRows, railLabel, railSignature } from '../shell/rail-rows'
 import {
   attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature
 } from '../shell/rail-sections'
@@ -203,7 +203,11 @@ export function Canvas({
   // for the identical reason.
   const nextIdRef = useRef(
     allPanelIds.reduce((max, id) => {
-      const match = /^n(\d+)$/.exec(id)
+      // Both prefixes, one sequence. `r` nodes and `n` panels draw from the
+      // same counter precisely so neither can mint an id the other owns; a
+      // regex that only saw `n` would restore a canvas holding r7 and then
+      // hand out n7, which is one id for two panels.
+      const match = /^[nr](\d+)$/.exec(id)
       return match ? Math.max(max, Number(match[1]) + 1) : max
     }, 1)
   )
@@ -857,7 +861,8 @@ export function Canvas({
         nextIdRef.current = Math.max(
           nextIdRef.current,
           result.allPanelIds.reduce((max, pid) => {
-            const match = /^n(\d+)$/.exec(pid)
+            // Both prefixes, one sequence — see nextIdRef's own comment.
+            const match = /^[nr](\d+)$/.exec(pid)
             return match ? Math.max(max, Number(match[1]) + 1) : max
           }, 1)
         )
@@ -1570,6 +1575,51 @@ export function Canvas({
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
 
+  /**
+   * A review node is minted from the SUBJECT's stored baseline, asked for
+   * once here and then carried inside the node — see ReviewSubject. The
+   * label is snapshotted through the same honest chain the rail row walks,
+   * because the panel it names may be closed long before the node is.
+   */
+  const openReview = useCallback((subjectId: string) => {
+    const subject = panelsRef.current.find((p) => p.rect.id === subjectId)
+    // A review of a review is not a thing, and the id could only reach here
+    // from a row that should have been gated.
+    if (subject === undefined || isReviewPanel(subject)) return
+    const label = railLabel(subject, registry.get(subjectId)?.status)
+    void window.canvas.review.baseline(subjectId).then((baseline) => {
+      // Null is reachable despite the row's gate: a panel can be killed
+      // between the click and the reply, and main drops its baseline on
+      // kill. Minting a node with no baseline would produce a panel that can
+      // never answer anything.
+      if (baseline === null) return
+      // `r`, from the SAME counter `n` comes from. PanelId doubles as a tmux
+      // session name, so a review node minting an id a terminal panel in any
+      // workspace already owns is M7's invisible collision through a new
+      // door — the second panel to go live attaches to the first one's
+      // session and the user simply sees one agent through two panels.
+      const id = `r${nextIdRef.current++}`
+      setPanels((current) => {
+        // cascadeCentre for the reason onSpawn uses it: opening two reviews
+        // of one panel must not stack them byte-identically, which is a
+        // canvas that looks like it holds one node while holding two.
+        const centre = cascadeCentre(reviewCentre(subject.rect), current)
+        const next = [
+          ...current,
+          makeReviewPanel(id, centre, nextZ(current), {
+            subjectId,
+            repoRoot: baseline.root,
+            baselineSha: baseline.sha,
+            label
+          })
+        ]
+        commitHistory(next)
+        return next
+      })
+      setSelectedId(id)
+    })
+  }, [commitHistory])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -2198,11 +2248,12 @@ export function Canvas({
         // consumed inside attachSlot; that is a deliberate design decision,
         // not a line to sneak into a fix wave.
       })
-    }
+    },
+    openReview
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
-       onClosePanel, onSelectPanel])
+       onClosePanel, onSelectPanel, openReview])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2569,6 +2620,7 @@ export function Canvas({
         onClose={paletteActions.closePanel}
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
+        onOpenReview={paletteActions.openReview}
         review={reviewModel}
       />
     </div>

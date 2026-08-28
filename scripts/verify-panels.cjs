@@ -7076,6 +7076,62 @@ app.whenReady().then(async () => {
           `cancelled=${cancelled} ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
       }
 
+      // Local to this block: neither exists anywhere else in this file. A
+      // review node reuses the `.panel` class (ReviewNode.tsx's own comment
+      // explains why), so this counts both kinds the same way spawnAt does.
+      const panelIds = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      const clickShell = (selector) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)})
+        if (!el) return false
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true })()`)
+
+      // 106. The inspector's button makes a real node beside a real panel,
+      //      through main's real baseline. Three clauses, and the id prefix
+      //      is one of them: `r` is what tells a reader of layout.json (and
+      //      of a tmux session list) which panels can possibly own a
+      //      session.
+      {
+        const beforeIds = await panelIds()
+        await selectPanel(first)
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        await clickShell('[data-inspector-action="review"]')
+        const node = await waitUntil(async () => {
+          const ids = await panelIds()
+          const fresh = ids.filter((id) => !beforeIds.includes(id))
+          return fresh.length === 1 ? fresh[0] : false
+        }, 8000)
+        const heading = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id=' +
+            ${JSON.stringify(JSON.stringify(node))} + ']')
+          return n ? n.querySelector('.panel__title').textContent : null })()`)
+        const sessions = await sessionMap(wc)
+        ok('106 the inspector opens a review node for the selected panel',
+          typeof node === 'string' && node.startsWith('r') &&
+            typeof heading === 'string' && heading.includes('review') &&
+            sessions.has(node) === false,
+          `node=${node} heading=${heading}`)
+      }
+
+      // 107. THE ID CHECK. A review node draws from the same counter as
+      //      Cmd+N, so the next terminal panel must not reuse its number —
+      //      PanelId doubles as a tmux session name, and two panels naming
+      //      one session is the failure with no visible symptom at all (the
+      //      second to go live attaches to the first one's process). Read
+      //      across EVERY workspace, not just this one, for the same reason
+      //      check 66 does.
+      {
+        await zoomTo(wc, 'n')
+        await settle()
+        const ids = await wc.executeJavaScript(
+          `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+        const numbers = ids.map((id) => /^[nr](\d+)$/.exec(id)).filter(Boolean).map((m) => m[1])
+        ok('107 review nodes and panels never share a number',
+          new Set(numbers).size === numbers.length, JSON.stringify(ids))
+      }
+
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
       // up must never turn a green suite red.

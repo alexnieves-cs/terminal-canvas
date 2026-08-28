@@ -13,6 +13,7 @@ export interface InspectorProps {
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  onOpenReview: (id: string) => void
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -44,7 +45,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, review
+  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview, review
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -67,6 +68,7 @@ function InspectorImpl({
             onClose={onClose}
             onSavePreset={onSavePreset}
             onRestart={onRestart}
+            onOpenReview={onOpenReview}
           />}
     </aside>
   )
@@ -112,7 +114,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, review, onRename, onClose, onSavePreset, onRestart
+  model, review, onRename, onClose, onSavePreset, onRestart, onOpenReview
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
@@ -120,6 +122,7 @@ function InspectorPanel({
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  onOpenReview: (id: string) => void
 }): JSX.Element {
   const state = useAgentState(model.id)
   return (
@@ -219,6 +222,22 @@ function InspectorPanel({
           {review.note !== undefined && (
             <p className="inspector__review-note" data-review-note>{review.note}</p>
           )}
+          {/*
+            Inside the section rather than beside Restart, and that placement
+            IS the gate: the section renders only when the review model is
+            not hidden, so the button exists exactly when there is something
+            to open — no disabled state to explain, and no button at all on
+            the panels (most of them) that are not in a repository.
+          */}
+          <button
+            type="button"
+            className="inspector__action"
+            data-inspector-action="review"
+            title={`Open a review node for ${model.heading}`}
+            {...shellControl(() => onOpenReview(model.id))}
+          >
+            Open review
+          </button>
           <ul className="inspector__review-files">
             {review.files.map((f) => (
               <li key={f.path} className="inspector__review-file" data-review-file={f.path}>

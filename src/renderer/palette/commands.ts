@@ -139,6 +139,18 @@ export interface PaletteActions {
    * row is the only way to reach it without the inspector open.
    */
   restartPanel(id: string): void
+  /**
+   * Open a review node for this panel: ask main for its stored baseline,
+   * then place a node beside it. Takes an id rather than reading the focused
+   * panel, for the reason savePanelAsPreset does — the inspector acts on the
+   * SELECTED panel and the palette on the CAPTURED one, and neither is
+   * `focusedId`.
+   *
+   * This one EARNS a Command row, unlike closePanel/startPanel: opening a
+   * review has exactly one other gesture (the inspector's button), and the
+   * inspector can be collapsed.
+   */
+  openReview(subjectId: string): void
 }
 
 export interface PaletteContext {
@@ -280,6 +292,26 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ctx.capturedId === null
           ? REASON_NO_FOCUS
           : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: 'panel.review',
+          title: target === undefined ? 'Open review' : `Open review of ${target.label}`,
+          searchText: 'review changes diff git what changed',
+          group: 'panel',
+          run: () => { if (target !== undefined) actions.openReview(target.id) }
+        },
+        // The SAME field the Restart row gates on, deliberately not a second
+        // boolean: "has this panel ever spawned" is one fact, and it is
+        // exactly the question both verbs ask — a panel that never started
+        // has no baseline, so there is nothing to review it against. Two
+        // flags derived from one status would agree the day they were
+        // written and disagree the first time one of them was wrong.
+        ctx.capturedId === null || target === undefined
+          ? REASON_NO_FOCUS
+          : (target.restartable ? undefined : REASON_NOT_STARTED)
       )
     )
   }
