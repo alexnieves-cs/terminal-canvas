@@ -5392,8 +5392,11 @@ app.whenReady().then(async () => {
     {
       const railOpen = await wc.executeJavaScript(
         `!document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+      // Scoped to .rail-list--panels: M8d's Workspaces section (Task 3) rows
+      // share the bare .rail-row class for its layout rules, and an unscoped
+      // query here would pick up the workspace list's row too.
       const rows = await wc.executeJavaScript(`
-        [...document.querySelectorAll('.rail-row')].map((r) => ({
+        [...document.querySelectorAll('.rail-list--panels .rail-row')].map((r) => ({
           id: r.getAttribute('data-rail-row'),
           label: r.querySelector('.rail-row__label').textContent,
           tail: r.querySelector('.rail-row__tail').textContent
@@ -5543,8 +5546,11 @@ app.whenReady().then(async () => {
     //     included) to prove the others never moved.
     {
       const BELL_LINE = "printf '\\007'\n"
+      // Scoped to .rail-list--panels for the same reason check 81 is: the
+      // Workspaces section's row shares the bare .rail-row class and has no
+      // .rail-row__dot, so an unscoped query throws on that row's null lookup.
       const dots = () => wc.executeJavaScript(`
-        Object.fromEntries([...document.querySelectorAll('.rail-row')].map((r) => [
+        Object.fromEntries([...document.querySelectorAll('.rail-list--panels .rail-row')].map((r) => [
           r.getAttribute('data-rail-row'),
           r.querySelector('.rail-row__dot').getAttribute('data-agent-state')
         ]))`)
@@ -6251,6 +6257,137 @@ app.whenReady().then(async () => {
       const disposes = (canvasSrc.match(/registry\.dispose\(/g) ?? []).length
       ok('94 pty.kill still has exactly two callers, and Canvas has five dispose sites',
         kills === 2 && disposes === 5, `kills=${kills} disposes=${disposes}`)
+    }
+
+    // ---------------------------------------------------------------------
+    // M8d — the rail's Workspaces and Attention sections.
+    // ---------------------------------------------------------------------
+
+    // Local helpers: panBy and agentStateOf are block-scoped to the M6c/M6d
+    // block far above and are not reachable here.
+    const railPan = (dx, dy) => wc.executeJavaScript(`
+      document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+        deltaX: ${dx}, deltaY: ${dy}, deltaMode: 0
+      }))
+      true
+    `)
+    const railAgentState = (id) => wc.executeJavaScript(
+      `(() => { const el = document.querySelector('[data-panel-id=${JSON.stringify(id)}]')
+                return el ? el.getAttribute('data-agent-state') : null })()`)
+    const clickRail = (selector) => wc.executeJavaScript(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)})
+      if (!el) return false
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      return true
+    })()`)
+    const activeWorkspaceId = () => wc.executeJavaScript(
+      `window.canvas.workspace.list().then((r) => (r.find((w) => w.active) || {}).id)`)
+
+    // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
+    //     Check 64 makes this claim for the palette's switcher and explains
+    //     why the pid is the only observable that can make it: every other
+    //     read — panel counts, the layout, the file on disk — stays green
+    //     against an implementation that quietly disposes and respawns on
+    //     switch, because a respawned agent is indistinguishable from a
+    //     reattached one in anything that only counts. The rail is a SECOND
+    //     door onto the same action, so it inherits the same obligation, and
+    //     the spec's "the shell adds no second switching path" is precisely
+    //     the claim this check tests.
+    //
+    //     The workspace ids are captured, never hardcoded: nextWorkspaceId()
+    //     mints w<max+1> over whatever already exists and this suite has
+    //     created and deleted several by now, so a literal here would be a
+    //     guess — and a wrong guess is SILENT, since activate() on an unknown
+    //     id returns null and changes nothing.
+    const homeWorkspaceId = await activeWorkspaceId()
+    {
+      const before = await settledSessionMap(wc)
+      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('rail-away')`)
+      await settle()
+      const clicked = await clickRail(
+        `.rail-row[data-rail-workspace=${JSON.stringify(homeWorkspaceId)}] .rail-row__main`)
+      await settle()
+      const landedOn = await activeWorkspaceId()
+      const after = await settledSessionMap(wc)
+      const { ok: preserved, changed } = pidsPreserved(before, after)
+      ok('95 clicking a rail workspace row switches, keeping every pid',
+        clicked === true && landedOn === homeWorkspaceId &&
+          before.size > 0 && preserved,
+        `clicked=${clicked} landed=${landedOn} before=${before.size} changed=[${changed.join(', ')}]`)
+    }
+
+    // 95b. The ACTIVE workspace's row is present and DISABLED, never absent.
+    //      The rule verify:palette 60 already pins for the palette's own
+    //      switch row, and it is the same argument check 31 makes there: a
+    //      row that disappears is indistinguishable from a feature that is
+    //      missing, and here it would also make the rail's list silently
+    //      disagree with its own count of how many workspaces exist.
+    {
+      const state = await wc.executeJavaScript(`(() => {
+        const row = document.querySelector(
+          '.rail-row[data-rail-workspace=${JSON.stringify(homeWorkspaceId)}]')
+        if (!row) return null
+        const main = row.querySelector('.rail-row__main')
+        return {
+          present: true,
+          disabled: main.disabled === true,
+          canRename: row.querySelector('.rail-row__rename') !== null,
+          canDelete: row.querySelector('.rail-row__close') !== null,
+          tail: row.querySelector('.rail-row__tail').textContent
+        }
+      })()`)
+      ok('95b the active workspace row is disabled, not absent, and still admin-able',
+        state !== null && state.disabled === true &&
+          state.canRename === true && state.canDelete === true &&
+          /\d+ panel/.test(state.tail),
+        JSON.stringify(state))
+    }
+
+    // 96. A HIDDEN WORKSPACE WITH A WAITING PANEL SAYS SO ON ITS RAIL ROW.
+    //     70b's fixture reached from the new surface, and the strongest form
+    //     of M6d's premise: an agent you cannot see because its whole CANVAS
+    //     is hidden, not merely because it is off screen. It is also the one
+    //     check that proves the two sections divide the question the way the
+    //     spec says they do — Attention cannot name this panel (it is not on
+    //     this canvas, and a row that navigates nowhere is worse than none),
+    //     so the workspace row's count is the ONLY place the fact surfaces.
+    {
+      const BELL_LINE = "printf '\\007'\n"
+      const waitroomId = await wc.executeJavaScript(
+        `window.__m7aWorkspace().createAndSwitch('rail-waitroom')`)
+      await settle()
+      // A real shell, not Cmd+N's default `cat -v`: cat only ECHOES what it is
+      // handed, so the escaped text never becomes a 0x07 byte and the check
+      // could not pass against correct code. Same substitution 54-63, 70b and
+      // 83 all make.
+      const idsBefore = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const panelId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !idsBefore.includes(id)) || false
+      }, 4000)
+      if (!panelId) throw new Error('96: PRESET_SPAWN produced no new panel')
+      const spawned = await waitUntil(
+        async () => (await settledSessionMap(wc)).has(panelId), 8000)
+      if (!spawned) throw new Error(`96: panel ${panelId} never got a PTY`)
+      ptyManager.write(panelId, BELL_LINE)
+      const rang = await waitUntil(
+        async () => (await railAgentState(panelId)) === 'wants-you', 6000)
+      if (rang !== true) throw new Error('96: the panel never reached wants-you')
+
+      await wc.executeJavaScript(
+        `window.__m7aWorkspace().switchTo(${JSON.stringify(homeWorkspaceId)})`)
+      await settle()
+      const tail = await wc.executeJavaScript(`(() => {
+        const row = document.querySelector(
+          '.rail-row[data-rail-workspace=${JSON.stringify(waitroomId)}]')
+        return row ? row.querySelector('.rail-row__tail').textContent : null
+      })()`)
+      ok('96 a hidden workspace with a waiting panel says so on its rail row',
+        tail !== null && tail.includes('1 waiting'), `tail=${JSON.stringify(tail)}`)
     }
 
   } catch (error) {

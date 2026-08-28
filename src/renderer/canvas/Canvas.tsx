@@ -39,6 +39,7 @@ import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
+import { buildWorkspaceRows, workspaceSignature } from '../shell/rail-sections'
 import {
   buildInspectorModel, buildInspectorSummary, inspectorSignature, isRestartable, isRunning
 } from '../shell/inspector-fields'
@@ -813,6 +814,10 @@ export function Canvas({
             return match ? Math.max(max, Number(match[1]) + 1) : max
           }, 1)
         )
+        // Refreshes workspaceRows so the rail's Workspaces section reflects
+        // which workspace is now active — see reloadWorkspacesRef's own
+        // comment for why this is a ref rather than a direct call.
+        reloadWorkspacesRef.current?.()
       })()
     },
     [selectedId, focusedId, restoreCamera]
@@ -831,6 +836,16 @@ export function Canvas({
   // an effect right after paletteActions is declared; read only from inside
   // a callback the test hook itself doesn't invoke until well after mount.
   const deleteWorkspaceRef = useRef<PaletteActions['deleteWorkspace'] | null>(null)
+
+  // Same ordering problem, same fix: switchWorkspace is declared here, but
+  // reloadWorkspaces (below, with the palette's other reload* loaders) reads
+  // workspaceRows state that does not exist yet at this point in the
+  // component. The rail's Workspaces section renders `active` per row and is
+  // ALWAYS mounted — unlike the palette, which reloads fresh on every open —
+  // so a switch that left workspaceRows stale would freeze every row's
+  // disabled/active state at whatever it last was, including the row a rail
+  // click just switched TO, which is silently unclickable from then on.
+  const reloadWorkspacesRef = useRef<(() => void) | null>(null)
 
   // Test hooks for verify:panels. The registry (and, since M7, the workspace
   // surface) is a module-level/main-owned concept with no other route in for
@@ -1409,6 +1424,9 @@ export function Canvas({
   // waiting COUNT is derived live below from attentionIds, so a bell must
   // not reload this list on every agent:state message.
   useEffect(() => { reloadWorkspaces() }, [reloadWorkspaces])
+  // Keeps reloadWorkspacesRef current for switchWorkspace, declared earlier
+  // in this component — see that ref's own comment for why.
+  useEffect(() => { reloadWorkspacesRef.current = reloadWorkspaces }, [reloadWorkspaces])
   useEffect(() => {
     if (palette.open) reloadWorkspaces()
   }, [palette.open, reloadWorkspaces])
@@ -2177,6 +2195,22 @@ export function Canvas({
   const railRows = useMemo(() => railBuilt, [railSig])
 
   /**
+   * The rail's Workspaces section, frozen the same way its rows are — against a
+   * different volatile input. There is no rect here: what churns is IDENTITY,
+   * because reloadWorkspaces() hands back a brand-new array of brand-new
+   * objects on mount and on every palette open. Without the freeze, SideRail's
+   * memo is defeated by a reload that changed nothing at all.
+   *
+   * `waitingIds` is the same live attention set the pips and the inspector
+   * summary read — it changes only when MEMBERSHIP changes (syncAttention
+   * notifies on nothing else), so a chatty agent's busy/idle churn never
+   * reaches this at all.
+   */
+  const workspaceBuilt = buildWorkspaceRows(workspaceRows, waitingIds)
+  const workspaceSig = workspaceSignature(workspaceBuilt)
+  const railWorkspaces = useMemo(() => workspaceBuilt, [workspaceSig])
+
+  /**
    * The inspector's model, frozen the same way the rail's rows are and for the
    * same reason: the selected panel comes straight out of `panels`, a fresh
    * array on every setPanelRect — i.e. every frame of a drag — and this pane
@@ -2226,6 +2260,11 @@ export function Canvas({
       />
       <SideRail
         onToggle={chrome.toggleRail}
+        workspaces={railWorkspaces}
+        onSwitchWorkspace={paletteActions.switchWorkspace}
+        onCreateWorkspace={paletteActions.beginCreateWorkspace}
+        onRenameWorkspace={paletteActions.beginRenameWorkspace}
+        onDeleteWorkspace={paletteActions.deleteWorkspace}
         rows={railRows}
         selectedId={selectedId}
         onGoToPanel={paletteActions.goToPanel}

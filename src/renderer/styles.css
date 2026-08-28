@@ -107,7 +107,16 @@ body {
 }
 .shell__spacer { flex: 1; }
 
-.shell__rail { border-right: 1px solid var(--border); }
+/* Three sections now, so the rail has to divide its own height rather than let
+   one list claim a fixed slice of it. Panels is the section that grows;
+   Workspaces and Attention are short by construction and are capped so a long
+   workspace list cannot push the panel outline off screen. */
+.shell__rail {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .shell__inspector { border-left: 1px solid var(--border); }
 
 /* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
@@ -155,6 +164,22 @@ body {
   text-transform: uppercase;
 }
 
+.shell__region-title--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.shell__region-add {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.shell__region-add:hover { color: var(--text); }
+
 /* The panel outline. Scrolls on its own rather than growing the rail: the
    canvas can hold far more panels than the rail is tall, and a rail that grew
    would push its own toggle off screen — the one control that is the way back
@@ -164,8 +189,13 @@ body {
   margin: 0;
   padding: 0 4px;
   overflow-y: auto;
-  max-height: calc(100% - 60px);
 }
+/* min-height: 0 or the flex item refuses to shrink below its content and the
+   list scrolls the whole rail instead of itself — the same min-width:0 trap
+   the canvas grid cell documents one screenful up. */
+.rail-list--panels { flex: 1 1 auto; min-height: 0; }
+.rail-list--workspaces,
+.rail-list--attention { flex: 0 1 auto; max-height: 26%; }
 
 .rail-row {
   display: flex;
@@ -347,6 +377,7 @@ body {
 .inspector__action:disabled:hover { background: transparent; }
 
 .rail-row__start,
+.rail-row__rename,
 .rail-row__close {
   flex: none;
   width: 18px;
@@ -359,7 +390,17 @@ body {
 }
 
 .rail-row__start:hover,
+.rail-row__rename:hover,
 .rail-row__close:hover { color: var(--text); }
+
+/* The active workspace's switch is disabled, not hidden. Keep it at full text
+   colour: greying it out would read as "this workspace is unavailable" rather
+   than "you are already here", which is the opposite of what it means. */
+.rail-row__main:disabled { cursor: default; color: var(--text); }
+
+/* Amber, because it is the same fact the panel border and the row dot already
+   paint amber. */
+.rail-row__waiting { color: var(--amber); }
 
 /* The fixed viewport. Clips the world and catches every canvas event. */
 .canvas {
