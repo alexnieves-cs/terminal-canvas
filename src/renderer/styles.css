@@ -271,6 +271,21 @@ body {
   font-size: 10px;
 }
 
+/* ...except in Workspaces, where 45% is too tight and the failure lands in
+   exactly the state the section exists for. The cap above is sized for a tail
+   that is unbounded (railTail's 'error' case) beside a label that must keep
+   most of the row. A workspace tail is `N waiting · M panels` — two short
+   numbers, bounded by construction — and the arithmetic runs against it: the
+   rail is 240px, less 8 of list padding, less two 18px controls and 4 of gaps
+   leaves 192 for .rail-row__main, less 8 of its own padding is 184 of content,
+   and 45% of that is ~83px against ~85-95px of text. So the PANEL COUNT
+   ellipses away precisely when a waiting count is also present, which is the
+   one moment this row has something to say. 70% buys the room without letting
+   the workspace name collapse. verify:panels 96 reads textContent and is blind
+   to this — an ellipsis is painted, not stored — so it is a hand-verified
+   number and the response to a longer tail is to re-run the arithmetic. */
+.rail-list--workspaces .rail-row__tail { max-width: 70%; }
+
 /* The inspector's body. Scrolls on its own for the same reason .rail-list
    does: a long cwd plus an error message can exceed the pane's height, and a
    body that grew would push the collapse toggle off screen — the one control

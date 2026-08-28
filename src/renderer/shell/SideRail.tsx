@@ -81,15 +81,27 @@ function SideRailImpl({
         </button>
       </div>
       <ul className="rail-list rail-list--workspaces" aria-label="Workspaces">
-        {workspaces.map((row) => (
-          <RailWorkspaceRow
-            key={row.id}
-            row={row}
-            onSwitch={onSwitchWorkspace}
-            onRename={onRenameWorkspace}
-            onDelete={onDeleteWorkspace}
-          />
-        ))}
+        {workspaces.length === 0 ? (
+          // The same treatment Attention gets below, for the same reason, and
+          // it is reachable despite there always being at least one workspace:
+          // this list is empty at mount until the first reloadWorkspaces()
+          // resolves, and permanently if that list() ever rejects — which is
+          // now warned about rather than swallowed, but still leaves the
+          // section on screen. A header with a void under it reads as a broken
+          // list; the header renders unconditionally (see above), so what sits
+          // under it has to answer for itself too.
+          <li className="rail-empty">no workspaces</li>
+        ) : (
+          workspaces.map((row) => (
+            <RailWorkspaceRow
+              key={row.id}
+              row={row}
+              onSwitch={onSwitchWorkspace}
+              onRename={onRenameWorkspace}
+              onDelete={onDeleteWorkspace}
+            />
+          ))
+        )}
       </ul>
 
       <div className="shell__region-title">Panels</div>

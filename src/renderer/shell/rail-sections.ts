@@ -12,6 +12,15 @@ import type { RailRow } from './rail-rows'
  *
  * It is a separate file from rail-rows.ts rather than an append to it because
  * that module's stated subject is the Panels section and its signature.
+ *
+ * One directory-level cycle passes through here and is held open by a single
+ * `import type`: shell/TopBar.tsx imports PresetRow from palette/commands.ts,
+ * and palette/commands.ts imports waitingCount from this file as a VALUE. The
+ * first hop is erased by esbuild, so there is no runtime cycle today — turning
+ * that type import into a value one closes it, and the failure of a real ESM
+ * cycle is a module-scope binding read before its initialiser has run, i.e. an
+ * undefined function at first call rather than a build error. Named so whoever
+ * makes that edit knows what they are doing.
  */
 
 /**
@@ -30,12 +39,20 @@ import type { RailRow } from './rail-rows'
  * survived the closure, the orphan reachableQueue drops at the head of the
  * jump queue.
  *
- * One honest limit, recorded so it is not later read as a bug: `panelIds`
- * comes from main's store, which saves on a 500ms coalescing debounce, so for
- * up to one debounce window a just-closed panel can still be listed here and a
- * phantom can still be counted. That is acceptable for a COUNT and would not
- * be for a navigation target — which is exactly why buildAttentionRows below
- * filters against the rendered panel rows instead.
+ * One honest limit, recorded so it is not later read as a bug — and note what
+ * it is NOT. The 500ms coalescing debounce in layout-store.ts is on the
+ * WRITE: doSave mutates w.panels synchronously and workspaces() reads that
+ * same in-memory snapshot, so main's answer is already fresh when the invoke
+ * lands. The staleness is on this side. `panelIds` reaches here from
+ * Canvas.tsx's workspaceRows, a renderer copy that is only as current as its
+ * last reloadWorkspaces() — mount, palette open, every workspace mutation,
+ * and (since the M8d fix) every change to the panel COUNT. So the window is
+ * one IPC round trip after a spawn or a close, not a debounce, and outside it
+ * the count is exact.
+ *
+ * A round trip is acceptable for a COUNT and would not be for a navigation
+ * target — which is exactly why buildAttentionRows below filters against the
+ * rendered panel rows instead.
  */
 export function waitingCount(
   panelIds: readonly string[],
@@ -126,9 +143,11 @@ export interface RailAttention {
  * guard nothing ever clears it — so an unfiltered section renders a row that
  * navigates nowhere, on a canvas with nothing to go to.
  *
- * Because it filters against the RENDERED panel rows rather than main's stored
- * panelIds, it is also strictly tighter than waitingCount above, which can lag
- * by one save debounce. A count may lag; a navigation target may not.
+ * Because it filters against the RENDERED panel rows rather than a reloaded
+ * copy of main's panelIds, it is also strictly tighter than waitingCount
+ * above, which lags for one reload round trip after a spawn or a close (see
+ * that function's own comment for why it is a round trip and not the store's
+ * write debounce). A count may lag by a frame; a navigation target may not.
  */
 export function buildAttentionRows(
   queue: readonly string[],

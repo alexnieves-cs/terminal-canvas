@@ -6353,6 +6353,72 @@ app.whenReady().then(async () => {
         JSON.stringify(state))
     }
 
+    // 95c. THE RENAME CONTROL IS A DOOR, AND IT OPENS FOR THE RIGHT WORKSPACE.
+    //      95b proves the ✎ and × ELEMENTS exist; nothing until now proved
+    //      either of them does anything. A missing {...shellControl(...)}
+    //      spread on one of those buttons leaves every other check in this
+    //      milestone green — the element is still rendered, still titled,
+    //      still counted by 95b — while the spec's central claim, that the row
+    //      is a second door onto an action that already exists rather than a
+    //      second implementation of it, goes unproven for that door.
+    //
+    //      The VALUE clause is what makes this more than "something happened".
+    //      Asserting only that the palette opened in text mode passes against
+    //      a row that hands over a hardcoded id, or the ACTIVE workspace's id
+    //      instead of its own — both of which open a perfectly real rename
+    //      prompt aimed at the wrong workspace, and the user's next Enter
+    //      renames a canvas they were not looking at. So the target here is
+    //      deliberately a NON-active row (rail-away, created by check 95),
+    //      read out of workspace.list() rather than named literally: with the
+    //      active row as the target, the id-swap this clause exists to catch
+    //      would be indistinguishable from correct.
+    //
+    //      It stops at the door and does not drive the rename home:
+    //      beginRenameWorkspace's submit path is the palette's own, already
+    //      covered there, and re-proving it here would only add a rename this
+    //      suite's later checks would have to know about.
+    //
+    //      + and × stay unchecked, deliberately: create is reachable only
+    //      through the same input mode this check already opens, and delete
+    //      would leave a destroyed workspace behind for checks 96-98b, which
+    //      spawn panels and ring bells against the fixture as it stands.
+    {
+      const target = await wc.executeJavaScript(
+        `window.canvas.workspace.list().then((rows) => {
+           const w = rows.find((r) => !r.active)
+           return w ? { id: w.id, name: w.name } : null
+         })`)
+      const clicked = target !== null && await clickRail(
+        `.rail-row[data-rail-workspace=${JSON.stringify(target && target.id)}] .rail-row__rename`)
+      await settle()
+      // Guarded reads throughout. An uncaught exception here ends the run and
+      // every check below it — 96, 97, 98, 98b — is never reached, so their
+      // absence would read as a suite that shrank rather than one that broke.
+      const mode = await wc.executeJavaScript(`(() => {
+        const input = document.querySelector('.palette__input')
+        return {
+          open: document.querySelector('.palette') !== null,
+          value: input ? input.value : null,
+          // Absent while inputMode is set — the palette is a text prompt here,
+          // not a command list.
+          list: document.querySelector('.palette__list') !== null
+        }
+      })()`)
+      ok('95c the rail rename control opens the palette in text mode for THAT workspace',
+        clicked === true && mode.open === true && mode.list === false &&
+          target !== null && mode.value === target.name,
+        `target=${JSON.stringify(target)} clicked=${clicked} mode=${JSON.stringify(mode)}`)
+
+      // Leave the app as 96-98b expect to find it: no overlay, no input mode.
+      await wc.executeJavaScript(`
+        const input = document.querySelector('.palette__input')
+        if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        true
+      `)
+      await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+    }
+
     // 96. A HIDDEN WORKSPACE WITH A WAITING PANEL SAYS SO ON ITS RAIL ROW.
     //     70b's fixture reached from the new surface, and the strongest form
     //     of M6d's premise: an agent you cannot see because its whole CANVAS

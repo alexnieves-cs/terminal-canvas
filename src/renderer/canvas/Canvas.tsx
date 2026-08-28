@@ -1416,7 +1416,15 @@ export function Canvas({
   // this same state and loader rather than a second one.
   const [workspaceRows, setWorkspaceRows] = useState<WorkspaceRow[]>(EMPTY_WORKSPACES)
   const reloadWorkspaces = useCallback(() => {
-    void window.canvas.workspace.list().then(setWorkspaceRows)
+    // Rejection handled rather than voided. void-ing the chain silences the
+    // lint, not the failure, and M8d raised what a swallowed one costs: before
+    // the rail, a failed reload meant missing rows in a surface that reloads on
+    // every open, so the next Cmd+K repaired it. Now it leaves an always-mounted
+    // Workspaces section stuck on whatever it last had — at mount, on nothing at
+    // all — with no console line naming the reason.
+    void window.canvas.workspace.list().then(setWorkspaceRows, (error: unknown) => {
+      console.warn('[workspace] could not list workspaces', error)
+    })
   }, [])
   // Mount (so the first Cmd+K sees real rows even if no mutation has run
   // yet) and every palette open (so a workspace mutated while the palette
@@ -1432,6 +1440,29 @@ export function Canvas({
   useEffect(() => {
     if (palette.open) reloadWorkspaces()
   }, [palette.open, reloadWorkspaces])
+  // The third occasion, and the one the rail added. A workspace row renders
+  // `N panels`, and NOTHING above reloads on a spawn or a close: mount, palette
+  // open, and the create/rename/delete/switch call sites are the whole set. So
+  // a mouse-only user who clicks the top bar's New panel three times reads
+  // "1 panel" two lines above a Panels list showing four rows, and it stays
+  // wrong until they happen to open the palette — which they may never do, and
+  // mouse-only reachability is exactly what this section exists for.
+  //
+  // Keyed on panels.LENGTH, never on `panels`: the array identity is fresh on
+  // every setPanelRect, i.e. every frame of a drag, so keying on the array
+  // would fire an IPC round trip at 60Hz for rect changes no workspace row
+  // displays — the same churn railSignature and every memo in this file exist
+  // to keep off the shell.
+  //
+  // It sees main's post-save state because of DECLARATION ORDER: the
+  // layout.save effect is declared earlier in this component, React runs a
+  // commit's effects in declaration order, and both IPC handlers are
+  // synchronous and processed in arrival order. doSave mutates w.panels in
+  // place — only its scheduleWrite is debounced — and workspaces() reads that
+  // same in-memory snapshot, so the reply is fresh within one round trip.
+  // Moving this effect above the save one would leave every count one panel
+  // stale, with nothing to point at.
+  useEffect(() => { reloadWorkspaces() }, [panels.length, reloadWorkspaces])
 
   // Read once at mount and again whenever a setting changes, so toggling the
   // glow off takes effect without a relaunch. settingRows is loaded only when
