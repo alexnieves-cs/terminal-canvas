@@ -662,7 +662,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       await manager.create(spec('r2'))
       manager.detachAll()
       await manager.create(spec('r2'))
-      ok(21, captures.length === 1, `captured ${captures.length}x`)
+      ok('21 the baseline is captured ONCE across a reattach', captures.length === 1, `captured ${captures.length}x`)
       manager.kill('r2')
     }
 
@@ -674,7 +674,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       const { manager } = makeHarness(tmuxBackend, { onDropBaseline: (id) => dropped.push(id) })
       await manager.create(spec('r3'))
       manager.kill('r3')
-      ok(22, dropped.includes('r3'))
+      ok('22 kill drops the baseline', dropped.includes('r3'))
     }
 
     // 22b. Finding 2 (task-6 review): kill() drops the baseline on the

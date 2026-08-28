@@ -17,6 +17,10 @@ module.exports = {
   // could drift from what production does.
   attachPtyLifecycle: require('../src/main/window-lifecycle').attachPtyLifecycle,
   resolveShellEnv: require('../src/main/shell-env').resolveShellEnv,
+  // Git is resolved by ABSOLUTE path from the login env, exactly as
+  // main/index.ts does — see git-runner.ts. A harness that spawned the
+  // bare name would be testing a code path production no longer has.
+  whichFromEnv: require('../src/main/shell-env').whichFromEnv,
   // Re-exported whole (not just createLayoutStore) so Task 8's check can build
   // a store, hand it to registerIpcHandlers, and later call flushSync() on the
   // SAME instance to force its 500ms-debounced write deterministically.

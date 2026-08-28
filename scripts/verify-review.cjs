@@ -170,9 +170,39 @@ const fakeRunner = (table) => async (args) => {
   ok('16 captureBaseline uses stash create', (await e.captureBaseline('/r')) === 'deadbee')
 }
 
+// 16b. A FAILED `stash create` is not a clean tree, and must NOT fall through
+//      to HEAD. `stash create` needs the index lock and refuses outright
+//      during an unresolved merge or against a corrupt index — both reachable
+//      in this app specifically, where a panel spawns into a repository other
+//      panels' agents are running git in constantly. A HEAD baseline taken
+//      there permanently attributes every pre-existing uncommitted change in
+//      the working tree to this agent, for the whole life of the panel id,
+//      because the baseline is persisted and never recaptured within a run.
+//      That is the spec's named worst option. No baseline at all is the
+//      honest answer: the panel reports never-started until its next spawn.
+//
+//      The fake defaults `ok` to true (`ok: hit.ok !== false`), which is why
+//      no pre-existing check drives this branch — 17 and 18 both exercise a
+//      SUCCESSFUL stash create, so the bug and its fix are indistinguishable
+//      to them. Check 17 is this check's companion in the other direction:
+//      without it a fix could over-correct into refusing the clean tree too.
+{
+  const e = R.createReviewEngine({
+    run: fakeRunner({
+      '-C /r stash create': { ok: false },
+      '-C /r rev-parse HEAD': { stdout: 'headsha\n' }
+    }),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  ok('16b a FAILED stash create stores no baseline', (await e.captureBaseline('/r')) === null)
+}
+
 // 17. On a CLEAN tree stash create prints nothing and the baseline is HEAD.
 //     Without this fallback every panel spawned in a clean repo would have no
-//     baseline at all and would report never-started forever.
+//     baseline at all and would report never-started forever. The companion
+//     to 16b: this is the direction a fix for a failed stash create can
+//     over-correct and break, since both inputs produce no sha.
 {
   const e = R.createReviewEngine({
     run: fakeRunner({
@@ -209,6 +239,57 @@ const fakeRunner = (table) => async (args) => {
   })
   ok('19 resolveRepo reports a missing git', (await e.resolveRepo('/a')) === null &&
     (await e.review('p1')).kind === 'git-missing')
+}
+
+// 19b. The runner refuses to spawn when git could not be resolved on the
+//      LOGIN PATH, and says so as `notFound` — the same fact an ENOENT would
+//      have produced, reached before a process is ever launched.
+//
+//      This is the production reachability of `git-missing`, and until this
+//      fix it did not exist: the runner spawned the bare name `git` against
+//      whatever PATH launchd handed the app, which on macOS is a bare one
+//      with no /opt/homebrew/bin on it — the exact defect shell-env.ts and
+//      tmux-probe.ts exist to prevent, and which main/index.ts already
+//      resolved correctly for its startup diagnostic and then threw away.
+//      On such a machine `git-missing` never fired at all; the section
+//      silently rendered nothing instead, which is the ordinary
+//      `not-a-repo` shape and therefore invisible as a bug.
+{
+  const runner = R.createGitRunner({ gitPath: () => null, env: () => ({}) })
+  const r = await runner(['--version'])
+  ok('19b an unresolved git is notFound, without spawning',
+    r.notFound === true && r.ok === false && r.stdout === '',
+    JSON.stringify(r))
+}
+
+// 19c. A hung git does not hold the promise open forever. `index.lock`
+//      contention, a credential prompt on a private remote, or a stalled
+//      network filesystem all block indefinitely, and the review path is
+//      fire-and-forget on capture and an un-replied invoke on read — neither
+//      has anyone to time it out. The production ceiling is
+//      GIT_TIMEOUT_MS; this drives a deliberately tiny one against a
+//      genuinely hanging process, because the real value cannot be waited
+//      out in a suite. A timeout reads as ok:false, i.e. baseline-lost,
+//      which is the honest "cannot be read" answer rather than a confident
+//      empty diff.
+{
+  const runner = R.createGitRunner({
+    gitPath: () => '/bin/sleep',
+    env: () => ({}),
+    timeoutMs: () => 100
+  })
+  const started = Date.now()
+  const r = await runner(['30'])
+  const elapsed = Date.now() - started
+  // The LOWER bound is the half that discriminates. Before this fix the
+  // runner ignored its deps entirely and spawned the bare name `git` with
+  // these args, which exits in milliseconds — so `ok === false` alone was
+  // satisfied by a runner with no timeout at all, and 19c was green against
+  // the very defect it exists to catch. The upper bound is what proves the
+  // process did not simply run to completion.
+  ok('19c a hung git is timed out rather than pending forever',
+    r.ok === false && r.notFound === false && elapsed >= 90 && elapsed < 5000,
+    `${JSON.stringify(r)} after ${elapsed}ms`)
 }
 
 // 20. resolveRepo does not cache across DIFFERENT cwds. A single-slot cache
@@ -394,7 +475,9 @@ if (!GIT) {
 
   const engine = (() => {
     let baseline
-    const runner = R.createGitRunner()
+    // Plain node, with the developer's own PATH: `git` by name is the right
+    // resolution here, and this suite is not the launchd-PATH case 19b covers.
+    const runner = R.createGitRunner({ gitPath: () => 'git', env: () => process.env })
     const e = R.createReviewEngine({
       run: runner,
       baselineOf: () => baseline,
@@ -436,6 +519,11 @@ if (!GIT) {
   git('gc', '--prune=now', '-q')
   const lost = await engine.e.review('p1')
   ok('34 real gc produces baseline-lost', lost.kind === 'baseline-lost')
+
+  // The fixture repository is not free: one per run accumulated in $TMPDIR
+  // for the life of the machine. Best-effort — a failure to clean up must
+  // never turn a green suite red.
+  try { require('node:fs').rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
 }
 
 /* A tick-flushing helper: createBaselineCapture's write sits behind TWO
@@ -539,6 +627,43 @@ ok('36b a panel with no baseline and no notARepo dep is still never-started',
     baselineOf: () => undefined,
     peersInRepo: () => 0
   }).review('p1')).kind === 'never-started')
+
+// 37. A baseline outlives the SESSION it describes, and that is only correct
+//     for as long as the session is still there. Quitting the app runs
+//     shutdown() — kill-server on the private socket — so at the next launch
+//     nothing survives and every panel spawns a genuinely new agent; the
+//     persisted baseline is then a snapshot from a previous day, and every
+//     edit the user made by hand in between is attributed to that agent. The
+//     in-memory guard (PtyManager's capturedBaselineIds) is the one that
+//     covers Cmd+R WITHIN a run, where the sessions really do survive and
+//     recapture really would be wrong — that half must not be weakened, and
+//     is untouched: this drop runs once at startup, in a fresh main process
+//     whose in-memory set is empty by construction.
+//
+//     `staleBaselineIds` is the pure half of that, so main/index.ts can wire
+//     it to knowledge it ALREADY has — ptyManager.list() asks the backend and
+//     therefore reports sessions this run never spawned — rather than
+//     inventing a probe.
+//
+//     Guarded on `typeof` rather than calling it bare: before the export
+//     exists a bare call THROWS, which aborts the whole run and takes 37b's
+//     RED down with it (CLAUDE.md's rule, and the same reason verify:layout
+//     98 is written the way it is).
+ok('37 baselines whose session did not survive are stale',
+  typeof R.staleBaselineIds === 'function' &&
+    JSON.stringify(R.staleBaselineIds(['p1', 'p2', 'p3'], ['p2'])) ===
+      JSON.stringify(['p1', 'p3']))
+
+// 37b. The companion that stops it over-correcting: a session that DID
+//      survive keeps its baseline. A drop-everything implementation satisfies
+//      37 perfectly and silently deletes the baseline of every panel whose
+//      tmux session outlived a crash — recapturing against a tree the agent
+//      has already rewritten, which reports "no changes" for an hour of work.
+//      That is the single failure this milestone turns on, so both directions
+//      are pinned rather than one.
+ok('37b a surviving session keeps its baseline',
+  typeof R.staleBaselineIds === 'function' &&
+    R.staleBaselineIds(['p1', 'p2'], ['p1', 'p2']).length === 0)
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)

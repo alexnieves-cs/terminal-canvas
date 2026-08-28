@@ -2296,23 +2296,55 @@ export function Canvas({
   // rule M6d and M7 both state in CLAUDE.md.
   const [review, setReview] = useState<ReviewFieldModel | null>(null)
   const selectedAgentState = useAgentState(selectedId ?? '')
+
+  // A COUNTER of idle ARRIVALS, not the state itself. The review effect used
+  // to depend on `selectedAgentState` wholesale, so `starting`, `busy`,
+  // `idle`, `wants-you` and `exited` each re-fired it — up to four git
+  // subprocesses per transition, on a path a chatty agent walks constantly —
+  // while the spec and IPC.REVIEW_PANEL's own comment both name exactly one
+  // useful signal: the transition TO `idle`, which means "this agent stopped
+  // producing output" and is therefore the moment its work is worth
+  // re-reading. Depending on a derived `state === 'idle'` boolean would not
+  // do: it changes on the way OUT of idle too, which is a firing with nothing
+  // new to read.
+  const [idleArrivals, setIdleArrivals] = useState(0)
+  const prevAgentRef = useRef<{ id: string | null; state: string | undefined }>({
+    id: null,
+    state: undefined
+  })
   useEffect(() => {
-    if (selectedId === null) { setReview(null); return }
+    const prev = prevAgentRef.current
+    prevAgentRef.current = { id: selectedId, state: selectedAgentState }
+    // Only a transition WITHIN one panel's own selection. Across a selection
+    // change the id has already re-fired the review effect below, and
+    // counting it again would spend a second round of git processes to learn
+    // the same answer.
+    if (prev.id === selectedId && selectedAgentState === 'idle' && prev.state !== 'idle') {
+      setIdleArrivals((n) => n + 1)
+    }
+  }, [selectedId, selectedAgentState])
+
+  useEffect(() => {
+    // Cleared UNCONDITIONALLY, before the invoke, not only when the selection
+    // goes to null. The `live` flag below prevents a stale WRITE; nothing
+    // prevented the stale RENDER, so selecting panel B kept panel A's model —
+    // a real file list, with real counts — under B's heading for an IPC round
+    // trip plus up to four git subprocesses, which is plainly visible on a
+    // real repository. That is the confident wrong attribution this milestone
+    // exists to prevent, arriving from the renderer rather than from git.
+    // verify:panels 100b.
+    setReview(null)
+    if (selectedId === null) return
     let live = true
     void window.canvas.review.panel(selectedId).then((result) => {
       // The guard is not defensiveness: an invoke issued for panel A can
       // resolve AFTER the user has selected panel B, and writing it then
-      // would show A's changes under B's name — the wrong-panel attribution
-      // this milestone exists to prevent, arriving through the renderer
-      // instead of through git.
+      // would show A's changes under B's name — the same wrong-panel
+      // attribution, from the other direction.
       if (live) setReview(buildReviewFields(result))
     })
     return () => { live = false }
-    // selectedAgentState is a dependency, not a stray: M6c's transition to
-    // `idle` means exactly "this agent stopped producing output", which is
-    // the moment its work is worth re-reading. That is why M9a needs no
-    // watcher of its own.
-  }, [selectedId, selectedAgentState])
+  }, [selectedId, idleArrivals])
   const reviewSig = reviewSignature(review)
   // Frozen on reviewSignature for the identical reason inspectorModel is
   // frozen on inspectorSig above: buildReviewFields returns a fresh object on

@@ -128,6 +128,13 @@ export interface LayoutStore {
   setBaseline(panelId: string, baseline: ReviewBaseline): void
   dropBaseline(panelId: string): void
   /**
+   * Every panel id holding a baseline, across every workspace. The startup
+   * sweep needs the whole set — a baseline is keyed by panel id alone, and a
+   * hidden workspace's panel is exactly as capable of holding a stale one as
+   * the active workspace's. Same reasoning as allPanelIds.
+   */
+  baselineIds(): string[]
+  /**
    * How many OTHER panels hold a baseline in this root. Excluding the asker is
    * the whole point: counting itself would make every single-panel repository
    * report as `shared`, and the feature would never once produce an
@@ -536,6 +543,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       if (snapshot.baselines[panelId] === undefined) return
       delete snapshot.baselines[panelId]
       scheduleWrite()
+    },
+    baselineIds() {
+      return Object.keys(snapshot.baselines)
     },
     baselinePeers(root, exceptPanelId) {
       return Object.entries(snapshot.baselines)

@@ -1462,7 +1462,7 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   // the field exists this line would THROW, aborting the run and taking
   // 99-103's RED with it, so the test-first step would prove nothing about
   // five of its six checks.
-  ok(98, snapshot.baselines !== undefined &&
+  ok('98 an absent baselines key warns nothing and resolves to an empty map', snapshot.baselines !== undefined &&
     Object.keys(snapshot.baselines).length === 0 &&
     !warnings.some((w) => w.includes('baseline')))
 }
@@ -1472,7 +1472,7 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
 //     nothing said.
 {
   const { warnings } = L.parseLayout(JSON.stringify({ version: 1, baselines: [] }))
-  ok(99, warnings.some((w) => w.includes('baseline')))
+  ok('99 a malformed baselines key warns rather than vanishing', warnings.some((w) => w.includes('baseline')))
 }
 
 // 100. An entry missing `sha` is dropped INDIVIDUALLY; its neighbours survive.
@@ -1481,7 +1481,7 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     version: 1,
     baselines: { p1: { root: '/r', sha: 'a' }, p2: { root: '/r' } }
   }))
-  ok(100, snapshot.baselines.p1 !== undefined && snapshot.baselines.p2 === undefined)
+  ok('100 a baseline missing sha is dropped individually, its neighbours survive', snapshot.baselines.p1 !== undefined && snapshot.baselines.p2 === undefined)
 }
 
 // 101. A baseline survives a write and a reopen.
@@ -1494,7 +1494,7 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   const reopened = L.createLayoutStore({ filePath: path })
   reopened.load()
   const back = reopened.baseline('p1')
-  ok(101, back !== undefined && back.sha === 'abc' && back.root === '/r')
+  ok('101 a baseline survives a write and a reopen', back !== undefined && back.sha === 'abc' && back.root === '/r')
 }
 
 // 102. baselinePeers counts OTHER panels in the same root and excludes the
@@ -1507,7 +1507,24 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   store.setBaseline('p1', { root: '/r', sha: 'a' })
   store.setBaseline('p2', { root: '/r', sha: 'b' })
   store.setBaseline('p3', { root: '/other', sha: 'c' })
-  ok(102, store.baselinePeers('/r', 'p1') === 1 && store.baselinePeers('/other', 'p3') === 0)
+  ok('102 baselinePeers counts other panels in the root and excludes the asker', store.baselinePeers('/r', 'p1') === 1 && store.baselinePeers('/other', 'p3') === 0)
+}
+
+// 103b. baselineIds spans EVERY panel holding a baseline, across workspaces.
+//       The startup sweep — which drops the baselines of panels whose session
+//       did not survive a quit — enumerates through this, so a view narrowed
+//       to the active workspace would leave a hidden workspace's panel diffed
+//       against a snapshot from a previous day, which is the exact failure
+//       that sweep exists to remove. Same reasoning as allPanelIds (check 91),
+//       and the same reason `PanelId` is global rather than per-workspace.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.setBaseline('p1', { root: '/r', sha: 'a' })
+  store.setBaseline('p2', { root: '/other', sha: 'b' })
+  const ids = typeof store.baselineIds === 'function' ? store.baselineIds().slice().sort() : null
+  ok('103b baselineIds names every panel holding a baseline',
+    ids !== null && JSON.stringify(ids) === JSON.stringify(['p1', 'p2']))
 }
 
 // 103. dropBaseline removes it. Without this the map grows for the life of
@@ -1519,7 +1536,7 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   store.load()
   store.setBaseline('p1', { root: '/r', sha: 'a' })
   store.dropBaseline('p1')
-  ok(103, store.baseline('p1') === undefined)
+  ok('103 dropBaseline removes it', store.baseline('p1') === undefined)
 }
 
 console.log('\n' + '='.repeat(60))

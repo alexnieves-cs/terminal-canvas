@@ -11,7 +11,7 @@ import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
 import { createReviewEngine } from './review-engine'
 import { createGitRunner } from './git-runner'
-import { createBaselineCapture } from './baseline-capture'
+import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import {
   allPresets,
@@ -48,8 +48,22 @@ const layoutStore = createLayoutStore({
   filePath: join(app.getPath('userData'), 'layout.json')
 })
 
+/**
+ * The ABSOLUTE path to git, resolved from the login env at whenReady — null
+ * until then, and null forever on a machine with no git on that PATH.
+ *
+ * Resolved rather than spawned by name for the reason tmux is: launchd gives
+ * a GUI app a bare PATH, so a homebrew-only git is simply not found, and the
+ * bare-name spawn then produced a silent no-Changes-section instead of the
+ * `git-missing` arm that exists for exactly this. The app already computed
+ * this answer for its startup diagnostic and threw it away.
+ */
+let gitPath: string | null = null
+
 const reviewEngine = createReviewEngine({
-  run: createGitRunner(),
+  // Getters for the reason PtyManager's getBackend is one: this runner is
+  // constructed at module scope, and resolveShellEnv() has not run yet.
+  run: createGitRunner({ gitPath: () => gitPath, env: () => loginEnv }),
   baselineOf: (panelId) => layoutStore.baseline(panelId),
   peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
   // Closes over baselineCapture, declared below — the same forward-closure
@@ -300,6 +314,11 @@ app.whenReady().then(async () => {
   loginEnv = env
   for (const binary of ['claude', 'codex', 'git']) {
     const found = whichFromEnv(binary, env)
+    // The diagnostic and the review engine's git are ONE resolution, not two.
+    // This loop already computed the right answer before M9a's fix round and
+    // only logged it, while git-runner.ts spawned the bare name against the
+    // launchd PATH — see gitPath's declaration above.
+    if (binary === 'git') gitPath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
 
@@ -352,13 +371,39 @@ app.whenReady().then(async () => {
     const known = new Set(
       layoutStore.initial().panels.map((p) => p.id)
     )
+    // Collected as the orphan loop runs rather than from a second list()
+    // call: a session KILLED as an orphan two lines below has not survived,
+    // and treating it as though it had would leave its baseline in place for
+    // a panel that is about to spawn a brand-new agent.
+    const surviving: string[] = []
     for (const session of ptyManager.list()) {
-      if (known.has(session.panelId)) continue
+      if (known.has(session.panelId)) {
+        surviving.push(session.panelId)
+        continue
+      }
       console.warn(
         `[tmux] orphan session ${session.panelId} (pid ${session.pid}) has no saved ` +
           `panel; killing it. A session with no panel cannot be reached, closed, or typed into.`
       )
       backend.destroy(session.panelId)
+    }
+
+    // A baseline describes ONE session's starting point, and quitting the app
+    // kills every session (before-quit runs shutdown(), i.e. kill-server), so
+    // a baseline that outlived its session would have the next launch's fresh
+    // agent diffed against a snapshot from a previous day — blaming it for
+    // every edit the user made by hand in between. Dropped HERE, at startup,
+    // and nowhere else: PtyManager's in-memory capturedBaselineIds is the
+    // guard that covers Cmd+R within one run, where the sessions really do
+    // survive and recapture really would be wrong, and this main process's
+    // copy of that set is empty by construction. See staleBaselineIds' own
+    // comment (verify:review 37/37b).
+    for (const id of staleBaselineIds(layoutStore.baselineIds(), surviving)) {
+      console.log(
+        `[review] dropping the stored baseline for panel ${id}: its session did not ` +
+          `survive, so its next spawn is a new session and needs a new snapshot.`
+      )
+      layoutStore.dropBaseline(id)
     }
   }
 
@@ -428,11 +473,25 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
-  // Flush BEFORE tearing anything down. killAll can take time and this must
-  // not be racing a process teardown; the store already holds the newest
-  // snapshot, so this is a synchronous write with nothing to wait for.
+  // Teardown FIRST, flush SECOND, and the order is the whole point. killAll ->
+  // kill(id) -> dropBaseline(id) -> layoutStore.dropBaseline -> scheduleWrite,
+  // a 500ms debounce on a process that is quitting: flushing before the
+  // teardown loses every one of those writes silently, so memory says the
+  // baselines are gone while layout.json says they are not, and layout.json
+  // wins at the next launch. There is nothing to race — kill() is synchronous
+  // all the way down to the backend's execFileSync.
+  //
+  // Wrapped so the flush still runs if the teardown throws. An exception in
+  // before-quit can wedge the quit before the window is allowed to close, and
+  // losing the flush would ALSO be the very bug this reordering fixes.
+  // flushSync itself is safe to leave bare: writeNow catches its own errors
+  // and says so in its comment.
+  try {
+    ptyManager.killAll()
+  } catch (error) {
+    console.warn('[pty] killAll failed during quit', error)
+  }
   layoutStore.flushSync()
-  ptyManager.killAll()
   // Quit is the one teardown where sessions are NOT meant to survive. M4c's
   // scope is reload survival: agents never outlive the app, so there is no
   // process left burning tokens behind a closed window.

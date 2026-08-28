@@ -75,15 +75,21 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
   }
 
   /**
-   * NOT covered yet, and the gap belongs to whichever milestone next touches
-   * this function's error handling — read it as a known limit, not an
+   * NOT covered yet, and the gap is deferred to M9b specifically rather than
+   * to "whichever milestone next touches this function" — a deferral with no
+   * owner is a deferral to nobody. Read it as a known limit, not an
    * oversight:
    *
    *   - `result.ok === false` conflates "not a repository" with "git refused
-   *     to answer". `rev-parse --show-toplevel` also exits non-zero for
-   *     `safe.directory` refusing an unowned checkout, a `.git` directory
-   *     that exists but is unreadable (permissions, a half-deleted repo), and
-   *     a cwd that has vanished out from under a still-running panel. Every
+   *     to answer". The concrete, ORDINARY case is the macOS
+   *     `/usr/bin/git` Command Line Tools stub: with no CLT installed it
+   *     exists, spawns fine (so it is not the ENOENT `git-missing` covers,
+   *     even now that git is resolved by absolute path from the login env)
+   *     and exits non-zero on every invocation. An earlier draft of this
+   *     comment named only exotic causes — `safe.directory` refusing an
+   *     unowned checkout, a `.git` that exists but is unreadable, a cwd that
+   *     vanished under a still-running panel — which understated how often
+   *     this branch is actually taken. Every
    *     one of those is a genuine repository git is declining to open, not
    *     the ordinary "most panels aren't in one" case `not-a-repo` exists
    *     for — and this function currently answers `null` for all of them
@@ -99,7 +105,7 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
    *     is the quieter of the two wrong answers under "no heuristic
    *     attribution" — reporting nothing is preferable to a confident wrong
    *     count, so the conflation is safe to leave unresolved, just not safe
-   *     to leave unrecorded.
+   *     to leave unrecorded. Reconsidered in M9b, which owns it.
    */
   const resolveRepo = async (cwd: string): Promise<string | null> => {
     const result = await run(buildRepoRootArgs(cwd))
@@ -108,10 +114,25 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
 
   const captureBaseline = async (root: string): Promise<string | null> => {
     const created = await run(buildBaselineArgs(root))
-    const sha = created.ok ? trimmed(created.stdout) : null
+    // A FAILED `stash create` is NOT a clean tree, and the two must not share
+    // an exit. `stash create` needs the index lock and refuses outright
+    // during an unresolved merge or against a corrupt index — all reachable
+    // here, because a panel spawns into a repository whose OTHER panels'
+    // agents are running git in constantly. Falling through to HEAD there
+    // takes a baseline that excludes nothing, so from that moment on the pane
+    // attributes every pre-existing uncommitted change in the working tree to
+    // this agent, confidently, for the whole life of the panel id — the
+    // baseline is persisted and never recaptured within a run. That is the
+    // spec's own named worst option. Returning null stores no baseline at
+    // all, and the panel honestly reports it has nothing to diff against
+    // until its next spawn. verify:review 16b, with 17 as the companion in
+    // the other direction.
+    if (!created.ok) return null
+    const sha = trimmed(created.stdout)
     if (sha !== null) return sha
-    // A clean tree prints nothing. HEAD is then the correct baseline — and an
-    // empty repository has no HEAD either, which is null rather than a throw.
+    // A clean tree SUCCEEDS and prints nothing. HEAD is then the correct
+    // baseline — and an empty repository has no HEAD either, which is null
+    // rather than a throw.
     const head = await run(buildHeadArgs(root))
     return head.ok ? trimmed(head.stdout) : null
   }
@@ -130,14 +151,17 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
       // .git, and a vanished cwd all read the same as "not a repository").
       // So `not-a-repo` can be produced for a panel whose cwd genuinely IS a
       // repository that git merely refused to open, and the user sees no
-      // Changes section with no explanation, same as the ordinary case.
+      // Changes section with no explanation, same as the ordinary case. The
+      // concrete case is ordinary rather than exotic — the /usr/bin/git
+      // Command Line Tools stub, which spawns and then fails everything; see
+      // resolveRepo's comment above.
       // This can only ever fire for a panel with no CAPTURED baseline —
       // `not-a-repo` cannot be produced once a baseline exists, since this
       // whole branch is gated on `baseline === undefined`. Left open for the
       // same reason resolveRepo's comment gives: separating the two means a
       // new ReviewResult arm, at the last task of the milestone, and
       // reporting nothing is the quieter wrong answer under "no heuristic
-      // attribution" either way.
+      // attribution" either way. Owned by M9b, not by whoever passes next.
       return deps.notARepo?.(panelId) === true ? { kind: 'not-a-repo' } : { kind: 'never-started' }
     }
     const { root, sha } = baseline

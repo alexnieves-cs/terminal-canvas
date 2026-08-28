@@ -93,3 +93,39 @@ export function createBaselineCapture(deps: BaselineCaptureDeps): BaselineCaptur
     }
   }
 }
+
+/**
+ * The baselines whose SESSION did not survive, and which must therefore be
+ * dropped before a panel can spawn again.
+ *
+ * A baseline is a snapshot of one session's starting point — `review.ts` and
+ * `IPC.REVIEW_PANEL` both say "since its session started" — but it is
+ * persisted in `layout.json`, which outlives the session by design. Quitting
+ * runs `shutdown()` (kill-server on the private socket), so at the next
+ * launch NOTHING survives and every panel spawns a genuinely new agent, while
+ * the stored baseline still points at a snapshot from a previous day. The
+ * store-side guard then blocks recapture, and every edit the user made by
+ * hand between the two sessions is attributed to the agent — success
+ * criterion 1 failing for the second and every later session of a panel.
+ *
+ * This is deliberately NOT the guard that covers `Cmd+R`. That one is
+ * PtyManager's in-memory `capturedBaselineIds`, where the sessions really do
+ * survive and recapture really would be wrong — the milestone's headline
+ * correctness property, untouched by this. This function runs once at
+ * startup, in a fresh main process whose in-memory set is empty by
+ * construction, and it consults knowledge main already has rather than
+ * inventing a probe: `ptyManager.list()` asks the BACKEND, so it reports
+ * sessions this run never spawned.
+ *
+ * Pure, and both directions matter: dropping too much silently deletes the
+ * baseline of every panel whose tmux session outlived a crash, which
+ * recaptures against a tree the agent has already rewritten and reports
+ * "no changes" for an hour of work. verify:review 37 and 37b.
+ */
+export function staleBaselineIds(
+  storedIds: readonly string[],
+  survivingSessionIds: Iterable<string>
+): string[] {
+  const alive = new Set(survivingSessionIds)
+  return storedIds.filter((id) => !alive.has(id))
+}

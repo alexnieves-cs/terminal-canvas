@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
@@ -33,6 +33,7 @@ const {
   buildTmuxConf,
   attachPtyLifecycle,
   resolveShellEnv,
+  whichFromEnv,
   createLayoutStore,
   fromPanels,
   SEED_PANELS,
@@ -242,7 +243,10 @@ app.whenReady().then(async () => {
   // each forked its OWN login zsh (visible as N "[shell-env] resolved" log
   // lines instead of one), a path the real app never takes, and it ate into
   // the fixed settle budget below for no reason.
-  await resolveShellEnv()
+  // Captured, not discarded: git is resolved by ABSOLUTE path from this
+  // env, the same single resolution main/index.ts performs at whenReady.
+  const loginEnv = await resolveShellEnv()
+  const gitPath = whichFromEnv('git', loginEnv)
 
   // Same wiring main/index.ts does at real startup: a PtyManager that reaches
   // this window's webContents, registered against the pty:* channels the
@@ -410,13 +414,51 @@ app.whenReady().then(async () => {
     preferences: { 'agent.idleAfterMs': 250 }
   }), 'utf8')
   const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
+  /* The real runner, FENCED to this suite's own fixture directories.
+
+     captureBaseline fires on EVERY pty:create, and most fixture panels here
+     are pointed at `~`. A developer whose home directory is itself a git
+     checkout — dotfiles-in-$HOME is a common setup, and it is the case this
+     machine has — would therefore have the suite run `git stash create`
+     against their entire home repository, once per spawn: minutes of real
+     work in a repository the repo does not own, which is the same rule as
+     "the verify suites must never touch the production socket" and the same
+     fence readProjectPrompts already carries for check 43. It also took this
+     suite past its own 120s watchdog, which is how it was found.
+
+     Everything outside the fence answers exactly as git does for a directory
+     that is not a repository (ok:false, notFound:false), so the fenced
+     panels read `not-a-repo` — which is what they are for. It costs no
+     coverage: 99-101 are the only checks that look at a review result, and
+     both their fixtures live under this prefix. */
+  // TWO prefixes, not one, and this is the whole subtlety: on macOS tmpdir()
+  // is /var/folders/... while `rev-parse --show-toplevel` answers with the
+  // resolved /private/var/folders/... — so the capture's FIRST call (keyed on
+  // the panel's cwd) and its SECOND (keyed on the resolved root) arrive under
+  // different spellings of the same directory. A single-prefix fence blocks
+  // the second, `stash create` reads as a failure, no baseline is stored, and
+  // 99/101 report never-started for a repository that is right there.
+  const REVIEW_FENCES = [
+    join(tmpdir(), 'tc panels '),
+    join(realpathSync(tmpdir()), 'tc panels ')
+  ]
+  const realGitRunner = createGitRunner({ gitPath: () => gitPath, env: () => loginEnv })
+  const fencedGitRunner = async (args) => {
+    const i = args.indexOf('-C')
+    const target = i >= 0 ? args[i + 1] : ''
+    if (typeof target !== 'string' || !REVIEW_FENCES.some((f) => target.startsWith(f))) {
+      return { stdout: '', ok: false, notFound: false }
+    }
+    return realGitRunner(args)
+  }
+
   // Real engine over a real git runner, mirroring main/index.ts's own
   // construction exactly (createReviewEngine + createGitRunner, baselineOf
   // and peersInRepo closing over THIS run's layoutStore) — a stub here would
   // leave review:panel proven no further than the preload, the reasoning
   // every other real export in this harness already follows.
   const reviewEngine = createReviewEngine({
-    run: createGitRunner(),
+    run: fencedGitRunner,
     baselineOf: (panelId) => layoutStore.baseline(panelId),
     peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
     // Mirrors main/index.ts's identical forward-closure over baselineCapture,
@@ -6669,8 +6711,25 @@ app.whenReady().then(async () => {
     // driven against a real git repository — everything in verify:review is
     // argued against a fake runner, and everything else in this suite never
     // touches git at all.
-    {
+    //
+    // Skipped LOUDLY on a machine with no git, never silently, and never by
+    // hard-failing: without this guard the execFileSync below throws into
+    // this suite's outer try, is recorded as an `infrastructure` failure and
+    // takes `npm run verify` red for a reason that has nothing to do with the
+    // code under test. The same guard verify:review already carries for its
+    // own real-git block, and the rule CLAUDE.md states for the tmux block.
+    let GIT_OK = true
+    try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT_OK = false }
+    if (!GIT_OK) {
+      console.log('SKIP  99-101 — no git binary found (loudly, not silently)')
+    } else {
       const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
+      // A directory that is definitely NOT a repository, for check 100.
+      // Deliberately its own mkdtemp rather than "any panel that is not
+      // first": the other fixture panels are `~`, and a developer who keeps
+      // dotfiles in a git checkout at $HOME — a common setup — would get a
+      // red 100 with a misleading message about a genuine repository.
+      const notRepo = mkdtempSync(join(tmpdir(), 'tc panels notrepo '))
       const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
       git('init', '-q', '.')
       git('config', 'user.email', 'v@example.com')
@@ -6684,10 +6743,10 @@ app.whenReady().then(async () => {
          writes real shell commands, and Cmd+N's default here is
          `/bin/cat -v`, which ECHOES bytes rather than interpreting them — the
          substitution checks 54-63 and 83 already make for the same reason. */
-      const spawnInRepo = async () => {
+      const spawnAt = async (cwd) => {
         const before = new Set(await wc.executeJavaScript(
           `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
-        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: repo, command: '/bin/sh', args: [], w: 400, h: 300 })
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd, command: '/bin/sh', args: [], w: 400, h: 300 })
         const ids = await waitUntil(async () => {
           const now = await wc.executeJavaScript(
             `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
@@ -6699,7 +6758,7 @@ app.whenReady().then(async () => {
       /* A real sendInputEvent click, not a dispatched MouseEvent: check 75c
          records why a synthetic one proves nothing about focus, and selection
          here has to be the real thing for the inspector to follow it. */
-      const selectPanel = async (id) => {
+      const selectPanel = async (id, opts = {}) => {
         const box = await wc.executeJavaScript(
           `(() => { const p = document.querySelector('[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']');
                     if (!p) return null;
@@ -6708,11 +6767,13 @@ app.whenReady().then(async () => {
         if (!box) return false
         wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
         wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
-        await settle()
+        // Skippable for 100b alone: settle() is long enough for the review
+        // invoke to resolve, which CLOSES the very window that check is about.
+        if (opts.settle !== false) await settle()
         return true
       }
 
-      const first = await spawnInRepo()
+      const first = await spawnAt(repo)
       // The write must not overtake the spawn: a panel's PTY does not exist
       // until it goes live and the registry's lazy spawn actually creates it
       // (see "Lazy spawn" in CLAUDE.md), so a write issued right after
@@ -6746,11 +6807,76 @@ app.whenReady().then(async () => {
       //      a 260px pane. Weak on its own: it passes vacuously before the
       //      section exists, so it is evidence only once 99 has been watched
       //      red.
-      const homePanel = await wc.executeJavaScript(
-        `(() => { const p = [...document.querySelectorAll('.panel')]
-            .find((e) => e.getAttribute('data-panel-id') !== ${JSON.stringify(JSON.stringify(first))});
-          return p ? p.getAttribute('data-panel-id') : null })()`)
+      const homePanel = await spawnAt(notRepo)
+      // 100b. I1: the OUTGOING panel's file list must not render under the
+      //       INCOMING panel's heading. Until this fix the effect cleared
+      //       `review` only when the selection went to NULL, so selecting B
+      //       kept A's model — a real file list, with real counts, under B's
+      //       name — for an IPC round trip plus up to four git subprocesses,
+      //       which is plainly visible on a real repository. The `live` flag
+      //       prevents the stale WRITE; nothing prevented the stale RENDER.
+      //
+      //       Detected POSITIVELY, as a single consistent DOM read pairing
+      //       "which panel is selected" with "is a review summary on screen":
+      //       the two commit together, so seeing the incoming panel selected
+      //       WITH a summary still present is the defect itself, not a race.
+      //       Asserting only "the summary is absent" cannot work — it is
+      //       satisfied before React has even processed the click — and the
+      //       click deliberately skips settle(), which is long enough for the
+      //       invoke to resolve and therefore closes the window entirely
+      //       (confirmed: the first draft of this check passed against the
+      //       unfixed renderer for exactly that reason).
+      // Settled FIRST, on its own, so its final answer (no section at all) is
+      // already on screen: a spawn selects the new panel, and a capture is
+      // fire-and-forget, so a panel read too early reports its own transient
+      // `never-started` — which the detection loop below would pick up as a
+      // stale summary that has nothing to do with panel A.
       if (homePanel) await selectPanel(homePanel)
+      await waitUntil(async () =>
+        await wc.executeJavaScript(`document.querySelector('[data-review-summary]') !== null`)
+          ? false : true, 5000)
+      // Back to panel A, whose summary is a real file list, and then to B
+      // again WITHOUT settling — the window this check is about.
+      await selectPanel(first)
+      await waitUntil(async () => {
+        const t = await wc.executeJavaScript(
+          `(document.querySelector('[data-review-summary]') || {}).textContent || null`)
+        return t && t.includes('file') ? true : false
+      }, 5000)
+      /* Selected through the RAIL row, not by clicking the panel: cascaded
+         spawns overlap, and selecting panel A raises it, so a coordinate
+         click aimed at B's header lands on A instead — which is how the
+         first draft of this check went green while the selection never
+         moved at all (last={id:A, summary:A's}). The rail row is a real
+         production gesture (goToPanel -> selectAndRaise), immune to z-order,
+         and it does not settle. */
+      const selectFromRail = (id) => wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-list--panels .rail-row[data-rail-row=' +
+          ${JSON.stringify(JSON.stringify(id))} + '] .rail-row__main')
+        if (!row) return false
+        row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true })()`)
+      const clickedB = homePanel ? await selectFromRail(homePanel) : false
+      let lastSeen = null
+      const staleSeen = await (async () => {
+        const deadline = Date.now() + 4000
+        while (Date.now() < deadline) {
+          const r = await wc.executeJavaScript(`(() => {
+            const sel = document.querySelector('.panel--selected');
+            const s = document.querySelector('[data-review-summary]');
+            return { id: sel ? sel.getAttribute('data-panel-id') : null,
+                     summary: s ? s.textContent : null } })()`)
+          // Only once the click has actually landed is the read meaningful:
+          // until then `.panel--selected` is still the OUTGOING panel and a
+          // present summary is correct rather than stale.
+          lastSeen = r
+          if (r.id === homePanel) return r.summary
+        }
+        return null
+      })()
+      ok('100b selecting a panel does not render the previous panel\'s files',
+        homePanel !== null && clickedB === true && staleSeen === null,
+        `staleSeen=${JSON.stringify(staleSeen)} clickedB=${clickedB} last=${JSON.stringify(lastSeen)}`)
       // waitUntil, not one immediate read: Canvas's review query is async
       // (an IPC round trip plus a real git process), and the previous
       // selection's model is still the frozen prop until that resolves — a
@@ -6776,7 +6902,7 @@ app.whenReady().then(async () => {
       //      confident wrong attribution — the only place the mixed-checkout
       //      rule is proven against a real store, a real engine and real git
       //      rather than a fake.
-      const second = await spawnInRepo()
+      const second = await spawnAt(repo)
       // Two races stacked here, not one. sessionMap alone (first's fix,
       // above) only proves the PTY exists — captureBaseline is ITSELF
       // fire-and-forget on top of that (a spawn must never be delayed by a
@@ -6802,6 +6928,12 @@ app.whenReady().then(async () => {
       }, 5000)
       ok('101 two panels in one repo are reported as unattributable',
         typeof note === 'string' && note.includes("can't be attributed"), `note=${note}`)
+
+      // Fixture repositories are not free — a git repo per run accumulated in
+      // $TMPDIR for the life of the machine. Best-effort: a failure to clean
+      // up must never turn a green suite red.
+      try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
+      try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
   } catch (error) {

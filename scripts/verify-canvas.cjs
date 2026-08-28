@@ -89,7 +89,11 @@ app.whenReady().then(async () => {
   // that carries a spawn() function, which structured clone cannot carry.
   // No check in this suite drives a preset mutation from IPC, so a stub that
   // is never called is enough — what matters here is that registration still
-  // succeeds with the fourth argument in place.
+  // succeeds with every argument in place. ALL of them are passed, including
+  // rebuildMenu and reviewEngine, for the reason verify-ipc-surface.cjs was
+  // already patched: neither closure runs here today, but a handler that
+  // reaches into one at REGISTRATION time would throw on undefined, and a
+  // short-arity call is a trap for whoever adds one.
   registerIpcHandlers(
     ptyManager,
     layoutStore,
@@ -107,6 +111,12 @@ app.whenReady().then(async () => {
       listPrompts: () => [],
       savePrompt: () => {},
       removePrompt: () => false
+    },
+    () => {},
+    {
+      resolveRepo: async () => null,
+      captureBaseline: async () => null,
+      review: async () => ({ kind: 'not-a-repo' })
     }
   )
 
