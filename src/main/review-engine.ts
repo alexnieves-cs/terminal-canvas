@@ -112,15 +112,15 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
       files.push({ path, added: 0, removed: 0, binary: false, untracked: true })
     }
 
-    const peers = deps.peersInRepo(root, panelId)
-    if (peers > 0) return { kind: 'shared', root, panelCount: peers + 1, files }
-
     // Checked ABOVE the peers branch, deliberately reordered from the plan's
     // draft: a repo where nothing has changed is unambiguously clean, however
     // many panels share it — there is nothing to fail to attribute, so
     // reporting "shared, can't attribute" beside "0 files changed" would be a
     // manufactured ambiguity rather than a real one.
     if (files.length === 0) return { kind: 'clean', root }
+
+    const peers = deps.peersInRepo(root, panelId)
+    if (peers > 0) return { kind: 'shared', root, panelCount: peers + 1, files }
 
     return {
       kind: 'changes',
