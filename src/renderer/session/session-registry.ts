@@ -67,6 +67,29 @@ export interface Registry {
    * keystroke goes somewhere they did not choose.
    */
   bumpVersion(): void
+  /**
+   * Stamp lastFocusedAt with now(), advance version() and notify — and do
+   * nothing else. In particular NOT handle.focus().
+   *
+   * Three near-identical members now sit here, and the difference between them
+   * is the whole point: bumpVersion says "re-render", touch says "this session
+   * is recently WANTED", focus says "the keyboard is here now". Restart needs
+   * the first two and must not have the third — it is driven from shell
+   * controls (the inspector's button, the rail's row), and a shell control that
+   * moves DOM focus violates the rule shell-control.ts exists to enforce, and
+   * fails silently: the panel looks right and the user's next keystroke goes
+   * somewhere they did not choose.
+   *
+   * Why the stamp matters at all: assignTiers fills its LIVE_BUDGET slots in
+   * lastFocusedAt order, and ensure() mints a session at 0 — so a restarted
+   * panel joins at the BACK of the eviction queue and is the first candidate
+   * denied a slot on a canvas already at budget. attachSlot is the only caller
+   * of spawn(), so being denied means the restart killed and never respawned:
+   * the panel becomes a card and the Restart control immediately greys out
+   * reading "has not started yet", denying the thing the user just did.
+   * verify:registry 25.
+   */
+  touch(id: PanelId): void
   subscribe(listener: () => void): () => void
   /**
    * Close one panel: free its terminal and kill its process. One of exactly
@@ -314,6 +337,15 @@ export function createRegistry(deps: RegistryDeps): Registry {
     version: () => version,
 
     bumpVersion: () => bump(),
+
+    touch(id) {
+      const session = sessions.get(id)
+      if (!session) return
+      // Deliberately no handle.focus() — see the interface comment. This is
+      // focus()'s first two lines and none of its third.
+      session.lastFocusedAt = now()
+      bump()
+    },
 
     subscribe(listener) {
       listeners.add(listener)

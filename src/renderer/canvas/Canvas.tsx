@@ -2027,7 +2027,41 @@ export function Canvas({
         // own comment exists to prevent, arriving through a new door.
         if (!panelsRef.current.some((p) => p.rect.id === id)) return
         registry.ensure(id, panel.spec, { dormant: false })
+        // TOUCH, then bump. Both are deliberate and neither substitutes for
+        // the other. ensure() mints the new session at lastFocusedAt 0, and
+        // assignTiers fills its LIVE_BUDGET slots in lastFocusedAt order — so
+        // without the stamp the restarted panel joins at the BACK of the
+        // eviction queue and is the first candidate denied a slot on a canvas
+        // already at budget. attachSlot is the ONLY caller of spawn(), so a
+        // denied slot means this verb killed and never respawned. The reach is
+        // ordinary, not theoretical: the inspector acts on selectedId, and the
+        // rail's row click selects WITHOUT focusing, so "pick a panel in the
+        // rail, press Restart" is exactly the gesture that lands here.
+        //
+        // touch bumps too, so the bumpVersion below is nominally redundant —
+        // it is kept because the re-render is a SEPARATE requirement with its
+        // own reason (see this verb's doc comment), and leaning on a member
+        // named for the eviction queue to also supply it would make a silent
+        // blank panel the cost of ever reordering these two lines. The two
+        // notifications land in one synchronous block and React batches them.
+        registry.touch(id)
         registry.bumpVersion()
+        // NOT registry.focus(id), and the residue is recorded rather than
+        // papered over. When the palette drove this restart, runRow already
+        // called restoreFocus(capturedId) -> handle.focus() on the very handle
+        // dispose() then destroyed, so DOM focus is on <body> and the next
+        // keystroke goes nowhere until the user clicks the panel — the same
+        // silent failure usePalette's rule 4 exists to prevent. focus(id)
+        // CANNOT fix it from here: the session was re-ensured at tier 'card'
+        // one line ago, and focus() only calls handle.focus() on a LIVE
+        // session, so the call would stamp, bump, and move no keyboard at all
+        // — a line that reads as a fix and is not one. The new handle cannot
+        // take focus until React has mounted its slot and attachSlot() has
+        // opened it, which is at minimum a render away and is not guaranteed
+        // to happen at all (see the off-screen residue in CLAUDE.md). Landing
+        // it needs the REGISTRY to own a one-shot "focus on next attach",
+        // consumed inside attachSlot; that is a deliberate design decision,
+        // not a line to sneak into a fix wave.
       })
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,

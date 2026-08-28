@@ -567,6 +567,46 @@ const tick = () => new Promise((r) => setImmediate(r))
       killFinished === true, `killFinished=${killFinished}`)
   }
 
+  // 23. The OLD handle is never written to again, and the NEW one IS. pty:data
+  //     arrives on one subscription for the whole canvas, keyed by panel id,
+  //     so a restart that left the disposed handle reachable would route the
+  //     NEW process's output into a disposed terminal — a restarted panel that
+  //     stays blank while its agent runs perfectly well, with nothing in any
+  //     log.
+  //
+  //     Both halves are asserted, and the positive one is why oldState is
+  //     captured BEFORE the second ensure: the fake factory keys `made` by
+  //     panel id and overwrites the entry on a second create(id), so the two
+  //     handles are only distinguishable if the first is held onto across the
+  //     restart. This check used to close with `registry.get('p1').handle !==
+  //     undefined`, which asserted nothing at all — ensure() cannot return a
+  //     session without one.
+  {
+    const { bridge, factory, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const oldState = factory.made.get('p1')
+    const writtenBefore = oldState.written.length
+
+    await registry.dispose('p1')
+    registry.ensure('p1', SPEC, { dormant: false })
+    registry.applyTiers({ p1: 'live' })
+    registry.attachSlot('p1')
+    await tick()
+    const newState = factory.made.get('p1')
+    bridge.emitData({ panelId: 'p1', data: 'after restart' })
+
+    ok('23 output after a restart reaches the new handle, never the disposed one',
+      oldState.disposed === true &&
+        oldState.written.length === writtenBefore &&
+        newState !== oldState &&
+        newState.disposed === false &&
+        newState.written.includes('after restart'),
+      `old disposed=${oldState.disposed} old writes ${writtenBefore} -> ${oldState.written.length}, new writes=${JSON.stringify(newState.written)}`)
+  }
+
   // 24. bumpVersion advances version() and does NOTHING else.
   //     The "nothing else" half is the whole reason it exists rather than
   //     reusing focus(), which also bumps: focus() moves the keyboard, and a
@@ -595,32 +635,42 @@ const tick = () => new Promise((r) => setImmediate(r))
       `version ${before} -> ${after}, notified=${notified}, focused ${focusedBefore} -> ${state.focused}`)
   }
 
-  // 23. The OLD handle is never written to again. pty:data arrives on one
-  //     subscription for the whole canvas, keyed by panel id, so a restart
-  //     that left the disposed handle reachable would route the NEW process's
-  //     output into a disposed terminal — a restarted panel that stays blank
-  //     while its agent runs perfectly well, with nothing in any log.
+  // 25. touch RAISES lastFocusedAt and re-renders, and moves no keyboard.
+  //     Same "and nothing else" shape as 24, guarding the other half of the
+  //     same trap. assignTiers fills its LIVE_BUDGET slots in lastFocusedAt
+  //     order and ensure() mints a session at 0, so a restarted panel starts
+  //     at the BACK of the eviction queue — on a canvas already at budget it
+  //     is the first candidate denied a slot, and attachSlot is the only
+  //     caller of spawn(). Without this stamp, restart kills and never
+  //     respawns: the panel becomes a card and the Restart control greys out
+  //     reading "has not started yet", denying the thing the user just did.
+  //
+  //     The clause that discriminates is `state.focused` staying false while
+  //     the panel is LIVE: focus() would also raise the stamp and bump, and on
+  //     a live session it calls handle.focus() — which is exactly what a shell
+  //     control must never do (shell-control.ts). Assert it on a live session
+  //     or the clause is vacuous, since focus() moves nothing on a card.
   {
-    const { bridge, factory, registry } = setup()
+    const { factory, registry } = setup()
     registry.ensure('p1', SPEC)
     registry.applyTiers({ p1: 'live' })
     registry.attachSlot('p1')
     await tick()
-    const oldState = factory.made.get('p1')
-    const writtenBefore = oldState.written.length
-
-    await registry.dispose('p1')
-    registry.ensure('p1', SPEC, { dormant: false })
-    registry.applyTiers({ p1: 'live' })
-    registry.attachSlot('p1')
-    await tick()
-    bridge.emitData({ panelId: 'p1', data: 'after restart' })
-
-    ok('23 output after a restart reaches the new handle, never the disposed one',
-      oldState.disposed === true &&
-        oldState.written.length === writtenBefore &&
-        registry.get('p1').handle !== undefined,
-      `disposed=${oldState.disposed} writes ${writtenBefore} -> ${oldState.written.length}`)
+    const state = factory.made.get('p1')
+    const focusedBefore = state.focused
+    const stampBefore = registry.lastFocusedAt().p1
+    let notified = 0
+    const off = registry.subscribe(() => { notified += 1 })
+    const before = registry.version()
+    registry.touch('p1')
+    const after = registry.version()
+    off()
+    ok('25 touch advances version and raises lastFocusedAt, without touching focus',
+      after === before + 1 && notified === 1 &&
+        registry.lastFocusedAt().p1 > stampBefore &&
+        state.focused === focusedBefore && focusedBefore === false &&
+        registry.get('p1').tier === 'live',
+      `version ${before} -> ${after}, notified=${notified}, stamp ${stampBefore} -> ${registry.lastFocusedAt().p1}, focused=${state.focused}`)
   }
 
   console.log('\n' + '='.repeat(60))
