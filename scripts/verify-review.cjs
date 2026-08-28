@@ -438,6 +438,65 @@ if (!GIT) {
   ok('34 real gc produces baseline-lost', lost.kind === 'baseline-lost')
 }
 
+/* A tick-flushing helper: createBaselineCapture's write sits behind TWO
+   awaited promises (resolveRepo, then captureBaseline), so a single
+   setImmediate is not enough to observe the write settle. Looping a handful
+   of macrotasks is cheaper and more honest than a fixed sleep — the fixture
+   below resolves its fakes synchronously, so there is no real I/O latency to
+   wait out, only the promise chain's own hops. */
+const flush = async (times = 5) => {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0))
+}
+
+// 35. Finding 1 (task-6 review): an in-flight capture must not write after
+//     its panel is killed. Create a panel, close it faster than the
+//     underlying git calls resolve, and the fire-and-forget closure was
+//     resolving AFTER the kill and writing a baseline for a dead panel id —
+//     reachable, not hypothetical, because onReset() always mints the SAME
+//     recycled id (FIRST_RUN_ID), so the next panel to take that id would
+//     inherit a stranger's baseline and report "no changes" for a
+//     repository its own agent rewrote. drop() must poison the in-flight
+//     capture so its write never lands.
+{
+  let releaseResolveRepo
+  const baselines = new Map()
+  const bc = R.createBaselineCapture({
+    baselineOf: (id) => baselines.get(id),
+    setBaseline: (id, b) => baselines.set(id, b),
+    // Deliberately slow and controlled by hand: capture() must have started
+    // and returned (fire-and-forget) BEFORE drop() runs, so this promise
+    // stays pending until the test releases it — exactly the window a real
+    // git subprocess occupies between spawn and exit.
+    resolveRepo: () => new Promise((res) => { releaseResolveRepo = res }),
+    captureBaseline: async () => 'deadbeef'
+  })
+  bc.capture('p1', '/repo')
+  bc.drop('p1') // the kill, arriving before resolveRepo has even settled
+  releaseResolveRepo('/repo')
+  await flush()
+  ok('35 a killed panel drops its in-flight capture', baselines.get('p1') === undefined,
+    `baselines=${JSON.stringify([...baselines])}`)
+}
+
+// 35b. The companion positive: a capture with NO kill in between still
+// writes. 35 alone would also pass against a guard that poisoned every
+// capture unconditionally — a `drop` that always won regardless of timing —
+// which would silently disable the feature this whole milestone exists to
+// ship. This is the check that would catch it.
+{
+  const baselines = new Map()
+  const bc = R.createBaselineCapture({
+    baselineOf: (id) => baselines.get(id),
+    setBaseline: (id, b) => baselines.set(id, b),
+    resolveRepo: async () => '/repo',
+    captureBaseline: async () => 'deadbeef'
+  })
+  bc.capture('p1', '/repo')
+  await flush()
+  ok('35b an un-killed capture still writes', JSON.stringify(baselines.get('p1')) ===
+    JSON.stringify({ root: '/repo', sha: 'deadbeef' }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -675,6 +675,24 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       await manager.create(spec('r3'))
       manager.kill('r3')
       ok(22, dropped.includes('r3'))
+    }
+
+    // 22b. Finding 2 (task-6 review): kill() drops the baseline on the
+    //      NO-LOCAL-SESSION branch too, not only the ordinary one 22 covers.
+    //      That branch is the same one verify:pty-manager 14c already
+    //      proves reaches backend.destroy() for an id this manager never
+    //      spawned — a hidden workspace's panel, reattachable after a
+    //      reload but never promoted, per "dispose(id) sends pty.kill even
+    //      when this renderer holds no local session for that id" in
+    //      CLAUDE.md. Before this check the baseline half of that same
+    //      branch was defended by prose alone, exactly the gap 14c itself
+    //      was added to close for backend.destroy() — a branch asserted by
+    //      nothing is one a later editor deletes as dead code.
+    {
+      const dropped = []
+      const { manager } = makeHarness(tmuxBackend, { onDropBaseline: (id) => dropped.push(id) })
+      manager.kill('r4') // never created locally — no session in this manager's map
+      ok('22b kill drops the baseline even with no local session', dropped.includes('r4'))
       // Check 20's obligation, inherited: this block must still end in a
       // definite kill-server, never in a session kill that leaves a stale
       // server for the NEXT run to attach to (see check 20's own comment for

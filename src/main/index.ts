@@ -11,6 +11,7 @@ import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
 import { createReviewEngine } from './review-engine'
 import { createGitRunner } from './git-runner'
+import { createBaselineCapture } from './baseline-capture'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import {
   allPresets,
@@ -56,19 +57,25 @@ const reviewEngine = createReviewEngine({
 // The once-only guard. Written here rather than inside PtyManager because the
 // store is the thing that knows whether a baseline already exists, and a
 // manager-held flag would be lost on the very reload this guard exists for.
-const captureBaseline = (panelId: string, cwd: string): void => {
-  if (layoutStore.baseline(panelId) !== undefined) return
-  void (async () => {
-    const root = await reviewEngine.resolveRepo(cwd)
-    if (root === null) return
-    // Two panels can spawn in the same tick and both pass the first check
-    // above before either await resolves; this second check is what stops
-    // the second one from overwriting the first's already-captured baseline.
-    if (layoutStore.baseline(panelId) !== undefined) return
-    const sha = await reviewEngine.captureBaseline(root)
-    if (sha === null) return
-    layoutStore.setBaseline(panelId, { root, sha })
-  })()
+// The epoch half — a kill poisoning an in-flight capture so it cannot write
+// after the panel it belongs to is gone — lives in baseline-capture.ts,
+// tested in isolation under plain node (verify:review 35/35b) rather than
+// inline here, where nothing but a real Electron run could ever drive it.
+const baselineCapture = createBaselineCapture({
+  baselineOf: (panelId) => layoutStore.baseline(panelId),
+  setBaseline: (panelId, baseline) => layoutStore.setBaseline(panelId, baseline),
+  resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
+  captureBaseline: (root) => reviewEngine.captureBaseline(root)
+})
+
+const captureBaseline = (panelId: string, cwd: string): void => baselineCapture.capture(panelId, cwd)
+
+// kill()'s baseline hook: poison any in-flight capture for this id (see
+// baseline-capture.ts) AND drop the persisted record, so neither an
+// in-flight write nor a stale on-disk one can reach a recycled id.
+const dropBaseline = (panelId: string): void => {
+  baselineCapture.drop(panelId)
+  layoutStore.dropBaseline(panelId)
 }
 
 // The manager needs a way to reach the live renderer; a getter rather than a
@@ -86,7 +93,7 @@ const ptyManager = new PtyManager(
   () => Number(layoutStore.getSetting('agent.idleAfterMs')),
   () => layoutStore.getSetting('agent.bell') === true,
   captureBaseline,
-  (id) => layoutStore.dropBaseline(id)
+  dropBaseline
 )
 
 /**
