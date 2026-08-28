@@ -6390,7 +6390,15 @@ app.whenReady().then(async () => {
          })`)
       const clicked = target !== null && await clickRail(
         `.rail-row[data-rail-workspace=${JSON.stringify(target && target.id)}] .rail-row__rename`)
-      await settle()
+      // Polled, not slept. Every other palette-opening check in this file waits
+      // on the input existing rather than on a flat settle(), and the reason is
+      // that a fixed sleep is only ever correct on the machine it was tuned on
+      // — a slower one turns this into an intermittent red against a codebase
+      // that is fine, which costs someone a debugging session pointed at
+      // nothing. The false branch is asserted below, not thrown on, so a door
+      // that genuinely never opens still reports as 95c failing.
+      await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
       // Guarded reads throughout. An uncaught exception here ends the run and
       // every check below it — 96, 97, 98, 98b — is never reached, so their
       // absence would read as a suite that shrank rather than one that broke.
@@ -6410,11 +6418,20 @@ app.whenReady().then(async () => {
         `target=${JSON.stringify(target)} clicked=${clicked} mode=${JSON.stringify(mode)}`)
 
       // Leave the app as 96-98b expect to find it: no overlay, no input mode.
-      await wc.executeJavaScript(`
+      //
+      // Wrapped in an IIFE, like the ~twenty other `const input` bodies in this
+      // file and unlike the one block that suffixes its names instead
+      // (chrome18/opts18). Either fix works; the IIFE is the majority form and
+      // needs no name discipline from the next author. A top-level `const` in
+      // an executeJavaScript string is a lexical binding that PERSISTS in the
+      // frame's global scope, so the second unwrapped block to pick the same
+      // name throws a SyntaxError — which aborts the run and takes every check
+      // below it with it, the failure mode this file's own header warns about.
+      await wc.executeJavaScript(`(() => {
         const input = document.querySelector('.palette__input')
         if (input) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-        true
-      `)
+        return true
+      })()`)
       await waitUntil(
         () => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
     }

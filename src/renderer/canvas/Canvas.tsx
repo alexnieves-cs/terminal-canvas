@@ -2231,8 +2231,17 @@ export function Canvas({
    * The rail's Workspaces section, frozen the same way its rows are — against a
    * different volatile input. There is no rect here: what churns is IDENTITY,
    * because reloadWorkspaces() hands back a brand-new array of brand-new
-   * objects on mount and on every palette open. Without the freeze, SideRail's
-   * memo is defeated by a reload that changed nothing at all.
+   * objects on every occasion it runs — every workspace mutation and every
+   * workspace switch, plus mount, and every change to the panel COUNT. Without
+   * the freeze, SideRail's memo is defeated by a reload that changed nothing at
+   * all.
+   *
+   * That freeze is also the answer to "why is it safe to reload this often".
+   * The panel-count reload (declared with its siblings above) fires on every
+   * spawn and every close, and when nothing about any workspace actually
+   * changed the signature is byte-identical, this useMemo hands back the
+   * previous array, and SideRail re-renders nothing. The cost is one IPC round
+   * trip per spawn or close and no render churn at all.
    *
    * `waitingIds` is the same live attention set the pips and the inspector
    * summary read — it changes only when MEMBERSHIP changes (syncAttention

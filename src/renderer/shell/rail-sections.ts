@@ -42,13 +42,28 @@ import type { RailRow } from './rail-rows'
  * One honest limit, recorded so it is not later read as a bug — and note what
  * it is NOT. The 500ms coalescing debounce in layout-store.ts is on the
  * WRITE: doSave mutates w.panels synchronously and workspaces() reads that
- * same in-memory snapshot, so main's answer is already fresh when the invoke
- * lands. The staleness is on this side. `panelIds` reaches here from
- * Canvas.tsx's workspaceRows, a renderer copy that is only as current as its
- * last reloadWorkspaces() — mount, palette open, every workspace mutation,
- * and (since the M8d fix) every change to the panel COUNT. So the window is
- * one IPC round trip after a spawn or a close, not a debounce, and outside it
- * the count is exact.
+ * same in-memory snapshot, so main's answer is fresh when the invoke lands —
+ * WITH the exception in the next paragraph. The staleness is on this side.
+ * `panelIds` reaches here from Canvas.tsx's workspaceRows, a renderer copy
+ * only as current as its last reloadWorkspaces(): every workspace mutation
+ * and every workspace switch, plus mount, and — since the M8d fix — every
+ * change to the panel COUNT. (Enumerating those occasions individually is how
+ * this very comment went stale once; the phrase is deliberately one that
+ * cannot.) So the window is one IPC round trip after a spawn or a close, not
+ * a debounce, and outside it the count is exact.
+ *
+ * The exception is `restore.layout`. doSave writes w.panels only inside
+ * `if (layout)`, i.e. only while that preference is ON, because a restore
+ * setting that is off means "start fresh each launch" and initial() hands the
+ * renderer `panels: []` — writing back unconditionally would let any panel
+ * move overwrite real stored data with what the fresh-start renderer
+ * invented. With it OFF, main's panelIds simply never advances on a spawn, so
+ * the reload returns an unchanged count and this row reads whatever was last
+ * stored while the setting was on. Not a lag but a freeze, pre-existing store
+ * behaviour rather than anything the count does, and NOT closed by the M8d
+ * reload. One thing does move it: a workspace switch calls
+ * activateWorkspace, whose doSave(outgoing, false) bypasses restore settings
+ * entirely, so the stored panels — and this count — catch up there.
  *
  * A round trip is acceptable for a COUNT and would not be for a navigation
  * target — which is exactly why buildAttentionRows below filters against the

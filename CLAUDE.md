@@ -2147,9 +2147,13 @@ named the wrong mechanism. It is NOT the store's 500ms write debounce:
 in-memory snapshot, so main's answer is already fresh when the invoke lands.
 The staleness is on the RENDERER's side — `panelIds` reaches the count from
 `Canvas.tsx`'s `workspaceRows`, a copy only as current as its last
-`reloadWorkspaces()`. That loader had five occasions (mount, palette open,
-create, rename, delete) and **a panel spawn or close was none of them**, which
-is not a lag but a permanent wrong number: click New panel three times and the
+`reloadWorkspaces()`. That loader ran on every workspace mutation and every
+workspace switch, plus mount and every palette open — a phrase deliberately
+chosen over enumerating the call sites, because the first draft of this
+paragraph enumerated them, said "five", and omitted `switchWorkspace`'s, which
+is a count going stale inside the paragraph about a count going stale. What
+matters is what was NOT on the list: **a panel spawn or close was none of
+them**, which is not a lag but a permanent wrong number: click New panel three times and the
 row reads "1 panel" two lines above a Panels list showing four, until the user
 happens to open the palette — which a mouse-only user may never do, and
 mouse-only reachability is the section's whole point. A sixth reload keyed on
@@ -2162,7 +2166,18 @@ earlier in the component, React runs a commit's effects in declaration order,
 and both `ipcMain` handlers are synchronous and processed in arrival order —
 so the correct window is one IPC round trip, not a debounce. That is acceptable
 for a count and would not be for a navigation target, which is exactly why
-`buildAttentionRows` filters against the rendered rows instead.
+`buildAttentionRows` filters against the rendered rows instead. One exception
+qualifies "main is fresh", and it is not closed by any of this: `doSave` writes
+`w.panels` only inside `if (layout)`, i.e. only while `restore.layout` is ON,
+because a restore setting that is off means "start fresh each launch" and
+`initial()` already hands the renderer `panels: []` (see "A workspace switch is
+a second boot, but not in preference semantics" below for the same flag's other
+half). With it off, main's `panelIds` never advances on a spawn at all, so the
+reload returns an unchanged count and the row reads whatever was stored while
+the setting was last on — a freeze rather than a lag, pre-existing store
+behaviour, and deliberately left alone. The one thing that moves it is a
+workspace switch, whose `doSave(outgoing, false)` bypasses restore settings
+entirely.
 
 **The attention section takes the built rows, not the panels
 (`shell/rail-sections.ts`'s `buildAttentionRows`).** Filtering the queue down
