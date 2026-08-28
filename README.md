@@ -36,7 +36,7 @@ npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/point
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
-npm run verify:rail          # the rail's row construction and its signature, plain node
+npm run verify:rail          # the rail's rows and the inspector's read model, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:canvas        # real input into the built renderer
@@ -259,7 +259,7 @@ milestone.
 Until M8a the app was almost entirely chords and a hidden `Cmd+K`, and a first
 launch showed a canvas with no visible way in. The shell — a top bar, a
 collapsible rail, a collapsible inspector, with the canvas as the grid's middle
-cell — adds no verb of its own: the New panel button routes through
+cell — added no verb of its own at first: the New panel button routes through
 `preset:spawn-by-id` (only main can resolve an absent `command` into your real
 login shell), the zoom cluster calls `useViewport`'s own named verbs so `+` and
 `⌘=` are provably the same gesture, and Search and the gear open the palette,
@@ -277,6 +277,38 @@ looks: nothing in the renderer watches the canvas host's size, so an animated
 collapse would not re-tier anything — it would re-render the edge-indicator
 layer on every frame of the transition, which is a real but modest cost in the
 one layer built to absorb it.
+
+**The inspector explains a panel; restart is the one verb the shell adds.** The
+right-hand pane answers "what is this panel, actually" — the resolved command
+and cwd main really spawned, the pid, the exit code, the agent's state, and a
+badge when the session survived a reload rather than being started fresh. It
+deliberately shows the LINKS rather than the answer: the resolved command and
+what the panel's own spec asked for are separate fields, because a panel
+labelled `login shell` is only explicable if you can see both that the spec
+asked for nothing and that your shell is `/bin/zsh`. With nothing selected it
+summarises the canvas instead — how many panels, how many running, how many
+waiting on you — using the same "running" predicate the reset dialog names, so
+the two can never disagree. Its act half is four verbs — rename, save as preset,
+close, restart — each aimed at the SELECTED panel rather than the focused one,
+and each routed through the same actions the palette and the rail use rather
+than reaching into the session registry itself.
+
+**Restart is dispose-and-re-ensure at the same panel id** — the same rect, the
+same spec, a fresh process. Under tmux that means the session is genuinely
+destroyed and a new one started, not reattached to: `new-session -A` would
+happily attach to the surviving session, so the destroy is awaited before the
+respawn, and the pane's process id is the only observable that tells a real
+restart from a reattach (`verify:pty-manager` 20 asserts exactly that). It
+clears the panel's agent state first, so a restarted panel cannot inherit the
+previous process's "needs you" glow, and it asks for no confirmation — the
+process it ends is precisely the one you asked to replace. Restart is offered
+for any panel that has started, including one that has already exited, which is
+most of why the verb exists.
+
+**A reattached panel now says so.** M6a made main probe `has-session` before
+every spawn specifically to know whether a panel's session survived, then
+carried that fact with nothing rendering it for two milestones. The inspector's
+badge is the reader, and it closes M6a's one outstanding success criterion.
 
 ## Milestones
 
@@ -298,6 +330,7 @@ one layer built to absorb it.
 | M7 | Workspaces: named canvases, switching without disposing | ✅ done |
 | M8a | The app shell: a frame, collapsible rail and inspector, a visible toolbar | ✅ done |
 | M8b | The panel outline: a rail row per panel, navigate without waking | ✅ done |
+| M8c | The inspector: what a panel is, and restart in place | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

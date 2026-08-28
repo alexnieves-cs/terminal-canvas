@@ -607,12 +607,15 @@ export function Canvas({
   // to trigger the native confirmation dialog that guards the real trigger,
   // so this is the narrow verb the suite calls instead.
   const resetCanvas = useCallback(() => {
-    // dispose, not just drop: reset kills every process. registry.dispose
-    // is one of three call sites in this file (the others are the close
-    // button and undo/redo removing a panel); pty.kill itself still has
-    // only its two callers inside session-registry.ts, because every one
-    // of these three routes through dispose() rather than calling
-    // pty.kill directly.
+    // dispose, not just drop: reset kills every process. This is one of the
+    // FIVE dispose call sites in this file — the others are the close button,
+    // undo/redo removing a panel, workspace delete, and restart in place —
+    // and pty.kill itself still has only its two callers inside
+    // session-registry.ts, because every one of the five routes through
+    // dispose() rather than calling pty.kill directly. verify:panels 94 pins
+    // both numbers; it regex-counts the call over this whole file, comments
+    // included, which is why this comment does not spell it with its
+    // parentheses.
     for (const panel of panelsRef.current) {
       registry.dispose(panel.rect.id)
       // Same reason as the undo/redo site above: reset drops every panel at
