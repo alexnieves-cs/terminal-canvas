@@ -351,7 +351,6 @@ node re-reads on its own when its subject's agent goes idle, and on the refresh
 control in its header; it does not watch the filesystem (pull, not push), so a
 change made outside a panel needs that click.
 
-
 ## Milestones
 
 | | Scope | Status |

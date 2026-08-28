@@ -315,6 +315,13 @@ app.whenReady().then(async () => {
    * An own property shadowing the prototype method, installed BEFORE
    * registerIpcHandlers, so the pty:kill handler and killAll() alike route
    * through it.
+   *
+   * OBLIGATION ON EVERY READER: both checks that read this assert a NEGATIVE
+   * (this id is not among the kills), which a probe that has stopped
+   * recording satisfies perfectly and permanently. Each therefore closes a
+   * REAL terminal panel inside its own window and asserts that id IS present.
+   * A future third reader inherits the same obligation; a negative-only
+   * assertion here is a check that cannot fail once the shadow is lost.
    */
   const killedPanelIds = []
   {
@@ -7417,17 +7424,50 @@ app.whenReady().then(async () => {
           return true })()`)
         const gone = await waitUntil(async () => wc.executeJavaScript(
           `document.querySelector('.review-node[data-panel-id="r90"]') === null`), 6000)
+        // THE NON-VACUITY HALF, and it is not optional. Everything this check
+        // asserts about `kills` is a NEGATIVE, against a recording mechanism
+        // nothing else proves is still recording: lose the shadow — the
+        // harness rewired, registerIpcHandlers binding the prototype method,
+        // PtyManager.kill refactored behind another entry point — and
+        // `killedPanelIds` is empty forever, both this check and 111b stay
+        // green, and the only coverage the three dispose guards have
+        // disappears with no signal at all. That is the shape CLAUDE.md
+        // already names for verify:pty-manager 18: "no wants-you" is
+        // satisfied just as well by bytes that never reached main.
+        //
+        // So a REAL terminal panel is closed inside the SAME window, through
+        // the rail (which closes outright, no arming step), and the slice
+        // must contain it. In-window rather than leaning on check 110's
+        // close one screenful up: a cumulative read would prove the probe was
+        // alive earlier in the run, and "earlier" is exactly the assumption a
+        // liveness clause must not make. homePanel is check 100's
+        // outside-a-repository panel and nothing after this point uses it.
+        const closedReal = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.rail-row[data-rail-row=' +
+            ${JSON.stringify(JSON.stringify(homePanel))} + '] .rail-row__close')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true })()`)
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=' +
+             ${JSON.stringify(JSON.stringify(homePanel))} + ']') === null`), 6000)
         await settle()
         const after = await sessionMap(wc)
-        const preserved = pidsPreserved(before, after)
-        // THE CLAUSE THAT DISCRIMINATES. The two before it are worth having
-        // and cannot fail on their own: a stray kill for an id that names no
-        // session changes no pid and removes no row, so an unguarded close
-        // is invisible from the renderer. `kills` is read at main's own
+        // Compared against `before` MINUS the panel this check deliberately
+        // closed: the liveness close is a real one and really does end a
+        // session, so the pid comparison has to be told about it or it would
+        // report the check's own fixture as a regression.
+        const expected = new Map([...before].filter(([id]) => id !== homePanel))
+        const preserved = pidsPreserved(expected, after)
+        // THE CLAUSE THAT DISCRIMINATES. The pid and DOM clauses are worth
+        // having and cannot fail on their own: a stray kill for an id that
+        // names no session changes no pid and removes no row, so an unguarded
+        // close is invisible from the renderer. `kills` is read at main's own
         // door, where it is the only place the mistake exists at all.
         const kills = killedPanelIds.slice(killsBefore)
         ok('111 closing a review node ends no session',
-          closed === true && gone === true && after.size === before.size && preserved.ok &&
+          closed === true && gone === true && preserved.ok &&
+            closedReal === true && kills.includes(homePanel) === true &&
             kills.includes('r90') === false,
           `sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
       }
@@ -7449,6 +7489,15 @@ app.whenReady().then(async () => {
       //       existed. The DOM and pid clauses stay because each rejects a
       //       different wrong undo — one that disposes the SUBJECT, one that
       //       leaves the node on screen.
+      //
+      //       It carries its OWN non-vacuity clause rather than borrowing
+      //       111's, for the reason 111's own comment gives: a positive
+      //       recorded in an earlier window proves the probe was alive
+      //       EARLIER, which is precisely the assumption a liveness clause
+      //       must not make. Its subject panel is spawned by this check and
+      //       used by nothing after it, so closing it here — after the undo
+      //       has been read — is a real kill inside this check's own window
+      //       and costs no other fixture.
       {
         const subject = await spawnAt(repo)
         // The baseline, not merely the session: captureBaseline is
@@ -7489,11 +7538,28 @@ app.whenReady().then(async () => {
                  ${JSON.stringify(JSON.stringify(node))} + ']') === null`), 6000)
           : false
         await settle()
+        const afterUndo = await sessionMap(wc)
+        const preserved = pidsPreserved(before, afterUndo)
+        // The liveness close, AFTER the undo has been read back — so the
+        // negative above is about the undo alone and this is about the
+        // probe.
+        const closedReal = typeof subject === 'string'
+          ? await wc.executeJavaScript(`(() => {
+              const el = document.querySelector('.rail-row[data-rail-row=' +
+                ${JSON.stringify(JSON.stringify(subject))} + '] .rail-row__close')
+              if (!el) return false
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+              return true })()`)
+          : false
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=' +
+             ${JSON.stringify(JSON.stringify(subject))} + ']') === null`), 6000)
+        await settle()
         const after = await sessionMap(wc)
-        const preserved = pidsPreserved(before, after)
         const kills = killedPanelIds.slice(killsBefore)
         ok('111b undoing a review node ends no session',
           typeof node === 'string' && gone === true && preserved.ok &&
+            closedReal === true && kills.includes(subject) === true &&
             kills.includes(node) === false,
           `node=${node} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
       }
