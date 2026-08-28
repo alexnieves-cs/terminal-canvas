@@ -6298,8 +6298,17 @@ app.whenReady().then(async () => {
     //     The workspace ids are captured, never hardcoded: nextWorkspaceId()
     //     mints w<max+1> over whatever already exists and this suite has
     //     created and deleted several by now, so a literal here would be a
-    //     guess — and a wrong guess is SILENT, since activate() on an unknown
-    //     id returns null and changes nothing.
+    //     guess.
+    //
+    //     What a wrong guess COSTS differs from check 64's, and the two
+    //     comments differ for that reason rather than by accident. 64 switches
+    //     programmatically and asserts only on pids, so a wrong id there is
+    //     genuinely SILENT: activate() returns null, nothing changes, and the
+    //     pid comparison passes vacuously. This switch goes through a real DOM
+    //     click, which gives it something to fail on — clickRail matches no
+    //     row and returns false, and the clicked === true clause below goes
+    //     red. Capture the id either way; here it is what keeps the check
+    //     RUNNABLE, there it is what keeps it from lying.
     const homeWorkspaceId = await activeWorkspaceId()
     {
       const before = await settledSessionMap(wc)
