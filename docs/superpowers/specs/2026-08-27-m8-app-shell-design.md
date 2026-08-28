@@ -1,6 +1,8 @@
 # M8: The App Shell — Design
 
-**Status:** approved in brainstorming, not yet implemented
+**Status:** M8a, M8b and M8c implemented and landed. M8d's section amended
+2026-08-28 with the decisions its own brainstorming settled; not yet
+implemented.
 **Predecessor:** `2026-08-27-m7-workspaces-design.md`
 **Backlog entries:** #11 (a real settings surface — the visible half), #17
 (attention routing, second surface), #29 (restart a panel in place), #32
@@ -516,7 +518,15 @@ it is a task with its own checks, not a button:
 
 ## M8d — Workspaces and attention in the rail
 
-**Gated on M7.**
+**Gated on M7.** M7 landed on 2026-08-27, so the gate is open.
+
+*Amended 2026-08-28.* The M8d brainstorming session settled three questions
+this section had left to implementation — what a workspace row carries, what
+an empty section renders, and which panels the attention queue is allowed to
+name — plus the module shape that keeps the waiting count a single
+derivation. The four settled decisions are marked *Settled:* below and the
+paragraphs after them spell out what each costs; nothing already written here
+was changed or removed.
 
 **Workspaces section.** M7's named canvases as rows: name, panel count,
 waiting count. Click switches, through M7's own `activateWorkspace`
@@ -525,6 +535,20 @@ delete route into the palette's input mode (see "The shell owns no modality"),
 which is also what preserves M7's destructive confirm and its "the agent count
 named in the question" rule. The counts are a second **view** over M7's
 derivation, never a second derivation.
+
+*Settled: a workspace row carries switch, rename and delete.* Three sibling
+controls, the shape `RailPanelRow` already uses — the row body switches, and
+a `✎` and a `×` sit beside it — plus the `+` on the section header. The
+alternative considered was leaving rename and delete in the palette's
+`Manage workspaces…` drill-in and putting only `×` on the row, which is fewer
+controls and an arbitrary split: rename is the *safer* of the two verbs, so a
+rail that shipped delete and withheld rename would make the harmless one the
+one you need a shortcut for. Both route into input mode exactly as the
+palette's own rows do, so the destructive confirm, the count named in the
+question, and `Canvas.tsx`'s switch-before-remove ordering are all *reached*
+rather than reimplemented — the row is a second door onto one action, which
+is the whole of "The shell is a second view over one verb surface". Every
+control mounts `shellControl()`; none takes DOM focus.
 
 **Attention section.** `useAttentionIds()` rendered as a queue, in order.
 
@@ -539,18 +563,91 @@ derivation, never a second derivation.
   panel is gone but whose agent state survived the closure must not render a
   row that navigates nowhere.
 
+*Settled: the attention section names only the ACTIVE workspace's waiting
+panels.* A row's entire job is to navigate, and `centreOn` can only frame a
+rect on this canvas — a row for a panel in a hidden workspace would either go
+nowhere or smuggle in a second switching path, and the section rejects both.
+A waiting panel in a hidden workspace surfaces as the **waiting count on its
+workspace row** instead, which is the count M7 already derives and
+`verify:panels` 70b already proves survives a hidden canvas. The two sections
+therefore divide one question between them — *who is waiting here* and *where
+else is anyone waiting* — and that division is deliberate rather than a
+limitation nobody noticed. It is recorded because the obvious "fix" (list
+every workspace's waiting panels in one flat queue) breaks the click.
+
+*Settled: all three section headers are always rendered.* Attention shows a
+quiet "nothing waiting" line at rest rather than vanishing, and Workspaces
+renders its header on a fresh install where there is exactly one row. This is
+the rule `hiddenAtRest` already states for the palette read the other way
+round: *a row that disappears is indistinguishable from a feature that is
+missing*, and the palette gets away with hiding only because typing a query
+brings the row back. A rail section has no query to type into, so hiding it at
+rest is hiding it permanently from the user who has never seen it fire. It
+also keeps the rail's own height stable, so the Panels list does not move
+under the pointer whenever a bell rings.
+
+*Settled: one derivation for the waiting count, in a new pure module.*
+`palette/commands.ts` computes a workspace's waiting count inline today
+(`w.panelIds.filter((id) => ctx.attentionIds.includes(id)).length`). The rail
+must not write that expression a second time — two derivations agree the day
+they are written and drift the first time one is wrong, and the drift here is
+a count on screen that no log explains. It moves into
+`renderer/shell/rail-sections.ts` as `waitingCount(panelIds, attentionIds)`,
+which `commands.ts` then calls; this is `isRunning`'s trade from M8c applied
+to a second derived number. The module joins `rail-rows.ts` and
+`inspector-fields.ts` in the plain-node `verify:rail` tier and carries the
+rest of the section's pure half: `buildWorkspaceRows`, `buildAttentionRows`,
+and a signature for each, `JSON.stringify` over the rows for `railSignature`'s
+own reason — a workspace **name** is user text, and a hand-rolled separator is
+a field boundary a name is free to forge. It is a new file rather than an
+append to `rail-rows.ts`, whose stated subject is the Panels section.
+
+`buildAttentionRows` takes the **already-built `RailRow[]`** rather than the
+panel list, and that is the load-bearing part of its signature: filtering the
+queue down to ids that have a panel row *is* `reachableQueue`'s phantom
+filter, and reading the label off that same row is what stops the two sections
+rendering two different names for one panel. One lookup, both guarantees.
+Queue order is preserved — it is entry order, longest-waiting first, which is
+what makes the section a queue rather than a set.
+
+**Two frozen arrays, not two fresh ones.** `Canvas.tsx` freezes both new row
+arrays on their signatures beside `railRows`, for the reason that file already
+records: the rail is rendered unconditionally and `panels` is a fresh array on
+every `setPanelRect`, so an unfrozen array defeats `SideRail`'s `memo`
+outright. The symptom is invisible on a four-panel canvas, which is the same
+risk the M8b bullet under "Risks" names, arriving through a second door.
+
+**M8d adds no verb and no IPC channel.** Every callback it needs is already on
+`CanvasActions` — `switchWorkspace`, `beginCreateWorkspace`,
+`beginRenameWorkspace`, `deleteWorkspace`, `goToPanel` — so `verify:ipc` stays
+at 26 channels. This is worth stating because a cross-workspace waiting count
+reads like a main-owned query, and it is not: `workspace:list` already returns
+`panelIds` and the renderer already holds the attention set, exactly as
+`WORKSPACE_LIST`'s own doc comment argues.
+
 **The rail does not replace the edge pips.** They answer different questions —
 a pip says *which direction*, a rail row says *what is in the queue and how
 deep*. `agent.edgeIndicators` still governs the pips alone.
 
 **Checks.**
 
+- `verify:rail`: `waitingCount` including the phantom case; `buildWorkspaceRows`'
+  counts and its active flag; `buildAttentionRows` dropping a phantom while
+  preserving queue order, and its label agreeing with the Panels row for the
+  same id; and both signatures stable under a rect change while moving on a
+  name, a count and a queue change.
 - `verify:panels`: a waiting panel appears in the attention section; clicking
   the row frames it and leaves it `wants-you` (read the rendered border colour,
   as check 62 does, because this failure is purely visual); focusing it clears
   both the state and the row.
 - `verify:panels`: switching workspaces from the rail lands on the same state
-  the palette's switcher produces.
+  the palette's switcher produces — the same pid, which is the only observable
+  that separates a demote from a dispose-and-respawn (check 64).
+- `verify:panels`: a hidden workspace holding a waiting panel shows a non-zero
+  count on its **rail** row — 70b's fixture reached from the new surface.
+- `verify:palette`: 64 stays green after `commands.ts` switches to the shared
+  helper. It pins that `waiting` is a typed field the view composes into a
+  title, never spliced into the haystack `fuzzyMatch` scans.
 
 ## Success criteria
 
