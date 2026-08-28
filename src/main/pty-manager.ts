@@ -83,6 +83,14 @@ export class PtyManager {
   private sessions = new Map<PanelId, Session>()
   /** One per manager, not per session. See IDLE_TICK_MS. */
   private idleTimer: NodeJS.Timeout | null = null
+  /**
+   * Which panel ids this manager has already fired captureBaseline for.
+   * Deliberately survives detachAll() — a Cmd+R reload must not recapture —
+   * and is cleared only by kill(), alongside dropBaseline, so a panel that
+   * genuinely closed and later reuses its id starts fresh. See create()'s
+   * own comment for why this is a SECOND guard, not the only one.
+   */
+  private capturedBaselineIds = new Set<PanelId>()
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -103,7 +111,14 @@ export class PtyManager {
      * sites (the verify harnesses) keep compiling unchanged.
      */
     private readonly getIdleAfterMs: () => number = () => 1500,
-    private readonly getBellEnabled: () => boolean = () => true
+    private readonly getBellEnabled: () => boolean = () => true,
+    /**
+     * Review-baseline hooks. Optional and defaulted for the same reason
+     * getIdleAfterMs is: the verify harnesses construct this manager directly
+     * and must keep compiling. In production they reach the layout store.
+     */
+    private readonly captureBaseline: (panelId: PanelId, cwd: string) => void = () => {},
+    private readonly dropBaseline: (panelId: PanelId) => void = () => {}
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -115,6 +130,25 @@ export class PtyManager {
     const env = buildPtyEnv(loginEnv, spec.env)
 
     const cwd = resolveCwd(spec.cwd)
+
+    // Fire-and-forget: the baseline must never delay or fail a spawn. It is
+    // taken BEFORE the process starts so the snapshot precedes the agent's
+    // first byte. Gated on capturedBaselineIds rather than called
+    // unconditionally: this function runs again for every panel on a Cmd+R
+    // reload — main's PtyManager is a module-scope singleton that survives a
+    // renderer reload untouched — and under tmux that second call REATTACHES
+    // to a session that may have been working for an hour, so calling this
+    // again there would reset the baseline to "now" and the pane would
+    // report "no changes" for an agent that rewrote the repository. This
+    // in-memory guard is deliberately NOT the only one: it resets on an app
+    // relaunch (a fresh PtyManager, a fresh empty Set), which is exactly why
+    // the store keeps its own persistent record — see captureBaseline's own
+    // second existence check in index.ts.
+    if (!this.capturedBaselineIds.has(spec.panelId)) {
+      this.capturedBaselineIds.add(spec.panelId)
+      this.captureBaseline(spec.panelId, cwd)
+    }
+
     const command = resolveCommand(spec, loginEnv)
 
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
@@ -265,6 +299,8 @@ export class PtyManager {
     // genuinely nothing there.
     if (!session) {
       this.getBackend().destroy(panelId)
+      this.dropBaseline(panelId)
+      this.capturedBaselineIds.delete(panelId)
       return
     }
     session.killed = true
@@ -277,6 +313,8 @@ export class PtyManager {
     // Closing a panel must end the SESSION, not merely detach a client.
     // Without this the tmux session survives with no panel able to reach it.
     this.getBackend().destroy(panelId)
+    this.dropBaseline(panelId)
+    this.capturedBaselineIds.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) this.stopIdleTick()
   }

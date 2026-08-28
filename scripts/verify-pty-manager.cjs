@@ -118,7 +118,9 @@ function makeHarness(backend, options = {}) {
     }),
     () => backend ?? DIRECT,
     () => options.idleAfterMs ?? 1500,
-    () => options.bellEnabled ?? true
+    () => options.bellEnabled ?? true,
+    (panelId) => { if (options.onCaptureBaseline) options.onCaptureBaseline(panelId) },
+    (panelId) => { if (options.onDropBaseline) options.onDropBaseline(panelId) }
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -641,22 +643,45 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       h.manager.kill('r1')
       // Check 15, the previous last action in this block, always ended with
       // shutdown() — a definite kill-server, so every run left the socket
-      // with no server at all. This check now runs after it, and kill('r1')
-      // only ends the SESSION, not the server: the server is left running,
-      // session-less. buildTmuxConf never sets exit-empty (tmux defaults it
-      // on), so the leftover server *usually* exits on its own, but that is
-      // a race, not a guarantee — kill()'s execFileSync returns as soon as
-      // kill-session does, not once the server's own exit-empty shutdown
-      // finishes. A -f confPath is applied only when a client STARTS the
-      // server; against one already running it is silently ignored. So a
-      // later run that begins before the stale server exits attaches to a
-      // server still wired to the PREVIOUS run's pane-died hook, including
-      // its now-deleted exitDir — and check 14, the one tmux check whose
-      // assertion is sourced from a file that hook writes, silently falls
-      // back to the client's own exit code instead of the real one. This
-      // shutdown() restores the invariant check 15 used to provide as the
-      // tmux block's last action; whoever appends the next check after this
-      // one inherits the same obligation.
+      // with no server at all. kill('r1') only ends the SESSION, not the
+      // server, and that call has moved to the end of check 22 below: the
+      // obligation to leave this block ending in a definite kill-server is
+      // inherited there now, not here. See check 22's own comment.
+    }
+
+    // 21. The baseline is captured ONCE. A second create() at the same id —
+    //     which is exactly what a Cmd+R reload does for every restored
+    //     panel, and which under tmux REATTACHES to a session that may have
+    //     worked for an hour — must not recapture. Recapturing reports "no
+    //     changes" for an agent that rewrote the repository: a wrong answer
+    //     shaped exactly like a right one, and the single failure this
+    //     whole milestone turns on.
+    {
+      const captures = []
+      const { manager } = makeHarness(tmuxBackend, { onCaptureBaseline: (id) => captures.push(id) })
+      await manager.create(spec('r2'))
+      manager.detachAll()
+      await manager.create(spec('r2'))
+      ok(21, captures.length === 1, `captured ${captures.length}x`)
+      manager.kill('r2')
+    }
+
+    // 22. kill drops the baseline, so the map does not grow for the life of
+    //     the install and a recycled id cannot inherit a dead panel's
+    //     snapshot.
+    {
+      const dropped = []
+      const { manager } = makeHarness(tmuxBackend, { onDropBaseline: (id) => dropped.push(id) })
+      await manager.create(spec('r3'))
+      manager.kill('r3')
+      ok(22, dropped.includes('r3'))
+      // Check 20's obligation, inherited: this block must still end in a
+      // definite kill-server, never in a session kill that leaves a stale
+      // server for the NEXT run to attach to (see check 20's own comment for
+      // why that matters — a later run reattaches to a server still wired to
+      // THIS run's now-deleted exitDir and check 14 silently reports the
+      // wrong exit code). Whoever appends check 23 inherits this obligation
+      // next.
       tmuxBackend.shutdown()
     }
   }

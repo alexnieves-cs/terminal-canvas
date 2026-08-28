@@ -9,6 +9,8 @@ import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
+import { createReviewEngine } from './review-engine'
+import { createGitRunner } from './git-runner'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import {
   allPresets,
@@ -39,6 +41,36 @@ let backend: SessionBackend = createDirectBackend('startup: tmux not probed yet'
  */
 let loginEnv: Record<string, string> = {}
 
+// userData is the standard per-user application directory; app.getPath is only
+// valid once the app module is loaded, which it is by the time this module runs.
+const layoutStore = createLayoutStore({
+  filePath: join(app.getPath('userData'), 'layout.json')
+})
+
+const reviewEngine = createReviewEngine({
+  run: createGitRunner(),
+  baselineOf: (panelId) => layoutStore.baseline(panelId),
+  peersInRepo: (root, except) => layoutStore.baselinePeers(root, except)
+})
+
+// The once-only guard. Written here rather than inside PtyManager because the
+// store is the thing that knows whether a baseline already exists, and a
+// manager-held flag would be lost on the very reload this guard exists for.
+const captureBaseline = (panelId: string, cwd: string): void => {
+  if (layoutStore.baseline(panelId) !== undefined) return
+  void (async () => {
+    const root = await reviewEngine.resolveRepo(cwd)
+    if (root === null) return
+    // Two panels can spawn in the same tick and both pass the first check
+    // above before either await resolves; this second check is what stops
+    // the second one from overwriting the first's already-captured baseline.
+    if (layoutStore.baseline(panelId) !== undefined) return
+    const sha = await reviewEngine.captureBaseline(root)
+    if (sha === null) return
+    layoutStore.setBaseline(panelId, { root, sha })
+  })()
+}
+
 // The manager needs a way to reach the live renderer; a getter rather than a
 // captured reference keeps it correct across window reloads. The backend is a
 // getter for the same reason — the probe that chooses it is async and has not
@@ -47,19 +79,15 @@ const ptyManager = new PtyManager(
   () => mainWindow?.webContents ?? null,
   () => backend,
   // Getters, closing over layoutStore rather than reading it here: the store
-  // is constructed BELOW this line, and a value read at construction would
+  // is constructed ABOVE this line, and a value read at construction would
   // also freeze the setting at its boot value, so changing it in the palette
   // would reach nothing until a relaunch. Both are only ever called from a
   // running PTY's callbacks, long after module evaluation.
   () => Number(layoutStore.getSetting('agent.idleAfterMs')),
-  () => layoutStore.getSetting('agent.bell') === true
+  () => layoutStore.getSetting('agent.bell') === true,
+  captureBaseline,
+  (id) => layoutStore.dropBaseline(id)
 )
-
-// userData is the standard per-user application directory; app.getPath is only
-// valid once the app module is loaded, which it is by the time this module runs.
-const layoutStore = createLayoutStore({
-  filePath: join(app.getPath('userData'), 'layout.json')
-})
 
 /**
  * Reset is the only action in the app Cmd+Z cannot take back, which is exactly
