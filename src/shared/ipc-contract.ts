@@ -16,7 +16,7 @@ import type {
 } from './types'
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
-import type { ReviewResult } from './review'
+import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest } from './review'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -146,7 +146,25 @@ export const IPC = {
    * would make main a second author of a timing decision the renderer
    * already makes correctly, the same call M6d and M7 both made and recorded.
    */
-  REVIEW_PANEL: 'review:panel'
+  REVIEW_PANEL: 'review:panel',
+  /**
+   * This panel's stored baseline, or null. The renderer asks exactly once —
+   * when a review node is created — and stores the answer IN the node, so
+   * the node can keep asking review:at after main has dropped the panel's
+   * baseline on kill. It is deliberately not a general read: nothing else in
+   * the renderer has any business knowing a sha.
+   */
+  REVIEW_BASELINE: 'review:baseline',
+  /**
+   * The same question review:panel answers, addressed by BASELINE instead of
+   * by panel id — which is the entire reason a review node can outlive its
+   * subject. Two channels rather than one optional-argument channel, because
+   * the two have different lifetimes and different failure arms: review:panel
+   * can answer never-started and not-a-repo, and neither is reachable here.
+   */
+  REVIEW_AT: 'review:at',
+  /** One file's hunks. Pull-only, one file at a time — see ReviewDiffRequest. */
+  REVIEW_DIFF: 'review:diff'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -407,6 +425,9 @@ export interface CanvasBridge {
   }
   review: {
     panel(panelId: PanelId): Promise<ReviewResult>
+    baseline(panelId: PanelId): Promise<ReviewBaseline | null>
+    at(subject: ReviewSubject): Promise<ReviewResult>
+    diff(req: ReviewDiffRequest): Promise<ReviewDiff>
   }
   platform: NodeJS.Platform
 }

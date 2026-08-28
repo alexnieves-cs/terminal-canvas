@@ -8,6 +8,7 @@ import type {
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
 import type { SessionBackendInfo, PresetListRow, CapturedPanel } from '../shared/ipc-contract'
+import type { ReviewSubject, ReviewDiffRequest } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
@@ -157,6 +158,25 @@ export function registerIpcHandlers(
   )
 
   ipcMain.handle(IPC.REVIEW_PANEL, (_event, panelId: PanelId) => reviewEngine.review(panelId))
+
+  // `?? null`, never undefined: an invoke's reply crosses a structured
+  // clone, and `undefined` and "no such panel" would be the same value on
+  // the far side of it — the absent-vs-present distinction this codebase
+  // already guards for `command`.
+  ipcMain.handle(IPC.REVIEW_BASELINE, (_event, panelId: PanelId) =>
+    layoutStore.baseline(panelId) ?? null)
+
+  // The subject is unpacked HERE rather than in the engine: the engine's
+  // question is about a baseline and a subject id, and teaching it the
+  // renderer's node shape would make it a second reader of a persisted type.
+  ipcMain.handle(IPC.REVIEW_AT, (_event, subject: ReviewSubject) =>
+    reviewEngine.reviewAt(
+      { root: subject.repoRoot, sha: subject.baselineSha },
+      subject.subjectId
+    ))
+
+  ipcMain.handle(IPC.REVIEW_DIFF, (_event, req: ReviewDiffRequest) =>
+    reviewEngine.fileDiff(req))
 }
 
 /**
