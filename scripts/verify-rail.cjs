@@ -363,6 +363,89 @@ ok('27b the signature accepts the empty selection',
       R.buildInspectorModel(panel('n1'), undefined)))
 
 
+/* ---- The workspaces section (M8d) ---- */
+
+// A WorkspaceRow as main's workspace:list hands one back, trimmed to what
+// buildWorkspaceRows reads.
+const ws = (id, name, panelIds, active = false) => ({ id, name, panelIds, active })
+
+// 28. The intersection, and the ONE derivation. commands.ts computed this
+//     inline until M8d; two derivations of one number agree the day they are
+//     written and drift the first time one is wrong, and the drift here is a
+//     count on screen that no log explains.
+ok('28 waitingCount counts this workspace\'s panels that are waiting',
+  R.waitingCount(['a', 'b', 'c'], ['b', 'c', 'z']) === 2)
+
+// 29. An attention id that names no panel of THIS workspace contributes
+//     nothing. That covers both real cases at once: a panel waiting in some
+//     OTHER workspace, and a phantom — an id whose panel is gone but whose
+//     agent state survived the closure, the same orphan reachableQueue drops.
+//     An implementation reaching for attentionIds.length passes 28 and fails
+//     here.
+ok('29 waitingCount ignores an id this workspace does not own',
+  R.waitingCount(['a'], ['zz', 'yy']) === 0 &&
+    R.waitingCount([], ['a', 'b']) === 0)
+
+// 30. The row carries what the section renders: the name, a panel COUNT (not
+//     the ids), its own waiting count, and the active flag. `waiting` stays a
+//     NUMBER — the view composes the text, the same rule Command.waiting
+//     obeys in the palette (verify:palette 64).
+{
+  const rows = R.buildWorkspaceRows(
+    [ws('w1', 'Main', ['n1', 'n2'], true), ws('w2', 'Scratch', ['n3'])],
+    ['n2'])
+  ok('30 a workspace row carries name, panel count, waiting count and active',
+    rows.length === 2 &&
+      rows[0].id === 'w1' && rows[0].name === 'Main' &&
+      rows[0].panels === 2 && rows[0].waiting === 1 && rows[0].active === true &&
+      rows[1].panels === 1 && rows[1].waiting === 0 && rows[1].active === false)
+}
+
+// 31. Per workspace, never global. A waiting panel in Main must not inflate
+//     Scratch's count — the failure a global `attentionIds.length` produces,
+//     which reads as "every workspace is waiting for you" and makes the
+//     number worthless the moment there is more than one canvas.
+{
+  const rows = R.buildWorkspaceRows(
+    [ws('w1', 'Main', ['n1'], true), ws('w2', 'Scratch', ['n2'])],
+    ['n1'])
+  // Length-guarded, and not for tidiness: at the RED step buildWorkspaceRows
+  // is a stub returning [], so an unguarded rows[0].waiting is a TypeError —
+  // which ENDS THE RUN and takes every check below it with it (CLAUDE.md, "A
+  // check that THROWS aborts the run").
+  ok('31 the waiting count is per workspace, not global',
+    rows.length === 2 && rows[0].waiting === 1 && rows[1].waiting === 0)
+}
+
+// 32. THE 60Hz DEFENCE, in the shape this section actually needs it. There is
+//     no rect here to move, so the volatile input is IDENTITY: reloadWorkspaces()
+//     hands Canvas a brand-new array of brand-new objects on every palette
+//     open, and without a signature that ignores identity the useMemo would
+//     hand SideRail a fresh array — defeating its memo — for a reload that
+//     changed nothing at all.
+{
+  const a = R.buildWorkspaceRows([ws('w1', 'Main', ['n1'], true)], ['n1'])
+  const b = R.buildWorkspaceRows([ws('w1', 'Main', ['n1'], true)], ['n1'])
+  ok('32 the workspace signature ignores array and object identity',
+    a !== b && R.workspaceSignature(a) === R.workspaceSignature(b))
+}
+
+// 33. …and moves for everything the row renders. THREE separate movers,
+//     because an implementation that hashed only the ids passes 32 — and a
+//     frozen array with a stale count is a rail that reports "2 waiting"
+//     forever with nothing throwing.
+{
+  const base = R.buildWorkspaceRows([ws('w1', 'Main', ['n1'], true)], [])
+  const renamed = R.buildWorkspaceRows([ws('w1', 'Home', ['n1'], true)], [])
+  const grown = R.buildWorkspaceRows([ws('w1', 'Main', ['n1', 'n2'], true)], [])
+  const waiting = R.buildWorkspaceRows([ws('w1', 'Main', ['n1'], true)], ['n1'])
+  const sig = R.workspaceSignature
+  ok('33 the workspace signature moves on a name, a count and a waiting change',
+    sig(base) !== sig(renamed) && sig(base) !== sig(grown) &&
+      sig(base) !== sig(waiting))
+}
+
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

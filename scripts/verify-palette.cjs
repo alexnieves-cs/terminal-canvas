@@ -14,12 +14,13 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  // No module in this bundle imports from @shared or @renderer today —
-  // commands.ts's only import is its sibling palette-model.ts. The aliases are
-  // here pre-emptively, and that is the whole point: verify-viewport.cjs was
-  // in exactly this state right up until panel-interaction.ts grew a real
-  // VALUE import from @shared and the bundle broke with "Could not resolve".
-  // They cost nothing until the day they are load-bearing.
+  // @renderer became load-bearing in M8d: commands.ts imports the VALUE
+  // waitingCount from shell/rail-sections so the palette and the rail share
+  // one derivation of a workspace's waiting count. @shared is still
+  // pre-emptive (every @shared import here is `import type`, which esbuild
+  // erases) and stays for the reason verify-viewport.cjs learned the hard
+  // way: needing no alias YET is exactly the state it was in until the day
+  // panel-interaction.ts grew a real value import and the bundle broke.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')

@@ -5,6 +5,7 @@ import type { Command } from './palette-model'
 // for exactly this day).
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { SettingValue } from '@shared/settings-schema'
+import { waitingCount } from '@renderer/shell/rail-sections'
 
 /**
  * The palette's command list, built from PLAIN DATA and callbacks.
@@ -352,7 +353,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // --- Workspaces ------------------------------------------------------------
 
   for (const w of ctx.workspaces) {
-    const waiting = w.panelIds.filter((id) => ctx.attentionIds.includes(id)).length
+    // The shared derivation, not a second copy of it — the rail's Workspaces
+    // section renders the same number and must not compute it again.
+    const waiting = waitingCount(w.panelIds, ctx.attentionIds)
     out.push(
       withReason(
         {
