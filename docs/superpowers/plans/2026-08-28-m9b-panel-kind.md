@@ -1405,6 +1405,20 @@ git commit -m "feat(m9b): review:baseline, review:at and review:diff"
 
 ### Task 6: The node's model
 
+> **Superseded during execution (Task 7's review, fix round 1).**
+> `reviewNodeSignature` was DELETED from `review-node-model.ts` and check 52 was
+> retargeted to assert the model is a pure function of its inputs, with the
+> serialization done test-side. The memo it was written for turned out to be
+> inert: `built` and `sig` were computed unconditionally every render, nothing
+> consumed the stabilized identity, and the signature itself serialised up to
+> `DIFF_MAX_LINES` (600) line objects per frame during a drag — imposing the
+> exact 60Hz cost it was meant to prevent. `rail-rows.ts` needs a signature
+> because its rows are rebuilt from a freshly-mapped `panels` array every
+> render; a review node's inputs are already identity-stable, so
+> `useMemo(..., [subject, panel.title, result, expandedPath])` does the same
+> job with no serialization. Read the `reviewNodeSignature` code and check-52
+> text below as history, not as the shipped design.
+
 **Files:**
 - Create: `src/renderer/review/review-node-model.ts`
 - Modify: `scripts/rail-entry.cjs`
@@ -1671,6 +1685,20 @@ git commit -m "feat(m9b): the review node's model, and why it is not the pane's"
 ---
 
 ### Task 7: The node on the canvas
+
+> **Superseded during execution (Task 7's review, fix round 1).**
+> `reviewNodeSignature` was DELETED from `review-node-model.ts` and check 52 was
+> retargeted to assert the model is a pure function of its inputs, with the
+> serialization done test-side. The memo it was written for turned out to be
+> inert: `built` and `sig` were computed unconditionally every render, nothing
+> consumed the stabilized identity, and the signature itself serialised up to
+> `DIFF_MAX_LINES` (600) line objects per frame during a drag — imposing the
+> exact 60Hz cost it was meant to prevent. `rail-rows.ts` needs a signature
+> because its rows are rebuilt from a freshly-mapped `panels` array every
+> render; a review node's inputs are already identity-stable, so
+> `useMemo(..., [subject, panel.title, result, expandedPath])` does the same
+> job with no serialization. Read the `reviewNodeSignature` code and check-52
+> text below as history, not as the shipped design.
 
 **Files:**
 - Create: `src/renderer/review/ReviewNode.tsx`
