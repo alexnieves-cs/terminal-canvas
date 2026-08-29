@@ -86,11 +86,12 @@ function panelLabel(panel: Panel): string {
   if (isReviewPanel(panel)) return `review: ${panel.subject.label} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
-  // present-tense claim — it says nothing that could go stale — and check 39
-  // targets it by this exact spawn-cwd text, so pulling in getLiveSession
-  // would both change what the row promises and break the check that finds
-  // it. Left as spec.cwd on purpose; see CLAUDE.md's "Display renders nothing
-  // without a live answer" entry for the fuller argument this is a corner of.
+  // present-tense claim — unlike an inspector field labelled "now in", it
+  // says nothing that could go stale — so there is nothing here for a live
+  // answer to make wrong, and pulling in getLiveSession would only add a
+  // claim this row was never making. Left as spec.cwd on purpose; see
+  // CLAUDE.md's "Display renders nothing without a live answer" entry for
+  // the fuller argument this is a corner of.
   return `${command} — ${panel.spec.cwd} (${panel.rect.id})`
 }
 
