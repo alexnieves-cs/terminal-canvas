@@ -27,6 +27,24 @@ export interface ReviewNodeProps {
    * an undo entry.
    */
   onCommitted: (nodeId: string, sha: string) => void
+  /**
+   * SessionHandle.focus() on a panel id — Canvas's own `restoreFocus`, the one
+   * the palette already uses. The commit input is the second surface in this
+   * app that takes DOM focus away from xterm, so it inherits usePalette's rule
+   * 4: an unmounting input's blur leaves focus on `<body>`, where every
+   * subsequent keystroke goes nowhere at all. It is threaded in rather than
+   * looked up here because the review layer, like the palette layer,
+   * deliberately knows nothing about the registry.
+   */
+  restoreFocus: (id: string) => void
+  /**
+   * Which panel had app focus when this node was rendered. Read at the moment
+   * the draft OPENS — the capture is this component's own ref below — for the
+   * reason usePalette captures rather than clears: `focusedId` still names the
+   * terminal panel, because the commit button's preventDefault deliberately
+   * never moved it.
+   */
+  focusedId: string | null
 }
 
 /**
@@ -45,7 +63,8 @@ export interface ReviewNodeProps {
  * way that matters to them.
  */
 function ReviewNodeImpl({
-  panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted
+  panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted,
+  restoreFocus, focusedId
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
@@ -60,6 +79,27 @@ function ReviewNodeImpl({
   // The last commit's own answer. Cleared when a new draft opens, so a refusal
   // from a previous attempt cannot sit under a fresh one.
   const [outcome, setOutcome] = useState<string | null>(null)
+  // Captured when the draft opens, exactly as usePalette captures `focusedId`
+  // rather than clearing it — and used on BOTH exits below.
+  const capturedFocusRef = useRef<string | null>(null)
+
+  /**
+   * The one way the message input closes, so both exits restore the keyboard.
+   *
+   * NO CHECK IN THIS REPO CAN OBSERVE THIS, and that is stated rather than
+   * papered over: the panels suite drives the input through a dispatched
+   * KeyboardEvent, and DOM focus after an unmount is a browser default action
+   * a synthetic event never triggers (the same untrusted-event limit
+   * verify:panels 47 and 75c both record from their own sides). Deleting the
+   * restoreFocus call leaves every suite green and leaves the user's next
+   * keystroke going nowhere — usePalette's rule 4 failure, silently.
+   */
+  const closeDraft = (): void => {
+    setDraft(null)
+    const id = capturedFocusRef.current
+    capturedFocusRef.current = null
+    if (id !== null) restoreFocus(id)
+  }
 
   // review:at, never review:panel: the node asks about a BASELINE it stores,
   // so it keeps answering after main has dropped the subject panel's own
@@ -193,7 +233,7 @@ function ReviewNodeImpl({
       .then((r) => {
         setCommitting(false)
         if (r.kind === 'committed') {
-          setDraft(null)
+          closeDraft()
           // Collapse the open file: the list it belonged to is about to be
           // empty, and an expanded body attached to a row that is gone is the
           // state buildReviewNodeModel's `expanded`-on-the-row already guards.
@@ -270,7 +310,13 @@ function ReviewNodeImpl({
               event.preventDefault()
               if (model.commit.kind !== 'ready' || committing) return
               setOutcome(null)
-              setDraft('')
+              // Only on the way IN. Re-pressing the control with a draft
+              // already open would otherwise wipe a half-typed message — on
+              // the one verb in this app where the text is the point — and
+              // the press is far more plausibly a mis-aim than a request to
+              // start over.
+              if (draft === null) capturedFocusRef.current = focusedId
+              setDraft((d) => d ?? '')
             }}
           >
             {committing ? 'committing…' : '⌦'}
@@ -324,7 +370,7 @@ function ReviewNodeImpl({
               onKeyDown={(event) => {
                 event.stopPropagation()
                 if (event.key === 'Enter') { event.preventDefault(); runCommit() }
-                if (event.key === 'Escape') { event.preventDefault(); setDraft(null) }
+                if (event.key === 'Escape') { event.preventDefault(); closeDraft() }
               }}
               onMouseDown={(event) => event.stopPropagation()}
             />

@@ -2652,6 +2652,12 @@ export function Canvas({
                   onBeginDrag={onBeginDrag}
                   onClose={onClosePanel}
                   onCommitted={onReviewCommitted}
+                  // The commit input is the second surface in this app that
+                  // takes DOM focus off xterm, so it inherits usePalette's
+                  // rule 4 — see ReviewNode's own prop comments for both
+                  // halves, and for why no check can observe it.
+                  restoreFocus={restoreFocus}
+                  focusedId={focusedId}
                 />
               )
             }
