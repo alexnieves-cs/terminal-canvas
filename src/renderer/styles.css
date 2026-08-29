@@ -498,9 +498,8 @@ body {
    verify:palette 31 states: a control that disappears is indistinguishable
    from a feature that is missing. */
 .inspector__action:disabled {
-  color: var(--muted);
+  color: var(--fg-4);
   cursor: default;
-  opacity: 0.55;
 }
 .inspector__action:disabled:hover { background: transparent; }
 
@@ -960,7 +959,7 @@ body {
 }
 
 .review-node__summary { margin: 0 0 2px; color: var(--text); }
-.review-node__root { margin: 0 0 8px; opacity: 0.6; word-break: break-all; }
+.review-node__root { margin: 0 0 8px; color: var(--fg-4); word-break: break-all; }
 .review-node__note { margin: 0 0 8px; color: var(--amber); }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
 
@@ -983,7 +982,7 @@ body {
 .review-node__file-button--open { background: var(--border); }
 
 .review-node__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.review-node__counts { flex: none; opacity: 0.7; }
+.review-node__counts { flex: none; color: var(--fg-3); }
 
 .review-node__hunks {
   margin: 2px 0 8px;
@@ -998,11 +997,11 @@ body {
    own out-of-scope line. */
 .review-node__line--add { color: var(--green); background: rgba(158, 206, 106, 0.08); }
 .review-node__line--del { color: var(--red); background: rgba(247, 118, 142, 0.08); }
-.review-node__line--hunk { color: var(--blue); opacity: 0.9; }
-.review-node__line--meta { opacity: 0.5; }
+.review-node__line--hunk { color: var(--blue); }
+.review-node__line--meta { color: var(--fg-4); }
 
 .review-node__hunk-note,
-.review-node__more { margin: 4px; opacity: 0.6; }
+.review-node__more { margin: 4px; color: var(--fg-4); }
 
 .review-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
@@ -1014,10 +1013,10 @@ body {
   font: inherit;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.7;
+  color: var(--fg-3);
 }
 
-.review-node__refresh:hover { opacity: 1; }
+.review-node__refresh:hover { color: var(--fg); }
 
 /* Matches .review-node__refresh rather than standing out: a destructive verb
    that looks like a primary action invites the accidental press this app's
@@ -1027,13 +1026,12 @@ body {
   flex: none;
   background: none;
   border: 0;
-  color: var(--text);
+  color: var(--fg-3);
   cursor: pointer;
-  opacity: 0.6;
   padding: 0 4px;
 }
-.review-node__commit:hover:not(:disabled) { opacity: 1; }
-.review-node__commit:disabled { opacity: 0.25; cursor: default; }
+.review-node__commit:hover:not(:disabled) { color: var(--fg); }
+.review-node__commit:disabled { color: var(--fg-4); cursor: default; }
 .review-node__commit-form { margin: 0 0 8px; }
 .review-node__commit-input {
   width: 100%;
