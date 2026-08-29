@@ -1541,7 +1541,12 @@ Three of these entries are corrections rather than features, and they are marked
 **#41** repairs a false assumption that four earlier entries rest on, and **#49** and **#43**
 are live defects that happen to be shaped like features.
 
-## 41. Live cwd and live command — a correction, not a feature
+## 41. Live cwd and live command — a correction, not a feature — **landed in M12**
+
+**Still not solved:** review resolves a panel's repository against its SPAWN cwd, so a
+panel that `cd`'d into a second repository is still reviewed against the first. The
+stored baseline sha lives in that first repository, so correcting it needs a
+recapture-or-refuse policy — a design of its own, and the natural successor to M12.
 
 `parseListOutput` already pulls `#{pane_current_path}` and `#{pane_start_command}` out of
 tmux, and the result is consumed exactly once, at boot reconciliation, and thrown away.
