@@ -14,6 +14,7 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
   applyAgentState, attentionIds, clearAgentState, useAgentState, useAttentionIds
 } from '@renderer/session/agent-state-store'
+import { applyLiveSession, clearLiveSession } from '@renderer/session/live-session-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -392,6 +393,7 @@ export function Canvas({
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
+        clearLiveSession(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -590,6 +592,13 @@ export function Canvas({
     applyAgentState(update.panelId, update.state)
   }), [])
 
+  // One subscription for the whole canvas, like agent.onState above and for the
+  // same reason: the store fans out per panel id, so a per-panel subscription
+  // here would deliver every panel's update to every panel.
+  useEffect(() => window.canvas.session.onLive((update) => {
+    applyLiveSession(update.panelId, update.cwd, update.currentCommand)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -686,6 +695,7 @@ export function Canvas({
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
+      clearLiveSession(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1137,6 +1147,7 @@ export function Canvas({
     // Same reason as the other two dispose sites: a closed panel's id must
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
+    clearLiveSession(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -2165,6 +2176,7 @@ export function Canvas({
                     if (doomedReviewIds.has(panelId)) continue
                     registry.dispose(panelId)
                     clearAgentState(panelId)
+                    clearLiveSession(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -2279,6 +2291,7 @@ export function Canvas({
       // waking a panel from a verb whose name says the opposite.
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
+      clearLiveSession(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it (the × and the rail's close control are
