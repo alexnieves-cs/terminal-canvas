@@ -6793,7 +6793,7 @@ app.whenReady().then(async () => {
     let GIT_OK = true
     try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT_OK = false }
     if (!GIT_OK) {
-      console.log('SKIP  99-101 — no git binary found (loudly, not silently)')
+      console.log('SKIP  99-101 and 113-115 — no git binary found (loudly, not silently)')
     } else {
       const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
       // A directory that is definitely NOT a repository, for check 100.
@@ -7792,9 +7792,16 @@ app.whenReady().then(async () => {
         const committed = Number(after) > Number(before)
           ? cgit('show', '--stat', '--name-only', '--format=', 'HEAD')
           : ''
+        // A FOURTH clause, and the only one about what the commit does NOT
+        // contain: `seed.txt` is sitting in this repository untouched, and a
+        // commit built from an unseeded scratch index would carry it as a
+        // deletion — the outcome buildReadTreeArgs' own comment calls the
+        // worst this milestone can produce. The three clauses above are all
+        // satisfied by exactly that commit.
         ok('113 a review node\'s files become a real commit, and the node then reads clean',
           typed === true && Number(after) === Number(before) + 1 &&
-            committed.includes('work.txt') && typeof clean === 'string',
+            committed.includes('work.txt') && !committed.includes('seed.txt') &&
+            typeof clean === 'string',
           `before=${before} after=${after} committed=${JSON.stringify(committed)} clean=${clean}`)
       }
 
@@ -7861,7 +7868,10 @@ app.whenReady().then(async () => {
           JSON.stringify(state))
       }
 
-      rmSync(crepo, { recursive: true, force: true })
+      // Best-effort, like the two below it and for the same reason: a throw
+      // here is caught by the outer try, reports as an `infrastructure`
+      // failure, and takes the other two cleanups with it on the way out.
+      try { rmSync(crepo, { recursive: true, force: true }) } catch { /* best effort */ }
 
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
