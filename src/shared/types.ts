@@ -82,3 +82,19 @@ export interface AgentStateUpdate {
   panelId: PanelId
   state: AgentState
 }
+
+/**
+ * What IPC_EVENTS.SESSION_LIVE carries: where a panel IS and what it is
+ * RUNNING, as opposed to PanelSpec.cwd and PtyCreateResult.cwd, which are both
+ * frozen at spawn.
+ *
+ * Only tmux can answer this, so there is no direct-backend equivalent and no
+ * fallback value — a panel with no live answer simply never receives one of
+ * these, which is what lets the inspector render nothing rather than render a
+ * spawn-time value under a present-tense label.
+ */
+export interface LiveSessionUpdate {
+  panelId: PanelId
+  cwd: string
+  currentCommand: string
+}

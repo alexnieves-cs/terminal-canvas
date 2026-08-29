@@ -9,6 +9,7 @@ import {
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
 import type {
   AgentStateUpdate,
+  LiveSessionUpdate,
   PanelId,
   PanelSpec,
   PtyDataChunk,
@@ -89,7 +90,8 @@ const bridge: CanvasBridge = {
     remove: (id: string) => ipcRenderer.invoke(IPC.PROMPT_DELETE, id)
   },
   session: {
-    info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND)
+    info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
+    onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener)
   },
   settings: {
     list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),
