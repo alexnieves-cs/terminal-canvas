@@ -56,6 +56,15 @@ export interface PtyCreateResult {
    * sessions to outlive anything.
    */
   reattached: boolean
+  /**
+   * The program running in the pane NOW, when anything knows — only the tmux
+   * backend's list() can answer it. OPTIONAL because this same type is what
+   * create() returns, where there is no live answer yet, and because the
+   * direct backend has none ever; a required field would force both to invent
+   * one, which is exactly the backfill this milestone forbids. Absent means
+   * "nothing knows".
+   */
+  currentCommand?: string
 }
 
 /**

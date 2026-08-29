@@ -364,6 +364,44 @@ const ok = (n, pass, detail) => {
     args[args.indexOf('-t') + 1] === '=n1')
 }
 
+// 27. The sixth column. pane_current_command is the program running NOW —
+// claude, node, zsh — as distinct from pane_start_command, which is what the
+// pane was launched as and which parseListOutput already reports as `command`.
+// Both are in the format string and both must land, because the whole point of
+// the pair is that they DISAGREE for a panel that is doing work.
+{
+  const args = T.buildListArgs()
+  const format = args[args.indexOf('-F') + 1]
+  const e = T.parseListOutput('alpha\t0\t4242\tclaude\t/Users/x/proj\tnode')[0]
+  ok('27 the list format and parse carry the CURRENT command beside the start one',
+    format.includes('#{pane_current_command}') &&
+      format.includes('#{pane_start_command}') &&
+      e.command === 'claude' && e.currentCommand === 'node' &&
+      e.cwd === '/Users/x/proj',
+    `format=${format} entry=${JSON.stringify(e)}`)
+}
+
+// 28. A FIVE-column line still yields an entry, with currentCommand ''. Not
+// defensiveness about a shape we control: `-f <conf>` is applied only when a
+// client STARTS a server and is ignored against one already running, and a
+// format string is the same — a tmux server left running by a build that
+// predates this column answers the OLD shape to a NEW client. Dropping the
+// entry there turns a cosmetic gap into a panel that reads as dead, which is
+// what boot reconciliation acts on. The dead filter is asserted again WITH the
+// new column present, so the widening cannot have quietly shifted the field
+// position it reads.
+{
+  const old = T.parseListOutput('alpha\t0\t4242\tclaude\t/Users/x/proj')[0]
+  const withDead = T.parseListOutput(
+    'alpha\t0\t1\tsh\t/a\tsh\nbeta\t1\t2\tsh\t/b\tsh\ngamma\t0\t3\tsh\t/c\tnode')
+  const ids = withDead.map((x) => x.panelId)
+  ok('28 an older five-column line survives, and the dead filter still reads pane_dead',
+    old !== undefined && old.panelId === 'alpha' && old.currentCommand === '' &&
+      ids.length === 2 && ids.includes('alpha') && ids.includes('gamma') &&
+      !ids.includes('beta'),
+    `old=${JSON.stringify(old)} ids=${JSON.stringify(ids)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
