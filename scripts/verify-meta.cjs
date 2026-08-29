@@ -216,6 +216,26 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     `workflow=${workflow !== null} badge=${badged}`)
 }
 
+// 17. CONTRIBUTING exists and names the one thing a contributor must do.
+// A CONTRIBUTING that does not name the verification command is decoration:
+// this repository has no test runner and no linter, so a newcomer has no way
+// to guess that `npm run verify` is the entire gate.
+{
+  const text = read('CONTRIBUTING.md') ?? ''
+  ok('17 CONTRIBUTING names the verify command',
+    text.includes('npm run verify'), text ? `${text.length} bytes` : 'absent')
+}
+
+// 18. SECURITY exists and is honest about what this app IS. Terminal Canvas
+// spawns arbitrary local commands with the user's own login environment —
+// that is the product, not a vulnerability — and a security policy that does
+// not say so invites reports about the feature while burying real ones.
+{
+  const text = read('SECURITY.md') ?? ''
+  ok('18 SECURITY exists and states the threat posture',
+    text.length > 300 && /arbitrary/i.test(text), text ? `${text.length} bytes` : 'absent')
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
