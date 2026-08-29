@@ -21,5 +21,10 @@ module.exports = {
   // Pure — no electron, no node-pty — so the epoch race that let a killed
   // panel's in-flight capture write a stale baseline can be driven here
   // against fakes instead of a real PTY and a real kill().
-  ...require('../src/main/baseline-capture')
+  ...require('../src/main/baseline-capture'),
+  // M9c's write verb. Pure the way review-engine.ts is pure — its GitRunner
+  // and its two filesystem callbacks are injected — so the whole five-call
+  // commit transaction can be driven here against a fake runner, with no real
+  // git and no real repository, in the cheapest tier the repo has.
+  ...require('../src/main/review-commit'),
 }

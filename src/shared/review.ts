@@ -116,3 +116,37 @@ export interface ReviewDiffRequest {
 }
 
 export type { PanelId }
+
+/**
+ * A commit of the work a review node reports.
+ *
+ * Addressed by repository ROOT, never by a panel id. M9b made a node ask by
+ * baseline precisely so it outlives its subject, and a commit is a repository
+ * operation; a panelId here would be a live pointer the node deliberately does
+ * not hold, and would go blank at the moment a commit of finished work is most
+ * useful. The baseline sha is deliberately NOT carried: nothing in the commit
+ * reads it, and a field no caller consults is the customer-free abstraction
+ * this codebase already declines elsewhere.
+ */
+export interface ReviewCommitRequest {
+  root: string
+  /** Every path the result reported — not only the ones under the render cap. */
+  paths: string[]
+  message: string
+}
+
+/**
+ * Four designed states, not one boolean and an error path.
+ *
+ * `refused` and `failed` split POSITIONALLY rather than by inspecting git's
+ * text: `refused` is a non-zero exit from `git commit` itself, which for a
+ * rejecting pre-commit hook carries that hook's own output verbatim, and
+ * `failed` is a non-zero exit from a call BEFORE the commit was attempted.
+ * The two have different fixes — "your repository said no" versus "this did
+ * not run" — which is the same standard not-a-repo and repo-unreadable draw.
+ */
+export type ReviewCommitResult =
+  | { kind: 'committed'; sha: string }
+  | { kind: 'nothing-to-commit' }
+  | { kind: 'refused'; detail: string }
+  | { kind: 'failed'; detail: string }

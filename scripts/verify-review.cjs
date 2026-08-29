@@ -982,6 +982,118 @@ ok('52 staged-entries argv is -z and scoped to the paths',
     out.ok && seen.every(Boolean))
 }
 
+// A fake runner that records every call and answers from a table keyed on the
+// first git SUBCOMMAND. `-C <root>` occupies args[0..1], so the subcommand is
+// args[2]. Defaults to success, so a check names only the call it cares about.
+const fakeGit = (table) => {
+  const calls = []
+  const run = async (args, opts) => {
+    calls.push({ args, env: opts?.env })
+    const hit = table[args[2]]
+    const answer = typeof hit === 'function' ? hit(args) : hit
+    return { stdout: '', ok: true, notFound: false, code: 0, stderr: '', ...(answer ?? {}) }
+  }
+  return { run, calls }
+}
+const committerOn = (run, removed = []) => R.createReviewCommitter({
+  run,
+  tempIndexPath: () => '/scratch/idx',
+  removeTempIndex: (p) => removed.push(p)
+})
+
+// 56. The happy path, and the ORDER is the check. read-tree must precede
+//     update-index (or the commit contains only the staged paths and DELETES
+//     the rest of the repository), and ls-files must FOLLOW commit (a
+//     pre-commit hook may rewrite the index, and reconciling from entries read
+//     before it stages content that is in no commit). Every one of the four
+//     scratch-index calls must carry GIT_INDEX_FILE; the reconcile must NOT,
+//     since it is the one call that is supposed to write the real index.
+{
+  const g = fakeGit({
+    'ls-files': { stdout: '100644 aaa 0\ta b.txt\0' },
+    'rev-parse': { stdout: 'newsha\n' }
+  })
+  const out = await committerOn(g.run)({
+    root: '/r', paths: ['a b.txt'], message: 'agent work'
+  })
+  const sub = g.calls.map((c) => c.args[2])
+  const scratch = (name) => g.calls.find((c) => c.args[2] === name)?.env?.GIT_INDEX_FILE
+  const reconcile = g.calls.filter((c) => c.args[2] === 'update-index').pop()
+  ok('56 the five calls run in order, scoped to the scratch index, and the reconcile is not',
+    out.kind === 'committed' && out.sha === 'newsha' &&
+      sub.indexOf('read-tree') < sub.indexOf('update-index') &&
+      sub.indexOf('commit') < sub.indexOf('ls-files') &&
+      scratch('read-tree') === '/scratch/idx' && scratch('commit') === '/scratch/idx' &&
+      scratch('ls-files') === '/scratch/idx' &&
+      reconcile.env === undefined)
+}
+
+// 57. A rejecting pre-commit hook. Its own output is what the user has to
+//     read — the hook is the only thing that knows what it objected to — and
+//     it arrives on stderr with a non-zero exit and nothing else marking it.
+//     `refused`, not `failed`: the repository said no, which is a different
+//     situation with a different fix from "this did not run".
+{
+  const g = fakeGit({ commit: { ok: false, code: 1, stderr: 'eslint: 3 problems\n' } })
+  const out = await committerOn(g.run)({ root: '/r', paths: ['a.ts'], message: 'm' })
+  ok('57 a non-zero commit is refused, carrying the hook output verbatim',
+    out.kind === 'refused' && out.detail.includes('eslint: 3 problems'))
+}
+
+// 58. A failure BEFORE the commit is a different arm, and the discriminating
+//     clause is that `commit` was never called at all. Collapsing the two
+//     would tell a user whose git is broken that their repository refused the
+//     change, which sends them to look at hooks that never ran.
+{
+  const g = fakeGit({ 'read-tree': { ok: false, code: 128, stderr: 'fatal: bad object' } })
+  const out = await committerOn(g.run)({ root: '/r', paths: ['a.ts'], message: 'm' })
+  ok('58 a pre-commit-call failure is failed, and never reaches git commit',
+    out.kind === 'failed' && out.detail.includes('fatal: bad object') &&
+      !g.calls.some((c) => c.args[2] === 'commit'))
+}
+
+// 59. The scratch index is removed on EVERY path, including the failing ones.
+//     It is a file per commit under userData, so a leak is unbounded growth
+//     for the life of the install — and the failing paths are exactly the
+//     ones a naive `await`-then-cleanup implementation skips.
+{
+  const removedOk = []
+  const removedBad = []
+  await committerOn(fakeGit({ 'ls-files': { stdout: '100644 a 0\tx\0' } }).run, removedOk)(
+    { root: '/r', paths: ['x'], message: 'm' })
+  await committerOn(fakeGit({ commit: { ok: false, code: 1, stderr: 'no' } }).run, removedBad)(
+    { root: '/r', paths: ['x'], message: 'm' })
+  ok('59 the scratch index is removed after success AND after a refusal',
+    removedOk.length === 1 && removedOk[0] === '/scratch/idx' &&
+      removedBad.length === 1 && removedBad[0] === '/scratch/idx')
+}
+
+// 60. A FAILED RECONCILE MUST NOT UNDO A SUCCESSFUL COMMIT. The commit is on
+//     disk and in history by then; reporting `failed` there would tell the
+//     user their work was not committed while it demonstrably was, and the
+//     obvious next thing they do is commit it again. The reconcile is a
+//     tidiness step for the agent's `git status`, not part of the
+//     transaction — so it is reported and swallowed. Its inverse is also
+//     pinned: an EMPTY path set never reaches git at all, because
+//     `update-index --add` with no paths is a call with nothing to do and
+//     `git commit` on an empty scratch index is a confusing refusal rather
+//     than the honest answer.
+{
+  const g = fakeGit({
+    'ls-files': { stdout: '100644 aaa 0\tx\0' },
+    'rev-parse': { stdout: 'newsha\n' },
+    'update-index': (args) => args.includes('--cacheinfo')
+      ? { ok: false, code: 1, stderr: 'index.lock exists' }
+      : {}
+  })
+  const out = await committerOn(g.run)({ root: '/r', paths: ['x'], message: 'm' })
+  const empty = fakeGit({})
+  const none = await committerOn(empty.run)({ root: '/r', paths: [], message: 'm' })
+  ok('60 a failed reconcile still reports committed, and no paths never calls git',
+    out.kind === 'committed' && out.sha === 'newsha' &&
+      none.kind === 'nothing-to-commit' && empty.calls.length === 0)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)
