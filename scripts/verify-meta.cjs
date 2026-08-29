@@ -216,24 +216,38 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     `workflow=${workflow !== null} badge=${badged}`)
 }
 
-// 17. CONTRIBUTING exists and names the one thing a contributor must do.
-// A CONTRIBUTING that does not name the verification command is decoration:
-// this repository has no test runner and no linter, so a newcomer has no way
-// to guess that `npm run verify` is the entire gate.
+// 17. CONTRIBUTING exists and names the one thing a contributor must do, as a
+// COMMAND rather than a passing mention. A substring test anywhere in the file
+// is satisfied by a sentence that merely talks about verification; requiring
+// the phrase to open a line is what tells a newcomer this is something they
+// can actually run, not decoration — this repository has no test runner and
+// no linter, so a newcomer has no way to guess that `npm run verify` is the
+// entire gate.
 {
-  const text = read('CONTRIBUTING.md') ?? ''
+  const contributing = read('CONTRIBUTING.md') ?? ''
+  const commandLine = contributing
+    .split('\n')
+    .some((l) => l.trim().startsWith('npm run verify'))
   ok('17 CONTRIBUTING names the verify command',
-    text.includes('npm run verify'), text ? `${text.length} bytes` : 'absent')
+    commandLine, contributing ? `${contributing.length} bytes` : 'absent')
 }
 
-// 18. SECURITY exists and is honest about what this app IS. Terminal Canvas
-// spawns arbitrary local commands with the user's own login environment —
-// that is the product, not a vulnerability — and a security policy that does
-// not say so invites reports about the feature while burying real ones.
+// 18. SECURITY exists and is honest about what this app IS, AND names where to
+// report. Terminal Canvas spawns arbitrary local commands with the user's own
+// login environment — that is the product, not a vulnerability — and a
+// security policy that does not say so invites reports about the feature
+// while burying real ones. Length-plus-keyword alone is a file-exists check
+// wearing a disguise: trim the reporting channel out of SECURITY.md later and
+// it still passes on size and the word "arbitrary", leaving a reporter with
+// nowhere to go and nothing red anywhere. The path fragment, not the whole
+// URL, is what is asserted — a future move between `/new` and the advisories
+// index should not fail this check for a reason that has nothing to do with
+// whether a channel is named at all.
 {
   const text = read('SECURITY.md') ?? ''
   ok('18 SECURITY exists and states the threat posture',
-    text.length > 300 && /arbitrary/i.test(text), text ? `${text.length} bytes` : 'absent')
+    text.length > 300 && /arbitrary/i.test(text) && /security\/advisories/.test(text),
+    text ? `${text.length} bytes` : 'absent')
 }
 
 console.log('\n' + '='.repeat(60))
