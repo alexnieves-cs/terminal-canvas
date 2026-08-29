@@ -618,8 +618,16 @@ body {
      by its row track. Keeping the old declaration would resolve it against
      .app's full height and push the canvas back out of the frame. */
   overflow: hidden;
+  /* The dot grid was #1c2030 on #0b0c11 — 1.21:1, imperceptible, a
+     compositing cost buying nothing. It stays, at an alpha that can actually
+     be seen: it is the canvas's only parallax cue, and with none at all
+     panning reads as stuck. The vignette keeps a large dark field from
+     reading as a void; its centre is --s-2, the nearest declared surface,
+     rather than a hand-picked literal that would belong to no ramp. */
   background:
-    radial-gradient(circle at 1px 1px, #1c2030 1px, transparent 0) 0 0 / 32px 32px;
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .05) 1px, transparent 0)
+      0 0 / 28px 28px,
+    radial-gradient(120% 80% at 50% 0%, var(--s-2) 0%, var(--s-0) 60%);
   cursor: default;
 }
 
@@ -1046,7 +1054,7 @@ body {
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
-  color: #f0b429;
+  color: var(--amber);
 }
 
 /* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
@@ -1084,8 +1092,8 @@ body {
   transform: translateX(-50%);
   width: min(680px, 90%);
   z-index: 1000;
-  background: #1b1d27;
-  border: 1px solid #343747;
+  background: var(--s-3);
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
   overflow: hidden;
@@ -1099,15 +1107,15 @@ body {
   align-items: center;
   gap: 8px;
   padding: 0 16px;
-  border-bottom: 1px solid #343747;
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .palette__scope {
   flex: none;
   padding: 3px 8px;
   border-radius: 5px;
-  background: #2f3346;
-  color: #b9bed6;
+  background: var(--s-5);
+  color: var(--fg-2);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -1119,7 +1127,7 @@ body {
   padding: 14px 0;
   background: transparent;
   border: 0;
-  color: #e6e8f0;
+  color: var(--fg);
   font: inherit;
   font-size: 15px;
   outline: none;
@@ -1143,11 +1151,11 @@ body {
 
 .palette__confirm {
   padding: 20px 16px;
-  color: #e6e8f0;
+  color: var(--fg);
   font-size: 15px;
   /* Marked the same red the row that opened it was, so the question reads as
      the continuation of that row rather than as a generic prompt. */
-  box-shadow: inset 3px 0 0 #e8807f;
+  box-shadow: inset 3px 0 0 var(--red);
 }
 
 /* An out-of-range number edit's refusal — genuinely an error, not a question,
@@ -1180,8 +1188,8 @@ body {
   top: 0;
   z-index: 1;
   padding: 8px 16px 4px;
-  background: #1b1d27;
-  color: #7d8199;
+  background: var(--s-3);
+  color: var(--fg-3);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1193,7 +1201,7 @@ body {
   align-items: baseline;
   gap: 10px;
   padding: 7px 16px;
-  color: #c8cbdb;
+  color: var(--fg-2);
   /* A row answers the pointer — hovering selects it and a mousedown runs it —
      so it must not read as inert text the way `default` makes it. */
   cursor: pointer;
@@ -1211,12 +1219,12 @@ body {
    background alone is a subtle enough change that the eye loses the selection
    while scanning, which matters more here than usual because Enter acts on it. */
 .palette__row--selected {
-  background: #2a2d3d;
-  box-shadow: inset 2px 0 0 #6b8afd;
+  background: var(--s-4);
+  box-shadow: inset 2px 0 0 var(--blue);
 }
 
 .palette__row--disabled {
-  color: #6b6f85;
+  color: var(--fg-4);
   /* Back to default: a disabled row takes neither the hover selection nor a
      click, and a pointer cursor over it would promise both. */
   cursor: default;
@@ -1227,11 +1235,11 @@ body {
    other — a red row still runs on one Enter, and an unmarked confirm is a
    question the user did not expect to be asked. */
 .palette__row--destructive .palette__title {
-  color: #e8807f;
+  color: var(--red);
 }
 
 .palette__row--destructive.palette__row--disabled .palette__title {
-  color: #8f6570;
+  color: var(--fg-4);
 }
 
 .palette__title {
@@ -1247,7 +1255,7 @@ body {
    weight and the accent colour instead. */
 .palette__hit {
   background: transparent;
-  color: #9db4ff;
+  color: var(--blue);
   font-weight: 600;
 }
 
@@ -1258,12 +1266,12 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
-  color: #7d8199;
+  color: var(--fg-3);
 }
 
 .palette__chevron {
   flex: none;
-  color: #7d8199;
+  color: var(--fg-3);
 }
 
 /* Shown only where a shortcut genuinely exists — the default preset's spawn
@@ -1272,10 +1280,10 @@ body {
 .palette__kbd {
   flex: none;
   padding: 1px 6px;
-  border: 1px solid #3d4157;
+  border: 1px solid var(--line-strong);
   border-radius: 4px;
-  background: #232637;
-  color: #9095ad;
+  background: var(--s-2);
+  color: var(--fg-3);
   font: inherit;
   font-size: 11px;
   white-space: nowrap;
@@ -1283,7 +1291,7 @@ body {
 
 .palette__empty {
   padding: 10px 16px;
-  color: #7d8199;
+  color: var(--fg-3);
 }
 
 /* The palette's only self-documentation. Every key it names is one the
@@ -1291,8 +1299,8 @@ body {
    "esc close" is the only place the two-stage Escape is visible at all. */
 .palette__footer {
   padding: 7px 16px;
-  border-top: 1px solid #343747;
-  background: #181a23;
-  color: #6b6f85;
+  border-top: 1px solid var(--line-strong);
+  background: var(--s-2);
+  color: var(--fg-3);
   font-size: 11px;
 }
