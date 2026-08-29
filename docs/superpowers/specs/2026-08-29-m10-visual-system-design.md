@@ -3,9 +3,12 @@
 **Status:** designed, not yet implemented.
 **Predecessor:** `2026-08-28-m9-review-layer-design.md`
 **Touches:** `src/renderer/styles.css`, and nothing else.
-**Backlog entries:** none existing — M10 emits three new ones (SVG icon set,
-self-hosted type, hover-revealed row controls), listed under "What M10 does
-not solve".
+**Successor:** M11 — Themes, created by this spec (see "What M10 does not
+solve").
+**Backlog entries:** none existing. M10 emits several, all listed as bullets
+under "What M10 does not solve"; the one it reopens deliberately is
+`ideas-backlog.md` #11's removal of an `'enum'` setting type, which a theme
+picker finally gives a customer.
 
 ## Goal
 
@@ -28,7 +31,8 @@ Run against `styles.css` at 1,153 lines:
 
 | Symptom | Count | Consequence |
 |---|---|---|
-| Colour vocabularies | **2** — 10 `:root` tokens, plus **19 hardcoded hexes** in the palette | The palette's destructive red (`#e8807f`) and the panel's exited red (`--red #f7768e`) are two different reds meaning one thing, on screen together |
+| Colour vocabularies | **3** — 10 `:root` tokens, **19 hardcoded hexes** in the palette block, and a **21-colour `ITheme` in `create-terminal.ts`** | The palette's destructive red (`#e8807f`) and the panel's exited red (`--red #f7768e`) are two different reds meaning one thing, on screen together. The third vocabulary is worse: four of its entries are byte-identical copies of `:root` tokens (`background` = `--panel-bg`, `foreground` = `--text`, `cursor` = `--blue`, and `red`/`green`/`yellow`/`blue` = the four accents), duplicated across a language boundary where no stylesheet audit can see them |
+| Monospace stacks | **4** — `.panel__card`, `.review-node__body`, `create-terminal.ts`, and `--font-mono` once M10 adds it | The xterm stack already names `"JetBrains Mono"`, a face the app does not ship, so it silently falls through to `"SF Mono"` on every machine |
 | Font sizes | **6** — 9, 10, 11, 12, 13, 15px | Five of six steps are ≤2px apart, at or below the just-noticeable difference. They do not establish hierarchy; they read as inconsistency |
 | Border radii | **5** — 3, 4, 5, 6, 10px | A 6px control inside a 10px panel has the wrong concentric offset; nested corners must decrease by the inset, and none of these were chosen to |
 | Distinct padding values | **14** — 1,2,3,4,5,6,7,8,9,10,12,14,16,20 | No rhythm. Adjacent surfaces align by coincidence or not at all |
@@ -188,10 +192,29 @@ it.
 
 ## The token layer
 
+M10 splits `:root` in two, and **the split is the milestone's one piece of
+architecture**. Structure — spacing, radius, motion, type — is theme-invariant
+and stays on bare `:root`. Every colour moves into a theme block keyed by a
+`data-theme` attribute:
+
 ```css
+/* Structure. Never varies by theme, so it never appears in a theme block. */
 :root {
-  color-scheme: dark;   /* native scrollbars, form controls and the
-                           canvas ground stop rendering light */
+  --sp-1: 2px;  /* … see below … */
+}
+
+/* Colour, and colour only. Declared on BOTH selectors so the app is dark with
+   no attribute set — which is today's behaviour, byte for byte.
+
+   The specificity is deliberate rather than incidental. `:root` alone is
+   (0,1,0) and `:root[data-theme="light"]` is (0,2,0), so a later theme block
+   wins on specificity rather than on source order — which means M11 can add
+   `light` without reordering anything, and a third theme after it cannot
+   silently lose to whichever block happens to be declared last. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;   /* per-theme: native scrollbars, form controls and
+                           the canvas ground follow the theme, not the OS */
 
   /* ── Surface ramp ──────────────────────────────────────────────
      Six steps. The old three (bg -> panel -> chrome) spanned 6.6
@@ -280,6 +303,23 @@ it.
   --ease:  cubic-bezier(.2, .8, .2, 1);
 }
 ```
+
+**M10 ships exactly one theme block, and that is the point.** The cost of the
+split today is nothing — the same tokens, one selector wider. The cost of
+*not* splitting is paid later at the worst moment: every rule that reached a
+colour off bare `:root` has to be found and re-pointed while a second palette
+is also being introduced, so a mistake in either is indistinguishable from a
+mistake in the other. Adding a theme after M10 is authoring a block of values.
+Adding one before it would be a refactor.
+
+Two rules keep the split honest, and both are the kind that get "tidied" away:
+
+- **No colour outside a theme block, and no structure inside one.** A radius
+  in the dark block is a radius the light theme must remember to repeat; a
+  colour on bare `:root` is a colour no theme can override.
+- **The renderer sets no `data-theme` in M10.** No attribute means dark, which
+  is what the app already does. Wiring the attribute is M11's first task, not
+  a loose end here.
 
 ## Type scale
 
@@ -389,7 +429,7 @@ introduced — Task 2 cannot be written before Task 1 exists.
 
 | T | Task | Landing condition |
 |---|---|---|
-| 1 | Token layer in `:root`; define `--fg`; back-compat aliases | `verify` green; every `var(--fg)` resolves to a declared token (today all 5 inherit by accident) |
+| 1 | Token layer, **split into structural `:root` and a `[data-theme="dark"]` colour block**; define `--fg`; back-compat aliases | `verify` green; every `var(--fg)` resolves to a declared token (today all 5 inherit by accident); no colour on bare `:root`, no structure inside the theme block |
 | 2 | Retire all 19 hardcoded hexes in the palette block onto tokens | zero `#rrggbb` outside `:root` |
 | 3 | Contrast pass; delete every `opacity`-based text dimming | measured table in the commit message |
 | 4 | Type scale; 9px/10px retired; uppercase labels to 600; one `--font-mono` | ≤4 `font-size` values |
@@ -426,8 +466,55 @@ actually matters for a values-only change:
 
 ## What M10 does not solve
 
-Four things, each a deliberate stop with a reason, and each becoming a backlog
-entry.
+**The short list, for triage later:**
+
+- **Light mode and any further theme** — M10 ships the *shape*, not a second
+  palette. Needs `create-terminal.ts`, a registry-wide retheme, and an `'enum'`
+  setting type. → **M11 — Themes**, sketched below.
+- **Icons are HTML entity glyphs** (`&times;`, `&#9654;`, `&#9998;`, `⚙`, `⟳`,
+  `−`, `+`, `‹`, `›`). Two are emoji-presentation-eligible; all sit at
+  different optical centres; stroke weight is uncontrollable. → SVG set.
+- **Pointer targets are under 24 CSS px** — the three rail row controls are
+  18×21, and five other controls are ~20–21px. WCAG 2.2 SC 2.5.8 wants 24×24.
+  → changes row heights, so it is a layout task.
+- **Row controls are permanently visible** — twelve close buttons on a
+  twelve-panel canvas. Hiding them behind `:hover`/`:focus-within` is the
+  largest decluttering win available, and `verify:panels` 84/85/86 drive those
+  controls, so it needs its own verification story.
+- **Type is the system stack** — and the CSP is `default-src 'self'`, so
+  self-hosting Inter / JetBrains Mono means a bundled dependency and a
+  `font-src` edit to `index.html`.
+- **Four monospace stacks disagree**, and one of them (`create-terminal.ts`)
+  already names a face the app does not ship. M10 unifies the two in CSS; the
+  xterm one is M11's, since it lives in the same file as the terminal theme.
+- **No visual regression test exists, and M10 adds none** — see
+  "Verification" for why that is a position rather than an omission. A
+  screenshot suite is its own milestone.
+- **The dot grid decision** — open question 2, and the only deferred item that
+  is a preference rather than a cost.
+
+Each is expanded below, with the reason it stops here.
+
+### M11 — Themes
+
+The successor this milestone creates. Scope, as currently understood:
+
+- Wire a `data-theme` attribute on the document root, driven by a setting.
+- Add `SettingDef['type'] = 'enum'` with an `options` list — the first genuine
+  customer for a type the codebase removed on purpose (`ideas-backlog.md` #11).
+  Reopening it deliberately is the point; it should be re-argued, not assumed.
+- Author `[data-theme="light"]`, with its contrast re-measured from scratch. A
+  light ground is the harder direction: dark palettes forgive a wrong step,
+  light ones show it.
+- Move the xterm `ITheme` out of `create-terminal.ts` so both palettes come
+  from one place, and add a registry verb that assigns `term.options.theme` to
+  every retained `Terminal`. This is the task that touches the create-once
+  invariant and deserves the most care.
+- Decide whether `prefers-color-scheme` selects the default when the user has
+  expressed no preference. (M10 deliberately does not, because there is no
+  light block for it to select.)
+
+### The four deferred items, in detail
 
 **Icons are HTML entity glyphs.** `&times;`, `&#9654;`, `&#9998;`, `⚙`, `⟳`,
 `−`, `+`, `‹`, `›`. Three separate problems: `⚙` (U+2699) and `▶` (U+25B6) are
@@ -480,7 +567,12 @@ Falsifiable, so that "it looks nicer" is never the evidence:
    ≤ 7 spacing values.
 6. Every interactive element has a `:focus-visible` treatment.
 7. A `prefers-reduced-motion` block exists and covers every animation added.
-8. `npm run verify` green.
+8. Colour appears only inside a `[data-theme]` block; structure appears only
+   on bare `:root`. Removing the theme block leaves a stylesheet with no
+   colour in it — which is the mechanical test that the split is real.
+9. With no `data-theme` attribute set, the rendered app is dark and behaves
+   exactly as it does today.
+10. `npm run verify` green.
 
 ## Risks
 
@@ -564,25 +656,47 @@ carried by context — nobody confuses an open modal with a sidebar.
 *Cost of deferring:* low, but this is a Task 1/5 decision and retrofitting it
 means touching both surfaces twice.
 
-### 4. Is the app committing to dark-only?
+### 4. Is the app committing to dark-only? — **ANSWERED: no**
 
-Every colour in the file assumes dark. `color-scheme: dark` in Task 1 makes
-that explicit to the browser, which is a small commitment with a real payoff
-(native scrollbars and form controls stop rendering light).
+*Decided 2026-08-29. Recorded here rather than deleted, because the reasoning
+constrains M10 and schedules M11.*
 
-- **(a)** Commit. Dark only, stated in the tokens, no light path ever.
-- **(b)** Structure the tokens so a light theme is a swap of the `:root` block
-  later, without building one now.
-- **(c)** Build both.
+**The app supports dark and light, and is built so further themes are values
+rather than work.** M10 does not ship light. It ships the *shape* — the
+`:root` / `[data-theme]` split described under "The token layer" — and stays
+one file with zero DOM risk.
 
-*Recommendation: (b).* It costs nothing at authoring time — it only requires
-that no rule hardcodes a colour outside `:root`, which is criterion 1 anyway —
-and it keeps the door open. **(c)** is a milestone. A terminal canvas running
-agent TUIs that mostly ship dark themes has a weak case for light mode at all,
-but "weak case" is not "decided".
+The split is where it is because light mode is **not** a values-only change,
+which was established by reading `create-terminal.ts` rather than assumed:
 
-*Cost of deferring:* real if answered wrong. Answering **(a)** and later
-wanting light means redoing M10.
+- **The terminal has its own palette, in TypeScript.** A 21-colour `ITheme`
+  const, four of whose entries duplicate `:root` tokens exactly. A light app
+  with dark terminal rectangles in every panel does not read as a light app;
+  it reads as broken.
+- **That palette is fixed at construction, and the `Terminal` is never
+  reconstructed.** It is passed to `new Terminal({ theme })`, and the
+  `Terminal` is created once and retained for the life of the renderer with
+  `term.open()` running at most once — the invariant `create-terminal.ts` and
+  `CLAUDE.md` are both most protective of. Switching theme at runtime means
+  assigning `term.options.theme` on **every retained `Terminal` in the
+  registry**, which is a new registry verb, not a CSS rule.
+- **The settings schema cannot express a theme picker.** `SettingDef['type']`
+  is `'boolean' | 'number'`. `CLAUDE.md` records that an earlier draft added
+  `'enum'` and it was removed deliberately as a customer-free abstraction
+  (`ideas-backlog.md` #11) — while the same file's `keywords` doc comment uses
+  *"a user looking for the theme types 'dark'"* as its motivating example. The
+  schema has been describing this feature as hypothetical since M6b. A theme
+  picker is the customer `'enum'` was missing, so adding it reopens a decision
+  the codebase declined on principle rather than inventing a new one.
+
+Three files, one new registry operation, one reopened schema decision. That is
+a milestone, and it is **M11 — Themes**, sketched under "What M10 does not
+solve".
+
+What remains genuinely open is only the *count*: whether M11 ships two themes
+or a set. The architecture is indifferent — a theme is a block of values under
+a `[data-theme]` selector either way — so this can be answered when M11 is
+specced rather than now.
 
 ### 5. Should `starting` stay visually identical to `idle`?
 
