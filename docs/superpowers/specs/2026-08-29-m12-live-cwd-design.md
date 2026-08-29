@@ -102,7 +102,9 @@ sent per panel and emits `session:live` only on a change — the rule
 there: an undeduped send is thirty messages a minute per panel describing a
 fact that changes when a human types `cd`.
 
-**`shared/ipc-contract.ts`** — one new event, `SESSION_LIVE: 'session:live'`,
+**`shared/ipc-contract.ts`** — one new event on `IPC_EVENTS` (not `IPC`; see
+Verification for why that distinction decides a check's expected number),
+`SESSION_LIVE: 'session:live'`,
 payload `{ panelId, cwd, currentCommand }`. Main to renderer, like `PTY_DATA`
 and `AGENT_STATE`. It is genuinely a new channel rather than something the
 renderer could fold from messages it already has (the test M6d and M7 each
@@ -188,7 +190,14 @@ Test-first, watched failing, in the cheapest tier that can see each fact.
   clause that rejects a merged implementation); and a `.claude/commands`
   directory the panel `cd`'d *into* is what `prompt:list` reads, which is the
   only end-to-end proof the consumer half is wired rather than merely present.
-- **`verify:ipc`** — 31 channels to 32.
+- **`verify:ipc`** — **unchanged at 31, and that is the correct answer rather
+  than an omission.** That suite asserts over `Object.values(IPC)`, the INVOKE
+  channels, each of which must have an `ipcMain.handle`. `session:live` is an
+  `IPC_EVENTS` member — main to renderer, like `PTY_DATA` and `AGENT_STATE` —
+  which is handled by nobody and counted by nothing. M6d hit this exact
+  boundary and recorded it: it added no invoke and the count stayed at 20. An
+  earlier draft of this spec said 31 to 32; it was wrong, and a task written
+  from it would have failed the suite by "fixing" a correct count.
 
 Both tmux-dependent blocks skip **loudly** where no tmux binary is found, the
 rule every tmux block in this repo already obeys.
