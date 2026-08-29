@@ -352,6 +352,45 @@ node re-reads on its own when its subject's agent goes idle, and on the refresh
 control in its header; it does not watch the filesystem (pull, not push), so a
 change made outside a panel needs that click.
 
+**A review node can now commit what it is showing.** M9c adds one verb to the
+node: type a message, press Enter, and the files the node lists become a real
+commit in that repository. It is an ordinary commit — your `pre-commit` hook
+runs, and there is no `--no-verify` and no flag that could become one, because a
+tool that quietly skipped a repository's own checks would be worth less than one
+that refused. A hook that rejects the commit is reported as a refusal carrying
+the hook's own output verbatim, which is a different answer from "this did not
+run at all": the two have different fixes, and the split is by which call failed
+rather than by guessing at git's wording.
+
+**Your own index is never written while the commit is assembled.** The files are
+staged into a scratch index outside the repository, the commit is made against
+that, and your `.git/index` is byte-identical the whole way through — so an
+agent running `git add` in that repository at the same moment cannot collide
+with a commit it did not ask for. What the commit does have to touch is the index
+afterwards, and that is the half that is easy to get wrong by leaving it alone:
+once HEAD moves and the index does not, the index still describes the previous
+tree, and the agent's own `git status` reports phantom deletions for files that
+were just committed. So the committed paths are brought back in step by their
+exact blob shas — never by re-reading the working tree, which would stage an
+edit the agent made in the interval behind its back — and only those paths, so
+anything you had staged yourself survives.
+
+**Afterwards the node reads clean, because its baseline advances.** A node diffs
+the working tree against the snapshot it holds, and committing does not change
+the working tree — so without the advance the node would report the same files
+forever and a second press would commit them again. Committing moves its
+baseline to the commit it just made. It is not undoable, and it deliberately does
+not pretend to be: `Cmd+Z` leaves it alone rather than restoring a baseline that
+would make the node report work already in history.
+
+**Where a commit cannot be attributed, the button is visible and refuses.** Two
+panels sharing one checkout produce a `shared` reading, and committing there
+would put another agent's work under this node's message — so the control stays
+on screen, disabled, saying exactly that. Hiding it would make "not supported
+here" look identical to "not built yet". There is no amend, no branch, no remote
+and no per-file selection: the commit takes every file the node's answer
+contains, not only the ones that fit on screen.
+
 ## Milestones
 
 | | Scope | Status |
@@ -376,6 +415,7 @@ change made outside a panel needs that click.
 | M8d | Workspaces and attention in the rail | ✅ done |
 | M9a | The review engine: what each agent changed, in the inspector | ✅ done |
 | M9b | The panel kind: a review node on the canvas | ✅ done |
+| M9c | Commit: a review node's work becomes a commit | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
