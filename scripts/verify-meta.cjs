@@ -122,8 +122,16 @@ const REQUIRED_HEADINGS = [
   '## Contributing',
   '## License'
 ]
+// Headings are matched against the README with fenced code blocks REMOVED.
+// `includes('\n## X\n')` on the raw file is satisfied by the heading string
+// sitting inside a ``` example or a table cell, so a future edit could delete
+// a real section, leave its name in a code sample, and keep this suite green —
+// the exact drift this file exists to make loud. README itself must stay RAW:
+// check 14 asserts the IPC channels appear, and those live inside the
+// architecture fence.
+const README_PROSE = README.replace(/^[ \t]*```[\s\S]*?^[ \t]*```/gm, '')
 for (const [i, heading] of REQUIRED_HEADINGS.entries()) {
-  ok(`${8 + i} README has "${heading}"`, README.includes('\n' + heading + '\n'))
+  ok(`${8 + i} README has "${heading}"`, README_PROSE.includes('\n' + heading + '\n'))
 }
 
 console.log('\n' + '='.repeat(60))
