@@ -66,7 +66,9 @@ const LIVE_AT_BOOT = ['s01']
    destroy real agents. verify:pty-manager owns 'terminal-canvas-verify', and
    the two suites must not share a server — this one reloads a renderer while
    that one is killing sessions out from under whatever it finds. */
-const PANELS_SOCKET = 'terminal-canvas-verify-panels'
+const { verifySocket } = require('./verify-socket.cjs')
+const PANELS_SOCKET = verifySocket('terminal-canvas-verify-panels')
+console.log(`[verify:panels] tmux socket: ${PANELS_SOCKET}`)
 
 /** Absolute path or null. A GUI app has a bare PATH, so never rely on the name. */
 function findTmux() {

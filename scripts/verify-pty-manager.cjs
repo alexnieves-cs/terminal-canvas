@@ -39,7 +39,13 @@ const { PtyManager } = require(OUT)
    running. The socket is a defaulted parameter on every argv builder in
    tmux-args.ts precisely so this can differ here without weakening the
    production default; verify-tmux.cjs check 9 still pins that default. */
-const VERIFY_SOCKET = 'terminal-canvas-verify'
+const { verifySocket } = require('./verify-socket.cjs')
+/* Suffixed by TC_VERIFY_SUFFIX so two checkouts can verify at once without
+   kill-server'ing each other's sessions; unset is the historic value, so a
+   single checkout is unchanged. See verify-socket.cjs for why it is a suffix
+   rather than a whole name. */
+const VERIFY_SOCKET = verifySocket('terminal-canvas-verify')
+console.log(`[verify:pty-manager] tmux socket: ${VERIFY_SOCKET}`)
 
 const OUT_BACKEND = join(__dirname, '..', 'out', 'verify', 'session-backend.cjs')
 buildSync({

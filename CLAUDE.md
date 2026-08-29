@@ -727,6 +727,41 @@ exists to prevent. `probeTmux` therefore writes the config and then runs
 `DirectBackend` with a reason naming the cause. One extra exec at startup, and
 starting the server early is free: `shutdown()` kill-servers it anyway.
 
+**...and two concurrent verify runs must not touch each other's
+(`scripts/verify-socket.cjs`, `TC_VERIFY_SUFFIX`).** The rule below keeps the
+suites off the app's socket; nothing kept them off EACH OTHER's. `VERIFY_SOCKET`
+and `PANELS_SOCKET` were module constants with no override, and both suites end
+in `shutdown()` — `kill-server` — so two checkouts running `npm run verify` at
+the same moment kill each other's sessions mid-run. That is #49 one layer down,
+and CLAUDE.md already named the cause in the app's own case: "`TMUX_SOCKET`
+being a module constant is what makes both true."
+
+It went unnoticed because two simultaneous runs were implausible until git
+worktrees made them ordinary — the same reason M4c could not see the app-level
+version of this bug. `verifySocket(base)` appends a sanitised `TC_VERIFY_SUFFIX`
+to each suite's own base name, and each suite prints the socket it resolved,
+because "which socket am I on" is exactly the question a collision raises.
+
+Three details. It is a **suffix, never a whole socket name**: each suite owns a
+DIFFERENT socket deliberately (`verify-panels.cjs`'s own comment says
+"verify:pty-manager owns 'terminal-canvas-verify'"), and one full-name override
+set for a whole run would collapse them onto one server — reintroducing between
+two SUITES the collision it was set to prevent between two CHECKOUTS. A blank or
+whitespace value falls back to the base, the `TC_TMUX_SOCKET=` trap
+`resolveSocket` already documents. And the suffix is filtered to
+`[A-Za-z0-9_-]`, because a socket name is a FILENAME and a suffix containing a
+slash escapes the directory tmux derived for it.
+
+**Measured, both directions.** A canary session was left on the default socket
+and the suite run twice: with `TC_VERIFY_SUFFIX` set it survived and the suite
+was 28/28; without, it was destroyed. That control run also failed CHECK 14
+(`reported=0` instead of 7), which is the OTHER hazard this file records under
+check 20's obligation, reproduced by accident: `-f <conf>` applies only when a
+client STARTS a server and is ignored against one already running, so the
+canary's config-less server had no `pane-died` hook and the exit code fell
+through to the client's. A stale server does not merely cost you sessions — it
+makes one specific check lie.
+
 **The verify suites must never touch the production socket.** Every argv
 builder in `tmux-args.ts` takes the socket as a *defaulted* parameter for this
 reason alone; `TMUX_SOCKET` stays the production value and `verify:tmux` 9 still

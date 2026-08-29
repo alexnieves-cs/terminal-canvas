@@ -51,6 +51,8 @@ Audited against `main` at commit `ac35041` (M9c done; M10 in flight in a worktre
 - **Do not delete or rewrite `CLAUDE.md`'s body, and do not restructure `README.md`'s `### Things that are non-obvious` section.** Both are load-bearing prose that took milestones to accumulate. This plan adds around them.
 - **Tasks 7 and 9 require a human.** They are marked. An agent must stop at their gate rather than improvise an icon or publish a release.
 - **Author and year for all licensing text:** `Alex Nieves`, `2026`.
+- **Run every suite with `TC_VERIFY_SUFFIX` set.** This plan is executed in a worktree alongside at least one other active worktree, and `verify:pty-manager`, `verify:panels` and `verify:packaged` all call `shutdown()` — `kill-server` — on a tmux socket. `scripts/verify-socket.cjs` exists for exactly this case; see Task 0.
+- **`package.json`'s `"verify"` chain WILL conflict at merge, and that is expected.** The parallel `m10-visual-system` branch prepends `npm run verify:styles && ` to the same line this plan prepends `npm run verify:meta && ` to. The resolution is to keep both, never to pick one side. See Task 0's closing note.
 
 ## File Structure
 
@@ -85,6 +87,67 @@ Audited against `main` at commit `ac35041` (M9c done; M10 in flight in a worktre
 |---|---|---|
 | `verify:meta` | — (new) | 1–18 |
 | `verify:package` | 10 | 11 |
+
+---
+
+### Task 0: The worktree, and isolating it from the parallel session
+
+**Files:** none committed. This task creates the workspace the other nine run in.
+
+**Interfaces:**
+- Produces: an isolated checkout on branch `oss-beta`, and the environment variable `TC_VERIFY_SUFFIX=oss` under which every later task's `npm run verify` must run.
+
+At least one other worktree (`m10-visual-system`) is active on this machine, and `main` is moving under both — it advanced twice during the audit that produced this plan. Two things must be true before Task 1 starts: this work must not share a branch with anything else, and its verify runs must not reach into another checkout's tmux sessions.
+
+The second one is not hypothetical. `verify:pty-manager`, `verify:panels` and `verify:packaged` each end by calling `shutdown()`, which is `tmux kill-server`. Two checkouts verifying at the same moment on the same socket kill each other's sessions mid-run, and `scripts/verify-socket.cjs` says why that is worse than an ordinary conflict: *"the loser gets a red check in whichever suite happened to be mid-run, in a branch that is fine, pointing at code that is correct. Re-running makes it go away."*
+
+- [ ] **Step 1: Branch from the current `main`, in its own worktree**
+
+```bash
+git -C /Users/alexnieves/Documents/terminal-canvas fetch origin
+git -C /Users/alexnieves/Documents/terminal-canvas worktree add \
+  .claude/worktrees/oss-beta -b oss-beta main
+cd /Users/alexnieves/Documents/terminal-canvas/.claude/worktrees/oss-beta
+```
+
+`.claude/` is gitignored, so the worktree itself is never committed. Branch from `main`, not from the current checkout's HEAD, which may be another milestone's branch.
+
+- [ ] **Step 2: Give the worktree a node_modules**
+
+The verify suites invoke the Electron binary by path (`node_modules/electron/dist/...`) and `node-pty` is compiled natively, so an empty worktree cannot run anything. Sharing the parent's is faster than a fresh install and was confirmed working:
+
+```bash
+ln -s /Users/alexnieves/Documents/terminal-canvas/node_modules node_modules
+node -e "require('electron'); console.log('electron resolves')"
+```
+
+Nothing in this plan changes `dependencies` or `devDependencies`, so a shared tree is safe. **Do not run `npm install` or `npm ci` in this worktree** — through the symlink it would rewrite the parent's `node_modules` under the other session. If a real install is ever needed, remove the symlink and run `npm ci` for a private copy.
+
+- [ ] **Step 3: Isolate the tmux sockets**
+
+```bash
+export TC_VERIFY_SUFFIX=oss
+```
+
+This must be set in **every shell** that runs a verify suite for the rest of the plan. It appends `-oss` to each suite's socket name, leaving the other worktree — which sets nothing and therefore uses the historic names — completely undisturbed.
+
+- [ ] **Step 4: Prove the isolation before trusting it**
+
+```bash
+npm run verify:pty-manager 2>&1 | grep -iE "socket|passed" | head
+```
+
+Expected: the run reports a socket ending in `-oss`, and finishes green. If the socket name has **no** `-oss` suffix, the export did not reach this process — fix that before running anything else, or the first full `npm run verify` will kill the other session's tmux sessions.
+
+- [ ] **Step 5: Establish the baseline**
+
+```bash
+npm run verify
+```
+
+Expected: every suite green. This is the "before" reading. If it is red **now**, the problem belongs to `main` and to another session, not to this plan — report it and stop rather than fixing product code here.
+
+> **Closing note, for whoever merges.** The only conflict this plan is expected to produce is one line: `package.json`'s `"verify"` chain, where `m10-visual-system` prepends `npm run verify:styles && ` and this branch prepends `npm run verify:meta && `. Keep **both**, in either order — they are independent suites and the chain is ordered cheapest-first by convention, so `verify:meta && verify:styles && verify:viewport && …` is the natural resolution. Everything else this plan touches is either a new file or a region of `README.md` and `CLAUDE.md` that M10 does not edit. Rebase onto `main` immediately before merging — `main` moves fast — and re-run `npm run verify` after resolving, because a conflict resolution in the verify chain is exactly the kind that still parses and silently drops a suite.
 
 ---
 
@@ -408,7 +471,7 @@ Expected: **FAIL** on checks 8 through 13, all six. `7/13 passed`.
 
 Replace the current first five lines of `README.md` — the `# Terminal Canvas` title through the `Think Figma, but the objects are terminals.` line, stopping **before** the blank line preceding `## Stack` — with exactly this:
 
-```markdown
+````markdown
 # Terminal Canvas
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -498,7 +561,7 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 
 Trackpad: two-finger drag pans, pinch zooms. A wheel over the focused panel
 scrolls that terminal instead of the camera.
-```
+````
 
 Everything from `## Stack` onward stays exactly where it is.
 
@@ -506,7 +569,7 @@ Everything from `## Stack` onward stays exactly where it is.
 
 At the very end of `README.md`, after the `Unscheduled ideas …` paragraph that currently closes the file, append:
 
-```markdown
+````markdown
 
 ## Verification
 
@@ -545,7 +608,7 @@ comment explaining the failure it guards.
 ## License
 
 [MIT](LICENSE) © 2026 Alex Nieves
-```
+````
 
 - [ ] **Step 5: Run the checks to verify they pass**
 
@@ -919,7 +982,7 @@ Expected: **FAIL** on 17 and 18, both `absent`. `16/18 passed`.
 
 - [ ] **Step 3: Write `CONTRIBUTING.md`**
 
-```markdown
+````markdown
 # Contributing
 
 Thanks for looking. This is a beta and the surface is still moving, so an issue
@@ -981,7 +1044,7 @@ answer is usually "because the obvious version fails silently".
 
 Conventional, scoped to the milestone: `feat(m9c): …`, `fix(m8a): …`,
 `docs(oss): …`.
-```
+````
 
 - [ ] **Step 4: Write `SECURITY.md`**
 

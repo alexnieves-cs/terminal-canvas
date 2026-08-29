@@ -45,7 +45,13 @@ const config = buildConfig()
    shipped unquoted through eight task reviews because every fixture used a
    space-free path. */
 const USER_DATA = mkdtempSync(join(tmpdir(), 'tc packaged '))
-const SOCKET = 'terminal-canvas-verify-packaged'
+const { verifySocket } = require('./verify-socket.cjs')
+/* Suffixed like the other two suites. Concurrent packaged runs are less
+   likely than concurrent `npm run verify` runs — this one is not in the
+   chain — but checks 10 and 11 launch two real app instances against this
+   socket, so a second run arriving mid-check is the same collision with a
+   more confusing symptom. */
+const SOCKET = verifySocket('terminal-canvas-verify-packaged')
 
 let child = null
 let child2 = null
