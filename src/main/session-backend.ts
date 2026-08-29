@@ -182,7 +182,8 @@ export function createTmuxBackend(o: {
         // Anything list() can see outlived whatever destroyed the last
         // renderer, so from the next renderer's point of view every one of
         // these is a reattach by definition.
-        reattached: true
+        reattached: true,
+        currentCommand: e.currentCommand
       }))
     },
 

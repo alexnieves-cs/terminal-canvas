@@ -854,6 +854,95 @@ ok('55 a review row is never dormant', R.buildRailRows(
     `paths=${JSON.stringify(paths)} rows=${m.files.map((f) => f.path).join(',')}`)
 }
 
+// 61. BOTH, never one merged field. The spawn-time cwd and the live one are
+// separate rows, which is this pane's stated reason to exist applied to a
+// second pair: "why is this not where I started it" is answerable only when the
+// user can see both halves. A merged implementation renders something entirely
+// plausible and deletes the feature — and it passes any check that only asserts
+// the live value is on screen, which is why this asserts the SPAWN row is still
+// there too.
+{
+  const panel = { rect: { id: 'p1', x: 0, y: 0, w: 100, h: 100, z: 1 },
+    spec: { panelId: 'p1', cwd: '/home/me', cols: 80, rows: 24 } }
+  const status = { kind: 'running', pid: 42, command: '/bin/zsh', cwd: '/home/me',
+    reattached: false }
+  const model = R.buildInspectorModel(panel, status, { cwd: '/repo/x', currentCommand: 'claude' })
+  const at = (k) => model.fields.find((f) => f.key === k)
+  ok('61 the inspector shows the live cwd BESIDE the spawn one, not instead of it',
+    at('cwd') !== undefined && at('cwd').value === '/home/me' &&
+      at('live-cwd') !== undefined && at('live-cwd').value === '/repo/x' &&
+      at('live-command') !== undefined && at('live-command').value === 'claude',
+    JSON.stringify(model.fields))
+}
+
+// 62. NO LIVE ANSWER, NO ROW — and read this check's limit before trusting it.
+// It asserts an ABSENCE, so it is GREEN before the feature exists and it can
+// never be watched failing; it is a regression guard, and 61 and 63 are what
+// carry the milestone. What it guards is real: the direct backend has no live
+// answer and never will, and a panel on the tmux backend has none until the
+// first tick lands, so this is the ordinary state rather than an error.
+// Backfilling the spawn cwd under a live label is indistinguishable from a
+// correct answer, which is worse than an absent row — while a CONSUMER, which
+// needs a directory rather than making a claim, falls back happily. The two
+// rules disagree on purpose.
+{
+  const panel = { rect: { id: 'p1', x: 0, y: 0, w: 100, h: 100, z: 1 },
+    spec: { panelId: 'p1', cwd: '/home/me', cols: 80, rows: 24 } }
+  const status = { kind: 'running', pid: 42, command: '/bin/zsh', cwd: '/home/me',
+    reattached: false }
+  const model = R.buildInspectorModel(panel, status, undefined)
+  const keys = model.fields.map((f) => f.key)
+  ok('62 with no live answer there is no live row, and no backfill',
+    !keys.includes('live-cwd') && !keys.includes('live-command') &&
+      keys.includes('cwd'),
+    JSON.stringify(keys))
+}
+
+// 63. THE SIGNATURE MOVES. inspectorSignature is what Canvas freezes the pane
+// on, so a live value not covered by it renders once and then never updates
+// again — a cwd frozen at whatever it was when the panel was selected, with
+// nothing throwing. Both halves are asserted separately, because an
+// implementation that folded in only the cwd passes a cwd-only check.
+{
+  const panel = { rect: { id: 'p1', x: 0, y: 0, w: 100, h: 100, z: 1 },
+    spec: { panelId: 'p1', cwd: '/home/me', cols: 80, rows: 24 } }
+  const status = { kind: 'running', pid: 42, command: '/bin/zsh', cwd: '/home/me',
+    reattached: false }
+  const sig = (live) => R.inspectorSignature(R.buildInspectorModel(panel, status, live))
+  const base = sig({ cwd: '/a', currentCommand: 'zsh' })
+  const movedCwd = sig({ cwd: '/b', currentCommand: 'zsh' })
+  const movedCmd = sig({ cwd: '/a', currentCommand: 'node' })
+  ok('63 a live cwd change and a live command change each move the signature',
+    base !== movedCwd && base !== movedCmd && movedCwd !== movedCmd,
+    `${base} | ${movedCwd} | ${movedCmd}`)
+}
+
+// 64. THE LIVE ROWS OUTLIVE THE PROCESS if the push is gated on `live !==
+// undefined` alone. Nothing clears the live store when a session exits — every
+// clearLiveSession call site in Canvas.tsx is a DISPOSE, not an exit — so a
+// panel whose shell ran `exit` keeps its last-known live answer sitting in the
+// map forever, and buildInspectorModel would go on rendering "running: sh"
+// two rows above "exit: exited 0" for the rest of that panel's life. That is
+// the milestone's own thesis (a present-tense label showing a stale value is
+// worse than none) failing through the one path nobody looked at. The fix is
+// isRunning, this file's own shared predicate for "is this panel a live
+// process" — not a second, narrower copy of that judgment written inline here.
+// Uses the top-of-file `panel()`/`running()` helpers rather than hand-rolled
+// literals, because a literal built with `z` nested inside `rect` (as checks
+// 61-63 above do) is the WRONG shape for a real Panel, which keeps `z`
+// top-level, and that mistake should not spread to a fourth check.
+{
+  const p = panel('p1', { spec: { cwd: '/home/me', args: [] } })
+  const liveAnswer = { cwd: '/repo/x', currentCommand: 'claude' }
+  const exited = { kind: 'exited', code: 0 }
+  const model = R.buildInspectorModel(p, exited, liveAnswer)
+  const keys = model.fields.map((f) => f.key)
+  ok('64 an exited panel renders no live row even with a live answer still cached, while its spawn cwd stays',
+    !keys.includes('live-cwd') && !keys.includes('live-command') &&
+      keys.includes('cwd') && keys.includes('exit'),
+    JSON.stringify(keys))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

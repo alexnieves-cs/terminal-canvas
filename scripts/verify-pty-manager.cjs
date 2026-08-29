@@ -9,7 +9,7 @@ const { buildSync } = require('esbuild')
 const { join } = require('node:path')
 const os = require('node:os')
 const { execFileSync } = require('node:child_process')
-const { mkdtempSync, writeFileSync, existsSync, mkdirSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 /** Absolute path or null. A GUI app has a bare PATH, so never rely on the name. */
@@ -705,7 +705,110 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // why that matters — a later run reattaches to a server still wired to
       // THIS run's now-deleted exitDir and check 14 silently reports the
       // wrong exit code). Whoever appends check 23 inherits this obligation
-      // next.
+      // next — and check 23 is next, so the shutdown moves below it.
+    }
+
+    // 23. THE DEDUPE, which is this milestone's whole cost story and is
+    // invisible on screen when it breaks — it shows up as heat, not as a
+    // wrong pixel. A panel that has not moved must produce NO further
+    // session:live traffic after its first value, and a `cd` must produce
+    // exactly one more.
+    //
+    // The fixture has to span SEVERAL ticks or it proves nothing: an
+    // implementation with no dedupe at all emits once per tick, so a check
+    // that samples a single tick's worth sees one message either way and is
+    // green against the defect. This is check 17's trap in reverse — there
+    // the danger was too little output to distinguish, here it is too short
+    // a window.
+    {
+      const h = makeHarness(tmuxBackend)
+      const liveOf = () => h.events
+        .filter((m) => m.channel === 'session:live' && m.payload.panelId === 'L1')
+        .map((m) => m.payload)
+
+      // A real directory, owned by this run alone — not os.homedir(). A
+      // login shell (-l) sources the running developer's own .zprofile/
+      // .zshrc, and a dotfile that cd's on startup would shift settled[0]'s
+      // cwd or falsify after[1] !== after[0] on one machine and not another,
+      // which is exactly the kind of state this repo's suites are written
+      // not to depend on (see CLAUDE.md on why verify:panels fences its
+      // project-prompt read to its own fixture directory). A plain /bin/sh
+      // with no args is a non-login, non-interactive-rc shell: nothing it
+      // reads is outside this repo's control.
+      const liveDir = mkdtempSync(join(tmpdir(), 'tc pty-manager live '))
+      await h.manager.create({ panelId: 'L1', cwd: liveDir, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+      // Long enough for at least three ticks at LIVE_TICK_MS (2000ms).
+      await sleep(7000)
+      const settled = liveOf()
+
+      h.manager.write('L1', 'cd /tmp\n')
+      await sleep(7000)
+      const after = liveOf()
+
+      ok('23 live cwd is sent once, then only when it CHANGES',
+        settled.length === 1 &&
+          typeof settled[0].cwd === 'string' && settled[0].cwd.length > 0 &&
+          after.length === 2 && after[1].cwd !== after[0].cwd,
+        `settled=${settled.length} total=${after.length} ${JSON.stringify(after)}`)
+      h.manager.kill('L1')
+      try { rmSync(liveDir, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
+    // 24. detachAll() must clear lastLive too, not only kill(). This is the
+    // branch's SUBTLEST fix and nothing else in this suite would notice its
+    // removal: check 23 above never reloads, and the panels suite's reload
+    // checks (26, 91) read nothing live at all. A reload's fresh PtyManager
+    // would start with an empty lastLive by construction — but THIS manager
+    // survives a detach and keeps running, with its map intact, so without the
+    // clear pollLive dedupes the reattached panel's first post-detach poll
+    // against its stale PRE-detach value and sends nothing until the cwd
+    // actually changes again, which may be never. On screen that is a
+    // reattached panel — a real, live, running tmux session — whose inspector
+    // goes on showing wherever it was a run ago: the milestone's own thesis (a
+    // present-tense label showing a stale value is worse than none) failing
+    // silently, through detachAll() rather than through the render path FR1
+    // covers.
+    //
+    // detachAll() only DETACHES the local client; the tmux session it leaves
+    // running is exactly what lets a plain create() at the same id reattach a
+    // moment later, so this reuses the same cwd/command on both sides of the
+    // detach on purpose — the dedupe key must be able to tell "the panel
+    // reattached with an unchanged cwd" apart from "the panel is still being
+    // polled without having reattached at all", and only a SECOND emitted
+    // value proves the former.
+    {
+      const h = makeHarness(tmuxBackend)
+      const liveOf = () => h.events
+        .filter((m) => m.channel === 'session:live' && m.payload.panelId === 'L2')
+        .map((m) => m.payload)
+      const detachLiveDir = mkdtempSync(join(tmpdir(), 'tc pty-manager detach-live '))
+      const spawnArgs = { panelId: 'L2', cwd: detachLiveDir, command: '/bin/sh', args: [], cols: 80, rows: 24 }
+
+      await h.manager.create(spawnArgs)
+      await waitFor(() => liveOf().length >= 1, 5000, 100)
+      const beforeDetach = liveOf().length
+
+      h.manager.detachAll()
+      await h.manager.create(spawnArgs)
+      // Two ticks' margin, the same allowance check 23 gives its own dedupe
+      // assertion, so a poll that merely landed slow does not read as "never
+      // cleared".
+      await waitFor(() => liveOf().length >= beforeDetach + 1, 2 * 2000 + 1000, 100)
+      const afterReattach = liveOf()
+
+      ok('24 detachAll() clears lastLive, so a reattach at an unchanged cwd still produces a second live answer',
+        afterReattach.length >= beforeDetach + 1,
+        `beforeDetach=${beforeDetach} afterReattach=${afterReattach.length} events=${JSON.stringify(afterReattach)}`)
+
+      h.manager.kill('L2')
+      try { rmSync(detachLiveDir, { recursive: true, force: true }) } catch { /* best effort */ }
+
+      // Check 20's obligation, inherited via 22b and 23: this block must end
+      // in a definite kill-server, never a session kill that leaves a stale
+      // server for the next run — see check 20's own comment for why (a later
+      // run's client would reattach to a server still wired to THIS run's
+      // now-deleted exitDir, and check 14 would silently report the wrong
+      // exit code). Whoever appends check 25 inherits it next.
       tmuxBackend.shutdown()
     }
   }

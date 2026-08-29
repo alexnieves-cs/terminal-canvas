@@ -6,6 +6,7 @@
  */
 import type {
   AgentStateUpdate,
+  LiveSessionUpdate,
   PanelId,
   PanelSpec,
   PtyCreateResult,
@@ -236,7 +237,20 @@ export const IPC_EVENTS = {
    * only on an actual CHANGE of state, so a panel printing a megabyte
    * produces one message, not thousands.
    */
-  AGENT_STATE: 'agent:state'
+  AGENT_STATE: 'agent:state',
+  /**
+   * Where a panel is and what it is running, pushed when either CHANGES.
+   *
+   * An IPC_EVENTS member and not an IPC one, which decides a number: verify:ipc
+   * asserts over Object.values(IPC) — invoke channels, each needing an
+   * ipcMain.handle — and is unmoved by this. M6d hit the same boundary and
+   * recorded it.
+   *
+   * Deduped in main for the reason AGENT_STATE is: this rides a 2s tick, and an
+   * unconditional send would be thirty messages a minute per panel describing a
+   * fact that changes when a human types `cd`.
+   */
+  SESSION_LIVE: 'session:live'
 } as const
 
 export interface SessionBackendInfo {
@@ -413,6 +427,11 @@ export interface CanvasBridge {
   }
   session: {
     info(): Promise<SessionBackendInfo>
+    /**
+     * Live cwd/command updates. Each subscribe returns its own unsubscribe, so
+     * a React effect can clean up without stacking listeners.
+     */
+    onLive(listener: (update: LiveSessionUpdate) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>

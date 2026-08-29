@@ -2,6 +2,7 @@ import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { isReviewPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
+import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
 
 /**
@@ -124,7 +125,15 @@ export function isRestartable(status: PanelStatus | undefined): boolean {
  */
 export function buildInspectorModel(
   panel: Panel,
-  status: PanelStatus | undefined
+  status: PanelStatus | undefined,
+  /**
+   * Where the panel IS, when anything knows. OPTIONAL and defaulted to
+   * undefined, so every pre-M12 caller and every pre-M12 check keeps its exact
+   * meaning — the trade review-engine.ts's `notARepo` dep already made, and for
+   * the same reason: a required dep would change what a dozen existing checks
+   * assert while looking like a widening.
+   */
+  live?: LiveSession | undefined
 ): InspectorModel {
   if (isReviewPanel(panel)) {
     return {
@@ -160,6 +169,31 @@ export function buildInspectorModel(
     // an accident.
     { key: 'pid', label: 'pid', value: running === undefined ? '—' : String(running.pid) }
   ]
+  // BESIDE, never instead of. See this function's own doc comment: the pane
+  // renders the links rather than the answer, and a panel that has cd'd is
+  // exactly the case where both halves are the point. Gated on isRunning, not
+  // on `live !== undefined` alone: nothing clears the live store when a
+  // process exits (see clearLiveSession's own call sites — every one of them
+  // is a DISPOSE, not an exit), so an unguarded push renders "running: sh"
+  // beside "status: exited 0" for the rest of that panel's life — the
+  // milestone's own thesis, a present-tense label showing a stale value, failing
+  // through the one path nobody looked at. A spawn cwd under a live label is
+  // still indistinguishable from a correct one, so this is also why the field
+  // is absent rather than merely stale-looking when there is no live answer at
+  // all (the direct backend, or a process that has not been polled yet).
+  //
+  // Each half is ALSO skipped individually when empty: verify:tmux 28 exists
+  // because parseListOutput tolerates a five-column line with
+  // currentCommand: '' — a tmux server started by an older build, ignoring a
+  // new client's format string. Pushing that through renders a labelled row
+  // with nothing in it, on exactly the machine-mid-upgrade case the tolerance
+  // was written to survive.
+  if (live !== undefined && isRunning(status)) {
+    if (live.cwd !== '') fields.push({ key: 'live-cwd', label: 'now in', value: live.cwd })
+    if (live.currentCommand !== '') {
+      fields.push({ key: 'live-command', label: 'running', value: live.currentCommand })
+    }
+  }
   if (status?.kind === 'exited') {
     // A TEMPLATE, never `code || …`: 0 is the commonest exit there is and the
     // falsy branch would print the wrong tail for exactly it. Same trap

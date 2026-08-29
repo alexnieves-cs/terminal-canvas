@@ -379,6 +379,23 @@ app.whenReady().then(async () => {
   // of bug the tmux exitDir's quoting note in CLAUDE.md records).
   const PROJECT_DIR = mkdtempSync(join(tmpdir(), 'tc panels project '))
   mkdirSync(join(PROJECT_DIR, '.claude', 'commands'), { recursive: true })
+  // A SET, not a single directory, since M12's check 117 needs a second
+  // fixture — the point of the fence is unchanged and is stated at length
+  // below: every cwd outside it answers [], so a panel still carrying
+  // `cwd: '~'` cannot make this suite read the running developer's own
+  // ~/.claude/commands. Widening it by one fixture directory weakens
+  // nothing; replacing it with a truthiness test would remove the fence.
+  //
+  // BOTH spellings of PROJECT_DIR, for the identical reason REVIEW_FENCES
+  // carries two prefixes (see its own comment further down): macOS tmpdir()
+  // is /var/folders/... while tmux's own `pane_current_path` answers the
+  // resolved /private/var/folders/... — M12's live cwd is read straight from
+  // tmux, unresolved-vs-resolved, so a panel that has never moved at all
+  // already fails a single-spelling fence the instant reloadPrompts prefers
+  // the live answer. Without both, check 43 — which predates M12 and asserts
+  // nothing about live cwd — goes red for a reason that has nothing to do
+  // with its own fixture, the moment ANY panel's live tick lands.
+  const PROMPT_DIRS = new Set([PROJECT_DIR, realpathSync(PROJECT_DIR)])
   // The name comes from the FILENAME (readProjectPrompts strips the .md), so
   // this string is what check 43's query and row assertion both target.
   const PROJECT_PROMPT_NAME = 'harness-project-prompt'
@@ -641,10 +658,16 @@ app.whenReady().then(async () => {
     // still caught, because the fence is on the cwd the RENDERER sent: a
     // palette that listed some other panel's directory gets `[]` here and
     // check 43's row never appears.
+    // A SET, not a single directory, since M12's check 117 needs a second
+    // fixture — the point of the fence is unchanged and is stated at length
+    // above: every cwd outside it answers [], so a panel still carrying
+    // `cwd: '~'` cannot make this suite read the running developer's own
+    // ~/.claude/commands. Widening it by one fixture directory weakens
+    // nothing; replacing it with a truthiness test would remove the fence.
     listPrompts: (cwd) =>
       mergePrompts(
         layoutStore.prompts(),
-        cwd === PROJECT_DIR ? readProjectPrompts(resolveCwd(cwd)) : []
+        PROMPT_DIRS.has(cwd) ? readProjectPrompts(resolveCwd(cwd)) : []
       ),
     savePrompt: () => {},
     removePrompt: () => false
@@ -2289,18 +2312,37 @@ app.whenReady().then(async () => {
           .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
         true
       `)
-      const focused = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
+      // M12: a SYNTHETIC live update for the panel about to be captured, the
+      // same route check 90 uses for the inspector's save-panel path — not a
+      // real tmux session (`backend` is still DIRECT here, so pollLive's own
+      // list() answers null and nothing would arrive on its own). Without
+      // this, onCapture's `getLiveSession(...) ?? panel.spec.cwd` fallback
+      // (Canvas.tsx, the MENU-driven capture path preset:save reaches through
+      // main's Presets menu, distinct from preset:save-panel's inspector
+      // path) is indistinguishable from a reverted `panel.spec.cwd` alone:
+      // nothing forces the live branch to be the one actually exercised.
+      // Check 90 does not cover this — it drives preset:save-panel via the
+      // inspector's own action, never PRESET_CAPTURE — so this was the
+      // surface a whole-branch review found genuinely uncovered.
+      const CAPTURE_LIVE_DIR = mkdtempSync(join(tmpdir(), 'tc panels capture-live '))
+      win.webContents.send(IPC_EVENTS.SESSION_LIVE,
+        { panelId: targetId, cwd: CAPTURE_LIVE_DIR, currentCommand: 'bash' })
+      const focused = await waitUntil(
+        async () => {
+          const c = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
+          return c !== null && c.cwd === CAPTURE_LIVE_DIR ? c : false
+        }, 3000)
       await wc.executeJavaScript(`
         document.querySelector('.canvas')
           .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
         true
       `)
       const unfocused = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
-      ok('30 PRESET_CAPTURE returns the focused panel spec, and null with nothing focused',
-        focused !== null && typeof focused.cwd === 'string' &&
+      ok('30 PRESET_CAPTURE returns the focused panel\'s LIVE cwd, not merely its spawn one, and null with nothing focused',
+        focused !== false && focused !== null && focused.cwd === CAPTURE_LIVE_DIR &&
           Array.isArray(focused.args) && typeof focused.w === 'number' &&
           unfocused === null,
-        `focused=${JSON.stringify(focused)} unfocused=${JSON.stringify(unfocused)}`)
+        `focused=${JSON.stringify(focused)} live=${CAPTURE_LIVE_DIR} unfocused=${JSON.stringify(unfocused)}`)
     }
 
     {
@@ -6043,6 +6085,16 @@ app.whenReady().then(async () => {
     //     `command — cwd`), and the cwd is read off the inspector's own field
     //     BEFORE saving. That field is already pinned by check 87, so it is a
     //     legitimate source here rather than a second derivation.
+    //
+    //     M12: the subtitle this check now asserts against is a SYNTHETIC
+    //     live cwd, sent directly at this point in the run rather than a
+    //     real one — `backend` is still the DIRECT one the M6c fixture block
+    //     installed here, so no real SESSION_LIVE would ever arrive and the
+    //     saved cwd would equal the spawn cwd by pure fallback, which proves
+    //     nothing about which one savePanelAsPreset actually reaches for.
+    //     Forcing a live answer to exist turns "the saved cwd happens to
+    //     equal the spawn cwd" into an assertion that FAILS if the consumer
+    //     is ever reverted to `panel.spec.cwd` alone.
     {
       const SAVE_PRESET_DIR = mkdtempSync(join(tmpdir(), 'tc panels save-preset '))
       const idsBefore90 = new Set(await wc.executeJavaScript(
@@ -6083,6 +6135,26 @@ app.whenReady().then(async () => {
         document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(selectId)} + '"] .rail-row__main')
           .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
       await settle()
+      // M12: a SYNTHETIC live update, sent the identical way this check
+      // already sends PRESET_SPAWN by hand — not a real tmux session. At
+      // this point in the run `backend` is still the DIRECT one the M6c
+      // fixture block installed (never reset to tmux until check 91), so
+      // pollLive's own list() answers null and no real SESSION_LIVE would
+      // ever arrive for this panel; without this send, LIVE_PRESET_DIR and
+      // observed.cwd below would be indistinguishable — savePanelAsPreset's
+      // `getLiveSession(...) ?? spec.cwd` and a reverted `spec.cwd` alone
+      // would save the identical string, and the assertion at the bottom
+      // would pass against either. Sending it directly is what turns "the
+      // saved cwd happens to equal the spawn cwd" into an actual claim
+      // about which one savePanelAsPreset reaches for.
+      const LIVE_PRESET_DIR = mkdtempSync(join(tmpdir(), 'tc panels save-preset live '))
+      win.webContents.send(IPC_EVENTS.SESSION_LIVE,
+        { panelId: selectId, cwd: LIVE_PRESET_DIR, currentCommand: 'bash' })
+      await waitUntil(async () => {
+        const v = await wc.executeJavaScript(
+          `(() => { const el = document.querySelector('[data-inspector-field="live-cwd"] .inspector__value'); return el ? el.textContent : null })()`)
+        return v === LIVE_PRESET_DIR
+      }, 5000)
       const observed = await wc.executeJavaScript(`(() => {
         const focusedEl = document.activeElement
         const focusedPanel = focusedEl && focusedEl.closest ? focusedEl.closest('.panel') : null
@@ -6100,12 +6172,20 @@ app.whenReady().then(async () => {
       await settle()
       const after = await wc.executeJavaScript(`window.canvas.preset.list()`)
       const added = after.filter((p) => !before.some((b) => b.id === p.id))
+      // The cwd clause reads LIVE_PRESET_DIR now, not observed.cwd (the
+      // SPAWN field) — M12's savePanelAsPreset saves where the SELECTED
+      // panel IS, falling back to where it was spawned only absent a live
+      // answer, and this check now forces a live answer to exist so the
+      // fallback is not what is being measured. LIVE_PRESET_DIR !==
+      // observed.cwd is asserted explicitly so a future reader can see the
+      // two are deliberately different values, not a typo.
       ok('90 the inspector saves the SELECTED panel, with focus deliberately elsewhere',
         observed.focused === focusId && observed.selected === selectId &&
           observed.focused !== observed.selected &&
           added.length === 1 && observed.cwd !== null &&
-          added[0].subtitle.endsWith(observed.cwd),
-        `${JSON.stringify(observed)} added=${JSON.stringify(added)}`)
+          LIVE_PRESET_DIR !== observed.cwd &&
+          added[0].subtitle.endsWith(LIVE_PRESET_DIR),
+        `${JSON.stringify(observed)} live=${LIVE_PRESET_DIR} added=${JSON.stringify(added)}`)
     }
 
     // ---------------------------------------------------------------------
@@ -6795,7 +6875,11 @@ app.whenReady().then(async () => {
     let GIT_OK = true
     try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT_OK = false }
     if (!GIT_OK) {
-      console.log('SKIP  99-101 and 113-115 — no git binary found (loudly, not silently)')
+      // 116-117 do not touch git at all, but they are nested inside this
+      // block purely to reuse its spawnAt/sessionMap helpers — so a machine
+      // with no git binary skips them too, and this message says so rather
+      // than leaving them unexplained.
+      console.log('SKIP  99-101, 113-115 and 116-117 — no git binary found (loudly, not silently)')
     } else {
       const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
       // A directory that is definitely NOT a repository, for check 100.
@@ -7868,6 +7952,136 @@ app.whenReady().then(async () => {
         ok('115 a shared checkout leaves the commit control present and disabled',
           state !== false && state.present === true && state.disabled === true,
           JSON.stringify(state))
+      }
+
+      // 116-117. M12: THE TWO CONSUMERS, END TO END. A live cwd does not
+      //          exist on the direct backend at all — pollLive's own comment
+      //          says so, backend.list() answers null there — so both checks
+      //          need tmux and are gated the same way check 91/107 are:
+      //          findTmux() plus the tmuxBackend this run may or may not have
+      //          built, a loud SKIP naming both checks rather than a silent
+      //          one, and the gate BEFORE anything is spawned or seeded so a
+      //          skip leaves no half-built fixture behind for whatever the
+      //          next task appends.
+      const TMUX_116 = findTmux()
+      if (!TMUX_116 || !tmuxBackend) {
+        ok('116-117 the panel\'s live cwd, and prompts read from it (SKIPPED — no tmux binary found)',
+          true, 'install tmux to cover this')
+      } else {
+        backend = tmuxBackend
+        // No top-level `clickPanel(id)` helper exists in this file — the same
+        // fact check 75c's comment records about `clickPanelBody`. Narrowed
+        // locally to a real click on a panel's body: onFocusPanel is what a
+        // body click reaches (TerminalPanel.tsx), and it both SELECTS (which
+        // the inspector's fields follow) and FOCUSES (which is what the
+        // palette captures on open, rule 2 of "who owns the keyboard") in one
+        // gesture — exactly what both checks below need.
+        const clickPanel = (id) => clickPanelBody(`[data-panel-id="${id}"] .panel__slot`)
+
+        // 116. THE DISPLAY HALF, in a real renderer. verify:rail 61 proves the
+        //      model carries both rows; nothing between that builder and a
+        //      painted pane is covered by it — the hook could be reading the
+        //      wrong id, the subscription could be missing, the store could be
+        //      empty. This is success criterion 1, and the SPAWN clause is half
+        //      of it: a merged implementation shows the new directory and looks
+        //      completely correct, which is the whole reason the pane keeps
+        //      both.
+        {
+          const home = tmpdir()
+          const id = await spawnAt(home)
+          if (!id) throw new Error('116: spawnAt produced no panel')
+          // The PTY must exist before the write, or `cd` lands on nothing and
+          // the panel stays where it started — check 99's trap, and it looks
+          // exactly like a broken feature.
+          await waitUntil(async () => (await sessionMap(wc)).has(id), 8000)
+          const moved = mkdtempSync(join(tmpdir(), 'tc panels cd '))
+          // Quoted, not concatenated bare: every fixture directory in this
+          // suite has a deliberate space in it (the tmux exitDir quoting note
+          // in CLAUDE.md is the same class of bug), and an unquoted `cd` here
+          // splits into extra shell words, errors, and leaves the panel
+          // exactly where it started — a failure indistinguishable from a
+          // broken feature that cost real time to tell apart from one.
+          ptyManager.write(id, "cd '" + moved + "'\n")
+          await clickPanel(id)
+          // The poll is a 2s tick, so this WAITS rather than sleeping: a fixed
+          // sleep here is a flake, not a bound.
+          const read = await waitUntil(async () => {
+            const r = await wc.executeJavaScript(`(() => {
+              const f = (k) => {
+                const el = document.querySelector('[data-inspector-field="' + k + '"] .inspector__value')
+                return el ? el.textContent : null
+              }
+              return { live: f('live-cwd'), spawn: f('cwd'), running: f('live-command') }
+            })()`)
+            return r.live && r.live.includes('tc panels cd') ? r : false
+          }, 15000)
+          ok('116 the inspector shows where the panel IS, with where it started still beside it',
+            read !== false && read.spawn !== null && read.spawn !== read.live &&
+              read.running !== null && read.running.length > 0,
+            JSON.stringify(read))
+          rmSync(moved, { recursive: true, force: true })
+        }
+
+        // 117. THE CONSUMER HALF, end to end and through a real `cd`. A panel is
+        //      spawned in one directory, cd's into a second that has its own
+        //      .claude/commands, and the palette must list THAT project's
+        //      prompts. It is the only check that proves the consumer is WIRED
+        //      rather than merely present — verify:rail 61-63 stop at the model,
+        //      and nothing between there and prompt:list is covered by them. The
+        //      failure it catches is a row that never appears, indistinguishable
+        //      from "this project has no commands", which is the same silent
+        //      shape check 43 exists for.
+        {
+          const moved = mkdtempSync(join(tmpdir(), 'tc panels moved '))
+          mkdirSync(join(moved, '.claude', 'commands'), { recursive: true })
+          writeFileSync(join(moved, '.claude', 'commands', 'moved-prompt.md'), 'from the new cwd\n')
+          // Both spellings, for PROMPT_DIRS' own reason above: this check's
+          // whole point is a live cwd read straight from tmux, which is the
+          // resolved /private/... form — the raw form is added too only so
+          // the fence stays consistent with itself, not because this check
+          // relies on it.
+          PROMPT_DIRS.add(moved)
+          PROMPT_DIRS.add(realpathSync(moved))
+
+          const id = await spawnAt(tmpdir())
+          if (!id) throw new Error('117: spawnAt produced no panel')
+          await waitUntil(async () => (await sessionMap(wc)).has(id), 8000)
+          // Quoted for the reason check 116's identical write is.
+          ptyManager.write(id, "cd '" + moved + "'\n")
+          // Focus it, so the palette CAPTURES this panel — a prompt row is aimed
+          // at the captured id, and opening the palette deliberately leaves
+          // focusedId alone (rule 2 of "who owns the keyboard").
+          await clickPanel(id)
+          // Wait for the live cwd to land BEFORE opening the palette: prompts
+          // are read once per open, so an early open reads the spawn directory
+          // and the check fails for a timing reason rather than a wiring one.
+          await waitUntil(async () => {
+            const cwd = await wc.executeJavaScript(
+              `(() => { const el = document.querySelector('[data-inspector-field="live-cwd"] .inspector__value'); return el ? el.textContent : null })()`)
+            return cwd !== null && cwd.includes('tc panels moved')
+          }, 15000)
+          await zoomTo(wc, 'k')
+          const listed = await waitUntil(async () => {
+            const rows = await wc.executeJavaScript(
+              `[...document.querySelectorAll('.palette__row')].map((r) => r.textContent)`)
+            return rows.some((t) => t.includes('moved-prompt')) ? rows : false
+          }, 5000)
+          ok('117 project prompts are read from where the panel IS, not where it started',
+            listed !== false, JSON.stringify(listed))
+          // On .palette__input, the file's own convention (lines 2528, 2583,
+          // 2670, 3391, 3438, 3518) — React binds Escape's handler on the
+          // overlay's root container, a DESCENDANT of document, so a
+          // document-targeted dispatch never reaches it and this cleanup was
+          // inert. Harmless while nothing follows but rmSync, and a real trap
+          // for whoever appends a check after this one into a run with the
+          // palette still open.
+          await wc.executeJavaScript(`
+            document.querySelector('.palette__input')
+              ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+            true
+          `)
+          rmSync(moved, { recursive: true, force: true })
+        }
       }
 
       // Best-effort, like the two below it and for the same reason: a throw

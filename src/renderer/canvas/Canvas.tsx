@@ -14,6 +14,9 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
   applyAgentState, attentionIds, clearAgentState, useAgentState, useAttentionIds
 } from '@renderer/session/agent-state-store'
+import {
+  applyLiveSession, clearLiveSession, getLiveSession, useLiveSession
+} from '@renderer/session/live-session-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -82,6 +85,13 @@ function panelLabel(panel: Panel): string {
   // so the switcher's rows stay one kind of row.
   if (isReviewPanel(panel)) return `review: ${panel.subject.label} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
+  // M12's live cwd is deliberately NOT read here. This label carries no
+  // present-tense claim — unlike an inspector field labelled "now in", it
+  // says nothing that could go stale — so there is nothing here for a live
+  // answer to make wrong, and pulling in getLiveSession would only add a
+  // claim this row was never making. Left as spec.cwd on purpose; see
+  // CLAUDE.md's "Display renders nothing without a live answer" entry for
+  // the fuller argument this is a corner of.
   return `${command} — ${panel.spec.cwd} (${panel.rect.id})`
 }
 
@@ -392,6 +402,7 @@ export function Canvas({
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
+        clearLiveSession(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -590,6 +601,13 @@ export function Canvas({
     applyAgentState(update.panelId, update.state)
   }), [])
 
+  // One subscription for the whole canvas, like agent.onState above and for the
+  // same reason: the store fans out per panel id, so a per-panel subscription
+  // here would deliver every panel's update to every panel.
+  useEffect(() => window.canvas.session.onLive((update) => {
+    applyLiveSession(update.panelId, update.cwd, update.currentCommand)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -610,11 +628,10 @@ export function Canvas({
       // cannot be the focused panel today (nothing focuses one but its own
       // body), and it answers null rather than throwing if that ever changes.
       if (!panel || isReviewPanel(panel)) return null
-      // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
-      // to — reading the real one means asking the pid, which is its own piece
-      // of machinery (ideas-backlog #4) and deliberately not in M5a.
+      // Where the panel IS, falling back to where it was spawned — the same
+      // asymmetry reloadPrompts obeys, stated there in full.
       const captured: CapturedPanel = {
-        cwd: panel.spec.cwd,
+        cwd: getLiveSession(panel.rect.id)?.cwd ?? panel.spec.cwd,
         args: [...panel.spec.args],
         w: panel.rect.w,
         h: panel.rect.h
@@ -686,6 +703,7 @@ export function Canvas({
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
+      clearLiveSession(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1137,6 +1155,7 @@ export function Canvas({
     // Same reason as the other two dispose sites: a closed panel's id must
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
+    clearLiveSession(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -1465,13 +1484,18 @@ export function Canvas({
   const promptBodiesRef = useRef(new Map<string, string>())
   const reloadPrompts = useCallback((capturedId: string | null) => {
     const panel = capturedId ? panelsRef.current.find((p) => p.rect.id === capturedId) : undefined
-    // The panel's SPAWN directory, which is what spec.cwd is. Wherever the
-    // user has since cd'd to is only knowable from the pid, and that is
-    // explicitly out of this milestone — so a panel that has wandered lists
-    // the prompts of where it started, not of where it is.
-    // A review node has no cwd of its own, so it lists the saved prompts
-    // alone — the same answer a null captured id already gives.
-    const cwd = panel !== undefined && !isReviewPanel(panel) ? panel.spec.cwd : null
+    // Where the panel IS, falling back to where it was spawned.
+    //
+    // The fallback is the asymmetry this milestone states once and obeys twice:
+    // DISPLAY renders nothing without a live answer, because a spawn-time value
+    // under a present-tense label is indistinguishable from a correct one — but
+    // a CONSUMER needs a directory, and the spawn cwd is exactly what it used
+    // before this milestone, so falling back here is never worse than not
+    // shipping. A review node has no cwd of its own and still lists the saved
+    // prompts alone.
+    const cwd = panel !== undefined && !isReviewPanel(panel)
+      ? (getLiveSession(panel.rect.id)?.cwd ?? panel.spec.cwd)
+      : null
     void window.canvas.prompt.list(cwd).then((rows) => {
       promptBodiesRef.current = new Map(rows.map((r) => [r.id, r.body]))
       setPromptRows(rows.map(({ id, name, source }) => ({ id, name, source })))
@@ -2165,6 +2189,7 @@ export function Canvas({
                     if (doomedReviewIds.has(panelId)) continue
                     registry.dispose(panelId)
                     clearAgentState(panelId)
+                    clearLiveSession(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -2203,11 +2228,10 @@ export function Canvas({
       // Nothing to save for a review node: it has no spec, and the preset it
       // would produce is a shell in a directory it never named.
       if (!panel || isReviewPanel(panel)) return
-      // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
-      // to — the same limit onCapture records; reading the real one means
-      // asking the pid (ideas-backlog #4).
+      // Where the panel IS, falling back to where it was spawned — the same
+      // asymmetry reloadPrompts obeys, stated there in full.
       const captured: CapturedPanel = {
-        cwd: panel.spec.cwd,
+        cwd: getLiveSession(panel.rect.id)?.cwd ?? panel.spec.cwd,
         args: [...panel.spec.args],
         w: panel.rect.w,
         h: panel.rect.h
@@ -2279,6 +2303,7 @@ export function Canvas({
       // waking a panel from a verb whose name says the opposite.
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
+      clearLiveSession(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it (the × and the rail's close control are
@@ -2500,9 +2525,17 @@ export function Canvas({
   // Save-as-preset disabled with a reason — rather than the pane's empty
   // state. The empty selection stays a first-class state (verify:rail 27b)
   // for the genuinely-no-selection case.
+  // Unconditional and above the ternary: a hook cannot live inside a
+  // conditional, and `selectedId ?? ''` is a panel id that matches nothing,
+  // which the store answers undefined for.
+  const selectedLive = useLiveSession(selectedId ?? '')
   const inspectorBuilt = selectedPanel === undefined
     ? null
-    : buildInspectorModel(selectedPanel, registry.get(selectedPanel.rect.id)?.status)
+    : buildInspectorModel(
+        selectedPanel,
+        registry.get(selectedPanel.rect.id)?.status,
+        selectedLive
+      )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
   // A BOOLEAN, never `selectedPanel` itself, and that is the whole reason it

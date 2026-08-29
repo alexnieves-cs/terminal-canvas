@@ -80,6 +80,12 @@ export interface TmuxListEntry {
   pid: number
   command: string
   cwd: string
+  /**
+   * The program running in the pane NOW, or '' when the server answering is
+   * older than this column. See parseListOutput for why that is tolerated
+   * rather than treated as a malformed line.
+   */
+  currentCommand: string
 }
 
 /**
@@ -211,9 +217,18 @@ export function buildTmuxArgs(o: {
   ]
 }
 
-/** Tab-separated so a cwd containing spaces survives the split. */
+/**
+ * Tab-separated so a cwd containing spaces survives the split.
+ *
+ * Two command columns, and they answer different questions.
+ * pane_start_command is what the pane was launched as and never changes;
+ * pane_current_command is the program running in it right now. They agree for
+ * an idle shell and disagree for every panel actually doing work, which is the
+ * entire reason both are here.
+ */
 const LIST_FORMAT =
-  '#{session_name}\t#{pane_dead}\t#{pane_pid}\t#{pane_start_command}\t#{pane_current_path}'
+  '#{session_name}\t#{pane_dead}\t#{pane_pid}\t#{pane_start_command}' +
+  '\t#{pane_current_path}\t#{pane_current_command}'
 
 export function buildListArgs(socket: TmuxSocket = TMUX_SOCKET): string[] {
   return ['-L', socket, 'list-panes', '-a', '-F', LIST_FORMAT]
@@ -283,14 +298,20 @@ export function parseListOutput(stdout: string): TmuxListEntry[] {
   const entries: TmuxListEntry[] = []
   for (const line of stdout.split('\n')) {
     if (!line.trim()) continue
-    const [panelId, dead, pid, command, cwd] = line.split('\t')
+    const [panelId, dead, pid, command, cwd, currentCommand] = line.split('\t')
     if (!panelId || dead === undefined) continue
     if (dead !== '0') continue
     entries.push({
       panelId,
       pid: Number(pid) || 0,
       command: command || '',
-      cwd: cwd || ''
+      cwd: cwd || '',
+      // '' rather than a dropped entry. A tmux server started by an older
+      // build ignores a new client's format string, so this column can be
+      // legitimately absent on a machine mid-upgrade — and an entry dropped
+      // here is a live session boot reconciliation never learns about, which
+      // restores the panel dormant and looks like the agent died.
+      currentCommand: currentCommand || ''
     })
   }
   return entries

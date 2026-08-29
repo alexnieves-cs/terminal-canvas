@@ -34,6 +34,18 @@ const FLUSH_INTERVAL_MS = 16
 const IDLE_TICK_MS = 500
 
 /**
+ * How often the live cwd/command poll runs. Deliberately a SEPARATE timer from
+ * IDLE_TICK_MS rather than a counter inside it: they differ by 4x, and a later
+ * edit that merged them would silently make idleness detection four times
+ * coarser, which is M6c's whole threshold.
+ *
+ * 2s is chosen against human patience, not against cost. One `list-panes`
+ * answers EVERY session at once — the list is global — so this costs one
+ * subprocess per tick whether the canvas holds two panels or forty.
+ */
+const LIVE_TICK_MS = 2000
+
+/**
  * node-pty passes cwd straight to the OS, so it never expands `~` and it throws
  * if the directory is gone. Both are easy to hit once panels are persisted with
  * a cwd that has since been deleted (M4), so handle them at the boundary.
@@ -91,6 +103,16 @@ export class PtyManager {
    * own comment for why this is a SECOND guard, not the only one.
    */
   private capturedBaselineIds = new Set<PanelId>()
+  /** One per manager, like idleTimer. See LIVE_TICK_MS. */
+  private liveTimer: NodeJS.Timeout | null = null
+  /**
+   * The last live values SENT, per panel, joined into one comparable string.
+   * This is the dedupe, and it is the design rather than an optimisation — see
+   * IPC_EVENTS.SESSION_LIVE. Cleared alongside the session so a recycled panel
+   * id cannot inherit a dead panel's values and thereby suppress its own first
+   * real send.
+   */
+  private lastLive = new Map<PanelId, string>()
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -172,6 +194,7 @@ export class PtyManager {
     this.sessions.set(spec.panelId, session)
     // Only ever ticks while something is in the map; see startIdleTick.
     this.startIdleTick()
+    this.startLiveTick()
 
     // The one DIRECT send in this class, and applyEvent structurally cannot
     // do it: applyEvent sends only on a CHANGE, and the detector is born in
@@ -196,7 +219,17 @@ export class PtyManager {
       // time this panelId may already have been recreated. Evicting by key
       // alone would unhook that new session and orphan its PTY, so only remove
       // the entry if it is still this exact session.
-      if (this.sessions.get(spec.panelId) === session) this.sessions.delete(spec.panelId)
+      if (this.sessions.get(spec.panelId) === session) {
+        this.sessions.delete(spec.panelId)
+        // lastLive's own comment claims it is cleared alongside the session
+        // unconditionally — kill() and detachAll() already do; a natural exit
+        // (the panel's own shell typed `exit`) is the third route out of the
+        // map and was the one route that left a stale entry behind. Unreachable
+        // today only because every re-create route goes through
+        // dispose -> pty.kill first (see Canvas.tsx's five dispose call sites),
+        // which is a property of the renderer's call sites, not of this class.
+        this.lastLive.delete(spec.panelId)
+      }
       // AFTER the flush above and before the exit is announced. Order matters
       // in one direction only: 'exited' is terminal in the state machine
       // precisely so the last bytes a dying process emits — which the flush
@@ -222,7 +255,7 @@ export class PtyManager {
       // state for a panel nobody can see. 'exited' is terminal, so once it is
       // recorded no later event can produce a send at all.
       this.applyEvent(session, { kind: 'exit' }, session.killed)
-      if (this.sessions.size === 0) this.stopIdleTick()
+      if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
       // An exit we asked for is not news the panel needs to paint.
       if (session.killed) return
       // The tmux CLIENT's exit code carries no information — an inner command
@@ -301,6 +334,7 @@ export class PtyManager {
       this.getBackend().destroy(panelId)
       this.dropBaseline(panelId)
       this.capturedBaselineIds.delete(panelId)
+      this.lastLive.delete(panelId)
       return
     }
     session.killed = true
@@ -315,8 +349,9 @@ export class PtyManager {
     this.getBackend().destroy(panelId)
     this.dropBaseline(panelId)
     this.capturedBaselineIds.delete(panelId)
+    this.lastLive.delete(panelId)
     this.sessions.delete(panelId)
-    if (this.sessions.size === 0) this.stopIdleTick()
+    if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
 
   /** Called on before-quit so no PTY outlives the app. */
@@ -341,7 +376,14 @@ export class PtyManager {
       }
       this.sessions.delete(session.panelId)
     }
-    if (this.sessions.size === 0) this.stopIdleTick()
+    // A reload's fresh PtyManager would start with an empty lastLive anyway,
+    // but THIS manager survives a detach and keeps running — so without this
+    // clear, pollLive dedupes every reattached panel against its stale
+    // pre-reload value and sends nothing until the cwd changes again, which
+    // may be never. lastLive is supposed to be cleared alongside the
+    // session; kill() already does both, detachAll() must too.
+    this.lastLive.clear()
+    if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
 
   /**
@@ -375,6 +417,52 @@ export class PtyManager {
     if (!this.idleTimer) return
     clearInterval(this.idleTimer)
     this.idleTimer = null
+  }
+
+  private startLiveTick(): void {
+    if (this.liveTimer) return
+    this.liveTimer = setInterval(() => this.pollLive(), LIVE_TICK_MS)
+    // Same reason idleTimer is unref'd: do not hold a plain-node verify process
+    // open for a 0.5Hz timer nothing is waiting on.
+    this.liveTimer.unref?.()
+  }
+
+  private stopLiveTick(): void {
+    if (!this.liveTimer) return
+    clearInterval(this.liveTimer)
+    this.liveTimer = null
+  }
+
+  /**
+   * One poll for every panel. backend.list() is null on the direct backend by
+   * contract — not "nothing is running", but "ask the manager", and the manager
+   * holds only spawn-time values — so there is no live answer there and none is
+   * invented.
+   */
+  private pollLive(): void {
+    const entries = this.getBackend().list()
+    if (!entries) return
+    for (const entry of entries) {
+      // Only panels this manager is actually holding. An entry for a session
+      // this renderer has no local session for belongs to a panel nothing is
+      // subscribed to, and sending for it would grow lastLive with ids the map
+      // will never clear.
+      if (!this.sessions.has(entry.panelId)) continue
+      // NUL, not a space: a path may contain a space, so ('/a b', 'sh')
+      // and ('/a', 'b sh') would collide into one key under a space
+      // delimiter — a panel whose update is silently suppressed, for the
+      // users whose directories happen to contain the delimiter and nobody
+      // else. NUL is the one byte a POSIX path cannot contain, the same
+      // collision railSignature avoids with JSON.stringify.
+      const key = `${entry.cwd}\u0000${entry.currentCommand}`
+      if (this.lastLive.get(entry.panelId) === key) continue
+      this.lastLive.set(entry.panelId, key)
+      this.send(IPC_EVENTS.SESSION_LIVE, {
+        panelId: entry.panelId,
+        cwd: entry.cwd,
+        currentCommand: entry.currentCommand
+      })
+    }
   }
 
   /**

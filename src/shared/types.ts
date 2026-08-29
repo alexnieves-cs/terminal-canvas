@@ -56,6 +56,15 @@ export interface PtyCreateResult {
    * sessions to outlive anything.
    */
   reattached: boolean
+  /**
+   * The program running in the pane NOW, when anything knows — only the tmux
+   * backend's list() can answer it. OPTIONAL because this same type is what
+   * create() returns, where there is no live answer yet, and because the
+   * direct backend has none ever; a required field would force both to invent
+   * one, which is exactly the backfill this milestone forbids. Absent means
+   * "nothing knows".
+   */
+  currentCommand?: string
 }
 
 /**
@@ -72,4 +81,20 @@ export type AgentState = 'starting' | 'busy' | 'idle' | 'wants-you' | 'exited'
 export interface AgentStateUpdate {
   panelId: PanelId
   state: AgentState
+}
+
+/**
+ * What IPC_EVENTS.SESSION_LIVE carries: where a panel IS and what it is
+ * RUNNING, as opposed to PanelSpec.cwd and PtyCreateResult.cwd, which are both
+ * frozen at spawn.
+ *
+ * Only tmux can answer this, so there is no direct-backend equivalent and no
+ * fallback value — a panel with no live answer simply never receives one of
+ * these, which is what lets the inspector render nothing rather than render a
+ * spawn-time value under a present-tense label.
+ */
+export interface LiveSessionUpdate {
+  panelId: PanelId
+  cwd: string
+  currentCommand: string
 }
