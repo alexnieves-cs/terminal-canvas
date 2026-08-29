@@ -366,6 +366,13 @@ export class PtyManager {
       }
       this.sessions.delete(session.panelId)
     }
+    // A reload's fresh PtyManager would start with an empty lastLive anyway,
+    // but THIS manager survives a detach and keeps running — so without this
+    // clear, pollLive dedupes every reattached panel against its stale
+    // pre-reload value and sends nothing until the cwd changes again, which
+    // may be never. lastLive is supposed to be cleared alongside the
+    // session; kill() already does both, detachAll() must too.
+    this.lastLive.clear()
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
 
@@ -437,7 +444,7 @@ export class PtyManager {
       // users whose directories happen to contain the delimiter and nobody
       // else. NUL is the one byte a POSIX path cannot contain, the same
       // collision railSignature avoids with JSON.stringify.
-      const key = `${entry.cwd} ${entry.currentCommand}`
+      const key = `${entry.cwd}\u0000${entry.currentCommand}`
       if (this.lastLive.get(entry.panelId) === key) continue
       this.lastLive.set(entry.panelId, key)
       this.send(IPC_EVENTS.SESSION_LIVE, {

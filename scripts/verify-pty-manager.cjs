@@ -726,7 +726,17 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
         .filter((m) => m.channel === 'session:live' && m.payload.panelId === 'L1')
         .map((m) => m.payload)
 
-      await h.manager.create({ panelId: 'L1', cwd: os.homedir(), args: ['-l'], cols: 80, rows: 24 })
+      // A real directory, owned by this run alone — not os.homedir(). A
+      // login shell (-l) sources the running developer's own .zprofile/
+      // .zshrc, and a dotfile that cd's on startup would shift settled[0]'s
+      // cwd or falsify after[1] !== after[0] on one machine and not another,
+      // which is exactly the kind of state this repo's suites are written
+      // not to depend on (see CLAUDE.md on why verify:panels fences its
+      // project-prompt read to its own fixture directory). A plain /bin/sh
+      // with no args is a non-login, non-interactive-rc shell: nothing it
+      // reads is outside this repo's control.
+      const liveDir = mkdtempSync(join(tmpdir(), 'tc pty-manager live '))
+      await h.manager.create({ panelId: 'L1', cwd: liveDir, command: '/bin/sh', args: [], cols: 80, rows: 24 })
       // Long enough for at least three ticks at LIVE_TICK_MS (2000ms).
       await sleep(7000)
       const settled = liveOf()
@@ -745,6 +755,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // Check 20's obligation, inherited via 22b: this block must end in a
       // definite kill-server, never a session kill that leaves a stale
       // server for the next run — see check 20's own comment for why.
+      // Whoever appends check 24 inherits it next.
       tmuxBackend.shutdown()
     }
   }
