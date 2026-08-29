@@ -79,7 +79,15 @@ turn a cosmetic gap into a panel that reads as dead.
 **`main/pty-manager.ts`** — `LIVE_TICK_MS = 2000` and a `startLiveTick` /
 `stopLiveTick` pair modelled on `startIdleTick`, with the same lifetime (armed
 on the first session, cleared when the map empties) and the same `unref()`, so
-a 0.5Hz timer cannot hold a plain-node verify process open. Each tick calls
+a 0.5Hz timer cannot hold a plain-node verify process open. Note that the
+lifetime is not one call site but **four**: `stopIdleTick` is called from three
+places today (the exit handler, `kill`, and `killAll`), each guarded on
+`this.sessions.size === 0`, and the live tick has to be stopped at every one of
+them. Missing a single one leaves a subprocess spawning every two seconds for
+the life of the app, on a canvas with no panels left — which nothing on screen
+would report. Re-derive that count with `grep -n "stopIdleTick"` rather than
+trusting this sentence; this repo has already had one call-site count go stale
+inside the commit that recorded it. Each tick calls
 `backend.list()`; a `null` answer returns immediately, so the direct backend
 costs one property read per tick and never spawns anything.
 
