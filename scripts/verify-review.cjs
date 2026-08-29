@@ -1150,18 +1150,19 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     // the fifth call and deliberately DOES write the real index (that write
     // is what check 63 depends on). `commit()` resolves only after the
     // reconcile has already run, so a before/after snapshot taken around the
-    // WHOLE call cannot separate "untouched by the risky staging calls" from
-    // "touched by the reconcile" — both a correct implementation and a
-    // FAULTY one (paths staged only in the scratch index, reconciled into
-    // the real one regardless of what the real commit actually contains)
-    // legitimately rewrite the real index by the time the promise settles,
-    // so a whole-call comparison cannot discriminate them (confirmed
-    // empirically: a bare `git commit` rewrites `.git/index` bytes even with
-    // nothing new staged, via the cache-tree extension). The runner is
-    // therefore wrapped to snapshot the real index the instant the porcelain
-    // `commit` call resolves — the last of the four scratch-scoped calls,
-    // and the point before which nothing should have touched the real file
-    // at all.
+    // WHOLE call cannot separate "untouched by the four scratch-scoped
+    // calls" from "touched by the deliberate reconcile" — a correct
+    // implementation legitimately rewrites the real index by the time the
+    // promise settles, purely because the reconcile ran, so a whole-call
+    // comparison cannot discriminate a correct implementation from a broken
+    // one (confirmed empirically: with GIT_INDEX_FILE scoped to the scratch
+    // index, the real .git/index is byte-identical across the commit call
+    // itself — the reconcile is the ONLY real-index write in this
+    // transaction, which is precisely why the window has to close before
+    // it). The runner is therefore wrapped to snapshot the real index the
+    // instant the porcelain `commit` call resolves — the last of the four
+    // scratch-scoped calls, and the point before which nothing should have
+    // touched the real file at all.
     let indexAfterCommitCall = null
     const runner = R.createGitRunner({ gitPath: () => git, env: () => ({}), timeoutMs: () => 20000 })
     const spyingRun = async (args, opts) => {
