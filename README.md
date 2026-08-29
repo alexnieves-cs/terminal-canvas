@@ -151,27 +151,33 @@ host does. That flag makes the Electron binary boot as plain Node, so
 The main process owns every PTY; the renderer never spawns a process.
 
 ```
-renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill  -->  main
-                       pty:list / layout:load / layout:save
+renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list   -->  main
+                       layout:load / layout:save
                        session:backend
                        preset:list / preset:rename / preset:delete
-                       preset:set-default / preset:spawn-by-id
+                       preset:set-default / preset:spawn-by-id / preset:save-panel
                        prompt:list / prompt:save / prompt:delete
                        settings:list / settings:set
                        canvas:request-reset
                        agent:acknowledge
-renderer  <--send---   pty:data (batched ~16ms) / pty:exit             <--  main
+                       workspace:list / workspace:create / workspace:rename
+                       workspace:delete / workspace:activate
+                       review:panel / review:baseline / review:at
+                       review:diff / review:commit
+renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state
-main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo  -->  renderer
+main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
 ```
 
-The last three invoke groups above — the preset mutations, the prompt library, and
-`canvas:request-reset` — are the palette's nine new channels. They exist so the
-palette runs code main already has rather than a renderer-side copy of it: only main
-can resolve an absent `command` into the login shell, and only main owns the reset
-confirmation dialog.
+The invoke direction is the load-bearing part. Preset and prompt mutations, the
+workspace verbs and the review reads are all renderer→main because main is the
+only process that can answer them: only main can resolve an absent `command`
+into the user's real login shell, only main owns the reset confirmation dialog,
+and only main can reach a git binary. A renderer-side reconstruction of any of
+them would drift from main's answer silently, and the two would then disagree
+only in the cases nobody tests.
 
 `canvas:counts` is the one event that runs the other way: main sends it and the renderer
 replies on an ephemeral `canvas:counts:reply:<timestamp>` channel that is invented per call

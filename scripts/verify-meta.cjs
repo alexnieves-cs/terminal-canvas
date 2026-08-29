@@ -134,6 +134,35 @@ for (const [i, heading] of REQUIRED_HEADINGS.entries()) {
   ok(`${8 + i} README has "${heading}"`, README_PROSE.includes('\n' + heading + '\n'))
 }
 
+// 14. The README's architecture diagram versus the ACTUAL contract.
+//
+// This is the check that pays for the suite. Every milestone since M7 has added
+// channels and left the diagram alone, so it documented ~20 of 43 by the time
+// anyone looked. A stale architecture diagram is worse than an absent one: it
+// is the first technical claim a reader checks, and it fails by omission, which
+// nothing else in this repository can see. Parsed out of ipc-contract.ts rather
+// than restated here, so this check cannot itself go stale.
+const CONTRACT = read('src/shared/ipc-contract.ts') ?? ''
+const channels = [...CONTRACT.matchAll(/^\s+[A-Z_]+: '([a-z]+:[a-z-]+)'/gm)].map((m) => m[1])
+{
+  const missing = channels.filter((c) => !README.includes(c))
+  ok('14 every IPC channel appears in the README',
+    channels.length > 20 && missing.length === 0,
+    missing.length ? `missing: ${missing.join(', ')}` : `${channels.length} channels`)
+}
+
+// 15. Non-vacuity guard for 14. If the regex above ever stops matching — a
+// reformat of ipc-contract.ts, a rename, a prettier pass that moves the quotes
+// — `channels` becomes an empty array and check 14 passes triumphantly while
+// asserting nothing at all. This is the same shape as the `othersAreReal`
+// clause in verify:panels 83: prove the input was real before trusting the
+// conclusion drawn from it.
+{
+  ok('15 the contract parse found the channels it should',
+    channels.includes('pty:create') && channels.includes('review:panel'),
+    `${channels.length} parsed`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
