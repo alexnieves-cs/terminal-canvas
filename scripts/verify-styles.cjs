@@ -78,8 +78,9 @@ const bodyText = bodyRules.map((r) => r.body).join('\n')
 // 1 — no hardcoded colour outside a theme block, in ANY notation. Hex alone
 //     was not enough: the spec's own test for criterion 8 is "delete the theme
 //     block and no colour remains", and eight rgba() literals survived a green
-//     run of the hex-only version — including hand-duplicated amber, green and
-//     red that the --*-dim tokens already declared one screenful away.
+//     run of the hex-only version — including three that re-mixed amber, green
+//     and red by hand at their own alphas (.10/.22, .08) one screenful from the
+//     --*-dim tokens that already declared those colours.
 //
 //     ALLOW is an explicit, per-value allowlist rather than a relaxed regex,
 //     so the check stays honest: each entry is a translucent WHITE that models

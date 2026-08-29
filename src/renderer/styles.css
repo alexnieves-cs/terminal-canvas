@@ -1393,8 +1393,8 @@ body {
    prototype. 90ms is below the threshold at which a change reads as waiting
    and above the one at which it reads as a glitch.
 
-   NOTE the properties: background-color, color, border-color and opacity,
-   never transform. .world carries will-change: transform and is driven at
+   NOTE the properties: background-color, color and border-color, never
+   transform. .world carries will-change: transform and is driven at
    60Hz by the viewport, and four checks read its computed matrix through
    DOMMatrixReadOnly — a transition there is both an elastic-feeling pan and
    a race against those reads.
