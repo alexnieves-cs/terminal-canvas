@@ -200,6 +200,11 @@ it has to leave the tmux session running (see `Canvas.tsx`).
 
 ### Things that are non-obvious
 
+A fuller version of this list — every load-bearing invariant in the codebase,
+each recorded next to the silent failure that follows from undoing it — lives in
+[`CLAUDE.md`](CLAUDE.md), which is the project's engineering decisions log
+rather than tool configuration.
+
 **Login-shell PATH.** macOS GUI apps are launched by launchd, so they inherit a
 bare PATH and none of your dotfile exports — `claude` and `codex` work in
 Terminal but come back "command not found" in the app. `src/main/shell-env.ts`

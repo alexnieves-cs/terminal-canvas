@@ -1,3 +1,17 @@
+> **What this file is.** An engineering decisions log, kept alongside the code
+> it explains. It is named `CLAUDE.md` because Claude Code loads it
+> automatically, but nothing in it is addressed only to a machine: nearly every
+> entry records a load-bearing invariant and the *silent* failure that would
+> follow from undoing it — a panel that renders nothing with no error, an exit
+> code of `0` printed as a failure, a diagram that quietly stopped matching the
+> contract. If you are wondering why some line in this repository is written so
+> strangely, the answer is almost certainly here, and it is almost always
+> "because the obvious version fails without saying anything".
+>
+> New to the project? Start with [README.md](README.md); come here when you need
+> to change something and want to know what it is holding up. The
+> `## Load-bearing details` section is the heart of it.
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
