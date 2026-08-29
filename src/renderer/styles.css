@@ -1,14 +1,127 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   STRUCTURE. Theme-invariant by definition, so none of it ever appears in a
+   theme block. A radius inside a theme block is a radius every future theme
+   has to remember to repeat.
+   ───────────────────────────────────────────────────────────────────────── */
 :root {
-  --bg: #0b0c11;
-  --panel-bg: #12131a;
-  --chrome-bg: #191b25;
-  --border: #262a38;
-  --text: #d8dae5;
-  --muted: #767d95;
-  --green: #9ece6a;
-  --red: #f7768e;
-  --blue: #7aa2f7;
-  --amber: #e0af68;
+  /* Space. Fourteen ad-hoc padding values collapse to seven steps. The
+     constraint IS the mechanism: rhythm comes from the absence of options. */
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
+  --sp-5: 12px; --sp-6: 16px; --sp-7: 24px;
+
+  /* One-off structural constant, tokenised rather than left as a literal so
+     the spacing audit can hold at zero literals. It is the hiddenInset
+     traffic-light clearance and belongs to no scale. */
+  --titlebar-h: 38px;
+
+  /* Radius. Nested corners must DECREASE by roughly the inset or the
+     concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
+     is right, and today's 6-inside-10 is not. 50% and --r-full are SHAPES (a
+     circle, a pill), not scale steps. */
+  --r-sm: 4px; --r-md: 6px; --r-lg: 12px; --r-full: 999px;
+
+  /* Type. Six sizes inside a 6px band become four with real ratios. --t-xs is
+     legal below the 12px floor ONLY because every user of it is a one- or
+     two-word ALL-CAPS label at 0.09em tracking. Sentence-case text at --t-xs
+     is a bug. */
+  --t-xs: 10.5px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px;
+  --lh-tight: 1.25; --lh-body: 1.5;
+
+  /* One monospace stack. There were three in CSS and a fourth in
+     create-terminal.ts, which resolve to different faces on some macOS
+     configurations. The xterm one moves in M11, with the terminal theme. */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Motion. 90ms is below the threshold at which a change reads as waiting
+     and above the one at which it reads as a glitch. */
+  --dur-1: 90ms; --dur-2: 160ms;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* Elevation. Panels have no shadow today, which is why they read as pasted
+     onto the canvas rather than floating above it. A shadow only reads as
+     depth when the surface beneath differs — which the ramp below provides. */
+  --e-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --e-2: 0 4px 12px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .40);
+  --e-3: 0 16px 48px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .40);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COLOUR, and colour only. Declared on BOTH selectors so the app is dark with
+   no attribute set — which is today's behaviour, byte for byte.
+
+   The specificity is deliberate rather than incidental. `:root` alone is
+   (0,1,0) and `:root[data-theme="light"]` is (0,2,0), so a theme block added
+   in M11 wins on SPECIFICITY rather than on source order — which means it can
+   be appended without reordering anything, and a third theme after it cannot
+   silently lose to whichever block happens to be declared last.
+
+   M10 ships exactly one theme block and the renderer sets no `data-theme`
+   attribute. No attribute means dark, which is what the app already does.
+   Wiring the attribute is M11's first task, not a loose end here.
+   ───────────────────────────────────────────────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  /* Per-theme, not structural: native scrollbars and form controls must
+     follow the theme rather than the OS. */
+  color-scheme: dark;
+
+  /* Surface ramp. The old three (bg -> panel -> chrome) spanned 6.6 of
+     perceptual lightness, which is why the app read as one flat slab: depth
+     was being asserted by a 1.30:1 hairline, and a hairline cannot carry a
+     hierarchy. This spans 22.3 L*, every adjacent step >= 2.6.
+
+     Contrast RATIO is the wrong metric for large adjacent fills and is
+     deliberately not quoted here; delta-L* is. Ratio is quoted for text. */
+  --s-0: #080910;   /* app ground, canvas                          */
+  --s-1: #0f111a;   /* panel body, palette list                    */
+  --s-2: #161926;   /* chrome: rail, top bar, panel header         */
+  --s-3: #1d2130;   /* raised: palette surface, HUD                */
+  --s-4: #282d40;   /* hover fill, AND the selected fill           */
+  --s-5: #343a52;   /* pressed only — transient, never a text ground */
+
+  /* Hairlines. Both decorative. Neither reaches 3:1 and neither is meant to:
+     WCAG 1.4.11 applies to boundaries needed to identify a control or
+     understand content, and a divider between two panes is neither. Where a
+     border IS the control boundary — focus, active — the accent is used, and
+     the accents clear 3:1 with margin. --line reaches 1.86 on --s-1, against
+     the 1.30 it replaces. */
+  --line:        #39415a;
+  --line-strong: #4d5675;
+
+  /* Text ramp. --fg-4 is DISABLED ONLY, and is the reason no other step needs
+     to go dimmer: every opacity-based dimming in the old file collapses onto
+     it. Measured against the worst ground text can land on (--s-4):
+     fg 11.37, fg-2 7.06, fg-3 5.06, fg-4 3.03. */
+  --fg:   #e8eaf4;
+  --fg-2: #b4bad0;
+  --fg-3: #959db8;
+  --fg-4: #6e7691;
+
+  /* Accents. Two tones each: saturated for borders, dots and icons; the tint
+     for fills, which is what lets a destructive hover read as destructive
+     without introducing a second red.
+
+     --amber MUST stay a literal colour declared here, and
+     .panel--agent-wants-you MUST keep `border-color: var(--amber)`
+     un-transformed. verify:panels 62 and 97 compare the two by resolved
+     value. See Global Constraint 1. */
+  --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .14);
+  --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .12);
+  --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .14);
+  --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .12);
+
+  /* Back-compat aliases. These are what let the migration land task by task
+     instead of as one unreviewable diff, and they mean the file temporarily
+     holds two names for one colour — the duplication M10 exists to remove.
+     Kept deliberately for this milestone; retiring them is a follow-up, and
+     whoever does it should re-derive the usage counts rather than trust a
+     number written here. */
+  --text:      var(--fg);
+  --muted:     var(--fg-3);
+  --bg:        var(--s-0);
+  --panel-bg:  var(--s-1);
+  --chrome-bg: var(--s-2);
+  --border:    var(--line);
 }
 
 * {
@@ -31,7 +144,7 @@ body {
 
 .app {
   height: 100%;
-  padding: 38px 0 0; /* clears the hiddenInset traffic lights */
+  padding: var(--titlebar-h) 0 0; /* clears the hiddenInset traffic lights */
 }
 
 /* M8a. The frame. The rail and inspector are grid COLUMNS with real width,
