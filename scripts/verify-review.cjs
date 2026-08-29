@@ -1019,12 +1019,16 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
   const sub = g.calls.map((c) => c.args[2])
   const scratch = (name) => g.calls.find((c) => c.args[2] === name)?.env?.GIT_INDEX_FILE
   const reconcile = g.calls.filter((c) => c.args[2] === 'update-index').pop()
+  // The first 'update-index' is the STAGE call; the reconcile is the LAST one
+  // (found via .pop() above). indexOf alone finds the stage call's position,
+  // which is also what the scratch('update-index') read below resolves to.
+  const stage = sub.indexOf('update-index')
   ok('56 the five calls run in order, scoped to the scratch index, and the reconcile is not',
     out.kind === 'committed' && out.sha === 'newsha' &&
-      sub.indexOf('read-tree') < sub.indexOf('update-index') &&
+      sub.indexOf('read-tree') < stage && stage < sub.indexOf('commit') &&
       sub.indexOf('commit') < sub.indexOf('ls-files') &&
-      scratch('read-tree') === '/scratch/idx' && scratch('commit') === '/scratch/idx' &&
-      scratch('ls-files') === '/scratch/idx' &&
+      scratch('read-tree') === '/scratch/idx' && scratch('update-index') === '/scratch/idx' &&
+      scratch('commit') === '/scratch/idx' && scratch('ls-files') === '/scratch/idx' &&
       reconcile.env === undefined)
 }
 
