@@ -196,11 +196,23 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 // Both halves matter and neither implies the other. A workflow nobody can see
 // is a workflow nobody trusts — the badge IS the deliverable for a reader — and
 // a badge with no workflow behind it is a broken image making a false claim.
+//
+// The /npm run verify/ test runs against COMMENT-STRIPPED text, the same
+// shape README_PROSE already uses: the workflow's own explanatory comments
+// mention "npm run verify" too, so testing the raw file cannot tell a real
+// `run:` step apart from a comment describing one that used to exist. Strip
+// lines rather than parse YAML — a `#` inside a quoted string would drop that
+// line too, but the failure direction is safe: it fails loudly instead of
+// passing on a step that isn't really there.
 {
   const workflow = read('.github/workflows/verify.yml')
+  const workflowCode = (workflow ?? '')
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n')
   const badged = README.includes('workflows/verify.yml/badge.svg')
   ok('16 CI runs verify, and the README carries its badge',
-    workflow !== null && /npm run verify/.test(workflow) && badged,
+    workflow !== null && /npm run verify/.test(workflowCode) && badged,
     `workflow=${workflow !== null} badge=${badged}`)
 }
 

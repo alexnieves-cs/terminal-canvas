@@ -29,7 +29,16 @@ jobs:
   verify:
     name: verify
     runs-on: macos-latest
-    timeout-minutes: 45
+    # The brief's two-job split budgeted 25 + 35 minutes because those jobs ran
+    # in PARALLEL, each needing its own ceiling for the sequential work inside
+    # it. Collapsing them into one job removes that parallelism, so this job
+    # now performs both tiers' work sequentially plus a cold `npm ci` that
+    # runs electron-rebuild against node-pty before any of it starts — the
+    # correct budget is closer to the SUM, not less than either half. GitHub
+    # bills minutes actually consumed, so a generous ceiling costs nothing; a
+    # tight one produces a timeout, a red badge indistinguishable from a real
+    # failure.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
