@@ -238,9 +238,12 @@ recorded: the renderer already holds the signal, so a second channel asking
 main to recompute it would be a second author of a fact one side already has.
 
 One new invoke channel, `review:panel`, taking `verify:ipc` from 26 channels
-to 27. No new push channel. M9c adds `review:commit`, taking it to 28;
-M9b adds none, because a review node reads through the same `review:panel`
-invoke the inspector already uses.
+to 27. No new push channel. This paragraph predicted M9b would add none — a
+node reading through the same `review:panel` invoke the inspector uses — and
+that was wrong in the one way that mattered: a node addressed by PANEL ID goes
+blank the moment main drops that panel's baseline on kill, so M9b added three
+(`review:baseline`, `review:at`, `review:diff`) and took the count to 30. M9c
+adds `review:commit`, taking it to 31.
 
 ## The inspector surface
 
@@ -338,27 +341,91 @@ coincidence rule M6 already established.
 
 # M9c — Commit
 
-`review:commit` — `{ panelId, message, paths }`. Three decisions the
-implementation plan must make explicitly:
+`review:commit` — `{ root, sha, paths, message }`. Addressed by the repository
+root and the baseline sha, **never by a panel id**. M9b established that a node
+asks by baseline precisely so it outlives its subject (see `ReviewSubject` in
+`shared/review.ts`), and a commit is a repository operation; a `panelId` in this
+payload would be a live pointer the node deliberately does not hold, and would
+go blank at the moment a commit of finished work is most useful.
 
-**Staging must not disturb the agent's index.** The obvious
-`git add … && git commit` writes the working index while an agent may be
-mid-operation in the same repository. The safe form is a temporary index —
-`GIT_INDEX_FILE` plus `read-tree` / `update-index` / `write-tree` /
-`commit-tree` / `update-ref` — which never touches the user's. It is more
-plumbing, and it is the difference between a commit feature and a commit
-feature that occasionally corrupts a running agent's staging area.
+**Staging must not disturb the agent's index, and `commit-tree` is the wrong
+plumbing for it.** The obvious `git add … && git commit` writes the working
+index while an agent may be mid-operation in the same repository. The temporary
+index is the right instinct, but the plumbing recipe it usually comes with —
+`read-tree` / `update-index` / `write-tree` / `commit-tree` / `update-ref` —
+silently delivers the `--no-verify` behaviour the next paragraph forbids, because
+`commit-tree` runs no hooks at all. The shipped form is a scratch
+`GIT_INDEX_FILE` with a **real `git commit` on top of it**, which was measured
+rather than assumed: the `pre-commit` hook ran and saw exactly the scratch index,
+the commit landed, and the user's `.git/index` was byte-identical afterwards.
+The scratch file lives under `userData`, never inside the repository, and is
+removed in a `finally`.
 
-**Hooks run, and they can block.** A `pre-commit` hook on a real repository
-can take thirty seconds or fail outright. The call is async and its output is
-surfaced in the node. `--no-verify` is not the default: silently skipping a
-repository's own checks is not something a review tool should do quietly.
+**...and never touching the index leaves it STALE, which is its own silent
+failure.** Once HEAD moves without the real index moving, the index still
+describes the previous tree, so the agent's own `git status` reports phantom
+staged changes for the files we just committed — `D b.txt` for a new file, `MM
+a.txt` for a modified one. An agent reading that will try to "fix" a repository
+that is fine. The close is a targeted reconcile after a successful commit:
+`update-index --add --cacheinfo <mode>,<sha>,<path>` per committed path against
+the real index, staging **exactly the blobs that were committed, by sha**. It is
+by sha rather than by re-reading the working tree because the agent may have
+edited the file in the interval, and it is per path rather than a wholesale
+`read-tree` because the user's own unrelated staged entries must survive. Both
+halves were verified: with the reconcile, `git status` is clean of our files and
+an unrelated staged file is still staged.
 
-**This is the first thing in the app that `Cmd+Z` cannot undo.** Every
-existing destructive action is either recoverable or scoped to processes. A
-commit is on disk and in history. It is confirmed in the review node rather
-than through the palette's confirm mode, which is a one-line yes/no and a
-commit needs a message.
+**Hooks run, and they can block.** A `pre-commit` hook on a real repository can
+take thirty seconds or fail outright. The call is async and its output is
+surfaced in the node: a hook rejection is a designed state carrying the hook's
+own stderr, the rule the `repo-unreadable` arm already follows, not an error
+path. `--no-verify` is not offered at all in M9c — silently skipping a
+repository's own checks is not something a review tool should do quietly, and an
+escape hatch nobody has asked for is a customer-free abstraction.
+
+**`GitRunner` gains an optional second parameter** — `(args, opts?: { env })`,
+merged over the login env — because the scratch index is passed as environment.
+Optional and defaulted, the same trade `review-engine.ts`'s `notARepo` dep
+already makes: every fake runner in `verify:review` built before this milestone
+keeps working untouched rather than breaking on a required argument. No `stdin`
+widening is needed; the message goes through `-m`.
+
+**The verb is offered by arm, and refused visibly where it is refused.** Enabled
+for `changes`. **Disabled with its reason on screen** for `shared` — a commit
+there would bundle another agent's work under this node's message, which is
+exactly the confident wrong answer the `shared` arm exists to refuse, and hiding
+the control instead would make "not supported here" indistinguishable from "not
+built yet" (`verify:palette` 31's rule). Absent for the arms with nothing to
+commit.
+
+**This is the first thing in the app that `Cmd+Z` cannot undo.** Every existing
+destructive action is either recoverable or scoped to processes. A commit is on
+disk and in history. It is confirmed in the review node rather than through the
+palette's confirm mode, which is a one-line yes/no and a commit needs a message:
+a single-line input in the node's body, revealed by the control, Enter to commit
+and Escape to cancel. Escape must restore focus the way `usePalette`'s rule 4
+does — an unmounted input's blur leaves focus on `<body>`, where every
+subsequent keystroke goes nowhere at all. While a commit is in flight the
+control is disabled and says so, because thirty seconds of a silent button is
+indistinguishable from a dead one.
+
+**On success the baseline advances, or the node lies forever.** A node diffs the
+working tree against its stored baseline, and committing does not change the
+working tree — so without this, a node reports the same files after a commit as
+before it, permanently, and a second commit re-commits the same content. The
+node's `subject.baselineSha` is rewritten to the sha just produced and the node
+re-reads, reporting `clean` and then reporting only what the agent does next.
+This makes `ReviewSubject` mutable for the first time, so `Canvas.tsx` owns the
+write and it persists through the existing `layout.save` path. The **subject
+panel's own** baseline in main is deliberately left alone: a node can outlive
+its subject, so reaching into another panel's state is only sometimes possible,
+and a write verb on one panel silently resetting another surface's reading is
+the wrong direction.
+
+**Not in scope**, and recorded rather than implied: per-file selection (the
+commit stages every file the result reports, not only the ones rendered under
+the node's display cap), `--no-verify`, amend, and anything touching branches or
+remotes.
 
 ---
 
