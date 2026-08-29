@@ -705,7 +705,46 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // why that matters — a later run reattaches to a server still wired to
       // THIS run's now-deleted exitDir and check 14 silently reports the
       // wrong exit code). Whoever appends check 23 inherits this obligation
-      // next.
+      // next — and check 23 is next, so the shutdown moves below it.
+    }
+
+    // 23. THE DEDUPE, which is this milestone's whole cost story and is
+    // invisible on screen when it breaks — it shows up as heat, not as a
+    // wrong pixel. A panel that has not moved must produce NO further
+    // session:live traffic after its first value, and a `cd` must produce
+    // exactly one more.
+    //
+    // The fixture has to span SEVERAL ticks or it proves nothing: an
+    // implementation with no dedupe at all emits once per tick, so a check
+    // that samples a single tick's worth sees one message either way and is
+    // green against the defect. This is check 17's trap in reverse — there
+    // the danger was too little output to distinguish, here it is too short
+    // a window.
+    {
+      const h = makeHarness(tmuxBackend)
+      const liveOf = () => h.events
+        .filter((m) => m.channel === 'session:live' && m.payload.panelId === 'L1')
+        .map((m) => m.payload)
+
+      await h.manager.create({ panelId: 'L1', cwd: os.homedir(), args: ['-l'], cols: 80, rows: 24 })
+      // Long enough for at least three ticks at LIVE_TICK_MS (2000ms).
+      await sleep(7000)
+      const settled = liveOf()
+
+      h.manager.write('L1', 'cd /tmp\n')
+      await sleep(7000)
+      const after = liveOf()
+
+      ok('23 live cwd is sent once, then only when it CHANGES',
+        settled.length === 1 &&
+          typeof settled[0].cwd === 'string' && settled[0].cwd.length > 0 &&
+          after.length === 2 && after[1].cwd !== after[0].cwd,
+        `settled=${settled.length} total=${after.length} ${JSON.stringify(after)}`)
+      h.manager.kill('L1')
+
+      // Check 20's obligation, inherited via 22b: this block must end in a
+      // definite kill-server, never a session kill that leaves a stale
+      // server for the next run — see check 20's own comment for why.
       tmuxBackend.shutdown()
     }
   }
