@@ -2,6 +2,7 @@ import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { isReviewPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
+import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
 
 /**
@@ -124,7 +125,15 @@ export function isRestartable(status: PanelStatus | undefined): boolean {
  */
 export function buildInspectorModel(
   panel: Panel,
-  status: PanelStatus | undefined
+  status: PanelStatus | undefined,
+  /**
+   * Where the panel IS, when anything knows. OPTIONAL and defaulted to
+   * undefined, so every pre-M12 caller and every pre-M12 check keeps its exact
+   * meaning — the trade review-engine.ts's `notARepo` dep already made, and for
+   * the same reason: a required dep would change what a dozen existing checks
+   * assert while looking like a widening.
+   */
+  live?: LiveSession | undefined
 ): InspectorModel {
   if (isReviewPanel(panel)) {
     return {
@@ -160,6 +169,15 @@ export function buildInspectorModel(
     // an accident.
     { key: 'pid', label: 'pid', value: running === undefined ? '—' : String(running.pid) }
   ]
+  // BESIDE, never instead of. See this function's own doc comment: the pane
+  // renders the links rather than the answer, and a panel that has cd'd is
+  // exactly the case where both halves are the point. Absent when there is no
+  // live answer — a spawn cwd under a live label is indistinguishable from a
+  // correct one, and the direct backend has no answer at all.
+  if (live !== undefined) {
+    fields.push({ key: 'live-cwd', label: 'now in', value: live.cwd })
+    fields.push({ key: 'live-command', label: 'running', value: live.currentCommand })
+  }
   if (status?.kind === 'exited') {
     // A TEMPLATE, never `code || …`: 0 is the commonest exit there is and the
     // falsy branch would print the wrong tail for exactly it. Same trap

@@ -14,7 +14,7 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
   applyAgentState, attentionIds, clearAgentState, useAgentState, useAttentionIds
 } from '@renderer/session/agent-state-store'
-import { applyLiveSession, clearLiveSession } from '@renderer/session/live-session-store'
+import { applyLiveSession, clearLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -2513,9 +2513,17 @@ export function Canvas({
   // Save-as-preset disabled with a reason — rather than the pane's empty
   // state. The empty selection stays a first-class state (verify:rail 27b)
   // for the genuinely-no-selection case.
+  // Unconditional and above the ternary: a hook cannot live inside a
+  // conditional, and `selectedId ?? ''` is a panel id that matches nothing,
+  // which the store answers undefined for.
+  const selectedLive = useLiveSession(selectedId ?? '')
   const inspectorBuilt = selectedPanel === undefined
     ? null
-    : buildInspectorModel(selectedPanel, registry.get(selectedPanel.rect.id)?.status)
+    : buildInspectorModel(
+        selectedPanel,
+        registry.get(selectedPanel.rect.id)?.status,
+        selectedLive
+      )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
   // A BOOLEAN, never `selectedPanel` itself, and that is the whole reason it
