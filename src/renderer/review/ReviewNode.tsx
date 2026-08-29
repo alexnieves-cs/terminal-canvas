@@ -247,7 +247,14 @@ function ReviewNodeImpl({
         setOutcome(
           r.kind === 'refused' ? `refused — ${r.detail}`
             : r.kind === 'failed' ? `could not commit — ${r.detail}`
-            : 'nothing to commit — the files changed since this was read')
+            // Its own sentence, and it names the fix rather than the fault:
+            // the repository gained a commit while this one was being
+            // prepared, nothing was written, and the refresh control beside
+            // this button is what the user needs next. Folding it into
+            // `failed` would send them to look at a git that is working.
+            : r.kind === 'head-moved'
+              ? 'the repository moved since this was read — refresh and try again'
+              : 'nothing to commit — the files changed since this was read')
       })
       // A REJECTED INVOKE MUST LAND IN A VISIBLE STATE. Left to the catch-less
       // version, `committing` stays true forever: the button reads "committing…"

@@ -53,11 +53,13 @@ const warnStaleIndex = (r: GitResult): void => {
  * Turn the work a review node reports into a commit, without ever writing the
  * repository's own index.
  *
- * Five calls, or six when the commit deleted something. Four of them run
- * against a scratch GIT_INDEX_FILE and the reconciles at the end deliberately
- * do not, because they are the ones that are meant to write the real index —
- * one staging what the commit contains by blob sha, and one dropping the
- * entries for paths the commit removed, which the first cannot see. The
+ * Seven calls, or eight when the commit deleted something. Two of them are the
+ * HEAD reads that bracket the preparation and one more reads the new sha back;
+ * of the rest, four run against a scratch GIT_INDEX_FILE and the reconciles at
+ * the end deliberately do not, because they are the ones meant to write the
+ * real index — one staging what the commit contains by blob sha, and one
+ * dropping the entries for paths the commit removed, which the first cannot
+ * see. The
  * sequence and the reasons for it live on the argv builders in git-args.ts;
  * what lives here is the ORDER, the arms, and the one rule that is easy to get
  * backwards: a failure after the commit has landed is not a failed commit.
@@ -77,6 +79,16 @@ export function createReviewCommitter(
     // refusal in place of the honest answer.
     if (req.paths.length === 0) return { kind: 'nothing-to-commit' }
 
+    // The FIRST of the two HEAD reads, and it has to come before read-tree
+    // seeds the scratch index from that same HEAD — the two must describe one
+    // commit, or the comparison below is against the wrong reference. A
+    // failure here is `failed` rather than a skipped guard: read-tree would
+    // fail on the next line anyway, and a guard that quietly gives up when it
+    // cannot read HEAD is a guard that is absent exactly when the repository
+    // is in an unusual state.
+    const before = await deps.run(buildHeadArgs(req.root))
+    if (!before.ok) return { kind: 'failed', detail: detailOf(before) }
+
     const index = deps.tempIndexPath()
     const scratch = { env: { GIT_INDEX_FILE: index } }
     try {
@@ -85,6 +97,26 @@ export function createReviewCommitter(
 
       const staged = await deps.run(buildStageArgs(req.root, req.paths), scratch)
       if (!staged.ok) return { kind: 'failed', detail: detailOf(staged) }
+
+      // THE SECOND HEAD READ, and its POSITION is the guard. The scratch index
+      // is seeded from HEAD at the top and this commit parents on HEAD here,
+      // so a commit that landed in between is silently reverted for every file
+      // outside req.paths — no conflict, no warning, an ordinary-looking
+      // commit that rolls its predecessor back. Git has that race for any two
+      // committers; this app's premise is an autonomous agent working in the
+      // same checkout, so the other committer is the ordinary case rather than
+      // an exotic one, and the window is the whole duration of the pre-commit
+      // hook below, which is legitimately thirty seconds on a real project.
+      // Reading here rather than just after read-tree is what closes it: the
+      // earlier position leaves nearly the entire window open while looking
+      // exactly as correct.
+      //
+      // A failed read is NOT treated as a move. "We could not check" and "it
+      // moved" are different facts, and refusing on the first would make an
+      // unreadable HEAD a permanently unusable commit button; the transaction
+      // below is no worse off than it was before this guard existed.
+      const now = await deps.run(buildHeadArgs(req.root))
+      if (now.ok && now.stdout.trim() !== before.stdout.trim()) return { kind: 'head-moved' }
 
       // The one call the user's repository is allowed to say no to. Hooks run
       // here; --no-verify is not offered, because silently skipping a

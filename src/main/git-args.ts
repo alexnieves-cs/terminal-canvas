@@ -43,6 +43,14 @@ export function buildBaselineArgs(root: string): string[] {
   return ['-C', root, 'stash', 'create']
 }
 
+/**
+ * Three callers, two jobs: reading the new commit's sha back, and the pair of
+ * reads that bracket a commit's preparation so a repository that moved
+ * underneath it is refused rather than reverted. Deliberately carries no
+ * scratch `GIT_INDEX_FILE` at any call site — HEAD is a ref, not an index, and
+ * scoping the read to a scratch file would only invite the idea that it
+ * describes one.
+ */
 export function buildHeadArgs(root: string): string[] {
   return ['-C', root, 'rev-parse', 'HEAD']
 }

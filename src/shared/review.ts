@@ -136,7 +136,7 @@ export interface ReviewCommitRequest {
 }
 
 /**
- * Four designed states, not one boolean and an error path.
+ * Five designed states, not one boolean and an error path.
  *
  * `refused` and `failed` split POSITIONALLY rather than by inspecting git's
  * text: `refused` is a non-zero exit from `git commit` itself, which for a
@@ -144,9 +144,15 @@ export interface ReviewCommitRequest {
  * `failed` is a non-zero exit from a call BEFORE the commit was attempted.
  * The two have different fixes — "your repository said no" versus "this did
  * not run" — which is the same standard not-a-repo and repo-unreadable draw.
+ *
+ * `head-moved` is a third situation and not a shade of either: the repository
+ * gained a commit while this one was being prepared, so nothing was attempted.
+ * Its fix is a button the node already has — refresh and look again — where
+ * `refused` sends the user to their hooks and `failed` to their git.
  */
 export type ReviewCommitResult =
   | { kind: 'committed'; sha: string }
   | { kind: 'nothing-to-commit' }
+  | { kind: 'head-moved' }
   | { kind: 'refused'; detail: string }
   | { kind: 'failed'; detail: string }

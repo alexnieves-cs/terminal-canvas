@@ -1001,7 +1001,10 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
   removeTempIndex: (p) => removed.push(p)
 })
 
-// 56. The happy path, and the ORDER is the check. read-tree must precede
+// 56. The happy path, and the ORDER is the check. The HEAD guard (checks 65
+//     and 66) added two rev-parse reads to this sequence, so the count that
+//     used to be in this check's title has moved; what it pins has not.
+//     read-tree must precede
 //     update-index (or the commit contains only the staged paths and DELETES
 //     the rest of the repository), and ls-files must FOLLOW commit (a
 //     pre-commit hook may rewrite the index, and reconciling from entries read
@@ -1023,7 +1026,7 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
   // (found via .pop() above). indexOf alone finds the stage call's position,
   // which is also what the scratch('update-index') read below resolves to.
   const stage = sub.indexOf('update-index')
-  ok('56 the five calls run in order, scoped to the scratch index, and the reconcile is not',
+  ok('56 the calls run in order, scoped to the scratch index, and the reconcile is not',
     out.kind === 'committed' && out.sha === 'newsha' &&
       sub.indexOf('read-tree') < stage && stage < sub.indexOf('commit') &&
       sub.indexOf('commit') < sub.indexOf('ls-files') &&
@@ -1146,6 +1149,59 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     `forced=${JSON.stringify(forced && forced.args)} survived=${JSON.stringify(survived)}`)
 }
 
+
+// 65. THE GUARD'S TWO READS, and their POSITIONS are the whole check. The
+//     scratch index is seeded from HEAD by read-tree and the commit parents on
+//     HEAD, so anything committed in that window is silently reverted for
+//     every file outside our path set — an ordinary-looking commit that rolls
+//     its predecessor back, with no conflict and no warning. This app's whole
+//     premise is an autonomous agent working in the same checkout, so the
+//     other committer is not hypothetical, and the window is not milliseconds:
+//     it is the entire duration of the pre-commit hook.
+//
+//     The second read has to sit immediately BEFORE the commit rather than
+//     just after read-tree, or it closes almost none of that window — which is
+//     the implementation this check exists to reject, and which check 66's
+//     fake (answering both reads from one table entry) cannot tell apart. The
+//     unchanged-HEAD clause is the over-correction guard: a comparison written
+//     backwards refuses every commit there is, which is a feature that never
+//     works rather than one that works and is unsafe.
+{
+  const g = fakeGit({
+    'ls-files': { stdout: '100644 aaa 0\tx\0' },
+    'rev-parse': { stdout: 'samesha\n' }
+  })
+  const out = await committerOn(g.run)({ root: '/r', paths: ['x'], message: 'm' })
+  const sub = g.calls.map((c) => c.args[2])
+  const heads = sub.reduce((acc, name, i) => name === 'rev-parse' ? [...acc, i] : acc, [])
+  ok('65 HEAD is read before read-tree and again immediately before the commit',
+    out.kind === 'committed' &&
+      heads.length >= 2 &&
+      heads[0] < sub.indexOf('read-tree') &&
+      heads[1] === sub.indexOf('commit') - 1)
+}
+
+// 66. HEAD MOVED, so nothing is committed. `head-moved` is its own arm rather
+//     than a `failed` with a sentence in it, for the reason refused/failed and
+//     not-a-repo/repo-unreadable are each two arms: "someone committed
+//     underneath you, re-read and try again" and "this did not run" have two
+//     different fixes, and the first one's fix is a button the node already
+//     has. The discriminating clause is that `commit` was never called — an
+//     implementation that detected the move AFTER committing has detected
+//     nothing, since the damage is the commit.
+//
+//     The fake answers the two HEAD reads in call order, which is the only
+//     way to express a repository that moved underneath a running
+//     transaction.
+{
+  const shas = ['before\n', 'after\n']
+  let nth = 0
+  const g = fakeGit({ 'rev-parse': () => ({ stdout: shas[Math.min(nth++, 1)] }) })
+  const out = await committerOn(g.run)({ root: '/r', paths: ['x'], message: 'm' })
+  ok('66 a HEAD that moved refuses, and never reaches git commit',
+    out.kind === 'head-moved' && !g.calls.some((c) => c.args[2] === 'commit'))
+}
+
 // 61-63. Real git, a real repository, in a SPACED temp directory — the
 //        directory shape that made the pane-died redirect bug survive eight
 //        reviews. Everything above this line drives a fake runner and would
@@ -1162,7 +1218,7 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
   if (git === null || git === '') {
     // LOUD, never silent. A skipped check that prints nothing is a check that
     // stops existing the day the binary goes missing on CI.
-    ok('61-63 SKIPPED — no git binary found', true, 'skipped, not passed')
+    ok('61-63, 67 SKIPPED — no git binary found', true, 'skipped, not passed')
   } else {
     const root = mkdtempSync(join(tmpdir(), 'tc m9c commit '))
     const g = (...args) => execFileSync(git, ['-C', root, ...args], { encoding: 'utf8' })
@@ -1283,6 +1339,69 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     rmSync(root, { recursive: true, force: true })
     rmSync(scratchDir, { recursive: true, force: true })
     try { rmSync(hookLog) } catch { /* best effort */ }
+
+    // 67. THE RACE, RUN. Checks 65 and 66 pin the guard's shape against a
+    //     fake; this is the repository actually moving underneath a
+    //     transaction in flight, which is the only form of evidence that says
+    //     the two HEAD reads are pointed at the right thing. The concurrent
+    //     commit is fired from inside the runner the instant `read-tree`
+    //     resolves — precisely the window the guard exists to cover, and the
+    //     window a real pre-commit hook holds open for as long as it runs.
+    //
+    //     The clause worth having is the LAST one. Refusing is only half the
+    //     answer: what makes the refusal correct is that the other committer's
+    //     work is still HEAD afterwards, which is exactly what the unguarded
+    //     sequencer destroyed — it seeds from HEAD at T0 and parents on HEAD at
+    //     T2, so it reverts everything the intervening commit touched outside
+    //     its own path set, silently, in a commit that looks ordinary.
+    const root2 = mkdtempSync(join(tmpdir(), 'tc m9c race '))
+    const g2 = (...args) => execFileSync(git, ['-C', root2, ...args], { encoding: 'utf8' })
+    g2('init', '-q', '.')
+    g2('config', 'user.email', 't@t')
+    g2('config', 'user.name', 'T')
+    writeFileSync(join(root2, 'ours.txt'), 'base\n')
+    writeFileSync(join(root2, 'theirs.txt'), 'base\n')
+    g2('add', 'ours.txt', 'theirs.txt')
+    g2('commit', '-qm', 'first')
+    // The work this node is reporting, and an unrelated file the OTHER
+    // committer owns — unrelated is the point, since it is the files outside
+    // our path set that an unguarded commit reverts.
+    writeFileSync(join(root2, 'ours.txt'), 'base\nagent\n')
+
+    const scratchDir2 = mkdtempSync(join(tmpdir(), 'tc m9c raceidx '))
+    const runner2 = R.createGitRunner({ gitPath: () => git, env: () => ({}), timeoutMs: () => 20000 })
+    let raced = false
+    const racingRun = async (args, opts) => {
+      const result = await runner2(args, opts)
+      if (args[2] === 'read-tree' && !raced) {
+        raced = true
+        writeFileSync(join(root2, 'theirs.txt'), 'base\nsomeone else\n')
+        g2('add', 'theirs.txt')
+        g2('commit', '-qm', 'concurrent')
+      }
+      return result
+    }
+    const commit2 = R.createReviewCommitter({
+      run: racingRun,
+      tempIndexPath: () => join(scratchDir2, 'index'),
+      removeTempIndex: (p) => { try { rmSync(p) } catch { /* best effort */ } }
+    })
+    const raceOut = await commit2({ root: root2, paths: ['ours.txt'], message: 'agent work' })
+    const head2 = g2('log', '-1', '--format=%s').trim()
+    // Read out of the COMMITTED TREE, never the working tree. Our commit
+    // never writes theirs.txt on disk, so a working-tree read says
+    // "someone else" under the broken sequencer too and asserts nothing at
+    // all. The revert this guards is a TREE fact: the scratch index was
+    // seeded from the old HEAD, so the new commit's tree carries the
+    // PRE-concurrent content for every path outside our own set.
+    const theirsInHead = g2('show', 'HEAD:theirs.txt')
+    ok('67 a commit landing mid-transaction is refused, and survives',
+      raceOut.kind === 'head-moved' && raced &&
+        head2 === 'concurrent' && theirsInHead.includes('someone else'),
+      `kind=${raceOut.kind} raced=${raced} head=${head2} theirsInHead=${JSON.stringify(theirsInHead)}`)
+
+    rmSync(root2, { recursive: true, force: true })
+    rmSync(scratchDir2, { recursive: true, force: true })
   }
 }
 
