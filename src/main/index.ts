@@ -30,6 +30,38 @@ import type { CapturedPanel } from '../shared/ipc-contract'
 let mainWindow: BrowserWindow | null = null
 
 /**
+ * Whether this process owns the app. TWO COPIES OF ONE BUILD ARE DESTRUCTIVE
+ * TO EACH OTHER, and silently: they share one userData directory, so one
+ * store's coalesced write lands on top of the other's, and they resolve the
+ * SAME tmux socket, so before-quit's shutdown() — kill-server — destroys the
+ * OTHER instance's running agents with nothing said anywhere. Reachable by
+ * double-clicking the dock icon while a copy is already open, which
+ * window-all-closed's darwin branch makes easy: an instance with no window is
+ * still an instance, and still holds the socket.
+ *
+ * The dev build is NOT the pair this blocks. app.getName() differs between the
+ * two ('terminal-canvas' from package.json versus the packaged productName
+ * 'Terminal Canvas'), so they already have separate userData paths and
+ * separate locks, and resolveSocket already gives them separate sockets. What
+ * is left is two copies of the SAME build, which is exactly the destructive
+ * case and nothing else.
+ *
+ * TC_ALLOW_MULTI is a developer escape hatch with no UI, the same shape as
+ * TC_TMUX_SOCKET — and it is only safe in combination with that override,
+ * since two instances sharing one socket is the whole hazard above.
+ */
+const allowMultipleInstances = process.env['TC_ALLOW_MULTI']?.trim() === '1'
+const hasInstanceLock = allowMultipleInstances || app.requestSingleInstanceLock()
+if (!hasInstanceLock) {
+  console.warn(
+    '[startup] another instance of this build is already running; ' +
+      'focusing it and quitting. Set TC_ALLOW_MULTI=1 (with TC_TMUX_SOCKET) ' +
+      'to run a second one deliberately.'
+  )
+  app.quit()
+}
+
+/**
  * Which backend spawns panels. Reassigned once by the startup probe; a
  * DirectBackend is the value until then, so a pty:create that somehow arrives
  * before the probe finishes still works rather than throwing.
@@ -341,6 +373,15 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // THE GATE, AND IT MUST STAY AHEAD OF EVERYTHING BELOW. app.quit() above
+  // still runs the ready and quit handlers, so a losing instance that reached
+  // even the first line of this body would start a tmux client on the winner's
+  // socket and write the winner's layout.json on the way back out — the very
+  // damage the lock is taken to prevent, caused by the fix. The same rule
+  // guards before-quit; between them, a process without the lock touches no
+  // store, no socket and no PTY.
+  if (!hasInstanceLock) return
+
   // Resolve the login-shell environment before the first PTY can be requested,
   // so no panel ever spawns with the bare launchd PATH.
   const env = await resolveShellEnv()
@@ -504,9 +545,29 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+
+  // A second launch of this build reaches the running instance here rather
+  // than starting a process of its own. Restoring is not optional: on darwin
+  // the window can be CLOSED while the app runs on, which is the state a user
+  // relaunches from the dock to escape, so an implementation that only calls
+  // focus() would leave the relaunch looking like it did nothing at all.
+  app.on('second-instance', () => {
+    if (mainWindow === null || mainWindow.isDestroyed()) {
+      createWindow()
+      return
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
 })
 
 app.on('before-quit', () => {
+  // See the whenReady gate: a losing instance quits through here, and killAll
+  // -> shutdown() is kill-server on a socket the WINNER owns, while flushSync
+  // writes a store this process never loaded. Both are total and silent.
+  if (!hasInstanceLock) return
+
   // Teardown FIRST, flush SECOND, and the order is the whole point. killAll ->
   // kill(id) -> dropBaseline(id) -> layoutStore.dropBaseline -> scheduleWrite,
   // a 500ms debounce on a process that is quitting: flushing before the

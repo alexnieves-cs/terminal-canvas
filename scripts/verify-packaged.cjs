@@ -48,6 +48,7 @@ const USER_DATA = mkdtempSync(join(tmpdir(), 'tc packaged '))
 const SOCKET = 'terminal-canvas-verify-packaged'
 
 let child = null
+let child2 = null
 let cleaned = false
 function cleanup() {
   // finish() calls cleanup() explicitly and then process.exit()s, which fires
@@ -55,8 +56,10 @@ function cleanup() {
   // harmless (idempotent) but a wasted kill-server exec on every run.
   if (cleaned) return
   cleaned = true
-  if (child && child.exitCode === null) {
-    try { child.kill('SIGKILL') } catch { /* already gone */ }
+  for (const c of [child, child2]) {
+    if (c && c.exitCode === null) {
+      try { c.kill('SIGKILL') } catch { /* already gone */ }
+    }
   }
   // SIGKILL means before-quit never ran, so no shutdown() and no kill-server.
   // Tear the scratch server down by hand instead of leaving it running.
@@ -197,6 +200,69 @@ process.on('exit', cleanup)
     ok('9 a PTY spawned in the packaged app',
       match !== null && Number(match[1]) > 0,
       match ? match[0] : out.slice(-2000))
+  }
+
+  // ---- The second instance ---------------------------------------------
+  // Two copies of one build sharing a userData directory and a tmux socket is
+  // the destructive case: before-quit runs shutdown(), i.e. kill-server, so
+  // quitting EITHER of them destroys the OTHER's agents, and flushSync writes
+  // one store over the other. The lock is what makes that unreachable, and
+  // this is the only tier that can see it — the lock needs two real app
+  // PROCESSES, which every other suite in this repo runs exactly one of.
+  //
+  // --user-data-dir is what keeps this honest in both directions: Electron
+  // keys the single-instance lock on that directory, so the second launch
+  // below collides with THIS run's first child rather than with whatever the
+  // developer happens to have open.
+  {
+    const before = child.exitCode === null
+    child2 = spawn(binary, [`--user-data-dir=${USER_DATA}`], {
+      cwd: ROOT,
+      env: {
+        HOME: process.env.HOME,
+        SHELL: process.env.SHELL,
+        USER: process.env.USER,
+        PATH: STRIPPED_PATH,
+        TC_TMUX_SOCKET: SOCKET
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let out2 = ''
+    child2.stdout.on('data', (b) => { out2 += b.toString() })
+    child2.stderr.on('data', (b) => { out2 += b.toString() })
+    let exit2 = null
+    child2.on('exit', (code) => { exit2 = code })
+
+    const stop = Date.now() + 30_000
+    while (Date.now() < stop && exit2 === null) {
+      await new Promise((r) => setTimeout(r, 500))
+    }
+
+    // 10. Both clauses are required and the second is the discriminating one.
+    // "It exited" alone is satisfied by an instance that booted fully — ran
+    // the shell probe, started a tmux client, wrote the store — and only THEN
+    // quit, which has already done every destructive thing the lock exists to
+    // prevent. The summary line is logged from inside whenReady's body, so its
+    // ABSENCE is the evidence that the gate ran before any of that.
+    ok('10 a second instance of the same build refuses to run',
+      exit2 !== null && !/\[startup\] packaged=/.test(out2),
+      `exit=${exit2} out=${out2.slice(-800)}`)
+
+    // 11. THE OTHER DIRECTION, and it is not a formality: a gate written
+    // backwards — the arriving instance takes over and quits the incumbent —
+    // satisfies check 10 perfectly, because the second process does exit. What
+    // separates them is who is left alive. The PTY clause is the one that
+    // matters, since it is the running agent, not the window, that a user
+    // loses. Read through the pid PtyManager itself logged rather than through
+    // a fresh query, so a first child that survived with a dead session cannot
+    // pass.
+    const pidMatch = /\[pty\] spawned .*pid=(\d+)/.exec(out)
+    const pid = pidMatch ? Number(pidMatch[1]) : 0
+    let alive = false
+    try { process.kill(pid, 0); alive = true } catch { alive = false }
+    ok('11 the incumbent and its PTY survived the second launch',
+      before && child.exitCode === null && pid > 0 && alive,
+      `incumbentWasUp=${before} incumbentExit=${child.exitCode} pid=${pid} alive=${alive}`)
   }
 
   finish()
