@@ -1,5 +1,6 @@
 import {
   buildCommitArgs,
+  buildForceRemoveArgs,
   buildHeadArgs,
   buildReadTreeArgs,
   buildReconcileArgs,
@@ -33,15 +34,33 @@ const detailOf = (r: GitResult): string =>
   `${r.stderr}${r.stderr && r.stdout ? '\n' : ''}${r.stdout}`.trim().slice(0, COMMIT_DETAIL_MAX)
 
 /**
+ * Loud, once, and swallowed. The repository is committed and correct; what is
+ * stale is the index, and the visible symptom is a phantom staged change in
+ * the agent's own status output. Reporting a FAILURE here would say the work
+ * was not committed when it demonstrably was, and the obvious next thing a
+ * user does then is commit it twice.
+ */
+const warnStaleIndex = (r: GitResult): void => {
+  console.warn(
+    '[review] committed, but the repository index could not be brought back ' +
+      'in step with the new HEAD. `git status` in that repository may report ' +
+      'staged changes for files that were just committed; `git reset` clears ' +
+      'it. ' + detailOf(r)
+  )
+}
+
+/**
  * Turn the work a review node reports into a commit, without ever writing the
  * repository's own index.
  *
- * Five calls. Four of them run against a scratch GIT_INDEX_FILE and the fifth
- * — the reconcile — deliberately does not, because it is the one that is meant
- * to write the real index. The sequence and the reasons for it live on the
- * argv builders in git-args.ts; what lives here is the ORDER, the arms, and
- * the one rule that is easy to get backwards: a failure after the commit has
- * landed is not a failed commit.
+ * Five calls, or six when the commit deleted something. Four of them run
+ * against a scratch GIT_INDEX_FILE and the reconciles at the end deliberately
+ * do not, because they are the ones that are meant to write the real index —
+ * one staging what the commit contains by blob sha, and one dropping the
+ * entries for paths the commit removed, which the first cannot see. The
+ * sequence and the reasons for it live on the argv builders in git-args.ts;
+ * what lives here is the ORDER, the arms, and the one rule that is easy to get
+ * backwards: a failure after the commit has landed is not a failed commit.
  *
  * Injected deps rather than imports, so the whole transaction is drivable in
  * the plain-node verify tier against a fake runner — the same shape
@@ -87,17 +106,19 @@ export function createReviewCommitter(
         const parsed = parseStagedEntries(entries.stdout)
         if (parsed.length > 0) {
           const reconciled = await deps.run(buildReconcileArgs(req.root, parsed))
-          if (!reconciled.ok) {
-            // Loud, once, and swallowed. The repository is committed and
-            // correct; what is stale is the index, and the visible symptom is
-            // a phantom staged deletion in the agent's own status output.
-            console.warn(
-              '[review] committed, but the repository index could not be ' +
-                'brought back in step with the new HEAD. `git status` in that ' +
-                'repository may report staged deletions for files that were ' +
-                'just committed; `git reset` clears it. ' + detailOf(reconciled)
-            )
-          }
+          if (!reconciled.ok) warnStaleIndex(reconciled)
+        }
+        // The other half of the same tidiness, and it needs its own call
+        // because it is a different verb: a path the commit DELETED has no
+        // entry in the read-back to restage, so --cacheinfo above never sees
+        // it and the real index keeps the entry it had. See
+        // buildForceRemoveArgs for what that reads as, and for the staging
+        // trade it deliberately accepts.
+        const present = new Set(parsed.map((e) => e.path))
+        const deleted = req.paths.filter((p) => !present.has(p))
+        if (deleted.length > 0) {
+          const removed = await deps.run(buildForceRemoveArgs(req.root, deleted))
+          if (!removed.ok) warnStaleIndex(removed)
         }
       }
 

@@ -266,6 +266,34 @@ export function buildReconcileArgs(root: string, entries: StagedEntry[]): string
   ]
 }
 
+/**
+ * Drop the REAL index's entries for paths the commit DELETED.
+ *
+ * `ls-files --stage` prints nothing for a path that is no longer in the tree,
+ * so the set of requested paths ABSENT from that read-back is exactly the set
+ * the commit deleted — and buildReconcileArgs, which stages by `--cacheinfo`,
+ * has no entry to stage for them and leaves the index's stale entry in place.
+ * Measured, that reads as `AD <path>` in the agent's own `git status`: the
+ * file staged as NEW in a repository whose HEAD just deleted it. It is the
+ * mirror of the `D`/`MM` phantom the --cacheinfo half exists to remove, and
+ * worse in one respect — an agent that runs `git commit` after reading it
+ * re-adds the file it just deleted.
+ *
+ * `--force-remove` rather than `--remove`, because `--remove` only drops an
+ * entry whose file is actually gone from the working tree, and the agent is
+ * free to have recreated it in the meantime; the entry we are removing
+ * describes a tree that no longer exists either way.
+ *
+ * THE TRADE, chosen rather than missed: if the user had independently staged
+ * one of these paths, this discards that staging. It is still the right call —
+ * the `AD` state does not merely confuse, it actively misleads an agent into
+ * undoing the deletion — and unlike the --cacheinfo half there is no per-path
+ * blob to restore it to, because the commit is the reason the path has none.
+ */
+export function buildForceRemoveArgs(root: string, paths: string[]): string[] {
+  return ['-C', root, 'update-index', '--force-remove', '--', ...paths]
+}
+
 /** `<mode> <sha> <stage>\t<path>` records, NUL-separated. */
 export function parseStagedEntries(stdout: string): StagedEntry[] {
   const out: StagedEntry[] = []

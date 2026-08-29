@@ -1098,6 +1098,54 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
       none.kind === 'nothing-to-commit' && empty.calls.length === 0)
 }
 
+// 64. A COMMITTED DELETION, reconciled. `ls-files --stage` returns NOTHING
+//     for a path the commit deleted, so the absent-from-the-read-back set is
+//     exactly the deleted set — and leaving those entries alone in the real
+//     index is the precise phantom the reconcile exists to remove, wearing
+//     the opposite sign. Measured against real git: the index still holds the
+//     pre-commit entry for a path HEAD no longer has, so `git status` reads
+//     `AD a.txt` — the file staged as NEW in a repository that just deleted
+//     it. An agent reading that re-adds the file it meant to remove, which is
+//     strictly worse than the `D`/`MM` case, because it is a wrong answer the
+//     agent will act on rather than merely a confusing one.
+//
+//     Both halves matter. The force-remove must NOT carry the scratch env —
+//     it is a real-index write, like the --cacheinfo reconcile beside it —
+//     and it must name only the deleted path, or a surviving file is removed
+//     from the index it was just committed into. And a FAILING force-remove
+//     still reports `committed`, for check 60's reason: the commit has
+//     landed, and telling the user otherwise invites a second one.
+{
+  const g = fakeGit({
+    // Only the surviving path comes back; `gone.txt` was deleted by the
+    // commit, so git prints no entry for it at all.
+    'ls-files': { stdout: '100644 aaa 0\tkept.txt\0' },
+    'rev-parse': { stdout: 'newsha\n' }
+  })
+  const out = await committerOn(g.run)({
+    root: '/r', paths: ['kept.txt', 'gone.txt'], message: 'm'
+  })
+  const forced = g.calls.find((c) => c.args.includes('--force-remove'))
+  // Same shape, with the force-remove refusing. `--cacheinfo` is what tells
+  // the two update-index reconciles apart in the table.
+  const h = fakeGit({
+    'ls-files': { stdout: '100644 aaa 0\tkept.txt\0' },
+    'rev-parse': { stdout: 'newsha\n' },
+    'update-index': (args) => args.includes('--force-remove')
+      ? { ok: false, code: 1, stderr: 'index.lock exists' }
+      : {}
+  })
+  const survived = await committerOn(h.run)({
+    root: '/r', paths: ['kept.txt', 'gone.txt'], message: 'm'
+  })
+  ok('64 a path absent from the read-back is force-removed, off the scratch index',
+    out.kind === 'committed' && forced !== undefined &&
+      forced.env === undefined &&
+      forced.args.includes('gone.txt') && !forced.args.includes('kept.txt') &&
+      survived.kind === 'committed' && survived.sha === 'newsha',
+    `forced=${JSON.stringify(forced && forced.args)} survived=${JSON.stringify(survived)}`)
+}
+
 // 61-63. Real git, a real repository, in a SPACED temp directory — the
 //        directory shape that made the pane-died redirect bug survive eight
 //        reviews. Everything above this line drives a fake runner and would
@@ -1122,12 +1170,17 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     g('config', 'user.email', 't@t')
     g('config', 'user.name', 'T')
     writeFileSync(join(root, 'a.txt'), 'base\n')
-    g('add', 'a.txt')
+    // Committed now so the agent can DELETE it below — the third shape a
+    // numstat reports, and the one whose reconcile has no ls-files entry to
+    // work from. See check 63's deletion clause.
+    writeFileSync(join(root, 'gone.txt'), 'doomed\n')
+    g('add', 'a.txt', 'gone.txt')
     g('commit', '-qm', 'first')
 
-    // The agent's work: one modified file and one brand-new one.
+    // The agent's work: one modified file, one brand-new one, one deleted.
     writeFileSync(join(root, 'a.txt'), 'base\nagent\n')
     writeFileSync(join(root, 'new file.txt'), 'agent\n')
+    rmSync(join(root, 'gone.txt'))
     // The USER's own unrelated staging, which must survive untouched.
     writeFileSync(join(root, 'mine.txt'), 'user\n')
     g('add', 'mine.txt')
@@ -1177,7 +1230,7 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
       removeTempIndex: (p) => { try { rmSync(p) } catch { /* best effort */ } }
     })
     const out = await commit({
-      root, paths: ['a.txt', 'new file.txt'], message: 'agent work'
+      root, paths: ['a.txt', 'new file.txt', 'gone.txt'], message: 'agent work'
     })
 
     // 61. Hooks run, and they see OUR staging. A commit-tree implementation
@@ -1204,12 +1257,28 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     //     agent reading its own status will try to "fix". The user's own
     //     staged mine.txt must survive that, or the reconcile has become the
     //     wholesale index write it exists to avoid.
+    //
+    //     The DELETED path is the clause the --cacheinfo half cannot reach:
+    //     `ls-files --stage` prints nothing for it, so there is no entry to
+    //     restage and the real index keeps the one it had — measured, that
+    //     is `AD gone.txt`, the file staged as NEW in a repository whose HEAD
+    //     just deleted it. It is asserted through the SAME `git status` read
+    //     as its neighbours rather than as a second mechanism, because what
+    //     is wrong in every one of these cases is what git derives from the
+    //     index, not the bytes in it.
     const status = g('status', '--porcelain')
     const committedFiles = g('show', '--stat', '--name-only', '--format=', 'HEAD')
     ok('63 the reconcile leaves no phantom staged change, and the user\'s own staging survives',
       committedFiles.includes('a.txt') && committedFiles.includes('new file.txt') &&
+        committedFiles.includes('gone.txt') &&
         !/^[ADM]M? +(a\.txt|new file\.txt)/m.test(status) &&
-        /^A  mine\.txt/m.test(status))
+        // A correctly reconciled deletion leaves NO status line for that path
+        // at all, so this is an absence rather than a shape — the index-state
+        // regex above cannot express it, because the wrong answer here is
+        // `AD`, whose second column is a D the pattern's ` +` never reaches.
+        !/gone\.txt/.test(status) &&
+        /^A  mine\.txt/m.test(status),
+      `status=${JSON.stringify(status)}`)
 
     rmSync(root, { recursive: true, force: true })
     rmSync(scratchDir, { recursive: true, force: true })
