@@ -85,6 +85,26 @@ const pkg = JSON.parse(read('package.json'))
   ok('6 private stays true — an app, never an npm package', pkg.private === true)
 }
 
+// 7. .claude/settings.json was tracked until this check existed, carrying the
+// author's absolute home path (/Users/<name>/.claude/plugins/cache/...) and
+// nine ad-hoc permission grants from development sessions — including perl
+// one-liners that rewrite Palette.tsx in place. It is local tool
+// configuration, not source: it means nothing to a contributor, and the home
+// path is personal information a public repository has no reason to carry.
+// Asserted against `git ls-files` rather than the filesystem, because the file
+// SHOULD still exist locally; what must not happen is it being tracked again.
+{
+  const { execFileSync } = require('node:child_process')
+  let tracked = ''
+  try {
+    tracked = execFileSync('git', ['ls-files', '.claude/'], { cwd: ROOT, encoding: 'utf8' })
+  } catch {
+    // Not a git checkout (a downloaded tarball). Nothing to assert.
+    tracked = ''
+  }
+  ok('7 no .claude/ file is tracked', tracked.trim() === '', tracked.trim() || 'none')
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

@@ -24,5 +24,9 @@ graphify-out/
 # working state, not source: committing a worktree would put the whole tree
 # in the repo a second time, and the SDD ledger is a recovery map for one
 # session, not a record anyone reads later.
-.claude/worktrees/
+# Local Claude Code configuration and scratch. settings.json accumulates
+# machine-specific permission grants with absolute home paths in them, and a
+# worktree committed to the repository would put the whole tree in twice.
+# Local tooling state, never source.
+.claude/
 .superpowers/
