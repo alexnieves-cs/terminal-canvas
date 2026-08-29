@@ -2312,18 +2312,37 @@ app.whenReady().then(async () => {
           .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
         true
       `)
-      const focused = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
+      // M12: a SYNTHETIC live update for the panel about to be captured, the
+      // same route check 90 uses for the inspector's save-panel path — not a
+      // real tmux session (`backend` is still DIRECT here, so pollLive's own
+      // list() answers null and nothing would arrive on its own). Without
+      // this, onCapture's `getLiveSession(...) ?? panel.spec.cwd` fallback
+      // (Canvas.tsx, the MENU-driven capture path preset:save reaches through
+      // main's Presets menu, distinct from preset:save-panel's inspector
+      // path) is indistinguishable from a reverted `panel.spec.cwd` alone:
+      // nothing forces the live branch to be the one actually exercised.
+      // Check 90 does not cover this — it drives preset:save-panel via the
+      // inspector's own action, never PRESET_CAPTURE — so this was the
+      // surface a whole-branch review found genuinely uncovered.
+      const CAPTURE_LIVE_DIR = mkdtempSync(join(tmpdir(), 'tc panels capture-live '))
+      win.webContents.send(IPC_EVENTS.SESSION_LIVE,
+        { panelId: targetId, cwd: CAPTURE_LIVE_DIR, currentCommand: 'bash' })
+      const focused = await waitUntil(
+        async () => {
+          const c = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
+          return c !== null && c.cwd === CAPTURE_LIVE_DIR ? c : false
+        }, 3000)
       await wc.executeJavaScript(`
         document.querySelector('.canvas')
           .dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 }))
         true
       `)
       const unfocused = await requestFromRenderer(wc, IPC_EVENTS.PRESET_CAPTURE, null)
-      ok('30 PRESET_CAPTURE returns the focused panel spec, and null with nothing focused',
-        focused !== null && typeof focused.cwd === 'string' &&
+      ok('30 PRESET_CAPTURE returns the focused panel\'s LIVE cwd, not merely its spawn one, and null with nothing focused',
+        focused !== false && focused !== null && focused.cwd === CAPTURE_LIVE_DIR &&
           Array.isArray(focused.args) && typeof focused.w === 'number' &&
           unfocused === null,
-        `focused=${JSON.stringify(focused)} unfocused=${JSON.stringify(unfocused)}`)
+        `focused=${JSON.stringify(focused)} live=${CAPTURE_LIVE_DIR} unfocused=${JSON.stringify(unfocused)}`)
     }
 
     {

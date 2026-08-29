@@ -219,7 +219,17 @@ export class PtyManager {
       // time this panelId may already have been recreated. Evicting by key
       // alone would unhook that new session and orphan its PTY, so only remove
       // the entry if it is still this exact session.
-      if (this.sessions.get(spec.panelId) === session) this.sessions.delete(spec.panelId)
+      if (this.sessions.get(spec.panelId) === session) {
+        this.sessions.delete(spec.panelId)
+        // lastLive's own comment claims it is cleared alongside the session
+        // unconditionally — kill() and detachAll() already do; a natural exit
+        // (the panel's own shell typed `exit`) is the third route out of the
+        // map and was the one route that left a stale entry behind. Unreachable
+        // today only because every re-create route goes through
+        // dispose -> pty.kill first (see Canvas.tsx's five dispose call sites),
+        // which is a property of the renderer's call sites, not of this class.
+        this.lastLive.delete(spec.panelId)
+      }
       // AFTER the flush above and before the exit is announced. Order matters
       // in one direction only: 'exited' is terminal in the state machine
       // precisely so the last bytes a dying process emits — which the flush

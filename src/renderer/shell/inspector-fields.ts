@@ -171,12 +171,28 @@ export function buildInspectorModel(
   ]
   // BESIDE, never instead of. See this function's own doc comment: the pane
   // renders the links rather than the answer, and a panel that has cd'd is
-  // exactly the case where both halves are the point. Absent when there is no
-  // live answer — a spawn cwd under a live label is indistinguishable from a
-  // correct one, and the direct backend has no answer at all.
-  if (live !== undefined) {
-    fields.push({ key: 'live-cwd', label: 'now in', value: live.cwd })
-    fields.push({ key: 'live-command', label: 'running', value: live.currentCommand })
+  // exactly the case where both halves are the point. Gated on isRunning, not
+  // on `live !== undefined` alone: nothing clears the live store when a
+  // process exits (see clearLiveSession's own call sites — every one of them
+  // is a DISPOSE, not an exit), so an unguarded push renders "running: sh"
+  // beside "status: exited 0" for the rest of that panel's life — the
+  // milestone's own thesis, a present-tense label showing a stale value, failing
+  // through the one path nobody looked at. A spawn cwd under a live label is
+  // still indistinguishable from a correct one, so this is also why the field
+  // is absent rather than merely stale-looking when there is no live answer at
+  // all (the direct backend, or a process that has not been polled yet).
+  //
+  // Each half is ALSO skipped individually when empty: verify:tmux 28 exists
+  // because parseListOutput tolerates a five-column line with
+  // currentCommand: '' — a tmux server started by an older build, ignoring a
+  // new client's format string. Pushing that through renders a labelled row
+  // with nothing in it, on exactly the machine-mid-upgrade case the tolerance
+  // was written to survive.
+  if (live !== undefined && isRunning(status)) {
+    if (live.cwd !== '') fields.push({ key: 'live-cwd', label: 'now in', value: live.cwd })
+    if (live.currentCommand !== '') {
+      fields.push({ key: 'live-command', label: 'running', value: live.currentCommand })
+    }
   }
   if (status?.kind === 'exited') {
     // A TEMPLATE, never `code || …`: 0 is the commonest exit there is and the

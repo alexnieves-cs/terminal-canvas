@@ -917,6 +917,32 @@ ok('55 a review row is never dormant', R.buildRailRows(
     `${base} | ${movedCwd} | ${movedCmd}`)
 }
 
+// 64. THE LIVE ROWS OUTLIVE THE PROCESS if the push is gated on `live !==
+// undefined` alone. Nothing clears the live store when a session exits — every
+// clearLiveSession call site in Canvas.tsx is a DISPOSE, not an exit — so a
+// panel whose shell ran `exit` keeps its last-known live answer sitting in the
+// map forever, and buildInspectorModel would go on rendering "running: sh"
+// two rows above "exit: exited 0" for the rest of that panel's life. That is
+// the milestone's own thesis (a present-tense label showing a stale value is
+// worse than none) failing through the one path nobody looked at. The fix is
+// isRunning, this file's own shared predicate for "is this panel a live
+// process" — not a second, narrower copy of that judgment written inline here.
+// Uses the top-of-file `panel()`/`running()` helpers rather than hand-rolled
+// literals, because a literal built with `z` nested inside `rect` (as checks
+// 61-63 above do) is the WRONG shape for a real Panel, which keeps `z`
+// top-level, and that mistake should not spread to a fourth check.
+{
+  const p = panel('p1', { spec: { cwd: '/home/me', args: [] } })
+  const liveAnswer = { cwd: '/repo/x', currentCommand: 'claude' }
+  const exited = { kind: 'exited', code: 0 }
+  const model = R.buildInspectorModel(p, exited, liveAnswer)
+  const keys = model.fields.map((f) => f.key)
+  ok('64 an exited panel renders no live row even with a live answer still cached, while its spawn cwd stays',
+    !keys.includes('live-cwd') && !keys.includes('live-command') &&
+      keys.includes('cwd') && keys.includes('exit'),
+    JSON.stringify(keys))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
