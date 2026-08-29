@@ -23,6 +23,32 @@ import type { ReviewResult, ReviewSubject } from '@shared/review'
  */
 export const NODE_FILE_CAP = 60
 
+/**
+ * Whether this node can commit what it is showing, as data rather than as a
+ * rendering decision.
+ *
+ * Three states rather than two, and `blocked` is the one that earns its place:
+ * `shared` reports real files that genuinely cannot be attributed to one
+ * agent, so committing them would bundle another agent's work under this
+ * node's message. Hiding the control there would make "not supported here"
+ * indistinguishable from "not built yet" — verify:palette 31's rule — so it
+ * renders, disabled, with the reason on screen.
+ */
+export type ReviewNodeCommit =
+  | {
+      kind: 'ready'
+      /**
+       * EVERY path the result reported, not the rows under NODE_FILE_CAP. The
+       * cap is a display bound; deriving the commit from the rendered rows
+       * would drop every file past the sixtieth from an irreversible write,
+       * silently, in a commit that looks complete.
+       */
+      paths: string[]
+      label: string
+    }
+  | { kind: 'blocked'; reason: string }
+  | { kind: 'none' }
+
 export interface ReviewNodeRow {
   path: string
   added: number
@@ -46,6 +72,7 @@ export interface ReviewNodeModel {
   note?: string
   files: ReviewNodeRow[]
   more: number
+  commit: ReviewNodeCommit
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -66,24 +93,24 @@ export function buildReviewNodeModel(input: {
   const root = subject.repoRoot
 
   if (result === undefined) {
-    return { heading, root, summary: 'reading…', files: [], more: 0 }
+    return { heading, root, summary: 'reading…', files: [], more: 0, commit: { kind: 'none' } }
   }
   switch (result.kind) {
     case 'never-started':
-      return { heading, root, summary: 'nothing yet', note: 'this panel had no session when the review was opened', files: [], more: 0 }
+      return { heading, root, summary: 'nothing yet', note: 'this panel had no session when the review was opened', files: [], more: 0, commit: { kind: 'none' } }
     case 'not-a-repo':
       // RENDERED here, hidden in the pane. See this module's own header.
-      return { heading, root, summary: 'no repository', note: 'this panel was not spawned inside a git repository', files: [], more: 0 }
+      return { heading, root, summary: 'no repository', note: 'this panel was not spawned inside a git repository', files: [], more: 0, commit: { kind: 'none' } }
     case 'git-missing':
-      return { heading, root, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0 }
+      return { heading, root, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0, commit: { kind: 'none' } }
     case 'repo-unreadable':
-      return { heading, root, summary: 'unavailable', note: `git could not open this repository — ${result.detail}`, files: [], more: 0 }
+      return { heading, root, summary: 'unavailable', note: `git could not open this repository — ${result.detail}`, files: [], more: 0, commit: { kind: 'none' } }
     case 'baseline-lost':
-      return { heading, root, summary: 'unattributable', note: 'this repository could not be read against its baseline', files: [], more: 0 }
+      return { heading, root, summary: 'unattributable', note: 'this repository could not be read against its baseline', files: [], more: 0, commit: { kind: 'none' } }
     case 'clean':
       // NOT an empty render: a panel that genuinely changed nothing and one
       // the feature is broken for must not look the same.
-      return { heading, root, summary: 'no changes', files: [], more: 0 }
+      return { heading, root, summary: 'no changes', files: [], more: 0, commit: { kind: 'none' } }
     default:
       break
   }
@@ -104,7 +131,14 @@ export function buildReviewNodeModel(input: {
       summary: `${plural(result.files.length, 'file')} changed`,
       note: `${result.panelCount} panels share this repo — changes can't be attributed`,
       files: rows,
-      more
+      more,
+      commit: {
+        kind: 'blocked',
+        reason:
+          `${result.panelCount} panels share this checkout, so these changes ` +
+          'cannot be attributed to one agent — committing them here would put ' +
+          'another agent\'s work under this message.'
+      }
     }
   }
   return {
@@ -112,7 +146,12 @@ export function buildReviewNodeModel(input: {
     root,
     summary: `${plural(result.files.length, 'file')} changed · +${result.added} −${result.removed}`,
     files: rows,
-    more
+    more,
+    commit: {
+      kind: 'ready',
+      paths: result.files.map((f) => f.path),
+      label: `Commit ${plural(result.files.length, 'file')}`
+    }
   }
 }
 

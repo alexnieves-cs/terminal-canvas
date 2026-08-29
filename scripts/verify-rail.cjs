@@ -773,6 +773,58 @@ ok('55 a review row is never dormant', R.buildRailRows(
       m.fields.some((f) => f.key === 'repo' && f.value === '/tmp/repo'))
 }
 
+// 57. `changes` offers the verb, and the paths are EVERY file the result
+//     reported — not the rows under NODE_FILE_CAP. The cap is a display
+//     bound; deriving the commit from the rendered rows would silently drop
+//     every file past the sixtieth from the commit, which is a partial commit
+//     that looks complete and is the quietest possible wrong answer for an
+//     irreversible write. Sized off NODE_FILE_CAP rather than a literal, so
+//     it keeps testing the OVERFLOW if that cap ever moves.
+{
+  const n = R.NODE_FILE_CAP + 5
+  const files = Array.from({ length: n }, (_, i) =>
+    ({ path: `f${i}.ts`, added: 1, removed: 0, binary: false, untracked: false }))
+  const m = nodeModel({ kind: 'changes', root: '/r', added: n, removed: 0, files })
+  ok('57 changes offers commit over EVERY reported file, not the rendered ones',
+    m.commit.kind === 'ready' && m.commit.paths.length === n &&
+      m.files.length === R.NODE_FILE_CAP && m.commit.label.includes(String(n)),
+    `paths=${m.commit.paths.length} rows=${m.files.length} label=${m.commit.label}`)
+}
+
+// 58. `shared` BLOCKS it, visibly. A commit here would bundle another agent's
+//     work under this node's message, which is exactly the confident wrong
+//     answer the shared arm exists to refuse — and hiding the control instead
+//     would make "not supported here" indistinguishable from "not built yet",
+//     the rule verify:palette 31 states. The reason must NAME the situation:
+//     a generic "unavailable" sends the user looking for a bug.
+{
+  const m = nodeModel({ kind: 'shared', root: '/r', panelCount: 2, files: [
+    { path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }] })
+  ok('58 shared blocks the commit with a reason that names the sharing',
+    m.commit.kind === 'blocked' && /share/i.test(m.commit.reason) &&
+      m.commit.reason.includes('2'), `commit=${JSON.stringify(m.commit)}`)
+}
+
+// 59. Every other arm offers nothing, and `clean` is the one worth naming:
+//     there is genuinely nothing to commit, so a disabled control there would
+//     be a permanent grey button on the state a node spends most of its life
+//     in — including, from now on, the state it lands in immediately AFTER a
+//     successful commit. The in-flight query is included for the same reason
+//     check 48 includes it: it is every selection change and every mount.
+{
+  const arms = [
+    { kind: 'clean', root: '/r' },
+    { kind: 'not-a-repo' },
+    { kind: 'never-started' },
+    { kind: 'git-missing' },
+    { kind: 'baseline-lost', root: '/r' },
+    { kind: 'repo-unreadable', root: '/r', detail: 'x' }
+  ]
+  const none = arms.every((r) => nodeModel(r).commit.kind === 'none')
+  ok('59 every non-changes arm offers no commit, an in-flight query included',
+    none && nodeModel(undefined).commit.kind === 'none')
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
