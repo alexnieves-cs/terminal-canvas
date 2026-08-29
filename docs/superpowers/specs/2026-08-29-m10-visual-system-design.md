@@ -2,7 +2,11 @@
 
 **Status:** designed, not yet implemented.
 **Predecessor:** `2026-08-28-m9-review-layer-design.md`
-**Touches:** `src/renderer/styles.css`, and nothing else.
+**Touches:** `src/renderer/styles.css` for every visual change, plus
+`scripts/verify-styles.cjs` and one `package.json` script entry, added by the
+implementation plan so the success criteria below are executable rather than
+aspirational. No `.tsx`, no class rename, no `index.html`, no dependency —
+the boundary that bounds risk to the running app is unchanged.
 **Successor:** M11 — Themes, created by this spec (see "What M10 does not
 solve").
 **Backlog entries:** none existing. M10 emits several, all listed as bullets
