@@ -161,9 +161,30 @@ function ReviewNodeImpl({
 
   const runCommit = (): void => {
     const message = draft?.trim() ?? ''
-    // An empty message is not a commit git would take, and a validation error
-    // is worse here than an inert button: the button says what is missing.
-    if (message === '' || model.commit.kind !== 'ready' || committing) return
+    // Three guards, and only one of them is silent. `committing` is silent on
+    // purpose: the button is already disabled and reads "committing…", so
+    // there is nothing left to say. The other two are reachable from the
+    // primary path — type a message, press Enter — and must each say why
+    // nothing happened, or Enter becomes the inert-button-with-no-explanation
+    // failure this file's own rule forbids for every other query in it.
+    if (committing) return
+    if (message === '') {
+      setOutcome('a commit needs a message')
+      return
+    }
+    if (model.commit.kind !== 'ready') {
+      // The node re-queries on its own whenever the subject's agent goes
+      // idle, so `result` can flip out from under an input the user is still
+      // typing into. If it landed on `blocked`, that arm already names the
+      // reason (e.g. a shared checkout) — reuse it rather than inventing a
+      // second, vaguer sentence for the same fact. Otherwise there is
+      // nothing left to commit at all; say so and point at the refresh.
+      setOutcome(
+        model.commit.kind === 'blocked'
+          ? model.commit.reason
+          : 'these changes are no longer available to commit — refresh and try again')
+      return
+    }
     setCommitting(true)
     setOutcome(null)
     void window.canvas.review.commit(
