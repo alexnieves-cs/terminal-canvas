@@ -5,6 +5,17 @@
   "main": "./out/main/index.js",
   "author": "Alex Nieves",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexnieves-cs/terminal-canvas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexnieves-cs/terminal-canvas/issues"
+  },
+  "homepage": "https://github.com/alexnieves-cs/terminal-canvas#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "private": true,
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
@@ -15,6 +26,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-rebuild -f -w node-pty",
     "package": "npm run build && electron-builder --config electron-builder.config.cjs",
+    "verify:meta": "node scripts/verify-meta.cjs",
     "verify:package": "node scripts/verify-package.cjs",
     "verify:packaged": "unset ELECTRON_RUN_AS_NODE && node scripts/verify-packaged.cjs",
     "verify:pty": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty.cjs",
@@ -32,7 +44,7 @@
     "verify:canvas": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-canvas.cjs",
     "verify:xterm": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-xterm-detach.cjs",
     "verify:panels": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels.cjs",
-    "verify": "npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:palette && npm run verify:rail && npm run verify:review && npm run verify:tmux && npm run verify:agent-state && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
+    "verify": "npm run verify:meta && npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:palette && npm run verify:rail && npm run verify:review && npm run verify:tmux && npm run verify:agent-state && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
   },
   "dependencies": {
     "node-pty": "1.1.0"
