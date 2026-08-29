@@ -20,6 +20,13 @@ export interface ReviewNodeProps {
   onFocus: (id: string) => void
   onBeginDrag: (state: DragState) => void
   onClose: (id: string) => void
+  /**
+   * A commit landed. The node cannot advance its own baseline — `subject`
+   * lives in the panel array — so Canvas rewrites it and the new prop
+   * re-fires the query below. See Canvas's own comment for why this is not
+   * an undo entry.
+   */
+  onCommitted: (nodeId: string, sha: string) => void
 }
 
 /**
@@ -38,13 +45,21 @@ export interface ReviewNodeProps {
  * way that matters to them.
  */
 function ReviewNodeImpl({
-  panel, selected, onSelect, onFocus, onBeginDrag, onClose
+  panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
   const [expandedPath, setExpandedPath] = useState<string | null>(null)
   const [diff, setDiff] = useState<ReviewDiff | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
+  // null = the control is at rest. A string = the input is open, holding the
+  // message. Two states in one, so "is the input showing" and "what is in it"
+  // cannot disagree.
+  const [draft, setDraft] = useState<string | null>(null)
+  const [committing, setCommitting] = useState(false)
+  // The last commit's own answer. Cleared when a new draft opens, so a refusal
+  // from a previous attempt cannot sit under a fresh one.
+  const [outcome, setOutcome] = useState<string | null>(null)
 
   // review:at, never review:panel: the node asks about a BASELINE it stores,
   // so it keeps answering after main has dropped the subject panel's own
@@ -144,6 +159,46 @@ function ReviewNodeImpl({
   )
   const { rect, z } = panel
 
+  const runCommit = (): void => {
+    const message = draft?.trim() ?? ''
+    // An empty message is not a commit git would take, and a validation error
+    // is worse here than an inert button: the button says what is missing.
+    if (message === '' || model.commit.kind !== 'ready' || committing) return
+    setCommitting(true)
+    setOutcome(null)
+    void window.canvas.review.commit(
+      { root: subject.repoRoot, paths: model.commit.paths, message }
+    )
+      .then((r) => {
+        setCommitting(false)
+        if (r.kind === 'committed') {
+          setDraft(null)
+          // Collapse the open file: the list it belonged to is about to be
+          // empty, and an expanded body attached to a row that is gone is the
+          // state buildReviewNodeModel's `expanded`-on-the-row already guards.
+          setExpandedPath(null)
+          onCommitted(rect.id, r.sha)
+          return
+        }
+        // Every other arm has a sentence. `nothing-to-commit` is reachable
+        // between the query and the click — the agent reverted its own work —
+        // and reads as a bug unless it says so.
+        setOutcome(
+          r.kind === 'refused' ? `refused — ${r.detail}`
+            : r.kind === 'failed' ? `could not commit — ${r.detail}`
+            : 'nothing to commit — the files changed since this was read')
+      })
+      // A REJECTED INVOKE MUST LAND IN A VISIBLE STATE. Left to the catch-less
+      // version, `committing` stays true forever: the button reads "committing…"
+      // for the rest of the run, which is the permanent-spinner state this
+      // feature's honest-degradation rule forbids, on the one verb where the
+      // user most needs to know whether it happened.
+      .catch((error: unknown) => {
+        setCommitting(false)
+        setOutcome(`could not commit — ${String(error)}`)
+      })
+  }
+
   return (
     <div
       className={`panel review-node${selected ? ' panel--selected' : ''}`}
@@ -178,6 +233,28 @@ function ReviewNodeImpl({
         >
           ⟳
         </button>
+        {model.commit.kind !== 'none' && (
+          <button
+            type="button"
+            className="review-node__commit"
+            data-review-node-commit
+            disabled={model.commit.kind === 'blocked' || committing}
+            title={model.commit.kind === 'blocked' ? model.commit.reason : 'Commit these changes'}
+            onMouseDown={(event) => {
+              // preventDefault is what keeps DOM focus off this button and on
+              // whatever had it — shellControl's rule, which every control in
+              // this app obeys. stopPropagation is what stops the header's own
+              // handler starting a DRAG from a click on a button inside it.
+              event.stopPropagation()
+              event.preventDefault()
+              if (model.commit.kind !== 'ready' || committing) return
+              setOutcome(null)
+              setDraft('')
+            }}
+          >
+            {committing ? 'committing…' : '⌦'}
+          </button>
+        )}
         {/* No arming step, unlike a terminal panel's ×: there is no process
             to lose. Closing a review node throws away a query, and the same
             button reopens it. */}
@@ -207,6 +284,34 @@ function ReviewNodeImpl({
           onFocus(rect.id)
         }}
       >
+        {draft !== null && (
+          <div className="review-node__commit-form">
+            <input
+              className="review-node__commit-input"
+              data-review-node-commit-input
+              autoFocus
+              value={draft}
+              placeholder={model.commit.kind === 'ready' ? model.commit.label : 'Commit message'}
+              onChange={(event) => setDraft(event.target.value)}
+              // stopPropagation on EVERY key, not only the two handled below.
+              // useViewport's keydown listener is on `window`, above this
+              // component's root container in the bubble path, so without this
+              // a Cmd+N typed while composing a message spawns a panel behind
+              // the node and a Cmd+K opens the palette over it. It is the
+              // pointer-half of the same rule usePalette's isOpen() gives the
+              // keyboard, reached by containment instead of by a flag.
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key === 'Enter') { event.preventDefault(); runCommit() }
+                if (event.key === 'Escape') { event.preventDefault(); setDraft(null) }
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+            />
+          </div>
+        )}
+        {outcome !== null && (
+          <p className="review-node__commit-outcome" data-review-node-commit-outcome>{outcome}</p>
+        )}
         <p className="review-node__summary" data-review-node-summary>{model.summary}</p>
         <p className="review-node__root">{model.root}</p>
         {model.note !== undefined && (

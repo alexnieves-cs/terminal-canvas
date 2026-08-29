@@ -1645,6 +1645,34 @@ export function Canvas({
     })
   }, [commitHistory])
 
+  /**
+   * A node committed. Advance ITS OWN stored baseline to the commit it just
+   * made, and nothing else.
+   *
+   * Without this the node reports the same files after a commit as before it,
+   * permanently: it diffs the working tree against its baseline, and
+   * committing does not change the working tree. A second press would then
+   * re-commit content that is already in history.
+   *
+   * The SUBJECT PANEL's baseline in main is deliberately left alone. A node
+   * can outlive its subject, so reaching into that panel's state is only
+   * sometimes possible at all — and a write verb on one panel silently
+   * resetting another surface's reading is the wrong direction.
+   *
+   * NO history entry. Cmd+Z cannot undo a commit, and an undo that restored
+   * the old baseline would put the node back to reporting work that is now in
+   * history — an undo stack that lies about what it can reverse is worse than
+   * one that declines. The panel array still changes, so the existing
+   * layout.save effect persists the new sha with no extra plumbing.
+   */
+  const onReviewCommitted = useCallback((nodeId: string, sha: string) => {
+    if (sha === '') return
+    setPanels((existing) => existing.map((p) =>
+      p.rect.id === nodeId && isReviewPanel(p)
+        ? { ...p, subject: { ...p.subject, baselineSha: sha } }
+        : p))
+  }, [])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -2623,6 +2651,7 @@ export function Canvas({
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
                   onClose={onClosePanel}
+                  onCommitted={onReviewCommitted}
                 />
               )
             }

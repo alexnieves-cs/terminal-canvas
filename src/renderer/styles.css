@@ -898,6 +898,38 @@ body {
 
 .review-node__refresh:hover { opacity: 1; }
 
+/* Matches .review-node__refresh rather than standing out: a destructive verb
+   that looks like a primary action invites the accidental press this app's
+   one irreversible write can least afford. The message field is what makes it
+   deliberate, not the colour. */
+.review-node__commit {
+  flex: none;
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0 4px;
+}
+.review-node__commit:hover:not(:disabled) { opacity: 1; }
+.review-node__commit:disabled { opacity: 0.25; cursor: default; }
+.review-node__commit-form { margin: 0 0 8px; }
+.review-node__commit-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  padding: 3px 6px;
+}
+.review-node__commit-outcome {
+  margin: 0 0 8px;
+  color: var(--amber);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
