@@ -621,11 +621,10 @@ export function Canvas({
       // cannot be the focused panel today (nothing focuses one but its own
       // body), and it answers null rather than throwing if that ever changes.
       if (!panel || isReviewPanel(panel)) return null
-      // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
-      // to — reading the real one means asking the pid, which is its own piece
-      // of machinery (ideas-backlog #4) and deliberately not in M5a.
+      // Where the panel IS, falling back to where it was spawned — the same
+      // asymmetry reloadPrompts obeys, stated there in full.
       const captured: CapturedPanel = {
-        cwd: panel.spec.cwd,
+        cwd: getLiveSession(panel.rect.id)?.cwd ?? panel.spec.cwd,
         args: [...panel.spec.args],
         w: panel.rect.w,
         h: panel.rect.h

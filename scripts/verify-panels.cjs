@@ -6066,6 +6066,16 @@ app.whenReady().then(async () => {
     //     `command — cwd`), and the cwd is read off the inspector's own field
     //     BEFORE saving. That field is already pinned by check 87, so it is a
     //     legitimate source here rather than a second derivation.
+    //
+    //     M12: the subtitle this check now asserts against is a SYNTHETIC
+    //     live cwd, sent directly at this point in the run rather than a
+    //     real one — `backend` is still the DIRECT one the M6c fixture block
+    //     installed here, so no real SESSION_LIVE would ever arrive and the
+    //     saved cwd would equal the spawn cwd by pure fallback, which proves
+    //     nothing about which one savePanelAsPreset actually reaches for.
+    //     Forcing a live answer to exist turns "the saved cwd happens to
+    //     equal the spawn cwd" into an assertion that FAILS if the consumer
+    //     is ever reverted to `panel.spec.cwd` alone.
     {
       const SAVE_PRESET_DIR = mkdtempSync(join(tmpdir(), 'tc panels save-preset '))
       const idsBefore90 = new Set(await wc.executeJavaScript(
@@ -6106,6 +6116,26 @@ app.whenReady().then(async () => {
         document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(selectId)} + '"] .rail-row__main')
           .dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
       await settle()
+      // M12: a SYNTHETIC live update, sent the identical way this check
+      // already sends PRESET_SPAWN by hand — not a real tmux session. At
+      // this point in the run `backend` is still the DIRECT one the M6c
+      // fixture block installed (never reset to tmux until check 91), so
+      // pollLive's own list() answers null and no real SESSION_LIVE would
+      // ever arrive for this panel; without this send, LIVE_PRESET_DIR and
+      // observed.cwd below would be indistinguishable — savePanelAsPreset's
+      // `getLiveSession(...) ?? spec.cwd` and a reverted `spec.cwd` alone
+      // would save the identical string, and the assertion at the bottom
+      // would pass against either. Sending it directly is what turns "the
+      // saved cwd happens to equal the spawn cwd" into an actual claim
+      // about which one savePanelAsPreset reaches for.
+      const LIVE_PRESET_DIR = mkdtempSync(join(tmpdir(), 'tc panels save-preset live '))
+      win.webContents.send(IPC_EVENTS.SESSION_LIVE,
+        { panelId: selectId, cwd: LIVE_PRESET_DIR, currentCommand: 'bash' })
+      await waitUntil(async () => {
+        const v = await wc.executeJavaScript(
+          `(() => { const el = document.querySelector('[data-inspector-field="live-cwd"] .inspector__value'); return el ? el.textContent : null })()`)
+        return v === LIVE_PRESET_DIR
+      }, 5000)
       const observed = await wc.executeJavaScript(`(() => {
         const focusedEl = document.activeElement
         const focusedPanel = focusedEl && focusedEl.closest ? focusedEl.closest('.panel') : null
@@ -6123,12 +6153,20 @@ app.whenReady().then(async () => {
       await settle()
       const after = await wc.executeJavaScript(`window.canvas.preset.list()`)
       const added = after.filter((p) => !before.some((b) => b.id === p.id))
+      // The cwd clause reads LIVE_PRESET_DIR now, not observed.cwd (the
+      // SPAWN field) — M12's savePanelAsPreset saves where the SELECTED
+      // panel IS, falling back to where it was spawned only absent a live
+      // answer, and this check now forces a live answer to exist so the
+      // fallback is not what is being measured. LIVE_PRESET_DIR !==
+      // observed.cwd is asserted explicitly so a future reader can see the
+      // two are deliberately different values, not a typo.
       ok('90 the inspector saves the SELECTED panel, with focus deliberately elsewhere',
         observed.focused === focusId && observed.selected === selectId &&
           observed.focused !== observed.selected &&
           added.length === 1 && observed.cwd !== null &&
-          added[0].subtitle.endsWith(observed.cwd),
-        `${JSON.stringify(observed)} added=${JSON.stringify(added)}`)
+          LIVE_PRESET_DIR !== observed.cwd &&
+          added[0].subtitle.endsWith(LIVE_PRESET_DIR),
+        `${JSON.stringify(observed)} live=${LIVE_PRESET_DIR} added=${JSON.stringify(added)}`)
     }
 
     // ---------------------------------------------------------------------
@@ -8011,8 +8049,18 @@ app.whenReady().then(async () => {
           }, 5000)
           ok('117 project prompts are read from where the panel IS, not where it started',
             listed !== false, JSON.stringify(listed))
-          await wc.executeJavaScript(
-            `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+          // On .palette__input, the file's own convention (lines 2528, 2583,
+          // 2670, 3391, 3438, 3518) — React binds Escape's handler on the
+          // overlay's root container, a DESCENDANT of document, so a
+          // document-targeted dispatch never reaches it and this cleanup was
+          // inert. Harmless while nothing follows but rmSync, and a real trap
+          // for whoever appends a check after this one into a run with the
+          // palette still open.
+          await wc.executeJavaScript(`
+            document.querySelector('.palette__input')
+              ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+            true
+          `)
           rmSync(moved, { recursive: true, force: true })
         }
       }
