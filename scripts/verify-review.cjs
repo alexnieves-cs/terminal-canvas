@@ -1098,6 +1098,124 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
       none.kind === 'nothing-to-commit' && empty.calls.length === 0)
 }
 
+// 61-63. Real git, a real repository, in a SPACED temp directory — the
+//        directory shape that made the pane-died redirect bug survive eight
+//        reviews. Everything above this line drives a fake runner and would
+//        pass identically against a sequencer that wrote the user's own index,
+//        because a fake has no index to write.
+{
+  const { execFileSync } = require('node:child_process')
+  const { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, chmodSync } = require('node:fs')
+  const { tmpdir } = require('node:os')
+
+  let git = null
+  try { git = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim() } catch { git = null }
+
+  if (git === null || git === '') {
+    // LOUD, never silent. A skipped check that prints nothing is a check that
+    // stops existing the day the binary goes missing on CI.
+    ok('61-63 SKIPPED — no git binary found', true, 'skipped, not passed')
+  } else {
+    const root = mkdtempSync(join(tmpdir(), 'tc m9c commit '))
+    const g = (...args) => execFileSync(git, ['-C', root, ...args], { encoding: 'utf8' })
+    g('init', '-q', '.')
+    g('config', 'user.email', 't@t')
+    g('config', 'user.name', 'T')
+    writeFileSync(join(root, 'a.txt'), 'base\n')
+    g('add', 'a.txt')
+    g('commit', '-qm', 'first')
+
+    // The agent's work: one modified file and one brand-new one.
+    writeFileSync(join(root, 'a.txt'), 'base\nagent\n')
+    writeFileSync(join(root, 'new file.txt'), 'agent\n')
+    // The USER's own unrelated staging, which must survive untouched.
+    writeFileSync(join(root, 'mine.txt'), 'user\n')
+    g('add', 'mine.txt')
+
+    // A pre-commit hook that leaves EVIDENCE it ran, and records which index
+    // it was shown — the two facts check 61 turns on.
+    const hooks = join(root, '.git', 'hooks')
+    mkdirSync(hooks, { recursive: true })
+    const hookLog = join(root, '..', 'hook-log.txt')
+    writeFileSync(join(hooks, 'pre-commit'),
+      `#!/bin/sh\ngit diff --cached --name-only > '${hookLog}'\nexit 0\n`)
+    chmodSync(join(hooks, 'pre-commit'), 0o755)
+
+    const indexBefore = readFileSync(join(root, '.git', 'index'))
+    const scratchDir = mkdtempSync(join(tmpdir(), 'tc m9c idx '))
+    const scratch = join(scratchDir, 'index')
+
+    // 62's claim is about the four scratch-scoped calls (read-tree, stage,
+    // commit, staged-entries), never about the reconcile — the reconcile is
+    // the fifth call and deliberately DOES write the real index (that write
+    // is what check 63 depends on). `commit()` resolves only after the
+    // reconcile has already run, so a before/after snapshot taken around the
+    // WHOLE call cannot separate "untouched by the risky staging calls" from
+    // "touched by the reconcile" — both a correct implementation and a
+    // FAULTY one (paths staged only in the scratch index, reconciled into
+    // the real one regardless of what the real commit actually contains)
+    // legitimately rewrite the real index by the time the promise settles,
+    // so a whole-call comparison cannot discriminate them (confirmed
+    // empirically: a bare `git commit` rewrites `.git/index` bytes even with
+    // nothing new staged, via the cache-tree extension). The runner is
+    // therefore wrapped to snapshot the real index the instant the porcelain
+    // `commit` call resolves — the last of the four scratch-scoped calls,
+    // and the point before which nothing should have touched the real file
+    // at all.
+    let indexAfterCommitCall = null
+    const runner = R.createGitRunner({ gitPath: () => git, env: () => ({}), timeoutMs: () => 20000 })
+    const spyingRun = async (args, opts) => {
+      const result = await runner(args, opts)
+      if (args[2] === 'commit') indexAfterCommitCall = readFileSync(join(root, '.git', 'index'))
+      return result
+    }
+
+    const commit = R.createReviewCommitter({
+      run: spyingRun,
+      tempIndexPath: () => scratch,
+      removeTempIndex: (p) => { try { rmSync(p) } catch { /* best effort */ } }
+    })
+    const out = await commit({
+      root, paths: ['a.txt', 'new file.txt'], message: 'agent work'
+    })
+
+    // 61. Hooks run, and they see OUR staging. A commit-tree implementation
+    //     runs no hook at all and writes no log; an implementation that
+    //     forgot GIT_INDEX_FILE on the commit call runs the hook against the
+    //     user's index and the log names mine.txt instead.
+    let hookSaw = ''
+    try { hookSaw = readFileSync(hookLog, 'utf8') } catch { hookSaw = '' }
+    ok('61 the pre-commit hook ran, and saw exactly the reviewed paths',
+      out.kind === 'committed' &&
+        hookSaw.includes('a.txt') && hookSaw.includes('new file.txt') &&
+        !hookSaw.includes('mine.txt'))
+
+    // 62. THE MILESTONE'S CENTRAL CLAIM: the user's index is byte-identical.
+    //     Compared as BYTES rather than by `git status` output, because a
+    //     status read is a claim about what git derives and this is a claim
+    //     about the file an agent may be mid-write against.
+    ok('62 the repository index was not written while the commit was staged',
+      indexAfterCommitCall !== null && Buffer.compare(indexBefore, indexAfterCommitCall) === 0)
+
+    // 63. ...and then it IS brought back in step, deliberately. Without the
+    //     reconcile, `git status` reports `D  new file.txt` and `MM a.txt` —
+    //     phantom staged deletions of files that were just committed, which an
+    //     agent reading its own status will try to "fix". The user's own
+    //     staged mine.txt must survive that, or the reconcile has become the
+    //     wholesale index write it exists to avoid.
+    const status = g('status', '--porcelain')
+    const committedFiles = g('show', '--stat', '--name-only', '--format=', 'HEAD')
+    ok('63 the reconcile leaves no phantom staged change, and the user\'s own staging survives',
+      committedFiles.includes('a.txt') && committedFiles.includes('new file.txt') &&
+        !/^[ADM]M? +(a\.txt|new file\.txt)/m.test(status) &&
+        /^A  mine\.txt/m.test(status))
+
+    rmSync(root, { recursive: true, force: true })
+    rmSync(scratchDir, { recursive: true, force: true })
+    try { rmSync(hookLog) } catch { /* best effort */ }
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)
