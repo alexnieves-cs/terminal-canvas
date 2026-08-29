@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import type { GitResult, GitRunner } from './review-engine'
+import type { GitResult, GitRunner, GitRunOptions } from './review-engine'
 
 /**
  * How long a single git call may take before it is killed. Deliberately
@@ -54,7 +54,7 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
   // the one that matters.
   let warned = false
 
-  return (args: string[]) =>
+  return (args: string[], opts?: GitRunOptions) =>
     new Promise<GitResult>((resolve) => {
       const bin = deps.gitPath()
       if (bin === null) {
@@ -74,7 +74,25 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
         resolve({ stdout: '', ok: false, notFound: true, code: -1, stderr: '' })
         return
       }
-      const env = deps.env()
+
+      const base = deps.env()
+      const overlay = opts?.env
+      // Three cases, and the middle one is the trap. With no overlay the old
+      // rule stands: pass the login env only when there IS one, since an empty
+      // object STRIPS the environment rather than inheriting it, taking HOME
+      // and git's own config with it. With an overlay we must always pass an
+      // env — so when the login env is empty (the pre-whenReady state, which
+      // no production call reaches) we inherit process.env explicitly rather
+      // than handing git a one-key environment.
+      const env = overlay === undefined
+        ? (Object.keys(base).length > 0 ? base : undefined)
+        : {
+            ...(Object.keys(base).length > 0
+              ? base
+              : (process.env as Record<string, string>)),
+            ...overlay
+          }
+
       execFile(
         bin,
         args,
@@ -85,11 +103,7 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
           // produced by a buffer size.
           maxBuffer: 64 * 1024 * 1024,
           timeout: deps.timeoutMs?.() ?? GIT_TIMEOUT_MS,
-          // Only when there is one: an empty object would STRIP the
-          // environment rather than inherit it, taking HOME and git's own
-          // config with it. Empty is the pre-whenReady state, which no
-          // production call can reach.
-          ...(Object.keys(env).length > 0 ? { env } : {})
+          ...(env !== undefined ? { env } : {})
         },
         (error, stdout, stderr) => {
           const err = error as (NodeJS.ErrnoException & { code?: number | string }) | null

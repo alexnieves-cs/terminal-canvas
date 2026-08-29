@@ -957,6 +957,31 @@ ok('52 staged-entries argv is -z and scoped to the paths',
     ]))
 }
 
+// 55. A per-call env OVERLAY, never a replacement. The scratch index is passed
+//     as GIT_INDEX_FILE, and an implementation that passed `opts.env` alone
+//     would strip HOME, PATH and git's own config from the call — the exact
+//     failure git-runner.ts's existing "an empty object would STRIP the
+//     environment" comment already records, reached through a new door. The
+//     overlay must WIN on a key both hold, or the scratch index is silently
+//     ignored and the commit writes the user's real index: the one thing this
+//     milestone exists to prevent, with no error anywhere.
+{
+  const seen = []
+  const run = R.createGitRunner({
+    gitPath: () => '/usr/bin/env',
+    env: () => ({ HOME: '/h', GIT_INDEX_FILE: '/should/be/overridden' }),
+    timeoutMs: () => 5000
+  })
+  // `env` with no arguments prints its own environment, so the call reports
+  // back exactly what it was given — a real process, not an inspected object.
+  const out = await run([], { env: { GIT_INDEX_FILE: '/scratch/idx' } })
+  const lines = out.stdout.split('\n')
+  seen.push(lines.includes('HOME=/h'), lines.includes('GIT_INDEX_FILE=/scratch/idx'),
+    !lines.includes('GIT_INDEX_FILE=/should/be/overridden'))
+  ok('55 a per-call env overlays the login env and wins on a shared key',
+    out.ok && seen.every(Boolean))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

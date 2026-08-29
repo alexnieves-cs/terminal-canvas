@@ -31,7 +31,22 @@ export interface GitResult {
   stderr: string
 }
 
-export type GitRunner = (args: string[]) => Promise<GitResult>
+/**
+ * Options for ONE git call. Optional and defaulted throughout, the same trade
+ * ReviewEngineDeps.notARepo makes: every fake runner written before M9c is a
+ * one-parameter arrow, and a required second argument would break all of them
+ * rather than leaving their behaviour exactly as it was.
+ */
+export interface GitRunOptions {
+  /**
+   * Merged OVER the login environment, never in place of it. The one caller
+   * is the commit sequencer, passing GIT_INDEX_FILE so a commit is staged in
+   * a scratch index instead of the repository's own.
+   */
+  env?: Record<string, string>
+}
+
+export type GitRunner = (args: string[], opts?: GitRunOptions) => Promise<GitResult>
 
 export interface ReviewEngineDeps {
   run: GitRunner
