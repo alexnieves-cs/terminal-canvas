@@ -191,6 +191,19 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     `${channels.length} parsed, ${declared} declared`)
 }
 
+// 16. CI exists, and the README says so.
+//
+// Both halves matter and neither implies the other. A workflow nobody can see
+// is a workflow nobody trusts — the badge IS the deliverable for a reader — and
+// a badge with no workflow behind it is a broken image making a false claim.
+{
+  const workflow = read('.github/workflows/verify.yml')
+  const badged = README.includes('workflows/verify.yml/badge.svg')
+  ok('16 CI runs verify, and the README carries its badge',
+    workflow !== null && /npm run verify/.test(workflow) && badged,
+    `workflow=${workflow !== null} badge=${badged}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
