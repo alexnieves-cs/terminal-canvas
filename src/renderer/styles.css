@@ -1,14 +1,133 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   STRUCTURE. Theme-invariant by definition, so none of it ever appears in a
+   theme block. A radius inside a theme block is a radius every future theme
+   has to remember to repeat.
+   ───────────────────────────────────────────────────────────────────────── */
 :root {
-  --bg: #0b0c11;
-  --panel-bg: #12131a;
-  --chrome-bg: #191b25;
-  --border: #262a38;
-  --text: #d8dae5;
-  --muted: #767d95;
-  --green: #9ece6a;
-  --red: #f7768e;
-  --blue: #7aa2f7;
-  --amber: #e0af68;
+  /* Space. Fourteen ad-hoc padding values collapse to seven steps. The
+     constraint IS the mechanism: rhythm comes from the absence of options. */
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
+  --sp-5: 12px; --sp-6: 16px; --sp-7: 24px;
+
+  /* One-off structural constant, tokenised rather than left as a literal so
+     the spacing audit can hold at zero literals. It is the hiddenInset
+     traffic-light clearance and belongs to no scale. */
+  --titlebar-h: 38px;
+
+  /* Radius. Nested corners must DECREASE by roughly the inset or the
+     concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
+     is right, and today's 6-inside-10 is not. 50% and --r-full are SHAPES (a
+     circle, a pill), not scale steps. */
+  --r-sm: 4px; --r-md: 6px; --r-lg: 12px; --r-full: 999px;
+
+  /* Type. Six sizes inside a 6px band become four with real ratios. --t-xs is
+     legal below the 12px floor ONLY because every user of it is a one- or
+     two-word ALL-CAPS label at 0.09em tracking. Sentence-case text at --t-xs
+     is a bug. */
+  --t-xs: 10.5px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px;
+  --lh-tight: 1.25; --lh-body: 1.5;
+
+  /* One monospace stack. There were three in CSS and a fourth in
+     create-terminal.ts, which resolve to different faces on some macOS
+     configurations. The xterm one moves in M11, with the terminal theme. */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Motion. 90ms is below the threshold at which a change reads as waiting
+     and above the one at which it reads as a glitch. */
+  --dur-1: 90ms; --dur-2: 160ms;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* Elevation. Panels have no shadow today, which is why they read as pasted
+     onto the canvas rather than floating above it. A shadow only reads as
+     depth when the surface beneath differs — which the ramp below provides. */
+  --e-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --e-2: 0 4px 12px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .40);
+  --e-3: 0 16px 48px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .40);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COLOUR, and colour only. Declared on BOTH selectors so the app is dark with
+   no attribute set — which is today's behaviour, byte for byte.
+
+   The specificity is deliberate rather than incidental. `:root` alone is
+   (0,1,0) and `:root[data-theme="light"]` is (0,2,0), so a theme block added
+   in M11 wins on SPECIFICITY rather than on source order — which means it can
+   be appended without reordering anything, and a third theme after it cannot
+   silently lose to whichever block happens to be declared last.
+
+   M10 ships exactly one theme block and the renderer sets no `data-theme`
+   attribute. No attribute means dark, which is what the app already does.
+   Wiring the attribute is M11's first task, not a loose end here.
+   ───────────────────────────────────────────────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  /* Per-theme, not structural: native scrollbars and form controls must
+     follow the theme rather than the OS. */
+  color-scheme: dark;
+
+  /* Surface ramp. The old three (bg -> panel -> chrome) spanned 6.6 of
+     perceptual lightness, which is why the app read as one flat slab: depth
+     was being asserted by a 1.30:1 hairline, and a hairline cannot carry a
+     hierarchy. This spans 22.3 L*, every adjacent step >= 2.6.
+
+     Contrast RATIO is the wrong metric for large adjacent fills and is
+     deliberately not quoted here; delta-L* is. Ratio is quoted for text. */
+  --s-0: #080910;   /* app ground, canvas                          */
+  --s-1: #0f111a;   /* panel body, palette list                    */
+  --s-2: #161926;   /* chrome: rail, top bar, panel header         */
+  --s-3: #1d2130;   /* raised: palette surface, HUD                */
+  --s-4: #282d40;   /* hover fill, AND the selected fill           */
+  --s-5: #343a52;   /* pressed only — transient, never a text ground */
+
+  /* Hairlines. Both decorative. Neither reaches 3:1 and neither is meant to:
+     WCAG 1.4.11 applies to boundaries needed to identify a control or
+     understand content, and a divider between two panes is neither. Where a
+     border IS the control boundary — focus, active — the accent is used, and
+     the accents clear 3:1 with margin. --line reaches 1.86 on --s-1, against
+     the 1.30 it replaces. */
+  --line:        #39415a;
+  --line-strong: #4d5675;
+
+  /* Text ramp. --fg-4 is DISABLED ONLY, and is the reason no other step needs
+     to go dimmer: every opacity-based dimming in the old file collapses onto
+     it. Measured against the worst ground text can land on (--s-4):
+     fg 11.37, fg-2 7.06, fg-3 5.06, fg-4 3.03. */
+  --fg:   #e8eaf4;
+  --fg-2: #b4bad0;
+  --fg-3: #959db8;
+  --fg-4: #6e7691;
+
+  /* Accents. Two tones each: saturated for borders, dots and icons; the tint
+     for fills, which is what lets a destructive hover read as destructive
+     without introducing a second red.
+
+     --amber MUST stay a literal colour declared here, and
+     .panel--agent-wants-you MUST keep `border-color: var(--amber)`
+     un-transformed. verify:panels 62 and 97 compare the two by resolved
+     value. See Global Constraint 1.
+
+     --blue-dim is the one accent tint with no user today. It is kept so the
+     four pairs stay a pair each — an accent with a saturated tone and no
+     tint is a gap the next person fills by hand-mixing one, which is the
+     duplication this block exists to remove. --sp-7 and --e-1 are unused for
+     the same reason: they complete a scale. Nothing else here is unused. */
+  --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .14);
+  --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .12);
+  --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .14);
+  --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .12);
+
+  /* Back-compat aliases. These are what let the migration land task by task
+     instead of as one unreviewable diff, and they mean the file temporarily
+     holds two names for one colour — the duplication M10 exists to remove.
+     Kept deliberately for this milestone; retiring them is a follow-up, and
+     whoever does it should re-derive the usage counts rather than trust a
+     number written here. */
+  --text:      var(--fg);
+  --muted:     var(--fg-3);
+  --bg:        var(--s-0);
+  --panel-bg:  var(--s-1);
+  --chrome-bg: var(--s-2);
+  --border:    var(--line);
 }
 
 * {
@@ -31,7 +150,7 @@ body {
 
 .app {
   height: 100%;
-  padding: 38px 0 0; /* clears the hiddenInset traffic lights */
+  padding: var(--titlebar-h) 0 0; /* clears the hiddenInset traffic lights */
 }
 
 /* M8a. The frame. The rail and inspector are grid COLUMNS with real width,
@@ -78,8 +197,8 @@ body {
 .shell__top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-4);
   border-bottom: 1px solid var(--border);
 }
 
@@ -87,21 +206,21 @@ body {
    a toolbar that competes with it for attention is worse than no toolbar. */
 .shell__top button {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
-  padding: 3px 9px;
-  font-size: 11px;
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--t-sm);
   cursor: pointer;
 }
 .shell__top button:disabled { color: var(--muted); cursor: default; }
-.shell__zoom { display: flex; align-items: center; gap: 4px; }
+.shell__zoom { display: flex; align-items: center; gap: var(--sp-2); }
 /* tabular-nums and a min-width so the readout does not shift the buttons
    beside it as the percentage changes width mid-gesture. */
 .shell__zoom-readout {
   min-width: 40px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -134,12 +253,12 @@ body {
 .shell__rail-toggle,
 .shell__inspector-toggle {
   width: 100%;
-  padding: 6px 0;
+  padding: var(--sp-3) 0;
   border: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--t-sm);
 }
 
 /* NO width transition, and the honest reason is smaller than it looks.
@@ -157,9 +276,10 @@ body {
    claim — a confidently false why gets "fixed" by matching the code to it. */
 
 .shell__region-title {
-  padding: 10px 12px 6px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-xs);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -173,9 +293,9 @@ body {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--t-md);
   line-height: 1;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   cursor: pointer;
 }
 .shell__region-add:hover { color: var(--text); }
@@ -187,7 +307,7 @@ body {
 .rail-list {
   list-style: none;
   margin: 0;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   overflow-y: auto;
 }
 /* min-height: 0 or the flex item refuses to shrink below its content and the
@@ -200,11 +320,15 @@ body {
 .rail-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  border-radius: 4px;
+  gap: var(--sp-1);
+  border-radius: var(--r-sm);
 }
 
-.rail-row--selected { background: rgba(255, 255, 255, 0.08); }
+/* --s-4 is the ramp's one hover/selected fill (see the token block). It was a
+   hand-mixed white overlay, which is a fourth idiom for a state three other
+   surfaces already spelled a different way each — the duplication M10 exists
+   to remove — and it is invisible to any audit that reads declared colours. */
+.rail-row--selected { background: var(--s-4); }
 
 /* The row body is a button, not the <li>: three sibling controls rather than
    nested interactive elements, which are invalid HTML and give the browser no
@@ -214,13 +338,13 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
   border: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-sm);
   text-align: left;
   cursor: pointer;
 }
@@ -268,7 +392,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-xs);
 }
 
 /* ...except in Workspaces, where 45% is too tight and the failure lands in
@@ -291,15 +415,15 @@ body {
    body that grew would push the collapse toggle off screen — the one control
    that is the way back from a collapse. */
 .inspector__body {
-  padding: 4px 12px 12px;
+  padding: var(--sp-2) var(--sp-5) var(--sp-5);
   overflow-y: auto;
   max-height: calc(100% - 60px);
 }
 
 .inspector__heading {
   color: var(--fg);
-  font-size: 13px;
-  margin-bottom: 8px;
+  font-size: var(--t-lg);
+  margin-bottom: var(--sp-4);
   /* A resolved command is an absolute path and a title is user text; neither
      is bounded, and the pane is 260px. Break rather than overflow: the rail
      next door clips, but a path the user cannot read at all defeats the one
@@ -310,8 +434,8 @@ body {
 .inspector__state {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
 }
 
 .inspector__dot {
@@ -329,26 +453,28 @@ body {
 .inspector__dot[data-agent-state="wants-you"] { background: var(--amber); }
 .inspector__dot[data-agent-state="exited"] { background: var(--red); }
 
-.inspector__state-label { color: var(--muted); font-size: 11px; }
+.inspector__state-label { color: var(--muted); font-size: var(--t-sm); }
 
 .inspector__badge {
   margin-left: auto;
-  padding: 1px 5px;
+  padding: 1px var(--sp-2);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--t-xs);
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .inspector__fields { margin: 0; }
 
-.inspector__field { margin-bottom: 8px; }
+.inspector__field { margin-bottom: var(--sp-4); }
 
 .inspector__label {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--t-xs);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -356,71 +482,71 @@ body {
 .inspector__value {
   margin: 1px 0 0;
   color: var(--fg);
-  font-size: 11px;
+  font-size: var(--t-sm);
   overflow-wrap: anywhere;
 }
 
 .inspector__actions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 14px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-5);
 }
 
 .inspector__action {
-  padding: 5px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--fg);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--t-sm);
   text-align: left;
 }
 
-.inspector__action:hover { background: rgba(255, 255, 255, 0.06); }
+/* --s-4, the one hover fill — not a second hand-mixed white overlay. */
+.inspector__action:hover { background: var(--s-4); }
 
 /* Disabled is the restart control's resting state on a panel that never
    started (Task 6). Kept visible rather than hidden, per the rule
    verify:palette 31 states: a control that disappears is indistinguishable
    from a feature that is missing. */
 .inspector__action:disabled {
-  color: var(--muted);
+  color: var(--fg-4);
   cursor: default;
-  opacity: 0.55;
 }
 .inspector__action:disabled:hover { background: transparent; }
 
 /* M9a's Changes section, following the existing .inspector__* rules above. */
 
 .inspector__section {
-  margin-top: 14px;
-  padding-top: 12px;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
   border-top: 1px solid var(--border);
 }
 
 .inspector__section-heading {
-  margin: 0 0 6px;
+  margin: 0 0 var(--sp-3);
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--t-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .inspector__review-summary {
-  margin: 0 0 4px;
+  margin: 0 0 var(--sp-2);
   color: var(--fg);
-  font-size: 11px;
+  font-size: var(--t-sm);
 }
 
 /* The honest arms' explanation — never-started, git-missing, baseline-lost,
    shared — reads as prose, not as a value, so it gets the muted colour the
    labels use rather than the value colour the summary above uses. */
 .inspector__review-note {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-4);
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-xs);
   overflow-wrap: anywhere;
 }
 
@@ -430,15 +556,15 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 
 .inspector__review-file {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  font-size: 10px;
+  gap: var(--sp-3);
+  font-size: var(--t-xs);
 }
 
 .inspector__review-path {
@@ -461,9 +587,9 @@ body {
 }
 
 .inspector__review-more {
-  margin: 4px 0 0;
+  margin: var(--sp-2) 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-xs);
 }
 
 .rail-row__start,
@@ -475,7 +601,7 @@ body {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--t-sm);
   cursor: pointer;
 }
 
@@ -493,9 +619,9 @@ body {
 .rail-row__waiting { color: var(--amber); }
 
 .rail-empty {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--t-sm);
 }
 
 /* The fixed viewport. Clips the world and catches every canvas event. */
@@ -505,8 +631,22 @@ body {
      by its row track. Keeping the old declaration would resolve it against
      .app's full height and push the canvas back out of the frame. */
   overflow: hidden;
+  /* The dot grid was #1c2030 on #0b0c11 — 1.21:1, imperceptible, a
+     compositing cost buying nothing. It stays, at an alpha that can actually
+     be seen: it is the canvas's only parallax cue, and with none at all
+     panning reads as stuck. The vignette keeps a large dark field from
+     reading as a void; its centre is --s-2, the nearest declared surface,
+     rather than a hand-picked literal that would belong to no ramp.
+
+     The dot's rgba() is a DELIBERATE literal and is allowlisted by name in
+     verify-styles check 1. It is not a theme colour: it is a translucent
+     white tick whose whole job is to take whatever ground is behind it, so
+     tokenising it would produce an opaque value that stops tracking the
+     vignette it sits on. A future theme overrides the ground, not the tick. */
   background:
-    radial-gradient(circle at 1px 1px, #1c2030 1px, transparent 0) 0 0 / 32px 32px;
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .05) 1px, transparent 0)
+      0 0 / 28px 28px,
+    radial-gradient(120% 80% at 50% 0%, var(--s-2) 0%, var(--s-0) 60%);
   cursor: default;
 }
 
@@ -527,14 +667,21 @@ body {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--panel-bg);
   user-select: none;
+  /* Panels had no shadow at all, which is why they read as pasted onto the
+     canvas rather than floating above it. box-shadow and border-color ONLY —
+     never transform: four checks read .world's computed matrix through
+     DOMMatrixReadOnly, and a transform transition here reads as elastic on
+     every pan (Global Constraint 3). */
+  box-shadow: var(--e-2);
+  transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
 
 .panel--selected {
   border-color: var(--blue);
-  box-shadow: 0 0 0 1px var(--blue);
+  box-shadow: 0 0 0 1px var(--blue), var(--e-3);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
@@ -550,12 +697,28 @@ body {
    silent visual bug, because nothing here would move with it. */
 .panel--agent-starting { border-color: var(--border); }
 .panel--agent-idle { border-color: var(--border); }
+/* wants-you is the only state carrying INTENT — idleness cannot tell
+   "finished" from "asked you a question" — so it is the only one worth
+   animating. The animation touches box-shadow ALONE: verify:panels 62 and 97
+   read borderTopColor, and border-color stays a plain, untransformed
+   var(--amber) below, outside the keyframes. Do not fold it in. */
+@keyframes wants-you-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim), var(--e-2); }
+  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px var(--amber-dim), var(--e-2); }
+}
 .panel--agent-wants-you {
   border-color: var(--amber);
-  /* The one state with a second visual channel. wants-you is the only signal
-     that carries INTENT — idleness cannot tell "finished" from "asked you a
-     question" — so it is the only one worth making findable across a canvas. */
-  box-shadow: 0 0 0 2px var(--amber);
+  /* The STATIC ring is not redundant with the keyframes and must not be
+     deleted as such. The reduced-motion block below forces every animation to
+     .01ms with one iteration and no fill-mode, so the moment it applies the
+     keyframed box-shadow stops painting entirely and the panel falls back to
+     whatever is declared HERE. Without this line that fallback is .panel's
+     plain var(--e-2): an unselected waiting panel shows no amber ring at all,
+     for exactly the users who asked for less motion — silently removing the
+     app's one attention signal. The animation merely MODULATES this ring's
+     glow; the ring itself lives outside it. */
+  box-shadow: 0 0 0 2px var(--amber), var(--e-2);
+  animation: wants-you-pulse 2.4s ease-in-out infinite;
 }
 .panel--agent-exited { border-color: var(--red); }
 
@@ -568,7 +731,13 @@ body {
 .panel--selected.panel--agent-idle,
 .panel--selected.panel--agent-exited {
   border-color: var(--blue);
-  box-shadow: 0 0 0 1px var(--blue);
+  /* var(--e-3) belongs here as well as on .panel--selected above. This rule is
+     the LATER one at equal specificity, so a ring-only box-shadow here wins
+     outright — which meant selecting a panel replaced .panel's own var(--e-2)
+     with nothing and flattened it against the canvas, and made --e-3 a token
+     that never rendered anywhere. A selected panel is the raised one by
+     definition, in every agent state. */
+  box-shadow: 0 0 0 1px var(--blue), var(--e-3);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -580,7 +749,12 @@ body {
    selection: none of them is asking for anything. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--amber);
-  box-shadow: 0 0 0 2px var(--amber);
+  /* Elevated for the same reason the blue rule above is: selection raises the
+     panel whatever its agent state. While the pulse is running the keyframes'
+     own box-shadow (carrying --e-2) wins over this declaration, so the
+     difference is visible only with reduced motion — which is precisely the
+     case this line, like the static ring above, exists to cover. */
+  box-shadow: 0 0 0 2px var(--amber), var(--e-3);
 }
 
 .panel__chrome {
@@ -590,11 +764,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 7px 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-5);
   background: var(--chrome-bg);
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  /* .panel moved from 10px to --r-lg (12px); a calc off the same token rather
+     than a literal 11px so the relationship survives a change to the token,
+     and so this stays zero literals for the audit. Without matching top
+     corners here, a sliver of .panel's own background shows past the header
+     at the corners. */
+  border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
+  font-size: var(--t-sm);
   user-select: none;
 }
 
@@ -619,17 +799,20 @@ body {
   flex: none;
   appearance: none;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   font: inherit;
   line-height: 1;
-  padding: 2px 7px;
+  padding: var(--sp-1) var(--sp-3);
   cursor: pointer;
 }
 
+/* --s-4, the hover fill. --border is the HAIRLINE token: using it as a fill
+   makes a boundary colour and a surface colour the same value by accident, so
+   changing either one moves the other. */
 .panel__close:hover {
-  background: var(--border);
+  background: var(--s-4);
   color: var(--text);
 }
 
@@ -638,7 +821,7 @@ body {
 .panel__close--arming {
   border-color: var(--red);
   color: var(--red);
-  font-size: 11px;
+  font-size: var(--t-sm);
 }
 
 /* The terminal's retained host (.panel__terminal, created once in
@@ -680,11 +863,11 @@ body {
 .panel__card {
   flex: 1;
   min-height: 0;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   overflow: hidden;
-  font-family: "SF Mono", Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.35;
+  font-family: var(--font-mono);
+  font-size: var(--t-md);
+  line-height: var(--lh-tight);
   color: var(--muted);
 }
 
@@ -717,15 +900,15 @@ body {
 .panel__card--agent-idle { border-left: 3px solid var(--border); }
 
 .badge {
-  font-size: 11px;
+  font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--r-full);
   border: 1px solid var(--border);
   color: var(--muted);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   /* Never shrunk to make room for a long .panel__title — see its comment. */
   flex: none;
 }
@@ -756,13 +939,18 @@ body {
   right: 12px;
   bottom: 12px;
   display: flex;
-  gap: 14px;
-  padding: 6px 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-5);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--chrome-bg);
+  border-radius: var(--r-full);
+  /* The one place a backdrop cost is earned: the HUD sits over a moving
+     world layer, and a solid fill there reads as a sticker pasted on top of
+     it rather than chrome floating above it. */
+  background: color-mix(in srgb, var(--s-3) 78%, transparent);
+  backdrop-filter: blur(12px) saturate(140%);
+  box-shadow: var(--e-2);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   user-select: none;
   pointer-events: none;
@@ -825,8 +1013,8 @@ body {
   flex: 1;
   min-height: 0;          /* or the list refuses to shrink and the box overflows */
   overflow-y: auto;
-  padding: 8px 10px;
-  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: var(--sp-4) var(--sp-4);
+  font: var(--t-sm) / var(--lh-body) var(--font-mono);
   color: var(--muted);
   background: var(--panel-bg);
   /* `.panel` sets user-select: none so a drag on the chrome never leaves a
@@ -838,19 +1026,21 @@ body {
   user-select: text;
 }
 
-.review-node__summary { margin: 0 0 2px; color: var(--text); }
-.review-node__root { margin: 0 0 8px; opacity: 0.6; word-break: break-all; }
-.review-node__note { margin: 0 0 8px; color: var(--amber); }
+.review-node__summary { margin: 0 0 var(--sp-1); color: var(--text); }
+/* --fg-3, not --fg-4: --fg-4 is the DISABLED step (3.03:1 on its worst
+   ground) and this is ordinary running text. */
+.review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
+.review-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
 
 .review-node__file-button {
   display: flex;
   width: 100%;
-  gap: 8px;
+  gap: var(--sp-4);
   justify-content: space-between;
-  padding: 3px 4px;
+  padding: var(--sp-2) var(--sp-2);
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   background: none;
   color: inherit;
   font: inherit;
@@ -858,30 +1048,34 @@ body {
   cursor: pointer;
 }
 
+/* --s-4 for both, the same fill the rail row and the palette row use. The
+   open state is deliberately NOT --s-5 (the pressed step): --s-5 is transient
+   by definition and an expanded file stays expanded, so an open row reads as
+   selected, which is what --s-4 means everywhere else in this file. */
 .review-node__file-button:hover,
-.review-node__file-button--open { background: var(--border); }
+.review-node__file-button--open { background: var(--s-4); }
 
 .review-node__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.review-node__counts { flex: none; opacity: 0.7; }
+.review-node__counts { flex: none; color: var(--fg-3); }
 
 .review-node__hunks {
-  margin: 2px 0 8px;
-  padding: 4px 0;
+  margin: var(--sp-1) 0 var(--sp-4);
+  padding: var(--sp-2) 0;
   border-left: 2px solid var(--border);
 }
 
-.review-node__line { padding: 0 6px; white-space: pre; }
+.review-node__line { padding: 0 var(--sp-3); white-space: pre; }
 
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
    languages, which is a dependency and a milestone of its own — the spec's
    own out-of-scope line. */
-.review-node__line--add { color: var(--green); background: rgba(158, 206, 106, 0.08); }
-.review-node__line--del { color: var(--red); background: rgba(247, 118, 142, 0.08); }
-.review-node__line--hunk { color: var(--blue); opacity: 0.9; }
-.review-node__line--meta { opacity: 0.5; }
+.review-node__line--add { color: var(--green); background: var(--green-dim); }
+.review-node__line--del { color: var(--red); background: var(--red-dim); }
+.review-node__line--hunk { color: var(--blue); }
+.review-node__line--meta { color: var(--fg-3); }
 
 .review-node__hunk-note,
-.review-node__more { margin: 4px; opacity: 0.6; }
+.review-node__more { margin: var(--sp-2); color: var(--fg-3); }
 
 .review-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
@@ -889,14 +1083,13 @@ body {
   flex: none;
   border: 0;
   background: none;
-  color: inherit;
   font: inherit;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.7;
+  color: var(--fg-3);
 }
 
-.review-node__refresh:hover { opacity: 1; }
+.review-node__refresh:hover { color: var(--fg); }
 
 /* Matches .review-node__refresh rather than standing out: a destructive verb
    that looks like a primary action invites the accidental press this app's
@@ -906,14 +1099,13 @@ body {
   flex: none;
   background: none;
   border: 0;
-  color: var(--text);
+  color: var(--fg-3);
   cursor: pointer;
-  opacity: 0.6;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
 }
-.review-node__commit:hover:not(:disabled) { opacity: 1; }
-.review-node__commit:disabled { opacity: 0.25; cursor: default; }
-.review-node__commit-form { margin: 0 0 8px; }
+.review-node__commit:hover:not(:disabled) { color: var(--fg); }
+.review-node__commit:disabled { color: var(--fg-4); cursor: default; }
+.review-node__commit-form { margin: 0 0 var(--sp-4); }
 .review-node__commit-input {
   width: 100%;
   box-sizing: border-box;
@@ -921,10 +1113,10 @@ body {
   border: 1px solid var(--border);
   color: var(--text);
   font: inherit;
-  padding: 3px 6px;
+  padding: var(--sp-2) var(--sp-3);
 }
 .review-node__commit-outcome {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-4);
   color: var(--amber);
   white-space: pre-wrap;
   word-break: break-word;
@@ -933,7 +1125,7 @@ body {
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
-  color: #f0b429;
+  color: var(--amber);
 }
 
 /* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
@@ -971,12 +1163,24 @@ body {
   transform: translateX(-50%);
   width: min(680px, 90%);
   z-index: 1000;
-  background: #1b1d27;
-  border: 1px solid #343747;
-  border-radius: 10px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  /* --e-3, plus a top inner highlight — the one-line move that separates a
+     floating surface from its own shadow.
+
+     The highlight's rgba() is a DELIBERATE literal and is allowlisted by name
+     in verify-styles check 1. Like the canvas dot grid it is a translucent
+     white, not a theme colour: it models light falling on the surface's top
+     edge, so it must composite over whatever --s-3 the active theme sets
+     rather than being a colour of its own that a theme has to restate. */
+  box-shadow: var(--e-3);
+  background-image:
+    linear-gradient(var(--s-3), var(--s-3)),
+    linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 40%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--t-md);
 }
 
 /* The input and the scope chip share a row, so entering a drill-in reads as
@@ -984,18 +1188,18 @@ body {
 .palette__bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  border-bottom: 1px solid #343747;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-6);
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .palette__scope {
   flex: none;
-  padding: 3px 8px;
-  border-radius: 5px;
-  background: #2f3346;
-  color: #b9bed6;
-  font-size: 12px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--s-5);
+  color: var(--fg-2);
+  font-size: var(--t-sm);
   white-space: nowrap;
 }
 
@@ -1003,12 +1207,12 @@ body {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  padding: 14px 0;
+  padding: var(--sp-5) 0;
   background: transparent;
   border: 0;
-  color: #e6e8f0;
+  color: var(--fg);
   font: inherit;
-  font-size: 15px;
+  font-size: var(--t-lg);
   outline: none;
 }
 
@@ -1029,12 +1233,12 @@ body {
 }
 
 .palette__confirm {
-  padding: 20px 16px;
-  color: #e6e8f0;
-  font-size: 15px;
+  padding: var(--sp-6) var(--sp-6);
+  color: var(--fg);
+  font-size: var(--t-lg);
   /* Marked the same red the row that opened it was, so the question reads as
      the continuation of that row rather than as a generic prompt. */
-  box-shadow: inset 3px 0 0 #e8807f;
+  box-shadow: inset 3px 0 0 var(--red);
 }
 
 /* An out-of-range number edit's refusal — genuinely an error, not a question,
@@ -1042,15 +1246,15 @@ body {
    Sits in the ordinary bar (the input with the bad value still in it stays
    visible above it), unlike palette__confirm which replaces the bar outright. */
 .palette__number-error {
-  padding: 8px 16px 16px;
+  padding: var(--sp-4) var(--sp-6) var(--sp-6);
   color: var(--red);
-  font-size: 13px;
+  font-size: var(--t-md);
 }
 
 .palette__list {
   list-style: none;
   margin: 0;
-  padding: 0 0 6px;
+  padding: 0 0 var(--sp-3);
   max-height: 46vh;
   /* The palette's wheel is yielded by Canvas.tsx's shouldYieldWheel, so this
      scrolls natively. `contain` stops a scroll past either end from chaining
@@ -1066,10 +1270,10 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 8px 16px 4px;
-  background: #1b1d27;
-  color: #7d8199;
-  font-size: 10px;
+  padding: var(--sp-4) var(--sp-6) var(--sp-2);
+  background: var(--s-3);
+  color: var(--fg-3);
+  font-size: var(--t-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1078,9 +1282,9 @@ body {
 .palette__row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 7px 16px;
-  color: #c8cbdb;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
+  color: var(--fg-2);
   /* A row answers the pointer — hovering selects it and a mousedown runs it —
      so it must not read as inert text the way `default` makes it. */
   cursor: pointer;
@@ -1098,12 +1302,12 @@ body {
    background alone is a subtle enough change that the eye loses the selection
    while scanning, which matters more here than usual because Enter acts on it. */
 .palette__row--selected {
-  background: #2a2d3d;
-  box-shadow: inset 2px 0 0 #6b8afd;
+  background: var(--s-4);
+  box-shadow: inset 2px 0 0 var(--blue);
 }
 
 .palette__row--disabled {
-  color: #6b6f85;
+  color: var(--fg-4);
   /* Back to default: a disabled row takes neither the hover selection nor a
      click, and a pointer cursor over it would promise both. */
   cursor: default;
@@ -1114,11 +1318,11 @@ body {
    other — a red row still runs on one Enter, and an unmarked confirm is a
    question the user did not expect to be asked. */
 .palette__row--destructive .palette__title {
-  color: #e8807f;
+  color: var(--red);
 }
 
 .palette__row--destructive.palette__row--disabled .palette__title {
-  color: #8f6570;
+  color: var(--fg-4);
 }
 
 .palette__title {
@@ -1134,7 +1338,7 @@ body {
    weight and the accent colour instead. */
 .palette__hit {
   background: transparent;
-  color: #9db4ff;
+  color: var(--blue);
   font-weight: 600;
 }
 
@@ -1144,13 +1348,13 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  color: #7d8199;
+  font-size: var(--t-sm);
+  color: var(--fg-3);
 }
 
 .palette__chevron {
   flex: none;
-  color: #7d8199;
+  color: var(--fg-3);
 }
 
 /* Shown only where a shortcut genuinely exists — the default preset's spawn
@@ -1158,28 +1362,109 @@ body {
    all but those two. */
 .palette__kbd {
   flex: none;
-  padding: 1px 6px;
-  border: 1px solid #3d4157;
-  border-radius: 4px;
-  background: #232637;
-  color: #9095ad;
+  padding: 1px var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--s-2);
+  color: var(--fg-3);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--t-sm);
   white-space: nowrap;
 }
 
 .palette__empty {
-  padding: 10px 16px;
-  color: #7d8199;
+  padding: var(--sp-4) var(--sp-6);
+  color: var(--fg-3);
 }
 
 /* The palette's only self-documentation. Every key it names is one the
    overlay swallows rather than passes to the agent, and "esc back" vs
    "esc close" is the only place the two-stage Escape is visible at all. */
 .palette__footer {
-  padding: 7px 16px;
-  border-top: 1px solid #343747;
-  background: #181a23;
-  color: #6b6f85;
-  font-size: 11px;
+  padding: var(--sp-3) var(--sp-6);
+  border-top: 1px solid var(--line-strong);
+  background: var(--s-2);
+  color: var(--fg-3);
+  font-size: var(--t-sm);
 }
+
+/* Every hover, selection and state change in this app is currently a 0ms
+   hard cut — the single largest contributor to the whole thing reading as a
+   prototype. 90ms is below the threshold at which a change reads as waiting
+   and above the one at which it reads as a glitch.
+
+   NOTE the properties: background-color, color, border-color and opacity,
+   never transform. .world carries will-change: transform and is driven at
+   60Hz by the viewport, and four checks read its computed matrix through
+   DOMMatrixReadOnly — a transition there is both an elastic-feeling pan and
+   a race against those reads.
+
+   .review-node__commit joins its siblings .review-node__file-button and
+   .review-node__refresh here: it is the same kind of button in the same
+   component, with its own :hover/:disabled colour changes, and the M9c
+   commit UI landed after this selector list was drafted. */
+.rail-row,
+.rail-row__main,
+.rail-row__close,
+.rail-row__start,
+.rail-row__rename,
+.shell__top button,
+.shell__region-add,
+.inspector__action,
+.palette__row,
+.panel__close,
+.review-node__file-button,
+.review-node__refresh,
+.review-node__commit {
+  transition:
+    background-color var(--dur-1) var(--ease),
+    color            var(--dur-1) var(--ease),
+    border-color     var(--dur-1) var(--ease);
+}
+
+/* Not optional the moment any animation exists, and the app had none until
+   this task — which is why there was nothing here before. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* The only `outline` in this file before now was `outline: none` on the
+   palette input. Because shellControl() calls preventDefault() on mousedown,
+   focus never lands on a shell control by MOUSE — but every one of them is
+   natively Tab-reachable, so a keyboard user got Chromium's default ring on
+   some surfaces and nothing considered anywhere.
+
+   :focus-visible rather than :focus, or every mouse click would ring.
+
+   :not(.palette__input) is what makes the relocation below TRUE rather than
+   merely intended. :where() contributes zero specificity, so without the
+   exclusion this rule is (0,1,0) — a tie with `.palette__input { outline:
+   none }`, won on source order because it is declared later. Chromium always
+   matches :focus-visible on a text input and the palette autofocuses on open,
+   so every single Cmd+K painted this 2px ring AND the bar's underline: the
+   exact ring-inside-a-ring the comment below claims was avoided. The input is
+   excluded here rather than given a higher-specificity `outline: none` of its
+   own, so there is one place that decides which elements get the ring. */
+:where(button, [href], input, [tabindex]):not(.palette__input):focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  /* No border-radius here. An outline already follows the element's OWN
+     radius, so setting one made every focused control adopt --r-sm — visibly
+     popping .panel__close from --r-md (6px) to 4px for as long as it held
+     focus, a shape change nothing about focus should cause. */
+}
+
+/* The input keeps outline: none — a ring inside a ring reads as broken — and
+   the BAR carries the indicator instead. Same information, correct object:
+   this satisfies "never remove a focus outline without a replacement" by
+   RELOCATION rather than by deletion, which is the distinction that makes the
+   existing outline:none defensible rather than an oversight. The generic rule
+   above excludes the input by name, which is what makes that true in the
+   cascade and not only in prose. */
+.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--blue); }

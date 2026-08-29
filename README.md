@@ -129,6 +129,7 @@ npm run verify:rail          # the rail's three sections and the inspector's rea
 npm run verify:review        # git argv, the review engine's result arms, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
+npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
