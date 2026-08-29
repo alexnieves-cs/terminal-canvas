@@ -93,5 +93,12 @@ module.exports = {
      baselineCapture is built from this same constructor over the same
      layoutStore the harness already owns; only the constructor is exported,
      the same trade createReviewEngine/createGitRunner already make. */
-  createBaselineCapture: require('../src/main/baseline-capture').createBaselineCapture
+  createBaselineCapture: require('../src/main/baseline-capture').createBaselineCapture,
+  /* Task 8's checks 113-115 drive the write verb end to end and need
+     registerIpcHandlers wired to a REAL committer over a REAL git runner —
+     the same reasoning createReviewEngine/createGitRunner above already
+     state, and the same trade: only the constructor is exported, and the
+     harness builds the committer itself so its tempIndexPath/removeTempIndex
+     deps can close over that file's own scratch directory. */
+  createReviewCommitter: require('../src/main/review-commit').createReviewCommitter
 }

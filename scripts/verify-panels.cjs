@@ -52,7 +52,8 @@ const {
   IPC_EVENTS,
   createReviewEngine,
   createGitRunner,
-  createBaselineCapture
+  createBaselineCapture,
+  createReviewCommitter
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -487,13 +488,21 @@ app.whenReady().then(async () => {
     join(realpathSync(tmpdir()), 'tc panels ')
   ]
   const realGitRunner = createGitRunner({ gitPath: () => gitPath, env: () => loginEnv })
-  const fencedGitRunner = async (args) => {
+  // `opts` is forwarded, not dropped: createReviewCommitter's four scratch-
+  // index calls pass { env: { GIT_INDEX_FILE: ... } } as a second argument,
+  // and a fence that swallowed it would silently commit against the real
+  // repository index instead of the scratch one — the exact thing this
+  // milestone's whole design exists to avoid, passing every check for a
+  // reason that has nothing to do with the scratch-index mechanism under
+  // test. reviewEngine's own calls never pass opts, so this widening changes
+  // nothing for checks 99-101.
+  const fencedGitRunner = async (args, opts) => {
     const i = args.indexOf('-C')
     const target = i >= 0 ? args[i + 1] : ''
     if (typeof target !== 'string' || !REVIEW_FENCES.some((f) => target.startsWith(f))) {
       return { stdout: '', ok: false, notFound: false }
     }
-    return realGitRunner(args)
+    return realGitRunner(args, opts)
   }
 
   // Real engine over a real git runner, mirroring main/index.ts's own
@@ -523,6 +532,25 @@ app.whenReady().then(async () => {
     setBaseline: (panelId, baseline) => layoutStore.setBaseline(panelId, baseline),
     resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
     captureBaseline: (root) => reviewEngine.captureBaseline(root)
+  })
+  // Real committer, mirroring main/index.ts's own construction: the same
+  // fenced runner reviewEngine uses (so a commit attempt against anything
+  // outside this suite's own fixture directories fails the way a directory
+  // that is not a repository fails, rather than reaching a real repo this
+  // suite does not own), and a scratch index directory of its own, outside
+  // every fixture repository — a scratch file inside one would show up as an
+  // untracked file in the very review about to be committed. Task 8's checks
+  // 113-115 are the only place review:commit is driven at all; a stub here
+  // would leave the whole write verb proven no further than the preload.
+  const commitIndexDir = mkdtempSync(join(tmpdir(), 'tc panels git-index '))
+  let commitIndexSeq = 0
+  const reviewCommit = createReviewCommitter({
+    run: fencedGitRunner,
+    tempIndexPath: () => join(commitIndexDir, `idx-${Date.now()}-${commitIndexSeq++}`),
+    // Best effort, the same as main/index.ts's: a stray scratch index file is
+    // a leftover in a directory nothing else reads, and throwing here would
+    // turn a successful commit into a rejected invoke.
+    removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } }
   })
   // main/index.ts calls this at whenReady; without it the store would start
   // from defaultSnapshot() and the seeded presets above would never be read.
@@ -626,7 +654,7 @@ app.whenReady().then(async () => {
     // still has to reach a callable fifth argument or a real settings-palette
     // exercise here would throw "rebuildMenu is not a function" instead of
     // testing what it means to.
-  }, reviewEngine)
+  }, reviewEngine, reviewCommit)
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -7635,6 +7663,205 @@ app.whenReady().then(async () => {
             pane.reviews === true && pane.reviewButton === false && pane.note === false,
           `node=${nodeId} selected=${selected} pane=${JSON.stringify(pane)}`)
       }
+
+      // 113-115. THE WRITE VERB, END TO END: a real repository, a real agent
+      //          writing through a real PTY, a real node, and a real commit
+      //          read back out of `git log`. Everything in verify:review is
+      //          argued against a fake runner or against a repository no
+      //          renderer ever saw; nothing above this line can tell whether
+      //          the control, the input and the baseline advance are wired to
+      //          each other at all.
+      //
+      //          Its own repository, deliberately. By check 112 the `repo`
+      //          fixture's subject panel has been closed (110) and its node
+      //          closed and undone (111/111b), so reusing it would make these
+      //          checks depend on the exact end state of five earlier ones.
+      const crepo = mkdtempSync(join(tmpdir(), 'tc panels commit '))
+      const cgit = (...args) => execFileSync('git', ['-C', crepo, ...args], { encoding: 'utf8' })
+      cgit('init', '-q', '.')
+      cgit('config', 'user.email', 'v@example.com')
+      cgit('config', 'user.name', 'v')
+      writeFileSync(join(crepo, 'seed.txt'), 'seed\n')
+      cgit('add', '-A')
+      cgit('commit', '-qm', 'init')
+      const headCount = () => cgit('rev-list', '--count', 'HEAD').trim()
+
+      const subject = await spawnAt(crepo)
+      // The same two stacked races checks 99 and 101 guard, for the same two
+      // reasons: a panel's PTY does not exist until lazy spawn creates it, and
+      // captureBaseline is fire-and-forget ON TOP of that — so sessionMap
+      // alone cannot see a baseline that has not landed yet.
+      if (subject) await waitUntil(async () => (await sessionMap(wc)).has(subject), 8000)
+      if (subject) ptyManager.write(subject, "printf 'agent\\n' > work.txt\n")
+      if (subject) {
+        await waitUntil(async () => {
+          const kind = await wc.executeJavaScript(
+            `window.canvas.review.panel(${JSON.stringify(subject)}).then((r) => r.kind)`)
+          return kind === 'changes' ? kind : false
+        }, 10000)
+      }
+      // 'rcommit' rather than the brief's literal 'r91': by this point in the
+      // run, check 106's own real "Open review" gesture has already minted a
+      // node id of exactly 'r91' through nextIdRef against the checks 99-112
+      // fixture repository, and that node is never closed. seedReviewNode
+      // APPENDS to the saved panel array rather than replacing, so a second
+      // entry sharing that id is a genuine duplicate-id collision — the one
+      // parseLayout's own comment calls "the one failure with no visible
+      // symptom" — and React silently renders the FIRST 'r91' (subject: the
+      // OTHER repository) under the second one's DOM position, which is why
+      // this looked like a false 'shared' verdict rather than a missing
+      // element. 'rcommit' does not match nextIdRef's own `^[nr](\d+)$`
+      // reseed regex, so no future mint in this run can ever collide with it.
+      const cnode = subject ? await seedReviewNode(subject, 'rcommit') : null
+      // seedReviewNode parks every node 60,000 world units off screen — check
+      // 104's own comment records that the camera it writes into layout.json
+      // never actually takes effect on the reload that follows, because the
+      // restore.camera preference defaults off, so the node comes back at
+      // DEFAULT_CAMERA rather than at the position seedReviewNode requested.
+      // Every earlier check that touches a seeded node's OWN controls reaches
+      // them by framing it first, through the same rail-row click check 108
+      // drives (goToPanel -> centreOn) — never by trusting the node to
+      // already be on screen. This suite's own typeCommit does a REAL
+      // sendInputEvent click at the button's real screen coordinates, so
+      // without this the button sits 60,000px off the window and the click
+      // lands on nothing.
+      const clickRailRow = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-rail-row=${JSON.stringify(id)}] .rail-row__main')
+        if (!el) return false
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true
+      })()`)
+      if (cnode) { await clickRailRow('rcommit'); await settle() }
+
+      /* Drives the node's OWN control and OWN input, never window.canvas.
+         review.commit from executeJavaScript: the disabled gate, the Enter
+         handler and the baseline advance are the three things this milestone
+         added, and an invoke driven by hand exercises none of them.
+
+         The click is a real sendInputEvent for check 75c's reason. The typing
+         is the native value setter plus an `input` event, which is what React
+         listens for — assigning .value alone updates the DOM and leaves
+         React's state untouched, so the commit would go out with an empty
+         message and the check would fail for a reason that has nothing to do
+         with the code under test. */
+      const typeCommit = async (nodeId, message, finishKey) => {
+        const box = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.review-node[data-panel-id="${nodeId}"] [data-review-node-commit]')
+          if (!b || b.disabled) return null
+          const r = b.getBoundingClientRect()
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (!box) return false
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        const opened = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="${nodeId}"] [data-review-node-commit-input]') !== null`),
+        3000)
+        if (opened !== true) return false
+        return wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.review-node[data-panel-id="${nodeId}"] [data-review-node-commit-input]')
+          if (!el) return false
+          const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          set.call(el, ${JSON.stringify(message)})
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          el.dispatchEvent(new KeyboardEvent('keydown',
+            { key: ${JSON.stringify(finishKey)}, bubbles: true }))
+          return true })()`)
+      }
+
+      // 113. THE HEADLINE. Three clauses in one read, and each alone passes
+      //      against a different real bug: HEAD advancing is satisfied by a
+      //      commit containing the wrong paths; the committed path being
+      //      right is satisfied by a node that never advanced its baseline
+      //      and will re-commit the same content on the next press; and the
+      //      node reading `clean` is satisfied by a node that lost its result
+      //      entirely and renders nothing.
+      {
+        const before = headCount()
+        const typed = cnode ? await typeCommit('rcommit', 'agent work', 'Enter') : false
+        // Waits on the node's own summary rather than sleeping: a pre-commit
+        // hook is legitimately slow, and a fixed sleep here is a flake on a
+        // loaded machine rather than a bound on anything.
+        const clean = typed === true
+          ? await waitUntil(async () => {
+              const text = await wc.executeJavaScript(
+                `((document.querySelector('.review-node[data-panel-id="rcommit"] [data-review-node-summary]') || {}).textContent) || ''`)
+              return /no changes|clean/i.test(text) ? text : false
+            }, 15000)
+          : false
+        const after = headCount()
+        const committed = Number(after) > Number(before)
+          ? cgit('show', '--stat', '--name-only', '--format=', 'HEAD')
+          : ''
+        ok('113 a review node\'s files become a real commit, and the node then reads clean',
+          typed === true && Number(after) === Number(before) + 1 &&
+            committed.includes('work.txt') && typeof clean === 'string',
+          `before=${before} after=${after} committed=${JSON.stringify(committed)} clean=${clean}`)
+      }
+
+      // 114. Escape cancels, and NOTHING is committed — read back out of
+      //      `git log` rather than off the overlay, the rule check 50 already
+      //      states for the palette's confirm: a cancel that cancels
+      //      unconditionally is invisible, and so is one that does not. It
+      //      needs new work to have something to cancel, since 113 left the
+      //      node clean.
+      {
+        if (subject) ptyManager.write(subject, "printf 'more\\n' > second.txt\n")
+        await settle()
+        const armed = await waitUntil(async () => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('.review-node[data-panel-id="rcommit"] [data-review-node-commit]')
+                    return b !== null && !b.disabled })()`), 15000)
+        const before = headCount()
+        const typed = armed === true ? await typeCommit('rcommit', 'should not land', 'Escape') : false
+        await settle()
+        const gone = await wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="rcommit"] [data-review-node-commit-input]') === null`)
+        ok('114 Escape closes the message and commits nothing',
+          typed === true && gone === true && headCount() === before,
+          `armed=${armed} before=${before} after=${headCount()}`)
+      }
+
+      // 115. The BLOCKED arm, reached honestly rather than by a fixture flag:
+      //      a second panel spawned into the same repository makes the node
+      //      read `shared`. Present AND disabled asserted in ONE condition,
+      //      because asserting only `disabled` passes against a control that
+      //      is missing entirely — which is the very failure verify:palette
+      //      31's rule is about — and asserting only presence passes against
+      //      one that would happily commit another agent's work.
+      {
+        const peer = await spawnAt(crepo)
+        if (peer) {
+          await waitUntil(async () => (await sessionMap(wc)).has(peer), 8000)
+          await waitUntil(async () => {
+            const kind = await wc.executeJavaScript(
+              `window.canvas.review.panel(${JSON.stringify(peer)}).then((r) => r.kind)`)
+            return kind !== 'never-started' ? kind : false
+          }, 10000)
+        }
+        // The node re-reads on its own only when its subject goes idle, which
+        // may already have happened — so the refresh control is what makes
+        // this deterministic rather than a race against an agent's timing.
+        await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.review-node[data-panel-id="rcommit"] .review-node__refresh')
+          if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        const state = await waitUntil(async () => {
+          const s = await wc.executeJavaScript(`(() => {
+            const n = document.querySelector('.review-node[data-panel-id="rcommit"]')
+            if (!n) return null
+            const b = n.querySelector('[data-review-node-commit]')
+            return {
+              note: (n.querySelector('[data-review-node-note]') || {}).textContent || '',
+              present: b !== null,
+              disabled: b !== null && b.disabled === true
+            } })()`)
+          return s && /share|attribut/i.test(s.note) ? s : false
+        }, 15000)
+        ok('115 a shared checkout leaves the commit control present and disabled',
+          state !== false && state.present === true && state.disabled === true,
+          JSON.stringify(state))
+      }
+
+      rmSync(crepo, { recursive: true, force: true })
 
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean
