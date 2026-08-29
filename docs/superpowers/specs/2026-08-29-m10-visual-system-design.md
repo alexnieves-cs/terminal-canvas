@@ -448,25 +448,47 @@ read `borderTopColor` rather than the computed shadow.
 
 ## Verification
 
-M10 adds **no new check**, and that is a deliberate position rather than an
-omission.
+M10 adds **one new suite** — `verify:styles`, plain node, eleven checks — and
+still adds **no visual regression test**. Those are two different statements
+and only the second is a deliberate position; the first sentence of this
+section used to make the second claim by asserting the first, and was wrong for
+the whole of the milestone's implementation.
 
-Every fact M10 changes is a rendered colour, size or duration. The repo has no
-tier that can assert on those meaningfully: the plain-node suites have no DOM,
-and the Electron suites can read a computed value but would then be asserting
-that a token equals itself — the shape `verify:panels` 32's comment already
-warns about, where a check reads as coverage and proves nothing. A screenshot
-test would catch real regressions and is a dependency and a milestone of its
-own.
+**What the new suite does.** `scripts/verify-styles.cjs` reads
+`src/renderer/styles.css` as TEXT and asserts the rules M10 set for itself as
+the *lexical* facts they are: no hardcoded colour outside a theme block (in any
+notation, with a two-entry explicit allowlist for translucent whites that must
+composite over the theme's own ground), every `var(--token)` declared, no
+fractional opacity, no literal font-size / radius / spacing outside the scales,
+the structure/colour split enforced from both sides, a reduced-motion block, a
+`:focus-visible` rule, and — the only check that computes rather than greps —
+measured WCAG contrast for every text token against every surface it can land
+on. It is plain node with zero imports, the tier `build/builder-config.cjs`
+already occupies, so it costs nothing to run. Its own header comment lists,
+per check, what it cannot see; read that before trusting a green run.
 
-What M10 does instead is **prove it broke nothing**, which is the claim that
-actually matters for a values-only change:
+**Why there is still no visual regression test, which IS a position.** Every
+*rendered* fact M10 changes is a colour, a size or a duration on screen. The
+repo has no tier that can assert on those meaningfully: the plain-node suites
+have no DOM, and the Electron suites can read a computed value but would then
+be asserting that a token equals itself — the shape `verify:panels` 32's
+comment already warns about, where a check reads as coverage and proves
+nothing. `verify:styles` sidesteps that trap precisely by NOT claiming to check
+appearance: "there is no hex in a body rule" is a fact about the file, and it
+stays true or false regardless of what the file renders as. A screenshot test
+would catch the real regressions this leaves uncovered, and it is a dependency
+and a milestone of its own.
+
+Alongside the new suite, M10's other claim is **that it broke nothing**, which
+is the claim that actually matters for a values-only change:
 
 - `npm run verify` green after every task.
 - `verify:panels` 62 and 97 specifically after Task 6 — the two checks the
   motion work is closest to.
 - The contrast table recomputed and pasted into the Task 3 commit message, so
-  the numbers are in the history rather than in someone's memory.
+  the numbers are in the history rather than in someone's memory — and now
+  recomputed on every run by `verify:styles` check 11, so it cannot go stale
+  silently the way a pasted table can.
 
 ## What M10 does not solve
 

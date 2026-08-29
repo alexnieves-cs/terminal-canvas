@@ -14,6 +14,31 @@
  * that the stylesheet obeys the rules M10 set for itself. There is no visual
  * regression test in this repo — see the spec's "Verification" section for
  * why that is a position rather than an omission.
+ *
+ * KNOWN GAPS, per check, so a green run is not read as a stronger claim than
+ * it makes. Each of these is a real hole, not a hypothetical one:
+ *
+ *   1 + 7  A colour written as a NORMAL property on bare `:root` — say
+ *          `:root { background: #123456 }` — escapes both. Check 1 filters
+ *          `:root` out as a theme block before it looks for colours, and
+ *          check 7 only inspects declarations whose name starts `--`. The
+ *          two together cover the case that has actually occurred (a token,
+ *          or a colour in a body rule) and not this one.
+ *   4      Only `px`. A font-size in `rem`, `em`, `%` or `pt` is invisible.
+ *   6      Only `padding`/`margin`/`gap`. `.canvas-hud`'s `right: 12px` and
+ *          `bottom: 12px` are spacing by any reasonable reading and are not
+ *          seen, and every `1px` is exempt outright as a hairline — so a
+ *          genuine 1px gap that should have been --sp-1 passes too.
+ *   8      Its token-name regex lists sp|r|dur|t|lh|ease, so `--e-*`,
+ *          `--ease` (matched only by luck, as the `ease` alternative), and
+ *          the one-offs `--font-mono` and `--titlebar-h` could all be moved
+ *          into a theme block without failing anything. Widening it to "any
+ *          token declared on bare :root" is the obvious improvement and was
+ *          not made here.
+ *
+ * The pattern in all of them is the same and is worth stating once: this file
+ * greps text. Anything spelled in a way it was not taught to look for is
+ * absent as far as it is concerned, and absence reads exactly like compliance.
  */
 const fs = require('fs')
 const path = require('path')
@@ -50,10 +75,30 @@ const themeRules = all.filter((r) => isThemeBlock(r.sel))
 const bodyRules = all.filter((r) => !isThemeBlock(r.sel))
 const bodyText = bodyRules.map((r) => r.body).join('\n')
 
-// 1 — no hex outside a theme block
+// 1 — no hardcoded colour outside a theme block, in ANY notation. Hex alone
+//     was not enough: the spec's own test for criterion 8 is "delete the theme
+//     block and no colour remains", and eight rgba() literals survived a green
+//     run of the hex-only version — including hand-duplicated amber, green and
+//     red that the --*-dim tokens already declared one screenful away.
+//
+//     ALLOW is an explicit, per-value allowlist rather than a relaxed regex,
+//     so the check stays honest: each entry is a translucent WHITE that models
+//     light on a surface (a canvas dot, a top-edge highlight) and must
+//     composite over whatever ground the active theme sets. Tokenising either
+//     would freeze it to one theme's ground, which is the opposite of the
+//     split this check exists to enforce. Both are commented at their site.
+//     Anything not on this list is a colour and belongs in the theme block.
+const ALLOW = new Set([
+  'rgba(255,255,255,.05)', // .canvas dot grid
+  'rgba(255,255,255,.07)'  // .palette top-edge highlight
+])
+const norm = (s) => s.replace(/\s+/g, '')
 const strayHex = [...new Set((bodyText.match(/#[0-9a-fA-F]{3,8}\b/g) || []))]
-ok(1, 'no hardcoded hex outside a theme block',
-  strayHex.length === 0, `${strayHex.length} found: ${strayHex.slice(0, 8).join(' ')}`)
+const strayFn = [...new Set((bodyText.match(/\b(?:rgba?|hsla?)\([^)]*\)/g) || []))]
+  .filter((v) => !ALLOW.has(norm(v)))
+const stray = [...strayHex, ...strayFn]
+ok(1, 'no hardcoded colour outside a theme block',
+  stray.length === 0, `${stray.length} found: ${stray.slice(0, 8).join(' ')}`)
 
 // 2 — every var(--x) resolves to a declared token
 const declared = new Set([...bare.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1]))

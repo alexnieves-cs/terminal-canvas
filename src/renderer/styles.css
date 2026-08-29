@@ -104,7 +104,13 @@
      --amber MUST stay a literal colour declared here, and
      .panel--agent-wants-you MUST keep `border-color: var(--amber)`
      un-transformed. verify:panels 62 and 97 compare the two by resolved
-     value. See Global Constraint 1. */
+     value. See Global Constraint 1.
+
+     --blue-dim is the one accent tint with no user today. It is kept so the
+     four pairs stay a pair each — an accent with a saturated tone and no
+     tint is a gap the next person fills by hand-mixing one, which is the
+     duplication this block exists to remove. --sp-7 and --e-1 are unused for
+     the same reason: they complete a scale. Nothing else here is unused. */
   --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .14);
   --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .12);
   --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .14);
@@ -318,7 +324,11 @@ body {
   border-radius: var(--r-sm);
 }
 
-.rail-row--selected { background: rgba(255, 255, 255, 0.08); }
+/* --s-4 is the ramp's one hover/selected fill (see the token block). It was a
+   hand-mixed white overlay, which is a fourth idiom for a state three other
+   surfaces already spelled a different way each — the duplication M10 exists
+   to remove — and it is invisible to any audit that reads declared colours. */
+.rail-row--selected { background: var(--s-4); }
 
 /* The row body is a button, not the <li>: three sibling controls rather than
    nested interactive elements, which are invalid HTML and give the browser no
@@ -494,7 +504,8 @@ body {
   text-align: left;
 }
 
-.inspector__action:hover { background: rgba(255, 255, 255, 0.06); }
+/* --s-4, the one hover fill — not a second hand-mixed white overlay. */
+.inspector__action:hover { background: var(--s-4); }
 
 /* Disabled is the restart control's resting state on a panel that never
    started (Task 6). Kept visible rather than hidden, per the rule
@@ -625,7 +636,13 @@ body {
      be seen: it is the canvas's only parallax cue, and with none at all
      panning reads as stuck. The vignette keeps a large dark field from
      reading as a void; its centre is --s-2, the nearest declared surface,
-     rather than a hand-picked literal that would belong to no ramp. */
+     rather than a hand-picked literal that would belong to no ramp.
+
+     The dot's rgba() is a DELIBERATE literal and is allowlisted by name in
+     verify-styles check 1. It is not a theme colour: it is a translucent
+     white tick whose whole job is to take whatever ground is behind it, so
+     tokenising it would produce an opaque value that stops tracking the
+     vignette it sits on. A future theme overrides the ground, not the tick. */
   background:
     radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .05) 1px, transparent 0)
       0 0 / 28px 28px,
@@ -659,7 +676,7 @@ body {
      DOMMatrixReadOnly, and a transform transition here reads as elastic on
      every pan (Global Constraint 3). */
   box-shadow: var(--e-2);
-  transition: box-shadow 140ms var(--ease), border-color 140ms var(--ease);
+  transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
 
 .panel--selected {
@@ -686,11 +703,21 @@ body {
    read borderTopColor, and border-color stays a plain, untransformed
    var(--amber) below, outside the keyframes. Do not fold it in. */
 @keyframes wants-you-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px rgba(224, 175, 104, .10), var(--e-2); }
-  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px rgba(224, 175, 104, .22), var(--e-2); }
+  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim), var(--e-2); }
+  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px var(--amber-dim), var(--e-2); }
 }
 .panel--agent-wants-you {
   border-color: var(--amber);
+  /* The STATIC ring is not redundant with the keyframes and must not be
+     deleted as such. The reduced-motion block below forces every animation to
+     .01ms with one iteration and no fill-mode, so the moment it applies the
+     keyframed box-shadow stops painting entirely and the panel falls back to
+     whatever is declared HERE. Without this line that fallback is .panel's
+     plain var(--e-2): an unselected waiting panel shows no amber ring at all,
+     for exactly the users who asked for less motion — silently removing the
+     app's one attention signal. The animation merely MODULATES this ring's
+     glow; the ring itself lives outside it. */
+  box-shadow: 0 0 0 2px var(--amber), var(--e-2);
   animation: wants-you-pulse 2.4s ease-in-out infinite;
 }
 .panel--agent-exited { border-color: var(--red); }
@@ -704,7 +731,13 @@ body {
 .panel--selected.panel--agent-idle,
 .panel--selected.panel--agent-exited {
   border-color: var(--blue);
-  box-shadow: 0 0 0 1px var(--blue);
+  /* var(--e-3) belongs here as well as on .panel--selected above. This rule is
+     the LATER one at equal specificity, so a ring-only box-shadow here wins
+     outright — which meant selecting a panel replaced .panel's own var(--e-2)
+     with nothing and flattened it against the canvas, and made --e-3 a token
+     that never rendered anywhere. A selected panel is the raised one by
+     definition, in every agent state. */
+  box-shadow: 0 0 0 1px var(--blue), var(--e-3);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -716,7 +749,12 @@ body {
    selection: none of them is asking for anything. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--amber);
-  box-shadow: 0 0 0 2px var(--amber);
+  /* Elevated for the same reason the blue rule above is: selection raises the
+     panel whatever its agent state. While the pulse is running the keyframes'
+     own box-shadow (carrying --e-2) wins over this declaration, so the
+     difference is visible only with reduced motion — which is precisely the
+     case this line, like the static ring above, exists to cover. */
+  box-shadow: 0 0 0 2px var(--amber), var(--e-3);
 }
 
 .panel__chrome {
@@ -770,8 +808,11 @@ body {
   cursor: pointer;
 }
 
+/* --s-4, the hover fill. --border is the HAIRLINE token: using it as a fill
+   makes a boundary colour and a surface colour the same value by accident, so
+   changing either one moves the other. */
 .panel__close:hover {
-  background: var(--border);
+  background: var(--s-4);
   color: var(--text);
 }
 
@@ -986,7 +1027,9 @@ body {
 }
 
 .review-node__summary { margin: 0 0 var(--sp-1); color: var(--text); }
-.review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-4); word-break: break-all; }
+/* --fg-3, not --fg-4: --fg-4 is the DISABLED step (3.03:1 on its worst
+   ground) and this is ordinary running text. */
+.review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
 .review-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
 
@@ -1005,8 +1048,12 @@ body {
   cursor: pointer;
 }
 
+/* --s-4 for both, the same fill the rail row and the palette row use. The
+   open state is deliberately NOT --s-5 (the pressed step): --s-5 is transient
+   by definition and an expanded file stays expanded, so an open row reads as
+   selected, which is what --s-4 means everywhere else in this file. */
 .review-node__file-button:hover,
-.review-node__file-button--open { background: var(--border); }
+.review-node__file-button--open { background: var(--s-4); }
 
 .review-node__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-node__counts { flex: none; color: var(--fg-3); }
@@ -1022,13 +1069,13 @@ body {
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
    languages, which is a dependency and a milestone of its own — the spec's
    own out-of-scope line. */
-.review-node__line--add { color: var(--green); background: rgba(158, 206, 106, 0.08); }
-.review-node__line--del { color: var(--red); background: rgba(247, 118, 142, 0.08); }
+.review-node__line--add { color: var(--green); background: var(--green-dim); }
+.review-node__line--del { color: var(--red); background: var(--red-dim); }
 .review-node__line--hunk { color: var(--blue); }
-.review-node__line--meta { color: var(--fg-4); }
+.review-node__line--meta { color: var(--fg-3); }
 
 .review-node__hunk-note,
-.review-node__more { margin: var(--sp-2); color: var(--fg-4); }
+.review-node__more { margin: var(--sp-2); color: var(--fg-3); }
 
 .review-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
@@ -1036,7 +1083,6 @@ body {
   flex: none;
   border: 0;
   background: none;
-  color: inherit;
   font: inherit;
   line-height: 1;
   cursor: pointer;
@@ -1120,7 +1166,13 @@ body {
   border: 1px solid var(--line-strong);
   border-radius: var(--r-lg);
   /* --e-3, plus a top inner highlight — the one-line move that separates a
-     floating surface from its own shadow. */
+     floating surface from its own shadow.
+
+     The highlight's rgba() is a DELIBERATE literal and is allowlisted by name
+     in verify-styles check 1. Like the canvas dot grid it is a translucent
+     white, not a theme colour: it models light falling on the surface's top
+     edge, so it must composite over whatever --s-3 the active theme sets
+     rather than being a colour of its own that a theme has to restate. */
   box-shadow: var(--e-3);
   background-image:
     linear-gradient(var(--s-3), var(--s-3)),
@@ -1367,8 +1419,7 @@ body {
   transition:
     background-color var(--dur-1) var(--ease),
     color            var(--dur-1) var(--ease),
-    border-color     var(--dur-1) var(--ease),
-    opacity          var(--dur-1) var(--ease);
+    border-color     var(--dur-1) var(--ease);
 }
 
 /* Not optional the moment any animation exists, and the app had none until
@@ -1389,19 +1440,31 @@ body {
    natively Tab-reachable, so a keyboard user got Chromium's default ring on
    some surfaces and nothing considered anywhere.
 
-   :focus-visible rather than :focus, or every mouse click would ring. */
-:where(button, [href], input, [tabindex]):focus-visible {
+   :focus-visible rather than :focus, or every mouse click would ring.
+
+   :not(.palette__input) is what makes the relocation below TRUE rather than
+   merely intended. :where() contributes zero specificity, so without the
+   exclusion this rule is (0,1,0) — a tie with `.palette__input { outline:
+   none }`, won on source order because it is declared later. Chromium always
+   matches :focus-visible on a text input and the palette autofocuses on open,
+   so every single Cmd+K painted this 2px ring AND the bar's underline: the
+   exact ring-inside-a-ring the comment below claims was avoided. The input is
+   excluded here rather than given a higher-specificity `outline: none` of its
+   own, so there is one place that decides which elements get the ring. */
+:where(button, [href], input, [tabindex]):not(.palette__input):focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
-  border-radius: var(--r-sm);
+  /* No border-radius here. An outline already follows the element's OWN
+     radius, so setting one made every focused control adopt --r-sm — visibly
+     popping .panel__close from --r-md (6px) to 4px for as long as it held
+     focus, a shape change nothing about focus should cause. */
 }
-
-/* Rows sit flush to the palette's edge, so an outset ring would clip. */
-.palette__row:focus-visible { outline-offset: -2px; }
 
 /* The input keeps outline: none — a ring inside a ring reads as broken — and
    the BAR carries the indicator instead. Same information, correct object:
    this satisfies "never remove a focus outline without a replacement" by
    RELOCATION rather than by deletion, which is the distinction that makes the
-   existing outline:none defensible rather than an oversight. */
+   existing outline:none defensible rather than an oversight. The generic rule
+   above excludes the input by name, which is what makes that true in the
+   cascade and not only in prose. */
 .palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--blue); }
