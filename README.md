@@ -1,8 +1,92 @@
 # Terminal Canvas
 
-An infinite-canvas workspace for macOS where every node is a live terminal panel
-running a coding-agent CLI (`claude`, `codex`, or any shell command).
-Think Figma, but the objects are terminals.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](#prerequisites)
+
+An infinite canvas where every node is a live terminal running a coding-agent CLI.
+Think Figma, but the objects are terminals — and the terminals are running `claude`,
+`codex`, or anything else you would type into a shell.
+
+> **Status: beta (`v0.1.0`).** macOS only, Apple Silicon by default. The app is
+> unsigned, so Gatekeeper will object the first time you open it — see
+> [Install](#install). It is used daily by its author and has not been used by
+> anyone else, which is the entire reason it is now public.
+
+## What it does
+
+- **An infinite canvas of real terminals.** Pan, zoom, drag and resize panels in
+  world space. Every panel is a genuine PTY — not a re-implementation, not a
+  wrapper — so any TUI that works in Terminal works here.
+- **More panels than a browser can afford.** Off-screen and over-budget panels
+  demote to cheap cards while their processes keep running. A fixed budget of
+  live WebGL terminals is what stops the twentieth panel taking down the
+  nineteen before it.
+- **Agents survive the window.** With `tmux` installed, panel processes outlive
+  a `Cmd+R` reload, a closed window, and a quit — you come back to the agent
+  mid-sentence rather than to a dead pane.
+- **A canvas that says who needs you.** Each panel's border reports what its
+  agent is doing — starting, working, idle, or waiting on you. Panels that want
+  attention while off screen get an edge pip pointing at them, and `Cmd+J`
+  flies to the next one.
+- **Workspaces.** Named canvases you switch between without killing anything;
+  the agents in the canvas you left keep working.
+- **A command palette.** `Cmd+K` for panels, presets, saved prompts, settings
+  and workspaces, with drill-in scopes and fuzzy matching.
+- **A review layer.** Each panel is diffed against the snapshot taken when its
+  agent started, so you can see what that agent — specifically that one —
+  changed, and commit it without leaving the canvas.
+- **Project prompts.** `.claude/commands/*.md` in a panel's working directory
+  are read and offered as insertable prompts, in Claude Code's own format, so
+  they version-control with the project rather than with this app.
+
+## Install
+
+### Download the beta
+
+Grab the `.dmg` from [Releases](https://github.com/alexnieves-cs/terminal-canvas/releases),
+open it, and drag **Terminal Canvas** to Applications.
+
+The build is **unsigned** — signing requires a paid Apple Developer account, and
+this is a beta. macOS will refuse the first launch with *"Terminal Canvas is
+damaged"* or *"cannot be opened because the developer cannot be verified"*. To
+get past it, either:
+
+- **Right-click the app → Open**, then confirm in the dialog; or
+- clear the quarantine flag:
+
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/Terminal\ Canvas.app
+  ```
+
+Only do this because you have read the source or trust its author. That warning
+exists for a reason and this app, by design, runs whatever commands you give it.
+
+### Build from source
+
+See [Getting started](#getting-started) below. It is three commands and needs no
+Apple Developer account.
+
+## Keyboard
+
+Every canvas shortcut requires **Cmd**. That is deliberate: agent TUIs claim
+essentially every bare key, so a bare keystroke always belongs to the terminal.
+
+| Chord | Action |
+|---|---|
+| `Cmd+N` | New panel, from the default preset |
+| `Cmd+K` | Command palette |
+| `Cmd+J` | Jump to the next panel waiting on you |
+| `Cmd+0` | Reset the camera |
+| `Cmd+1` | Fit every panel on screen |
+| `Cmd+=` / `Cmd+-` | Zoom in / out |
+| `Cmd+\` | Toggle the side rail |
+| `Cmd+Shift+\` | Toggle the inspector |
+| `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
+| `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
+| **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**, as SIGINT, SIGTSTP, and tmux's own prefix respectively |
+
+Trackpad: two-finger drag pans, pinch zooms. A wheel over the focused panel
+scrolls that terminal instead of the camera.
 
 ## Stack
 
@@ -419,3 +503,41 @@ contains, not only the ones that fit on screen.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.
+
+## Verification
+
+There is no unit-test runner and no linter here. `npm run verify` is the entire
+quality signal: it chains every suite, runs a typecheck and a build in the
+middle, and exits non-zero on any failure.
+
+The suites are tiered by cost. Anything with no native dependency, no DOM and no
+`electron` import runs under plain `node` in seconds — canvas math, the session
+registry, the on-disk layout format, the palette's matching and ranking, the
+tmux argv builders, the bell/idle state machine, the git review engine. That
+tier is large on purpose, and it is why several modules take their dependencies
+as parameters rather than importing them: `layout-store.ts` takes filesystem
+paths instead of calling `app.getPath`, `presets.ts` takes `which` instead of
+importing the login-shell probe, `review-engine.ts` takes a git runner instead
+of spawning one. Everything that genuinely needs `node-pty` runs under the
+Electron binary as Node; everything that needs real input against real pixels
+opens a hidden Electron window.
+
+To see the current suite list and check counts:
+
+```sh
+npm run verify
+```
+
+Individual suites are listed in [`package.json`](package.json) and described
+check-by-check in [`CLAUDE.md`](CLAUDE.md).
+
+## Contributing
+
+Issues and pull requests are welcome. The one hard requirement is that
+`npm run verify` is green — see [CONTRIBUTING.md](CONTRIBUTING.md) for what a
+check is expected to look like and why nearly every one of them carries a
+comment explaining the failure it guards.
+
+## License
+
+[MIT](LICENSE) © 2026 Alex Nieves

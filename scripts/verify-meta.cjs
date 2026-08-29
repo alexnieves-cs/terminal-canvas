@@ -105,6 +105,27 @@ const pkg = JSON.parse(read('package.json'))
   ok('7 no .claude/ file is tracked', tracked.trim() === '', tracked.trim() || 'none')
 }
 
+// 8–13. The README's STRUCTURE, asserted as a set of required headings.
+//
+// The failure this guards is not a typo — it is drift. Every milestone in this
+// repository has added a feature and left the README's visitor-facing half
+// alone, because the author already knows what the app does and the file that
+// gets updated is the one that hurts when it is wrong. Nothing hurts when a
+// README is missing a features list, so nothing ever fixed it. A check is the
+// only thing that makes an absent section as loud as a failing build.
+const README = read('README.md') ?? ''
+const REQUIRED_HEADINGS = [
+  '## What it does',
+  '## Install',
+  '## Keyboard',
+  '## Verification',
+  '## Contributing',
+  '## License'
+]
+for (const [i, heading] of REQUIRED_HEADINGS.entries()) {
+  ok(`${8 + i} README has "${heading}"`, README.includes('\n' + heading + '\n'))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
