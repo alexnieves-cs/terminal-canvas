@@ -142,10 +142,25 @@ for (const [i, heading] of REQUIRED_HEADINGS.entries()) {
 // is the first technical claim a reader checks, and it fails by omission, which
 // nothing else in this repository can see. Parsed out of ipc-contract.ts rather
 // than restated here, so this check cannot itself go stale.
+//
+// Scoped to the architecture diagram's OWN fenced block, not the whole README.
+// `README.includes(c)` would pass if a channel name appeared anywhere in the
+// file — `pty:create`, for instance, also appears in ordinary prose — so a
+// future edit could drop a channel from the diagram, mention it in a
+// paragraph, and this check would stay green: the exact failure it advertises
+// catching. All 43 channels (both invoke direction and event directions) live
+// in the single fence containing `--invoke-->` as of this writing. If a future
+// editor ever splits the diagram across two fences, this check FAILS loudly —
+// the fix then is to widen the selector to find every relevant fence, never to
+// fall back to matching the whole README: a false FAILURE gets noticed and
+// fixed, a false PASS never does, and that asymmetry is why this stays scoped
+// tightly rather than generously.
 const CONTRACT = read('src/shared/ipc-contract.ts') ?? ''
 const channels = [...CONTRACT.matchAll(/^\s+[A-Z_]+: '([a-z]+:[a-z-]+)'/gm)].map((m) => m[1])
+const fences = README.match(/^```[\s\S]*?^```/gm) ?? []
+const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 {
-  const missing = channels.filter((c) => !README.includes(c))
+  const missing = channels.filter((c) => !DIAGRAM.includes(c))
   ok('14 every IPC channel appears in the README',
     channels.length > 20 && missing.length === 0,
     missing.length ? `missing: ${missing.join(', ')}` : `${channels.length} channels`)
@@ -157,10 +172,23 @@ const channels = [...CONTRACT.matchAll(/^\s+[A-Z_]+: '([a-z]+:[a-z-]+)'/gm)].map
 // asserting nothing at all. This is the same shape as the `othersAreReal`
 // clause in verify:panels 83: prove the input was real before trusting the
 // conclusion drawn from it.
+//
+// The two named-channel clauses catch a TOTAL regex failure (an empty array)
+// but not a PARTIAL one: a future channel whose name contains a digit or a
+// camelCase segment could silently fall out of `channels` while `pty:create`
+// and `review:panel` still match, and check 14 would then assert presence
+// only for the channels it happened to find — passing while the README is
+// genuinely incomplete for the one it missed. `declared` counts channel
+// declarations with a LOOSER, independent regex (any quoted value after an
+// `A-Z_` key, not just the channel-shaped `[a-z]+:[a-z-]+` pattern), so a
+// declaration the channel-shaped regex could not read still gets counted here
+// — and the two counts disagreeing is what catches a partial miss the two
+// named clauses cannot see.
 {
+  const declared = [...CONTRACT.matchAll(/^\s+[A-Z_]+: '[^']*'/gm)].length
   ok('15 the contract parse found the channels it should',
-    channels.includes('pty:create') && channels.includes('review:panel'),
-    `${channels.length} parsed`)
+    channels.includes('pty:create') && channels.includes('review:panel') && channels.length === declared,
+    `${channels.length} parsed, ${declared} declared`)
 }
 
 console.log('\n' + '='.repeat(60))
