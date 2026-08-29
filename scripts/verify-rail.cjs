@@ -825,6 +825,35 @@ ok('55 a review row is never dormant', R.buildRailRows(
     none && nodeModel(undefined).commit.kind === 'none')
 }
 
+// 60. A RENAME contributes BOTH paths to the commit and ONE row to the list,
+//     and the two halves have to be asserted together or the check is about
+//     the wrong thing. `git diff --numstat` does rename detection by default,
+//     so `git mv old new` is ONE entry carrying `path: new` and
+//     `renamedFrom: old`. A commit set built from `path` alone stages the
+//     addition and never stages the deletion — read-tree seeded the scratch
+//     index from HEAD, so HEAD's own `old` survives into the new tree and the
+//     commit RESURRECTS a file the agent deleted, while the node says "1 file
+//     changed". Nothing is lost (the resurrected blob is HEAD's own) and the
+//     next review self-corrects, but it is content the user did not intend on
+//     this app's one irreversible write. The DISPLAY half is check 57's rule
+//     from the other side: the commit set and the rendered list are two
+//     different questions, and widening one must not widen the other — a row
+//     per old path would report "2 files changed" for one `git mv`.
+{
+  const m = nodeModel({ kind: 'changes', root: '/r', added: 1, removed: 1, files: [
+    { path: 'new name.ts', added: 1, removed: 1, binary: false, untracked: false,
+      renamedFrom: 'old name.ts' },
+    { path: 'plain.ts', added: 2, removed: 0, binary: false, untracked: false }
+  ] })
+  const paths = m.commit.kind === 'ready' ? m.commit.paths : []
+  ok('60 a rename commits both of its paths and still renders one row',
+    m.commit.kind === 'ready' &&
+      paths.includes('new name.ts') && paths.includes('old name.ts') &&
+      paths.includes('plain.ts') && paths.length === 3 &&
+      m.files.length === 2 && m.files.every((f) => f.path !== 'old name.ts'),
+    `paths=${JSON.stringify(paths)} rows=${m.files.map((f) => f.path).join(',')}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

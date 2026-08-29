@@ -149,7 +149,18 @@ export function buildReviewNodeModel(input: {
     more,
     commit: {
       kind: 'ready',
-      paths: result.files.map((f) => f.path),
+      // BOTH sides of a rename. `git diff --numstat` does rename detection by
+      // default, so `git mv old new` arrives as ONE file with `path: new` and
+      // `renamedFrom: old` — and staging only the destination leaves HEAD's
+      // own `old` in the scratch index (read-tree seeded it from HEAD), so the
+      // commit RESURRECTS a file the agent deleted while the node says "1 file
+      // changed". buildStageArgs' `--remove` already stages the deletion once
+      // the path is in the set; all that was missing was the path. The
+      // rendered `files` list deliberately does NOT grow the same way — one
+      // `git mv` is one row, and one commit set of two paths, which is check
+      // 57's display-versus-commit split stated from the other side.
+      paths: result.files.flatMap((f) =>
+        f.renamedFrom === undefined ? [f.path] : [f.path, f.renamedFrom]),
       label: `Commit ${plural(result.files.length, 'file')}`
     }
   }
