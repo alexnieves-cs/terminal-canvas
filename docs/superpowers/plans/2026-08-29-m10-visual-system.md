@@ -577,10 +577,15 @@ The palette's colours were chosen independently of `:root` and land *near* it �
   background:
     radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .05) 1px, transparent 0)
       0 0 / 28px 28px,
-    radial-gradient(120% 80% at 50% 0%, #12141d 0%, var(--s-0) 60%);
+    radial-gradient(120% 80% at 50% 0%, var(--s-2) 0%, var(--s-0) 60%);
   cursor: default;
 }
 ```
+
+The vignette's centre is `var(--s-2)` rather than a hand-picked literal. A
+literal here fails audit check 1 — which this task's own next step expects to
+pass — and `--s-2` is the nearest declared surface, so the canvas lifts toward
+the chrome tone rather than toward a colour that belongs to no ramp.
 
 The grid must stay *barely* visible — a texture, not a pattern. It exists as a parallax cue: with no texture at all there is nothing to tell the eye the world moved, and panning feels stuck.
 
