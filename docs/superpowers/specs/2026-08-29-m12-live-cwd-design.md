@@ -1,7 +1,12 @@
-# M10a: Live cwd and live command — Design
+# M12: Live cwd and live command — Design
 
 **Status:** designed, not yet implemented.
-**Predecessor:** `2026-08-28-m9-review-layer-design.md`
+**Predecessor:** `2026-08-29-m10-visual-system-design.md` by number; by
+DEPENDENCY, none — M10 (the visual system) touches `styles.css` and no `.tsx`,
+and M11 (themes) is claimed by M10's own spec. This milestone touches
+`tmux-args.ts`, `pty-manager.ts`, the IPC contract, a new renderer store and
+the inspector, and shares not one file with either. The number records claim
+order, not a build order: M12 can land before M10 or M11 without conflict.
 **Backlog entries:** #41 (live cwd and live command — the whole of this spec),
 and the four entries that already assume it works: #3 (file tree — "which
 directory?"), #4 (multiplayer's git badge), #19 (token accounting's transcript
@@ -23,7 +28,7 @@ panel's life, with nothing anywhere indicating it.
 
 This is a **correction, not a feature**. Its value is not the field; it is that
 four already-captured entries assert this fact exists, and each of them is
-silently wrong for a moved panel. M10a makes the assertion true.
+silently wrong for a moved panel. M12 makes the assertion true.
 
 ## Why it is nearly free, and why that is the argument
 
@@ -55,7 +60,7 @@ Out, deliberately:
   against the first. The stored baseline sha lives in the first repository, so
   correcting this needs a recapture-or-refuse policy — a design of its own, and
   the reason CLAUDE.md records the limitation rather than papering over it. It
-  is the natural M10b.
+  is the natural successor to this milestone.
 - **Any use of the live command beyond display.** Knowing that `claude` is the
   foreground process is exactly the input a "what is this panel actually
   running" feature wants; nothing in this milestone acts on it.
