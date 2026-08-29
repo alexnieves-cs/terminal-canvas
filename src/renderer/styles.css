@@ -680,12 +680,18 @@ body {
    silent visual bug, because nothing here would move with it. */
 .panel--agent-starting { border-color: var(--border); }
 .panel--agent-idle { border-color: var(--border); }
+/* wants-you is the only state carrying INTENT — idleness cannot tell
+   "finished" from "asked you a question" — so it is the only one worth
+   animating. The animation touches box-shadow ALONE: verify:panels 62 and 97
+   read borderTopColor, and border-color stays a plain, untransformed
+   var(--amber) below, outside the keyframes. Do not fold it in. */
+@keyframes wants-you-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px rgba(224, 175, 104, .10), var(--e-2); }
+  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px rgba(224, 175, 104, .22), var(--e-2); }
+}
 .panel--agent-wants-you {
   border-color: var(--amber);
-  /* The one state with a second visual channel. wants-you is the only signal
-     that carries INTENT — idleness cannot tell "finished" from "asked you a
-     question" — so it is the only one worth making findable across a canvas. */
-  box-shadow: 0 0 0 2px var(--amber);
+  animation: wants-you-pulse 2.4s ease-in-out infinite;
 }
 .panel--agent-exited { border-color: var(--red); }
 
@@ -1328,4 +1334,51 @@ body {
   background: var(--s-2);
   color: var(--fg-3);
   font-size: var(--t-sm);
+}
+
+/* Every hover, selection and state change in this app is currently a 0ms
+   hard cut — the single largest contributor to the whole thing reading as a
+   prototype. 90ms is below the threshold at which a change reads as waiting
+   and above the one at which it reads as a glitch.
+
+   NOTE the properties: background-color, color, border-color and opacity,
+   never transform. .world carries will-change: transform and is driven at
+   60Hz by the viewport, and four checks read its computed matrix through
+   DOMMatrixReadOnly — a transition there is both an elastic-feeling pan and
+   a race against those reads.
+
+   .review-node__commit joins its siblings .review-node__file-button and
+   .review-node__refresh here: it is the same kind of button in the same
+   component, with its own :hover/:disabled colour changes, and the M9c
+   commit UI landed after this selector list was drafted. */
+.rail-row,
+.rail-row__main,
+.rail-row__close,
+.rail-row__start,
+.rail-row__rename,
+.shell__top button,
+.shell__region-add,
+.inspector__action,
+.palette__row,
+.panel__close,
+.review-node__file-button,
+.review-node__refresh,
+.review-node__commit {
+  transition:
+    background-color var(--dur-1) var(--ease),
+    color            var(--dur-1) var(--ease),
+    border-color     var(--dur-1) var(--ease),
+    opacity          var(--dur-1) var(--ease);
+}
+
+/* Not optional the moment any animation exists, and the app had none until
+   this task — which is why there was nothing here before. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }
