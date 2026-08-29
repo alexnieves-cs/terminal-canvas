@@ -42,10 +42,25 @@ So a cell is a **workspace**, and #1's own scheduling note already said so:
 | `renderer/navgrid/useNavGrid.ts` | — | the held-modifier state machine |
 | `renderer/navgrid/NavGrid.tsx` | — | the overlay |
 
-`nav-grid.ts` imports nothing but types, so it joins `viewport.ts`, `lod.ts` and
-`rail-rows.ts` in the cheapest verify tier as a new `verify:navgrid` suite. The
-gesture is the risky half of this milestone and the arithmetic is not; keeping
-them in separate files is what lets the arithmetic be checked in seconds.
+`nav-grid.ts` imports nothing but types, so it belongs in the cheapest verify
+tier beside `viewport.ts`, `lod.ts` and `rail-rows.ts`. The gesture is the risky
+half of this milestone and the arithmetic is not; keeping them in separate files
+is what lets the arithmetic be checked in seconds.
+
+It joins **`scripts/rail-entry.cjs`**, i.e. `verify:rail`, rather than getting a
+`verify:navgrid` suite of its own. That is this repo's twice-applied precedent
+rather than a preference: M8c's `inspector-fields.ts` and M8d's
+`rail-sections.ts` both joined that entry, and M9b's `review-node-model.ts`
+joined it *from the canvas side* — the entry's own comment gives the reason, that
+"a suite of its own would re-prove the same esbuild wiring for one file". The
+suite name is then one step further from describing its contents, which is a
+real cost and the smaller one; `verify:meta` 19 would also have to grow a wiring
+entry for a suite whose whole content is four pure functions.
+
+`nav-grid.ts` must call `rail-sections.ts`'s exported `waitingCount` for a cell's
+waiting number rather than counting the intersection itself — the standing "one
+waiting count, and the rail is a view over it" rule, which already made the
+palette stop computing it inline.
 
 ## Cell assignment
 
@@ -168,7 +183,7 @@ reason it is a sibling too.
 
 ## Testing
 
-**`verify:navgrid`** (new, plain node) — the arithmetic:
+**`verify:rail`** (existing, plain node) — the arithmetic:
 
 - a workspace holds its cell as the list grows (criterion 2);
 - cell 8 is `more` even with two workspaces, and with twelve;
