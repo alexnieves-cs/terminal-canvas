@@ -191,8 +191,8 @@ body {
 .shell__top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-4);
   border-bottom: 1px solid var(--border);
 }
 
@@ -200,15 +200,15 @@ body {
    a toolbar that competes with it for attention is worse than no toolbar. */
 .shell__top button {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
-  padding: 3px 9px;
+  padding: var(--sp-2) var(--sp-4);
   font-size: var(--t-sm);
   cursor: pointer;
 }
 .shell__top button:disabled { color: var(--muted); cursor: default; }
-.shell__zoom { display: flex; align-items: center; gap: 4px; }
+.shell__zoom { display: flex; align-items: center; gap: var(--sp-2); }
 /* tabular-nums and a min-width so the readout does not shift the buttons
    beside it as the percentage changes width mid-gesture. */
 .shell__zoom-readout {
@@ -247,7 +247,7 @@ body {
 .shell__rail-toggle,
 .shell__inspector-toggle {
   width: 100%;
-  padding: 6px 0;
+  padding: var(--sp-3) 0;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -270,7 +270,7 @@ body {
    claim — a confidently false why gets "fixed" by matching the code to it. */
 
 .shell__region-title {
-  padding: 10px 12px 6px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
   color: var(--muted);
   font-size: var(--t-xs);
   font-weight: 600;
@@ -289,7 +289,7 @@ body {
   color: var(--muted);
   font-size: var(--t-md);
   line-height: 1;
-  padding: 0 2px;
+  padding: 0 var(--sp-1);
   cursor: pointer;
 }
 .shell__region-add:hover { color: var(--text); }
@@ -301,7 +301,7 @@ body {
 .rail-list {
   list-style: none;
   margin: 0;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
   overflow-y: auto;
 }
 /* min-height: 0 or the flex item refuses to shrink below its content and the
@@ -314,8 +314,8 @@ body {
 .rail-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  border-radius: 4px;
+  gap: var(--sp-1);
+  border-radius: var(--r-sm);
 }
 
 .rail-row--selected { background: rgba(255, 255, 255, 0.08); }
@@ -328,8 +328,8 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
   border: 0;
   background: transparent;
   color: var(--text);
@@ -405,7 +405,7 @@ body {
    body that grew would push the collapse toggle off screen — the one control
    that is the way back from a collapse. */
 .inspector__body {
-  padding: 4px 12px 12px;
+  padding: var(--sp-2) var(--sp-5) var(--sp-5);
   overflow-y: auto;
   max-height: calc(100% - 60px);
 }
@@ -413,7 +413,7 @@ body {
 .inspector__heading {
   color: var(--fg);
   font-size: var(--t-lg);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-4);
   /* A resolved command is an absolute path and a title is user text; neither
      is bounded, and the pane is 260px. Break rather than overflow: the rail
      next door clips, but a path the user cannot read at all defeats the one
@@ -424,8 +424,8 @@ body {
 .inspector__state {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
 }
 
 .inspector__dot {
@@ -447,9 +447,9 @@ body {
 
 .inspector__badge {
   margin-left: auto;
-  padding: 1px 5px;
+  padding: 1px var(--sp-2);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   color: var(--muted);
   font-size: var(--t-xs);
   font-weight: 600;
@@ -459,7 +459,7 @@ body {
 
 .inspector__fields { margin: 0; }
 
-.inspector__field { margin-bottom: 8px; }
+.inspector__field { margin-bottom: var(--sp-4); }
 
 .inspector__label {
   color: var(--muted);
@@ -479,14 +479,14 @@ body {
 .inspector__actions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 14px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-5);
 }
 
 .inspector__action {
-  padding: 5px 8px;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--fg);
   cursor: pointer;
@@ -509,13 +509,13 @@ body {
 /* M9a's Changes section, following the existing .inspector__* rules above. */
 
 .inspector__section {
-  margin-top: 14px;
-  padding-top: 12px;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
   border-top: 1px solid var(--border);
 }
 
 .inspector__section-heading {
-  margin: 0 0 6px;
+  margin: 0 0 var(--sp-3);
   color: var(--muted);
   font-size: var(--t-xs);
   letter-spacing: 0.08em;
@@ -524,7 +524,7 @@ body {
 }
 
 .inspector__review-summary {
-  margin: 0 0 4px;
+  margin: 0 0 var(--sp-2);
   color: var(--fg);
   font-size: var(--t-sm);
 }
@@ -533,7 +533,7 @@ body {
    shared — reads as prose, not as a value, so it gets the muted colour the
    labels use rather than the value colour the summary above uses. */
 .inspector__review-note {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-4);
   color: var(--muted);
   font-size: var(--t-xs);
   overflow-wrap: anywhere;
@@ -545,14 +545,14 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 
 .inspector__review-file {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--sp-3);
   font-size: var(--t-xs);
 }
 
@@ -576,7 +576,7 @@ body {
 }
 
 .inspector__review-more {
-  margin: 4px 0 0;
+  margin: var(--sp-2) 0 0;
   color: var(--muted);
   font-size: var(--t-xs);
 }
@@ -608,7 +608,7 @@ body {
 .rail-row__waiting { color: var(--amber); }
 
 .rail-empty {
-  padding: 4px 8px;
+  padding: var(--sp-2) var(--sp-4);
   color: var(--muted);
   font-size: var(--t-sm);
 }
@@ -650,14 +650,21 @@ body {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--panel-bg);
   user-select: none;
+  /* Panels had no shadow at all, which is why they read as pasted onto the
+     canvas rather than floating above it. box-shadow and border-color ONLY —
+     never transform: four checks read .world's computed matrix through
+     DOMMatrixReadOnly, and a transform transition here reads as elastic on
+     every pan (Global Constraint 3). */
+  box-shadow: var(--e-2);
+  transition: box-shadow 140ms var(--ease), border-color 140ms var(--ease);
 }
 
 .panel--selected {
   border-color: var(--blue);
-  box-shadow: 0 0 0 1px var(--blue);
+  box-shadow: 0 0 0 1px var(--blue), var(--e-3);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
@@ -713,10 +720,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 7px 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-5);
   background: var(--chrome-bg);
   border-bottom: 1px solid var(--border);
+  /* .panel moved from 10px to --r-lg (12px); a calc off the same token rather
+     than a literal 11px so the relationship survives a change to the token,
+     and so this stays zero literals for the audit. Without matching top
+     corners here, a sliver of .panel's own background shows past the header
+     at the corners. */
+  border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
   font-size: var(--t-sm);
   user-select: none;
 }
@@ -742,12 +755,12 @@ body {
   flex: none;
   appearance: none;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   font: inherit;
   line-height: 1;
-  padding: 2px 7px;
+  padding: var(--sp-1) var(--sp-3);
   cursor: pointer;
 }
 
@@ -803,7 +816,7 @@ body {
 .panel__card {
   flex: 1;
   min-height: 0;
-  padding: 10px 12px;
+  padding: var(--sp-4) var(--sp-5);
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--t-md);
@@ -842,13 +855,13 @@ body {
 .badge {
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--r-full);
   border: 1px solid var(--border);
   color: var(--muted);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   /* Never shrunk to make room for a long .panel__title — see its comment. */
   flex: none;
 }
@@ -879,11 +892,16 @@ body {
   right: 12px;
   bottom: 12px;
   display: flex;
-  gap: 14px;
-  padding: 6px 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-5);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--chrome-bg);
+  border-radius: var(--r-full);
+  /* The one place a backdrop cost is earned: the HUD sits over a moving
+     world layer, and a solid fill there reads as a sticker pasted on top of
+     it rather than chrome floating above it. */
+  background: color-mix(in srgb, var(--s-3) 78%, transparent);
+  backdrop-filter: blur(12px) saturate(140%);
+  box-shadow: var(--e-2);
   color: var(--muted);
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
@@ -948,7 +966,7 @@ body {
   flex: 1;
   min-height: 0;          /* or the list refuses to shrink and the box overflows */
   overflow-y: auto;
-  padding: 8px 10px;
+  padding: var(--sp-4) var(--sp-4);
   font: var(--t-sm) / var(--lh-body) var(--font-mono);
   color: var(--muted);
   background: var(--panel-bg);
@@ -961,19 +979,19 @@ body {
   user-select: text;
 }
 
-.review-node__summary { margin: 0 0 2px; color: var(--text); }
-.review-node__root { margin: 0 0 8px; color: var(--fg-4); word-break: break-all; }
-.review-node__note { margin: 0 0 8px; color: var(--amber); }
+.review-node__summary { margin: 0 0 var(--sp-1); color: var(--text); }
+.review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-4); word-break: break-all; }
+.review-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
 
 .review-node__file-button {
   display: flex;
   width: 100%;
-  gap: 8px;
+  gap: var(--sp-4);
   justify-content: space-between;
-  padding: 3px 4px;
+  padding: var(--sp-2) var(--sp-2);
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   background: none;
   color: inherit;
   font: inherit;
@@ -988,12 +1006,12 @@ body {
 .review-node__counts { flex: none; color: var(--fg-3); }
 
 .review-node__hunks {
-  margin: 2px 0 8px;
-  padding: 4px 0;
+  margin: var(--sp-1) 0 var(--sp-4);
+  padding: var(--sp-2) 0;
   border-left: 2px solid var(--border);
 }
 
-.review-node__line { padding: 0 6px; white-space: pre; }
+.review-node__line { padding: 0 var(--sp-3); white-space: pre; }
 
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
    languages, which is a dependency and a milestone of its own — the spec's
@@ -1004,7 +1022,7 @@ body {
 .review-node__line--meta { color: var(--fg-4); }
 
 .review-node__hunk-note,
-.review-node__more { margin: 4px; color: var(--fg-4); }
+.review-node__more { margin: var(--sp-2); color: var(--fg-4); }
 
 .review-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
@@ -1031,11 +1049,11 @@ body {
   border: 0;
   color: var(--fg-3);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 var(--sp-2);
 }
 .review-node__commit:hover:not(:disabled) { color: var(--fg); }
 .review-node__commit:disabled { color: var(--fg-4); cursor: default; }
-.review-node__commit-form { margin: 0 0 8px; }
+.review-node__commit-form { margin: 0 0 var(--sp-4); }
 .review-node__commit-input {
   width: 100%;
   box-sizing: border-box;
@@ -1043,10 +1061,10 @@ body {
   border: 1px solid var(--border);
   color: var(--text);
   font: inherit;
-  padding: 3px 6px;
+  padding: var(--sp-2) var(--sp-3);
 }
 .review-node__commit-outcome {
-  margin: 0 0 8px;
+  margin: 0 0 var(--sp-4);
   color: var(--amber);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1093,10 +1111,16 @@ body {
   transform: translateX(-50%);
   width: min(680px, 90%);
   z-index: 1000;
-  background: var(--s-3);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  border-radius: var(--r-lg);
+  /* --e-3, plus a top inner highlight — the one-line move that separates a
+     floating surface from its own shadow. */
+  box-shadow: var(--e-3);
+  background-image:
+    linear-gradient(var(--s-3), var(--s-3)),
+    linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 40%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
   overflow: hidden;
   font-size: var(--t-md);
 }
@@ -1106,15 +1130,15 @@ body {
 .palette__bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-6);
   border-bottom: 1px solid var(--line-strong);
 }
 
 .palette__scope {
   flex: none;
-  padding: 3px 8px;
-  border-radius: 5px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-md);
   background: var(--s-5);
   color: var(--fg-2);
   font-size: var(--t-sm);
@@ -1125,7 +1149,7 @@ body {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  padding: 14px 0;
+  padding: var(--sp-5) 0;
   background: transparent;
   border: 0;
   color: var(--fg);
@@ -1151,7 +1175,7 @@ body {
 }
 
 .palette__confirm {
-  padding: 20px 16px;
+  padding: var(--sp-6) var(--sp-6);
   color: var(--fg);
   font-size: var(--t-lg);
   /* Marked the same red the row that opened it was, so the question reads as
@@ -1164,7 +1188,7 @@ body {
    Sits in the ordinary bar (the input with the bad value still in it stays
    visible above it), unlike palette__confirm which replaces the bar outright. */
 .palette__number-error {
-  padding: 8px 16px 16px;
+  padding: var(--sp-4) var(--sp-6) var(--sp-6);
   color: var(--red);
   font-size: var(--t-md);
 }
@@ -1172,7 +1196,7 @@ body {
 .palette__list {
   list-style: none;
   margin: 0;
-  padding: 0 0 6px;
+  padding: 0 0 var(--sp-3);
   max-height: 46vh;
   /* The palette's wheel is yielded by Canvas.tsx's shouldYieldWheel, so this
      scrolls natively. `contain` stops a scroll past either end from chaining
@@ -1188,7 +1212,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 8px 16px 4px;
+  padding: var(--sp-4) var(--sp-6) var(--sp-2);
   background: var(--s-3);
   color: var(--fg-3);
   font-size: var(--t-xs);
@@ -1200,8 +1224,8 @@ body {
 .palette__row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 7px 16px;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
   color: var(--fg-2);
   /* A row answers the pointer — hovering selects it and a mousedown runs it —
      so it must not read as inert text the way `default` makes it. */
@@ -1280,9 +1304,9 @@ body {
    all but those two. */
 .palette__kbd {
   flex: none;
-  padding: 1px 6px;
+  padding: 1px var(--sp-3);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--s-2);
   color: var(--fg-3);
   font: inherit;
@@ -1291,7 +1315,7 @@ body {
 }
 
 .palette__empty {
-  padding: 10px 16px;
+  padding: var(--sp-4) var(--sp-6);
   color: var(--fg-3);
 }
 
@@ -1299,7 +1323,7 @@ body {
    overlay swallows rather than passes to the agent, and "esc back" vs
    "esc close" is the only place the two-stage Escape is visible at all. */
 .palette__footer {
-  padding: 7px 16px;
+  padding: var(--sp-3) var(--sp-6);
   border-top: 1px solid var(--line-strong);
   background: var(--s-2);
   color: var(--fg-3);
