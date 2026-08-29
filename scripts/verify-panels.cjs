@@ -285,8 +285,52 @@ app.whenReady().then(async () => {
     () => Number(layoutStore.getSetting('agent.idleAfterMs')),
     () => layoutStore.getSetting('agent.bell') === true,
     (panelId, cwd) => baselineCapture.capture(panelId, cwd),
-    (panelId) => baselineCapture.drop(panelId)
+    // BOTH halves, exactly as main/index.ts's own dropBaseline does them:
+    // poison any in-flight capture AND drop the persisted record. Dropping
+    // only the first is a harness that keeps answering review:panel for a
+    // panel it has just killed — which is the precise state check 110's
+    // fault injection has to be able to see, and with the store half missing
+    // that injection stayed GREEN (observed, not argued: swapping the node
+    // to review:panel left 110 passing until this line grew its second
+    // half). A harness that mirrors production loosely proves the app works
+    // for a configuration nobody ships.
+    (panelId) => {
+      baselineCapture.drop(panelId)
+      layoutStore.dropBaseline(panelId)
+    }
   )
+
+  /**
+   * Every panel id main was ever ASKED to kill, in order — the one fact
+   * checks 111 and 111b need and the one no renderer can read back.
+   *
+   * A kill aimed at an id that names no session is swallowed at every layer
+   * below this line: the direct backend's destroy() is a no-op, tmux's cli()
+   * eats a non-zero exit, dropBaseline for an unknown id drops nothing. So
+   * "a review node was routed through registry.dispose" has NO observable
+   * consequence in the DOM, in pty:list, or in any pid — confirmed by
+   * injection, with both guards removed and both checks still green. The
+   * only place the mistake is visible is at the door itself, which is here.
+   *
+   * An own property shadowing the prototype method, installed BEFORE
+   * registerIpcHandlers, so the pty:kill handler and killAll() alike route
+   * through it.
+   *
+   * OBLIGATION ON EVERY READER: both checks that read this assert a NEGATIVE
+   * (this id is not among the kills), which a probe that has stopped
+   * recording satisfies perfectly and permanently. Each therefore closes a
+   * REAL terminal panel inside its own window and asserts that id IS present.
+   * A future third reader inherits the same obligation; a negative-only
+   * assertion here is a check that cannot fail once the shadow is lost.
+   */
+  const killedPanelIds = []
+  {
+    const realKill = ptyManager.kill.bind(ptyManager)
+    ptyManager.kill = (panelId) => {
+      killedPanelIds.push(panelId)
+      realKill(panelId)
+    }
+  }
 
   // A real store, not a stub: the built renderer now calls and awaits
   // window.canvas.layout.load() before React mounts, so an unhandled channel
@@ -6928,6 +6972,669 @@ app.whenReady().then(async () => {
       }, 5000)
       ok('101 two panels in one repo are reported as unattributable',
         typeof note === 'string' && note.includes("can't be attributed"), `note=${note}`)
+
+
+      /* A review node is seeded through DISK + RELOAD rather than through a
+         gesture, and deliberately: the creation gesture is Task 9's subject,
+         and a node that can only exist because a button worked would make
+         these three checks fail for that button's reasons. The route is the
+         one checks 39 and 84 already use for a dormant panel — append to the
+         saved canvas, reload, read what came back. It needs a REAL baseline
+         sha, so it asks main for the subject panel's own. */
+      const seedReviewNode = async (subjectId, nodeId) => {
+        const baseline = await wc.executeJavaScript(
+          `window.canvas.review.baseline(${JSON.stringify(subjectId)})`)
+        if (!baseline) return null
+        const saved = layoutStore.initial()
+        const panels = saved.panels.concat([{
+          id: nodeId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
+          subject: { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: 'claude' }
+        }])
+        // The camera is set for legibility if anyone ever watches this run,
+        // and for nothing else: a review node is never CULLED, because
+        // culling is tiering and Canvas.tsx keeps nodes out of the array
+        // assignTiers is given, so React renders it wherever it sits. Check
+        // 104's own output says so — it reads the node at screen x 60360,
+        // some 60,000px off screen, and still finds it in the DOM.
+        layoutStore.save({ panels, camera: { x: -60000 + 200, y: 100, scale: 1 },
+          selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        // waitUntil on the DOM rather than a guessed sleep: boot awaits two
+        // IPC round trips (layout:load, then pty:list) before the first
+        // render, and the node's own review:at query resolves after that.
+        const appeared = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="${nodeId}"]') !== null`), 10000)
+        return appeared === true ? nodeId : null
+      }
+      const xtermCount = () => wc.executeJavaScript(
+        `document.querySelectorAll('.xterm').length`)
+      const beforeXterms = await xtermCount()
+      const node = first ? await seedReviewNode(first, 'r90') : null
+
+      // 102. The node renders REAL content — the file its subject's agent
+      //      actually wrote, read through review:at with no panel id
+      //      involved — and there is no terminal machinery underneath it.
+      //      Both halves in one read: a node that rendered a file list AND
+      //      an empty xterm host would satisfy either half alone, and the
+      //      empty host is precisely what a copy-pasted TerminalPanel gives.
+      {
+        // The summary starts at "reading…" and becomes "1 file changed" one
+        // IPC round trip later, so the file rows are what this waits on —
+        // reading immediately would fail against a correct implementation.
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]').length > 0`),
+        8000)
+        const body = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id="r90"]')
+          if (!n) return null
+          return {
+            summary: (n.querySelector('[data-review-node-summary]') || {}).textContent || '',
+            files: [...n.querySelectorAll('[data-review-node-file]')]
+              .map((e) => e.getAttribute('data-review-node-file')),
+            slots: n.querySelectorAll('.panel__slot').length,
+            xterms: n.querySelectorAll('.xterm').length
+          } })()`)
+        ok('102 a review node renders its subject\'s files and no terminal',
+          node !== null && body !== null && body.files.includes('agent.txt') &&
+            body.summary.includes('file') && body.slots === 0 && body.xterms === 0,
+          JSON.stringify(body))
+      }
+
+      // 103. THE ONE TO KNOW BY NUMBER — success criterion 4's teeth. The
+      //      node holds no PanelSession and consumes no WebGL context, and
+      //      both are asserted against the registry and the DOM rather than
+      //      argued from the code. The xterm count is compared to the count
+      //      BEFORE the node existed, because "the node has no xterm" (102)
+      //      is satisfied by an implementation that quietly promoted some
+      //      OTHER panel to pay for it.
+      {
+        // __m4aSessions, not sessionMap: the claim is about the RENDERER's
+        // registry — "no PanelSession was minted for this id" — and main's
+        // pty:list would answer `false` for a node that had a session and
+        // simply had not spawned yet.
+        const sessions = await wc.executeJavaScript(
+          `(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+        const afterXterms = await xtermCount()
+        ok('103 a review node has no session and costs no WebGL context',
+          node !== null && sessions.includes('r90') === false && afterXterms <= beforeXterms,
+          `xterms ${beforeXterms} -> ${afterXterms} sessions=${JSON.stringify(sessions)}`)
+      }
+
+      // 104. It is a child of .world, which is what makes semantic zoom free
+      //      rather than a feature: it pans and zooms with the panel it
+      //      reviews. Asserted as a real camera move changing its screen
+      //      position, not merely as a CSS ancestor — a node re-parented to
+      //      the screen-space chrome layer would still match a selector and
+      //      would sit still while the canvas moved under it.
+      {
+        // Its own pan helper: the panBy in the M6c/M6d blocks above is a
+        // block-local of theirs and is not in scope here.
+        const panReview = (dx, dy) => wc.executeJavaScript(`
+          document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+            bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+            deltaX: ${dx}, deltaY: ${dy}, deltaMode: 0
+          }))
+          true
+        `)
+        const boxOf = () => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id="r90"]')
+          return n ? n.getBoundingClientRect().left : null })()`)
+        const inWorld = await wc.executeJavaScript(
+          `document.querySelector('.world .review-node[data-panel-id="r90"]') !== null`)
+        const before = await boxOf()
+        await panReview(120, 0)
+        await settle()
+        const after = await boxOf()
+        ok('104 the node lives in .world and moves with the camera',
+          inWorld === true && before !== null && after !== null && Math.abs(after - before) > 50,
+          `${before} -> ${after}`)
+      }
+
+      // 105. A wheel over a FOCUSED review node's body is left uncancelled
+      //      (the browser scrolls the diff) and moves no camera, while the
+      //      same wheel over the canvas background still pans — the two
+      //      halves check 47 already pins for the palette, on a second
+      //      surface. Cancellation, not scrollTop: a synthetic WheelEvent is
+      //      untrusted and Chromium performs no default action for one, so a
+      //      scrollTop assertion would fail the correct implementation. The
+      //      camera clause is what makes it more than a tautology.
+      {
+        const focused = await wc.executeJavaScript(`(() => {
+          const body = document.querySelector('.review-node[data-panel-id="r90"] .review-node__body')
+          if (!body) return null
+          body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        await settle()
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const cancelled = await wc.executeJavaScript(`(() => {
+          const body = document.querySelector('.review-node[data-panel-id="r90"] .review-node__body')
+          const e = new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })
+          return body.dispatchEvent(e) === false })()`)
+        await settle()
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        ok('105 a wheel over a focused review node is the node\'s, not the camera\'s',
+          focused === true && cancelled === false && after.x === before.x && after.y === before.y,
+          `cancelled=${cancelled} ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+      }
+
+      // Local to this block: neither exists anywhere else in this file. A
+      // review node reuses the `.panel` class (ReviewNode.tsx's own comment
+      // explains why), so this counts both kinds the same way spawnAt does.
+      const panelIds = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      const clickShell = (selector) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)})
+        if (!el) return false
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true })()`)
+
+      // 106. The inspector's button makes a real node beside a real panel,
+      //      through main's real baseline. Three clauses, and the id prefix
+      //      is one of them: `r` is what tells a reader of layout.json (and
+      //      of a tmux session list) which panels can possibly own a
+      //      session.
+      {
+        const beforeIds = await panelIds()
+        await selectPanel(first)
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        await clickShell('[data-inspector-action="review"]')
+        const node = await waitUntil(async () => {
+          const ids = await panelIds()
+          const fresh = ids.filter((id) => !beforeIds.includes(id))
+          return fresh.length === 1 ? fresh[0] : false
+        }, 8000)
+        const heading = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id=' +
+            ${JSON.stringify(JSON.stringify(node))} + ']')
+          return n ? n.querySelector('.panel__title').textContent : null })()`)
+        const sessions = await sessionMap(wc)
+        ok('106 the inspector opens a review node for the selected panel',
+          typeof node === 'string' && node.startsWith('r') &&
+            typeof heading === 'string' && heading.includes('review') &&
+            sessions.has(node) === false,
+          `node=${node} heading=${heading}`)
+      }
+
+      // 107. THE ID CHECK, RETARGETED after fix round 1. `n6` and `r6`
+      //      cannot collide — they are different strings, and only
+      //      SAME-PREFIX ids collide as tmux session names — so comparing
+      //      bare numbers across prefixes (the original form of this check)
+      //      flagged n34/r34 coexisting as though it were a defect, and it
+      //      passed identically under either regex besides: the reload below
+      //      seeds the counter from an n-max nowhere near the seeded r-node's
+      //      own number, so neither regex ever had a reason to disagree.
+      //
+      //      The REAL hazard is review node versus review node. A persisted
+      //      `r<N>` is invisible to a NARROW seeding regex, so a later
+      //      review gesture can mint that exact id a SECOND time — a literal
+      //      duplicate panel id, which parseLayout drops silently on the
+      //      next load and which React keys collide on today. This seeds a
+      //      review node whose number is exactly the NEXT one a narrow
+      //      reseed would compute (today's n-max plus one), reloads so the
+      //      reseed actually runs, then opens a review on that SAME subject
+      //      through the real gesture — the first id-minting action after
+      //      the reload — and asserts the minted id collides with nothing
+      //      the canvas already holds, across every workspace.
+      // Session survival across wc.reload() is a TMUX property — the
+      // direct backend kills the process outright on reload, so the subject
+      // would never reattach, `minted` would stay null, and a tmux-free
+      // machine would see a RED that has nothing to do with the id-collision
+      // defect this check exists to prove. Skipped LOUDLY, never silently,
+      // the same shape and wording as check 91 — and gating BEFORE the
+      // spawn/seed/reload, not merely around the assertion, so a skip leaves
+      // no half-built fixture (an extra subject panel, a seeded collide-id
+      // node on disk) for anything appended after this block to trip over.
+      const TMUX_107 = findTmux()
+      if (!TMUX_107 || !tmuxBackend) {
+        ok('107 a review node cannot mint an id a persisted node already owns (SKIPPED — no tmux binary found)',
+          true, 'install tmux to cover this')
+      } else {
+        backend = tmuxBackend
+        const subjectPanel = first ? await spawnAt(repo) : null
+        if (subjectPanel) {
+          await waitUntil(async () => (await sessionMap(wc)).has(subjectPanel), 8000)
+        }
+        const idsForSeed = subjectPanel
+          ? await wc.executeJavaScript(
+              `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+          : []
+        const maxN = idsForSeed.reduce((max, id) => {
+          const m = /^n(\d+)$/.exec(id)
+          return m ? Math.max(max, Number(m[1])) : max
+        }, 0)
+        // Exactly the id a NARROW regex's reseed would hand out next: it
+        // never sees this r-node at all, so it recomputes the same
+        // n-max-plus-one it would have without this node existing.
+        const collideId = `r${maxN + 1}`
+        const seedBaseline = subjectPanel
+          ? await wc.executeJavaScript(
+              `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
+          : null
+        let minted = null
+        let idsAfterReload = null
+        if (seedBaseline) {
+          const saved = layoutStore.initial()
+          const seededPanels = saved.panels.concat([{
+            id: collideId, x: 60000, y: 0, w: 640, h: 520, z: 99, kind: 'review',
+            subject: {
+              subjectId: subjectPanel, repoRoot: seedBaseline.root,
+              baselineSha: seedBaseline.sha, label: 'claude'
+            }
+          }])
+          // Camera near the ORIGIN, deliberately unlike seedReviewNode's own
+          // far-off one above: this check has to click the SUBJECT panel
+          // after the reload through a real sendInputEvent, which needs real
+          // screen coordinates — not a panel 60,000 world units from
+          // wherever the camera happens to sit.
+          layoutStore.save({ panels: seededPanels, camera: { x: 0, y: 0, scale: 1 },
+            selectedId: null, focusedId: null })
+          layoutStore.flushSync()
+          const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload()
+          await reloaded
+          await waitUntil(async () => wc.executeJavaScript(
+            `document.querySelector('.review-node[data-panel-id="${collideId}"]') !== null`),
+          10000)
+          idsAfterReload = await wc.executeJavaScript(
+            `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+          // The subject's own session reattaching (tmux) is what keeps its
+          // baseline alive in main, exactly the mechanism check 91 already
+          // proves for the inspector's reattached badge.
+          const reattached = await waitUntil(
+            async () => (await sessionMap(wc)).has(subjectPanel), 8000)
+          if (reattached) {
+            await selectPanel(subjectPanel)
+            await waitUntil(async () => wc.executeJavaScript(
+              `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+            await clickShell('[data-inspector-action="review"]')
+            await settle()
+            minted = await waitUntil(async () => {
+              const ids = await wc.executeJavaScript(
+                `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+              const fresh = ids.filter((id) => !idsAfterReload.includes(id))
+              return fresh.length === 1 ? fresh[0] : false
+            }, 8000)
+          }
+        }
+        const finalIds = await wc.executeJavaScript(
+          `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
+        ok('107 a review node cannot mint an id a persisted node already owns',
+          subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
+            minted !== collideId && new Set(finalIds).size === finalIds.length,
+          `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
+      }
+
+      // 108. The node is in the rail, and its row NAVIGATES — the rule
+      //      M8b's rows already obey. The camera clause is what rejects a
+      //      row wired to nothing; the session clause is what rejects a row
+      //      that reached onSelectPanel, whose wake path has no meaning here
+      //      and whose real cost is that it is the app's spawn gesture.
+      {
+        const panBy108 = (dx, dy) => wc.executeJavaScript(`
+          document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', {
+            bubbles: true, cancelable: true, clientX: 700, clientY: 450,
+            deltaX: ${dx}, deltaY: ${dy}, deltaMode: 0
+          }))
+          true
+        `)
+        const clickRail108 = (id) => wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-rail-row=${JSON.stringify(id)}] .rail-row__main')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await panBy108(900, 600)
+        await settle()
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const clicked = node !== null ? await clickRail108('r90') : false
+        await settle()
+        const after = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const sessions = await sessionMap(wc)
+        ok('108 the rail lists a review node and its row frames it',
+          node !== null && clicked === true && (after.x !== before.x || after.y !== before.y) &&
+            sessions.has('r90') === false)
+      }
+
+      // 109. Success criterion 4's last clause: a review node survives a
+      //      relaunch. Driven through a REAL reload rather than a parse
+      //      check — Task 2 already pins the on-disk format, and what this
+      //      adds is that the restored node still ANSWERS. Its subject's
+      //      session is gone on the direct backend and merely detached under
+      //      tmux, and the node must not care either way: it asks review:at
+      //      with the baseline it carries, so the only thing that has to
+      //      have survived the reload is the node's own `subject` record.
+      {
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        const back = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="r90"]') !== null`), 10000)
+        // waitUntil on the FILE ROWS, not on the node: boot awaits two IPC
+        // round trips before its first render and the node's own query
+        // resolves after that, so the summary reads "reading…" for a moment
+        // on a perfectly healthy restore. An immediate read would fail
+        // against correct code.
+        const files = await waitUntil(async () => {
+          const f = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]')]
+               .map((e) => e.getAttribute('data-review-node-file'))`)
+          return f.length > 0 ? f : false
+        }, 10000)
+        ok('109 a review node survives a reload and still reports its files',
+          back === true && Array.isArray(files) && files.includes('agent.txt'),
+          `back=${back} files=${JSON.stringify(files)}`)
+      }
+
+      // 110. SUCCESS CRITERION 5, and the check the node's whole design
+      //      exists for. Closing the subject panel drops its baseline in
+      //      main (PtyManager.kill -> dropBaseline, on every close) — so a
+      //      node that had asked review:panel(subjectId) would go blank
+      //      exactly here, at the moment a review of finished work is most
+      //      useful. This node keeps answering because it carries the
+      //      baseline itself and asks review:at.
+      //
+      //      It cannot be watched failing against correct code, and was
+      //      proven by FAULT INJECTION instead: swapping ReviewNode's query
+      //      to window.canvas.review.panel(subject.subjectId) turns this
+      //      RED while check 102 — the same node, rendering the same files,
+      //      with its subject still alive — stays GREEN. That contrast is
+      //      the whole point of this check: 102 proves the node renders,
+      //      and only 110 proves it OUTLIVES.
+      {
+        // The rail's close control, not the panel's own ×: a terminal panel
+        // running a process ARMS on the first × click and needs a second
+        // one, so a single dispatched mousedown there would leave the panel
+        // open and this check would pass for the wrong reason (a subject
+        // that was never closed cannot demonstrate outliving anything).
+        // The rail row closes outright — check 86's own gesture.
+        const closed = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.rail-row[data-rail-row=' +
+            ${JSON.stringify(JSON.stringify(first))} + '] .rail-row__close')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true })()`)
+        const subjectGone = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=' +
+             ${JSON.stringify(JSON.stringify(first))} + ']') === null`), 8000)
+        const stillThere = await waitUntil(async () => {
+          const f = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]')]
+               .map((e) => e.getAttribute('data-review-node-file'))`)
+          return f.includes('agent.txt') ? f : false
+        }, 8000)
+        // Re-QUERIED, not merely still painted. The clause above is
+        // satisfied by a DOM left over from before the close, which is
+        // exactly what a broken node would show for as long as nobody asked
+        // it anything; the refresh control sends a fresh review:at through
+        // main, and only an answer to THAT proves the node can still read
+        // its repository with its subject gone.
+        const requeried = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.review-node[data-panel-id="r90"] .review-node__refresh')
+          if (!n) return false
+          n.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        // A SUSTAINED hold, never a waitUntil, and this is the one thing
+        // about check 110 that had to be learned the hard way. The node does
+        // not clear `result` while a refresh is in flight (it would flicker
+        // the file list on every re-read), so there is no DOM state meaning
+        // "re-querying" — which makes a waitUntil here satisfied INSTANTLY
+        // by the rows that were already painted, long before the new answer
+        // lands. The first draft was exactly that, and it passed against the
+        // fault-injected node roughly half the time: whether the check saw
+        // the defect depended on which of two promises won a race. Holding
+        // the condition for two seconds instead is what makes a
+        // never-started answer arriving mid-window turn this red rather than
+        // slipping in behind a green assertion.
+        const after = await (async () => {
+          const deadline = Date.now() + 2000
+          let last = null
+          while (Date.now() < deadline) {
+            last = await wc.executeJavaScript(
+              `[...document.querySelectorAll('.review-node[data-panel-id="r90"] [data-review-node-file]')]
+                 .map((e) => e.getAttribute('data-review-node-file'))`)
+            if (!last.includes('agent.txt')) return false
+            await sleep(100)
+          }
+          return last
+        })()
+        ok('110 a review node outlives the panel it reviews',
+          closed === true && subjectGone === true && stillThere !== false &&
+            requeried === true && after !== false,
+          `closed=${closed} gone=${subjectGone} still=${JSON.stringify(stillThere)} after=${JSON.stringify(after)}`)
+      }
+
+      // 111. Closing the NODE kills nothing. onClosePanel branches on the
+      //      kind before it disposes, and this is the only check that can
+      //      see the branch: dispose(id) sends pty.kill even for an id this
+      //      renderer holds no session for, so routing a node through it
+      //      would send a tmux kill-session named after a panel that never
+      //      had one — and drop the baseline of whatever panel later
+      //      recycles that id.
+      {
+        const before = await sessionMap(wc)
+        const killsBefore = killedPanelIds.length
+        const closed = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.review-node[data-panel-id="r90"] .panel__close')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true })()`)
+        const gone = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.review-node[data-panel-id="r90"]') === null`), 6000)
+        // THE NON-VACUITY HALF, and it is not optional. Everything this check
+        // asserts about `kills` is a NEGATIVE, against a recording mechanism
+        // nothing else proves is still recording: lose the shadow — the
+        // harness rewired, registerIpcHandlers binding the prototype method,
+        // PtyManager.kill refactored behind another entry point — and
+        // `killedPanelIds` is empty forever, both this check and 111b stay
+        // green, and the only coverage the three dispose guards have
+        // disappears with no signal at all. That is the shape CLAUDE.md
+        // already names for verify:pty-manager 18: "no wants-you" is
+        // satisfied just as well by bytes that never reached main.
+        //
+        // So a REAL terminal panel is closed inside the SAME window, through
+        // the rail (which closes outright, no arming step), and the slice
+        // must contain it. In-window rather than leaning on check 110's
+        // close one screenful up: a cumulative read would prove the probe was
+        // alive earlier in the run, and "earlier" is exactly the assumption a
+        // liveness clause must not make. homePanel is check 100's
+        // outside-a-repository panel and nothing after this point uses it.
+        const closedReal = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.rail-row[data-rail-row=' +
+            ${JSON.stringify(JSON.stringify(homePanel))} + '] .rail-row__close')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true })()`)
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=' +
+             ${JSON.stringify(JSON.stringify(homePanel))} + ']') === null`), 6000)
+        await settle()
+        const after = await sessionMap(wc)
+        // Compared against `before` MINUS the panel this check deliberately
+        // closed: the liveness close is a real one and really does end a
+        // session, so the pid comparison has to be told about it or it would
+        // report the check's own fixture as a regression.
+        const expected = new Map([...before].filter(([id]) => id !== homePanel))
+        const preserved = pidsPreserved(expected, after)
+        // THE CLAUSE THAT DISCRIMINATES. The pid and DOM clauses are worth
+        // having and cannot fail on their own: a stray kill for an id that
+        // names no session changes no pid and removes no row, so an unguarded
+        // close is invisible from the renderer. `kills` is read at main's own
+        // door, where it is the only place the mistake exists at all.
+        const kills = killedPanelIds.slice(killsBefore)
+        ok('111 closing a review node ends no session',
+          closed === true && gone === true && preserved.ok &&
+            closedReal === true && kills.includes(homePanel) === true &&
+            kills.includes('r90') === false,
+          `sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
+      }
+
+      // 111b. The UNDO path, which Task 9's creation gesture made reachable:
+      //       applyHistory's dispose loop removes whatever the undone state
+      //       no longer contains, and until this milestone's guard it made
+      //       no exception for a kind that owns no session. Cmd+N then
+      //       Cmd+Z is one gesture away from being how most nodes are
+      //       closed, so the loop needs the same branch onClosePanel has.
+      //
+      //       Its `kills` clause is the one that discriminates, for the
+      //       reason check 111 states above: with the guard removed, every
+      //       renderer-visible fact here is unchanged — the node still
+      //       leaves the DOM (applyHistory removes it either way) and every
+      //       pid is still preserved (a kill aimed at an id naming no
+      //       session is swallowed at every layer). Confirmed by injection:
+      //       both guards deleted, both checks green, until the kill probe
+      //       existed. The DOM and pid clauses stay because each rejects a
+      //       different wrong undo — one that disposes the SUBJECT, one that
+      //       leaves the node on screen.
+      //
+      //       It carries its OWN non-vacuity clause rather than borrowing
+      //       111's, for the reason 111's own comment gives: a positive
+      //       recorded in an earlier window proves the probe was alive
+      //       EARLIER, which is precisely the assumption a liveness clause
+      //       must not make. Its subject panel is spawned by this check and
+      //       used by nothing after it, so closing it here — after the undo
+      //       has been read — is a real kill inside this check's own window
+      //       and costs no other fixture.
+      {
+        const subject = await spawnAt(repo)
+        // The baseline, not merely the session: captureBaseline is
+        // fire-and-forget on top of the spawn (a spawn must never wait on a
+        // git process), so the inspector's review button is present-but-
+        // useless for a moment after the panel appears, and openReview
+        // returns early on a null baseline — a node that never gets minted,
+        // read here as a check that fails for a racing fixture rather than
+        // for a defect. Check 101 above states the same two-stacked-races
+        // problem in full.
+        if (subject) {
+          await waitUntil(async () => (await sessionMap(wc)).has(subject), 8000)
+          await waitUntil(async () => wc.executeJavaScript(
+            `window.canvas.review.baseline(${JSON.stringify(subject)}).then((b) => b !== null)`), 8000)
+          await selectPanel(subject)
+        }
+        const beforeIds = await panelIds()
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        await clickShell('[data-inspector-action="review"]')
+        const node = await waitUntil(async () => {
+          const ids = await panelIds()
+          const fresh = ids.filter((id) => !beforeIds.includes(id))
+          return fresh.length === 1 ? fresh[0] : false
+        }, 8000)
+        // Captured with the node ON SCREEN, so `after` is compared against
+        // the state the undo actually acted on rather than against a
+        // snapshot from before the subject panel even spawned.
+        const before = await sessionMap(wc)
+        const killsBefore = killedPanelIds.length
+        // __m4bUndo(), not a 'z' keydown: Cmd+Z is a main-process menu
+        // accelerator and this harness has no menu — check 67's comment
+        // states it in full.
+        await wc.executeJavaScript(`window.__m4bUndo()`)
+        const gone = typeof node === 'string'
+          ? await waitUntil(async () => wc.executeJavaScript(
+              `document.querySelector('[data-panel-id=' +
+                 ${JSON.stringify(JSON.stringify(node))} + ']') === null`), 6000)
+          : false
+        await settle()
+        const afterUndo = await sessionMap(wc)
+        const preserved = pidsPreserved(before, afterUndo)
+        // The liveness close, AFTER the undo has been read back — so the
+        // negative above is about the undo alone and this is about the
+        // probe.
+        const closedReal = typeof subject === 'string'
+          ? await wc.executeJavaScript(`(() => {
+              const el = document.querySelector('.rail-row[data-rail-row=' +
+                ${JSON.stringify(JSON.stringify(subject))} + '] .rail-row__close')
+              if (!el) return false
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+              return true })()`)
+          : false
+        await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel[data-panel-id=' +
+             ${JSON.stringify(JSON.stringify(subject))} + ']') === null`), 6000)
+        await settle()
+        const after = await sessionMap(wc)
+        const kills = killedPanelIds.slice(killsBefore)
+        ok('111b undoing a review node ends no session',
+          typeof node === 'string' && gone === true && preserved.ok &&
+            closedReal === true && kills.includes(subject) === true &&
+            kills.includes(node) === false,
+          `node=${node} sessions ${before.size} -> ${after.size} changed=${JSON.stringify(preserved.changed)} kills=${JSON.stringify(kills)}`)
+      }
+
+      // 112. A selected review NODE renders no Changes section at all, and
+      //      therefore no review button. The effect that feeds the section
+      //      fired review:panel(selectedId) for WHATEVER was selected, and
+      //      main holds no baseline for a node's own id — so the engine
+      //      answered `never-started`, buildReviewFields returned
+      //      `hidden: false`, and the pane rendered the note "this panel has
+      //      no session yet" under a heading for a panel that will never have
+      //      a session, above an "Open review" button whose handler refuses a
+      //      review node as a subject and returns immediately. A control that
+      //      can never do anything is worse than an absent one: it is a
+      //      promise the app cannot keep, and the note beside it is a
+      //      confidently wrong sentence about what the selected thing IS.
+      //
+      //      THE NON-VACUITY CLAUSE IS THE WHOLE REASON THIS CAN FAIL
+      //      HONESTLY. Both assertions are negatives, and the inspector's
+      //      EMPTY state — exactly what a selection that never landed
+      //      produces — satisfies both of them completely. So the read also
+      //      demands the node's own `reviews` field, which only
+      //      buildInspectorModel's review arm emits, in the SAME read.
+      //
+      //      It is selected through the RAIL ROW rather than by clicking the
+      //      node, because goToPanel centres before it selects: this block
+      //      has panned the camera several times by now, and where
+      //      cascadeCentre put the node relative to it is not something this
+      //      check should have to know. Check 108 already pins that the row
+      //      frames and selects.
+      {
+        const subject = await spawnAt(repo)
+        if (subject) {
+          await waitUntil(async () => (await sessionMap(wc)).has(subject), 8000)
+          // The baseline, not merely the session — check 111b's comment
+          // states the two-stacked-races problem in full: openReview returns
+          // early on a null baseline, so a racing fixture would mint no node
+          // and this check would fail for the fixture rather than the defect.
+          await waitUntil(async () => wc.executeJavaScript(
+            `window.canvas.review.baseline(${JSON.stringify(subject)}).then((b) => b !== null)`), 8000)
+          await selectPanel(subject)
+        }
+        const beforeIds = await panelIds()
+        const armed = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+        if (armed) await clickShell('[data-inspector-action="review"]')
+        const nodeId = armed
+          ? await waitUntil(async () => {
+              const ids = await panelIds()
+              const fresh = ids.filter((id) => !beforeIds.includes(id))
+              return fresh.length === 1 ? fresh[0] : false
+            }, 8000)
+          : false
+        // Guarded rather than built bare: an absent row would make this a
+        // TypeError, which ends the whole script and takes every later
+        // check's result with it.
+        const selected = typeof nodeId === 'string'
+          ? await wc.executeJavaScript(`(() => {
+              const el = document.querySelector('.rail-row[data-rail-row=' +
+                ${JSON.stringify(JSON.stringify(nodeId))} + '] .rail-row__main')
+              if (!el) return false
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+              return true })()`)
+          : false
+        await settle()
+        const pane = await wc.executeJavaScript(`(() => ({
+          reviews: document.querySelector('[data-inspector-field="reviews"]') !== null,
+          reviewButton: document.querySelector('[data-inspector-action="review"]') !== null,
+          note: document.querySelector('[data-review-note]') !== null
+        }))()`)
+        ok('112 a selected review node gets no Changes section and no dead review button',
+          typeof nodeId === 'string' && selected === true && pane !== null &&
+            pane.reviews === true && pane.reviewButton === false && pane.note === false,
+          `node=${nodeId} selected=${selected} pane=${JSON.stringify(pane)}`)
+      }
 
       // Fixture repositories are not free — a git repo per run accumulated in
       // $TMPDIR for the life of the machine. Best-effort: a failure to clean

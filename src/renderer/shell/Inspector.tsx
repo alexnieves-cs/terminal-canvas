@@ -13,6 +13,7 @@ export interface InspectorProps {
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  onOpenReview: (id: string) => void
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -44,7 +45,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, review
+  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview, review
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -67,6 +68,7 @@ function InspectorImpl({
             onClose={onClose}
             onSavePreset={onSavePreset}
             onRestart={onRestart}
+            onOpenReview={onOpenReview}
           />}
     </aside>
   )
@@ -112,7 +114,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, review, onRename, onClose, onSavePreset, onRestart
+  model, review, onRename, onClose, onSavePreset, onRestart, onOpenReview
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
@@ -120,6 +122,7 @@ function InspectorPanel({
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  onOpenReview: (id: string) => void
 }): JSX.Element {
   const state = useAgentState(model.id)
   return (
@@ -168,10 +171,12 @@ function InspectorPanel({
           type="button"
           className="inspector__action"
           data-inspector-action="restart"
-          disabled={!model.restartable}
-          title={model.restartable
-            ? `Restart ${model.heading} — ends the running process and starts it again`
-            : `${model.heading} has not started yet`}
+          disabled={model.kind === 'review' || !model.restartable}
+          title={model.kind === 'review'
+            ? 'A review node has no process to restart'
+            : model.restartable
+              ? `Restart ${model.heading} — ends the running process and starts it again`
+              : `${model.heading} has not started yet`}
           {...shellControl(() => onRestart(model.id))}
         >
           Restart
@@ -189,7 +194,10 @@ function InspectorPanel({
           type="button"
           className="inspector__action"
           data-inspector-action="save-preset"
-          title={`Save ${model.heading} as a preset`}
+          disabled={model.kind === 'review'}
+          title={model.kind === 'review'
+            ? 'A review node is not a spawnable panel'
+            : `Save ${model.heading} as a preset`}
           {...shellControl(() => onSavePreset(model.id))}
         >
           Save as preset
@@ -219,6 +227,40 @@ function InspectorPanel({
           {review.note !== undefined && (
             <p className="inspector__review-note" data-review-note>{review.note}</p>
           )}
+          {/*
+            Inside the section rather than beside Restart, so it sits with the
+            thing it acts on — but the SECTION IS NOT THE GATE, and reading it
+            as one is what shipped a dead button. `hidden` answers "is this
+            panel in a repository", which is a different question from "is
+            there anything to open": several of ReviewResult's visible arms
+            are unopenable, and `never-started` is by far the commonest of
+            them — a panel with no session has no baseline, so openReview
+            correctly returns on the null and the button does nothing, ever.
+
+            So it gates on `restartable` — the SAME field the palette's
+            panel.review row gates on, and the same one Restart above gates
+            on, deliberately not a second boolean. "Has this panel ever
+            spawned" is one fact, and it is exactly the question both verbs
+            ask. Disabled with a reason rather than hidden, the rule
+            verify:palette 31 states for rows: a control that vanishes reads
+            as a feature that was never built, and this one sits where a user
+            has just been told there are changes.
+
+            A review NODE never reaches here at all — Canvas leaves `review`
+            null for one, so the section does not render (verify:panels 112).
+          */}
+          <button
+            type="button"
+            className="inspector__action"
+            data-inspector-action="review"
+            disabled={!model.restartable}
+            title={model.restartable
+              ? `Open a review node for ${model.heading}`
+              : `${model.heading} has not started yet, so there is no baseline to review against`}
+            {...shellControl(() => onOpenReview(model.id))}
+          >
+            Open review
+          </button>
           <ul className="inspector__review-files">
             {review.files.map((f) => (
               <li key={f.path} className="inspector__review-file" data-review-file={f.path}>

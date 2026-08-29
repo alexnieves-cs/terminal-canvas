@@ -1,7 +1,8 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
-import type { Panel } from '@renderer/panels/panels'
+import { isReviewPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
+import { railLabel } from './rail-rows'
 
 /**
  * What the inspector renders, as plain data.
@@ -21,6 +22,13 @@ export interface InspectorField {
 
 export interface InspectorModel {
   id: string
+  /**
+   * Which kind of panel this model describes. `'review'` is what gates
+   * Inspector.tsx's Restart and Save-as-preset controls — an optional
+   * `restartable`/reattached-only check would let a half-finished wiring
+   * compile with those controls silently always-enabled.
+   */
+  kind: Panel['kind']
   /** The user's own name, if any. The rename control echoes it. */
   title?: string
   /** The COLLAPSED honest chain — the one answer the header and rail show. */
@@ -101,19 +109,6 @@ export function isRestartable(status: PanelStatus | undefined): boolean {
 }
 
 /**
- * The collapsed chain — identical to railLabel's, deliberately. Two labels for
- * one panel that differ only in the common case is the defect railLabel's own
- * comment describes, and the inspector sits directly beside the rail on
- * screen, where a disagreement is not merely wrong but visibly wrong.
- */
-function heading(panel: Panel, status: PanelStatus | undefined): string {
-  return panel.title
-    ?? (status?.kind === 'running' ? status.command : undefined)
-    ?? panel.spec.command
-    ?? 'login shell'
-}
-
-/**
  * The read half.
  *
  * Every link of the chain gets its OWN field rather than the collapsed answer,
@@ -131,6 +126,29 @@ export function buildInspectorModel(
   panel: Panel,
   status: PanelStatus | undefined
 ): InspectorModel {
+  if (isReviewPanel(panel)) {
+    return {
+      kind: 'review',
+      id: panel.rect.id,
+      heading: railLabel(panel, undefined),
+      ...(panel.title !== undefined ? { title: panel.title } : {}),
+      // A node has no process, so neither verb applies. FALSE rather than
+      // absent, for the reason PanelRow.restartable is required: an optional
+      // flag lets a half-finished wiring compile with the control silently
+      // always-enabled, and tsc says nothing at all about it.
+      restartable: false,
+      reattached: false,
+      fields: [
+        { key: 'reviews', label: 'reviews', value: panel.subject.label },
+        { key: 'subject', label: 'panel', value: panel.subject.subjectId },
+        { key: 'repo', label: 'repo', value: panel.subject.repoRoot },
+        // Short, because the pane is 260px and nobody reads forty hex
+        // characters — but PRESENT, because it is the one field that says
+        // which moment this node is measuring from.
+        { key: 'baseline', label: 'since', value: panel.subject.baselineSha.slice(0, 8) }
+      ]
+    }
+  }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
     { key: 'command', label: 'command', value: running?.command ?? 'not started' },
@@ -152,9 +170,10 @@ export function buildInspectorModel(
     fields.push({ key: 'error', label: 'error', value: status.message })
   }
   return {
+    kind: 'terminal',
     id: panel.rect.id,
     ...(panel.title !== undefined ? { title: panel.title } : {}),
-    heading: heading(panel, status),
+    heading: railLabel(panel, status),
     fields,
     reattached: running?.reattached === true,
     restartable: isRestartable(status)
@@ -276,6 +295,18 @@ export function buildReviewFields(result: ReviewResult | undefined): ReviewField
   }
   if (result.kind === 'git-missing') {
     return { hidden: false, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0 }
+  }
+  if (result.kind === 'repo-unreadable') {
+    // The detail is git's own words, and it is the whole value of this arm:
+    // "unavailable" alone is what M9a rendered for git-missing, and a user
+    // who has git installed would have no idea why this panel says it.
+    return {
+      hidden: false,
+      summary: 'unavailable',
+      note: `git could not open this repository — ${result.detail}`,
+      files: [],
+      more: 0
+    }
   }
   if (result.kind === 'baseline-lost') {
     // A DIFFERENT note from never-started: two situations, two fixes. Telling

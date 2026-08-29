@@ -9,6 +9,10 @@ module.exports = {
   ...require('../src/shared/settings-schema'),
   ...require('../src/shared/panel-geometry'),
   ...require('../src/renderer/panels/layout-adapt'),
+  /* M9b: panels.ts is type-only imports plus pure data/functions (makePanel,
+     makeReviewPanel, cascadeCentre, ...) — no DOM, no electron — so it costs
+     this tier nothing and check 108b needs makeReviewPanel from it. */
+  ...require('../src/renderer/panels/panels'),
   ...require('../src/main/layout-store'),
   /* M5a: the preset helpers are pure — availability takes an injected `which`
      rather than importing shell-env — so they belong in this cheap tier

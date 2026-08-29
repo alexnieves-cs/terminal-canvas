@@ -191,11 +191,14 @@ const active = (snap) => snap.workspaces.find((w) => w.id === snap.activeWorkspa
 }
 
 // 13. A round trip must be lossless. Anything dropped here is a user's canvas
-//     quietly degrading a little on every launch.
+//     quietly degrading a little on every launch. fromPanels EMITS `kind`
+//     explicitly (M9b) even though a reader tolerates its absence, so the
+//     input fixture already carries it — a bare "input has no kind" fixture
+//     would fail here for a reason that has nothing to do with loss.
 {
   const persisted = [
-    { id: 'a1', x: -40, y: 12.5, w: 720, h: 460, z: 3, cwd: '/tmp', args: ['-l'] },
-    { id: 'b2', x: 900, y: 0, w: 300, h: 200, z: 1, cwd: '~', command: '/bin/bash', args: [] }
+    { id: 'a1', x: -40, y: 12.5, w: 720, h: 460, z: 3, kind: 'terminal', cwd: '/tmp', args: ['-l'] },
+    { id: 'b2', x: 900, y: 0, w: 300, h: 200, z: 1, kind: 'terminal', cwd: '~', command: '/bin/bash', args: [] }
   ]
   const back = L.fromPanels(L.toPanels(persisted))
   ok('13 persisted -> Panel -> persisted is lossless',
@@ -1537,6 +1540,115 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   store.setBaseline('p1', { root: '/r', sha: 'a' })
   store.dropBaseline('p1')
   ok('103 dropBaseline removes it', store.baseline('p1') === undefined)
+}
+
+const SUBJECT = { subjectId: 'n4', repoRoot: '/tmp/repo', baselineSha: 'abc123', label: 'claude' }
+const reviewPanelOnDisk = (id, over = {}) => ({
+  id, x: 10, y: 20, w: 640, h: 520, z: 3, kind: 'review', subject: { ...SUBJECT }, ...over
+})
+
+// 104. The rule every other check in this block depends on: a panel with NO
+//      `kind` key is a TERMINAL panel. Every layout.json in existence
+//      predates the field, and parseLayout drops entries INDIVIDUALLY — so a
+//      required `kind` would not fail loudly, it would silently empty every
+//      saved canvas on first launch. The same trade `title` already makes.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main',
+      panels: [{ id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const p = out.snapshot.workspaces[0].panels[0]
+  ok('104 a panel with no kind survives as a terminal panel',
+    p !== undefined && p.kind === undefined && p.cwd === '~' &&
+      L.toPanels([p])[0].kind === 'terminal')
+}
+
+// 105. A review panel round-trips through the format with all four subject
+//      fields intact. baselineSha is the one that matters most: without it
+//      the node cannot ask git anything at all, and a node that silently
+//      lost it would render "not started" beside an agent that did an
+//      hour's work — this milestone's headline silent failure, reached
+//      through the format rather than through the engine.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [reviewPanelOnDisk('r1')] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const p = out.snapshot.workspaces[0].panels[0]
+  ok('105 a review panel round-trips with its whole subject',
+    p !== undefined && p.kind === 'review' && p.subject.subjectId === 'n4' &&
+      p.subject.repoRoot === '/tmp/repo' && p.subject.baselineSha === 'abc123' &&
+      p.subject.label === 'claude')
+}
+
+// 106. A malformed subject costs THAT panel, not the file — the rule this
+//      whole parser is built on. Its neighbour must survive in the same
+//      read, which is the half that fails if the review branch throws
+//      instead of returning null.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      reviewPanelOnDisk('r1', { subject: { subjectId: 'n4' } }),
+      { id: 'n9', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const ids = out.snapshot.workspaces[0].panels.map((p) => p.id)
+  ok('106 a review panel with a broken subject is dropped alone',
+    ids.length === 1 && ids[0] === 'n9' && out.warnings.length > 0)
+}
+
+// 107. THE ASYMMETRY. ABSENT means terminal (104); a PRESENT but unknown
+//      kind is DROPPED, never defaulted. `"kind": "tree"` is a file written
+//      by a later version of this app, and reading it as a terminal panel
+//      would spawn a process for a node that never asked for one — with a
+//      cwd and args it does not have. Dropping it costs one panel; guessing
+//      costs a process.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main',
+      panels: [{ id: 'x1', x: 0, y: 0, w: 640, h: 520, z: 1, kind: 'tree' }] }],
+    activeWorkspaceId: 'w1'
+  }))
+  ok('107 an unknown kind is dropped, not defaulted to terminal',
+    out.snapshot.workspaces[0].panels.length === 0 &&
+      out.warnings.some((w) => w.includes('kind')))
+}
+
+// 108. The two kinds validate DIFFERENT fields, in both directions: a review
+//      panel needs no cwd/args (it has no spec to build), and a terminal
+//      panel still requires them. Asserting only the first half passes
+//      against a parser that stopped validating cwd for everything.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      reviewPanelOnDisk('r1'),
+      { id: 'n2', x: 0, y: 0, w: 720, h: 460, z: 1, args: [] }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const ids = out.snapshot.workspaces[0].panels.map((p) => p.id)
+  ok('108 a review panel needs no cwd; a terminal panel still does',
+    ids.length === 1 && ids[0] === 'r1')
+}
+
+// 108b. fromPanels writes a review panel back out with no cwd/args keys at
+//       all, and toPanels(fromPanels(x)) is x. The absent-stays-absent rule
+//       `command` and `title` already obey, applied to a whole branch:
+//       writing `cwd: undefined` here would make the panel fail its own
+//       parse on the next launch (check 108's terminal half), i.e. a canvas
+//       that loses its review nodes on every relaunch.
+{
+  const node = L.makeReviewPanel
+    ? L.makeReviewPanel('r1', { x: 0, y: 0 }, 3, { ...SUBJECT })
+    : null
+  const persisted = L.fromPanels([{ kind: 'review', rect: { id: 'r1', x: 10, y: 20, w: 640, h: 520 }, z: 3, subject: { ...SUBJECT } }])
+  const back = L.toPanels(persisted)
+  ok('108b a review panel survives fromPanels -> toPanels',
+    node !== null && !('cwd' in persisted[0]) && !('args' in persisted[0]) &&
+      back[0].kind === 'review' && back[0].subject.baselineSha === 'abc123' &&
+      back[0].rect.x === 10)
 }
 
 console.log('\n' + '='.repeat(60))

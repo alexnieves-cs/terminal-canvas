@@ -178,6 +178,11 @@ function TerminalPanelImpl({
       {live ? (
         <div
           className="panel__slot"
+          // The marker shouldYieldWheel's rule 3 looks for. It is on the SLOT
+          // rather than on .panel because a carded panel has no terminal to
+          // hand a wheel to — the "requiring the slot" clause rule 3 already
+          // documented, now expressed as a fact each kind states about itself.
+          data-scroll-host
           ref={slotRef}
           onMouseDown={(event) => {
             // Chrome selects; body focuses and falls through to xterm. No

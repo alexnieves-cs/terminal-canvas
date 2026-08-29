@@ -134,8 +134,15 @@ ok('13b buildHeadArgs argv', JSON.stringify(R.buildHeadArgs('/r')) ===
 const fakeRunner = (table) => async (args) => {
   const key = args.join(' ')
   const hit = table[key]
-  if (hit === undefined) return { stdout: '', ok: false, notFound: false }
-  return { stdout: hit.stdout ?? '', ok: hit.ok !== false, notFound: hit.notFound === true }
+  if (hit === undefined) return { stdout: '', ok: false, notFound: false, code: -1, stderr: '' }
+  const ok = hit.ok !== false
+  return {
+    stdout: hit.stdout ?? '',
+    ok,
+    notFound: hit.notFound === true,
+    code: hit.code ?? (ok ? 0 : -1),
+    stderr: hit.stderr ?? ''
+  }
 }
 
 // 14. resolveRepo returns the root for a cwd inside a repository.
@@ -145,19 +152,27 @@ const fakeRunner = (table) => async (args) => {
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('14 resolveRepo finds the root', (await e.resolveRepo('/a/b')) === '/a')
+  const answer = await e.resolveRepo('/a/b')
+  ok('14 resolveRepo finds the root', answer.kind === 'root' && answer.root === '/a')
 }
 
-// 15. Outside a repository git exits non-zero. Null, and NOT an exception:
-//     a panel in ~ is the ordinary case, not an error, and a throw here would
-//     take the pty:create it is called from down with it.
+// 15. Outside a repository git exits non-zero, saying so on stderr with its
+//     own "fatal:" status. not-a-repo, and NOT an exception: a panel in ~ is
+//     the ordinary case, not an error, and a throw here would take the
+//     pty:create it is called from down with it.
 {
   const e = R.createReviewEngine({
-    run: fakeRunner({ '-C /tmp rev-parse --show-toplevel': { stdout: '', ok: false } }),
+    run: fakeRunner({
+      '-C /tmp rev-parse --show-toplevel': {
+        ok: false,
+        code: 128,
+        stderr: 'fatal: not a git repository (or any of the parent directories): .git\n'
+      }
+    }),
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('15 resolveRepo outside a repo is null', (await e.resolveRepo('/tmp')) === null)
+  ok('15 resolveRepo outside a repo is not-a-repo', (await e.resolveRepo('/tmp')).kind === 'not-a-repo')
 }
 
 // 16. captureBaseline prefers the stash-create sha.
@@ -233,11 +248,11 @@ const fakeRunner = (table) => async (args) => {
 //     "not a repository", which would silently hide the real cause.
 {
   const e = R.createReviewEngine({
-    run: async () => ({ stdout: '', ok: false, notFound: true }),
+    run: async () => ({ stdout: '', ok: false, notFound: true, code: -1, stderr: '' }),
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('19 resolveRepo reports a missing git', (await e.resolveRepo('/a')) === null &&
+  ok('19 resolveRepo reports a missing git', (await e.resolveRepo('/a')).kind === 'unreadable' &&
     (await e.review('p1')).kind === 'git-missing')
 }
 
@@ -309,8 +324,10 @@ const fakeRunner = (table) => async (args) => {
     baselineOf: () => undefined,
     peersInRepo: () => 0
   })
-  ok('20 resolveRepo is per-cwd', (await e.resolveRepo('/a')) === '/a' &&
-    (await e.resolveRepo('/b')) === '/b')
+  const a = await e.resolveRepo('/a')
+  const b = await e.resolveRepo('/b')
+  ok('20 resolveRepo is per-cwd', a.kind === 'root' && a.root === '/a' &&
+    b.kind === 'root' && b.root === '/b')
 }
 
 /* One builder for the arm checks, so each states only what it varies. */
@@ -487,8 +504,9 @@ if (!GIT) {
   })()
 
   // 30. resolveRepo against a real repository in a spaced path.
-  const root = await engine.e.resolveRepo(repo)
-  ok('30 real resolveRepo', typeof root === 'string' && root.endsWith(repo.split('/').pop()))
+  const repoAnswer = await engine.e.resolveRepo(repo)
+  ok('30 real resolveRepo', repoAnswer.kind === 'root' && repoAnswer.root.endsWith(repo.split('/').pop()))
+  const root = repoAnswer.root
 
   // 31. stash create leaves the worktree and the stash list ALONE. If this
   //     ever fails, the app is stashing a working agent's edits out from
@@ -560,7 +578,7 @@ const flush = async (times = 5) => {
   })
   bc.capture('p1', '/repo')
   bc.drop('p1') // the kill, arriving before resolveRepo has even settled
-  releaseResolveRepo('/repo')
+  releaseResolveRepo({ kind: 'root', root: '/repo' })
   await flush()
   ok('35 a killed panel drops its in-flight capture', baselines.get('p1') === undefined,
     `baselines=${JSON.stringify([...baselines])}`)
@@ -576,7 +594,7 @@ const flush = async (times = 5) => {
   const bc = R.createBaselineCapture({
     baselineOf: (id) => baselines.get(id),
     setBaseline: (id, b) => baselines.set(id, b),
-    resolveRepo: async () => '/repo',
+    resolveRepo: async () => ({ kind: 'root', root: '/repo' }),
     captureBaseline: async () => 'deadbeef'
   })
   bc.capture('p1', '/repo')
@@ -598,7 +616,7 @@ const flush = async (times = 5) => {
   const bc = R.createBaselineCapture({
     baselineOf: (id) => baselines.get(id),
     setBaseline: (id, b) => baselines.set(id, b),
-    resolveRepo: async () => null,
+    resolveRepo: async () => ({ kind: 'not-a-repo' }),
     captureBaseline: async () => 'unreached'
   })
   bc.capture('p1', '/home/nobody')
@@ -664,6 +682,201 @@ ok('37 baselines whose session did not survive are stale',
 ok('37b a surviving session keeps its baseline',
   typeof R.staleBaselineIds === 'function' &&
     R.staleBaselineIds(['p1', 'p2'], ['p1', 'p2']).length === 0)
+
+const gitOk = (stdout) => ({ stdout, ok: true, notFound: false, code: 0, stderr: '' })
+const gitFail = (code, stderr) => ({ stdout: '', ok: false, notFound: false, code, stderr })
+
+// 38. The ordinary "this is not a repository" answer, which must stay
+//     exactly what it was: git exits 128 and says so on stderr. This arm is
+//     the answer for a panel in the home directory — i.e. most panels — and
+//     turning it into an error would put a red field on nearly every panel.
+{
+  const engine = R.createReviewEngine({
+    run: async () => gitFail(128, 'fatal: not a git repository (or any of the parent directories): .git\n'),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  const answer = await engine.resolveRepo('/home/u')
+  ok('38 exit 128 + "not a git repository" is not-a-repo', answer.kind === 'not-a-repo')
+}
+
+// 39. THE CASE THIS TASK EXISTS FOR. The Command Line Tools stub exits 1 and
+//     prints its own error; git's own fatals exit 128. Anything that is not
+//     the 128-and-says-so pair is a repository git DECLINED to open, and the
+//     detail is carried so the user is told which. Conflating it with 38 is
+//     what M9a shipped, and it renders as nothing at all on screen.
+{
+  const engine = R.createReviewEngine({
+    run: async () => gitFail(1, 'xcrun: error: invalid active developer path\n'),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  const answer = await engine.resolveRepo('/home/u/proj')
+  ok('39 a non-128 git failure is unreadable, with a detail',
+    answer.kind === 'unreadable' && answer.detail.includes('xcrun'))
+}
+
+// 40. The three-way split at the panel level, asserted in ONE check because
+//     each pair is individually satisfiable by the wrong implementation:
+//     "no baseline" alone is never-started, "no baseline + not a repo" is
+//     not-a-repo, and "no baseline + git refused" is now its own arm. An
+//     implementation that folded the third into either of the first two
+//     passes any two of these three clauses.
+{
+  const mk = (extra) => R.createReviewEngine({
+    run: async () => gitOk(''),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0,
+    ...extra
+  })
+  const plain = await mk({}).review('p1')
+  const notRepo = await mk({ notARepo: () => true }).review('p1')
+  const unreadable = await mk({ repoUnreadable: () => 'xcrun: error' }).review('p1')
+  ok('40 never-started / not-a-repo / repo-unreadable are three answers',
+    plain.kind === 'never-started' && notRepo.kind === 'not-a-repo' &&
+      unreadable.kind === 'repo-unreadable' && unreadable.detail === 'xcrun: error')
+}
+
+// 41. The capture records WHICH failure it saw, and drop() clears it — the
+//     rule isNotARepo already obeys, extended to the second verdict. Without
+//     the clear, onReset()'s recycled FIRST_RUN_ID inherits a stranger's
+//     "git refused" verdict and reports it against a perfectly good repo.
+{
+  const capture = R.createBaselineCapture({
+    baselineOf: () => undefined,
+    setBaseline: () => {},
+    resolveRepo: async () => ({ kind: 'unreadable', detail: 'xcrun: error' }),
+    captureBaseline: async () => null
+  })
+  capture.capture('p1', '/home/u/proj')
+  await new Promise((r) => setImmediate(r))
+  const before = capture.unreadableDetail('p1')
+  capture.drop('p1')
+  ok('41 an unreadable verdict is recorded and cleared by drop',
+    before === 'xcrun: error' && capture.unreadableDetail('p1') === undefined &&
+      capture.isNotARepo('p1') === false)
+}
+
+// 42. THE ONE TO KNOW BY NUMBER. A unified diff's file headers begin '---'
+//     and '+++', so a parser that tests '+' before '+++' paints the header
+//     of every file as an ADDED line — a green "+++ b/src/app.ts" at the top
+//     of every hunk, which looks like a rendering quirk and is a
+//     classification bug. Order of tests, asserted directly.
+{
+  const { lines } = R.parseDiffLines('--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-old\n+new\n ctx\n')
+  ok('42 file headers are meta, not additions',
+    lines[0].kind === 'meta' && lines[1].kind === 'meta' && lines[2].kind === 'hunk' &&
+      lines[3].kind === 'del' && lines[4].kind === 'add' && lines[5].kind === 'context')
+}
+
+// 43. The preamble git prints before the first hunk is meta too, and the
+//     "\ No newline at end of file" marker is meta rather than context — it
+//     is a note ABOUT the diff, and rendering it as an unchanged source line
+//     puts text on screen that is not in the file.
+{
+  const { lines } = R.parseDiffLines(
+    'diff --git a/x b/x\nindex 1..2 100644\nnew file mode 100644\n@@ -0,0 +1 @@\n+hi\n\\ No newline at end of file\n')
+  ok('43 the preamble and the no-newline marker are meta',
+    lines.slice(0, 3).every((l) => l.kind === 'meta') &&
+      lines[lines.length - 1].kind === 'meta')
+}
+
+// 44. The cap TRUNCATES and SAYS SO. A node that silently rendered the first
+//     600 lines of a 5000-line diff is a review tool that lies by omission,
+//     which is the one thing this milestone's honest-degradation rule
+//     forbids; the count is what the view renders as "+N more lines".
+{
+  const patch = Array.from({ length: 50 }, (_, i) => `+line ${i}`).join('\n')
+  const out = R.parseDiffLines(patch, 10)
+  ok('44 the line cap truncates and reports the remainder',
+    out.lines.length === 10 && out.truncated === 40)
+}
+
+// 45. THE OUTLIVES-THE-SUBJECT PROPERTY, and the only place it is provable
+//     cheaply. reviewAt takes a BASELINE, so it must never consult
+//     baselineOf — main drops a panel's stored baseline the moment its
+//     session is killed, so an implementation that looked the subject up
+//     would go blank exactly when the agent is dismissed, which is when a
+//     review of finished work is most useful. The fake throws rather than
+//     returning undefined, so a lookup fails loudly instead of degrading
+//     into a plausible never-started.
+{
+  const engine = R.createReviewEngine({
+    run: async (args) => args.includes('--numstat')
+      ? gitOk('3\t1\tsrc/app.ts\0')
+      : gitOk(''),
+    baselineOf: () => { throw new Error('reviewAt must not look up a panel') },
+    peersInRepo: () => 0
+  })
+  const result = await engine.reviewAt({ root: '/r', sha: 'abc' }, 'n4')
+  ok('45 reviewAt answers from the baseline alone',
+    result.kind === 'changes' && result.files[0].path === 'src/app.ts' &&
+      result.added === 3 && result.removed === 1)
+}
+
+// 46. …and it still reports `shared` rather than a confident wrong
+//     attribution, excluding its own subject from the peer count. A node
+//     that dropped the exclusion would report every single-panel repository
+//     as shared with itself.
+{
+  const engine = R.createReviewEngine({
+    run: async (args) => args.includes('--numstat') ? gitOk('1\t0\tx\0') : gitOk(''),
+    baselineOf: () => undefined,
+    peersInRepo: (root, except) => (except === 'n4' ? 1 : 99)
+  })
+  const result = await engine.reviewAt({ root: '/r', sha: 'abc' }, 'n4')
+  ok('46 reviewAt excludes its own subject from the peer count',
+    result.kind === 'shared' && result.panelCount === 2)
+}
+
+// 47. fileDiff's three answers. `binary` is git's own report and must not be
+//     parsed as source; a failed diff is `unavailable`, never an EMPTY diff
+//     — "this file did not change" for a file the numstat just said changed
+//     is the confident wrong answer this whole feature is built to refuse.
+//
+//     The EMPTY-stdout clause is the second half of that same sentence, and
+//     it is the one a reader is likeliest to think is covered by the failure
+//     clause above when it is not: git exiting 0 with nothing to say is a
+//     SUCCESS, so it flows straight past the `acceptable` test. It is
+//     reachable — the file was reverted between the numstat that listed it
+//     and the click that expanded it — and without this clause the node
+//     renders an empty expanded box with no note at all.
+{
+  const mk = (result) => R.createReviewEngine({
+    run: async () => result, baselineOf: () => undefined, peersInRepo: () => 0
+  })
+  const text = await mk(gitOk('@@ -1 +1 @@\n-a\n+b\n')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
+  const bin = await mk(gitOk('Binary files a/x.png and b/x.png differ\n')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.png', untracked: false })
+  const bad = await mk(gitFail(128, 'fatal: bad object')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
+  const empty = await mk(gitOk('')).fileDiff(
+    { repoRoot: '/r', baselineSha: 'abc', path: 'x.ts', untracked: false })
+  ok('47 fileDiff answers diff / binary / unavailable, and an empty diff is unavailable',
+    text.kind === 'diff' && text.lines.length === 3 &&
+      bin.kind === 'binary' && bad.kind === 'unavailable' &&
+      empty.kind === 'unavailable')
+}
+
+// 48. An UNTRACKED file — the commonest thing an agent produces — has no
+//     entry in `git diff <baseline>` at all, so it needs --no-index against
+//     /dev/null. That call EXITS 1 whenever it finds differences, which is
+//     every successful call; treating exit 1 as failure here means every new
+//     file a user opens reads "unavailable", i.e. the feature is broken for
+//     its most common input while looking correct on modified files.
+{
+  const engine = R.createReviewEngine({
+    run: async (args) => args.includes('--no-index')
+      ? { stdout: '@@ -0,0 +1 @@\n+hello\n', ok: false, notFound: false, code: 1, stderr: '' }
+      : gitOk(''),
+    baselineOf: () => undefined,
+    peersInRepo: () => 0
+  })
+  const out = await engine.fileDiff({ repoRoot: '/r', baselineSha: 'abc', path: 'new.txt', untracked: true })
+  ok('48 an untracked file diffs against /dev/null, and exit 1 is success',
+    out.kind === 'diff' && out.lines.some((l) => l.kind === 'add' && l.text.includes('hello')))
+}
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)

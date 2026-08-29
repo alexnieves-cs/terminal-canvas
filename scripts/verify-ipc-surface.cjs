@@ -87,7 +87,9 @@ app.whenReady().then(() => {
   const reviewEngineStub = {
     resolveRepo: async () => null,
     captureBaseline: async () => null,
-    review: async () => ({ kind: 'not-a-repo' })
+    review: async () => ({ kind: 'not-a-repo' }),
+    reviewAt: async () => ({ kind: 'not-a-repo' }),
+    fileDiff: async () => ({ hunks: [] })
   }
   registerIpcHandlers(
     stub,
@@ -100,11 +102,12 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  ok(
-    `1 every contract channel has a main-process handler (${channels.length} channels)`,
-    missing.length === 0,
-    missing.length ? `unhandled: ${missing.join(', ')}` : channels.join(', ')
-  )
+  // M9b takes the surface to 30: review:baseline mints a node, review:at is
+  // the node's own baseline-addressed query, review:diff is one file's hunks.
+  const EXPECTED_CHANNELS = 30
+  ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
+    missing.length === 0 && channels.length === EXPECTED_CHANNELS,
+    missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
 
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)

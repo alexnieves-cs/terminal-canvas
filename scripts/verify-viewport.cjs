@@ -986,6 +986,74 @@ ok('70 a single-entry queue keeps returning that entry',
     JSON.stringify(restored))
 }
 
+/* ---- M9b: the panel kind ---- */
+
+// 74. A panel with NO `kind` at all reads as a TERMINAL panel. This is the
+//     disk rule (absent means terminal — every layout.json predates the
+//     field) stated as a runtime fact, and it is also what keeps every
+//     fixture in every suite written before this milestone meaning what it
+//     said. The direction is not symmetric and the asymmetry is the whole
+//     check: a review node misread as a terminal fails loudly at
+//     registry.ensure, while a terminal misread as a review node silently
+//     stops spawning on every restored canvas.
+ok('74 a panel with no kind is not a review panel',
+  V.isReviewPanel({ rect: { id: 'n1', x: 0, y: 0, w: 720, h: 460 }, z: 1, spec: { cwd: '~', args: [] } }) === false)
+
+// 75. makeReviewPanel centres EXACTLY, the contract check 48 pins for
+//     makePanel. Placement is cascadeCentre's job and stays outside.
+{
+  const subject = { subjectId: 'n4', repoRoot: '/r', baselineSha: 'abc', label: 'claude' }
+  const p = V.makeReviewPanel('r1', { x: 100, y: 50 }, 9, subject)
+  ok('75 makeReviewPanel centres on the point it is given',
+    p.kind === 'review' && p.rect.id === 'r1' && p.z === 9 &&
+      p.rect.x === 100 - V.REVIEW_W / 2 && p.rect.y === 50 - V.REVIEW_H / 2)
+}
+
+// 76. THE ONE TO KNOW BY NUMBER. makePanel forces the minted id into
+//     spec.panelId — a template carrying a stale one gives two panels one
+//     session. Copying that line into makeReviewPanel is the obvious move
+//     and it is catastrophic and silent: subject.subjectId would be
+//     rewritten to the NODE's own id, so the node would be a review OF
+//     ITSELF — a panel with no baseline, reporting never-started forever,
+//     on a feature whose entire purpose is to report the subject's work.
+//     The subject is a DIFFERENT panel and must be carried verbatim.
+{
+  const subject = { subjectId: 'n4', repoRoot: '/r', baselineSha: 'abc', label: 'claude' }
+  const p = V.makeReviewPanel('r1', { x: 0, y: 0 }, 1, subject)
+  ok('76 makeReviewPanel does NOT rewrite subjectId to its own id',
+    p.subject.subjectId === 'n4' && p.subject.repoRoot === '/r' &&
+      p.subject.baselineSha === 'abc' && p.subject.label === 'claude')
+}
+
+// 77. reviewCentre places the node BESIDE its subject — clear of the
+//     subject's right edge, not on top of it. Asserted as a gap between the
+//     two rects rather than as a coordinate, so the constants can move
+//     without this check restating them.
+{
+  const subjectRect = { id: 'n4', x: 0, y: 0, w: 720, h: 460 }
+  const c = V.reviewCentre(subjectRect)
+  const left = c.x - V.REVIEW_W / 2
+  ok('77 reviewCentre clears the subject\'s right edge',
+    left >= subjectRect.x + subjectRect.w && c.y === subjectRect.y + V.REVIEW_H / 2)
+}
+
+// 78. A review node is an ordinary occupant of the cascade lattice: a second
+//     node beside the same subject must not land byte-identically on the
+//     first. cascadeCentre reads rects and knows nothing about kinds, which
+//     is exactly the property being pinned — nothing here needed a special
+//     case, and a later "optimisation" that filtered the panel list by kind
+//     before cascading would reintroduce M6's indistinguishability bug for
+//     review nodes alone.
+{
+  const subjectRect = { id: 'n4', x: 0, y: 0, w: 720, h: 460 }
+  const c = V.reviewCentre(subjectRect)
+  const existing = V.makeReviewPanel('r1', c, 1,
+    { subjectId: 'n4', repoRoot: '/r', baselineSha: 'abc', label: 'claude' })
+  const next = V.cascadeCentre(c, [existing])
+  ok('78 a second review node cascades off the first',
+    next.x === c.x + V.CASCADE_STEP && next.y === c.y + V.CASCADE_STEP)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

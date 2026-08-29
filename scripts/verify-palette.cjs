@@ -217,7 +217,9 @@ const spyActions = () => {
     // merely for shape: without it `row.run()` calls undefined and the check
     // dies with a TypeError instead of failing an assertion — and a THROW in
     // this single-script suite aborts every check written after it.
-    restartPanel: record('restartPanel')
+    restartPanel: record('restartPanel'),
+    // Review IS reached from a row too (checks 67/68), same reason.
+    openReview: record('openReview')
   }
 }
 
@@ -1006,6 +1008,66 @@ const WS = [
       noFocus !== undefined && noFocus.disabledReason === P.REASON_NO_FOCUS &&
       notStarted.disabledReason !== noFocus.disabledReason,
     JSON.stringify([notStarted && notStarted.disabledReason, noFocus && noFocus.disabledReason]))
+}
+
+// 67. The Open review row is present, enabled, and aimed at the CAPTURED
+//     panel rather than the focused one — the rule panel.rename and
+//     panel.restart already obey, because opening the palette moves DOM
+//     focus to its input and deliberately leaves focusedId alone.
+{
+  const c = ctx({
+    capturedId: 'n2',
+    panels: [
+      { id: 'n1', label: 'claude', restartable: true },
+      { id: 'n2', label: 'zsh', restartable: true }
+    ]
+  })
+  const row = byId(P.buildCommands(c), 'panel.review')
+  if (row) row.run()
+  ok('67 the review row is enabled and aimed at the captured panel',
+    row !== undefined && row.disabledReason === undefined &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'openReview' &&
+      c.actions.calls[0][1] === 'n2',
+    JSON.stringify(c.actions.calls))
+}
+
+// 68. Disabled — not absent — for a panel that never started, and for no
+//     capture at all, with the two DISTINCT reasons check 66b already
+//     establishes the rule for. A panel with no session has no baseline, so
+//     there is nothing to review against: "start this panel" and "click a
+//     panel" are two situations with two different fixes. Compared against
+//     the EXPORTED constants, never string literals, which would keep
+//     passing while the text the user reads said something else.
+{
+  const never = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'zsh', restartable: false }]
+  })), 'panel.review')
+  const none = byId(P.buildCommands(ctx({
+    capturedId: null,
+    panels: [{ id: 'n1', label: 'zsh', restartable: true }]
+  })), 'panel.review')
+  ok('68 review is disabled with two distinct reasons',
+    never !== undefined && never.disabledReason === P.REASON_NOT_STARTED &&
+      none !== undefined && none.disabledReason === P.REASON_NO_FOCUS &&
+      P.REASON_NOT_STARTED !== P.REASON_NO_FOCUS,
+    JSON.stringify([never && never.disabledReason, none && none.disabledReason]))
+}
+
+// 69. A review node is in the Panels section like any other panel — an
+//     off-screen node must be reachable by keyboard — and the verbs it
+//     cannot do are DISABLED there, not missing. Restart is the case: its
+//     row is aimed at the captured panel, and a captured review node has no
+//     process to restart.
+{
+  const rows = P.buildCommands(ctx({
+    panels: [{ id: 'r1', label: 'review: claude', restartable: false }],
+    capturedId: 'r1'
+  }))
+  ok('69 a review node is navigable and its process verbs are disabled',
+    rows.some((r) => r.id === 'panel.goto.r1' && r.disabledReason === undefined) &&
+      rows.find((r) => r.id === 'panel.restart')?.disabledReason === P.REASON_NOT_STARTED)
 }
 
 const failed = results.filter((r) => !r.pass)

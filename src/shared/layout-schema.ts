@@ -1,6 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { SettingValue, settingDef } from './settings-schema'
-import type { ReviewBaseline } from './review'
+import type { ReviewBaseline, ReviewSubject } from './review'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -35,22 +35,13 @@ export interface RestoreSettings {
   focus: boolean
 }
 
-export interface PersistedPanel {
+export interface PersistedPanelBase {
   id: string
   x: number
   y: number
   w: number
   h: number
   z: number
-  cwd: string
-  /** Absent means "the user's login shell" — main resolves it. See PanelSpec. */
-  command?: string
-  args: string[]
-  // PanelSpec.env has NO counterpart here — deliberate, not an oversight.
-  // Nothing sets spec.env today, so nothing is lost by the omission yet; but
-  // it is a SILENT exclusion, and a later feature that starts setting env
-  // (per-panel environment overrides, say) would have those values vanish on
-  // every restore with no warning anywhere in this file.
   /**
    * User-set panel name, set from the command palette's rename row and
    * persisted here since M6a (`layout-adapt.ts`'s `fromPanels`/`toPanels`).
@@ -60,6 +51,38 @@ export interface PersistedPanel {
    */
   title?: string
 }
+
+export interface PersistedTerminalPanel extends PersistedPanelBase {
+  /**
+   * OPTIONAL, and absent means 'terminal'. Every layout.json ever written
+   * predates this field, and parsePanel drops entries individually — so a
+   * required discriminant would not fail loudly, it would quietly empty
+   * every existing canvas the first time a user launched the new build.
+   * Writers still EMIT it (fromPanels), so files written from M9b onward are
+   * explicit; only readers tolerate its absence.
+   */
+  kind?: 'terminal'
+  cwd: string
+  /** Absent means "the user's login shell" — main resolves it. See PanelSpec. */
+  command?: string
+  // PanelSpec.env has NO counterpart here — deliberate, not an oversight.
+  // Nothing sets spec.env today, so nothing is lost by the omission yet; but
+  // it is a SILENT exclusion, and a later feature that starts setting env
+  // (per-panel environment overrides, say) would have those values vanish on
+  // every restore with no warning anywhere in this file.
+  args: string[]
+}
+
+export interface PersistedReviewPanel extends PersistedPanelBase {
+  kind: 'review'
+  /**
+   * The whole subject, not a panel id. See ReviewSubject in shared/review.ts:
+   * a node outlives the panel it reviews, whose baseline main drops on kill.
+   */
+  subject: ReviewSubject
+}
+
+export type PersistedPanel = PersistedTerminalPanel | PersistedReviewPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -221,6 +244,27 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isStr = (v: unknown): v is string => typeof v === 'string'
 
+function parseReviewSubject(raw: unknown, id: string, warnings: string[]): ReviewSubject | null {
+  if (!isRecord(raw)) {
+    warnings.push(`dropped review panel ${id}: subject was not an object`)
+    return null
+  }
+  const { subjectId, repoRoot, baselineSha, label } = raw
+  // All four are required. A subject missing any one of them cannot ask git
+  // its question, and a node that renders a heading over a permanently empty
+  // body is worse than a node that was never restored: it looks like the
+  // feature is broken rather than like the file was.
+  if (!isStr(subjectId) || !ID_PATTERN.test(subjectId)) {
+    warnings.push(`dropped review panel ${id}: subject id was unusable`)
+    return null
+  }
+  if (!isStr(repoRoot) || !isStr(baselineSha) || !isStr(label)) {
+    warnings.push(`dropped review panel ${id}: subject was incomplete`)
+    return null
+  }
+  return { subjectId, repoRoot, baselineSha, label }
+}
+
 function parsePanel(
   raw: unknown,
   seen: Set<string>,
@@ -246,16 +290,9 @@ function parsePanel(
     warnings.push(`dropped panel ${id}: a coordinate was not a finite number`)
     return null
   }
-  if (!isStr(cwd)) {
-    warnings.push(`dropped panel ${id}: cwd was not a string`)
-    return null
-  }
-  if (!Array.isArray(args) || !args.every(isStr)) {
-    warnings.push(`dropped panel ${id}: args was not an array of strings`)
-    return null
-  }
   seen.add(id)
-  const panel: PersistedPanel = {
+
+  const base = {
     id,
     x,
     y,
@@ -264,11 +301,46 @@ function parsePanel(
     w: Math.max(MIN_PANEL_W, w),
     h: Math.max(MIN_PANEL_H, h),
     z,
+    ...(isStr(title) ? { title } : {})
+  }
+
+  // ABSENT is terminal — the whole file's compatibility rule. A PRESENT but
+  // unrecognised kind is dropped instead, and the difference is deliberate:
+  // absence is a historical fact about every file written before M9b, while
+  // "kind": "tree" is a file from a LATER version of this app, and reading
+  // it as a terminal panel would spawn a process for a node that never
+  // asked for one — out of a record that carries no cwd and no args.
+  const { kind } = raw
+  if (kind === 'review') {
+    const subject = parseReviewSubject((raw as Record<string, unknown>).subject, id, warnings)
+    if (subject === null) return null
+    return { ...base, kind: 'review', subject }
+  }
+  if (kind !== undefined && kind !== 'terminal') {
+    warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
+    return null
+  }
+
+  if (!isStr(cwd)) {
+    warnings.push(`dropped panel ${id}: cwd was not a string`)
+    return null
+  }
+  if (!Array.isArray(args) || !args.every(isStr)) {
+    warnings.push(`dropped panel ${id}: args was not an array of strings`)
+    return null
+  }
+  const panel: PersistedTerminalPanel = {
+    ...base,
+    // Absence is preserved, not normalised: this is a READER, and a file
+    // written before M9b never had a `kind` key at all. `fromPanels` is the
+    // WRITER that makes it explicit going forward; echoing it back here would
+    // make every parsed pre-M9b panel look, to the next reader, as though the
+    // key had always been present.
+    ...(kind === 'terminal' ? { kind: 'terminal' as const } : {}),
     cwd,
     args: [...args]
   }
   if (isStr(command)) panel.command = command
-  if (isStr(title)) panel.title = title
   return panel
 }
 

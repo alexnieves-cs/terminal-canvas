@@ -71,7 +71,7 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
         // The same fact an ENOENT would have produced, reached before a
         // process is ever launched. Spawning the bare name `git` here instead
         // is the defect shell-env.ts and tmux-probe.ts exist to prevent.
-        resolve({ stdout: '', ok: false, notFound: true })
+        resolve({ stdout: '', ok: false, notFound: true, code: -1, stderr: '' })
         return
       }
       const env = deps.env()
@@ -91,10 +91,21 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
           // production call can reach.
           ...(Object.keys(env).length > 0 ? { env } : {})
         },
-        (error, stdout) => {
-          const notFound =
-            error !== null && (error as NodeJS.ErrnoException).code === 'ENOENT'
-          resolve({ stdout: stdout ?? '', ok: error === null, notFound })
+        (error, stdout, stderr) => {
+          const err = error as (NodeJS.ErrnoException & { code?: number | string }) | null
+          const notFound = err !== null && err.code === 'ENOENT'
+          resolve({
+            stdout: stdout ?? '',
+            ok: error === null,
+            notFound,
+            // execFile puts the EXIT STATUS in `code` for a normal non-zero
+            // exit and an ERRNO STRING there for a spawn failure — the same
+            // field, two types. -1 for anything that is not a number, so a
+            // caller comparing against 128 can never accidentally match
+            // 'ENOENT'.
+            code: typeof err?.code === 'number' ? err.code : error === null ? 0 : -1,
+            stderr: stderr ?? ''
+          })
         }
       )
     })

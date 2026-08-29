@@ -310,6 +310,48 @@ every spawn specifically to know whether a panel's session survived, then
 carried that fact with nothing rendering it for two milestones. The inspector's
 badge is the reader, and it closes M6a's one outstanding success criterion.
 
+**A review node is a panel that is not a terminal.** M9a taught main to answer
+"what has this agent changed" — a `git stash create` snapshot taken the first
+time a panel spawns in a repository, and a diff against it on demand — and put
+the answer in the inspector's Changes section. M9b makes that answer a thing on
+the canvas. `Panel` is now a discriminated union: a terminal panel and a review
+node are two kinds of the same shape, sharing a rect, a z, a title and every
+gesture that acts on one (drag, resize, close, select, the rail row, the panel
+switcher), and differing in exactly what they render and what they own. You
+open one from the inspector's Changes heading, or from the palette's
+`Open review of <panel>` row (findable by typing "review changes"), on a panel
+that has started inside a repository.
+
+**It costs no `LIVE_BUDGET` slot and no WebGL context.** `Canvas.tsx` partitions
+the panel array before tiering, so a node never reaches `assignTiers` or the
+session registry at all — it holds no `PanelSession`, spawns no PTY, opens no
+xterm, and cannot evict a running agent to make room for itself. That is
+structural rather than a rule something obeys: there is no code path from a
+review node to `registry.ensure`, so the eight live terminals you had before
+opening a review are the eight you still have after. Opening five reviews of
+five panels costs five DOM subtrees and nothing else.
+
+**It outlives the panel it reviews.** A node stores its subject — the repository
+root, the baseline sha, and a label snapshotted from the panel's own chrome —
+and asks main a question addressed by that baseline rather than by a panel id.
+Main drops a panel's baseline the moment its session is killed, so a node that
+asked "review panel n7" would go blank at exactly the moment a review of
+finished work is most useful: you close the agent, and the record of what it
+did closes with it. Ask by baseline and the node keeps answering — after the
+panel is closed, and after a relaunch.
+
+**What a node shows.** A summary line (how many files, how many lines added and
+removed), the repository root, a note when the answer cannot be attributed to
+one agent (two panels sharing a checkout) or when git declined to open the
+repository at all, and the list of changed files. Click a file and its hunks
+expand in place, one file at a time — fetching every file's diff up front is
+megabytes of text inside the world layer for a node you may only glance at.
+Hunks are added, removed and context lines only: file headers, the `diff --git`
+preamble and the no-newline marker are meta and never rendered as changes. A
+node re-reads on its own when its subject's agent goes idle, and on the refresh
+control in its header; it does not watch the filesystem (pull, not push), so a
+change made outside a panel needs that click.
+
 ## Milestones
 
 | | Scope | Status |
@@ -333,6 +375,7 @@ badge is the reader, and it closes M6a's one outstanding success criterion.
 | M8c | The inspector: what a panel is, and restart in place | ✅ done |
 | M8d | Workspaces and attention in the rail | ✅ done |
 | M9a | The review engine: what each agent changed, in the inspector | ✅ done |
+| M9b | The panel kind: a review node on the canvas | ✅ done |
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

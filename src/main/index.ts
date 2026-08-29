@@ -70,7 +70,8 @@ const reviewEngine = createReviewEngine({
   // this manager already relies on for layoutStore one line up. Never
   // called until a real review:panel invoke lands, long after both consts
   // have been initialised.
-  notARepo: (panelId) => baselineCapture.isNotARepo(panelId)
+  notARepo: (panelId) => baselineCapture.isNotARepo(panelId),
+  repoUnreadable: (panelId) => baselineCapture.unreadableDetail(panelId)
 })
 
 // The once-only guard. Written here rather than inside PtyManager because the

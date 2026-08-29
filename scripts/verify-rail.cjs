@@ -611,6 +611,168 @@ ok('45 git-missing is visible with its own summary and note',
     return m.hidden === false && m.summary === 'unavailable' && m.note === 'no git binary was found'
   })())
 
+// 46. The new arm RENDERS, with a note naming the cause. `hidden` would be
+//     the wrong answer here for the same reason `clean` is not hidden: a
+//     panel the feature is broken for and a panel with nothing to report
+//     must not look identical.
+{
+  const m = R.buildReviewFields({ kind: 'repo-unreadable', detail: 'xcrun: error: invalid active developer path' })
+  ok('46 repo-unreadable renders a note, not nothing',
+    m.hidden === false && m.summary === 'unavailable' &&
+      typeof m.note === 'string' && m.note.includes('xcrun'))
+}
+
+// 47. The boundary the new arm exists to draw, from the other side:
+//     not-a-repo is STILL hidden. It is the ordinary answer for a panel in
+//     the home directory, and a permanent error row on most panels teaches
+//     the user to stop reading the section. Asserting 46 alone passes
+//     against an implementation that stopped hiding anything.
+ok('47 not-a-repo is still hidden', R.buildReviewFields({ kind: 'not-a-repo' }).hidden === true)
+
+const SUBJ = { subjectId: 'n4', repoRoot: '/tmp/repo', baselineSha: 'abc', label: 'claude' }
+const nodeModel = (result, expandedPath = null, title) =>
+  R.buildReviewNodeModel({ subject: SUBJ, title, result, expandedPath })
+
+// 48. An UNRESOLVED query still renders. This is the first of the two places
+//     the node deliberately disagrees with the inspector: buildReviewFields
+//     returns HIDDEN for `undefined`, because the pane flickers through that
+//     state on every selection change. A node is a panel the user opened on
+//     purpose, and one that renders nothing while its invoke is in flight is
+//     indistinguishable from one that is broken.
+{
+  const m = nodeModel(undefined)
+  ok('48 an in-flight query still renders a heading and a summary',
+    m.heading.includes('claude') && m.summary !== '' && m.files.length === 0)
+}
+
+// 49. THE ONE TO KNOW BY NUMBER. not-a-repo is HIDDEN in the pane and
+//     RENDERED in the node, and both halves are asserted in one condition —
+//     asserting only the node half passes against an implementation that
+//     simply called buildReviewFields and ignored `hidden`, which is the
+//     obvious "don't repeat yourself" move and is wrong: it would render a
+//     deliberately-opened panel as an empty box.
+ok('49 not-a-repo: hidden in the pane, rendered in the node',
+  R.buildReviewFields({ kind: 'not-a-repo' }).hidden === true &&
+    nodeModel({ kind: 'not-a-repo' }).summary !== '')
+
+// 50. Exactly one row is expanded, and it is the one named. `expanded` lives
+//     on the ROW rather than as a separate id on the model so the view can
+//     render without a second lookup — and so a path that is no longer in
+//     the list (the file was reverted between queries) expands nothing at
+//     all rather than leaving a dangling open panel.
+{
+  const result = { kind: 'changes', root: '/r', added: 4, removed: 1, files: [
+    { path: 'a.ts', added: 3, removed: 1, binary: false, untracked: false },
+    { path: 'b.ts', added: 1, removed: 0, binary: false, untracked: false }
+  ] }
+  const m = nodeModel(result, 'b.ts')
+  const gone = nodeModel(result, 'deleted.ts')
+  ok('50 exactly the named row is expanded',
+    m.files[0].expanded === false && m.files[1].expanded === true &&
+      gone.files.every((f) => f.expanded === false))
+}
+
+// 51. The node's cap is its own, and it is LARGER than the pane's: the node
+//     is a scroll host in world space, the 260px inspector is not. Sharing
+//     REVIEW_FILE_CAP would silently truncate a review of a large change to
+//     ten files, which is the omission this feature's honest-degradation
+//     rule forbids — so `more` reports the remainder either way.
+{
+  const files = Array.from({ length: R.NODE_FILE_CAP + 5 }, (_, i) =>
+    ({ path: `f${i}.ts`, added: 1, removed: 0, binary: false, untracked: false }))
+  const m = nodeModel({ kind: 'changes', root: '/r', added: 65, removed: 0, files })
+  ok('51 the node caps at its own, larger cap and reports the rest',
+    R.NODE_FILE_CAP > R.REVIEW_FILE_CAP && m.files.length === R.NODE_FILE_CAP && m.more === 5)
+}
+
+// 52. The model is a pure function of its inputs, which is what lets
+//     ReviewNode.tsx memo the BUILD on those inputs and carry no signature of
+//     its own — unlike rail-rows.ts, which needs one.
+//
+//     The distinction is the point of this check's shape. buildRailRows is
+//     handed `panels.map(...)`, freshly allocated every render, so nothing
+//     there is identity-stable and only a content hash can answer "did
+//     anything I render change". Every input here survives a rect change by
+//     reference, so React's dependency comparison answers it for free — and
+//     a signature over a model carrying up to 600 lines of diff text would
+//     have to be recomputed on every frame of a drag to save one object
+//     allocation, imposing the exact cost it exists to prevent.
+//
+//     So the serialization happens HERE, in the check, where it is free and
+//     runs once. Equal inputs must produce a DEEP-equal model, and three
+//     separate INPUTS must each move it — the result, the expanded path and
+//     the title — because an implementation that carried only the file list
+//     passes the first clause alone.
+//
+//     The `diff` travelling in the painted pair is FIXTURE BOOKKEEPING, not a
+//     fourth mover, and the distinction cost this check a clause. It is what
+//     the node paints beneath the model, so painting the pair is what the
+//     component actually renders — but it is not an input to
+//     buildReviewNodeModel, so an assertion that varying it changes the
+//     string is true of EVERY implementation, a constant-returning one
+//     included. It is therefore held IDENTICAL across all four paintings, so
+//     that any difference observed is the model's and nothing else's.
+{
+  const result = { kind: 'changes', root: '/r', added: 1, removed: 0, files: [
+    { path: 'a.ts', added: 1, removed: 0, binary: false, untracked: false }] }
+  const diff = { kind: 'diff', truncated: 0, lines: [{ kind: 'add', text: '+x' }] }
+  const painted = (model, d) => JSON.stringify([model, d])
+  const a = painted(nodeModel(result), diff)
+  const b = painted(nodeModel(result), diff)
+  const expanded = painted(nodeModel(result, 'a.ts'), diff)
+  // A DIFFERENT ReviewResult, which is the input the decorative diff clause
+  // used to stand in for: `clean` and `changes` are the two arms a user is
+  // most often looking at, and a model that ignored `result` entirely would
+  // still satisfy the expansion and title clauses.
+  const otherResult = painted(nodeModel({ kind: 'clean', root: '/r' }), diff)
+  const renamed = painted(nodeModel(result, null, 'my review'), diff)
+  ok('52 the model is pure in its inputs, and result, expansion and title all move it',
+    a === b && expanded !== a && otherResult !== a && renamed !== a)
+}
+
+const reviewPanel = (id, over = {}) => ({
+  kind: 'review', rect: { id, x: 0, y: 0, w: 640, h: 520 }, z: 1,
+  subject: { ...SUBJ }, ...over
+})
+
+// 53. A review row names its SUBJECT, not itself: "review" alone tells
+//     nobody which agent's work it is, on a rail whose entire job is telling
+//     panels apart. Its tail is 'review' rather than a status — it has no
+//     process, and railTail's status vocabulary ('not started', 'exited 0')
+//     would be a lie in every one of its words.
+{
+  const row = R.buildRailRows([reviewPanel('r1')], () => undefined, NONE)[0]
+  ok('53 a review row names its subject and says review',
+    row.label === 'review: claude' && row.tail === 'review' && row.dormant === false)
+}
+
+// 54. A user's own title still outranks it — the first link of the honest
+//     chain, which is not a terminal-only rule.
+ok('54 a titled review node uses its title',
+  R.buildRailRows([reviewPanel('r1', { title: 'auth diff' })], () => undefined, NONE)[0].label === 'auth diff')
+
+// 55. `dormant: false` is load-bearing rather than incidental: the rail's
+//     start control renders on dormant rows only, and a review node that
+//     reported dormant would offer a "start" arrow for a panel that has
+//     nothing to start — a control that cannot work, on the surface whose
+//     rule is that a visible control does something.
+ok('55 a review row is never dormant', R.buildRailRows(
+  [reviewPanel('r1')], () => undefined, new Set(['r1']))[0].dormant === false)
+
+// 56. The inspector model for a review node: it names the subject, and both
+//     process verbs are refused. `restartable: false` is the clause that
+//     matters — Restart is rendered disabled rather than absent, and a
+//     review node that reported restartable would offer to end a process it
+//     does not have, which reaches restartPanel and disposes nothing while
+//     looking like it worked.
+{
+  const m = R.buildInspectorModel(reviewPanel('r1'), undefined)
+  ok('56 a review node\'s inspector model refuses the process verbs',
+    m.kind === 'review' && m.restartable === false && m.reattached === false &&
+      m.fields.some((f) => f.key === 'subject' && f.value === 'n4') &&
+      m.fields.some((f) => f.key === 'repo' && f.value === '/tmp/repo'))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

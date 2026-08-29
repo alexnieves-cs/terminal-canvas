@@ -1,15 +1,11 @@
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
+import type { ReviewSubject } from '@shared/review'
 
-/**
- * A panel is its geometry, its spec, and its paint order. cols/rows are
- * deliberately absent from the spec: they are not known until the panel is
- * attached and fitted, and inventing them here would reintroduce the
- * spawn-at-80x24 problem lazy spawning exists to avoid.
- */
-export interface Panel {
+export type { ReviewSubject }
+
+export interface PanelBase {
   rect: WorldRect
-  spec: PanelSpecTemplate
   /**
    * Paint order, rendered as style.zIndex. Stacking is NOT the array's order:
    * React reconciles a reordered keyed list by MOVING DOM nodes, and a move is
@@ -33,6 +29,52 @@ export interface Panel {
   title?: string
 }
 
+/**
+ * A panel with a PTY behind an xterm — what `Panel` meant on its own until
+ * M9b.
+ */
+export interface TerminalPanel extends PanelBase {
+  kind: 'terminal'
+  spec: PanelSpecTemplate
+}
+
+/**
+ * A non-terminal panel: a rendered review of what one agent changed.
+ *
+ * It has no spec, and that absence is the point rather than an omission —
+ * there is nothing to spawn, so it never reaches assignTiers, never reaches
+ * registry.ensure, and can take neither a LIVE_BUDGET slot nor a WebGL
+ * context. Canvas.tsx partitions on kind BEFORE tiering so that is
+ * structurally true rather than merely unasked-for.
+ */
+export interface ReviewPanel extends PanelBase {
+  kind: 'review'
+  subject: ReviewSubject
+}
+
+export type Panel = TerminalPanel | ReviewPanel
+
+/**
+ * The only kind test written against a `Panel` anywhere, and it is
+ * deliberately positive. (Other reads of a `kind` field exist and are not
+ * this: `layout-schema.ts` and `layout-adapt.ts`'s toPanels branch on the
+ * PERSISTED record on the way in from disk, before a `Panel` exists at all;
+ * `Inspector.tsx` branches on `InspectorModel.kind`, an already-built view
+ * model; and `railTail` branches on a bare `Panel['kind']` argument it was
+ * handed. Nothing but this function asks a live `Panel` what it is.)
+ *
+ * Never write `kind === 'terminal'` anywhere: `kind` is absent in every
+ * layout.json written before M9b (see parsePanel) and in every verify
+ * fixture written before it, and both must keep meaning "terminal". Asking
+ * only whether something IS a review node makes the default fall the safe
+ * way everywhere at once — a terminal panel misread as a review node stops
+ * spawning silently on a restored canvas, while a review node misread as a
+ * terminal fails loudly the first time anything reads its absent spec.
+ */
+export function isReviewPanel(panel: Panel): panel is ReviewPanel {
+  return panel.kind === 'review'
+}
+
 export const PANEL_W = 720
 export const PANEL_H = 460
 
@@ -54,20 +96,23 @@ const shell = (panelId: string, cwd = '~'): PanelSpecTemplate => ({
  * Scattered well outside the initial viewport, exactly as M2's placeholders
  * were: panning to find something stays testable by hand, and culling has
  * something to cull.
+ *
+ * Goes through a small local helper rather than twelve edited literals, so
+ * the coordinates verify:panels' fixtures depend on cannot be disturbed by
+ * the M9b `kind` edit.
  */
+const seed = (id: string, x: number, y: number, z: number): TerminalPanel => ({
+  kind: 'terminal',
+  rect: { id, x, y, w: PANEL_W, h: PANEL_H },
+  spec: shell(id),
+  z
+})
+
 export const SEED_PANELS: Panel[] = [
-  { rect: { id: 's01', x: 0, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s01'), z: 1 },
-  { rect: { id: 's02', x: 800, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s02'), z: 2 },
-  { rect: { id: 's03', x: 1600, y: 0, w: PANEL_W, h: PANEL_H }, spec: shell('s03'), z: 3 },
-  { rect: { id: 's04', x: 0, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s04'), z: 4 },
-  { rect: { id: 's05', x: 800, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s05'), z: 5 },
-  { rect: { id: 's06', x: 1600, y: 540, w: PANEL_W, h: PANEL_H }, spec: shell('s06'), z: 6 },
-  { rect: { id: 's07', x: -900, y: 270, w: PANEL_W, h: PANEL_H }, spec: shell('s07'), z: 7 },
-  { rect: { id: 's08', x: -900, y: 810, w: PANEL_W, h: PANEL_H }, spec: shell('s08'), z: 8 },
-  { rect: { id: 's09', x: 2500, y: 270, w: PANEL_W, h: PANEL_H }, spec: shell('s09'), z: 9 },
-  { rect: { id: 's10', x: 400, y: 1100, w: PANEL_W, h: PANEL_H }, spec: shell('s10'), z: 10 },
-  { rect: { id: 's11', x: 1200, y: 1100, w: PANEL_W, h: PANEL_H }, spec: shell('s11'), z: 11 },
-  { rect: { id: 's12', x: 400, y: -640, w: PANEL_W, h: PANEL_H }, spec: shell('s12'), z: 12 }
+  seed('s01', 0, 0, 1), seed('s02', 800, 0, 2), seed('s03', 1600, 0, 3),
+  seed('s04', 0, 540, 4), seed('s05', 800, 540, 5), seed('s06', 1600, 540, 6),
+  seed('s07', -900, 270, 7), seed('s08', -900, 810, 8), seed('s09', 2500, 270, 9),
+  seed('s10', 400, 1100, 10), seed('s11', 1200, 1100, 11), seed('s12', 400, -640, 12)
 ]
 
 /** The id the single first-run panel gets. Kept out of the `n` sequence Cmd+N uses. */
@@ -82,7 +127,7 @@ export const FIRST_RUN_ID = 'p1'
  * fixture data, which is what they have always actually been.
  */
 export function firstRunPanels(): Panel[] {
-  return [{ rect: { id: FIRST_RUN_ID, x: -PANEL_W / 2, y: -PANEL_H / 2, w: PANEL_W, h: PANEL_H }, spec: shell(FIRST_RUN_ID), z: 1 }]
+  return [{ kind: 'terminal', rect: { id: FIRST_RUN_ID, x: -PANEL_W / 2, y: -PANEL_H / 2, w: PANEL_W, h: PANEL_H }, spec: shell(FIRST_RUN_ID), z: 1 }]
 }
 
 /**
@@ -104,10 +149,11 @@ export function makePanel(
   z: number,
   spec?: Omit<PanelSpecTemplate, 'panelId'> & { panelId?: string },
   size?: { w?: number; h?: number }
-): Panel {
+): TerminalPanel {
   const w = size?.w ?? PANEL_W
   const h = size?.h ?? PANEL_H
   return {
+    kind: 'terminal',
     rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
     // panelId is forced to the minted id: a template carrying a stale one
     // would give two panels the same session, which registry.ensure resolves
@@ -223,4 +269,55 @@ export function removePanel(panels: Panel[], id: string): Panel[] {
 export function raisePanel(panels: Panel[], id: string): Panel[] {
   const top = nextZ(panels)
   return panels.map((p) => (p.rect.id === id ? { ...p, z: top } : p))
+}
+
+/**
+ * A review node is TALLER and NARROWER than a terminal panel: it is a list of
+ * paths and a column of diff lines, both of which read better in a portrait
+ * box than in the 720x460 landscape one a terminal wants.
+ */
+export const REVIEW_W = 640
+export const REVIEW_H = 520
+
+/** World units between a subject's right edge and its review node's left. */
+export const REVIEW_GAP = 40
+
+/**
+ * Beside the subject, top-aligned with it, so the pair reads as one unit at
+ * any zoom.
+ *
+ * The RESULT is a request, not a decision: Canvas.tsx runs it through
+ * cascadeCentre exactly as onSpawn does, so opening two reviews of one panel
+ * does not stack them byte-identically — the coincidence rule M6 established,
+ * which review nodes inherit for free because cascadeCentre reads rects and
+ * knows nothing about kinds.
+ */
+export function reviewCentre(subject: WorldRect, w = REVIEW_W, h = REVIEW_H): Point {
+  return { x: subject.x + subject.w + REVIEW_GAP + w / 2, y: subject.y + h / 2 }
+}
+
+/**
+ * Centred exactly on the point it is given, the contract makePanel has.
+ *
+ * `subject` is carried VERBATIM. Do not copy makePanel's `{ ...spec, panelId:
+ * id }` line here: that line exists because a spec's panelId names the panel
+ * ITSELF, while a subject's subjectId names a DIFFERENT panel. Forcing the
+ * minted id into it makes the node a review of itself — no baseline, "not
+ * started" forever, and nothing anywhere saying why. verify:viewport 76.
+ */
+export function makeReviewPanel(
+  id: string,
+  centre: Point,
+  z: number,
+  subject: ReviewSubject,
+  size?: { w?: number; h?: number }
+): ReviewPanel {
+  const w = size?.w ?? REVIEW_W
+  const h = size?.h ?? REVIEW_H
+  return {
+    kind: 'review',
+    rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
+    subject,
+    z
+  }
 }
