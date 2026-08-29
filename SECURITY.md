@@ -21,9 +21,13 @@ design rather than bugs:
 - **Panel processes can outlive the window.** With `tmux` installed, closing or
   reloading the window deliberately leaves sessions running so agents survive.
   Quitting the app tears them down.
-- **The review layer runs `git` against your working tree.** It takes a
-  snapshot object with `git stash create` and reads diffs against it. It never
-  checks anything out, never pops a stash, and never modifies the working tree.
+- **The review layer runs `git` against your working tree.** Reading is
+  non-destructive: it takes a snapshot object with `git stash create` and
+  diffs against it, never checking anything out and never popping a stash.
+  Committing from a review node is a write, and an intentional one: it
+  creates commits, writes the index for the paths you commit, moves `HEAD`,
+  and runs your own pre-commit hooks — which are third-party code that can
+  modify the working tree themselves.
 
 ## What is in scope
 

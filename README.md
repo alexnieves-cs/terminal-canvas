@@ -23,8 +23,9 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   live WebGL terminals is what stops the twentieth panel taking down the
   nineteen before it.
 - **Agents survive the window.** With `tmux` installed, panel processes outlive
-  a `Cmd+R` reload, a closed window, and a quit — you come back to the agent
-  mid-sentence rather than to a dead pane.
+  a `Cmd+R` reload and a closed window — you come back to the agent
+  mid-sentence rather than to a dead pane. Quitting the app does tear them
+  down.
 - **A canvas that says who needs you.** Each panel's border reports what its
   agent is doing — starting, working, idle, or waiting on you. Panels that want
   attention while off screen get an edge pip pointing at them, and `Cmd+J`
@@ -52,7 +53,9 @@ this is a beta. macOS will refuse the first launch with *"Terminal Canvas is
 damaged"* or *"cannot be opened because the developer cannot be verified"*. To
 get past it, either:
 
-- **Right-click the app → Open**, then confirm in the dialog; or
+- open **System Settings → Privacy & Security**, scroll to the blocked-app
+  notice and choose **Open Anyway** (on macOS 14 and earlier, right-clicking
+  the app and choosing **Open** does the same job); or
 - clear the quarantine flag:
 
   ```sh
@@ -84,7 +87,7 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+Shift+\` | Toggle the inspector |
 | `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
-| **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**, as SIGINT, SIGTSTP, and tmux's own prefix respectively |
+| **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**: `Ctrl+C` as SIGINT, `Ctrl+Z` as SIGTSTP, and `Ctrl+B` because tmux's own prefix is deliberately disabled |
 
 Trackpad: two-finger drag pans, pinch zooms. A wheel over the focused panel
 scrolls that terminal instead of the camera.
@@ -113,6 +116,7 @@ npm install       # postinstall runs electron-rebuild for node-pty
 npm run dev
 npm run typecheck
 npm run verify       # every check below
+npm run verify:meta          # licensing, README structure and drift, plain node
 npm run verify:pty           # node-pty behaviour, under Electron's ABI
 npm run verify:pty-manager   # the real PtyManager: session lifecycle, batching
 npm run verify:window        # renderer teardown reaches the PTY layer
@@ -122,6 +126,7 @@ npm run verify:registry      # session lifecycle against a fake bridge/terminal,
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
 npm run verify:rail          # the rail's three sections and the inspector's read model, plain node
+npm run verify:review        # git argv, the review engine's result arms, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:canvas        # real input into the built renderer

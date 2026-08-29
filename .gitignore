@@ -20,13 +20,9 @@ release/
 # every reviewer. Keep it locally, never in git.
 graphify-out/
 
-# Isolated worktrees and subagent-driven-development scratch. Both are local
-# working state, not source: committing a worktree would put the whole tree
-# in the repo a second time, and the SDD ledger is a recovery map for one
-# session, not a record anyone reads later.
-# Local Claude Code configuration and scratch. settings.json accumulates
-# machine-specific permission grants with absolute home paths in them, and a
-# worktree committed to the repository would put the whole tree in twice.
-# Local tooling state, never source.
+# Local Claude Code configuration and scratch, never source: settings.json
+# accumulates machine-specific permission grants with absolute home paths in
+# them, and worktrees under here are local working state whose commit would
+# put the whole tree in the repo a second time.
 .claude/
 .superpowers/

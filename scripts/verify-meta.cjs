@@ -250,6 +250,27 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     text ? `${text.length} bytes` : 'absent')
 }
 
+// 19. Every verify suite is WIRED INTO the chain. package.json's `verify`
+// script is an enumerated list, which is the shape .github/workflows/verify.yml
+// deliberately refuses for exactly this reason: a suite added as a script and
+// never added to the chain runs nowhere, silently, forever — and the one
+// green-or-not signal this repository has quietly stops covering it, with a
+// green badge still on the README. Same stale-by-omission failure check 14
+// guards for the IPC diagram, turned on the harness itself.
+//
+// verify:packaged is excluded deliberately, not overlooked: it rebuilds native
+// modules, reaches electron-builder's cache and needs a network, so it is a
+// hand-run pre-release gate rather than part of the chain.
+{
+  const chain = pkg.scripts.verify ?? ''
+  const suites = Object.keys(pkg.scripts)
+    .filter((k) => k.startsWith('verify:') && k !== 'verify:packaged')
+  const unwired = suites.filter((k) => !chain.includes(`npm run ${k}`))
+  ok('19 every verify suite is wired into the chain',
+    suites.length > 10 && unwired.length === 0,
+    unwired.length ? `unwired: ${unwired.join(', ')}` : `${suites.length} suites`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

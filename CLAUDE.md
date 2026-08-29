@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **M1 through M5c have landed** — the PTY layer, the canvas, their
+running a coding-agent CLI. **M1 through M9c have landed** — the PTY layer, the canvas, their
 merge, persistence and tmux-backed session survival (M4), presets (M5a), the Cmd+K command
 palette (M5b), and electron-builder packaging into a real, launchable `.app` (M5c). The three that shaped the architecture are worth keeping in mind: M1 is the PTY layer, M2 is the
 canvas and its coordinate math — deliberately built apart so that a blank panel had exactly
