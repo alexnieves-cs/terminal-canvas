@@ -878,6 +878,85 @@ const gitFail = (code, stderr) => ({ stdout: '', ok: false, notFound: false, cod
     out.kind === 'diff' && out.lines.some((l) => l.kind === 'add' && l.text.includes('hello')))
 }
 
+// 49. The scratch-index read. `read-tree HEAD` seeds the temporary index with
+//     the current commit's tree so `update-index` adds ON TOP of HEAD rather
+//     than producing a commit containing only the paths we staged — which
+//     would delete every other file in the repository, in a commit, on disk,
+//     as the app's first irreversible write.
+ok('49 read-tree argv seeds the scratch index from HEAD',
+  JSON.stringify(R.buildReadTreeArgs('/r')) ===
+    JSON.stringify(['-C', '/r', 'read-tree', 'HEAD']))
+
+// 50. --add AND --remove, and the pair is the check. `git diff --numstat`
+//     reports a DELETED file exactly as it reports a modified one, so a
+//     builder carrying only --add fails on the path git names but cannot
+//     find — and `update-index` treats a missing file as an error, so the
+//     whole commit fails rather than the deletion being dropped. --remove is
+//     what makes "the files the node reports" and "the files we can stage"
+//     the same set. `--` terminates options, or a file named `-f` is a flag.
+{
+  const args = R.buildStageArgs('/r', ['a b.txt', '-f.txt'])
+  ok('50 stage argv carries --add AND --remove, and terminates options',
+    JSON.stringify(args) === JSON.stringify(
+      ['-C', '/r', 'update-index', '--add', '--remove', '--', 'a b.txt', '-f.txt']))
+}
+
+// 51. A real `git commit`, not `commit-tree`. commit-tree runs NO HOOKS AT
+//     ALL, so the plumbing recipe that looks safest silently delivers the
+//     --no-verify behaviour the spec forbids. There is no --no-verify here
+//     and there is no flag that could become one by accident; the message
+//     goes through -m rather than stdin so the runner needs no stdin.
+{
+  const args = R.buildCommitArgs('/r', 'agent work')
+  ok('51 commit argv is porcelain with a -m message and no --no-verify',
+    JSON.stringify(args) === JSON.stringify(['-C', '/r', 'commit', '-m', 'agent work']) &&
+      !args.includes('--no-verify') && !args.includes('commit-tree'))
+}
+
+// 52. Reading the entries BACK, -z. This is what the reconcile stages by, and
+//     it is read AFTER the commit rather than before deliberately: a
+//     pre-commit hook is allowed to change the index (a formatter that runs
+//     `git add` is the ordinary case), so the entries read before the commit
+//     are not necessarily the entries that got committed, and reconciling
+//     with those would stage content that is in no commit.
+ok('52 staged-entries argv is -z and scoped to the paths',
+  JSON.stringify(R.buildStagedEntriesArgs('/r', ['a b.txt'])) ===
+    JSON.stringify(['-C', '/r', 'ls-files', '--stage', '-z', '--', 'a b.txt']))
+
+// 53. `<mode> <sha> <stage>\t<path>\0`. The separator between the metadata
+//     and the path is a TAB and the record separator is a NUL, so a path
+//     containing either a space or a tab-looking sequence still parses — the
+//     -z rule this file states for every other read. A trailing NUL must not
+//     produce an empty final entry.
+{
+  const raw = '100644 9ad2eb 0\ta b.txt\u0000100755 587be6 0\trun.sh\u0000'
+  const parsed = R.parseStagedEntries(raw)
+  ok('53 staged entries parse mode/sha/path across a spaced path',
+    parsed.length === 2 &&
+      parsed[0].mode === '100644' && parsed[0].sha === '9ad2eb' && parsed[0].path === 'a b.txt' &&
+      parsed[1].mode === '100755' && parsed[1].path === 'run.sh')
+}
+
+// 54. The reconcile, BY SHA. --cacheinfo takes the blob the commit actually
+//     contains, so an agent that edited the file between our commit and this
+//     call cannot have its newer content staged behind its back — which is
+//     what a plain `update-index --add -- <paths>` (a working-tree read)
+//     would do. One call for every path rather than one call per path,
+//     because each is a separate lock acquisition on the index of a
+//     repository an agent is working in.
+{
+  const args = R.buildReconcileArgs('/r', [
+    { mode: '100644', sha: 'aaa', path: 'a b.txt' },
+    { mode: '100755', sha: 'bbb', path: 'run.sh' }
+  ])
+  ok('54 reconcile argv stages the committed blobs by sha, in one call',
+    JSON.stringify(args) === JSON.stringify([
+      '-C', '/r', 'update-index', '--add', '--replace',
+      '--cacheinfo', '100644,aaa,a b.txt',
+      '--cacheinfo', '100755,bbb,run.sh'
+    ]))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -175,3 +175,108 @@ export function parseNumstat(stdout: string): NumstatEntry[] {
   }
   return out
 }
+
+/**
+ * One entry of a git index, as `ls-files --stage` prints it.
+ *
+ * The `sha` is a BLOB, not a commit — it is what the reconcile stages, and
+ * staging by sha rather than by re-reading the working tree is what makes the
+ * reconcile safe to run underneath an agent that is still editing.
+ */
+export interface StagedEntry {
+  mode: string
+  sha: string
+  path: string
+}
+
+/**
+ * Seed the scratch index from HEAD.
+ *
+ * Without it, `update-index` builds an index containing ONLY the staged paths,
+ * and the resulting commit deletes every other file in the repository. That is
+ * the worst outcome this milestone can produce — on disk, in history, and the
+ * one action in this app Cmd+Z cannot undo.
+ */
+export function buildReadTreeArgs(root: string): string[] {
+  return ['-C', root, 'read-tree', 'HEAD']
+}
+
+/**
+ * Stage the reviewed paths into the scratch index.
+ *
+ * `--add` AND `--remove`, because `git diff --numstat` reports a DELETED file
+ * exactly as it reports a modified one: the node lists it, so the commit must
+ * be able to carry it, and `update-index --add` alone errors on a path it
+ * cannot find rather than skipping it — one deleted file would fail the whole
+ * commit. `--` terminates options, or a file named `-f` is read as a flag.
+ */
+export function buildStageArgs(root: string, paths: string[]): string[] {
+  return ['-C', root, 'update-index', '--add', '--remove', '--', ...paths]
+}
+
+/**
+ * A real `git commit`, deliberately NOT `commit-tree`.
+ *
+ * The plumbing recipe the spec originally named — write-tree / commit-tree /
+ * update-ref — runs NO HOOKS AT ALL, so it silently delivers the `--no-verify`
+ * behaviour the same spec forbids. Porcelain honours GIT_INDEX_FILE, which was
+ * measured rather than assumed: the pre-commit hook ran and saw exactly the
+ * scratch index, and the user's own .git/index was byte-identical afterwards.
+ *
+ * The message goes through -m rather than stdin so GitRunner never needs a
+ * stdin channel. There is no --no-verify and no flag that could become one.
+ */
+export function buildCommitArgs(root: string, message: string): string[] {
+  return ['-C', root, 'commit', '-m', message]
+}
+
+/**
+ * What the scratch index holds for these paths, AFTER the commit.
+ *
+ * After, not before: a pre-commit hook is allowed to change the index — a
+ * formatter that runs `git add` is the ordinary case — so entries read before
+ * the commit are not necessarily the entries that got committed, and
+ * reconciling with those would stage content that exists in no commit.
+ */
+export function buildStagedEntriesArgs(root: string, paths: string[]): string[] {
+  return ['-C', root, 'ls-files', '--stage', '-z', '--', ...paths]
+}
+
+/**
+ * Bring the REAL index back in step with the new HEAD, for the committed
+ * paths only.
+ *
+ * Never touching the real index sounds like the safe answer and is its own
+ * silent failure: once HEAD moves and the index does not, the index still
+ * describes the previous tree, so the agent's own `git status` reports a
+ * phantom `D` for every file we added and `MM` for every file we modified. An
+ * agent reading that will try to "fix" a repository that is fine.
+ *
+ * `--cacheinfo` stages the exact blob the commit contains, so an edit landing
+ * between the commit and this call cannot be staged behind the agent's back —
+ * which a working-tree-reading `update-index --add -- <paths>` would do. Per
+ * PATH rather than wholesale, so the user's own unrelated staged entries
+ * survive. `--replace` because the path may already be in the index at a
+ * different sha, which is the ordinary case for a modified file.
+ */
+export function buildReconcileArgs(root: string, entries: StagedEntry[]): string[] {
+  return [
+    '-C', root, 'update-index', '--add', '--replace',
+    ...entries.flatMap((e) => ['--cacheinfo', `${e.mode},${e.sha},${e.path}`])
+  ]
+}
+
+/** `<mode> <sha> <stage>\t<path>` records, NUL-separated. */
+export function parseStagedEntries(stdout: string): StagedEntry[] {
+  const out: StagedEntry[] = []
+  for (const record of stdout.split('\0')) {
+    // A trailing NUL produces an empty final field, which is not an entry.
+    if (record === '') continue
+    const tab = record.indexOf('\t')
+    if (tab === -1) continue
+    const meta = record.slice(0, tab).split(' ')
+    if (meta.length < 3) continue
+    out.push({ mode: meta[0], sha: meta[1], path: record.slice(tab + 1) })
+  }
+  return out
+}
