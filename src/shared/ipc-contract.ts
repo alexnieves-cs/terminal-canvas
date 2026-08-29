@@ -16,7 +16,7 @@ import type {
 } from './types'
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
-import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest } from './review'
+import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -164,7 +164,20 @@ export const IPC = {
    */
   REVIEW_AT: 'review:at',
   /** One file's hunks. Pull-only, one file at a time — see ReviewDiffRequest. */
-  REVIEW_DIFF: 'review:diff'
+  REVIEW_DIFF: 'review:diff',
+  /**
+   * Turn the work a review node reports into a commit.
+   *
+   * The app's first irreversible write, and the only channel here that
+   * changes anything outside this app's own state. Addressed by repository
+   * ROOT rather than by panel id, for the reason REVIEW_AT is: a node outlives
+   * its subject, and a commit is a repository operation.
+   *
+   * Async and slow by design — a pre-commit hook on a real repository is
+   * legitimately thirty seconds — so the renderer must render an in-flight
+   * state rather than assuming a prompt reply.
+   */
+  REVIEW_COMMIT: 'review:commit'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -428,6 +441,7 @@ export interface CanvasBridge {
     baseline(panelId: PanelId): Promise<ReviewBaseline | null>
     at(subject: ReviewSubject): Promise<ReviewResult>
     diff(req: ReviewDiffRequest): Promise<ReviewDiff>
+    commit(req: ReviewCommitRequest): Promise<ReviewCommitResult>
   }
   platform: NodeJS.Platform
 }

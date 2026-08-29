@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { mkdirSync, rmSync } from 'node:fs'
 import { BrowserWindow, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
@@ -10,6 +11,7 @@ import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
 import { createReviewEngine } from './review-engine'
+import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -60,10 +62,15 @@ const layoutStore = createLayoutStore({
  */
 let gitPath: string | null = null
 
+// Getters for the reason PtyManager's getBackend is one: this runner is
+// constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
+// to a named const rather than constructed inline per consumer: a second
+// runner would carry its own `warned` flag, and the "git not found" warning
+// this repo deliberately logs ONCE would log twice.
+const gitRunner = createGitRunner({ gitPath: () => gitPath, env: () => loginEnv })
+
 const reviewEngine = createReviewEngine({
-  // Getters for the reason PtyManager's getBackend is one: this runner is
-  // constructed at module scope, and resolveShellEnv() has not run yet.
-  run: createGitRunner({ gitPath: () => gitPath, env: () => loginEnv }),
+  run: gitRunner,
   baselineOf: (panelId) => layoutStore.baseline(panelId),
   peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
   // Closes over baselineCapture, declared below — the same forward-closure
@@ -72,6 +79,31 @@ const reviewEngine = createReviewEngine({
   // have been initialised.
   notARepo: (panelId) => baselineCapture.isNotARepo(panelId),
   repoUnreadable: (panelId) => baselineCapture.unreadableDetail(panelId)
+})
+
+/**
+ * Scratch indexes live under userData, never inside the repository being
+ * committed: a scratch file in the tree would appear as an untracked file in
+ * the very review about to be committed, and would be staged by a user who
+ * pressed commit twice.
+ *
+ * One file per commit, named by timestamp and a counter rather than reused,
+ * so two nodes committing in two repositories at the same moment cannot share
+ * one index — which would produce a commit containing the other repository's
+ * paths.
+ */
+const scratchIndexDir = join(app.getPath('userData'), 'git-index')
+let scratchIndexSeq = 0
+const reviewCommit = createReviewCommitter({
+  run: gitRunner,
+  tempIndexPath: () => {
+    mkdirSync(scratchIndexDir, { recursive: true })
+    return join(scratchIndexDir, `idx-${Date.now()}-${scratchIndexSeq++}`)
+  },
+  // Best effort: a scratch index that outlives its commit is a stale file in
+  // a directory nothing else reads, and throwing here would turn a successful
+  // commit into a rejected invoke.
+  removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } }
 })
 
 // The once-only guard. Written here rather than inside PtyManager because the
@@ -464,7 +496,8 @@ app.whenReady().then(async () => {
       removePrompt: (id) => layoutStore.deletePrompt(id)
     },
     rebuildMenu,
-    reviewEngine
+    reviewEngine,
+    reviewCommit
   )
   createWindow()
 

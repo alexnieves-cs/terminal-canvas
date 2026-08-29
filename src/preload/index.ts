@@ -6,7 +6,7 @@ import {
   type PresetTemplate,
   type CapturedPanel
 } from '../shared/ipc-contract'
-import type { ReviewSubject, ReviewDiffRequest } from '../shared/review'
+import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
 import type {
   AgentStateUpdate,
   PanelId,
@@ -112,7 +112,8 @@ const bridge: CanvasBridge = {
     panel: (panelId: PanelId) => ipcRenderer.invoke(IPC.REVIEW_PANEL, panelId),
     baseline: (panelId: PanelId) => ipcRenderer.invoke(IPC.REVIEW_BASELINE, panelId),
     at: (subject: ReviewSubject) => ipcRenderer.invoke(IPC.REVIEW_AT, subject),
-    diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req)
+    diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req),
+    commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req)
   },
   platform: process.platform
 }

@@ -8,7 +8,7 @@ import type {
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
 import type { SessionBackendInfo, PresetListRow, CapturedPanel } from '../shared/ipc-contract'
-import type { ReviewSubject, ReviewDiffRequest } from '../shared/review'
+import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
@@ -62,7 +62,15 @@ export function registerIpcHandlers(
   // getBackendInfo and rebuildMenu already are: it is main/index.ts's own
   // collaborator, constructed once at module scope, not something the
   // palette surface owns.
-  reviewEngine: ReviewEngine
+  reviewEngine: ReviewEngine,
+  /**
+   * The write half. A separate parameter from reviewEngine rather than a
+   * member of it, because the engine is the read side: a five-call
+   * transaction with a cleanup obligation and a non-fatal reconcile step has
+   * a different failure model, and folding it in would make every engine
+   * fixture carry a filesystem dependency it has no use for.
+   */
+  reviewCommit: (req: ReviewCommitRequest) => Promise<ReviewCommitResult>
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -177,6 +185,8 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.REVIEW_DIFF, (_event, req: ReviewDiffRequest) =>
     reviewEngine.fileDiff(req))
+
+  ipcMain.handle(IPC.REVIEW_COMMIT, (_event, req: ReviewCommitRequest) => reviewCommit(req))
 }
 
 /**

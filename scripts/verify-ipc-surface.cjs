@@ -91,20 +91,24 @@ app.whenReady().then(() => {
     reviewAt: async () => ({ kind: 'not-a-repo' }),
     fileDiff: async () => ({ hunks: [] })
   }
+  // Never invoked here either, for the identical reason reviewEngineStub is
+  // not: this suite only asserts REGISTRATION, never drives review:commit.
+  const reviewCommitStub = async () => ({ kind: 'nothing-to-commit' })
   registerIpcHandlers(
     stub,
     layoutStoreStub,
     () => ({ kind: 'direct', reason: 'verify: direct', hasSession: () => false }),
     presetsStub,
     () => {},
-    reviewEngineStub
+    reviewEngineStub,
+    reviewCommitStub
   )
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M9b takes the surface to 30: review:baseline mints a node, review:at is
-  // the node's own baseline-addressed query, review:diff is one file's hunks.
-  const EXPECTED_CHANNELS = 30
+  // M9c takes the surface to 31: review:commit turns the work a review node
+  // reports into a commit.
+  const EXPECTED_CHANNELS = 31
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
