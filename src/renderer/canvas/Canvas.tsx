@@ -14,7 +14,9 @@ import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
   applyAgentState, attentionIds, clearAgentState, useAgentState, useAttentionIds
 } from '@renderer/session/agent-state-store'
-import { applyLiveSession, clearLiveSession, useLiveSession } from '@renderer/session/live-session-store'
+import {
+  applyLiveSession, clearLiveSession, getLiveSession, useLiveSession
+} from '@renderer/session/live-session-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -1476,13 +1478,18 @@ export function Canvas({
   const promptBodiesRef = useRef(new Map<string, string>())
   const reloadPrompts = useCallback((capturedId: string | null) => {
     const panel = capturedId ? panelsRef.current.find((p) => p.rect.id === capturedId) : undefined
-    // The panel's SPAWN directory, which is what spec.cwd is. Wherever the
-    // user has since cd'd to is only knowable from the pid, and that is
-    // explicitly out of this milestone — so a panel that has wandered lists
-    // the prompts of where it started, not of where it is.
-    // A review node has no cwd of its own, so it lists the saved prompts
-    // alone — the same answer a null captured id already gives.
-    const cwd = panel !== undefined && !isReviewPanel(panel) ? panel.spec.cwd : null
+    // Where the panel IS, falling back to where it was spawned.
+    //
+    // The fallback is the asymmetry this milestone states once and obeys twice:
+    // DISPLAY renders nothing without a live answer, because a spawn-time value
+    // under a present-tense label is indistinguishable from a correct one — but
+    // a CONSUMER needs a directory, and the spawn cwd is exactly what it used
+    // before this milestone, so falling back here is never worse than not
+    // shipping. A review node has no cwd of its own and still lists the saved
+    // prompts alone.
+    const cwd = panel !== undefined && !isReviewPanel(panel)
+      ? (getLiveSession(panel.rect.id)?.cwd ?? panel.spec.cwd)
+      : null
     void window.canvas.prompt.list(cwd).then((rows) => {
       promptBodiesRef.current = new Map(rows.map((r) => [r.id, r.body]))
       setPromptRows(rows.map(({ id, name, source }) => ({ id, name, source })))
@@ -2215,11 +2222,10 @@ export function Canvas({
       // Nothing to save for a review node: it has no spec, and the preset it
       // would produce is a shell in a directory it never named.
       if (!panel || isReviewPanel(panel)) return
-      // spec.cwd is the SPAWN directory, not wherever the user has since cd'd
-      // to — the same limit onCapture records; reading the real one means
-      // asking the pid (ideas-backlog #4).
+      // Where the panel IS, falling back to where it was spawned — the same
+      // asymmetry reloadPrompts obeys, stated there in full.
       const captured: CapturedPanel = {
-        cwd: panel.spec.cwd,
+        cwd: getLiveSession(panel.rect.id)?.cwd ?? panel.spec.cwd,
         args: [...panel.spec.args],
         w: panel.rect.w,
         h: panel.rect.h
