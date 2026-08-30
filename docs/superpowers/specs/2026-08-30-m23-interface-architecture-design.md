@@ -141,6 +141,35 @@ zoom percentage, and no affordance whatsoever.
 
 ### 1.10 There is one theme, and no switch (#10)
 
+> **CORRECTION, made while implementing M23a Task 2.** This section and §9 were
+> written from `CLAUDE.md`, which describes a **dark** palette. `CLAUDE.md` is
+> stale on this point: **M19 ("soft machine — neumorphic repaint of the whole
+> app", `c76c315`) repainted the entire palette LIGHT** — a pale extruded
+> casing with dark terminal wells (`--well`), `color-scheme: light`, and a
+> surface ramp that inverts the dark one's semantics (`--s-4` is *darker* than
+> the ground, because hover and selection are recesses rather than highlights).
+>
+> So the direction of §9 inverts: **the app is light, and the missing theme is
+> dark.** Three consequences, all of which make M23d *cheaper* rather than
+> harder:
+>
+> - The block is still *named* `[data-theme="dark"]` while holding light
+>   values. That is deliberate and documented in `styles.css` — nothing stamps
+>   the attribute, so this one block is the app's only theme and both selectors
+>   resolve to it. Renaming it would change nothing and would be its own lie.
+> - **§9.3's light-ANSI-palette work largely disappears.** Terminals stay dark
+>   by design (`--well`, kept in the same family as the pre-M19 `--s-0`
+>   precisely so `create-terminal.ts` needed one value changed rather than a
+>   re-tune of all sixteen ANSI colours). The hard half of #10 was the terminal,
+>   and M19 already answered it.
+> - **§9.4's widening was M19's own named blocker**, in as many words:
+>   "A dark soft variant is a real follow-up and it needs check 11 taught to
+>   loop over blocks FIRST." Task 2 did that.
+>
+> **The structural diagnosis in §1.1–§1.9 is unaffected** and was re-verified
+> after the correction: the shell is still `220 + 240 + 260`, the inspector
+> still has six sections. M19 repainted; it did not re-architect.
+
 M10 did the expensive half — every colour is a token inside a single
 `:root[data-theme="dark"]` block, structural tokens live on bare `:root` where
 a theme cannot reach them, and `verify:styles` 1/7/8 police the split from both
