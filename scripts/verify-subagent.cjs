@@ -124,11 +124,36 @@ ok('7 cwdOf reads the cwd off a transcript line, and answers null for a line wit
 // THE OVER-CORRECTION GUARD, and the reason 11 is not enough on its own: an
 // implementation that refuses everything satisfies 11 perfectly and ships a
 // feature that never once produces a node. Same shape as verify:review 37b.
+//
+// Three DISTINCT NON-NULL slugs, deliberately. An earlier form of this check
+// used nulls for the two neighbours, which made it the only exerciser of
+// attributable's null arm — and no production caller passes a null slug at
+// all (poll always calls slugFor, which never answers null), so the arm was
+// defended by a check alone, which this repo's own rule says gets read as
+// dead code and deleted. The claim under test is unchanged and is what
+// matters: a panel ALONE in its repository is attributed, and having
+// neighbours elsewhere does not disable it.
 {
-  const one = new Map([['n1', '-repo'], ['n2', null], ['n3', null]])
+  const one = new Map([['n1', '-repo'], ['n2', '-other'], ['n3', '-third']])
   const allowed = S.attributable(one)
   ok('12 a single panel in a repository IS attributed — the refusal must not refuse everything',
-    allowed.has('n1') && allowed.size === 1, [...allowed].join(','))
+    allowed.has('n1') && allowed.size === 3, [...allowed].join(','))
+}
+
+// 12b. The COUNT the ambiguity line states to the user, and the reason it is
+// a derivation rather than the literal `2` the first cut of SubagentLayer
+// rendered. Three panels in one repository is reachable, attributable already
+// handles it, and all three nodes then stated a number that was simply wrong.
+// attributable is written in terms of THIS function, so the refusal and the
+// sentence cannot drift apart.
+{
+  const sharing = S.slugSharing(new Map([
+    ['n1', '-repo'], ['n2', '-repo'], ['n3', '-repo'], ['n4', '-other']
+  ]))
+  ok('12b slugSharing counts the panel itself, so 1 IS the attributable case',
+    sharing.get('n1') === 3 && sharing.get('n4') === 1 &&
+      S.attributable(new Map([['n4', '-other']])).has('n4'),
+    JSON.stringify([...sharing]))
 }
 
 // 13-14. scanForResults. The discriminating clause is that a tool_use is NOT
@@ -165,6 +190,14 @@ const fakeFs = (tree) => {
     listDirs: (p) => (tree.dirs[p] ?? null),
     listFiles: (p) => (tree.files[p] ?? null),
     readText: (p) => { reads.push(p); return tree.text[p] ?? null },
+    // Recorded as `path#max` so a check can assert the claim's confirmation
+    // read is BOUNDED — the whole point of readHead existing beside readText.
+    readHead: (p, max) => {
+      const t = tree.text[p]
+      if (t === undefined) return null
+      reads.push(`${p}#${max}`)
+      return t.slice(0, max)
+    },
     readFrom: (p, from) => {
       const t = tree.text[p]
       if (t === undefined) return null
@@ -320,6 +353,132 @@ const tree1 = () => ({
       second.length === 1 && second[0].records.length === 1 &&
       second[0].records[0].toolUseId === first[0].records[0].toolUseId,
     JSON.stringify({ first, second }))
+}
+
+// 23. THE RE-CLAIM. A claim is made ONCE — poll only calls claim() for a
+// panel it holds no state for — and nothing else ever re-derives it, so a
+// panel that `cd`s into a different repository kept rendering the FIRST
+// repository's subagents beside a panel that is no longer in it. That is a
+// confident WRONG attribution, which is the one direction this module's whole
+// confirmation read exists to refuse, arriving after the confirmation rather
+// than at it. The fix is the slug stored on the claim and compared each tick.
+//
+// The check drives it end to end rather than inspecting the claim: poll in
+// repo A, move the panel to repo B (a different cwd, hence a different slug,
+// hence a different session directory with its own subagent), poll again. The
+// discriminating clause is that the record that comes back is B's — an
+// implementation that never re-claims reports NOTHING at all on the second
+// poll (its records are unchanged, so the dedupe swallows them), which a
+// check asserting only "something came back" would also catch, but one
+// asserting only "no throw" would not.
+{
+  const t = {
+    dirs: {
+      '/root/-a': [{ name: 'SA', createdAt: 500 }],
+      '/root/-b': [{ name: 'SB', createdAt: 500 }]
+    },
+    files: {
+      '/root/-a/SA/subagents': ['agent-a1.meta.json'],
+      '/root/-b/SB/subagents': ['agent-b1.meta.json']
+    },
+    text: {
+      '/root/-a/SA/subagents/agent-a1.meta.json': META('a1', 'toolu_01A'),
+      '/root/-b/SB/subagents/agent-b1.meta.json': META('b1', 'toolu_01B'),
+      '/root/-a/SA.jsonl': JSON.stringify({ type: 'user', cwd: '/a' }) + '\n',
+      '/root/-b/SB.jsonl': JSON.stringify({ type: 'user', cwd: '/b' }) + '\n'
+    }
+  }
+  const w = new S.SubagentWatch(fakeFs(t))
+  const first = w.poll([{ panelId: 'n1', cwd: '/a', spawnedAt: 100 }])
+  const second = w.poll([{ panelId: 'n1', cwd: '/b', spawnedAt: 100 }])
+  ok('23 a panel that moves to another repository re-claims, rather than reporting the old one forever',
+    first.length === 1 && first[0].records.length === 1 && first[0].records[0].id === 'agent-a1' &&
+      second.length === 1 && second[0].records.length === 1 && second[0].records[0].id === 'agent-b1',
+    JSON.stringify({ first, second }))
+}
+
+// 24. THE CAP, and the overflow it reports rather than swallows. Nothing here
+// removes a record once added — a finished subagent stays as a `done` node —
+// so the list only grows, and three invisible costs ride on its length: a
+// 6,400px column of nodes painted over whatever is beside the panel, the
+// whole list re-serialised into the dedupe key every 2s, and the whole list
+// crossing IPC on every change. None of them is a wrong pixel; all of them
+// are heat, which is why only a counting check can see this at all.
+//
+// The remainder is asserted as well as the cap, because a cap that silently
+// stops is a WRONG answer where a cap that says `+N more` is a bounded one —
+// the same rule REVIEW_FILE_CAP already obeys.
+{
+  const over = 5
+  const n = S.SUBAGENT_CAP + over
+  const names = []
+  const text = { '/root/-repo/S1.jsonl': JSON.stringify({ type: 'user', cwd: '/repo' }) + '\n' }
+  for (let i = 0; i < n; i++) {
+    names.push(`agent-${i}.meta.json`)
+    text[`/root/-repo/S1/subagents/agent-${i}.meta.json`] = META(`x${i}`, `toolu_${i}`)
+  }
+  const w = new S.SubagentWatch(fakeFs({
+    dirs: { '/root/-repo': [{ name: 'S1', createdAt: 500 }] },
+    files: { '/root/-repo/S1/subagents': names },
+    text
+  }))
+  const out = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  ok('24 records are capped at SUBAGENT_CAP and the remainder is REPORTED, not dropped',
+    out.length === 1 && out[0].records.length === S.SUBAGENT_CAP && out[0].overflow === over,
+    JSON.stringify({ n: out[0] && out[0].records.length, overflow: out[0] && out[0].overflow }))
+}
+
+// 25. The description bound, at the PARSE boundary so every consumer inherits
+// it rather than the one that remembered. The string is model-authored text
+// out of a file this repo does not own: it crosses IPC, sits in the
+// renderer's store, and is re-serialised into the dedupe key on every tick,
+// so an unbounded one is a per-tick cost set by something a model decided.
+{
+  const long = 'x'.repeat(5000)
+  const m = S.parseMeta(JSON.stringify({ toolUseId: 't', description: long }))
+  ok('25 a description is truncated at DESCRIPTION_MAX rather than carried whole',
+    m !== null && m.description.length === S.DESCRIPTION_MAX && S.DESCRIPTION_MAX < 5000,
+    `${m && m.description.length}`)
+}
+
+// 26. A FAILED confirmation is remembered, and the read that failed is
+// BOUNDED. Both halves are one story: claim() stored no state on the
+// confirmation-failure path, so it re-derived the same session directory and
+// re-read the same parent transcript on every 2s tick, forever — and that
+// transcript is the file that grows to megabytes, read whole, for one line.
+// It is reachable rather than theoretical: slugFor maps `/` and `-` alike to
+// `-`, so /Users/me/my-repo and /Users/me/my/repo share a slug and a panel in
+// one keeps resolving the other's session.
+//
+// The negative is keyed on the session DIRECTORY, never on the panel, so a
+// genuinely new session can still be claimed later — asserted here as the
+// third clause, because a fix that poisoned the panel would satisfy the first
+// two perfectly and leave the feature silently dead for that panel's life.
+{
+  const t = tree1()
+  t.text['/root/-repo/S1.jsonl'] = JSON.stringify({ type: 'user', cwd: '/somewhere/else' }) + '\n'
+  const fs = fakeFs(t)
+  const w = new S.SubagentWatch(fs)
+  const panel = [{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }]
+  w.poll(panel)
+  const boundedFirstRead = fs.reads.some((r) => r === '/root/-repo/S1.jsonl#8192') &&
+    !fs.reads.includes('/root/-repo/S1.jsonl')
+  fs.reads.length = 0
+  w.poll(panel)
+  w.poll(panel)
+  const rereads = fs.reads.length
+
+  // A NEW session directory, with a transcript that does agree: the negative
+  // must not have poisoned the panel.
+  t.dirs['/root/-repo'] = [{ name: 'S1', createdAt: 500 }, { name: 'S2', createdAt: 900 }]
+  t.files['/root/-repo/S2/subagents'] = ['agent-a1.meta.json']
+  t.text['/root/-repo/S2/subagents/agent-a1.meta.json'] = META('a1', 'toolu_01A')
+  t.text['/root/-repo/S2.jsonl'] = JSON.stringify({ type: 'user', cwd: '/repo' }) + '\n'
+  const later = w.poll(panel)
+
+  ok('26 a refused session is not re-read every tick, is read BOUNDED when it is, and does not poison the panel',
+    boundedFirstRead && rereads === 0 && later.length === 1 && later[0].records.length === 1,
+    JSON.stringify({ boundedFirstRead, rereads, later }))
 }
 
 console.log('\n' + '='.repeat(60))

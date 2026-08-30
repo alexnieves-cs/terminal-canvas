@@ -12,6 +12,39 @@ const { execFileSync } = require('node:child_process')
 const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
+/* THE FENCE, at MODULE SCOPE and not inside any one check.
+
+   Every PtyManager this suite constructs resolves its Claude Code projects
+   root ONCE, synchronously, in its own field initializer
+   (`subagentWatch = new SubagentWatch(createFsWatchDeps())`), and
+   resolveProjectsRoot() falls back to homedir()/.claude/projects when
+   TC_CLAUDE_PROJECTS is unset. This suite's default `spec()` uses
+   os.homedir() as the panel cwd, so with no override every manager here —
+   including check 25's, whose whole subject is "this panel has NO Claude Code
+   session" — polls the running developer's REAL ~/.claude/projects every two
+   seconds and slugs straight to a directory that, on the machine this repo is
+   developed on, genuinely exists.
+
+   Two failures, and the loud one is not the worse one. A real session
+   directory CREATED DURING THE RUN (this repo is developed with `claude` open
+   in the very directory these fixture panels point at) post-dates the panel's
+   spawn, so chooseSession accepts it, the claim confirms against a cwd that
+   really does match, and check 25 goes red reporting subagents that belong to
+   the developer's own conversation — a failure nothing in the suite explains
+   and which does not reproduce on a machine without one. Quietly, and always,
+   it is a per-tick read into a directory this repo does not own: the rule
+   M9a's git fence and the prompt fence each cost a fix round to learn, and
+   which panels-entry.cjs already states in full for the Electron tier.
+
+   Checks 26 and 27 still set their own roots and restore what they found;
+   what they restore to is now this fenced default rather than the real home.
+   The path carries a SPACE for the reason every fixture path in this repo
+   does — see the `pane-died` redirect bug. */
+if (!process.env.TC_CLAUDE_PROJECTS || process.env.TC_CLAUDE_PROJECTS.trim() === '') {
+  process.env.TC_CLAUDE_PROJECTS = mkdtempSync(join(tmpdir(), 'tc claude projects '))
+}
+console.log(`[verify:pty-manager] claude projects root: ${process.env.TC_CLAUDE_PROJECTS}`)
+
 /** Absolute path or null. A GUI app has a bare PATH, so never rely on the name. */
 function findTmux() {
   for (const p of ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/tmux']) {

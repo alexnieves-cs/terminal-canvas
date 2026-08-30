@@ -79,6 +79,13 @@ const SubagentGroup = memo(function SubagentGroup({ panel }: SubagentGroupProps)
     // Visible, never silent: an absent feature reads as a broken one. One
     // line rather than a guess at attribution, because a mixed checkout has
     // no correct per-panel answer to draw nodes for.
+    //
+    // The COUNT comes off the wire (slugSharing, one derivation shared with
+    // the refusal itself), never hardcoded to 2: three panels in one
+    // repository is reachable and `attributable` handles it correctly, so a
+    // literal would put a wrong number on screen in the one place this
+    // feature speaks to the user in a sentence — and a sentence that is
+    // wrong about something checkable is worse than one that says nothing.
     return (
       <div
         className="subagent-ambiguous"
@@ -86,12 +93,16 @@ const SubagentGroup = memo(function SubagentGroup({ panel }: SubagentGroupProps)
         data-subagent-ambiguous
         style={{ left: nodeX, top: rect.y, width: NODE_W, zIndex: z }}
       >
-        2 panels share this repository — subagents unattributed
+        {subagents.sharing} panels share this repository — subagents unattributed
       </div>
     )
   }
 
-  if (subagents.records.length === 0) return null
+  // Nothing to draw at all. Guarded on the overflow too: a panel whose every
+  // record was over the cap is impossible today (the cap fills first), but a
+  // `+N more` with no nodes above it is the one state this early return would
+  // silently eat if that ever changed.
+  if (subagents.records.length === 0 && subagents.overflow === 0) return null
 
   return (
     <>
@@ -121,6 +132,28 @@ const SubagentGroup = memo(function SubagentGroup({ panel }: SubagentGroupProps)
           </Fragment>
         )
       })}
+      {subagents.overflow > 0 && (
+        /* The cap's remainder, NAMED rather than silently absent — the same
+           `+N more` REVIEW_FILE_CAP already renders for the same reason. A
+           column that just stops reads as "the agent spawned this many",
+           which is a wrong answer; this one reads as "there are more than a
+           node column can show". Positioned as the row after the last node,
+           so it inherits the same stacking arithmetic rather than restating
+           it. */
+        <div
+          className="subagent-more"
+          data-subagent-overflow
+          data-panel-id={rect.id}
+          style={{
+            left: nodeX,
+            top: rect.y + subagents.records.length * (NODE_H + NODE_GAP),
+            width: NODE_W,
+            zIndex: z
+          }}
+        >
+          +{subagents.overflow} more
+        </div>
+      )}
     </>
   )
 })

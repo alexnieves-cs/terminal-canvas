@@ -1,6 +1,11 @@
 # M13: Subagent nodes on the canvas — Design
 
-**Status:** designed, not yet implemented.
+**Status:** built, verified and documented. Landed across eight tasks plus a
+whole-branch fix wave; `npm run verify` green (19 suites). The load-bearing
+rulings live in `CLAUDE.md`'s M13 entries and the `verify:subagent` /
+`verify:pty-manager` / `verify:panels` table rows; the limits this milestone
+deliberately did NOT close are recorded there too, beside the code they
+affect, rather than in this document.
 **Predecessor:** `2026-08-29-m12-live-cwd-design.md`, and by DEPENDENCY as well
 as by number — M13 attributes a session by a panel's **live** cwd, which is the
 fact M12 made true. A panel that `cd`s into another repository is an ordinary
@@ -310,7 +315,9 @@ Each of these is an ordinary state, not an error, and none of them may throw or
 log repeatedly:
 
 - **No `~/.claude/projects` at all** (the user runs no Claude Code): no nodes,
-  ever, and the watcher does no work per tick beyond one failed `stat`.
+  ever, and the watcher does no work per tick beyond one failed `readdir` —
+  a `stat` in an earlier draft of this line, which is not what the code does
+  and never was: `listDirs` reads the projects root's ENTRIES.
 - **No session directory yet** (a panel running a shell): no nodes.
 - **A `subagents/` directory that never appears**: the common case for a
   session with no fan-out, and it must cost a `readdir` of a missing directory
@@ -369,7 +376,7 @@ check green and the screen plausible.
    the live `.xterm` count is unchanged by a fan-out.
 4. Nodes follow a dragged parent, at 60Hz, without re-rendering any panel.
 5. Two panels sharing one repository produce a visible refusal, never an edge.
-6. A canvas with no Claude Code session anywhere costs one failed `stat` per
+6. A canvas with no Claude Code session anywhere costs one failed `readdir` per
    panel per tick and nothing else.
 
 ## Risks

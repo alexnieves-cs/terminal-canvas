@@ -2206,21 +2206,20 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 35. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
 36. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
-37. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
-38. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
-39. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
+37. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
+38. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
    (one live panel in two windows) waits for M4c for the same reason #4 does.
-40. **#28 accounts** — free to run, but only *after* #9's trust-boundary pass, and only
+39. **#28 accounts** — free to run, but only *after* #9's trust-boundary pass, and only
    once #2 has given the persisted format names worth syncing. Google sign-in and the
    email-code flow are the small half; deciding the machine-owns-processes rule is the
    half that makes it either shippable or M4c in disguise.
-41. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
-42. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
+40. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
+41. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
    argument for #28's accounts than sync is.
-43. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-44. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
+42. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
+43. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
    Only after there is somewhere to audit automations that is not the canvas itself.
-45. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
+44. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
 ## The structural decision underneath all of this — **made in M9b**

@@ -7,6 +7,20 @@
  * throw: this code runs per file, per panel, per 2s tick.
  */
 
+/**
+ * How much of a `description` is kept. Model-authored free text out of a file
+ * this repo does not own and cannot bound: nothing in Claude Code's format
+ * promises a short one, and the whole string is carried across IPC, held in
+ * the renderer's store, AND re-serialised into the poll's dedupe key every 2s
+ * for the life of the panel. An unbounded one is therefore not merely an ugly
+ * node — it is a per-tick cost that grows with something a model decided, and
+ * its failure is invisible: no pixel is wrong, it shows up as heat. Truncated
+ * at the PARSE boundary rather than at render time, so the bound holds for
+ * every consumer at once rather than for the one that remembered it. 200 is
+ * comfortably more than the node's two rendered lines can show.
+ */
+export const DESCRIPTION_MAX = 200
+
 export interface SubagentMeta {
   agentType: string
   description: string
@@ -49,7 +63,7 @@ export function parseMeta(text: string): SubagentMeta | null {
   if (typeof o.toolUseId !== 'string' || o.toolUseId === '') return null
   return {
     agentType: typeof o.agentType === 'string' ? o.agentType : 'agent',
-    description: typeof o.description === 'string' ? o.description : '',
+    description: typeof o.description === 'string' ? o.description.slice(0, DESCRIPTION_MAX) : '',
     toolUseId: o.toolUseId,
     spawnDepth: typeof o.spawnDepth === 'number' ? o.spawnDepth : 1,
     model: typeof o.model === 'string' ? o.model : ''
@@ -104,21 +118,54 @@ export function chooseSession(
  * the strict direction is the correct one: refuse both.
  *
  * A null slug is a panel with no directory to resolve. It contributes nothing
- * and must not make its neighbours ambiguous, or one shell panel would disable
- * the feature for the whole canvas.
+ * and must not make its neighbours ambiguous, or one shell panel would
+ * disable the feature for the whole canvas. **No production caller passes one
+ * today** — `SubagentWatch.poll` always calls `slugFor`, which never answers
+ * null for any string — and that is stated here rather than left to be
+ * rediscovered, because this repo's own rule is that a branch defended only
+ * by a check gets read as dead code and deleted. It stays because
+ * `string | null` is the honest type for "which directory does this panel
+ * resolve to", and a future caller (a panel with no cwd at all) would
+ * otherwise reach a function narrowed to assume one. `verify:subagent` 12 no
+ * longer exercises it either: its fixture is three DISTINCT non-null slugs,
+ * so the over-correction guard it exists for is proven without resting on
+ * this arm.
  */
 export function attributable(slugs: ReadonlyMap<string, string | null>): Set<string> {
+  const sharing = slugSharing(slugs)
+  const allowed = new Set<string>()
+  for (const [panelId, n] of sharing) {
+    if (n === 1) allowed.add(panelId)
+  }
+  return allowed
+}
+
+/**
+ * How many panels share each panel's slug, itself included — so 1 means "this
+ * panel is alone in its repository" and anything higher is the refusal above.
+ *
+ * The ONE derivation of that count, which `attributable` is written in terms
+ * of rather than beside: the renderer's ambiguity line names the number to
+ * the user ("3 panels share this repository"), and a second count computed
+ * for the message would agree with the refusal the day it was written and
+ * drift the first time one of them was wrong — a sentence on screen stating a
+ * number no log explains, the rule `waitingCount` already states for the rail.
+ *
+ * A null slug maps to 0 rather than being omitted, so a caller can tell "no
+ * directory to resolve" from "alone in its repository" without a second
+ * lookup.
+ */
+export function slugSharing(slugs: ReadonlyMap<string, string | null>): Map<string, number> {
   const count = new Map<string, number>()
   for (const slug of slugs.values()) {
     if (slug === null) continue
     count.set(slug, (count.get(slug) ?? 0) + 1)
   }
-  const allowed = new Set<string>()
+  const sharing = new Map<string, number>()
   for (const [panelId, slug] of slugs) {
-    if (slug === null) continue
-    if (count.get(slug) === 1) allowed.add(panelId)
+    sharing.set(panelId, slug === null ? 0 : (count.get(slug) ?? 0))
   }
-  return allowed
+  return sharing
 }
 
 /**

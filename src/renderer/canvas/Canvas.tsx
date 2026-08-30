@@ -615,7 +615,7 @@ export function Canvas({
   // the same reason: the store fans out per panel id, so a per-panel
   // subscription here would deliver every panel's update to every panel.
   useEffect(() => window.canvas.session.onSubagents((update) => {
-    applySubagents(update.panelId, update.records, update.ambiguous)
+    applySubagents(update.panelId, update)
   }), [])
 
   // The three preset events main pushes (see main/index.ts's menu handlers).

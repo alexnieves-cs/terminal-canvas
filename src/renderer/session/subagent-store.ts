@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { PanelId, SubagentRecord } from '@shared/types'
+import type { PanelId, SubagentRecord, SubagentUpdate } from '@shared/types'
 
 /**
  * Which subagents each panel's agent is running, as told by main.
@@ -17,7 +17,11 @@ import type { PanelId, SubagentRecord } from '@shared/types'
 
 export interface Subagents {
   records: SubagentRecord[]
+  /** Subagents beyond main's cap, rendered as `+N more`. */
+  overflow: number
   ambiguous: boolean
+  /** How many panels share this panel's repository, itself included. */
+  sharing: number
 }
 
 const subagents = new Map<PanelId, Subagents>()
@@ -38,11 +42,24 @@ function notify(panelId: PanelId): void {
  * snapshot-on-load, or a second sender. The object is replaced only on a real
  * change, which is what lets the hook below hand React a stable reference.
  */
-export function applySubagents(panelId: PanelId, records: SubagentRecord[], ambiguous: boolean): void {
+export function applySubagents(panelId: PanelId, update: SubagentUpdate): void {
   const prev = subagents.get(panelId)
-  const serialized = JSON.stringify(records)
-  if (prev && prev.ambiguous === ambiguous && JSON.stringify(prev.records) === serialized) return
-  subagents.set(panelId, { records, ambiguous })
+  const serialized = JSON.stringify(update.records)
+  if (
+    prev &&
+    prev.ambiguous === update.ambiguous &&
+    prev.sharing === update.sharing &&
+    prev.overflow === update.overflow &&
+    JSON.stringify(prev.records) === serialized
+  ) {
+    return
+  }
+  subagents.set(panelId, {
+    records: update.records,
+    overflow: update.overflow,
+    ambiguous: update.ambiguous,
+    sharing: update.sharing
+  })
   notify(panelId)
 }
 

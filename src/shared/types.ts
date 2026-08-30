@@ -120,11 +120,37 @@ export interface SubagentRecord {
  * panel, not a delta. A delta protocol would need ordering/ack guarantees a
  * 2s poll with no backpressure does not have — a dropped or reordered delta
  * would leave the renderer's picture of "what's running" wrong indefinitely,
- * with nothing to resync it. A full replace is self-healing: the next tick
- * always repairs the last one, whatever was lost in between.
+ * with nothing to resync it, and a delta applied to the wrong base is a
+ * confident wrong answer rather than a missing one. A full replace has no
+ * base to be wrong about: whatever arrives IS the answer.
+ *
+ * What it is NOT is self-healing, and an earlier draft of this comment
+ * claimed it was. Main sends only on a CHANGE (see SubagentWatch's dedupe),
+ * so a message lost in flight is never resent — the next tick computes the
+ * same key, dedupes, and sends nothing. Nothing repairs a dropped update
+ * until the records themselves next change. That is accepted rather than
+ * fixed: the channel is in-process IPC, and the alternative is either a
+ * re-send every tick (the cost the dedupe exists to remove) or an ack
+ * protocol for a fact that corrects itself the next time a subagent starts
+ * or finishes.
  */
 export interface SubagentUpdate {
   panelId: PanelId
   records: SubagentRecord[]
+  /**
+   * How many subagents were seen beyond main's cap and are therefore NOT in
+   * `records` — rendered as `+N more`. Reported rather than dropped silently
+   * for REVIEW_FILE_CAP's reason: a list that simply stops is
+   * indistinguishable from an agent that stopped spawning.
+   */
+  overflow: number
   ambiguous: boolean
+  /**
+   * How many panels share this panel's repository, itself included — so 1 is
+   * the attributable case and anything higher is why `ambiguous` is set. On
+   * the wire rather than assumed to be 2 by the renderer, because three
+   * panels in one repository is reachable and a line stating the wrong number
+   * is worse than one stating none.
+   */
+  sharing: number
 }

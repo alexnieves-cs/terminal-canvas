@@ -1225,6 +1225,18 @@ body {
   pointer-events: none;
 }
 
+/* The cap's remainder. --fg-4 rather than --fg-3, unlike .subagent-ambiguous
+   above: that one is a sentence explaining why there is nothing to show, while
+   this is a footnote under a column of real nodes and must not compete with
+   them for a reading eye. */
+.subagent-more {
+  position: absolute;
+  padding: var(--sp-1) var(--sp-3);
+  font: var(--t-sm) / var(--lh-tight) var(--font-mono);
+  color: var(--fg-4);
+  pointer-events: none;
+}
+
 /* The palette is in SCREEN space — a sibling of .world, never inside it. A
    scale() ancestor would shrink it at low zoom and would put it in the
    coordinate space xterm-pointer.ts rewrites during a drag. */

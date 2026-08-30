@@ -150,6 +150,24 @@ function createFsWatchDeps(): WatchDeps {
         return null
       }
     },
+    readHead(path, max) {
+      try {
+        const fd = openSync(path, 'r')
+        try {
+          // A bounded read, never readFileSync: the one caller is the claim's
+          // confirmation, and its file is a parent transcript that grows for
+          // the whole life of a conversation — megabytes, read for one line,
+          // on every tick a claim keeps failing. See SubagentWatch.claim.
+          const buffer = Buffer.alloc(max)
+          const read = readSync(fd, buffer, 0, max, 0)
+          return buffer.subarray(0, read).toString('utf8')
+        } finally {
+          closeSync(fd)
+        }
+      } catch {
+        return null
+      }
+    },
     readFrom(path, from) {
       try {
         const fd = openSync(path, 'r')
@@ -407,6 +425,16 @@ export class PtyManager {
         // panel's claimed session directory and report a stranger's
         // subagents as its own.
         this.subagentWatch.drop(spec.panelId)
+        // And firstSpawnedAt with them, for symmetry with kill(): this is the
+        // third route out of the sessions map and was the one that left the
+        // entry standing. Harmless TODAY only because create() overwrites it
+        // whenever `reattached` is false, so the stale value is replaced
+        // before anything reads it — but that is a property of create()'s
+        // branch, not of this map, and it sits three lines under a comment
+        // whose whole subject is a map that WAS left stale on this exact
+        // path. A per-panel map that only some exits clear is the shape the
+        // recycled-id failure keeps arriving in.
+        this.firstSpawnedAt.delete(spec.panelId)
       }
       // AFTER the flush above and before the exit is announced. Order matters
       // in one direction only: 'exited' is terminal in the state machine
@@ -697,6 +725,13 @@ export class PtyManager {
       const payload: SubagentUpdate = {
         panelId: entry.panelId,
         ambiguous: entry.ambiguous,
+        // Both numbers are main's own derivations, carried rather than
+        // recomputed on the far side: `sharing` because the renderer cannot
+        // see the other panels' slugs at all, and `overflow` because the
+        // renderer is handed the CAPPED list and so has nothing left to count
+        // it from.
+        sharing: entry.sharing,
+        overflow: entry.overflow,
         // Field by field, never a spread: spreading would carry toolUseId
         // onto the wire, where it is both meaningless and the internal key
         // of a format this repo does not own. Same rule M5a's absent
