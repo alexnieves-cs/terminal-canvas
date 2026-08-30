@@ -9053,16 +9053,28 @@ app.whenReady().then(async () => {
       //      backward press wraps straight back — two presses, both of them
       //      the case a naive `rows[at + delta]` returns undefined for.
       //
-      //      WHAT IT CANNOT DO, stated rather than implied: it supplies BOTH
-      //      `key` and `code`, so it separates a `key === ']'` implementation
-      //      (dead on arrival — no such key is ever delivered under Shift)
-      //      from a correct one, and it CANNOT separate a `key === '}'` one,
-      //      which is right on the US layout this event is modelled on and
-      //      silently wrong on every layout that prints '}' elsewhere. No
-      //      synthetic event can, because the layout lives below the DOM.
-      //      That rule is held by review, not by this check.
+      //      THE THIRD PRESS IS THE ONE THAT HOLDS THE `code` RULE, and it is
+      //      worth knowing why it exists. Two presses catch a `key === ']'`
+      //      implementation, which is dead on arrival — no such key is ever
+      //      delivered under Shift — and catch NOTHING about a `key === '}'`
+      //      one, which is right on the US layout the first two presses are
+      //      modelled on and silently wrong on every layout that prints '}'
+      //      somewhere else. That second bug is the WORSE of the two, because
+      //      it works for whoever wrote it.
+      //
+      //      An earlier draft of this check concluded the gap was unclosable —
+      //      "the layout lives below the DOM" — and that reasoning was wrong
+      //      in this suite's favour. THE HARNESS CONSTRUCTS THE EVENT, so it
+      //      can hand over any `key` it likes: a German layout delivers the
+      //      physical BracketRight key as '*', so one press of
+      //      { key: '*', code: 'BracketRight' } is exactly as synthetic as
+      //      the two above and turns a `key === '}'` implementation RED while
+      //      leaving a `code`-matching one green. Measured both ways — see the
+      //      task report. Do not delete it as a duplicate of the first press:
+      //      it is the only assertion here that any `key`-based match fails.
       let stepped128 = null
       let back128 = null
+      let foreign128 = null
       if (ids128.length >= 2) {
         await wc.executeJavaScript(
           `window.__m7aWorkspace().switchTo(${JSON.stringify(last128)})`)
@@ -9074,14 +9086,22 @@ app.whenReady().then(async () => {
         await PREV()
         await waitUntil(async () => (await activeId()) === last128, 2500)
         back128 = await activeId()
+        // The same physical key a German keyboard prints as '*'. It has to
+        // wrap forward again from `last128`, which is where the PREV above
+        // has just put the canvas, so this clause asserts the same movement
+        // the first press did and separates a different implementation.
+        await chord('BracketRight', '*')
+        await waitUntil(async () => (await activeId()) === first128, 2500)
+        foreign128 = await activeId()
         // Non-vacuity: starting anywhere but the last row would make this a
         // plain step wearing a wrap's name.
         if (parked !== last128) stepped128 = `PARKED ${parked}`
       }
       ok('128 the workspace chords step forward and back, wrapping',
-        ids128.length >= 2 && stepped128 === first128 && back128 === last128,
+        ids128.length >= 2 && stepped128 === first128 && back128 === last128 &&
+          foreign128 === first128,
         `n=${ids128.length} ids=${ids128.join(',')} last=${last128} ` +
-          `next=${stepped128} prev=${back128}`)
+          `next=${stepped128} prev=${back128} foreignLayout=${foreign128}`)
 
       // 129. HELD, they move exactly ONE step. Neither chord joins
       //      REPEATABLE_KEYS: a held switch steps through every canvas at the
@@ -9200,6 +9220,7 @@ app.whenReady().then(async () => {
       await zoomTo(wc, '-')
       await zoomTo(wc, '-')
       await settle()
+      const laneCamera131 = await wc.executeJavaScript(`window.__m4aViewport()`)
       const expected131 = ids128[(ids128.indexOf(outgoing131) + 1) % ids128.length]
       const incomingCamera131 = cameraOf(expected131)
       await NEXT()
@@ -9212,13 +9233,21 @@ app.whenReady().then(async () => {
       ok('131 a switch while merged leaves the merged view and writes no lane camera',
         merged131 === true && stillMerged131 === false &&
           landed131 === expected131 &&
-          // Non-vacuity: the two cameras the last clause separates must
-          // actually differ, or it separates nothing.
+          // Non-vacuity, twice, and check 130 already carries the second of
+          // them. The two cameras the last clause separates must actually
+          // differ, or it separates nothing. And the LANE camera must differ
+          // from the pre-merge one, or `sameCamera(outgoingStored, preMerge)`
+          // is satisfied by an implementation that wrote the lane camera —
+          // which is the corruption this whole check exists for. If the zooms
+          // above ever stop moving the camera (a clamp, or a merged entry
+          // that refits), this goes RED rather than quietly passing.
           !sameCamera(preMerge131, incomingCamera131) &&
+          !sameCamera(laneCamera131, preMerge131) &&
           sameCamera(outgoingStored131, preMerge131) &&
           sameCamera(camera131, incomingCamera131),
         `merged=${merged131} -> ${stillMerged131} ${outgoing131} -> ${landed131} ` +
           `(expected ${expected131}) preMerge=${JSON.stringify(preMerge131)} ` +
+          `lane=${JSON.stringify(laneCamera131)} ` +
           `outgoingStored=${JSON.stringify(outgoingStored131)} ` +
           `incomingStored=${JSON.stringify(incomingCamera131)} ` +
           `camera=${JSON.stringify(camera131)}`)
