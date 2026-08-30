@@ -3,10 +3,19 @@ import { type TokenTotals } from './cost'
 /**
  * Dollars per MILLION tokens, per class, per model.
  *
- * PRICES AS OF 2026-08-30, from Anthropic's published API price list. A price
- * table with no date is a table nobody can tell is stale, which is why that
- * sentence is here rather than in a commit message — and why an unknown model
- * yields no figure at all rather than a plausible-looking wrong one.
+ * TRANSCRIBED on 2026-08-30 and NOT YET VERIFIED against Anthropic's
+ * published API price list — the whole-branch review's SDD ledger records
+ * these figures as plausible in structure (cache writes above input, cache
+ * reads well below it) but unconfirmed against a real source, and
+ * `claude-opus-5`'s specific rate is a guess rather than a checked value. A
+ * price table with no date is a table nobody can tell is stale, which is why
+ * that sentence is here rather than in a commit message; this is the same
+ * shape of honesty callout as the unverified `--session-id`→filename link and
+ * the `agent.idleAfterMs` provisional default recorded elsewhere in
+ * CLAUDE.md — it needs a hand checking it against the real list once, and
+ * must not be read as confirmed until somebody has done that. An unknown
+ * model yields no figure at all rather than a plausible-looking wrong one,
+ * which is the one thing this table gets to be confident about regardless.
  *
  * These are API LIST prices. They are not what a Max or Pro subscriber is
  * charged, which is nothing per token. Everything downstream labels the
