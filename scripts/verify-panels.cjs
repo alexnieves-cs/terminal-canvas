@@ -3545,7 +3545,7 @@ app.whenReady().then(async () => {
         // loads the built renderer rather than bundling palette-model.ts, so
         // reaching the real SECTIONS value here would mean adding plumbing
         // this task was told not to add.
-        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Manage']
+        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Credentials', 'Manage']
         const unique = headers.length === new Set(headers).size
         const ordered = headers.join(',') ===
           ORDER.filter((label) => headers.includes(label)).join(',')

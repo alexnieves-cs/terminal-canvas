@@ -2504,12 +2504,39 @@ export function Canvas({
       openEntry()
     },
     verifyCredential: (service) => {
-      // No input mode: there is nothing to type, only a round trip to main.
-      // The row's own title already reads "Verify X (label)"; a stored,
-      // never-verified credential shows the service's own label until this
-      // succeeds and CredentialMeta.label updates to what the remote service
-      // actually calls the account.
-      void window.canvas.credential.verify(service).then(reloadCredentials)
+      // On SUCCESS, the reload is the only signal: the row's own title
+      // already reads "Verify X (label)", and a stored, never-verified
+      // credential shows the service's own label until this succeeds and
+      // CredentialMeta.label updates to what the remote service actually
+      // calls the account — a success dialog on top of that would be a
+      // second, noisier way to say what the row itself is about to say.
+      //
+      // On FAILURE, that same silence is exactly wrong: runRow already
+      // closed the palette before this ran, so a rejection reason computed
+      // in main — "GitHub rejected the token — it may be revoked or lack
+      // scope", the single most useful thing this verb can report — would
+      // otherwise cross IPC and be dropped with the overlay already gone.
+      // Surfaced the same way beginSetCredential's own refusal path already
+      // demonstrates: reopen the palette in an input mode carrying the
+      // reason, with feedback: true so it renders as an answer rather than a
+      // hint. 'confirm' rather than 'secret' or 'text', because there is
+      // nothing to type or correct here — only a fact to acknowledge, the
+      // same shape deletePreset's question already reuses this mode for.
+      const label = findService(service)?.label ?? service
+      void window.canvas.credential.verify(service).then((res) => {
+        if (!res.ok) {
+          setInputMode({
+            kind: 'confirm',
+            label: `${label} verification failed — ${res.reason}`,
+            initial: '',
+            feedback: true,
+            submit: () => {}
+          })
+          palette.openPalette()
+          return
+        }
+        reloadCredentials()
+      })
     },
     beginDeleteCredential: (service) => {
       // Gated, not instant — the same reason deletePreset and deleteWorkspace
