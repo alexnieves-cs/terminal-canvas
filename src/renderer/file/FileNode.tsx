@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FilePanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
-import type { FileResult } from '@shared/file-panel'
+import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
 
@@ -20,10 +20,21 @@ import { buildFileNodeModel } from './file-node-model'
  */
 function conflictMessage(
   conflict: 'disk-changed' | 'refused',
-  resultKind: FileResult['kind'] | undefined
+  result: FileResult | undefined
 ): string {
   if (conflict === 'refused') return 'This file changed on disk, so the save was refused.'
-  switch (resultKind) {
+  // Its own sentence, and it has to be: the file is still perfectly readable
+  // TEXT, so every generic wording above and below reads as "something
+  // changed" when what actually happened is that the file outgrew what this
+  // panel can hold — and the fix ("open it somewhere else") is different from
+  // every other arm's. It is also the one arm where the ordinary sentence
+  // would be actively misleading: "this file changed on disk" invites the
+  // user to press Save again, which is exactly the write that would delete
+  // the lines past the cap.
+  if (result?.kind === 'text' && result.truncatedLines > 0) {
+    return `This file grew past the ${FILE_MAX_LINES.toLocaleString()} line viewing limit, so it can no longer be edited here — saving would drop the ${result.truncatedLines.toLocaleString()} lines this panel cannot show.`
+  }
+  switch (result?.kind) {
     case 'missing':
       return 'This file was deleted from disk.'
     case 'binary':
@@ -36,6 +47,14 @@ function conflictMessage(
       return 'This file changed on disk.'
   }
 }
+
+/**
+ * How long a discard stays armed before it forgets it was ever asked.
+ * TerminalPanel's CONFIRM_CLOSE_MS, restated rather than imported: that
+ * constant is not exported, and a file panel's confirmation is its own
+ * decision that happens to agree today.
+ */
+const CONFIRM_DISCARD_MS = 3000
 
 export interface FileNodeProps {
   panel: FilePanel
@@ -139,10 +158,95 @@ function FileNodeImpl({
   // marker vanished at exactly the moment unsaved work was most at risk.
   const dirty = editing && draft !== seedRef.current
 
+  /**
+   * What our own last successful write left on disk, and the mtime main
+   * stamped for it.
+   *
+   * FileWriteResult.mtimeMs was returned and consumed by nobody, and the gap
+   * that leaves is a FALSE conflict on the very next edit. Save content that
+   * happens to be byte-identical to what is already on disk — revert an edit,
+   * or simply press Save twice — and the rename still advances the file's
+   * mtime, but file-watch.ts's dedupe hash deliberately EXCLUDES mtimeMs, so
+   * the re-read hashes identically and no push is sent. The store therefore
+   * still holds the pre-save mtime, the next ✎ seeds `baseMtimeMs` from it,
+   * and the next save is refused with "this file changed on disk since it was
+   * opened here" — a confident claim about another writer that never existed,
+   * offering the user only "discard mine" or "Overwrite theirs".
+   *
+   * A REF here rather than only `baseMtimeMs` state, because the value has to
+   * outlive `closeDraft()` — it is the NEXT draft's seed that is wrong, and by
+   * then the state has been thrown away. And keyed on the CONTENT we wrote so
+   * it invalidates itself: if anyone else has written since, the watcher push
+   * that follows changes `result.content`, the comparison fails, and seeding
+   * falls back to the store's own mtime so the CAS correctly refuses. The one
+   * case it cannot separate is a third party writing bytes IDENTICAL to ours,
+   * where no push arrives either — there the next save refuses as stale,
+   * which is the conservative direction and involves no content difference
+   * anyway.
+   *
+   * It stays in the COMPONENT rather than in file-store.ts on that store's own
+   * stated rule: it is "a cache of main's answer, never a second author of
+   * it", and it holds whole FileResults. Writing this token in would mean
+   * either synthesising a `text` result (inventing `lines` and
+   * `truncatedLines`, which main alone computes) or teaching the store a
+   * second, partial shape — both of which make it an author. A save-time
+   * token is this component's own bookkeeping about its own write, so it
+   * lives with the draft it belongs to.
+   */
+  const lastWriteRef = useRef<{ content: string; mtimeMs: number } | null>(null)
+
   // Captured when the draft OPENS, exactly as ReviewNode's commit draft
   // captures `focusedId` rather than clearing it, and consumed on every exit
   // below — see closeDraft.
   const capturedFocusRef = useRef<string | null>(null)
+
+  /**
+   * The two gestures that DESTROY an unsaved draft, each armed once.
+   *
+   * `dirty` was computed and rendered as a marker and consulted by nothing
+   * else: the close × and a bare Escape in the textarea both discarded typed,
+   * unsaved work outright. That is the failure this milestone spent a fix
+   * round making the marker visible FOR — the user is told there is unsaved
+   * work and then loses it to a single mis-aimed click or a reflexive Escape,
+   * with nothing recoverable and nothing said.
+   *
+   * TerminalPanel's × pattern, followed rather than reinvented: one click
+   * arms and says so, a second within CONFIRM_DISCARD_MS goes through, and
+   * the arming forgets itself. Deliberately NOT a modal — "a dialog on every
+   * close trains you to click through the one that mattered", and this app
+   * has exactly one modal-shaped surface (the palette's confirm mode) which a
+   * panel-local gesture has no business reaching for. Two separate arming
+   * states because they are two different verbs with two different losses:
+   * the × takes the whole panel, Escape takes only the draft.
+   *
+   * Armed only while `dirty`. A clean draft has nothing to lose, so it closes
+   * outright — the same split TerminalPanel draws between an exited panel and
+   * a running one.
+   */
+  const [closeArmed, setCloseArmed] = useState(false)
+  const [discardArmed, setDiscardArmed] = useState(false)
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A file panel unmounts on a workspace switch, and a timer left running
+  // would call setState on a gone component.
+  useEffect(() => () => {
+    if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+  }, [])
+  const disarm = (): void => {
+    if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+    armTimerRef.current = null
+    setCloseArmed(false)
+    setDiscardArmed(false)
+  }
+  const arm = (which: 'close' | 'discard'): void => {
+    if (armTimerRef.current !== null) clearTimeout(armTimerRef.current)
+    if (which === 'close') { setCloseArmed(true); setDiscardArmed(false) }
+    else { setDiscardArmed(true); setCloseArmed(false) }
+    armTimerRef.current = setTimeout(() => {
+      armTimerRef.current = null
+      setCloseArmed(false)
+      setDiscardArmed(false)
+    }, CONFIRM_DISCARD_MS)
+  }
 
   /**
    * The one way edit mode closes, so every exit restores the keyboard.
@@ -155,6 +259,9 @@ function FileNodeImpl({
    * going nowhere — usePalette's rule 4 failure, silently.
    */
   const closeDraft = (): void => {
+    // Every exit clears the arming too, so a timer cannot fire into a panel
+    // that has already left edit mode and re-arm nothing visible.
+    disarm()
     setDraft(null)
     setConflict(null)
     const fid = capturedFocusRef.current
@@ -205,6 +312,25 @@ function FileNodeImpl({
       setConflict('disk-changed')
       return
     }
+    // The file is still text, but it is now TRUNCATED — it grew past
+    // FILE_MAX_LINES while the draft was open. This is a conflict and never a
+    // reseed, and it is the door the editability gate was bypassed through:
+    // buildFileNodeModel sets `editable: false` for a truncated result
+    // precisely so a truncated buffer can never be saved back, but that gate
+    // only ever guarded the EDIT BUTTON. A draft opened while the file was
+    // small, and left untyped-in for a moment while an agent appended 30,000
+    // lines, is NOT dirty — so the ordinary "nothing is lost, reseed" arm
+    // below would replace the draft with the 10,000-line VIEW of the file and
+    // advance baseMtimeMs to the new mtime, at which point the CAS would
+    // happily pass and the save would delete everything past the cap. Checked
+    // BEFORE the mtime early-return, deliberately: an unchanged mtime cannot
+    // produce this today (the edit button refuses a truncated result, so a
+    // draft is never seeded from one), but refusing is the safe direction and
+    // costs one comparison.
+    if (result.truncatedLines > 0) {
+      setConflict('disk-changed')
+      return
+    }
     if (result.mtimeMs === baseMtimeMs) return
     if (dirty) {
       setConflict('disk-changed')
@@ -217,6 +343,24 @@ function FileNodeImpl({
 
   const save = (force: boolean): void => {
     if (draft === null) return
+    // THE GATE, ENFORCED WHERE THE WRITE IS ISSUED. `model.editable` was
+    // checked only where edit mode is ENTERED, which is a different claim: a
+    // draft opened on an editable file can arrive at an uneditable one
+    // without passing that door again (the file grows past FILE_MAX_LINES, is
+    // replaced with something binary, or is deleted), and until this guard
+    // existed `save` consulted nothing but `draft` and `baseMtimeMs`. Do NOT
+    // remove this as redundant with the button's own `disabled` — the reseed
+    // effect above is a second door into a draft, and that is exactly the
+    // path a truncated buffer reached the writer through.
+    //
+    // Fails VISIBLY. A Save button that silently does nothing is its own
+    // defect, so this lands in the same place a rejected write lands, and it
+    // reuses the model's own per-arm sentence rather than inventing a generic
+    // one — the rule buildFileNodeModel already states for `editableNote`.
+    if (!model.editable) {
+      setSaveError(model.editableNote ?? 'This file can no longer be saved from here.')
+      return
+    }
     setSaveError(null)
     void window.canvas.file
       // No panelId: FileWriteRequest is a plain request/response with
@@ -225,6 +369,14 @@ function FileNodeImpl({
       .write({ path, content: draft, baseMtimeMs: force ? null : baseMtimeMs })
       .then((res) => {
         if (res.kind === 'written') {
+          // Adopt the mtime main stamped for OUR write, as the current token,
+          // before the draft closes — see lastWriteRef above for why the ref
+          // is the half that matters (this setState is thrown away by
+          // closeDraft a line later, and is kept because leaving `baseMtimeMs`
+          // describing a superseded revision for even one render is a lie
+          // waiting for a future reader to depend on).
+          lastWriteRef.current = { content: draft, mtimeMs: res.mtimeMs }
+          setBaseMtimeMs(res.mtimeMs)
           // Leave edit mode on success through the same door every other
           // exit uses, so focus comes back exactly once. The watcher's own
           // push will bring the saved content back through the store a
@@ -313,7 +465,13 @@ function FileNodeImpl({
             if (!model.editable || result?.kind !== 'text') return
             seedRef.current = result.content
             setDraft(result.content)
-            setBaseMtimeMs(result.mtimeMs)
+            // The store's mtime is the freshest answer EXCEPT after a save
+            // whose content matched what was already there, which pushes
+            // nothing — see lastWriteRef. Keyed on the content, so a genuine
+            // third-party write (which does push, and does change the
+            // content) falls back to the store and the CAS still refuses.
+            const lw = lastWriteRef.current
+            setBaseMtimeMs(lw !== null && lw.content === result.content ? lw.mtimeMs : result.mtimeMs)
             setConflict(null)
             setSaveError(null)
             capturedFocusRef.current = focusedId
@@ -337,20 +495,30 @@ function FileNodeImpl({
         >
           ⟳
         </button>
-        {/* No arming step, unlike a terminal panel's ×: that button arms
-            because a mis-click there kills a process. There is nothing to kill
-            here, and the same gesture reopens the file. */}
+        {/* Arms only while a draft is DIRTY. This comment used to say there
+            was "nothing to kill here" and that "the same gesture reopens the
+            file" — true while this panel was read-only, and false the moment
+            it grew an editor: an unsaved draft is unrecoverable state, exactly
+            like a running process, and reopening the file brings back what is
+            on DISK, not what the user had typed. A clean panel still closes on
+            one click, because a clean panel really does have nothing to lose. */}
         <button
           type="button"
-          className="panel__close"
-          title="Close this file"
+          className={`panel__close${closeArmed ? ' panel__close--arming' : ''}`}
+          data-file-node-close
+          title={closeArmed ? 'Click again to close and lose your unsaved changes' : 'Close this file'}
           onMouseDown={(event) => {
             event.stopPropagation()
             event.preventDefault()
-            onClose(id)
+            if (!dirty || closeArmed) {
+              disarm()
+              onClose(id)
+              return
+            }
+            arm('close')
           }}
         >
-          ×
+          {closeArmed ? 'lose edits?' : '×'}
         </button>
       </header>
 
@@ -378,7 +546,7 @@ function FileNodeImpl({
           <>
             {conflict !== null && (
               <div className="file-node__conflict" data-file-node-conflict>
-                <span>{conflictMessage(conflict, result?.kind)}</span>
+                <span>{conflictMessage(conflict, result)}</span>
                 {/* One label for every arm, including 'missing': the action
                     is always closeDraft(), which discards the draft and
                     returns to the READ view — and the read view then shows
@@ -403,7 +571,15 @@ function FileNodeImpl({
                 )}
               </div>
             )}
-            {saveError !== null && <p className="file-node__note">{saveError}</p>}
+            {saveError !== null && <p className="file-node__note" data-file-node-save-error>{saveError}</p>}
+            {discardArmed && (
+              // The arming has to be VISIBLE or it is just a key that stopped
+              // working: a first Escape that silently does nothing reads as a
+              // broken editor, which is worse than the discard it prevents.
+              <p className="file-node__note" data-file-node-discard-armed>
+                Press Escape again to discard your unsaved changes.
+              </p>
+            )}
             <textarea
               className="file-node__editor"
               data-file-node-editor
@@ -421,7 +597,19 @@ function FileNodeImpl({
                 // separately, in useNavGrid.ts itself, to name this class.
                 event.stopPropagation()
                 if (event.metaKey && event.key === 's') { event.preventDefault(); save(false) }
-                if (event.key === 'Escape') { event.preventDefault(); closeDraft() }
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  // Escape on a DIRTY draft arms rather than discards. It is
+                  // the most reflexive key on this surface — the way out of
+                  // every other overlay in this app — and until this guard it
+                  // was also the fastest way to lose typed work with no
+                  // confirmation and no undo. A clean draft still leaves on
+                  // one press: there is nothing to lose, and making the
+                  // ordinary exit ask twice is how a confirmation stops being
+                  // read.
+                  if (!dirty || discardArmed) { disarm(); closeDraft(); return }
+                  arm('discard')
+                }
               }}
             />
             <button

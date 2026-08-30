@@ -81,6 +81,12 @@ module.exports = {
   // manager and a window getter, the same shape ptyManager/mainWindow already
   // take in main/index.ts.
   FileWatchers: require('../src/main/file-watch').FileWatchers,
+  /* Check 140 has to push a file PAST the render cap, and it reads the cap
+     from the source of truth rather than restating 10000 in the harness: a
+     literal here would keep passing against a changed constant, i.e. the
+     suite would agree with itself while the app truncated somewhere else —
+     the same rule CASCADE_STEP/SEED_PANELS below already state. */
+  FILE_MAX_LINES: require('../src/shared/file-panel').FILE_MAX_LINES,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
   // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
   // reloads the renderer: reload survival is a tmux property, so a direct

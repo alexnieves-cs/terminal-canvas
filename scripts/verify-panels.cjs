@@ -72,7 +72,8 @@ const {
   createGitRunner,
   createBaselineCapture,
   createReviewCommitter,
-  FileWatchers
+  FileWatchers,
+  FILE_MAX_LINES
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -9481,6 +9482,120 @@ app.whenReady().then(async () => {
         ok('139 a write under a dirty draft raises the conflict banner and does not clobber the draft',
           state139.draft === 'my unsaved work\n' && state139.banner === true,
           `draft=${JSON.stringify(state139.draft)} banner=${state139.banner}`)
+      }
+
+      // 140 — THE TRUNCATION BYPASS. buildFileNodeModel refuses to mark a
+      //       truncated result editable precisely so a truncated buffer can
+      //       never be saved back — saving one deletes every line past
+      //       FILE_MAX_LINES — but until the final review that gate stood
+      //       only on the EDIT BUTTON. verify:rail 81 proves the MODEL
+      //       computes the flag; nothing anywhere proved the SAVE PATH obeys
+      //       it, and it did not: the reseed effect's only conflict test was
+      //       `kind !== 'text'`, so a truncated text result reseeded the
+      //       draft AND advanced baseMtimeMs, after which the CAS passed and
+      //       the write went through reporting success.
+      //
+      //       Driven as the ordinary sequence it is, rather than as an
+      //       exotic one — this app's whole premise is an agent writing
+      //       files beside you: open a small file, press edit, do not type
+      //       yet, let the file grow, then type and save. The claim is
+      //       asserted ON DISK, because the panel is exactly what would lie
+      //       about it: a clobbered file renders as a perfectly ordinary
+      //       10,000-line view with no banner.
+      //
+      //       The edit wait is `:not([disabled])` and the typing goes
+      //       through the NATIVE setter plus a bubbling `input` event, for
+      //       the two reasons checks 138/139 above already record.
+      {
+        const FIXTURE = join(M17_DIR, 'grows past the cap.txt')
+        writeFileSync(FIXTURE, 'line 1\n')
+        await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+        // Scoped to the NEWEST file panel and to an ENABLED button, for
+        // check 139's stated reason: an unscoped wait resolves instantly
+        // against an earlier panel's already-enabled control, before this
+        // panel's own file:read has landed.
+        const newestEnabledEdit = `
+          (() => {
+            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
+            const last = nodes[nodes.length - 1]
+            const btn = last && last.querySelector('[data-file-node-edit]')
+            return !!(btn && !btn.disabled)
+          })()
+        `
+        await waitUntil(() => wc.executeJavaScript(newestEnabledEdit), 5000)
+        await wc.executeJavaScript(`
+          (() => {
+            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
+            nodes[nodes.length - 1].querySelector('[data-file-node-edit]')
+              .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()
+        `)
+        // EVERY query below is scoped to the NEWEST file panel, and that is
+        // not caution — check 139 above deliberately leaves ITS panel in edit
+        // mode with a conflict banner up (it asserts the draft survives and
+        // never closes it). A bare document.querySelector for an editor or a
+        // banner therefore matches 139's panel, so the first draft of this
+        // check typed into the wrong textarea and satisfied its banner wait
+        // instantly against a banner raised two checks earlier — passing while
+        // exercising nothing. It was caught by `saveError=null` in the detail
+        // line: the guard under test sets a save error, and its absence said
+        // the keystroke never reached this panel at all.
+        const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].pop()`
+        await waitUntil(() => wc.executeJavaScript(
+          `!!${NEWEST}.querySelector('[data-file-node-editor]')`), 5000)
+
+        // "The agent" appends a generated file's worth of lines. Past the
+        // cap read from the SOURCE OF TRUTH, never a literal — a hardcoded
+        // 10000 would agree with itself while the app truncated elsewhere.
+        const total = FILE_MAX_LINES + 5000
+        const grown = Array.from({ length: total }, (_, i) => `line ${i + 1}`).join('\n') + '\n'
+        writeFileSync(FIXTURE, grown)
+
+        // The draft is NOT dirty at this point — nothing has been typed —
+        // which is exactly the state the old reseed arm treated as "nothing
+        // is lost, reseed". The banner appearing is what says it no longer
+        // does. Waited on, never slept on: WATCH_DEBOUNCE_MS is an upper
+        // bound rather than a duration.
+        await waitUntil(() => wc.executeJavaScript(
+          `!!${NEWEST}.querySelector('[data-file-node-conflict]')`), 8000)
+
+        // Now the user types their edit and presses Cmd+S, exactly as they
+        // would have before the file grew.
+        await wc.executeJavaScript(`
+          (() => {
+            const node = [...document.querySelectorAll('[data-panel-kind="file"]')].pop()
+            const ta = node.querySelector('[data-file-node-editor]')
+            const setter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype, 'value').set
+            setter.call(ta, 'my one line edit\\n')
+            ta.dispatchEvent(new Event('input', { bubbles: true }))
+            ta.dispatchEvent(new KeyboardEvent('keydown',
+              { key: 's', metaKey: true, bubbles: true }))
+          })()
+        `)
+        // A write, if one escaped, is a synchronous main-side rename behind
+        // one IPC round trip, so this window is generous rather than tight.
+        await new Promise((r) => setTimeout(r, 1500))
+
+        const diskLines = readFileSync(FIXTURE, 'utf8').split('\n').filter((l) => l !== '').length
+        const armed = await wc.executeJavaScript(`
+          (() => {
+            const node = [...document.querySelectorAll('[data-panel-kind="file"]')].pop()
+            return {
+              banner: !!node.querySelector('[data-file-node-conflict]'),
+              saveError: node.querySelector('[data-file-node-save-error]')?.textContent ?? null
+            }
+          })()
+        `)
+        // The disk clause is the claim. The other two are non-vacuity
+        // guards, and both are load-bearing: a panel that never received the
+        // push would also leave the file intact (banner), and a Cmd+S that
+        // never reached this panel's own textarea would too (saveError — the
+        // save-time gate's visible refusal, which is the ONLY evidence the
+        // write path was actually asked to run and said no).
+        ok('140 a file that grows past the render cap under an open draft cannot be saved back over it',
+          diskLines === total && armed.banner === true && armed.saveError !== null,
+          `diskLines=${diskLines} expected=${total} banner=${armed.banner} saveError=${JSON.stringify(armed.saveError)}`)
       }
 
       try { rmSync(M17_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
