@@ -10,4 +10,5 @@
 module.exports = {
   ...require('../src/shared/credential-schema'),
   ...require('../src/main/credential-store'),
+  ...require('../src/main/credential-verify'),
 }

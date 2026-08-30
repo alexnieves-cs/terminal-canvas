@@ -26,6 +26,12 @@ const ok = (label, pass, detail) => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? ' — ' + detail : ''}`)
 }
 
+// Everything from here through the summary and the rmSync runs inside one
+// async IIFE — checks 11–14 need `await`, and wrapping only the new block
+// would let the synchronous summary/exit run BEFORE they report, printing a
+// stale "11/11 passed" and exiting 0 while checks 11–14 never ran at all.
+void (async () => {
+
 // 1. One declared service, and it is github. SERVICES is what lets set()
 // reject an id the schema never declared, and what the palette builds its
 // rows from — the same three payoffs SETTINGS already buys in
@@ -176,8 +182,67 @@ const TOKEN = 'ghp_supersecrettokenvalue123456'
     gone === true && reread.list().length === 0 && !raw.includes('cipher'))
 }
 
+// 11. The happy path: the login GitHub reports becomes the stored label, and
+// the token is never returned. The fetcher is fake — the real request is
+// checked by hand, and the spec says so.
+{
+  const p = join(dir, 'verify.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  let sawToken = null
+  const fetcher = async (_url, token) => {
+    sawToken = token
+    return { status: 200, body: JSON.stringify({ login: 'octocat', email: 'o@example.com' }) }
+  }
+  const res = await mod.verifyCredential({ store, fetcher }, 'github')
+  const keys = res.ok ? Object.keys(res.meta) : []
+  ok('11 a successful verify stores the login as the label and returns no token',
+    res.ok === true && res.meta.label === 'octocat' && !!res.meta.verifiedAt &&
+    !keys.includes('token') && !keys.includes('cipher') && sawToken === TOKEN)
+}
+
+// 12. Only `login` is read out. GET /user returns email and profile data this
+// app has no use for; storing the body wholesale would put personal data in a
+// file whose stated purpose is one token.
+{
+  const p = join(dir, 'verify2.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  const fetcher = async () => ({
+    status: 200, body: JSON.stringify({ login: 'octocat', email: 'o@example.com' })
+  })
+  await mod.verifyCredential({ store, fetcher }, 'github')
+  ok('12 the verify response is not stored wholesale',
+    !readFileSync(p, 'utf8').includes('o@example.com'))
+}
+
+// 13. A 401 is a REFUSAL with a stated reason, not a throw and not a silent
+// failure. A revoked token is the ordinary case here, not an exotic one.
+{
+  const p = join(dir, 'verify3.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  const fetcher = async () => ({ status: 401, body: '{"message":"Bad credentials"}' })
+  const res = await mod.verifyCredential({ store, fetcher }, 'github')
+  ok('13 a rejected token reports why and does not throw',
+    res.ok === false && res.reason.length > 0 && !res.reason.includes(TOKEN))
+}
+
+// 14. Verifying a service with nothing stored is a refusal, not a request.
+// Without this the app issues an outbound call carrying `undefined`.
+{
+  const p = join(dir, 'verify4.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  let called = false
+  const fetcher = async () => { called = true; return { status: 200, body: '{}' } }
+  const res = await mod.verifyCredential({ store, fetcher }, 'github')
+  ok('14 verifying an absent credential makes no request', res.ok === false && called === false)
+}
+
 rmSync(dir, { recursive: true, force: true })
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length ? 1 : 0)
+
+})()
