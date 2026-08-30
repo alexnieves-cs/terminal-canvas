@@ -8857,6 +8857,11 @@ app.whenReady().then(async () => {
         return live.has(FOREIGN_A) || live.has(FOREIGN_B)
       }, 3000)
       const sessionsAfter = await sessionMap(wc)
+      // Scoped to the two ids this check is about — see the clause's own
+      // comment below for why the whole-canvas count was not evidence.
+      const foreignCount = (m) => [FOREIGN_A, FOREIGN_B].filter((id) => m.has(id)).length
+      const foreignBefore = foreignCount(sessionsBefore)
+      const foreignAfter = foreignCount(sessionsAfter)
       const registry124 = await wc.executeJavaScript(`window.__m4aSessions()`)
       const regA = registry124.find((s) => s.id === FOREIGN_A)
       const regB = registry124.find((s) => s.id === FOREIGN_B)
@@ -8870,21 +8875,37 @@ app.whenReady().then(async () => {
       //      session.dormant is already false, and attachSlot spawns. Up to
       //      LIVE_BUDGET agent CLIs, from a view toggle with no gesture.
       //
-      //      The session COUNT is the headline clause; the registry clauses
-      //      are what make it more than a count, because a merged view that
-      //      rendered nothing at all satisfies the count perfectly (check 125
-      //      is the other half of that guard).
+      //      The mass-spawn power is entirely in the ID-SCOPED clauses: the
+      //      `spawned` waitUntil over FOREIGN_A/B, and regA/regB reading
+      //      dormant:true spawned:false. Those are exactly what the ordering
+      //      injection flips (dormant:false spawned:true), and check 125 is
+      //      what stops all of it passing against a view that renders nothing.
+      //
+      //      The session count is scoped to THOSE TWO IDS and no longer to
+      //      the whole canvas. A whole-canvas count measures sessions this
+      //      check does not control: a spawn still in flight from an earlier
+      //      check lands inside the 3s window and inflates it with the merged
+      //      view entirely innocent — observed as `sessions 27 -> 28` with
+      //      both foreign panels correctly `dormant:true spawned:false` — and
+      //      its baseline is not stable between runs either (0, 26 and 27
+      //      have all been seen), which is the tell. sessionsBefore is
+      //      already a settledSessionMap(wc, 4000), so settling harder is not
+      //      the fix. What the narrowing gives up is a spawn under some OTHER
+      //      lane's panel id; that was never evidence here, because this
+      //      check's own camera fixture deliberately puts every other lane
+      //      far outside the cull region, where nothing is promoted under a
+      //      broken build either.
       ok('124 entering the merged view spawns nothing',
         opened === true && spawned !== true &&
           // The forcing guard: without it every clause below is a negative a
           // badly-placed camera satisfies for free.
           inCullRegion !== null && inCullRegion.hit === true &&
           typeof inCullRegion.scale === 'number' && inCullRegion.scale >= 0.5 &&
-          sessionsAfter.size === sessionsBefore.size &&
+          foreignAfter === foreignBefore &&
           regA !== undefined && regA.dormant === true && regA.spawned === false &&
           regB !== undefined && regB.dormant === true && regB.spawned === false,
         `opened=${opened} promotable=${JSON.stringify(inCullRegion)} spawned=${spawned} ` +
-          `sessions ${sessionsBefore.size} -> ${sessionsAfter.size} ` +
+          `foreign sessions ${foreignBefore} -> ${foreignAfter} ` +
           `A=${JSON.stringify(regA)} B=${JSON.stringify(regB)}`)
 
       // 125. Foreign panels are RENDERED and addressable, and their lane says

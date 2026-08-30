@@ -251,10 +251,13 @@ export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag 
 /**
  * The merged view is read-only, so the move rows refuse there.
  *
- * An EXPORTED constant, like every reason above it, because checks compare
- * against the constant and never against the literal — a reason asserted as a
- * string literal keeps passing while the text the user actually reads says
- * something else entirely (the rule verify:palette 66b records).
+ * An EXPORTED constant, like every reason above it, so that a check CAN
+ * compare against the constant rather than against the literal — the rule
+ * verify:palette 66b records, where a reason asserted as a string literal
+ * keeps passing while the text the user actually reads says something else
+ * entirely. Be honest about the tense: nothing imports this one yet. No check
+ * asserts this reason today, and the export is what makes writing one a
+ * one-line import rather than a temptation to paste the sentence.
  */
 export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
 

@@ -579,16 +579,23 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       // is load-bearing rather than incidental.
       const targetId = resolution.kind === 'known' ? resolution.id : doCreateWorkspace(resolution.name)
 
-      for (const { workspace, keep } of removals) workspace.panels = keep
-
       const dest = snapshot.workspaces.find((w) => w.id === targetId)
-      // Unreachable: a 'known' id was already validated above, and a
-      // 'mint' id is always present in snapshot.workspaces the instant
+      // Unreachable: a 'known' id was already validated above, and a 'mint'
+      // id is always present in snapshot.workspaces the instant
       // doCreateWorkspace returns it. Kept as a guard rather than an
-      // assertion so a future change that breaks the invariant fails as
-      // "nothing changed" rather than a crash mid-move with panels already
-      // pulled out of their source.
+      // assertion so a future change that breaks the invariant fails softly.
+      //
+      // It sits ABOVE the removals loop, and that ordering is the whole
+      // reason the guard is worth having: the loop is what actually pulls
+      // panels out of their source records, so a `return null` taken after it
+      // would report failure having already deleted panels from every source
+      // and filed them nowhere — the one outcome worse than either a crash or
+      // a refusal. Returning here leaves every source record untouched. The
+      // one residue it cannot undo is an empty workspace a 'mint' target has
+      // already created, which is visible, nameable and harmless.
       if (!dest) return null
+
+      for (const { workspace, keep } of removals) workspace.panels = keep
       // The rect travels unchanged. A moved panel lands where it was, which
       // may collide with something already in the target — visible the next
       // time the user opens that workspace, and honest: cascading it here
