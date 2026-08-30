@@ -105,6 +105,36 @@ const TOKEN = 'ghp_supersecrettokenvalue123456'
   ok('7 no refusal reason or warning contains the token', !leaked)
 }
 
+// 7b. An encrypt that THROWS while holding the plaintext must become a
+// scrubbed refusal, not a propagating exception. This is the only way to
+// reach the encrypt call at all — 6/7 use available()===false, which
+// short-circuits before encrypt is ever called, so this path was previously
+// completely untested.
+{
+  const p3b = join(dir, 'noleak2.json')
+  const warnings = []
+  const throwingCrypto = {
+    available: () => true,
+    encrypt: () => { throw new Error('keychain died holding ' + TOKEN) },
+    decrypt: (b) => b.toString('utf8')
+  }
+  let threw = false
+  let res
+  try {
+    const store = mod.createCredentialStore({
+      filePath: p3b, crypto: throwingCrypto, onWarning: (m) => warnings.push(m)
+    })
+    res = store.set('github', TOKEN)
+  } catch {
+    threw = true
+  }
+  const leaked = threw || !res || res.ok !== false ||
+    (res.reason && res.reason.includes(TOKEN)) ||
+    warnings.some((w) => w.includes(TOKEN))
+  ok('7b an encrypt that throws is a refusal, and the thrown message never reaches the reason',
+    !threw && res && res.ok === false && !existsSync(p3b) && !leaked)
+}
+
 // 8. An undeclared service is rejected rather than stored — Task 1 check 2's
 // fact, reached through the write path.
 {

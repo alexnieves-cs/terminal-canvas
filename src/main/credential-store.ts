@@ -131,9 +131,23 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
           reason: 'the system keychain is unavailable, so nothing was stored'
         }
       }
+      let cipher: string
+      try {
+        cipher = crypto.encrypt(token).toString('base64')
+      } catch {
+        // Deliberately NOT the thrown message, and deliberately no binding on
+        // the catch: an adapter that failed while holding the plaintext may
+        // have embedded it in the error (a TOCTOU race where available()
+        // answered true microseconds before the keychain went away, or a
+        // buggy adapter that echoes its input), and this is the one module
+        // that must never let that reach a log or a UI string. An unbound
+        // catch means there is nothing here for a later edit to interpolate
+        // by accident.
+        return { ok: false, reason: 'the system keychain refused to encrypt; nothing was stored' }
+      }
       const entry: Entry = {
         label: def.label,
-        cipher: crypto.encrypt(token).toString('base64'),
+        cipher,
         addedAt: new Date().toISOString()
       }
       entries = { ...entries, [service]: entry }
