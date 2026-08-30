@@ -60,7 +60,12 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `SERVICES: readonly CredentialService[]`, `type CredentialServiceId = string`, `interface CredentialMeta { service: string; label: string; addedAt: string; verifiedAt?: string }`, `findService(id: string): CredentialService | undefined`.
+- Produces: `SERVICES: readonly CredentialService[]`, `interface CredentialService { id: string; label: string; help: string }`, `interface CredentialMeta { service: string; label: string; addedAt: string; verifiedAt?: string }`, `findService(id: string): CredentialService | undefined`.
+
+  (An earlier draft also promised `type CredentialServiceId = string`. Removed at
+  pre-flight review: no later task consumes it — Tasks 2 and 5 both take
+  `service: string` — so it would be an exported type with no user, which is
+  the rule the spec cites from CLAUDE.md and ideas-backlog #11.)
 
 - [ ] **Step 1: Write the failing checks**
 
