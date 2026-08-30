@@ -1,4 +1,4 @@
-import { isFilePanel, isReviewPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 
 /**
@@ -48,6 +48,7 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // basename, not the whole path, because a 260px row cannot hold one and the
   // directory is the inspector's job.
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
+  if (isJiraPanel(panel)) return 'Jira tickets'
   return (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
     ?? 'login shell'

@@ -2,7 +2,7 @@ import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import type { PanelUsage } from '@shared/cost'
 import { costOf } from '@shared/pricing'
-import { isFilePanel, isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -387,6 +387,7 @@ export function buildInspectorModel(
       ]
     }
   }
+  if (isJiraPanel(panel)) return { kind: 'file', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
     { key: 'command', label: 'command', value: running?.command ?? 'not started' },

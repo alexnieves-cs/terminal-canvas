@@ -65,6 +65,8 @@ export interface TerminalPanelProps {
    * has to SEE it change, or a panel would keep its × after the toggle.
    */
   readOnly?: boolean
+  openingContext?: string
+  onContextPasted?: (id: string) => void
   /**
    * Whether the agent.glow setting is on. A prop rather than a read inside
    * this component, because memo's shallow compare has to SEE it change —
@@ -80,7 +82,7 @@ const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
-  onClose, glow, entering, onEntryEnd, readOnly = false
+  onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -91,6 +93,11 @@ function TerminalPanelImpl({
   // 60Hz — see agent-state-store.ts.
   const agentState = useAgentState(session.id)
   const agentClass = glow && agentState ? ` panel--agent-${agentState}` : ''
+  useEffect(() => {
+    if (openingContext === undefined || session.status.kind !== 'running') return
+    session.handle.paste(openingContext)
+    onContextPasted?.(session.id)
+  }, [openingContext, onContextPasted, session])
 
   // Arming lives in the view, not the session, so a panel that arms and is
   // then demoted (scrolled off screen) unmounts and forgets. That is the

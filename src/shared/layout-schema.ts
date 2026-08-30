@@ -116,8 +116,9 @@ export interface PersistedFilePanel extends PersistedPanelBase {
    */
   source: FileSource
 }
+export interface PersistedJiraPanel extends PersistedPanelBase { kind: 'jira' }
 
-export type PersistedPanel = PersistedTerminalPanel | PersistedReviewPanel | PersistedFilePanel
+export type PersistedPanel = PersistedTerminalPanel | PersistedReviewPanel | PersistedFilePanel | PersistedJiraPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -435,6 +436,7 @@ function parsePanel(
     if (source === null) return null
     return { ...base, kind: 'file', source }
   }
+  if (kind === 'jira') return { ...base, kind: 'jira' }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
     return null

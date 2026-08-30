@@ -128,16 +128,16 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // 40, not 41. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // 41, not 42. file:changed is an IPC_EVENTS member — a main-to-renderer send,
   // handled by nobody — and this suite asserts over Object.values(IPC), the
   // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
   // records both. M14 Task 5 took the surface to 35 (four credential:* channels,
   // none of which returns a secret). Two milestones then built on that 35 from
   // branches that never saw each other: the file panel's three invokes
   // (file:open/file:read/file:close) and the workspace extras' two
-  // (workspace:merged, workspace:move-panels), which expose the merged-view
-  // store read and the cross-workspace move. 35 + 3 + 2 = 40.
-  const EXPECTED_CHANNELS = 40
+  // (workspace:merged, workspace:move-panels), plus M19's jira:list.
+  // 35 + 3 + 2 + 1 = 41.
+  const EXPECTED_CHANNELS = 41
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -144,6 +144,7 @@ npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
 npm run verify:credentials   # the credential store, its schema and its refusal path, plain node
+npm run verify:jira          # Jira's injected HTTP adapter and ticket mapping, plain node
 npm run verify:subagent      # the subagent scanner and its watcher, against a fake fs, plain node
 npm run verify:file          # the file panel's five-arm read and its directory watch, plain node
 npm run verify:canvas        # real input into the built renderer
@@ -190,6 +191,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:diff / review:commit
                        credential:list / credential:set / credential:delete
                        credential:verify
+                       jira:list
                        file:open / file:read / file:close
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
@@ -593,6 +595,7 @@ price of not killing something.
 | M16 | File panels: a local file on the canvas, watched | ✅ done |
 | M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 | M18 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
+| M19 | Jira context: assigned tickets and ticket-to-session handoff | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11, M12,

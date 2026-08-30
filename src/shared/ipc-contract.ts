@@ -20,6 +20,7 @@ import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
+import type { WorkItem } from './work-item'
 import type { FileResult } from './file-panel'
 import type { AgentKind, PanelUsage } from './cost'
 
@@ -209,6 +210,8 @@ export const IPC = {
   CREDENTIAL_DELETE: 'credential:delete',
   /** Uses the token to make one request; returns what the service said. */
   CREDENTIAL_VERIFY: 'credential:verify',
+  /** Main reads the authenticated user's assigned Jira work. */
+  JIRA_LIST: 'jira:list',
   /**
    * Ask main to show a native open dialog. Resolves to the chosen absolute
    * path, or null if the user cancelled.
@@ -471,6 +474,10 @@ export type CredentialSetResult =
   | { ok: true; meta: CredentialMeta }
   | { ok: false; reason: string }
 
+export type JiraListResult =
+  | { kind: 'items'; items: WorkItem[] }
+  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
+
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
   id: string
@@ -633,6 +640,7 @@ export interface CanvasBridge {
     remove(service: string): Promise<boolean>
     verify(service: string): Promise<CredentialSetResult>
   }
+  jira: { list(): Promise<JiraListResult> }
   file: {
     /** A native open dialog. `null` when the user cancelled. */
     open(): Promise<string | null>

@@ -253,6 +253,7 @@ export interface PaletteActions {
    * keyboard entirely.
    */
   openFile(): void
+  openJira(): void
 }
 
 export interface PaletteContext {
@@ -745,6 +746,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // be driven directly by verify:palette without constructing a whole
   // PaletteContext.
   out.push(...buildCredentialRows(ctx.credentials, SERVICES, actions))
+  if (ctx.credentials.some((credential) => credential.service === 'jira')) {
+    out.push({ id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openJira() })
+  }
 
   // --- Manage --------------------------------------------------------------
   //

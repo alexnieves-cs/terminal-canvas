@@ -1,5 +1,5 @@
 import type { PersistedPanel } from '@shared/layout-schema'
-import { isFilePanel, isReviewPanel, type Panel } from './panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -31,6 +31,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // a terminal panel here rather than anywhere further downstream.
     if (p.kind === 'review') return { ...base, kind: 'review' as const, subject: { ...p.subject } }
     if (p.kind === 'file') return { ...base, kind: 'file' as const, source: { path: p.source.path } }
+    if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -75,6 +76,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // states: an explicit `cwd: undefined` fails the terminal branch's cwd
     // check on the next launch, losing the panel on every relaunch, silently.
     if (isFilePanel(panel)) return { ...base, kind: 'file' as const, source: { path: panel.source.path } }
+    if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
     return {
       ...base,
       kind: 'terminal' as const,
