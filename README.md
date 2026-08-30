@@ -171,6 +171,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:delete / workspace:activate
                        review:panel / review:baseline / review:at
                        review:diff / review:commit
+                       fs:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer

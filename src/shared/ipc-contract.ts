@@ -18,6 +18,7 @@ import type {
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
+import type { DirResult } from './fs-tree'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -178,7 +179,20 @@ export const IPC = {
    * legitimately thirty seconds — so the renderer must render an in-flight
    * state rather than assuming a prompt reply.
    */
-  REVIEW_COMMIT: 'review:commit'
+  REVIEW_COMMIT: 'review:commit',
+  /**
+   * One directory's entries, for the file tree. Addressed by an absolute path
+   * rather than by a panel id: the tree's root follows the SELECTED panel but
+   * a directory the user has expanded is not that panel's business, and a
+   * panel-addressed read would go blank the moment the selection moved.
+   *
+   * Names and kinds only. There is deliberately no `fs:read` — file CONTENTS
+   * never cross this boundary, which is what keeps ideas-backlog #31
+   * ("any feature that moves terminal bytes out of the panel is a disclosure
+   * surface, because agents print secrets") out of this milestone entirely.
+   * A preview pane is a separate milestone that owes #31 an answer first.
+   */
+  FS_LIST: 'fs:list'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -424,6 +438,10 @@ export interface CanvasBridge {
     save(name: string, body: string): Promise<void>
     /** False for an id the saved store does not hold — every project id, for one. */
     remove(id: string): Promise<boolean>
+  }
+  files: {
+    /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
+    list: (path: string) => Promise<DirResult>
   }
   session: {
     info(): Promise<SessionBackendInfo>

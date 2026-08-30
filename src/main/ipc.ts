@@ -10,10 +10,12 @@ import type { CanvasState } from '../shared/layout-schema'
 import type { SessionBackendInfo, PresetListRow, CapturedPanel } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
+import { resolveCwd } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
+import { readDir } from './fs-tree'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -116,6 +118,16 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_LIST, (_event, cwd: string | null) => palette.listPrompts(cwd))
   ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
+
+  // resolveCwd, not the raw path: `~` expansion is main's job and the renderer
+  // has no process.env to do it with — the same boundary readProjectPrompts
+  // sits on. It also answers the home directory for a path that is gone, which
+  // is why readDir's own `gone` arm is still reachable only for a path BELOW a
+  // root that exists (an expanded child that was deleted) rather than for the
+  // root itself.
+  ipcMain.handle(IPC.FS_LIST, (_event, path: string) =>
+    readDir(resolveCwd(path), { showHidden: layoutStore.getSetting('files.showHidden') === true })
+  )
 
   ipcMain.handle(IPC.SETTINGS_LIST, () =>
     SETTINGS.map((def) => ({
