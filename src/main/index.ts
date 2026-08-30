@@ -10,6 +10,8 @@ import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
+import { createCredentialStore } from './credential-store'
+import { createSafeStorageCrypto } from './credential-crypto'
 import { createReviewEngine } from './review-engine'
 import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
@@ -81,6 +83,20 @@ let loginEnv: Record<string, string> = {}
 const layoutStore = createLayoutStore({
   filePath: join(app.getPath('userData'), 'layout.json')
 })
+
+// Its own file, deliberately not a key in layout.json. That file is rewritten
+// in full on a 500ms debounce, CLAUDE.md documents hand-editing it as a
+// supported path, and parseLayout copies a future-version one to .bak — which
+// is correct for a canvas and would silently duplicate a ciphertext.
+const credentialStore = createCredentialStore({
+  filePath: join(app.getPath('userData'), 'credentials.json'),
+  crypto: createSafeStorageCrypto(),
+  onWarning: (m) => console.warn('[credentials]', m)
+})
+// Not yet consumed — Task 5 wires the IPC handlers that read this. The
+// explicit `void` is what keeps noUnusedLocals from failing typecheck in the
+// meantime without disabling the rule.
+void credentialStore
 
 /**
  * The ABSOLUTE path to git, resolved from the login env at whenReady — null
