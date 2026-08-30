@@ -22,7 +22,7 @@ import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDif
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem } from './work-item'
 import type { FileResult } from './file-panel'
-import type { AgentKind, PanelUsage } from './cost'
+import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -395,6 +395,8 @@ export interface PresetTemplate {
   h?: number
   /** Which agent CLI this launches, when this app can account for it. */
   agent?: AgentKind
+  /** The spawn-time knobs for that agent CLI (M18). */
+  agentOptions?: AgentOptions
 }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
@@ -406,6 +408,8 @@ export interface CapturedPanel {
   h: number
   /** Which agent CLI this launches, when this app can account for it. */
   agent?: AgentKind
+  /** The spawn-time knobs for that agent CLI (M18). */
+  agentOptions?: AgentOptions
 }
 
 /** One row of the palette's prompt list. Mirrors PromptListRow in main. */

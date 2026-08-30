@@ -1,4 +1,4 @@
-import type { AgentKind } from './cost'
+import type { AgentKind, AgentOptions } from './cost'
 
 /** Stable identifier for a panel. Doubles as the tmux session name from M4 onward. */
 export type PanelId = string
@@ -26,6 +26,12 @@ export interface PanelSpec {
    * spawned beyond that one flag.
    */
   agent?: AgentKind
+  /**
+   * The spawn-time knobs for that agent CLI (M18). Read ONLY at genuine
+   * creation: tmux `new-session -A` reattaches without re-running the command,
+   * so a changed value here does nothing until the panel is restarted.
+   */
+  agentOptions?: AgentOptions
 }
 
 export interface PtyExitInfo {

@@ -48,6 +48,9 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
         // from the field being absent, and buildInspectorModel's `pinned`
         // test treats the two differently.
         ...(p.agent === undefined ? {} : { agent: p.agent }),
+        // And again for the knobs beside it. One record rather than three
+        // fields is what keeps this ONE conditional line instead of three.
+        ...(p.agentOptions === undefined ? {} : { agentOptions: p.agentOptions }),
         args: [...p.args]
       }
     }
@@ -83,6 +86,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       cwd: panel.spec.cwd,
       ...(panel.spec.command === undefined ? {} : { command: panel.spec.command }),
       ...(panel.spec.agent === undefined ? {} : { agent: panel.spec.agent }),
+      ...(panel.spec.agentOptions === undefined ? {} : { agentOptions: panel.spec.agentOptions }),
       args: [...panel.spec.args]
     }
   })
