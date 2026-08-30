@@ -1161,6 +1161,57 @@ body {
    wear; this is --blue-dim's first user, and it is a token rather than a
    hand-mixed rgba() precisely so the fill stays in step with the ring on
    .panel--selected instead of drifting from it. */
+/* M14's merged view.
+
+   The lanes live INSIDE .world — see MergedLanes.tsx for why a lane header is
+   the one overlay in this app that must scale with the canvas — so this block
+   describes world-space chrome, unlike .canvas-marquee below it.
+
+   z-index 0 against panels' own Panel.z (>= 1) is what keeps a lane BEHIND
+   the panels it labels; pointer-events: none is what keeps a region covering
+   most of the canvas from swallowing the background mousedown that clears
+   selection. */
+.merged-lanes {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.merged-lane {
+  position: absolute;
+  z-index: 0;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-lg);
+  pointer-events: none;
+}
+/* The active workspace's own lane, brighter so "which of these is the canvas
+   I was just on" is answerable at a glance rather than by reading four
+   headers. --blue is the same accent selection already uses, at the same two
+   strengths, rather than a fifth colour nobody has a meaning for. */
+.merged-lane--active {
+  border-color: var(--blue);
+  border-style: solid;
+  background: var(--blue-dim);
+}
+.merged-lane__name {
+  padding: var(--sp-2) var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-lg);
+  line-height: var(--lh-tight);
+}
+.merged-lane--active .merged-lane__name { color: var(--text); }
+
+/* The top bar's merged toggle, held down while the mode is on. Inherits
+   .shell__top button for everything else; only the pressed look is its own,
+   and it reuses the raised/hover surface rather than inventing a state
+   colour. */
+.shell__merge--on {
+  background: var(--s-4);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
 .canvas-marquee {
   position: absolute;
   border: 1px solid var(--blue);

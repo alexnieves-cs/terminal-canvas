@@ -21,6 +21,14 @@ export interface ReviewNodeProps {
   onBeginDrag: (state: DragState) => void
   onClose: (id: string) => void
   /**
+   * Shown inside another workspace's lane in M14's merged view, where
+   * geometry is read-only. Suppresses the close button and the resize
+   * handles for TerminalPanel's reason: Canvas.tsx gates the verbs
+   * themselves, and an affordance that is rendered but refused reads as a
+   * broken app where an absent one reads as a read-only view.
+   */
+  readOnly?: boolean
+  /**
    * A commit landed. The node cannot advance its own baseline — `subject`
    * lives in the panel array — so Canvas rewrites it and the new prop
    * re-fires the query below. See Canvas's own comment for why this is not
@@ -64,7 +72,7 @@ export interface ReviewNodeProps {
  */
 function ReviewNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted,
-  restoreFocus, focusedId
+  restoreFocus, focusedId, readOnly = false
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
@@ -332,18 +340,20 @@ function ReviewNodeImpl({
         {/* No arming step, unlike a terminal panel's ×: there is no process
             to lose. Closing a review node throws away a query, and the same
             button reopens it. */}
-        <button
-          type="button"
-          className="panel__close"
-          title="Close this review"
-          onMouseDown={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            onClose(rect.id)
-          }}
-        >
-          ×
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className="panel__close"
+            title="Close this review"
+            onMouseDown={(event) => {
+              event.stopPropagation()
+              event.preventDefault()
+              onClose(rect.id)
+            }}
+          >
+            ×
+          </button>
+        )}
       </header>
 
       <div
@@ -416,7 +426,7 @@ function ReviewNodeImpl({
         {model.more > 0 && <p className="review-node__more">+{model.more} more files</p>}
       </div>
 
-      {(['e', 's', 'se'] as const).map((edge) => (
+      {(readOnly ? [] : (['e', 's', 'se'] as const)).map((edge) => (
         <div
           key={edge}
           className={`panel__resize panel__resize--${edge}`}

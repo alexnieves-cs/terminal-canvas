@@ -8637,6 +8637,291 @@ app.whenReady().then(async () => {
           `names=${rowsAfter.map((w) => w.name).join(',')}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 124-127 — M14. THE MERGED VIEW: every workspace at once, geometry
+    //     read-only.
+    //
+    //     ONE fixture serves all four, and it is built rather than inherited
+    //     for the reason check 118's block states: by this point the suite
+    //     has created, filled and deleted several workspaces, and a check
+    //     that depended on whatever 123 left active would assert about a
+    //     canvas nobody chose.
+    //
+    //     The ACTIVE workspace here is deliberately EMPTY, and that is lane
+    //     geometry rather than laziness. mergedLayout puts the active
+    //     workspace's lane FIRST and gives an empty one LANE_MIN_WIDTH (800)
+    //     plus LANE_GUTTER (400), so the foreign lane's leftmost panel always
+    //     lands at world x = 1200 whatever the active workspace holds. An
+    //     empty active lane is what makes the FOREIGN panels the only thing
+    //     on the merged canvas, which is what lets check 124 position the
+    //     camera over them precisely (see its own comment) instead of
+    //     depending on a fit whose scale would be decided by check 39's
+    //     never-woken panel parked at world 50000,50000 — a fit there lands
+    //     far below LIVE_MIN_SCALE, where NOTHING is promoted and check 124
+    //     would be green against every implementation including a broken one.
+    // ---------------------------------------------------------------------
+    {
+      const MERGED_WS_ID = 'w40'
+      const MERGED_WS_NAME = 'never merged'
+      const FOREIGN_A = 'w40p1'
+      const FOREIGN_B = 'w40p2'
+
+      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('mergehome')`)
+      await settle()
+      await zoomTo(wc, '0') // camera INITIAL, scale 1 — check 124 needs a known scale
+      await settle()
+
+      // The workspace under test is seeded ON DISK and never rendered by this
+      // renderer, exactly the way check 68's w9 fixture is and for the same
+      // reason: registry.ensure only ever runs against panels this canvas has
+      // shown, so a workspace reached for the FIRST time is the only place
+      // the mass-spawn bug can live. It cannot be seeded into the BOOT layout
+      // the way w9 is, because check 71 deletes every other workspace on its
+      // way to the only-workspace case — this injection has to happen after
+      // that, which is why it is written here rather than beside LAYOUT_PATH.
+      //
+      // Its own persisted focusedId names FOREIGN_A, matching check 68's
+      // fixture. Be honest about what that buys HERE, though: entering the
+      // merged view deliberately does NOT restore any workspace's focusedId
+      // (there is no workspace being switched to), so unlike check 68 this
+      // field pins nothing on its own — the forcing is the camera placement
+      // below. It stays because a future merged view that DID adopt a lane's
+      // focus would spawn from this fixture rather than from a bug report.
+      //
+      // w40: nextWorkspaceId derives from the maximum existing `w<n>`, so a
+      // number well above anything this run has minted cannot collide with a
+      // workspace some earlier check created.
+      flushLayoutStore()
+      const onDisk124 = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      onDisk124.workspaces.push({
+        id: MERGED_WS_ID,
+        name: MERGED_WS_NAME,
+        // Small boxes, close together: the whole lane has to fit on screen at
+        // scale 1 once the camera is centred on it, or the panels this check
+        // is about are outside the cull region and nothing would be promoted
+        // under a broken implementation either.
+        panels: [
+          { id: FOREIGN_A, x: 0, y: 0, w: 300, h: 200, z: 1, cwd: '/tmp', command: '/bin/cat', args: [] },
+          { id: FOREIGN_B, x: 0, y: 240, w: 300, h: 200, z: 2, cwd: '/tmp', command: '/bin/cat', args: [] }
+        ],
+        camera: { ...DEFAULT_CAMERA },
+        selectedId: FOREIGN_A,
+        focusedId: FOREIGN_A
+      })
+      writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk124, null, 2), 'utf8')
+      // layout:load and workspace:merged both answer from layoutStore's
+      // in-memory snapshot, never a fresh disk read — without this the
+      // injection above would be invisible to the renderer.
+      layoutStore.load()
+
+      /** Clicks the top bar's merged toggle. Returns false if it is absent. */
+      const clickMerged = () => wc.executeJavaScript(`(() => {
+        const b = document.querySelector('.shell__merge')
+        if (!b) return false
+        b.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true
+      })()`)
+
+      /** One DOM read of everything the four checks below assert about. */
+      const mergedDom = () => wc.executeJavaScript(`(() => {
+        const panels = [...document.querySelectorAll('.panel[data-panel-id]')]
+        return {
+          on: document.querySelector('.shell__merge--on') !== null,
+          ids: panels.map((e) => e.dataset.panelId),
+          lanes: [...document.querySelectorAll('.merged-lane')].map((e) => ({
+            id: e.dataset.laneId,
+            name: (e.querySelector('.merged-lane__name') || {}).textContent || ''
+          })),
+          closes: document.querySelectorAll('.panel__close').length,
+          resizes: document.querySelectorAll('.panel__resize').length,
+          rects: Object.fromEntries(panels.map((e) => {
+            const r = e.getBoundingClientRect()
+            return [e.dataset.panelId, { x: Math.round(r.left), y: Math.round(r.top) }]
+          }))
+        }
+      })()`)
+
+      /** Every workspace's stored rects, keyed by workspace then panel id. */
+      const storedRects = async () => {
+        const rows = await wc.executeJavaScript(`window.canvas.workspace.merged()`)
+        const out = {}
+        for (const w of rows) {
+          out[w.id] = {}
+          for (const p of w.panels) out[w.id][p.id] = `${p.x},${p.y},${p.w},${p.h}`
+        }
+        return out
+      }
+
+      const sessionsBefore = await settledSessionMap(wc, 4000)
+      const storedBefore = await storedRects()
+
+      // The FIRST entry is a positioning device, and the double entry is what
+      // makes check 124 able to fail at all. The injected defect — committing
+      // the merged array before pty:list resolves — only spawns while
+      // dormantIds is stale, which is a few milliseconds; a panel outside the
+      // cull region during that window is never promoted, the corrected set
+      // lands, and the run stays green against a genuinely broken build. So:
+      // enter once to learn where the lane is and navigate the camera onto it
+      // (goToPanel — centreOn plus selectAndRaise, which is navigation and
+      // never a wake, the rule check 39 pins), leave, and enter AGAIN with the
+      // camera already framing the foreign panels. On that second entry the
+      // stale window and the visible region coincide, which is the only
+      // arrangement in which the defect can reach attachSlot.
+      const opened = await clickMerged()
+      await settle()
+      const firstEntry = await mergedDom()
+      // Through the panel's own RAIL ROW rather than a coordinate click: the
+      // foreign lane is off screen at this point, so there is nothing to
+      // click at, and the rail listing a foreign panel at all is itself part
+      // of what routing railRows through displayPanels buys.
+      const navigated = await wc.executeJavaScript(`(() => {
+        const row = document.querySelector('.rail-row[data-rail-row=${JSON.stringify(FOREIGN_A)}] .rail-row__main')
+        if (!row) return false
+        row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true
+      })()`)
+      await settle()
+      await clickMerged()
+      await settle()
+      await clickMerged()
+      await settle()
+      const secondEntry = await mergedDom()
+
+      // Waits for the FAILURE condition rather than reading absence at once,
+      // the rule check 68 states: a spawn is several IPC round trips deep, so
+      // an instant read could pass because it was early rather than correct.
+      const spawned = await waitUntil(async () => {
+        const live = await sessionMap(wc)
+        return live.has(FOREIGN_A) || live.has(FOREIGN_B)
+      }, 3000)
+      const sessionsAfter = await sessionMap(wc)
+      const registry124 = await wc.executeJavaScript(`window.__m4aSessions()`)
+      const regA = registry124.find((s) => s.id === FOREIGN_A)
+      const regB = registry124.find((s) => s.id === FOREIGN_B)
+
+      // 124. ENTERING THE MERGED VIEW SPAWNS NOTHING. The milestone's most
+      //      dangerous line: registry.ensure early-returns for a session that
+      //      already exists, so a dormantIds correction arriving one render
+      //      after the merged array can never repair a session created
+      //      non-dormant — lod.ts promotes it because dormantIds does not yet
+      //      contain it, the registry's own dormancy guard passes because
+      //      session.dormant is already false, and attachSlot spawns. Up to
+      //      LIVE_BUDGET agent CLIs, from a view toggle with no gesture.
+      //
+      //      The session COUNT is the headline clause; the registry clauses
+      //      are what make it more than a count, because a merged view that
+      //      rendered nothing at all satisfies the count perfectly (check 125
+      //      is the other half of that guard).
+      ok('124 entering the merged view spawns nothing',
+        opened === true && spawned !== true &&
+          sessionsAfter.size === sessionsBefore.size &&
+          regA !== undefined && regA.dormant === true && regA.spawned === false &&
+          regB !== undefined && regB.dormant === true && regB.spawned === false,
+        `opened=${opened} navigated=${navigated} spawned=${spawned} ` +
+          `sessions ${sessionsBefore.size} -> ${sessionsAfter.size} ` +
+          `A=${JSON.stringify(regA)} B=${JSON.stringify(regB)}`)
+
+      // 125. Foreign panels are RENDERED and addressable, and their lane says
+      //      whose they are. Without this, 124 is green against a merged view
+      //      that renders nothing at all — which is exactly what a toggle
+      //      wired to nothing produces.
+      ok('125 the merged view renders foreign panels under a named lane',
+        secondEntry.on === true &&
+          secondEntry.ids.includes(FOREIGN_A) && secondEntry.ids.includes(FOREIGN_B) &&
+          secondEntry.lanes.some((l) => l.id === MERGED_WS_ID && l.name.includes(MERGED_WS_NAME)),
+        `on=${secondEntry.on} ids=${secondEntry.ids.join(',')} ` +
+          `lanes=${JSON.stringify(secondEntry.lanes)} first=${JSON.stringify(firstEntry.lanes)}`)
+
+      // 126. NOTHING IS DRAGGABLE. A real sendInputEvent drag on the foreign
+      //      panel's chrome — the gesture that moves a panel everywhere else
+      //      in this app — must leave it exactly where it was, and no close
+      //      button may be rendered on any merged panel. A dispatched
+      //      MouseEvent would not do: check 75c's rule, and this gesture is
+      //      only a gesture because the browser tracks the button down.
+      //
+      //      Asserted on the SCREEN rect rather than the stored one, because
+      //      a drag that moved the panel would move it visibly first; check
+      //      127 is the stored half.
+      const chrome126 = await wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(FOREIGN_A)}]')
+        if (!p) return null
+        const r = p.getBoundingClientRect()
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 8) }
+      })()`)
+      let dragged126 = null
+      if (chrome126) {
+        wc.sendInputEvent({ type: 'mouseDown', x: chrome126.x, y: chrome126.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 4; i++) {
+          wc.sendInputEvent({
+            type: 'mouseMove',
+            x: chrome126.x + i * 20,
+            y: chrome126.y + i * 15,
+            button: 'left',
+            modifiers: ['leftButtonDown']
+          })
+        }
+        wc.sendInputEvent({
+          type: 'mouseUp', x: chrome126.x + 80, y: chrome126.y + 60, button: 'left', clickCount: 1
+        })
+        await settle()
+        dragged126 = await mergedDom()
+      }
+      ok('126 a merged panel cannot be dragged, resized or closed',
+        chrome126 !== null && dragged126 !== null &&
+          dragged126.rects[FOREIGN_A] !== undefined &&
+          secondEntry.rects[FOREIGN_A] !== undefined &&
+          dragged126.rects[FOREIGN_A].x === secondEntry.rects[FOREIGN_A].x &&
+          dragged126.rects[FOREIGN_A].y === secondEntry.rects[FOREIGN_A].y &&
+          dragged126.closes === 0 && dragged126.resizes === 0,
+        `chrome=${JSON.stringify(chrome126)} ` +
+          `before=${JSON.stringify(secondEntry.rects[FOREIGN_A])} ` +
+          `after=${dragged126 ? JSON.stringify(dragged126.rects[FOREIGN_A]) : 'null'} ` +
+          `closes=${dragged126 && dragged126.closes} resizes=${dragged126 && dragged126.resizes}`)
+
+      // 127. EVERY workspace's STORED rects are byte-identical after a merged
+      //      session — enter, pan, select, leave. This is the check for the
+      //      failure the read-only design exists to prevent: `panels` stays
+      //      the active workspace's real array and remains the only thing the
+      //      layout.save effect writes, so a lane-offset rect can never be
+      //      un-offset wrongly into another workspace's record. That failure
+      //      is a well-formed layout.json with wrong coordinates in it, found
+      //      launches later with nothing to blame — so it is asserted over
+      //      EVERY workspace, not only the one under test.
+      const zoomedOut = await zoomTo(wc, '-')
+      await settle()
+      const selected127 = await wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(FOREIGN_B)}]')
+        if (!p) return false
+        const chrome = p.querySelector('.panel__chrome')
+        if (!chrome) return false
+        chrome.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return true
+      })()`)
+      await settle()
+      await clickMerged() // leave
+      await settle()
+      // The save is coalesced at 500ms in main, so the write this check reads
+      // back has to be forced rather than waited on — the same flush check 19
+      // uses before reading layout.json.
+      flushLayoutStore()
+      const storedAfter = await storedRects()
+      const drifted = []
+      for (const [wsId, before] of Object.entries(storedBefore)) {
+        const after = storedAfter[wsId]
+        if (!after) { drifted.push(`${wsId}: workspace gone`); continue }
+        for (const [panelId, rect] of Object.entries(before)) {
+          if (after[panelId] !== rect) {
+            drifted.push(`${wsId}/${panelId}: ${rect} -> ${after[panelId] ?? 'MISSING'}`)
+          }
+        }
+      }
+      const leftMerged = await mergedDom()
+      ok('127 a merged session writes no rect into any workspace',
+        drifted.length === 0 && leftMerged.on === false && leftMerged.lanes.length === 0,
+        `zoomed=${zoomedOut} selected=${selected127} on=${leftMerged.on} ` +
+          `lanes=${leftMerged.lanes.length} drifted=[${drifted.join('; ')}]`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

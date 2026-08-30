@@ -10,6 +10,9 @@ export interface TopBarProps {
   onFit: () => void
   onSearch: () => void
   onSettings: () => void
+  /** Whether M14's merged view is currently showing. */
+  merged: boolean
+  onToggleMerged: () => void
 }
 
 /**
@@ -40,7 +43,7 @@ const ZOOM_STEP = 1.2
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, scale, onSpawnPreset, onZoomBy, onFit, onSearch, onSettings
+  presets, scale, onSpawnPreset, onZoomBy, onFit, onSearch, onSettings, merged, onToggleMerged
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -71,6 +74,22 @@ export function TopBar({
         <button type="button" className="shell__fit" title="Fit everything (⌘1)"
           {...shellControl(onFit)}>Fit</button>
       </div>
+
+      {/* The merged view's discoverable door. `aria-pressed` and the --on
+          modifier both carry the same fact, because the two audiences are
+          different: a screen reader needs the state named, and the button has
+          to LOOK held down or the only way to tell which mode you are in is
+          to recognise the canvas. It is a toggle rather than an enter/leave
+          pair for the reason PaletteActions.toggleMerged is one. */}
+      <button
+        type="button"
+        className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
+        aria-pressed={merged}
+        title={merged ? 'Back to this workspace' : 'Show every workspace at once'}
+        {...shellControl(onToggleMerged)}
+      >
+        {merged ? 'Merged ✓' : 'Merged'}
+      </button>
 
       <div className="shell__spacer" />
 

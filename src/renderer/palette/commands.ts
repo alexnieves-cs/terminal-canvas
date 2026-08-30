@@ -174,6 +174,16 @@ export interface PaletteActions {
    * what makes Escape a real cancel.
    */
   beginMovePanelsToNewWorkspace(panelIds: string[]): void
+  /**
+   * Enter M14's merged view — every workspace's panels at once, in lanes —
+   * or leave it. ONE verb rather than an enter/leave pair: the row and the
+   * toolbar button are both toggles, and two callbacks would let the two
+   * surfaces disagree about which state the view is in.
+   *
+   * A later task adds a keyboard chord that calls this; it deliberately does
+   * not exist yet.
+   */
+  toggleMerged(): void
 }
 
 export interface PaletteContext {
@@ -461,6 +471,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'canvas',
     shortcut: '⌘0',
     run: () => actions.zoomToFit()
+  })
+  out.push({
+    // The row is deliberately NOT hiddenAtRest, unlike every administration
+    // row: this is a whole VIEW MODE, and its only other gesture is one
+    // toolbar button a user may never have looked at. It says "Merged view"
+    // rather than which way the toggle currently sits, because — unlike a
+    // setting row — the canvas itself is the readout: a user in the merged
+    // view is looking at four lanes.
+    id: 'canvas.merged',
+    title: 'Merged view: every workspace at once',
+    searchText: 'merge merged workspaces lanes all overview toggle',
+    group: 'canvas',
+    run: () => actions.toggleMerged()
   })
   out.push({
     id: 'canvas.reset',

@@ -48,6 +48,20 @@ export interface TerminalPanelProps {
   /** Close this panel for good: the canvas disposes its session and drops it. */
   onClose: (id: string) => void
   /**
+   * M14's merged view: this panel is being shown inside another workspace's
+   * lane, so its geometry belongs to a record this canvas does not own.
+   *
+   * Suppresses the close button and the resize handles — the two affordances
+   * that would otherwise promise a verb the canvas refuses (Canvas.tsx gates
+   * onClosePanel and onBeginDrag on the same flag, which is the authority).
+   * Rendering them inert would be worse than not rendering them: a × that
+   * does nothing reads as the app being broken, where an absent one reads as
+   * the read-only view it is. A prop rather than a read inside this component
+   * for the reason `glow` and `version` are props — memo's shallow compare
+   * has to SEE it change, or a panel would keep its × after the toggle.
+   */
+  readOnly?: boolean
+  /**
    * Whether the agent.glow setting is on. A prop rather than a read inside
    * this component, because memo's shallow compare has to SEE it change —
    * the same reason `version` and `title` are props.
@@ -61,7 +75,8 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose, glow
+  session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
+  onClose, glow, readOnly = false
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -165,14 +180,16 @@ function TerminalPanelImpl({
             every other panel interaction and beats the chrome's own drag
             start — a mousedown on the chrome begins a move, and a close that
             waited for mouseup would fire after a gesture had already begun. */}
-        <button
-          type="button"
-          className={`panel__close${arming ? ' panel__close--arming' : ''}`}
-          onMouseDown={handleClose}
-          title={arming ? 'Click again to kill this process' : 'Close panel'}
-        >
-          {arming ? 'kill?' : '×'}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className={`panel__close${arming ? ' panel__close--arming' : ''}`}
+            onMouseDown={handleClose}
+            title={arming ? 'Click again to kill this process' : 'Close panel'}
+          >
+            {arming ? 'kill?' : '×'}
+          </button>
+        )}
       </header>
 
       {live ? (
@@ -201,7 +218,7 @@ function TerminalPanelImpl({
       {/* East, south and south-east only — see ResizeEdge. Each handle is a
           child of .panel, so it rides .world's transform with the rest of the
           panel instead of sitting in screen pixels and drifting on zoom. */}
-      {(['e', 's', 'se'] as const).map((edge) => (
+      {(readOnly ? [] : (['e', 's', 'se'] as const)).map((edge) => (
         <div
           key={edge}
           className={`panel__resize panel__resize--${edge}`}
