@@ -171,8 +171,10 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:delete / workspace:activate
                        review:panel / review:baseline / review:at
                        review:diff / review:commit
+                       file:open / file:read / file:close
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live
+                       file:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -520,11 +522,13 @@ contains, not only the ones that fit on screen.
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
 | M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
+| M13 | File panels: a local file on the canvas, watched | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11 and
-M12 each landed on their own branch and merged in sequence. A gap in the
-numbers here is a milestone someone else is holding, not one that was skipped.
+claimed by a separate concurrent track and is not yet in this table; M11,
+M12 and M13 each landed on their own branch and merged in sequence. A gap in
+the numbers here is a milestone someone else is holding, not one that was
+skipped.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

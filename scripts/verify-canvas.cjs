@@ -27,7 +27,23 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  external: ['node-pty', 'electron']
+  external: ['node-pty', 'electron'],
+  // The same two aliases electron.vite.config.ts, every plain-node verify
+  // bundle, and (since M13) verify-panels.cjs's own copy of this exact
+  // panels-entry.cjs build already carry. This bundle got away without them
+  // for the identical reason verify-panels.cjs did until M13: every
+  // cross-boundary import main/* made from @shared was an `import type`,
+  // erased before bundling, so nothing was ever actually resolved.
+  // main/file-read.ts now imports real VALUES from @shared/file-panel
+  // (FILE_MAX_BYTES and its siblings), and this build fails outright without
+  // the alias — the app then throws during load, and the harness waits on a
+  // window that will never open rather than reporting anything, so the
+  // failure reads as a hang rather than a red suite. See CLAUDE.md's entry on
+  // verify-panels.cjs's own version of this fix for the full story.
+  alias: {
+    '@shared': join(__dirname, '..', 'src', 'shared'),
+    '@renderer': join(__dirname, '..', 'src', 'renderer')
+  }
 })
 const { registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, createLayoutStore } =
   require(ENTRY_OUT)
