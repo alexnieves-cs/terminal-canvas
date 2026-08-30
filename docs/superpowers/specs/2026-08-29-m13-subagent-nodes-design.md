@@ -158,6 +158,19 @@ No `fs`, no `electron`, no `node-pty`; the plain-node tier, on the terms
 `git-args.ts` and `tmux-args.ts` already meet.
 
 - `slugFor(cwd)` — the project directory name Claude Code derives from a cwd.
+  Observed rule: every character outside `[A-Za-z0-9]` becomes `-`, so `/repo`
+  is `-repo` and `/repo/.claude/x` is `-repo--claude-x`. **It is a HINT, never
+  an oracle.** The mapping is undocumented and was derived from 31 real
+  directory names, none of which contains an underscore or a space, so those
+  two cases are genuinely unknown. That is why attribution confirms rather than
+  trusts — see below.
+- `cwdOf(firstLine)` — the `cwd` field carried on every transcript line. A
+  claimed session is **confirmed** by reading its own first line and checking
+  that cwd against the panel's, so a wrong slug degrades to NO nodes rather
+  than to somebody else's nodes. Guessing the slug is cheap and being wrong
+  about it must stay harmless; this is what makes that true, and it is the one
+  guard that turns an undocumented format from a correctness risk into an
+  availability one.
 - `parseMeta(text)` — a `.meta.json` into a record, or `null`. It must tolerate
   an unknown extra field and a MISSING field individually rather than throwing:
   this is a format this repo does not own and cannot version, so the rule
@@ -366,6 +379,11 @@ check green and the screen plausible.
   the honest-degradation section: every parse failure is an absent node, never
   an error. The feature can go quiet after a Claude Code update and the app must
   not.
+- **The slug mapping is inferred from 31 samples**, none containing an
+  underscore or a space, so those two characters are a genuine unknown. The
+  confirm-by-cwd step is what converts that from a correctness risk (somebody
+  else's nodes) into an availability one (no nodes), which is the trade this
+  whole milestone makes wherever it can.
 - **Attribution across a tmux reattach.** A panel whose session survived a
   reload has a spawn time from a previous run, so "created after the panel
   spawned" is weaker there. The fallback is the ambiguity refusal, which is the
