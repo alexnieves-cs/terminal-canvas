@@ -6940,8 +6940,15 @@ app.whenReady().then(async () => {
       // 116-117 do not touch git at all, but they are nested inside this
       // block purely to reuse its spawnAt/sessionMap helpers — so a machine
       // with no git binary skips them too, and this message says so rather
-      // than leaving them unexplained.
-      console.log('SKIP  99-101, 113-115 and 116-117 — no git binary found (loudly, not silently)')
+      // than leaving them unexplained. M13's file-tree checks (125-129) are
+      // nested here for the identical reason (reusing spawnAt/sessionMap/
+      // settle rather than a second copy of that plumbing) and would
+      // otherwise vanish from the summary with nothing printed at all on a
+      // git-less machine — the exact silent-skip shape this whole guard
+      // exists to avoid. Check 73's own widened four-column assertion lives
+      // OUTSIDE this block (it runs long before this GIT_OK probe) and does
+      // not belong in this message.
+      console.log('SKIP  99-101, 113-115, 116-117 and 125-129 — no git binary found (loudly, not silently)')
     } else {
       const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
       // A directory that is definitely NOT a repository, for check 100.
