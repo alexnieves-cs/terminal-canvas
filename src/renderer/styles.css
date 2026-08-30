@@ -443,6 +443,21 @@ body {
    whole reason insetting is safe; a future window measurement breaks this
    silently. */
 .shell {
+  /* M23a. The query container every breakpoint below resolves against.
+     `inline-size`, never `size`: `size` containment requires a block size
+     independent of contents, which `height: 100%` does not guarantee, and a
+     container that fails that condition silently stops matching — the queries
+     would never fire and every region would sit at its fallback width forever,
+     with nothing thrown.
+
+     A CONTAINER query and never a media query, and that is load-bearing rather
+     than stylistic. A media query measures the VIEWPORT, i.e. the window, and
+     the entire reason insetting the canvas is safe is stated four lines up:
+     nothing in the canvas measures the window. @container measures .shell,
+     which is the element that actually owns this grid, so the breakpoints
+     cannot become the "future window measurement" that comment warns breaks
+     this silently. */
+  container: shell / inline-size;
   --shell-tree-w: 220px;
   --shell-rail-w: 240px;
   --shell-inspector-w: 260px;
@@ -460,6 +475,35 @@ body {
   grid-template-areas:
     "top top top top"
     "tree rail canvas inspector";
+}
+
+/* M23a. The three breakpoints, and ALL THREE CURRENTLY PRODUCE TODAY'S WIDTHS
+   BYTE FOR BYTE. That is the whole point of declaring them in a task with no
+   visual diff: a regression in the MECHANISM is then unambiguous and cannot be
+   confused with a regression in the layout Phase 1 will hang off it.
+
+   THEIR POSITION IN THE FILE IS LOAD-BEARING, and this is the trap. Both
+   `.shell--tree-collapsed` and a `.shell` rule inside an @container block have
+   specificity (0,1,0) — an @container wrapper adds none — so SOURCE ORDER
+   decides between them. Declared after the collapse rules, a breakpoint would
+   silently override every collapse and the toggles would appear dead while
+   still writing their setting to main's store: a control that persists and
+   moves nothing, which is exactly the defect verify:panels 79 exists to catch
+   one layer up. They therefore sit ABOVE the `.shell--*-collapsed` block and
+   must stay there.
+
+   The bounds do not overlap and leave no gap: max-width 1099 and min-width
+   1100 are adjacent integers. An overlapping pair would let both blocks apply
+   at exactly 1100px and the winner would again be source order, which is right
+   until somebody reorders the file. */
+@container shell (max-width: 1099px) {
+  .shell { --shell-tree-w: 220px; --shell-rail-w: 240px; --shell-inspector-w: 260px; }
+}
+@container shell (min-width: 1100px) and (max-width: 1599px) {
+  .shell { --shell-tree-w: 220px; --shell-rail-w: 240px; --shell-inspector-w: 260px; }
+}
+@container shell (min-width: 1600px) {
+  .shell { --shell-tree-w: 220px; --shell-rail-w: 240px; --shell-inspector-w: 260px; }
 }
 
 .shell__top { grid-area: top; }
