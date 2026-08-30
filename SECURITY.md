@@ -77,6 +77,6 @@ binary running as the same user is materially weaker than it would be for a
 signed build, and may amount to little more than obfuscation. This is not a
 defect in what this project claims — `safeStorage`'s actual real-world
 protection has never been measured against this app's own build (see
-CLAUDE.md's "What M13 does NOT prove" for the specifics) — it is the reason
+CLAUDE.md's "What M14 does NOT prove" for the specifics) — it is the reason
 that hand-check has to be done, and re-done, against a **signed** build if
 one is ever cut.

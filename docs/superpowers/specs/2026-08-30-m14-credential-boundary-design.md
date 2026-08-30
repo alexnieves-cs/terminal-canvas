@@ -1,4 +1,4 @@
-# M13: The credential boundary — Design
+# M14: The credential boundary — Design
 
 **Status:** designed, not yet implemented.
 **Predecessor:** `2026-08-29-m12-live-cwd-design.md` by number; by DEPENDENCY,
@@ -181,7 +181,7 @@ payoffs: `set()` can reject an id the schema does not declare, the palette rows
 are generated from the array rather than hand-written, and an unrecognised id
 read from a hand-edited file is dropped with a warning rather than carried
 forward as a permanent typo (`verify:layout` 67's rule, applied to a second
-map). M13 declares exactly one entry, `github`.
+map). M14 declares exactly one entry, `github`.
 
 ### 2. The boundary, as three rules
 

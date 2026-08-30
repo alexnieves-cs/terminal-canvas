@@ -1,4 +1,4 @@
-# M13 Credential Boundary Implementation Plan
+# M14 Credential Boundary Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Electron 43.4.1 (`safeStorage`), Node built-ins only (`node:https`, `node:fs`), esbuild for the plain-node verify bundles. No new npm dependencies.
 
-**Spec:** `docs/superpowers/specs/2026-08-30-m13-credential-boundary-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-30-m14-credential-boundary-design.md`
 
 ## Global Constraints
 
@@ -18,7 +18,7 @@
 - **If `crypto.available()` is false, `set()` refuses and writes nothing.** Never a plaintext fallback.
 - **No error message, warning, or log line may contain a submitted token.** Task 2 check 7 pins this.
 - **`shared/credential-schema.ts` imports NOTHING** — not electron, not node, not a sibling — exactly as `settings-schema.ts` states in its own header. That is what keeps `verify:credentials` in the plain-node tier.
-- **Commit convention:** `feat(m13): …` / `fix(m13): …` / `docs(m13): …`, per CLAUDE.md.
+- **Commit convention:** `feat(m14): …` / `fix(m14): …` / `docs(m14): …`, per CLAUDE.md.
 - **`scripts/credentials-entry.cjs` grows exactly ONE spread per task**, as each module comes into existence. Naming a module before the task that creates it makes esbuild fail to resolve the whole bundle, so NO check runs and the suite cannot go green. `scripts/review-entry.cjs`'s own header records this happening to a previous plan's first draft.
 - **Every `ok(...)` label is a descriptive string, never a bare number.** CLAUDE.md records six checks in `verify:layout` that shipped with bare numeric labels and print no title at all on failure.
 
@@ -184,7 +184,7 @@ export interface CredentialService {
 }
 
 /**
- * M13 declares exactly one. #9's own sequencing advice is that two concrete
+ * M14 declares exactly one. #9's own sequencing advice is that two concrete
  * integrations must exist before anything is generalised from them, and this
  * milestone deliberately does not reach that bar — the store is a store, not
  * an integration surface.
@@ -232,7 +232,7 @@ Expected: PASS, `2/2 passed`.
 ```bash
 npm run typecheck
 git add src/shared/credential-schema.ts scripts/credentials-entry.cjs scripts/verify-credentials.cjs package.json
-git commit -m "feat(m13): declare credential services as data, and the suite that reads them"
+git commit -m "feat(m14): declare credential services as data, and the suite that reads them"
 ```
 
 ---
@@ -571,7 +571,7 @@ This is the one check the whole boundary rests on; watching it fail is what prov
 ```bash
 npm run typecheck
 git add src/main/credential-store.ts scripts/credentials-entry.cjs scripts/verify-credentials.cjs
-git commit -m "feat(m13): the credential store, refusing rather than falling back to plaintext"
+git commit -m "feat(m14): the credential store, refusing rather than falling back to plaintext"
 ```
 
 ---
@@ -646,7 +646,7 @@ Expected: both succeed.
 
 ```bash
 git add src/main/credential-crypto.ts src/main/index.ts
-git commit -m "feat(m13): wire the store to safeStorage, lazily"
+git commit -m "feat(m14): wire the store to safeStorage, lazily"
 ```
 
 ---
@@ -859,7 +859,7 @@ Expected: PASS, `14/14 passed`.
 ```bash
 npm run typecheck
 git add src/main/credential-verify.ts scripts/credentials-entry.cjs scripts/verify-credentials.cjs
-git commit -m "feat(m13): verify a token against GitHub, the app's first outbound request"
+git commit -m "feat(m14): verify a token against GitHub, the app's first outbound request"
 ```
 
 ---
@@ -957,7 +957,7 @@ Expected: PASS, reporting **35** channels.
 
 ```bash
 git add src/shared/ipc-contract.ts src/preload/index.ts src/main/ipc.ts src/main/index.ts
-git commit -m "feat(m13): four credential channels, none of which returns a secret"
+git commit -m "feat(m14): four credential channels, none of which returns a secret"
 ```
 
 ---
@@ -1103,7 +1103,7 @@ Expected: PASS, three more checks than before.
 
 ```bash
 git add src/renderer/palette src/renderer/canvas/Canvas.tsx scripts/verify-palette.cjs
-git commit -m "feat(m13): masked credential entry, reusing input mode rather than a modal"
+git commit -m "feat(m14): masked credential entry, reusing input mode rather than a modal"
 ```
 
 ---
@@ -1167,7 +1167,7 @@ A structural check that has never been watched failing is a regex nobody has pro
 
 ```bash
 git add scripts/verify-meta.cjs
-git commit -m "feat(m13): pin the two boundary rules as source text, since neither has a runtime symptom"
+git commit -m "feat(m14): pin the two boundary rules as source text, since neither has a runtime symptom"
 ```
 
 ---
@@ -1185,7 +1185,7 @@ git commit -m "feat(m13): pin the two boundary rules as source text, since neith
 Append to `scripts/verify-panels.cjs`, continuing its numbering (current last is 124):
 
 ```js
-// 125. The whole boundary in one window: a token entered through the REAL
+// 130. The whole boundary in one window: a token entered through the REAL
 // palette input mode is stored and listed back, and is NOT readable through
 // any member of the bridge. Both halves are required — the negative alone
 // passes before the feature exists, which is the vacuity trap this suite
@@ -1213,7 +1213,7 @@ Append to `scripts/verify-panels.cjs`, continuing its numbering (current last is
     }
   })()`)
 
-  ok(125, masked === 'password' && probe.stored && !probe.leaked && !probe.hasGet,
+  ok(130, masked === 'password' && probe.stored && !probe.leaked && !probe.hasGet,
     `masked=${masked} stored=${probe.stored} leaked=${probe.leaked} hasGet=${probe.hasGet}`)
 }
 ```
@@ -1227,7 +1227,7 @@ Expected: FAIL — the palette row does not exist yet in the built renderer if T
 
 ```bash
 git add scripts/verify-panels.cjs
-git commit -m "feat(m13): prove the boundary end to end in a real renderer"
+git commit -m "feat(m14): prove the boundary end to end in a real renderer"
 ```
 
 ---
@@ -1268,7 +1268,7 @@ In `docs/ideas-backlog.md` #9, note that the trust-boundary design pass it names
 ```bash
 npm run verify
 git add CLAUDE.md README.md docs/ideas-backlog.md
-git commit -m "docs(m13): record the credential boundary and retire #9's prerequisite"
+git commit -m "docs(m14): record the credential boundary and retire #9's prerequisite"
 ```
 
 ---

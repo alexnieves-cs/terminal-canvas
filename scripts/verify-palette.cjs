@@ -17,7 +17,7 @@ buildSync({
   // @renderer became load-bearing in M8d: commands.ts imports the VALUE
   // waitingCount from shell/rail-sections so the palette and the rail share
   // one derivation of a workspace's waiting count. @shared became load-bearing
-  // too, in M13: commands.ts now imports the VALUE SERVICES from
+  // too, in M14: commands.ts now imports the VALUE SERVICES from
   // @shared/credential-schema (not just types, the way every earlier @shared
   // import here was), so both aliases are exercised on every build now — the
   // "needing no alias YET" state verify-viewport.cjs's own comment warns
@@ -436,7 +436,7 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     ]
   }))
   const found = P.filterCommands(rows, 'auth')
-  // found[0] rather than found.length === 1: M13 adds a standing credential
+  // found[0] rather than found.length === 1: M14 adds a standing credential
   // row ("Add GitHub token…") whose haystack ("credential token sign in
   // GitHub Add GitHub token…") happens to contain a,u,t,h as a scattered
   // SUBSEQUENCE too — an incidental collision of fuzzy.ts's subsequence

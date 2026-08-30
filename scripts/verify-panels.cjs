@@ -8548,7 +8548,7 @@ app.whenReady().then(async () => {
       try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
-    // 125. The whole boundary in one window: a token entered through the
+    // 130. The whole boundary in one window: a token entered through the
     //      REAL palette input mode is stored and listed back, and is NOT
     //      readable through any member of the bridge. Both halves are
     //      required — the negative alone passes before the feature exists,
@@ -8558,7 +8558,7 @@ app.whenReady().then(async () => {
     //      Deliberately OUTSIDE the GIT_OK gate above, even though it sits
     //      right after it: this check touches no git at all, only the
     //      palette and the credential store, so gating it behind a git
-    //      probe would silently drop the one check that proves M13's whole
+    //      probe would silently drop the one check that proves M14's whole
     //      boundary claim on any machine with no git binary — the SKIP line
     //      above names 99-101, 113-115 and 116-117 precisely because each of
     //      those genuinely needs git (or, for 116-117, reuses that block's
@@ -8669,7 +8669,7 @@ app.whenReady().then(async () => {
       const preVerifyLeaked = preVerify.str.includes('ghp_e2e_token_value') ||
         Object.keys(preVerify.res || {}).some((k) => k === 'cipher' || k === 'token')
 
-      ok(125, entry.masked === 'password' && probe.stored === true &&
+      ok(130, entry.masked === 'password' && probe.stored === true &&
           probe.leaked === false && probe.hasGet === false &&
           probe.setLeaked === false && preVerifyRefused === true && preVerifyLeaked === false,
         `entry=${JSON.stringify(entry)} stored=${probe.stored} leaked=${probe.leaked} ` +
@@ -8677,13 +8677,13 @@ app.whenReady().then(async () => {
         `preVerify=${JSON.stringify(preVerify.res)}`)
     }
 
-    // Check 125 is the first thing that ever writes through
+    // Check 130 is the first thing that ever writes through
     // panels-entry.cjs's credential store, so this is the first run where
     // this directory holds anything worth removing — a trivially
     // reversible 'enc:' + token fixture otherwise left in $TMPDIR forever.
     // Unlike crepo/repo/notRepo above, this one runs UNCONDITIONALLY — the
     // directory is minted at module load in panels-entry.cjs regardless of
-    // GIT_OK, since check 125 itself needs no git binary and must not be
+    // GIT_OK, since check 130 itself needs no git binary and must not be
     // skipped on a machine without one (see the check's own comment).
     // Same best-effort shape as those three: a failure here must never turn
     // a green suite red.

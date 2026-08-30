@@ -209,7 +209,7 @@ together: the canvas as an agentic super app, not a terminal multiplexer.**
   that run arbitrary commands. That deserves its own design pass before the *first*
   integration ships, not the fifth.
 - **The design pass that constraint asks for has LANDED, and the answer is written down.**
-  M13 — `docs/superpowers/specs/2026-08-30-m13-credential-boundary-design.md` — is that
+  M14 — `docs/superpowers/specs/2026-08-30-m14-credential-boundary-design.md` — is that
   pass, plus the smallest store and consumer that keep it from being a customer-free
   abstraction (the failure #11 warns about, and a credential store with nothing storing
   credentials is its purest instance). **The decision: a stored credential never reaches an

@@ -7,7 +7,7 @@ const { mkdtempSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
-// M13 Task 5: registerIpcHandlers now takes a CredentialStore as its final
+// M14 Task 5: registerIpcHandlers now takes a CredentialStore as its final
 // positional parameter, so this harness needs one too or every credential:*
 // handler throws the moment a check reaches it (Task 8). A fake, reversible
 // crypto — the same one verify-credentials.cjs uses — and a scratch temp

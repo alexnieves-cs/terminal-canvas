@@ -117,7 +117,7 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M13 Task 5 takes the surface to 35: four credential:* channels, none of
+  // M14 Task 5 takes the surface to 35: four credential:* channels, none of
   // which returns a secret.
   const EXPECTED_CHANNELS = 35
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,

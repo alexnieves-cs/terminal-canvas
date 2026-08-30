@@ -22,7 +22,7 @@ export interface CredentialService {
 }
 
 /**
- * M13 declares exactly one. #9's own sequencing advice is that two concrete
+ * M14 declares exactly one. #9's own sequencing advice is that two concrete
  * integrations must exist before anything is generalised from them, and this
  * milestone deliberately does not reach that bar — the store is a store, not
  * an integration surface.
