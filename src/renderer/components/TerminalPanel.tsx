@@ -47,6 +47,10 @@ export interface TerminalPanelProps {
   onSlotUnmount: (id: string) => void
   /** Close this panel for good: the canvas disposes its session and drops it. */
   onClose: (id: string) => void
+  /** True only for a newly created panel, never for an LOD remount. */
+  entering: boolean
+  /** Clears the one-shot entry marker once its wrapper animation finishes. */
+  onEntryEnd: (id: string) => void
   /**
    * Whether the agent.glow setting is on. A prop rather than a read inside
    * this component, because memo's shallow compare has to SEE it change —
@@ -61,7 +65,8 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose, glow
+  session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose,
+  glow, entering, onEntryEnd
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -131,6 +136,14 @@ function TerminalPanelImpl({
       data-agent-state={glow ? agentState : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
+      {/* Motion lives on this wrapper, never .panel: .panel's geometry rides
+          .world and the viewport checks read that transform as a matrix. */}
+      <div
+        className={`panel__motion${entering ? ' panel__motion--entering' : ''}`}
+        onAnimationEnd={(event) => {
+          if (event.animationName === 'panel-enter') onEntryEnd(session.id)
+        }}
+      >
       <header
         className="panel__chrome"
         onMouseDown={(event) => {
@@ -218,6 +231,7 @@ function TerminalPanelImpl({
           }}
         />
       ))}
+      </div>
     </div>
   )
 }

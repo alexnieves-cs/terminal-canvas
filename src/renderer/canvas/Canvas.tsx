@@ -162,6 +162,12 @@ export function Canvas({
   const [panels, setPanels] = useState<Panel[]>(() =>
     initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
   )
+  // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
+  // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
+  // after a pan would turn ordinary navigation into motion. The id is removed
+  // when the wrapper animation ends, so its one-time render cost cannot join
+  // the canvas's 60Hz path either.
+  const [enteringPanelIds, setEnteringPanelIds] = useState<ReadonlySet<string>>(() => new Set())
   // Hit testing and the pip layer keep the WHOLE array: a review node is a
   // real, clickable panel and an off-screen one is a real thing to point at.
   const rects = useMemo(() => panels.map((p) => p.rect), [panels])
@@ -280,6 +286,7 @@ export function Canvas({
     (centre: Point, template?: PresetTemplate) => {
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
+      setEnteringPanelIds((current) => new Set(current).add(id))
       setPanels((current) => {
         // Where the panel ACTUALLY goes. Without this, N presses at an
         // unmoved camera produce N byte-identical rects and the canvas looks
@@ -315,6 +322,14 @@ export function Canvas({
     },
     [commitHistory]
   )
+  const onPanelEntryEnd = useCallback((id: string) => {
+    setEnteringPanelIds((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
+  }, [])
   const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId)
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
@@ -2804,6 +2819,8 @@ export function Canvas({
                 onBeginDrag={onBeginDrag}
                 onClose={onClosePanel}
                 glow={glowEnabled}
+                entering={enteringPanelIds.has(panel.rect.id)}
+                onEntryEnd={onPanelEntryEnd}
               />
             )
           })}

@@ -383,6 +383,7 @@ body {
   height: 7px;
   border-radius: 50%;
   background: var(--border);
+  transition: background var(--dur-1) var(--ease);
 }
 
 /* The same colours the panel border and the card stripe already use, so a
@@ -710,6 +711,24 @@ body {
      every pan (Global Constraint 3). */
   box-shadow: var(--e-2);
   transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+/* A panel enters once, at its spawn point. This wrapper is intentionally the
+   animated layer: .panel remains the stable world-space box whose placement
+   and parent transform verify:panels inspect through DOMMatrixReadOnly. */
+.panel__motion {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel__motion--entering {
+  animation: panel-enter var(--dur-2) var(--ease) both;
 }
 
 .panel--selected {
@@ -1470,6 +1489,8 @@ body {
   *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    animation-fill-mode: none !important;
     transition-duration: .01ms !important;
   }
 }
@@ -1543,7 +1564,22 @@ body {
   background: var(--s-1);
   color: var(--fg-2);
   font-size: var(--t-md);
+  animation: navgrid-cell-enter var(--dur-1) var(--ease) both;
 }
+/* A held-modifier overlay must appear faster than a page load: the small
+   scale gives its grid a coherent reveal without competing with the canvas. */
+@keyframes navgrid-cell-enter {
+  from { opacity: 0; transform: scale(.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.navgrid__cell:nth-child(2) { animation-delay: 30ms; }
+.navgrid__cell:nth-child(3) { animation-delay: 60ms; }
+.navgrid__cell:nth-child(4) { animation-delay: 90ms; }
+.navgrid__cell:nth-child(5) { animation-delay: 120ms; }
+.navgrid__cell:nth-child(6) { animation-delay: 150ms; }
+.navgrid__cell:nth-child(7) { animation-delay: 180ms; }
+.navgrid__cell:nth-child(8) { animation-delay: 210ms; }
+.navgrid__cell:nth-child(9) { animation-delay: 240ms; }
 .navgrid__cell--empty { background: var(--s-0); border-style: dashed; }
 /* --s-4 is the selected fill, and the cursor IS a selection. --s-5 is
    deliberately not used: it is the pressed state — transient, never a text
