@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -163,6 +163,17 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.WORKSPACE_DELETE, (_event, id: string) =>
     layoutStore.deleteWorkspace(id)
+  )
+
+  ipcMain.handle(IPC.WORKSPACE_MERGED, (): MergedWorkspace[] => layoutStore.mergedWorkspaces())
+
+  ipcMain.handle(
+    IPC.WORKSPACE_MOVE_PANELS,
+    (
+      _event,
+      panelIds: PanelId[],
+      target: { workspaceId: string } | { newName: string }
+    ): { workspaceId: string } | null => layoutStore.movePanels(panelIds, target)
   )
 
   ipcMain.handle(IPC.REVIEW_PANEL, (_event, panelId: PanelId) => reviewEngine.review(panelId))

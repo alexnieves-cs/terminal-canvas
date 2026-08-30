@@ -108,7 +108,10 @@ const bridge: CanvasBridge = {
     create: (name: string) => ipcRenderer.invoke(IPC.WORKSPACE_CREATE, name),
     rename: (id: string, name: string) =>
       ipcRenderer.invoke(IPC.WORKSPACE_RENAME, id, name),
-    remove: (id: string) => ipcRenderer.invoke(IPC.WORKSPACE_DELETE, id)
+    remove: (id: string) => ipcRenderer.invoke(IPC.WORKSPACE_DELETE, id),
+    merged: () => ipcRenderer.invoke(IPC.WORKSPACE_MERGED),
+    movePanels: (panelIds: PanelId[], target: { workspaceId: string } | { newName: string }) =>
+      ipcRenderer.invoke(IPC.WORKSPACE_MOVE_PANELS, panelIds, target)
   },
   review: {
     panel: (panelId: PanelId) => ipcRenderer.invoke(IPC.REVIEW_PANEL, panelId),

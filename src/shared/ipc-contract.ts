@@ -138,6 +138,26 @@ export const IPC = {
   WORKSPACE_RENAME: 'workspace:rename',
   WORKSPACE_DELETE: 'workspace:delete',
   /**
+   * Every workspace's panels at once, for the merged view.
+   *
+   * A SECOND channel rather than a widening of WORKSPACE_LIST, which already
+   * fires on mount, on every palette open, on every workspace mutation, on
+   * every switch and on every panels.length change. Putting every panel of
+   * every workspace on that payload makes a hot path fat to serve a mode
+   * that is off almost always.
+   *
+   * Returns records, not display panels: the renderer places them into lanes
+   * (merged-layout.ts), because lane placement is pure geometry over plain
+   * data and belongs in the tier that can test it under plain node.
+   */
+  WORKSPACE_MERGED: 'workspace:merged',
+  /**
+   * Relocates panels between workspace records. Touches NO SESSION on either
+   * side — a moved panel becomes a hidden workspace's panel with a running
+   * tmux session, the state a switch already produces. See LayoutStore.movePanels.
+   */
+  WORKSPACE_MOVE_PANELS: 'workspace:move-panels',
+  /**
    * What has changed in this panel's repository since its session started.
    *
    * An invoke, and pull-only: no watcher and no push channel. The renderer
@@ -471,6 +491,17 @@ export interface CanvasBridge {
     rename(id: string, name: string): Promise<boolean>
     /** `remove`, not `delete`: `delete` is reserved, as PresetBridge already found. */
     remove(id: string): Promise<boolean>
+    /** Every workspace's whole panels at once, for the merged cross-workspace view. */
+    merged(): Promise<MergedWorkspace[]>
+    /**
+     * Relocates panels between workspace records. Touches no session on
+     * either side. Null, and nothing changed, when `target` names an unknown
+     * workspace id.
+     */
+    movePanels(
+      panelIds: PanelId[],
+      target: { workspaceId: string } | { newName: string }
+    ): Promise<{ workspaceId: string } | null>
   }
   review: {
     panel(panelId: PanelId): Promise<ReviewResult>

@@ -106,9 +106,9 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M9c takes the surface to 31: review:commit turns the work a review node
-  // reports into a commit.
-  const EXPECTED_CHANNELS = 31
+  // M14 takes the surface to 33: workspace:merged and workspace:move-panels
+  // expose Task 1's store reads/mutations across the process boundary.
+  const EXPECTED_CHANNELS = 33
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

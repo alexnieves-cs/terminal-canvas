@@ -169,6 +169,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:acknowledge
                        workspace:list / workspace:create / workspace:rename
                        workspace:delete / workspace:activate
+                       workspace:merged / workspace:move-panels
                        review:panel / review:baseline / review:at
                        review:diff / review:commit
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
