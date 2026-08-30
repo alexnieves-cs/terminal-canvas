@@ -43,11 +43,15 @@ const p = (id, x, y, w = 720, h = 460) => ({ id, x, y, w, h, z: 1, cwd: '~', arg
 // 1. The whole point: two workspaces whose panels overlap by construction
 //    (both laid out around the origin, months apart, by two cameras that
 //    never knew about each other) must not overlap after placement. This is
-//    the obstacle M7's own paragraph misnamed as LIVE_BUDGET.
+//    the obstacle M7's own paragraph misnamed as LIVE_BUDGET. w2's panels sit
+//    at NEGATIVE world coordinates on purpose — an entirely ordinary canvas
+//    that has been panned left — so the claim is proven across the sign
+//    boundary rather than only in the positive quadrant, where box.x is 0 and
+//    the bounding-box subtraction that does the real work is a no-op.
 {
   const out = R.mergedLayout([
     ws('w1', 'Main', true, [p('n1', 0, 0), p('n2', 100, 100)]),
-    ws('w2', 'School', false, [p('n3', 0, 0), p('n4', 100, 100)])
+    ws('w2', 'School', false, [p('n3', -900, -50), p('n4', -800, 50)])
   ])
   const rect = (id) => out.panels.find((q) => q.rect.id === id).rect
   const overlaps = (a, b) =>
@@ -87,15 +91,21 @@ const p = (id, x, y, w = 720, h = 460) => ({ id, x, y, w, h, z: 1, cwd: '~', arg
 //    one from, so the obvious implementation drops it — and a workspace that
 //    silently vanishes from the merged view reads as a workspace that was
 //    deleted. It must disagree with neither the rail nor the palette about
-//    how many workspaces exist.
+//    how many workspaces exist. Its lane's width is exactly LANE_MIN_WIDTH —
+//    the exported constant this is the one place that names — because a
+//    dropped clamp (`box?.w ?? 0` with nothing to floor it) leaves an empty
+//    workspace's lane zero-wide, which is a lane that exists in the array and
+//    is invisible on screen: the same silent vanishing this check exists to
+//    catch, one layer deeper.
 {
   const out = R.mergedLayout([
     ws('w1', 'Main', true, [p('n1', 0, 0)]),
     ws('w2', 'Empty', false, [])
   ])
-  ok('4 an empty workspace still gets a lane',
-    out.lanes.length === 2 && out.lanes.some((l) => l.workspaceId === 'w2'),
-    out.lanes.map((l) => l.workspaceId).join(','))
+  const emptyLane = out.lanes.find((l) => l.workspaceId === 'w2')
+  ok('4 an empty workspace still gets a lane, exactly LANE_MIN_WIDTH wide',
+    out.lanes.length === 2 && emptyLane !== undefined && emptyLane.bounds.w === R.LANE_MIN_WIDTH,
+    `lanes=${out.lanes.map((l) => l.workspaceId).join(',')} emptyWidth=${emptyLane?.bounds.w}`)
 }
 
 // 5. Panels carry their REAL identity through. Only rect.x/rect.y are
@@ -129,17 +139,27 @@ const p = (id, x, y, w = 720, h = 460) => ({ id, x, y, w, h, z: 1, cwd: '~', arg
 // 7. A lane's bounds CONTAIN every panel placed in it. The lane header and
 //    any future lane chrome are drawn from bounds, so bounds that did not
 //    contain the content would render a label floating away from the panels
-//    it names.
+//    it names. TWO lanes, and the second is built from panels at NEGATIVE
+//    source coordinates: with only one lane at cursorX 0, bounds.x is 0 and
+//    box.x is 0 too, so `bounds.x = cursorX` and the `-box.x`/`-box.y`
+//    normalisation are both no-ops and a dropped subtraction is invisible.
+//    The second lane's cursorX is nonzero and its source box.x is negative,
+//    which is what makes both facts load-bearing — every panel in EVERY
+//    lane is checked, not just the first, since the bug this guards against
+//    is specifically a LATER lane's panels landing in an EARLIER one's
+//    bounds.
 {
-  const out = R.mergedLayout([ws('w1', 'Main', true, [p('n1', 0, 0), p('n2', 300, 200)])])
-  const lane = out.lanes[0]
-  const inside = (r) =>
-    r.x >= lane.bounds.x && r.y >= lane.bounds.y &&
-    r.x + r.w <= lane.bounds.x + lane.bounds.w &&
-    r.y + r.h <= lane.bounds.y + lane.bounds.h
-  ok('7 every panel sits inside its own lane\'s bounds',
-    out.panels.every((q) => inside(q.rect)),
-    JSON.stringify(lane.bounds))
+  const out = R.mergedLayout([
+    ws('w1', 'Main', true, [p('n1', 0, 0), p('n2', 300, 200)]),
+    ws('w2', 'School', false, [p('n3', -900, -400), p('n4', -700, -200)])
+  ])
+  const laneOf = { n1: 'w1', n2: 'w1', n3: 'w2', n4: 'w2' }
+  const boundsById = Object.fromEntries(out.lanes.map((l) => [l.workspaceId, l.bounds]))
+  const inside = (r, b) =>
+    r.x >= b.x && r.y >= b.y && r.x + r.w <= b.x + b.w && r.y + r.h <= b.y + b.h
+  ok('7 every panel sits inside its own lane\'s bounds, across a negative-coordinate lane too',
+    out.panels.every((q) => inside(q.rect, boundsById[laneOf[q.rect.id]])),
+    JSON.stringify(out.lanes.map((l) => l.bounds)))
 }
 
 console.log('\n' + '='.repeat(60))

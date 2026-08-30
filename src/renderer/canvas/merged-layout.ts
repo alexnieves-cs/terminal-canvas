@@ -56,7 +56,14 @@ export interface MergedLayout {
 
 export function mergedLayout(workspaces: MergedWorkspace[]): MergedLayout {
   // The ACTIVE workspace's lane comes first, so toggling the mode does not
-  // scroll the user away from the canvas they were just looking at.
+  // scroll the user away from the canvas they were just looking at. This
+  // sort must be STABLE — every non-active workspace keeps its INPUT order
+  // relative to its other non-active neighbours between refetches, or a lane
+  // that did not move at all reads as the canvas rearranging itself. That is
+  // true today only because Array.prototype.sort has been stable since
+  // ES2019; nothing in this function asks for it explicitly. Writing it down
+  // because this repo's convention is to record facts that are load-bearing
+  // by accident, not only the ones written on purpose.
   const ordered = [...workspaces].sort((a, b) => Number(b.active) - Number(a.active))
 
   const panels: Panel[] = []
