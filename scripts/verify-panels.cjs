@@ -8572,6 +8572,27 @@ app.whenReady().then(async () => {
       await zoomTo(wc, 'k')
       await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
 
+      // Probed BEFORE the palette flow below ever stores anything.
+      // verifyCredential's very FIRST guard (credential-verify.ts) is
+      //   const token = deps.store.read(service)
+      //   if (token === undefined) return { ok: false, reason: 'no stored credential to verify' }
+      // which returns before the fetcher is ever constructed or called — so
+      // calling verify() here, while the store is still empty, reaches a
+      // real refusal payload with ZERO network traffic. This is deliberate
+      // ordering, not a mock: `npm run verify` is this repo's single
+      // green-or-not signal and CLAUDE.md requires it stay "fast and
+      // offline" (the stated reason verify:packaged is kept out of the
+      // default chain) — a live request to api.github.com would make a
+      // green run depend on a resource this repo does not own, the same
+      // rule as "the verify suites must never touch the production socket"
+      // one layer out. Calling verify() AFTER the token is stored would
+      // route past this guard and into a real HTTPS request, so order is
+      // everything here.
+      const preVerify = await wc.executeJavaScript(`(async () => {
+        const res = await window.canvas.credential.verify('github')
+        return { res, str: JSON.stringify(res) }
+      })()`)
+
       // React's controlled <input> ignores a plain input.value = x — the
       // native setter plus a dispatched 'input' is what makes the change
       // reach React's state, the same nativeSet dance checks 38/45/60 use.
@@ -8612,22 +8633,16 @@ app.whenReady().then(async () => {
         // Every bridge member, walked: none may hand back the token.
         const serialised = JSON.stringify(list)
 
-        // list()'s payload is not the only leak path: set() and verify()
-        // each RESOLVE to a value of their own, and neither is probed above.
-        // set() is called again here — idempotent, the service is already
-        // stored from the palette flow above — so its resolved value is
-        // directly in hand rather than merely assumed from the UI call that
-        // ran it the first time. verify() genuinely reaches GitHub over
-        // HTTPS with this fake token, so it is EXPECTED to refuse (401 from
-        // a real response, or a network failure in a sandboxed run) — that
-        // refusal is exactly the leak path worth closing, since a failure
-        // message is the most likely place a token gets interpolated (see
-        // credential-verify.ts's own comment on why its catch block returns
-        // a fixed string rather than the thrown error).
+        // list()'s payload is not the only leak path: set() also RESOLVES to
+        // a value of its own, and it is not probed above. Called again here
+        // — idempotent, the service is already stored from the palette flow
+        // above — so its resolved value is directly in hand rather than
+        // merely assumed from the UI call that ran it the first time.
+        // (verify()'s resolved value is probed separately, BEFORE this
+        // block runs, back when the store was still empty — see preVerify
+        // above and its comment for why the ordering matters.)
         const setResult = await window.canvas.credential.set({ service: 'github', token: 'ghp_e2e_token_value' })
-        const verifyResult = await window.canvas.credential.verify('github')
         const setStr = JSON.stringify(setResult)
-        const verifyStr = JSON.stringify(verifyResult)
         const carriesToken = (obj, str) =>
           str.includes('ghp_e2e_token_value') ||
           Object.keys(obj || {}).some((k) => k === 'cipher' || k === 'token')
@@ -8637,16 +8652,29 @@ app.whenReady().then(async () => {
           leaked: serialised.includes('ghp_e2e_token_value') ||
                   keys.includes('cipher') || keys.includes('token'),
           hasGet: typeof window.canvas.credential.get === 'function',
-          setLeaked: carriesToken(setResult, setStr),
-          verifyLeaked: carriesToken(verifyResult, verifyStr)
+          setLeaked: carriesToken(setResult, setStr)
         }
       })()`)
 
+      // preVerify's refusal reason is asserted by NAME, not merely by
+      // ok === false: this is the cheapest available proof that the call
+      // took the early-return path rather than a real network round trip —
+      // any answer FROM GitHub (a 401 rejection, or the generic "the
+      // request to GitHub failed" a genuine network error produces) would
+      // read as a DIFFERENT reason string, so this clause would catch a
+      // future edit that reordered the flow and let this leak back onto
+      // the network.
+      const preVerifyRefused = preVerify.res && preVerify.res.ok === false &&
+        /no stored credential/i.test(preVerify.res.reason || '')
+      const preVerifyLeaked = preVerify.str.includes('ghp_e2e_token_value') ||
+        Object.keys(preVerify.res || {}).some((k) => k === 'cipher' || k === 'token')
+
       ok(125, entry.masked === 'password' && probe.stored === true &&
           probe.leaked === false && probe.hasGet === false &&
-          probe.setLeaked === false && probe.verifyLeaked === false,
+          probe.setLeaked === false && preVerifyRefused === true && preVerifyLeaked === false,
         `entry=${JSON.stringify(entry)} stored=${probe.stored} leaked=${probe.leaked} ` +
-        `hasGet=${probe.hasGet} setLeaked=${probe.setLeaked} verifyLeaked=${probe.verifyLeaked}`)
+        `hasGet=${probe.hasGet} setLeaked=${probe.setLeaked} ` +
+        `preVerify=${JSON.stringify(preVerify.res)}`)
     }
 
     // Check 125 is the first thing that ever writes through
