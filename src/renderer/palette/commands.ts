@@ -8,6 +8,7 @@ import type { Command } from './palette-model'
 // pre-emptive. Measured in M14 by deleting the alias and building.
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
+import type { WorkProvider } from '@shared/work-item'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
@@ -289,7 +290,7 @@ export interface PaletteActions {
    * keyboard entirely.
    */
   openFile(): void
-  openJira(): void
+  openWork(provider: WorkProvider): void
 }
 
 export interface PaletteContext {
@@ -867,7 +868,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // PaletteContext.
   out.push(...buildCredentialRows(ctx.credentials, SERVICES, actions))
   if (ctx.credentials.some((credential) => credential.service === 'jira')) {
-    out.push({ id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openJira() })
+    out.push({ id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openWork('jira') })
   }
 
   // --- Manage --------------------------------------------------------------

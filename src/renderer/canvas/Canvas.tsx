@@ -54,7 +54,7 @@ import type {
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
-  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
+  cascadeCentre, firstRunPanels, isFilePanel, isWorkPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeWorkPanel,
   makeToolboxPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, removeLink, setLinkLabel,
@@ -65,8 +65,8 @@ import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { findService, type CredentialMeta } from '@shared/credential-schema'
-import type { WorkItem } from '@shared/work-item'
-import { JiraNode } from '@renderer/jira/JiraNode'
+import { WORK_PROVIDER_LABEL, type WorkItem, type WorkProvider } from '@shared/work-item'
+import { WorkNode } from '@renderer/work/WorkNode'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -159,7 +159,7 @@ function panelLabel(panel: Panel): string {
   // because two panels on one canvas can easily hold two files of the same
   // name from different directories.
   if (isFilePanel(panel)) return `file: ${panel.source.path} (${panel.rect.id})`
-  if (isJiraPanel(panel)) return `jira tickets (${panel.rect.id})`
+  if (isWorkPanel(panel)) return `${WORK_PROVIDER_LABEL[panel.provider]} work (${panel.rect.id})`
   // The DIRECTORY, not a basename: a toolbox answers for a whole cwd, and two
   // repositories with the same leaf name are the ordinary case.
   if (isToolboxPanel(panel)) return `toolbox: ${panel.source.cwd} (${panel.rect.id})`
@@ -356,7 +356,7 @@ export function Canvas({
       // collides on the key and parseLayout drops one silently at the next
       // load. BOTH seed sites (here and switchWorkspace) must carry the same
       // character class; missing either reopens it through the other door.
-      const match = /^[nrfjt](\d+)$/.exec(id)
+      const match = /^[nrfjtw](\d+)$/.exec(id)
       return match ? Math.max(max, Number(match[1]) + 1) : max
     }, 1)
   )
@@ -467,14 +467,17 @@ export function Canvas({
     [commitHistory]
   )
   const [openingContexts, setOpeningContexts] = useState<Map<string, string>>(() => new Map())
-  const spawnJiraTicket = useCallback((item: WorkItem) => {
+  const spawnWorkItem = useCallback((item: WorkItem) => {
     const id = `n${nextIdRef.current}`
     setOpeningContexts((current) => new Map(current).set(id, `Jira ticket ${item.id}: ${item.title}\n\n${item.description}`))
     onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
-  const openJiraPanel = useCallback(() => {
-    const id = `j${nextIdRef.current++}`
-    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
+  // Mints the `w` prefix. Legacy `j` ids stay readable by both id-seed regexes
+  // forever: a persisted j4 the seed cannot see is a counter that hands out a
+  // duplicate id, which is the quiet direction.
+  const openWorkPanel = useCallback((provider: WorkProvider) => {
+    const id = `w${nextIdRef.current++}`
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeWorkPanel(id, cascadeCentre(centre, current), nextZ(current), provider)]; commitHistory(next); return next })
   }, [commitHistory])
   // The selection is a SET, so a later marquee can build a multi-selection
   // without renaming forty call sites. Nothing in this milestone creates one
@@ -1433,7 +1436,7 @@ export function Canvas({
             // nextIdRef's own comment for what a regex blind to one of them
             // costs. This is the SECOND of the two seed sites and must move
             // with the first.
-            const match = /^[nrfjt](\d+)$/.exec(pid)
+            const match = /^[nrfjtw](\d+)$/.exec(pid)
             return match ? Math.max(max, Number(match[1]) + 1) : max
           }, 1)
         )
@@ -3255,7 +3258,7 @@ export function Canvas({
               if (isFilePanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
               }
-              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name }
+              if (isWorkPanel(p)) return { kind: p.kind, provider: p.provider, rect: p.rect, z: p.z, title: name }
               if (isToolboxPanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
               }
@@ -3977,13 +3980,13 @@ export function Canvas({
         openFilePanel(path, worldCentre())
       })
     },
-    openJira: () => openJiraPanel()
+    openWork: (provider: WorkProvider) => openWorkPanel(provider)
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
-       movePanelsToWorkspace, toggleMerged, openFilePanel, openJiraPanel, worldCentre])
+       movePanelsToWorkspace, toggleMerged, openFilePanel, openWorkPanel, worldCentre])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -4629,7 +4632,7 @@ export function Canvas({
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
+            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnWorkItem} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (
