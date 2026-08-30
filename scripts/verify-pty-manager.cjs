@@ -114,6 +114,21 @@ async function waitFor(predicate, timeoutMs = 4000, stepMs = 25) {
  */
 function makeHarness(backend, options = {}) {
   const events = []
+  const baseBackend = backend ?? DIRECT
+  // Check 27's observation point: this suite's fake backend cannot see argv
+  // any other way, since PtyManager hands the spec straight to
+  // SessionBackend.spawn. Wrapping rather than adding a hook to PtyManager
+  // itself keeps the seam here, where every other test-only hook in this
+  // harness already lives.
+  const effectiveBackend = options.onSpawnArgs
+    ? {
+        ...baseBackend,
+        spawn: (spec, command, cwd, env) => {
+          options.onSpawnArgs(spec.args)
+          return baseBackend.spawn(spec, command, cwd, env)
+        }
+      }
+    : baseBackend
   const manager = new PtyManager(
     () => ({
       isDestroyed: () => false,
@@ -122,20 +137,24 @@ function makeHarness(backend, options = {}) {
         if (options.onSend) options.onSend(channel, payload)
       }
     }),
-    () => backend ?? DIRECT,
+    () => effectiveBackend,
     () => options.idleAfterMs ?? 1500,
     () => options.bellEnabled ?? true,
     (panelId) => { if (options.onCaptureBaseline) options.onCaptureBaseline(panelId) },
-    (panelId) => { if (options.onDropBaseline) options.onDropBaseline(panelId) }
+    (panelId) => { if (options.onDropBaseline) options.onDropBaseline(panelId) },
+    (panelId) => (options.pinnedSession ? options.pinnedSession(panelId) : undefined),
+    (panelId, sessionId) => { if (options.setPinnedSession) options.setPinnedSession(panelId, sessionId) },
+    (panelId) => { if (options.onDropPinnedSession) options.onDropPinnedSession(panelId) }
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
 
-const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
+const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = undefined) => ({
   panelId,
   cwd: os.homedir(),
   command,
   args,
+  agent,
   cols: 80,
   rows: 24
 })
@@ -802,15 +821,79 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
 
       h.manager.kill('L2')
       try { rmSync(detachLiveDir, { recursive: true, force: true }) } catch { /* best effort */ }
-
-      // Check 20's obligation, inherited via 22b and 23: this block must end
-      // in a definite kill-server, never a session kill that leaves a stale
-      // server for the next run — see check 20's own comment for why (a later
-      // run's client would reattach to a server still wired to THIS run's
-      // now-deleted exitDir, and check 14 would silently report the wrong
-      // exit code). Whoever appends check 25 inherits it next.
-      tmuxBackend.shutdown()
     }
+
+    // 25. The pin is minted ONCE and REUSED on a second create at the same
+    //     panel id. That second create is exactly what a Cmd+R reload does
+    //     for every restored panel, and under tmux it REATTACHES to a
+    //     session that may have been working for an hour — so a re-mint
+    //     there names a transcript that does not exist while the real one
+    //     goes on growing, and the panel's cost freezes forever with nothing
+    //     in any log. This is success criterion 2's mechanism, and it is
+    //     check 21's shape (the once-only baseline capture) applied to a
+    //     second thing create() must not do twice.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      await h.manager.create(spec('p9', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const first = pins.get('p9')
+      h.manager.detachAll()
+      await h.manager.create(spec('p9', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      ok('25 the pin is minted once and reused on a second create at the same id',
+        typeof first === 'string' && first.length > 0 && pins.get('p9') === first,
+        `first=${first} second=${pins.get('p9')}`)
+      h.manager.killAll()
+    }
+
+    // 26. A panel whose preset declares NO agent is never pinned. The whole
+    //     honesty rule rests on this: a login shell must reach the PTY
+    //     exactly as the user wrote it, and a pin for it would also make the
+    //     inspector render a Cost section for a panel that can never have
+    //     one.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      await h.manager.create(spec('p10'))
+      ok('26 a panel with no declared agent is never pinned', pins.get('p10') === undefined,
+        String(pins.get('p10')))
+      h.manager.killAll()
+    }
+
+    // 27. The flag actually reaches the spawn's ARGV, carrying the pinned
+    //     id. 25 proves the id is stable and says nothing about whether it
+    //     is ever passed to anything — a manager that minted, stored and
+    //     never spawned with it satisfies 25 completely and accounts for
+    //     nothing at all.
+    {
+      const pins = new Map()
+      const seen = []
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        onSpawnArgs: (args) => seen.push(args)
+      })
+      await h.manager.create(spec('p11', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const args = seen[0] ?? []
+      const i = args.indexOf('--session-id')
+      ok('27 the flag reaches the spawn argv carrying the pinned id',
+        i >= 0 && args[i + 1] === pins.get('p11'),
+        `args=${JSON.stringify(args)} pin=${pins.get('p11')}`)
+      h.manager.killAll()
+    }
+
+    // Check 20's obligation, inherited via 22b, 23 and 24: this block must
+    // end in a definite kill-server, never a session kill that leaves a
+    // stale server for the next run — see check 20's own comment for why (a
+    // later run's client would reattach to a server still wired to THIS
+    // run's now-deleted exitDir, and check 14 would silently report the
+    // wrong exit code). Whoever appends check 28 inherits it next.
+    tmuxBackend.shutdown()
   }
 
   console.log('\n' + '='.repeat(60))

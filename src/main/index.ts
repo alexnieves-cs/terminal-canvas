@@ -177,7 +177,10 @@ const ptyManager = new PtyManager(
   () => Number(layoutStore.getSetting('agent.idleAfterMs')),
   () => layoutStore.getSetting('agent.bell') === true,
   captureBaseline,
-  dropBaseline
+  dropBaseline,
+  (panelId) => layoutStore.session(panelId),
+  (panelId, sessionId) => layoutStore.setSession(panelId, sessionId),
+  (panelId) => layoutStore.dropSession(panelId)
 )
 
 /**

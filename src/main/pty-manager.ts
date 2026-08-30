@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { resolve } from 'node:path'
@@ -140,7 +141,25 @@ export class PtyManager {
      * and must keep compiling. In production they reach the layout store.
      */
     private readonly captureBaseline: (panelId: PanelId, cwd: string) => void = () => {},
-    private readonly dropBaseline: (panelId: PanelId) => void = () => {}
+    private readonly dropBaseline: (panelId: PanelId) => void = () => {},
+    /**
+     * The stored agent session id for this panel, if it has one.
+     *
+     * OPTIONAL and defaulted, the trade captureBaseline/dropBaseline already
+     * make: every fixture in the verify suites constructs a manager without
+     * these, and a required dep would change what a dozen existing checks
+     * assert while looking like a widening.
+     */
+    private readonly pinnedSession: (panelId: PanelId) => string | undefined = () => undefined,
+    private readonly setPinnedSession: (panelId: PanelId, sessionId: string) => void = () => {},
+    /**
+     * Drop the pin, beside dropBaseline and for its reason: the map must not
+     * grow for the life of the install, and a recycled panel id must not
+     * inherit a dead panel's session — `--session-id` naming an EXISTING
+     * session is a RESUME, so that panel would come back holding a
+     * stranger's conversation.
+     */
+    private readonly dropPinnedSession: (panelId: PanelId) => void = () => {}
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -173,12 +192,41 @@ export class PtyManager {
 
     const command = resolveCommand(spec, loginEnv)
 
+    // Pin an agent session id, and pass it as a flag so the transcript this
+    // panel writes is one we can find later.
+    //
+    // Read-then-mint, never mint: this function runs again for EVERY panel on
+    // a Cmd+R reload, and under tmux `new-session -A` reattaches rather than
+    // creating — the command is not re-run and the agent keeps the id it was
+    // given. A fresh uuid on that second call would name a transcript that
+    // does not exist while the real one went on growing, and the panel's cost
+    // would freeze at whatever it was before the reload with nothing in any
+    // log. Same shape as captureBaseline's guard twenty lines up, and the same
+    // shape as `reattached` needing its probe BEFORE the spawn.
+    //
+    // Gated on spec.agent, never on the resolved command: appending a flag to
+    // a command the user typed is the move resolveCommand deliberately refuses.
+    let args = spec.args
+    if (spec.agent === 'claude-code') {
+      let sessionId = this.pinnedSession(spec.panelId)
+      if (sessionId === undefined) {
+        sessionId = randomUUID()
+        this.setPinnedSession(spec.panelId, sessionId)
+      }
+      // Only when the user has not already said otherwise. A preset whose args
+      // carry their own --session-id is the user being explicit, and a second
+      // one would make the CLI reject the invocation outright.
+      if (!args.includes('--session-id')) {
+        args = [...args, '--session-id', sessionId]
+      }
+    }
+
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
     // is missing, so a probe taken afterwards answers true unconditionally and
     // every panel — including one on a cold start — claims to have reattached.
     const reattached = this.getBackend().hasSession(spec.panelId)
 
-    const proc = this.getBackend().spawn(spec, command, cwd, env)
+    const proc = this.getBackend().spawn({ ...spec, args }, command, cwd, env)
 
     const session: Session = {
       panelId: spec.panelId,
@@ -334,6 +382,7 @@ export class PtyManager {
       this.getBackend().destroy(panelId)
       this.dropBaseline(panelId)
       this.capturedBaselineIds.delete(panelId)
+      this.dropPinnedSession(panelId)
       this.lastLive.delete(panelId)
       return
     }
@@ -349,6 +398,7 @@ export class PtyManager {
     this.getBackend().destroy(panelId)
     this.dropBaseline(panelId)
     this.capturedBaselineIds.delete(panelId)
+    this.dropPinnedSession(panelId)
     this.lastLive.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
@@ -383,6 +433,15 @@ export class PtyManager {
     // may be never. lastLive is supposed to be cleared alongside the
     // session; kill() already does both, detachAll() must too.
     this.lastLive.clear()
+    // The pin is the exact MIRROR of lastLive, for the opposite reason: this
+    // is a reload, the tmux session survives it, and the agent keeps the id
+    // it was given — dropping the pin here would re-mint a fresh uuid on the
+    // next create() and name a transcript that does not exist while the real
+    // one goes on growing, freezing the panel's cost forever with nothing in
+    // any log (check 25). lastLive must be cleared here because the tmux
+    // session survives and the LOCAL cached value goes stale; the pin must
+    // survive here because the tmux session survives and the pin is still
+    // correct.
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
 

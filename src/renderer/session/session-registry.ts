@@ -1,4 +1,5 @@
 import type { PanelId, PtyCreateResult, PtyDataChunk, PtyExitInfo } from '@shared/types'
+import type { AgentKind } from '@shared/cost'
 import type { Tier } from '@renderer/canvas/lod'
 import type { PanelSession, PanelSpecTemplate, SessionFactory } from './panel-session'
 
@@ -18,6 +19,8 @@ export interface Bridge {
       /** Absent means "the login shell"; main resolves it. See PanelSpec. */
       command?: string
       args: string[]
+      /** Which agent CLI this launches, when this app can account for it. */
+      agent?: AgentKind
       cols: number
       rows: number
     }): Promise<PtyCreateResult>
@@ -182,6 +185,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
         cwd: session.spec.cwd,
         command: session.spec.command,
         args: session.spec.args,
+        agent: session.spec.agent,
         cols,
         rows
       })
