@@ -946,7 +946,109 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // a stale server for the next run — see check 20's own comment for why
       // (a later run's client would reattach to a server still wired to
       // THIS run's now-deleted exitDir, and check 14 would silently report
-      // the wrong exit code). Whoever appends check 27 inherits it next.
+      // the wrong exit code). Check 27 is next, so the shutdown moves below it.
+    }
+
+    // 27. R10: a REATTACHED session must reuse its ORIGINAL spawnedAt, never
+    // a fresh Date.now() taken at the moment of reattachment. new-session -A
+    // makes "this client just attached" and "this process just started" the
+    // same tmux call — M6a's reattached flag exists for the identical
+    // ambiguity one layer down — and for a reattached session the agent has
+    // been running since BEFORE this attach, so its Claude Code session
+    // directory NECESSARILY predates it. Treating the attach moment as the
+    // spawn moment makes chooseSession's post-spawn filter
+    // (createdAt >= spawnedAt) reject the panel's own, still-valid session
+    // directory — permanently, since nothing ever re-derives spawnedAt again
+    // for a session this manager keeps alive.
+    //
+    // This is the sibling door check 26 does not open and R8 alone did not
+    // close: a panel reloaded BEFORE its first successful poll, so
+    // SubagentWatch never claimed it in the first place. detachAll()'s
+    // clearDedupe() (R8) has nothing to preserve for a panel with no claim
+    // yet — that property rests entirely on spawnedAt surviving in
+    // PtyManager itself, which is what this check is actually pinning. The
+    // fixture seeds the session directory and then detaches and reattaches
+    // to the SAME session BEFORE the first LIVE_TICK_MS tick can fire —
+    // comfortably under LIVE_TICK_MS even with the settle margins checks
+    // 16/16b need for a real reattach to happen at all (see below) — so
+    // there is no successful poll in between to let R8's own fix quietly
+    // cover for this one.
+    //
+    // Asserted as the actual user-visible property, not as a value read off
+    // any internal field (PtyManager exposes no such thing to assert on
+    // directly): a session directory created BEFORE the reattach is STILL
+    // CLAIMABLE afterwards, producing exactly one subagent:state for it.
+    // Under the bug this reports nothing at all, ever — the same silent,
+    // unrecoverable failure R8 exists to close, reached through a sibling
+    // door.
+    {
+      const seen = []
+      const projectsRoot = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager projects ')))
+      const subagentCwd = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager reattach-cwd ')))
+      const priorProjectsRoot = process.env.TC_CLAUDE_PROJECTS
+      process.env.TC_CLAUDE_PROJECTS = projectsRoot
+      try {
+        const { manager } = makeHarness(tmuxBackend, {
+          onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
+        })
+        await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+        // Let the session settle before touching it, the same margin checks
+        // 16/16b give a fresh session before detaching it — new-session -A's
+        // local client needs a moment to actually attach before the session
+        // is one detachAll() can hand back cleanly; skip this and the
+        // "reattach" below silently spawns a SECOND, unrelated session
+        // instead (reattached: false), which is a fixture bug, not the one
+        // this check exists to find.
+        await sleep(700)
+
+        // Seeded after settling, still well before detachAll(): its
+        // createdAt postdates the ORIGINAL spawn — the same ordering check
+        // 26 needs and for the identical reason (verify:subagent 9's
+        // post-spawn filter, restated end to end).
+        const slug = subagentCwd.replace(/[^A-Za-z0-9]/g, '-')
+        const sessionDir = join(projectsRoot, slug, 'S1')
+        mkdirSync(join(sessionDir, 'subagents'), { recursive: true })
+        writeFileSync(join(sessionDir, 'subagents', 'agent-y.meta.json'), JSON.stringify({
+          agentType: 'general-purpose', description: 'reattach path', toolUseId: 'toolu_verify27',
+          spawnDepth: 1, model: 'sonnet'
+        }))
+        writeFileSync(`${sessionDir}.jsonl`, JSON.stringify({ type: 'user', cwd: subagentCwd }) + '\n')
+
+        // Detach and reattach to the SAME panel id with NO POLL in between:
+        // 700ms settle + 500ms post-detach margin (checks 16/16b's own
+        // numbers) is comfortably under one LIVE_TICK_MS (2000ms), and this
+        // manager's live tick stops outright the instant detachAll() empties
+        // its session map — it does not restart until the reattaching
+        // create() below runs — so the first tick that could possibly claim
+        // this session is the first one AFTER reattachment, exactly the
+        // window this check needs to isolate.
+        manager.detachAll()
+        await sleep(500)
+        const reattachResult = await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+
+        await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
+        const record = seen[0]?.records?.[0]
+        ok('27 a reattached session reuses its ORIGINAL spawnedAt, so a session directory that predates the reattach is still claimable',
+          reattachResult.reattached === true &&
+          seen.length === 1 && seen[0].panelId === 'sa3' && seen[0].ambiguous === false &&
+            seen[0].records.length === 1 && record?.id === 'agent-y' && record?.state === 'running',
+          `seen=${JSON.stringify(seen)}`)
+
+        manager.kill('sa3')
+      } finally {
+        if (priorProjectsRoot === undefined) delete process.env.TC_CLAUDE_PROJECTS
+        else process.env.TC_CLAUDE_PROJECTS = priorProjectsRoot
+        try { rmSync(projectsRoot, { recursive: true, force: true }) } catch { /* best effort */ }
+        try { rmSync(subagentCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+      }
+
+      // Check 20's obligation, inherited via 22b, 23, 24, 25 and 26: this
+      // block must end in a definite kill-server, never a session kill that
+      // leaves a stale server for the next run — see check 20's own comment
+      // for why (a later run's client would reattach to a server still
+      // wired to THIS run's now-deleted exitDir, and check 14 would
+      // silently report the wrong exit code). Whoever appends check 28
+      // inherits it next.
       tmuxBackend.shutdown()
     }
   }

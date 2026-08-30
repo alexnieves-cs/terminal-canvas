@@ -241,6 +241,22 @@ export class PtyManager {
    * no real ~/.claude anywhere in earshot.
    */
   private readonly subagentWatch = new SubagentWatch(createFsWatchDeps())
+  /**
+   * The FIRST spawnedAt this manager ever recorded for a panel id, kept
+   * across a detachAll() reload the same way capturedBaselineIds is (see
+   * that field's own comment): a Cmd+R reattach must not treat "this client
+   * just attached" as "this process just started". Under tmux those are
+   * NOT the same fact -- M6a's reattached flag exists for the identical
+   * ambiguity one layer down, because new-session -A makes create and
+   * reattach the same call -- and for a reattached session the agent has
+   * been running since BEFORE this attach, so its Claude Code session
+   * directory necessarily predates it. Cleared only by kill(), never by
+   * detachAll(): a reload's tmux session is still running the same agent it
+   * always was, so the original spawn time is still the true one. See
+   * create()'s own comment for the failure this closes and the one case it
+   * deliberately leaves open.
+   */
+  private readonly firstSpawnedAt = new Map<PanelId, number>()
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -308,6 +324,34 @@ export class PtyManager {
 
     const proc = this.getBackend().spawn(spec, command, cwd, env)
 
+    // A genuinely NEW session's spawnedAt is now, recorded in firstSpawnedAt
+    // for the life of this manager (or until kill()). A REATTACHED one
+    // reuses whatever this manager already holds for this panel id, because
+    // the Claude Code session directory it needs to re-claim necessarily
+    // predates this moment, not this attach -- see firstSpawnedAt's own
+    // comment. Treating the attach as the spawn would make chooseSession's
+    // post-spawn filter (createdAt >= spawnedAt) reject the panel's own,
+    // still-valid session directory, permanently: the exact silent failure
+    // detachAll()'s clearDedupe() (R8) exists to prevent for an
+    // ALREADY-CLAIMED panel, reachable again here for one that had not been
+    // claimed yet at the moment of the reload (a panel reloaded before its
+    // first successful poll, or one two colliding panels' shared ambiguity
+    // had already dropped the claim for).
+    //
+    // Deliberate limit, left as-is: after a full app RELAUNCH this manager
+    // is new and firstSpawnedAt is empty, so a reattached panel still falls
+    // back to Date.now() and its pre-existing session stays unclaimable.
+    // Fixing that needs the tmux session's own start time -- a seventh
+    // LIST_FORMAT column and a verify:tmux count change -- which is out of
+    // scope here. The safe direction is no nodes rather than wrong nodes,
+    // this milestone's own stated principle, so the fallback is correct
+    // even though it is lossy.
+    let spawnedAt = this.firstSpawnedAt.get(spec.panelId)
+    if (!reattached || spawnedAt === undefined) {
+      spawnedAt = Date.now()
+      this.firstSpawnedAt.set(spec.panelId, spawnedAt)
+    }
+
     const session: Session = {
       panelId: spec.panelId,
       proc,
@@ -318,7 +362,7 @@ export class PtyManager {
       cwd,
       reattached,
       detector: initialDetector(Date.now()),
-      spawnedAt: Date.now()
+      spawnedAt
     }
     this.sessions.set(spec.panelId, session)
     // Only ever ticks while something is in the map; see startIdleTick.
@@ -470,6 +514,7 @@ export class PtyManager {
       this.capturedBaselineIds.delete(panelId)
       this.lastLive.delete(panelId)
       this.subagentWatch.drop(panelId)
+      this.firstSpawnedAt.delete(panelId)
       return
     }
     session.killed = true
@@ -486,6 +531,7 @@ export class PtyManager {
     this.capturedBaselineIds.delete(panelId)
     this.lastLive.delete(panelId)
     this.subagentWatch.drop(panelId)
+    this.firstSpawnedAt.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
