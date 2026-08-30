@@ -41,6 +41,11 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
         // the login shell; a renderer-side default would silently give a bash or
         // fish user zsh.
         ...(p.command === undefined ? {} : { command: p.command }),
+        // Same absent-stays-absent rule as `command`: a spread would carry
+        // `agent: undefined` across the boundary, which is a different fact
+        // from the field being absent, and buildInspectorModel's `pinned`
+        // test treats the two differently.
+        ...(p.agent === undefined ? {} : { agent: p.agent }),
         args: [...p.args]
       }
     }
@@ -70,6 +75,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       kind: 'terminal' as const,
       cwd: panel.spec.cwd,
       ...(panel.spec.command === undefined ? {} : { command: panel.spec.command }),
+      ...(panel.spec.agent === undefined ? {} : { agent: panel.spec.agent }),
       args: [...panel.spec.args]
     }
   })

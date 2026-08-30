@@ -84,6 +84,17 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
   // (per-panel environment overrides, say) would have those values vanish on
   // every restore with no warning anywhere in this file.
   args: string[]
+  /**
+   * Which agent CLI this panel is pinned to, mirroring Preset.agent. OPTIONAL,
+   * and absent means "not accounted for" — every layout.json before M15 has no
+   * such field, and a required one would drop every existing panel. Without
+   * this field surviving a write-then-reopen, main's PtyManager goes on
+   * accumulating and sending usage:panel for a panel whose restored
+   * spec.agent is undefined, and buildInspectorModel's `pinned` test silently
+   * fails — the Cost section vanishes on every restart even though main is
+   * still measuring it.
+   */
+  agent?: AgentKind
 }
 
 export interface PersistedReviewPanel extends PersistedPanelBase {
@@ -344,7 +355,7 @@ function parsePanel(
     warnings.push('dropped a panel that was not an object')
     return null
   }
-  const { id, x, y, w, h, z, cwd, command, args, title } = raw
+  const { id, x, y, w, h, z, cwd, command, args, title, agent } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a panel with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -417,6 +428,16 @@ function parsePanel(
     args: [...args]
   }
   if (isStr(command)) panel.command = command
+  // Present but unknown is the same asymmetry parsePreset draws for its own
+  // agent field: a later version wrote a value this one has never heard of,
+  // and the field is dropped with a warning rather than carried into the map
+  // or silently coerced away.
+  if (agent !== undefined && !(AGENT_KINDS as readonly string[]).includes(agent as string)) {
+    warnings.push(`panel ${id} named an unknown agent; dropped that field`)
+  }
+  if (isStr(agent) && (AGENT_KINDS as readonly string[]).includes(agent)) {
+    panel.agent = agent as AgentKind
+  }
   return panel
 }
 

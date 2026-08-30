@@ -1892,6 +1892,85 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     !('agent' in out[0]) && warnings.length === 1, warnings.join('; '))
 }
 
+// ---------------------------------------------------------------------------
+// Final review fix. PersistedTerminalPanel had no `agent` field at all: a
+// preset's own agent round-tripped (119/120) while a PANEL's did not, so
+// every restart dropped spec.agent off a restored panel, buildInspectorModel's
+// `pinned` test went false, and the Cost section vanished — silently, and
+// permanently, even though main's PtyManager kept accumulating and sending
+// usage:panel for a session layout.json's own record no longer named.
+
+// 121. A panel's `agent` round-trips through the schema parser with no
+//      warning — the same absent-vs-malformed line 119 draws for a preset,
+//      drawn here for the SECOND record type that carries the field.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({ agent: 'claude-code' }), panel({ id: 'p2' })],
+      camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null
+    }],
+    settings: { layout: true, camera: true, focus: true }
+  }))
+  const w = active(snapshot)
+  const [p1, p2] = w.panels
+  ok('121 a panel agent round-trips, and absent stays absent',
+    p1.agent === 'claude-code' && !('agent' in p2) && warnings.length === 0,
+    `${p1.agent} / ${'agent' in p2}`)
+}
+
+// 122. An unknown agent value on a PANEL is dropped with a warning rather
+//      than carried into the map — 120's rule, on the record type that
+//      actually reaches buildInspectorModel's `pinned` test.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({ agent: 'codex-cli-but-misspelled' })],
+      camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null
+    }],
+    settings: { layout: true, camera: true, focus: true }
+  }))
+  const w = active(snapshot)
+  ok('122 an unknown panel agent is dropped with a warning',
+    !('agent' in w.panels[0]) && warnings.length === 1, warnings.join('; '))
+}
+
+// 123. `spec.agent` survives a real write and a real reopen through
+//      layout-adapt's fromPanels/toPanels round trip, which is the OTHER
+//      door onto this field and the one a schema-only check (121) cannot
+//      see — the exact gap this fix round found, since 119/120 only ever
+//      exercised Preset.agent, never PanelSpec.agent.
+{
+  const [persisted] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'], agent: 'claude-code' },
+    z: 1
+  }])
+  ok('123 fromPanels carries spec.agent out', persisted.agent === 'claude-code')
+  const [back] = L.toPanels([persisted])
+  ok('123b toPanels carries agent back into spec', back.spec.agent === 'claude-code')
+}
+
+// 124. An untitled — unpinned — panel writes no `agent` key at all, the same
+//      rule check 60 states for `title`: a spread would put `agent: undefined`
+//      in layout.json, where `'agent' in panel` reads true for a panel that
+//      was never pinned to anything.
+{
+  const [out] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'] },
+    z: 1
+  }])
+  ok('124 an unpinned panel writes no agent key at all', !('agent' in out))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
