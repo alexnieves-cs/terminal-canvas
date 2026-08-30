@@ -68,25 +68,39 @@
   /* Tracking. Heavy grotesks at display sizes need NEGATIVE tracking or the
      counters read loose; caps micro-labels need positive or they read as a
      smear. Both were hardcoded per-rule before this branch. */
-  --track-display: -.035em; --track-tight: -.015em; --track-caps: .09em;
+  --track-display: -.02em; --track-tight: -.015em; --track-caps: .09em;
 
   /* One monospace stack. There were three in CSS and a fourth in
      create-terminal.ts, which resolve to different faces on some macOS
      configurations. The xterm one moves in M11, with the terminal theme. */
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
-  /* SPIKE. The one bundled face (Inter Display Black, SIL OFL 1.1, ~108 KB,
-     see assets/fonts/OFL.txt). DISPLAY ONLY — body and label text stay on the
+  /* M19. The one bundled face, and it CHANGED with this milestone: Inter
+     Display Black -> Poppins Black (SIL OFL 1.1, 7.6 KB latin subset, see
+     assets/fonts/OFL.txt). Inter is a neo-grotesque — flat-sided, engineered
+     — and the reference this milestone is modelled on sets its display type
+     as a geometric with circular bowls and monoline strokes. That roundness
+     is the argument the shadows make one screen up, said in type: the casing
+     is soft, so the numerals on it should be too. Poppins is the closest
+     widely-available OFL face to it, and it is 14x SMALLER than what it
+     replaces.
+
+     DISPLAY ONLY — body and label text stay on the
      system UI stack, and the contrast between an editorial display face and a
      plain system UI face IS the look; a single face used for everything is
      what makes an app read as a template.
 
      The fallback chain matters more than usual here: if the @font-face fails
      (a CSP font-src regression is the realistic cause) headlines silently
-     fall back to system-ui at weight 900 and look ALMOST right, which is
+     fall back to a system face at weight 900 and look ALMOST right, which is
      exactly the kind of failure that ships. document.fonts.check() is how to
-     assert it, not the eye. */
-  --font-display: "Inter Display", ui-sans-serif, system-ui, -apple-system, sans-serif;
+     assert it, not the eye.
+
+     ui-rounded LEADS the fallbacks now rather than ui-sans-serif: on macOS it
+     resolves to SF Pro Rounded, so even a failed load degrades to something
+     with the right SHAPE rather than to a grotesque that contradicts every
+     other surface in the app. */
+  --font-display: "Poppins", ui-rounded, ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
@@ -121,124 +135,258 @@
    ───────────────────────────────────────────────────────────────────────── */
 :root,
 :root[data-theme="dark"] {
-  /* Per-theme, not structural: native scrollbars and form controls must
-     follow the theme rather than the OS. */
-  color-scheme: dark;
+  /* M19 SOFT MACHINE. The app stops being a dark sheet of glass and becomes a
+     physical instrument: a pale extruded casing with dark screens sunk into
+     it. Chrome is the case, terminals are the wells.
 
-  /* Surface ramp. The old three (bg -> panel -> chrome) spanned 6.6 of
-     perceptual lightness, which is why the app read as one flat slab: depth
-     was being asserted by a 1.30:1 hairline, and a hairline cannot carry a
-     hierarchy. This spans 22.3 L*, every adjacent step >= 2.6.
+     WHY THE SELECTOR STILL SAYS "dark", and why that is not a leftover: the
+     renderer has never set a `data-theme` attribute — M11's first task never
+     landed — so this one block IS the app's only theme and both selectors
+     resolve to it. Renaming the attribute selector would be a lie of a
+     different kind (there is no dark theme to name) and would silently change
+     nothing, because nothing stamps the attribute. `color-scheme` below is
+     the value that actually had to move.
 
-     Contrast RATIO is the wrong metric for large adjacent fills and is
-     deliberately not quoted here; delta-L* is. Ratio is quoted for text. */
-  /* SPIKE RETUNE. The ground drops to near-neutral black and the raised steps
-     keep their cool cast. Reason, from the screenshot diagnosis: the ground
-     was #080910 with a radial vignette lightening the TOP of the canvas
-     toward --s-2 — so the canvas behind a panel was brighter than the panel,
-     and panels sank instead of floating. Translucency reads as glass only
-     when the pane is lighter than what is behind it, so the ground has to be
-     the darkest thing in the app, without exception.
+     WHY ONE BLOCK AND NOT A THIRD THEME. verify:styles 11 flattens EVERY
+     theme block into a single token map, so the last declaration of each
+     token wins and earlier blocks stop being measured. A `[data-theme="soft"]`
+     added alongside a dark one would leave the contrast check silently
+     covering only one of them — a hole in the only guard this repo has on
+     text legibility. One block means what renders is what is measured. A dark
+     soft variant is a real follow-up and it needs check 11 taught to loop
+     over blocks FIRST; see docs/ideas-backlog.md. */
+  color-scheme: light;
 
-     Every ratio in check 11 is measured against these grounds and DARKENING
-     them can only raise it, so this retune moves every text pair the safe
-     way. The tightest pair is --fg-4 on --s-4, which was 3.03 against a 3.0
-     floor — a third of a percent of headroom. It computes to ~3.16 here.
-     Re-run the check rather than trusting that number. */
-  --s-0: #050507;   /* app ground, canvas — the darkest thing, always */
-  --s-1: #0d0e14;   /* panel body, palette list                    */
-  --s-2: #14161f;   /* chrome: rail, inspector, panel header       */
-  --s-3: #1b1e2a;   /* raised: top bar, palette surface, HUD       */
-  --s-4: #262a39;   /* hover fill, AND the selected fill           */
-  --s-5: #323749;   /* pressed only — transient, never a text ground */
+  /* ── Surface ramp ─────────────────────────────────────────────────────
+     Re-derived, and the semantics invert. In a dark UI depth is asserted by
+     LIGHTNESS, so the old ramp climbed 22 L* from a near-black ground. In
+     soft UI depth is asserted by SHADOW, so the ramp collapses to a five-step
+     band about 5 L* wide and the ground sits in the MIDDLE of it — raised
+     surfaces go lighter, recessed ones go darker, and both directions have to
+     be available from the ground or nothing can appear to sink.
 
-  /* Hairlines. Both decorative. Neither reaches 3:1 and neither is meant to:
-     WCAG 1.4.11 applies to boundaries needed to identify a control or
-     understand content, and a divider between two panes is neither. Where a
-     border IS the control boundary — focus, active — the accent is used, and
-     the accents clear 3:1 with margin. --line reaches 1.86 on --s-1, against
-     the 1.30 it replaces. */
-  --line:        #39415a;
-  --line-strong: #4d5675;
+     --s-4 is therefore DARKER than the ground rather than lighter, which is
+     the one step that looks wrong in a diff and is the whole grammar: hover
+     and selection are RECESSES here, not highlights. It is also the binding
+     constraint on the whole ink ramp below, being the darkest thing text ever
+     lands on.
 
-  /* Text ramp. --fg-4 is DISABLED ONLY, and is the reason no other step needs
-     to go dimmer: every opacity-based dimming in the old file collapses onto
-     it. Measured against the worst ground text can land on (--s-4):
-     fg 11.37, fg-2 7.06, fg-3 5.06, fg-4 3.03. */
-  --fg:   #e8eaf4;
-  --fg-2: #b4bad0;
-  --fg-3: #959db8;
-  --fg-4: #6e7691;
+     Every value re-derived against verify:styles 11 rather than by eye. Do
+     not nudge one without re-running it. */
+  --s-0: #e3e6eb;   /* app ground, canvas — the mid tone, not the darkest  */
+  --s-1: #e8eaef;   /* panel casing, palette list                          */
+  --s-2: #e5e8ed;   /* chrome: rail, inspector, panel header               */
+  --s-3: #eceef2;   /* raised: top bar, palette surface, HUD — the lightest */
+  --s-4: #dbdee6;   /* hover fill, AND the selected fill — a RECESS        */
+  --s-5: #cfd4de;   /* pressed only — transient, never a text ground       */
 
-  /* Agent-state accents. Two tones each: saturated for borders, dots and
-     icons; the tint for fills, which is what lets a destructive hover read as
-     destructive without introducing a second red.
+  /* THE WELL. The one dark value left in the app, and the reason the style
+     works here at all: a terminal cannot go light. tmux-args.ts passes 24-bit
+     agent colour through on purpose and agent TUIs paint their own grounds,
+     so tinting a terminal body fights the thing the app exists to show. The
+     screen stays dark and the CASING around it is what changed — which is
+     more skeuomorphic than a uniform repaint, not less: it is a display sunk
+     into a device.
+
+     Kept in the same family as the pre-M19 --s-0 deliberately, so the xterm
+     theme in create-terminal.ts needed one value changed rather than a
+     re-tune of all sixteen ANSI colours. */
+  --well: #14161c;
+
+  /* The canvas tick. It was an allowlisted rgba() literal — a translucent
+     iris dot that had to composite over whatever ground a theme set — and it
+     is a TOKEN now for a reason that only appears on a light ground: a
+     translucent light tick over porcelain is invisible, so the dot has to
+     DARKEN rather than lighten, which is a different colour and not a
+     different alpha. verify-styles check 1's allowlist entry for it is now
+     unused; the entry is harmless (a Set membership test) and is left for the
+     follow-up that retires the other two. */
+  --dot: rgba(96, 106, 128, .13);
+
+  /* Hairlines. Both decorative, and both now do LESS work than they did:
+     depth used to be asserted by a 1.30:1 hairline and is now asserted by the
+     shadow pairs below. What a line is still for is the forced-colours and
+     high-contrast case, where every shadow is stripped and the border is the
+     only thing left holding a boundary — see the @media block at the end of
+     this file. That is Law IV of the direction, and it is why these did not
+     simply get deleted. */
+  --line:        #c3c8d3;
+  --line-strong: #a8afbd;
+
+  /* Text ramp, re-derived against check 11 on the new grounds. --fg-4 is
+     DISABLED ONLY and lands at 3.07 against a 3.0 floor — a margin as thin as
+     the 3.03 the pre-M19 ramp carried, and thin for the same structural
+     reason: it is the dimmest text on the darkest ground. Measured worst
+     cases, all against --s-4: fg 12.38, fg-2 6.92, fg-3 5.06, fg-4 3.07. */
+  --fg:   #1b1e26;
+  --fg-2: #414754;
+  --fg-3: #555b69;
+  --fg-4: #767d8c;
+
+  /* Agent-state accents, re-tuned for a light ground and NOT re-chosen. The
+     old values were tuned to glow on near-black and are near-invisible on
+     porcelain — #e0af68 amber on #e3e6eb is 1.5:1, so a waiting panel's
+     border would effectively vanish, which is the single most important
+     signal in the app.
+
+     These are borders, dots and icons, so the floor is WCAG 1.4.11 non-text
+     contrast at 3:1 rather than check 11's text ratios — which do not measure
+     accents at all. Measured worst cases, all against --s-4: blue 3.70,
+     green 3.14, amber 3.07, red 3.78, iris 3.47.
 
      --amber MUST stay a literal colour declared here, and
      .panel--agent-wants-you MUST keep `border-color: var(--amber)`
-     un-transformed. verify:panels 62 and 97 compare the two by resolved
-     value. See Global Constraint 1.
+     un-transformed. verify:panels 62 and 97 compare the two by RESOLVED
+     value, so the value may be re-tuned — as it is here — and may never
+     become a gradient, an image or a shadow.
 
-     --blue-dim is the one accent tint with no user today. It is kept so the
-     four pairs stay a pair each — an accent with a saturated tone and no
-     tint is a gap the next person fills by hand-mixing one, which is the
-     duplication this block exists to remove. --sp-7 is unused for the same
-     reason: it completes a scale. Nothing else here is unused. */
-  --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .14);
-  --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .12);
-  --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .14);
-  --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .12);
+     The dims invert with the ground: a tint on a light surface has to DARKEN
+     to read, so these are the same hues at low alpha over porcelain rather
+     than the old glows. --blue-dim still has no user and is still kept, so
+     the four pairs stay a pair each. */
+  --blue:  #2f6bd8;  --blue-dim:  rgba(47, 107, 216, .12);
+  --green: #3f8b3f;  --green-dim: rgba(63, 139, 63, .12);
+  --amber: #a8720a;  --amber-dim: rgba(168, 114, 10, .14);
+  --red:   #cc3344;  --red-dim:   rgba(204, 51, 68, .11);
 
   /* App identity, never agent state. Iris answers an interaction with the
-     interface itself — focus, navigation, palette context and HUD readouts —
-     so a user can distinguish their own action from an agent's activity. */
-  --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .12);
+     interface itself. Cyan cannot survive a light ground — #67e8f9 is 1.3:1
+     on porcelain — so it deepens to a teal that holds the same "this is the
+     interface, not the agent" reading while clearing 3.47:1. */
+  --iris: #0b7f97;  --iris-dim: rgba(11, 127, 151, .12);
 
-  /* ── SPIKE: elevation, glass and bevel ──────────────────────────────────
-     Elevation, relocated from bare :root (see the note there). */
-  --e-1: 0 1px 2px rgba(0, 0, 0, .40);
-  --e-2: 0 4px 12px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .40);
-  --e-3: 0 16px 48px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .40);
-  --e-4: 0 32px 80px rgba(0, 0, 0, .65), 0 4px 16px rgba(0, 0, 0, .50);
+  /* ── The material ────────────────────────────────────────────────────
+     Two shadow colours, one light source, upper-left, never moved. Every
+     raised surface gets white up-left and shadow down-right; every recess
+     reverses exactly that pair. A single element lit the other way reads as a
+     rendering bug rather than a variation, which is why these are two tokens
+     and not a per-rule decision.
 
-  /* GLASS — TRANSIENT SURFACES ONLY (palette, nav grid, HUD, launcher).
-     Persistent chrome (rail, inspector, top bar) is deliberately OPAQUE and
-     fakes the same look with --sheen + --glass-edge: three permanently
-     composited backdrop-filter layers over a canvas that repaints on every
-     frame of a pan, alongside up to LIVE_BUDGET WebGL terminals, is real GPU
-     spent blurring a dot grid nobody can read through. Glass is for surfaces
-     that FLOAT OVER CONTENT, where it carries information about depth. */
-  --glass-1: rgba(20, 22, 31, .74);   /* overlay fill over the canvas   */
-  --glass-2: rgba(27, 30, 42, .84);   /* raised region inside an overlay */
-  --glass-edge: rgba(255, 255, 255, .09); /* the lit top edge of a pane */
+     --sh-lo is a translucent COOL GREY rather than black: black at low alpha
+     over porcelain goes muddy and reads as dirt on the casing, while a grey
+     carrying the ground's own blue bias reads as shade. */
+  --sh-hi: rgba(255, 255, 255, .92);
+  --sh-lo: rgba(163, 171, 189, .55);
 
-  /* SHEEN — the opaque fake. A 40%-stop top gradient on a solid surface
-     reproduces most of what the eye reads as "glass" for none of the cost.
-     This is what the rail, inspector and top bar get. */
-  --sheen: rgba(255, 255, 255, .05);
+  /* RAISED. These keep the --e-* names on purpose. Every existing rule that
+     says `box-shadow: var(--e-2)` becomes soft-raised with no edit at all,
+     which is what let this milestone land as a values change plus targeted
+     grammar edits rather than a 2,400-line rewrite. The scale still reads as
+     elevation: e-1 a chip, e-2 a panel, e-3 an overlay, e-4 a modal.
 
-  /* BEVEL — TACTILE CONTROLS ONLY, and only on VERBS (spawn, launch, commit,
-     restart). If every chip in the app is extruded then extrusion stops
-     carrying information and becomes decoration, which is precisely the
-     failure that killed neumorphism as a style. A bevel here means "this
-     does something". Rest = --bevel-hi inside-top + --bevel-lo below;
-     pressed = --press-inset inside-top and the content shifts down --sp-1. */
-  --bevel-hi: rgba(255, 255, 255, .10);
-  --bevel-lo: rgba(0, 0, 0, .45);
-  --press-inset: rgba(0, 0, 0, .55);
+     The offsets grow with the blur rather than independently: in soft UI the
+     ratio between them IS the apparent size of the object, and an e-4 with
+     e-1's offset reads as a large FLAT sticker rather than a thick one. */
+  --e-1: 2px 2px 5px var(--sh-lo), -2px -2px 5px var(--sh-hi);
+  --e-2: 6px 6px 14px var(--sh-lo), -6px -6px 14px var(--sh-hi);
+  --e-3: 12px 12px 30px var(--sh-lo), -10px -10px 24px var(--sh-hi);
+  --e-4: 20px 20px 48px var(--sh-lo), -16px -16px 36px var(--sh-hi);
 
-  /* Back-compat aliases. These are what let the migration land task by task
-     instead of as one unreviewable diff, and they mean the file temporarily
-     holds two names for one colour — the duplication M10 exists to remove.
-     Kept deliberately for this milestone; retiring them is a follow-up, and
-     whoever does it should re-derive the usage counts rather than trust a
-     number written here. */
+  /* RECESSED. The other half of the grammar, and the half the app did not
+     have a vocabulary for before: depth was only ever UP. --in-1 is a control
+     that holds state (a pressed button, a selected row, an input); --in-2 is
+     a container that holds content (a list scroll area, a well).
+
+     A recess needs LESS blur than the raise at the same nominal depth, or the
+     inner shadow fills the whole element and it reads as a smudge rather than
+     as a dish. */
+  --in-1: inset 2px 2px 5px var(--sh-lo), inset -2px -2px 5px var(--sh-hi);
+  --in-2: inset 6px 6px 12px var(--sh-lo), inset -5px -5px 10px var(--sh-hi);
+
+  /* THE SCREEN. A well is not an --in-2: it holds a surface DARKER than the
+     casing, so a white inner highlight on its lower-right would read as light
+     leaking out from behind the glass. It gets a hard dark inner shadow and a
+     single white line along its bottom edge — the lip of the cut-out catching
+     the room light, which is the detail that sells a screen as inset. */
+  --well-inset: inset 0 2px 10px rgba(0, 0, 0, .70), 0 1px 0 var(--sh-hi);
+
+  /* GLASS, RETIRED — kept as ALIASES rather than deleted. Soft UI takes its
+     depth from shadow, so every backdrop-filter in this file goes with it,
+     and that is a real performance win rather than a style preference: three
+     permanently composited blur layers over a canvas that repaints on every
+     frame of a pan, alongside up to LIVE_BUDGET WebGL terminals, stop
+     existing. The names survive only so this milestone lands without
+     rewriting every overlay rule in one unreviewable diff; retiring the names
+     is a follow-up, and whoever does it should re-derive the usage counts
+     rather than trust a number written here. */
+  --glass-1: var(--s-3);
+  --glass-2: var(--s-1);
+  --glass-edge: var(--sh-hi);
+
+  /* SHEEN. Survives, and its argument survives with it: a top-stop gradient
+     is a cheap fake of a lit edge. On porcelain it goes to near-white. */
+  --sheen: rgba(255, 255, 255, .55);
+
+  /* BEVEL. The pre-M19 file rationed these to VERBS ONLY, with a comment
+     warning that universal extrusion is "precisely the failure that killed
+     neumorphism as a style". That warning is correct and this milestone does
+     not overrule it — it makes it structural. Depth is now GRAMMATICAL rather
+     than emphatic: raised means pressable, recessed means holds content or
+     state, flat means a label. Nothing is extruded for importance, so
+     extrusion never has to compete with itself, and colour is left to carry
+     urgency alone, which it was always better at.
+
+     These stay as the verb accent on top of that grammar: a verb is a raised
+     control that ALSO catches a brighter top edge. */
+  --bevel-hi: rgba(255, 255, 255, .95);
+  --bevel-lo: rgba(163, 171, 189, .60);
+  --press-inset: rgba(150, 158, 176, .65);
+
+  /* Back-compat aliases. Unchanged in role from M10: they are what let a
+     migration land task by task instead of as one unreviewable diff. */
   --text:      var(--fg);
   --muted:     var(--fg-3);
   --bg:        var(--s-0);
   --panel-bg:  var(--s-1);
   --chrome-bg: var(--s-2);
   --border:    var(--line);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M19 LAW IV — shadow never carries a boundary alone.
+
+   This is the clause that makes soft UI survivable rather than merely pretty,
+   and it is the one every neumorphic implementation skips. The style encodes
+   "this is a control" in a shadow pair that is deliberately low contrast
+   against its own ground; under forced colours the UA replaces backgrounds
+   and text with the user's own palette and KEEPS box-shadow, so every surface
+   in the app would flatten into one sheet with its boundaries painted in a
+   shadow the user has explicitly asked not to see.
+
+   Stripping the shadows and restoring a real border is the whole fix. It sits
+   here, immediately after the theme block, rather than at the end of the file
+   because it must lose to nothing: it is a media block, so it beats every
+   later rule of equal specificity regardless of source order, and putting it
+   beside the tokens it neutralises is where a reader looking for it will be.
+
+   The colours are SYSTEM KEYWORDS, not values of ours — that is the entire
+   point of the mode — which is also why verify:styles check 1 does not see
+   them: they are not hex, rgb() or hsl(). */
+@media (forced-colors: active) {
+  .panel,
+  .panel__slot > .panel__terminal,
+  .palette,
+  .navgrid,
+  .canvas-hud,
+  .badge,
+  .rail-row,
+  .rail-row:hover,
+  .rail-row--selected,
+  .shell__top,
+  .shell__rail,
+  .shell__inspector,
+  .shell__top button,
+  .shell__top button:hover {
+    box-shadow: none;
+    border: 1px solid CanvasText;
+  }
+  /* The one exception. A recessed row loses its shadow like everything else,
+     but selection is INFORMATION rather than decoration, so it has to survive
+     in a channel forced colours preserves. */
+  .rail-row--selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 /* SPIKE. The one bundled face. `font-display: block` rather than `swap`
@@ -248,8 +396,8 @@
    resolves in a frame or two, and wrong for a network one. There is no
    network here; the file is inside the asar. */
 @font-face {
-  font-family: "Inter Display";
-  src: url("./assets/fonts/InterDisplay-Black.woff2") format("woff2");
+  font-family: "Poppins";
+  src: url("./assets/fonts/Poppins-Black.woff2") format("woff2");
   font-weight: 900;
   font-style: normal;
   font-display: block;
@@ -391,7 +539,11 @@ body {
      button in the bar silently dead. */
   -webkit-app-region: no-drag;
 }
-.shell__top button:hover { background: var(--s-4); color: var(--fg); }
+.shell__top button:hover {
+  background: var(--s-4);
+  color: var(--fg);
+  box-shadow: var(--in-1);
+}
 .shell__top button:disabled { color: var(--fg-4); cursor: default; }
 .shell__top button:disabled:hover { background: transparent; color: var(--fg-4); }
 
@@ -446,17 +598,17 @@ body {
 .shell__rail {
   background: var(--s-2);
   /* The rail and inspector are continuous physical surfaces, not boxes
-     outlined against the canvas. This literal is deliberate surface light,
-     allowlisted in verify:styles check 1 for the same reason as the palette
-     highlight: it has to composite over whichever ground a theme supplies. */
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .04);
+     outlined against the canvas. M19 makes this the --sh-hi token rather than
+     an allowlisted literal: a 4%-white edge is invisible on porcelain, and
+     the light edge of a surface is exactly what --sh-hi already means. */
+  box-shadow: inset 0 1px 0 var(--sh-hi);
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 .shell__inspector {
   background: var(--s-2);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .04);
+  box-shadow: inset 0 1px 0 var(--sh-hi);
 }
 
 /* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
@@ -558,19 +710,24 @@ body {
    hand-mixed white overlay, which is a fourth idiom for a state three other
    surfaces already spelled a different way each — the duplication M10 exists
    to remove — and it is invisible to any audit that reads declared colours.
-   The one-pixel lift and --e-1 make a hovered row read as an available action,
-   rather than merely another filled item in the list. */
+   M19 REVERSES THE DIRECTION and keeps the argument. A hovered row still has
+   to read as an available action; in this material it does that by going IN
+   rather than up, because a row is a thing you press into a list, not a card
+   you lift out of one. The one-pixel translate goes with it — a lift plus a
+   recess is two contradictory depth cues on one element. */
 .rail-row:hover {
   background: var(--s-4);
-  transform: translateY(-1px);
-  box-shadow: var(--e-1);
+  box-shadow: var(--in-1);
 }
 /* SPIKE. An accent bar as well as a fill, matching .palette__row--selected.
    The rail's selection drives what the inspector shows, so "which row is
    selected" has to survive a glance across a 240px column. */
+/* The accent bar is declared FIRST so it paints above the recess — box-shadow
+   paints first-to-last, and a bar behind the inner shadow is a bar you cannot
+   see at the one edge it lives on. */
 .rail-row--selected {
   background: var(--s-4);
-  box-shadow: inset 3px 0 0 var(--iris);
+  box-shadow: inset 3px 0 0 var(--iris), var(--in-1);
 }
 .rail-row--selected .rail-row__label { color: var(--fg); }
 
@@ -985,18 +1142,23 @@ body {
      this whole direction, and it is invisible in any static description of
      the file; it took a screenshot to find.
 
-     Now the light is at the BOTTOM and is far weaker: enough to keep a large
-     dark field from reading as a void (the original, correct, reason for
-     having one) without ever out-lighting a surface placed on it. The ground
-     is the darkest thing in the app, without exception.
+     M19 INVERTS BOTH HALVES. The light moves to the TOP, because the whole
+     stylesheet now models one light source at the upper-left and a ground lit
+     from below would contradict every shadow pair in the file at once — the
+     one inconsistency the eye reads instantly as broken rather than as a
+     variation.
 
-     The dot grid is unchanged and its rgba() is still the allowlisted literal
-     verify-styles check 1 names — a translucent iris tick that must take
-     whatever ground is behind it. */
+     The pre-M19 rule that the ground must be the darkest thing in the app is
+     GONE, and deliberately: it existed because translucency only reads as
+     glass when the pane is lighter than what is behind it. Nothing is glass
+     any more. The ground is now the MID tone of a five-step band and panels
+     separate from it by shadow, so the ground is free to be lighter than the
+     casings sitting on it — which is what a casing sitting on a desk actually
+     looks like. */
   background:
-    radial-gradient(circle at 1px 1px, rgba(103, 232, 249, .05) 1px, transparent 0)
+    radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0)
       0 0 / 28px 28px,
-    radial-gradient(140% 90% at 50% 118%, var(--s-1) 0%, var(--s-0) 55%);
+    radial-gradient(140% 90% at 50% -18%, var(--s-3) 0%, var(--s-0) 55%);
   cursor: default;
 }
 
@@ -1397,6 +1559,50 @@ body {
   display: flex;
 }
 
+/* M19 THE WELL. The screen sunk into the casing, and the one place in the
+   app where a dark surface survives.
+
+   ────────────────────────────────────────────────────────────────────────
+   DO NOT GIVE THIS SLOT PADDING, A BORDER, OR A MARGIN ON ITS CHILD.
+   ────────────────────────────────────────────────────────────────────────
+   The first cut of this milestone did exactly that — var(--sp-2) of padding,
+   to float the screen inside the casing — and it is the regression
+   xterm-pointer.ts predicts BY NAME twenty lines into its own comment:
+   correction re-expresses a click relative to the SLOT's rect while xterm
+   subtracts .xterm-screen's, so any inset between the two survives as
+   d * (1 - 1/scale) and every click at a zoomed-out scale lands a column or
+   more off the cell the user aimed at. The whole verify suite stays GREEN
+   through it: verify:panels 9's target is the four characters of "beta", and
+   a one-to-two column shift is still inside that word.
+
+   So the recess is drawn WITHOUT geometry. Radius and overflow clip the
+   terminal's corners against the casing, which is what actually reads as a
+   screen bonded into a case; the fill is what a dormant card and the frame
+   before xterm attaches show. Neither moves an origin by a pixel, so the
+   invariant holds untouched.
+
+   Insetting the screen for real is a legitimate future change and the path is
+   already written down: anchor the correction to .xterm-screen's own rect,
+   and add a check with a target tighter than a four-character word. It is not
+   a CSS-only change and must not be attempted as one. */
+.panel__slot {
+  background: var(--well);
+  /* Concentric corners, per the rule --r-* is declared with: a nested radius
+     must decrease by roughly the inset, and this slot's inset is ZERO — it is
+     flush to the panel's left, right and bottom edges. So the BOTTOM pair has
+     to match the panel's own --r-xl exactly; at --r-md the screen's 6px curve
+     sits inside the casing's 18px one and leaves a visible sliver of casing in
+     each bottom corner, which reads as a misprinted part rather than a screen.
+
+     The TOP pair is square because the header sits directly above and the two
+     surfaces meet on a straight line. This is the one radius in the file that
+     is a four-value shorthand, and it is why: the slot is not a free-floating
+     box, it is the bottom of a case. */
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+  overflow: hidden;
+  box-shadow: var(--well-inset);
+}
+
 .panel__slot > .panel__terminal {
   flex: 1;
   min-height: 0;
@@ -1498,12 +1704,17 @@ body {
 .panel__card--agent-starting { border-left: 3px solid var(--border); }
 .panel__card--agent-idle { border-left: 3px solid var(--border); }
 
+/* M19. A badge reports state and cannot be pressed, so by the grammar it is
+   a RECESS — a capsule stamped into the surface — never a raised chip. The
+   border survives the shadow for Law IV: with shadows stripped by forced
+   colours it is the only thing left holding the capsule's boundary. */
 .badge {
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   padding: var(--sp-1) var(--sp-4);
   border-radius: var(--r-full);
   border: 1px solid var(--border);
+  box-shadow: var(--in-1);
   color: var(--muted);
   display: inline-flex;
   align-items: center;
@@ -1542,12 +1753,17 @@ body {
   padding: var(--sp-3) var(--sp-5);
   border: 1px solid var(--iris-dim);
   border-radius: var(--r-full);
-  /* The one place a backdrop cost is earned: the HUD sits over a moving
-     world layer, and a solid fill there reads as a sticker pasted on top of
-     it rather than chrome floating above it. */
-  background: color-mix(in srgb, var(--s-3) 78%, transparent);
-  backdrop-filter: blur(12px) saturate(160%);
-  box-shadow: 0 0 16px var(--iris-dim), var(--e-2);
+  /* M19. The backdrop cost is no longer earned and this is the most
+     expensive place it was being paid: the HUD is mounted permanently over a
+     world layer that repaints on every frame of a pan, so its blur was a
+     composited layer for the entire life of the app — unlike the palette and
+     the nav grid, which are transient.
+
+     It becomes a gauge cut INTO the ground rather than chrome floating above
+     it, which is what the old comment wanted a blur to buy: a recess cannot
+     read as a sticker, because a sticker has no inside. */
+  background: var(--s-0);
+  box-shadow: var(--in-1);
   color: var(--iris);
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
@@ -2024,10 +2240,14 @@ body {
   /* --e-4, not --e-3. The ground is near-black now, so the old shadow was
      invisible against it and the overlay read as pasted on rather than
      floating; a deeper, wider shadow is what re-separates them. */
+  /* M19. No blur, no translucency: --e-4 is a soft raise now, and a slab
+     lifted 20px off the ground by shadow alone separates from it at least as
+     well as a blurred pane did — with no composited layer over a repainting
+     canvas. The literal white gradient becomes --sheen, which is the token
+     that already meant "a lit top edge faked on an opaque surface". */
   box-shadow: var(--e-4), inset 0 1px 0 var(--glass-edge);
   background: var(--glass-1);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 40%);
-  backdrop-filter: blur(20px) saturate(160%);
+  background-image: linear-gradient(180deg, var(--sheen), transparent 40%);
   overflow: hidden;
   font-size: var(--t-md);
 }
@@ -2379,8 +2599,11 @@ body {
      grid reads as summoned above the workspace rather than replacing it.
      This uses a translucent fill rather than element opacity: opacity would
      also dim the grid's text and controls. */
-  background: color-mix(in srgb, var(--s-3) 78%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
+  /* M19: the translucency stays and the blur goes. The comment above is why
+     the fill is translucent rather than the element being faded, and that
+     argument is untouched; what the blur was adding on top of it was a
+     full-viewport composited layer for the duration of a held chord. */
+  background: color-mix(in srgb, var(--s-3) 82%, transparent);
   z-index: 1000; /* the palette's layer; only one of the two is ever up */
 }
 .navgrid__grid {
