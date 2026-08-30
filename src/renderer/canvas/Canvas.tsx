@@ -3276,6 +3276,12 @@ export function Canvas({
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
                   onClose={onClosePanel}
+                  // The editor textarea is a third surface that takes DOM
+                  // focus off xterm, so it inherits usePalette's rule 4 —
+                  // see FileNode's own prop comments for both halves, and
+                  // ReviewNode's restoreFocus prop for the precedent.
+                  restoreFocus={restoreFocus}
+                  focusedId={focusedId}
                 />
               )
             }

@@ -1750,6 +1750,86 @@ body {
 
 .file-node__refresh:hover { color: var(--fg); }
 
+/* Present and DISABLED when model.editable is false — see FileNode's own
+   comment on the button. The disabled colour matches .review-node__commit's,
+   the sibling verb-that-can-be-unavailable in the other node kind. */
+.file-node__edit {
+  flex: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--fg-3);
+}
+.file-node__edit:hover:not(:disabled) { color: var(--fg); }
+.file-node__edit:disabled { color: var(--fg-4); cursor: default; }
+
+/* The unsaved-work marker. Amber, the same "something here wants your
+   attention" colour .file-node__note and .panel--agent-wants-you both use —
+   this is not an error, but it is a fact worth noticing before closing the
+   panel. */
+.file-node__dirty {
+  flex: none;
+  color: var(--amber);
+  font-size: var(--t-xs);
+}
+
+/* The draft surface. Tokens only, per verify:styles 1/4-6: --s-1 matches the
+   read view's own .panel-bg ground, and the mono font/size/line-height match
+   .file-node__body so switching into edit mode does not reflow the text the
+   user was just reading. */
+.file-node__editor {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: none;
+  background: var(--s-1);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+  padding: var(--sp-4);
+}
+
+.file-node__save {
+  align-self: flex-start;
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--s-2);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  padding: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-2);
+}
+.file-node__save:hover { background: var(--s-4); }
+
+/* --amber-dim, the same wash .panel--agent-wants-you's card variant uses for
+   "this needs you, but it is not an error" — a conflict is exactly that: the
+   save was refused (or would silently reseed), not a system failure. */
+.file-node__conflict {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-2) var(--sp-4);
+  margin: 0 0 var(--sp-4);
+  background: var(--amber-dim);
+  color: var(--fg);
+  font-size: var(--t-sm);
+}
+.file-node__conflict button {
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--s-2);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  padding: var(--sp-1) var(--sp-3);
+}
+.file-node__conflict button:hover { background: var(--s-4); }
+
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
@@ -2172,7 +2252,10 @@ body {
 .review-node__file-button,
 .review-node__refresh,
 .review-node__commit,
-.file-node__refresh {
+.file-node__refresh,
+.file-node__edit,
+.file-node__save,
+.file-node__conflict button {
   transition:
     background-color var(--dur-1) var(--ease),
     color            var(--dur-1) var(--ease),

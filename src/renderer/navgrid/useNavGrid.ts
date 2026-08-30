@@ -90,8 +90,15 @@ export function useNavGrid(deps: {
         // No preventDefault before this bail, unlike the repeat guard below:
         // this chord is NOT ours here, so it belongs to whoever owns that
         // field, exactly as usePalette's modifier checks bail bare.
+        //
+        // A second text surface inherits the identical guard: a file panel's
+        // edit draft (.file-node__editor) has the same problem for the same
+        // reason — unguarded, Cmd+G typed into a draft reveals the grid, the
+        // open branch's default: arm swallows every further keystroke, and
+        // releasing Cmd switches workspace and unmounts the panel with the
+        // draft unsaved.
         const target = event.target as HTMLElement | null
-        if (target?.closest?.('.review-node__commit-form')) return
+        if (target?.closest?.('.review-node__commit-form, .file-node__editor')) return
         // A held chord is ONE gesture and roughly fifteen events a second.
         // The guard's reachable case is the TAIL of a held chord after the
         // grid has already been dismissed: Escape closes, the user has not
