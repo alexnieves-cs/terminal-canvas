@@ -39,6 +39,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #49 two copies of the app eating each other | M5c fix | "...and two copies of ONE build must not either" |
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
+| #3 file tree / codebase browser | M13 | "Every file row mounts `shellControl`, and here that is not a convention" |
 
 Seven more entries were rewritten rather than removed, because a milestone shipped most of
 each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#17**
@@ -81,23 +82,6 @@ Three pieces of the original entry are still open, and each is blocked on someth
   #52 (multi-select) exists.
 - **A workspace-switching keyboard shortcut**, deliberately left unassigned; see `README.md`'s
   M7 paragraph for why.
-
-## 3. File tree / codebase browser (IDE-style left rail)
-
-A collapsible left sidebar showing files and structure for the project a panel is
-working in.
-
-- **Constraint:** the sidebar lives *outside* the transformed `.world` layer. That is
-  the whole point of "one transform, not N layouts" — a chrome element inside the world
-  would scale with zoom. It needs to be a sibling of the canvas host, and its width
-  changes the canvas viewport size, which feeds `viewport.ts`'s math and every panel's
-  culling decision.
-- **Constraint:** file reads must happen in **main**, not the renderer. The renderer has
-  no `process.env` and no fs; the contract in `shared/ipc-contract.ts` would need new
-  channels (`fs:list`, `fs:read`, a watcher for `fs:changed`), and `verify:ipc` will fail
-  until every one has a handler.
-- **Open question:** which directory? Each panel is a shell that can `cd` anywhere. Either
-  a workspace-level root, or track each session's cwd (obtainable from the PTY's pid).
 
 ## 4. Multiplayer / shared team canvas
 
@@ -2182,7 +2166,10 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 29. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
-30. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
+30. ~~**#3 file tree**~~ — **done, M13**, rooted on the selected panel rather than a
+   workspace-level root, which the open question here left unsettled: each panel is a
+   shell that can `cd` anywhere, so the tree follows the panel the user has selected
+   instead of picking one root for the whole canvas.
 31. **#26 agent toolbox, read-only inventory** — after #3 or #14 tier 1, because it is
    the same watched-directory machinery and should not invent a second copy of it. The
    editing half is a separate, later decision.
