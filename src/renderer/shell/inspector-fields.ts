@@ -1,6 +1,6 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
-import type { PanelUsage } from '@shared/cost'
+import type { AgentOptions, PanelUsage } from '@shared/cost'
 import { costOf } from '@shared/pricing'
 import { isFilePanel, isJiraPanel, isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
@@ -330,7 +330,21 @@ export function buildInspectorModel(
    * keeps its exact meaning — the trade `live` made in M12, `panels` made in
    * M13 and review-engine.ts's `notARepo` made in M9a.
    */
-  usage?: PanelUsage | undefined
+  usage?: PanelUsage | undefined,
+  /**
+   * The agent knobs of the SESSION's spec — the spec most recently handed to
+   * `pty.create` for this panel — never the panel's own.
+   *
+   * They differ, and the difference is the point: `registry.ensure` returns an
+   * existing session unchanged, so `panel.spec` is merely what the canvas
+   * currently holds while `session.spec` is what actually got spawned. Reading
+   * the panel would let this pane claim a permission mode the running agent is
+   * not in, which is a confident wrong answer about a permission boundary.
+   *
+   * OPTIONAL and defaulted, the trade `live`, `panels` and `usage` each made
+   * before it, so no pre-M18 caller or check changes meaning.
+   */
+  sessionOptions?: AgentOptions | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isReviewPanel(panel)) {
@@ -399,6 +413,26 @@ export function buildInspectorModel(
     // an accident.
     { key: 'pid', label: 'pid', value: running === undefined ? '—' : String(running.pid) }
   ]
+  // The agent knobs, each rendered only when SET. An absent knob renders no
+  // row rather than the word "default": a login shell can never have one, and
+  // a row that says "default" on every panel is the confident-nothing this
+  // pane's three-state Cost section already refuses.
+  //
+  // No "requested vs running" caveat, and that is an invariant rather than an
+  // omission: the ONLY way to change a knob on an existing panel is the
+  // compound "Restart in <mode>" gesture, which restarts — and a restart
+  // re-reads the argv. So the session's spec and the running process cannot
+  // disagree. A future bare "edit this panel's mode" that did not restart
+  // would break that silently, which is what verify:rail 87 is pinned against.
+  if (sessionOptions?.permissionMode !== undefined) {
+    fields.push({ key: 'agent-mode', label: 'mode', value: sessionOptions.permissionMode })
+  }
+  if (sessionOptions?.effort !== undefined) {
+    fields.push({ key: 'agent-effort', label: 'effort', value: sessionOptions.effort })
+  }
+  if (sessionOptions?.model !== undefined) {
+    fields.push({ key: 'agent-model', label: 'model', value: sessionOptions.model })
+  }
   // BESIDE, never instead of. See this function's own doc comment: the pane
   // renders the links rather than the answer, and a panel that has cd'd is
   // exactly the case where both halves are the point. Gated on isRunning, not

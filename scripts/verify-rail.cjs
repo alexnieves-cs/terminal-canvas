@@ -1303,6 +1303,89 @@ const src = { path: '/Users/x/notes/todo.md' }
   ok(86, a !== b && a === moved, `usageMoved=${a !== b} rectStable=${a === moved}`)
 }
 
+// ---------------------------------------------------------------------------
+// M18 — the agent knobs in the inspector (ideas-backlog #8 part 1).
+// ---------------------------------------------------------------------------
+
+// 87. The knobs render from the SESSION's spec, not from the panel's.
+//
+//     The fixture builds the two DISAGREEING, which is the only shape that can
+//     tell them apart — a fixture where they agree passes against either
+//     implementation and proves nothing. It matters because `registry.ensure`
+//     returns an existing session unchanged, so `session.spec` is by
+//     construction the spec of the most recent `pty.create` for that panel
+//     while `panel.spec` is merely what the canvas currently holds; reading
+//     the panel would let the pane claim a mode the running agent is not in.
+//
+//     Absent knobs render NO rows at all rather than "default" — the same rule
+//     the Cost section's three states already state, and the reason a login
+//     shell shows nothing here instead of a confident nothing-in-particular.
+{
+  const withOpts = panel('p1', {
+    spec: {
+      panelId: 'p1', cwd: '~', args: [], command: 'claude', agent: 'claude-code',
+      agentOptions: { permissionMode: 'plan', effort: 'high', model: 'opus' }
+    }
+  })
+  // What the canvas holds, deliberately different from what was spawned.
+  const staleOnPanel = {
+    ...withOpts,
+    spec: { ...withOpts.spec, agentOptions: { permissionMode: 'bypassPermissions' } }
+  }
+  const status = { kind: 'running', pid: 1, command: 'claude', cwd: '/x', reattached: false }
+
+  const m = R.buildInspectorModel(
+    staleOnPanel, status, undefined, [], undefined, withOpts.spec.agentOptions
+  )
+  const at = (k) => {
+    const f = m.fields.find((x) => x.key === k)
+    return f && f.value
+  }
+
+  const bare = R.buildInspectorModel(
+    panel('p2', { spec: { panelId: 'p2', cwd: '~', args: ['-l'] } }),
+    undefined, undefined, [], undefined, undefined
+  )
+  const bareKeys = bare.fields.map((f) => f.key)
+
+  ok(87,
+    at('agent-mode') === 'plan' &&
+      at('agent-effort') === 'high' &&
+      at('agent-model') === 'opus' &&
+      !bareKeys.includes('agent-mode') &&
+      !bareKeys.includes('agent-effort') &&
+      !bareKeys.includes('agent-model'),
+    JSON.stringify({
+      mode: at('agent-mode'), effort: at('agent-effort'), model: at('agent-model'),
+      bare: bareKeys
+    }))
+}
+
+// 88. inspectorSignature MOVES when a knob changes, and is byte-identical
+//     across a rect change. Canvas freezes the model on that signature, so a
+//     value the signature does not cover renders once and then never updates
+//     again — stuck at whatever it was when the panel was selected, with
+//     nothing throwing. The knobs are the newest field on the model and so the
+//     easiest for a later edit to leave uncovered.
+{
+  const base = panel('p1', {
+    spec: { panelId: 'p1', cwd: '~', args: [], command: 'claude', agent: 'claude-code' }
+  })
+  const st = { kind: 'running', pid: 1, command: 'claude', cwd: '/x', reattached: false }
+  const sig = (opts, rect) => R.inspectorSignature(
+    R.buildInspectorModel(
+      rect ? { ...base, rect: { ...base.rect, x: rect } } : base,
+      st, undefined, [], undefined, opts
+    )
+  )
+  const a = sig({ permissionMode: 'plan' })
+  const moved = sig({ permissionMode: 'plan' }, 999)
+  const b = sig({ permissionMode: 'acceptEdits' })
+  const c = sig({ permissionMode: 'plan', effort: 'max' })
+  ok(88, a === moved && a !== b && a !== c && b !== c,
+    JSON.stringify({ rectStable: a === moved, modeMoves: a !== b, effortMoves: a !== c }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

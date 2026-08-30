@@ -4073,7 +4073,13 @@ export function Canvas({
         panels,
         // M15. The Cost section's data. Optional and this is its only
         // production caller, the same trade `live` and `panels` made.
-        selectedUsage
+        selectedUsage,
+        // M18. The SESSION's knobs, never selectedPanel.spec.agentOptions.
+        // registry.ensure returns an existing session unchanged, so the
+        // session's spec is what actually reached pty.create while the panel's
+        // is merely what this canvas currently holds — and a pane that read the
+        // panel could claim a permission mode the running agent is not in.
+        registry.get(selectedPanel.rect.id)?.spec.agentOptions
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

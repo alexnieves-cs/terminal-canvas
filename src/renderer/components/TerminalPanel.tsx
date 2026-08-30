@@ -200,6 +200,29 @@ function TerminalPanelImpl({
             session.spec.command ??
             'login shell'}
         </span>
+        {/*
+          M18. The permission mode the panel was STARTED in, and only ever
+          that: read off the session's own spec, which is the spec that
+          reached pty.create, never off the panel the canvas holds.
+
+          Only permissionMode earns a place in the chrome. Effort and model are
+          inspector rows because they change what an agent costs and how well
+          it does; a permission mode changes what it is allowed to DO to the
+          user's machine, and `bypassPermissions` on a panel scrolled off
+          screen is the one fact this canvas must never make someone hunt for.
+          Rendered only when set — a login shell has no mode, and a chip that
+          said "default" on every panel would be noise on the one surface that
+          has to stay scannable.
+        */}
+        {session.spec.agentOptions?.permissionMode !== undefined && (
+          <span
+            className="panel__mode"
+            data-permission-mode={session.spec.agentOptions.permissionMode}
+            title={`Started with --permission-mode ${session.spec.agentOptions.permissionMode}`}
+          >
+            {session.spec.agentOptions.permissionMode}
+          </span>
+        )}
         <StatusBadge status={session.status} />
         {/* onMouseDown rather than onClick, so it runs in the same phase as
             every other panel interaction and beats the chrome's own drag

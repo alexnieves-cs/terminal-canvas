@@ -1352,6 +1352,49 @@ body {
   white-space: nowrap;
 }
 
+/* M18. The permission mode a panel was STARTED in.
+
+   Every colour here is a token: verify:styles 1 forbids a literal in any
+   notation outside a theme block, and the two exempt values are translucent
+   whites modelling light on a surface, which this is not.
+
+   The DEFAULT is deliberately quiet — --muted on the hover fill, the same
+   weight the close button carries — because most modes are unremarkable and a
+   chip that shouted on every agent panel would train the eye to skip it, which
+   is exactly what must not happen to the one case that matters.
+
+   bypassPermissions and dontAsk get --red. They are the modes where the agent
+   stops asking before it acts, and this chip is the only place that fact is
+   visible on a canvas built to hold panels nobody is looking at. plan gets
+   --green: it is the mode where the agent cannot write at all, and saying so
+   is worth as much as the warning is.
+
+   Never shrunk to make room for a long title, the rule .panel__title's own
+   comment states for its neighbours. */
+.panel__mode {
+  flex: none;
+  border-radius: var(--r-sm);
+  background: var(--s-4);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  letter-spacing: var(--track-caps);
+  line-height: 1;
+  padding: var(--sp-1) var(--sp-2);
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.panel__mode[data-permission-mode='bypassPermissions'],
+.panel__mode[data-permission-mode='dontAsk'] {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.panel__mode[data-permission-mode='plan'] {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
 .panel__close {
   /* Never shrunk to make room for a long title — see .panel__title. */
   flex: none;
