@@ -808,7 +808,42 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // server for the next run — see check 20's own comment for why (a later
       // run's client would reattach to a server still wired to THIS run's
       // now-deleted exitDir, and check 14 would silently report the wrong
-      // exit code). Whoever appends check 25 inherits it next.
+      // exit code). Check 25 is next, so the shutdown moves below it.
+    }
+
+    // 25. The subagent poll's dedupe, and it is the only thing anywhere that
+    // would notice this milestone's cost story going wrong: the failure
+    // changes no pixel, it shows up as heat. So this COUNTS messages.
+    //
+    // The WINDOW is what makes the count mean anything, and a future editor
+    // must not shrink it: an implementation with no dedupe emits once per
+    // LIVE_TICK_MS tick, so a sample spanning a single tick sees one message
+    // either way and stays green against the defect. Check 23's trap, in the
+    // same shape.
+    //
+    // The fixture points a panel at a temp cwd with NO Claude Code project
+    // directory anywhere — the ordinary case for most panels — so the
+    // assertion is that a canvas with nothing to report reports nothing at
+    // all, rather than re-announcing an empty list every two seconds.
+    {
+      const seen = []
+      const { manager } = makeHarness(tmuxBackend, {
+        onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
+      })
+      const subagentDir = mkdtempSync(join(tmpdir(), 'tc pty-manager subagent '))
+      await manager.create({ panelId: 'sa1', cwd: subagentDir, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+      await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
+      ok('25 no subagent:state for a panel with no Claude Code session dir',
+        seen.length === 0, `expected no subagent:state, got ${seen.length}`)
+      manager.kill('sa1')
+      try { rmSync(subagentDir, { recursive: true, force: true }) } catch { /* best effort */ }
+
+      // Check 20's obligation, inherited via 22b, 23 and 24: this block must
+      // end in a definite kill-server, never a session kill that leaves a
+      // stale server for the next run — see check 20's own comment for why (a
+      // later run's client would reattach to a server still wired to THIS
+      // run's now-deleted exitDir, and check 14 would silently report the
+      // wrong exit code). Whoever appends check 26 inherits it next.
       tmuxBackend.shutdown()
     }
   }
