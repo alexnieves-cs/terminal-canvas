@@ -6,7 +6,15 @@ import { fuzzyMatch } from './fuzzy'
  * in Palette.tsx owns no decision this file can make.
  */
 
-export type SectionId = 'panel' | 'spawn' | 'prompt' | 'workspace' | 'canvas' | 'setting' | 'manage'
+export type SectionId =
+  | 'panel'
+  | 'spawn'
+  | 'prompt'
+  | 'workspace'
+  | 'canvas'
+  | 'setting'
+  | 'credential'
+  | 'manage'
 
 export interface SectionDef {
   id: SectionId
@@ -33,6 +41,7 @@ export const SECTIONS: readonly SectionDef[] = [
   { id: 'workspace', label: 'Workspaces' },
   { id: 'canvas', label: 'Canvas' },
   { id: 'setting', label: 'Settings' },
+  { id: 'credential', label: 'Credentials' },
   { id: 'manage', label: 'Manage' }
 ]
 
@@ -41,7 +50,7 @@ export const SECTIONS: readonly SectionDef[] = [
  * view holds rather than a value a Command carries — a Command names the ONE
  * scope it appears in, or names none and appears only at the top level.
  */
-export type PaletteScope = 'presets' | 'prompts' | 'settings' | 'workspaces'
+export type PaletteScope = 'presets' | 'prompts' | 'settings' | 'workspaces' | 'credentials'
 
 /** Unknown ids sink to the bottom rather than throwing: a row in a section
  *  that no longer exists is a display bug, not a reason to blank the palette. */

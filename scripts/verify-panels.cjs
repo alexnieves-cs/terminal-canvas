@@ -27,6 +27,8 @@ buildSync({
 })
 const {
   registerIpcHandlers,
+  credentialStore,
+  credentialDir,
   PtyManager,
   createDirectBackend,
   createTmuxBackend,
@@ -729,7 +731,7 @@ app.whenReady().then(async () => {
     // still has to reach a callable fifth argument or a real settings-palette
     // exercise here would throw "rebuildMenu is not a function" instead of
     // testing what it means to.
-  }, reviewEngine, reviewCommit)
+  }, reviewEngine, reviewCommit, credentialStore)
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -3544,7 +3546,7 @@ app.whenReady().then(async () => {
         // loads the built renderer rather than bundling palette-model.ts, so
         // reaching the real SECTIONS value here would mean adding plumbing
         // this task was told not to add.
-        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Manage']
+        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Credentials', 'Manage']
         const unique = headers.length === new Set(headers).size
         const ordered = headers.join(',') ===
           ORDER.filter((label) => headers.includes(label)).join(',')
@@ -8815,6 +8817,147 @@ app.whenReady().then(async () => {
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
     }
+
+    // 130. The whole boundary in one window: a token entered through the
+    //      REAL palette input mode is stored and listed back, and is NOT
+    //      readable through any member of the bridge. Both halves are
+    //      required — the negative alone passes before the feature exists,
+    //      which is the vacuity trap this suite already records for checks
+    //      111/111b.
+    //
+    //      Deliberately OUTSIDE the GIT_OK gate above, even though it sits
+    //      right after it: this check touches no git at all, only the
+    //      palette and the credential store, so gating it behind a git
+    //      probe would silently drop the one check that proves M14's whole
+    //      boundary claim on any machine with no git binary — the SKIP line
+    //      above names 99-101, 113-115 and 116-117 precisely because each of
+    //      those genuinely needs git (or, for 116-117, reuses that block's
+    //      spawnAt/sessionMap helpers); this check needs neither and must
+    //      run unconditionally, the same "skipped LOUDLY, never silently"
+    //      rule CLAUDE.md states for verify:review 61-63 and the
+    //      verify:pty-manager tmux block — which cuts the other way here,
+    //      since the correct fix for a check with no such dependency is not
+    //      to skip it loudly but to not gate it at all.
+    {
+      await zoomTo(wc, 'k')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+
+      // Probed BEFORE the palette flow below ever stores anything.
+      // verifyCredential's very FIRST guard (credential-verify.ts) is
+      //   const token = deps.store.read(service)
+      //   if (token === undefined) return { ok: false, reason: 'no stored credential to verify' }
+      // which returns before the fetcher is ever constructed or called — so
+      // calling verify() here, while the store is still empty, reaches a
+      // real refusal payload with ZERO network traffic. This is deliberate
+      // ordering, not a mock: `npm run verify` is this repo's single
+      // green-or-not signal and CLAUDE.md requires it stay "fast and
+      // offline" (the stated reason verify:packaged is kept out of the
+      // default chain) — a live request to api.github.com would make a
+      // green run depend on a resource this repo does not own, the same
+      // rule as "the verify suites must never touch the production socket"
+      // one layer out. Calling verify() AFTER the token is stored would
+      // route past this guard and into a real HTTPS request, so order is
+      // everything here.
+      const preVerify = await wc.executeJavaScript(`(async () => {
+        const res = await window.canvas.credential.verify('github')
+        return { res, str: JSON.stringify(res) }
+      })()`)
+
+      // React's controlled <input> ignores a plain input.value = x — the
+      // native setter plus a dispatched 'input' is what makes the change
+      // reach React's state, the same nativeSet dance checks 38/45/60 use.
+      const entry = await wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        // The row is hiddenAtRest (commands.ts's buildCredentialRows), so
+        // it only appears once a query surfaces it.
+        nativeSet(document.querySelector('.palette__input'), 'add github token')
+        await new Promise((r) => setTimeout(r, 50))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((el) => el.textContent.includes('Add GitHub token'))
+        if (!row) return { error: 'no add-github-token row' }
+        if (row.className.includes('palette__row--disabled')) return { error: 'row was disabled' }
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 50))
+        // Still an input, and now in secret input mode: beginSetCredential
+        // reopens the palette into inputMode rather than leaving it shut.
+        const input2 = document.querySelector('.palette__input')
+        if (!input2) return { error: 'palette closed instead of entering secret mode' }
+        // The masking claim, captured here because it is cheap here and
+        // checkable nowhere else — Palette.tsx renders type="password"
+        // ONLY for InputMode.kind === 'secret'.
+        const masked = input2.type
+        nativeSet(input2, 'ghp_e2e_token_value')
+        input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await new Promise((r) => setTimeout(r, 200))
+        return { masked }
+      })()`)
+      await settle()
+
+      const probe = await wc.executeJavaScript(`(async () => {
+        const list = await window.canvas.credential.list()
+        const keys = list.length ? Object.keys(list[0]) : []
+        // Every bridge member, walked: none may hand back the token.
+        const serialised = JSON.stringify(list)
+
+        // list()'s payload is not the only leak path: set() also RESOLVES to
+        // a value of its own, and it is not probed above. Called again here
+        // — idempotent, the service is already stored from the palette flow
+        // above — so its resolved value is directly in hand rather than
+        // merely assumed from the UI call that ran it the first time.
+        // (verify()'s resolved value is probed separately, BEFORE this
+        // block runs, back when the store was still empty — see preVerify
+        // above and its comment for why the ordering matters.)
+        const setResult = await window.canvas.credential.set({ service: 'github', token: 'ghp_e2e_token_value' })
+        const setStr = JSON.stringify(setResult)
+        const carriesToken = (obj, str) =>
+          str.includes('ghp_e2e_token_value') ||
+          Object.keys(obj || {}).some((k) => k === 'cipher' || k === 'token')
+
+        return {
+          stored: list.some((m) => m.service === 'github'),
+          leaked: serialised.includes('ghp_e2e_token_value') ||
+                  keys.includes('cipher') || keys.includes('token'),
+          hasGet: typeof window.canvas.credential.get === 'function',
+          setLeaked: carriesToken(setResult, setStr)
+        }
+      })()`)
+
+      // preVerify's refusal reason is asserted by NAME, not merely by
+      // ok === false: this is the cheapest available proof that the call
+      // took the early-return path rather than a real network round trip —
+      // any answer FROM GitHub (a 401 rejection, or the generic "the
+      // request to GitHub failed" a genuine network error produces) would
+      // read as a DIFFERENT reason string, so this clause would catch a
+      // future edit that reordered the flow and let this leak back onto
+      // the network.
+      const preVerifyRefused = preVerify.res && preVerify.res.ok === false &&
+        /no stored credential/i.test(preVerify.res.reason || '')
+      const preVerifyLeaked = preVerify.str.includes('ghp_e2e_token_value') ||
+        Object.keys(preVerify.res || {}).some((k) => k === 'cipher' || k === 'token')
+
+      ok(130, entry.masked === 'password' && probe.stored === true &&
+          probe.leaked === false && probe.hasGet === false &&
+          probe.setLeaked === false && preVerifyRefused === true && preVerifyLeaked === false,
+        `entry=${JSON.stringify(entry)} stored=${probe.stored} leaked=${probe.leaked} ` +
+        `hasGet=${probe.hasGet} setLeaked=${probe.setLeaked} ` +
+        `preVerify=${JSON.stringify(preVerify.res)}`)
+    }
+
+    // Check 130 is the first thing that ever writes through
+    // panels-entry.cjs's credential store, so this is the first run where
+    // this directory holds anything worth removing — a trivially
+    // reversible 'enc:' + token fixture otherwise left in $TMPDIR forever.
+    // Unlike crepo/repo/notRepo above, this one runs UNCONDITIONALLY — the
+    // directory is minted at module load in panels-entry.cjs regardless of
+    // GIT_OK, since check 130 itself needs no git binary and must not be
+    // skipped on a machine without one (see the check's own comment).
+    // Same best-effort shape as those three: a failure here must never turn
+    // a green suite red.
+    try { rmSync(credentialDir, { recursive: true, force: true }) } catch { /* best effort */ }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

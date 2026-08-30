@@ -18,6 +18,7 @@ import type {
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
+import type { CredentialMeta } from './credential-schema'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -178,7 +179,13 @@ export const IPC = {
    * legitimately thirty seconds — so the renderer must render an in-flight
    * state rather than assuming a prompt reply.
    */
-  REVIEW_COMMIT: 'review:commit'
+  REVIEW_COMMIT: 'review:commit',
+  /** Metadata only. There is deliberately no credential:get — see CLAUDE.md. */
+  CREDENTIAL_LIST: 'credential:list',
+  CREDENTIAL_SET: 'credential:set',
+  CREDENTIAL_DELETE: 'credential:delete',
+  /** Uses the token to make one request; returns what the service said. */
+  CREDENTIAL_VERIFY: 'credential:verify'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -328,6 +335,11 @@ export interface ActivateResult {
   allPanelIds: string[]
 }
 
+/** Mirrors CredentialStore's SetResult / credential-verify's VerifyResult — never a cipher, never a token. */
+export type CredentialSetResult =
+  | { ok: true; meta: CredentialMeta }
+  | { ok: false; reason: string }
+
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
   id: string
@@ -461,6 +473,16 @@ export interface CanvasBridge {
     at(subject: ReviewSubject): Promise<ReviewResult>
     diff(req: ReviewDiffRequest): Promise<ReviewDiff>
     commit(req: ReviewCommitRequest): Promise<ReviewCommitResult>
+  }
+  /**
+   * Metadata only. Deliberately no `get` here — there is no channel that
+   * would let it exist, and no bridge member returns a token. See CLAUDE.md.
+   */
+  credential: {
+    list(): Promise<CredentialMeta[]>
+    set(req: { service: string; token: string }): Promise<CredentialSetResult>
+    remove(service: string): Promise<boolean>
+    verify(service: string): Promise<CredentialSetResult>
   }
   platform: NodeJS.Platform
 }

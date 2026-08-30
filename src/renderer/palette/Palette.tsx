@@ -27,6 +27,7 @@ import {
   type PromptRow
 } from './commands'
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
+import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 
 /**
@@ -56,7 +57,17 @@ export interface InputMode {
    * submit callback, where the setting id and its bounds are in scope
    * (Canvas.tsx's beginEditSetting).
    */
-  kind: 'text' | 'confirm' | 'number'
+  /**
+   * 'secret' is 'text' with three differences, each against a specific
+   * failure: it renders type="password", so a token is not on screen in an
+   * app whose users screenshot and screen-share canvases; `initial` is
+   * always '' so a secret field never pre-seeds; and unlike 'number' a
+   * REFUSAL never re-seeds the typed value. 'number' re-seeds deliberately,
+   * so the user can see and correct what they typed — but a secret field is
+   * masked, so there is nothing to correct by reading, and re-seeding only
+   * extends how long the plaintext lives in renderer state for no benefit.
+   */
+  kind: 'text' | 'confirm' | 'number' | 'secret'
   label: string
   initial: string
   submit(value: string): void
@@ -84,6 +95,8 @@ export interface PaletteProps {
   panels: PanelRow[]
   settings: SettingRow[]
   workspaces: WorkspaceRow[]
+  /** Metadata only — see PaletteContext.credentials in commands.ts. */
+  credentials: readonly CredentialMeta[]
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
@@ -95,7 +108,8 @@ const SCOPE_LABEL: Record<PaletteScope, string> = {
   presets: 'Presets',
   prompts: 'Prompts',
   settings: 'Settings',
-  workspaces: 'Workspaces'
+  workspaces: 'Workspaces',
+  credentials: 'Credentials'
 }
 
 const sectionLabel = (id: SectionId): string =>
@@ -138,13 +152,14 @@ export function Palette(props: PaletteProps): JSX.Element {
         panels: props.panels,
         settings: props.settings,
         workspaces: props.workspaces,
+        credentials: props.credentials,
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
-     props.attentionIds, controller.capturedId, props.hasSelection, props.actions]
+     props.credentials, props.attentionIds, controller.capturedId, props.hasSelection, props.actions]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 
@@ -472,6 +487,11 @@ export function Palette(props: PaletteProps): JSX.Element {
           <input
             ref={inputRef}
             className="palette__input"
+            // 'secret' is the only kind that renders as a password field —
+            // see InputMode.kind's own doc comment above. Every other kind,
+            // command mode included, is ordinary text: nothing else in this
+            // app has a reason to mask what the user is typing.
+            type={inputMode?.kind === 'secret' ? 'password' : 'text'}
             value={query}
             placeholder={
               inputMode

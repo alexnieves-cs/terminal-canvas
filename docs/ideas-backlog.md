@@ -208,6 +208,27 @@ together: the canvas as an agentic super app, not a terminal multiplexer.**
   main owns everything." Tokens for N services, stored somewhere, reachable by agents
   that run arbitrary commands. That deserves its own design pass before the *first*
   integration ships, not the fifth.
+- **The design pass that constraint asks for has LANDED, and the answer is written down.**
+  M14 — `docs/superpowers/specs/2026-08-30-m14-credential-boundary-design.md` — is that
+  pass, plus the smallest store and consumer that keep it from being a customer-free
+  abstraction (the failure #11 warns about, and a credential store with nothing storing
+  credentials is its purest instance). **The decision: a stored credential never reaches an
+  agent's process** — not in the environment, not in argv, not in a file the agent can read.
+  It ships as `main/credential-store.ts` over its own `userData/credentials.json`, encrypted
+  through `safeStorage`, four `credential:*` invokes of which **none returns a secret**, and
+  two source-text checks (`verify:meta` 20/21) rather than behavioural ones, because neither
+  rule has a runtime symptom when broken. The reasoning is stricter than the app's existing
+  posture on purpose and the spec says why at length: `shell-env.ts` already pours the user's
+  whole login environment into every PTY and must, since that is how `claude` finds its API
+  key — the axis is not the secrets' sensitivity but **whose decision it was**, and a token
+  this app obtained through UI this app built is one the app would be handing over
+  gratuitously. **A broker was considered and deliberately deferred**: agents reaching a
+  loopback socket that holds no secret and proxies authorised calls is genuinely the
+  strongest design, and the only one that survives an agent pasting its own environment into
+  a log — but it is a milestone of its own, and it is strictly easier to build later on top
+  of a store that never leaked than to retrofit onto one that did. The practical consequence
+  for this entry: **the tier-1 and tier-2 reference implementations below are now
+  unblocked**, and each inherits a boundary rather than having to invent one.
 - **Sequencing advice:** pick **one** from tier 1 and **one** from tier 2 — Obsidian and
   GitHub — and build them as the two reference implementations. What they have in common
   becomes the integration surface; what they don't becomes the list of things that
