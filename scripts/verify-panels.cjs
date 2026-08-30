@@ -73,6 +73,7 @@ const {
   createBaselineCapture,
   createReviewCommitter,
   FileWatchers,
+  ToolboxCache,
   readFrom
 } = require(ENTRY_OUT)
 
@@ -768,6 +769,7 @@ app.whenReady().then(async () => {
   // run. Answering only for a path that exists on disk keeps the answer
   // honest rather than blanket-true.
   const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
+  const toolboxCache = new ToolboxCache()
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
       resolveAvailability(allPresets(layoutStore.presets()), whichHere),
@@ -837,7 +839,13 @@ app.whenReady().then(async () => {
     // still has to reach a callable fifth argument or a real settings-palette
     // exercise here would throw "rebuildMenu is not a function" instead of
     // testing what it means to.
-  }, reviewEngine, reviewCommit, credentialStore, new FileWatchers(), () => win)
+  }, reviewEngine, reviewCommit, credentialStore, new FileWatchers(), () => win,
+  // A REAL cache, not a stub, and fenced onto the harness's own fixture home
+  // by the TOOLBOX_HOME below rather than by homedir(): the toolbox reader is
+  // the one thing in this milestone that would otherwise read the running
+  // developer's real ~/.claude, which is the rule M9a's git fence and M15's
+  // projects-root fence each cost a fix round to learn.
+  toolboxCache)
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -10878,6 +10886,119 @@ app.whenReady().then(async () => {
         `kills=${JSON.stringify(killsSince)}`)
 
       try { rmSync(FILE_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
+    /* ============== M21: the toolbox node, end to end ================== */
+    {
+      // Its own fixture tree, in a directory whose path contains a SPACE —
+      // this repo's costliest silent bug shipped through eight reviews on
+      // space-free fixtures. It is a PROJECT scope only: the USER scope is
+      // fenced onto an empty temp home by panels-entry.cjs, deliberately, so
+      // this check can never read the running developer's real ~/.claude.
+      const TB_DIR = mkdtempSync(join(tmpdir(), 'tc toolbox panel '))
+      mkdirSync(join(TB_DIR, '.claude', 'skills', 'fixture-skill'), { recursive: true })
+      writeFileSync(
+        join(TB_DIR, '.claude', 'skills', 'fixture-skill', 'SKILL.md'),
+        '---\nname: fixture-skill\ndescription: A skill this fixture owns.\n---\n'
+      )
+      writeFileSync(
+        join(TB_DIR, '.claude', 'settings.json'),
+        JSON.stringify({
+          permissions: { allow: ['Bash(ls)', 'Bash(cat)'] },
+          hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node /h/guard.js --token=SHOULD-NOT-CROSS' }] }] }
+        })
+      )
+
+      const xtermsBefore = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+      await wc.executeJavaScript(
+        `window.__m20Toolbox(${JSON.stringify(TB_DIR)}, ${JSON.stringify('fixture')})`)
+
+      // 156 is the check the whole milestone exists for, and it is the FIRST
+      //     thing to exercise the reader, the invoke, the store, the model and
+      //     the component together — verify:toolbox proves the reader and
+      //     verify:rail proves the models, and nothing between either of them
+      //     and a painted node is covered by those. Asserted on the REAL
+      //     content, never on the panel existing: a node that mounted and
+      //     rendered nothing satisfies "a panel exists" completely.
+      const body = async () => wc.executeJavaScript(
+        `(() => { const b = document.querySelector('[data-panel-kind="toolbox"] [data-scroll-host]'); return b ? b.textContent : null })()`)
+      const rendered = await waitUntil(async () => {
+        const t = await body()
+        return t && t.includes('fixture-skill') ? t : null
+      }, 8000)
+      ok('156 a toolbox node renders the real skills of the directory it names',
+        rendered !== null,
+        `body=${JSON.stringify(String(rendered).slice(0, 80))}`)
+
+      // 157 is the projection observed at the LAST possible surface — the
+      //     rendered DOM of a real node, in a real renderer, reading a real
+      //     file. verify:toolbox 15 pins hookProgram and verify:rail 92 pins
+      //     the row, and neither can see whether something between them and
+      //     the screen put the token back. The positive clause is what stops
+      //     it being vacuous: the hook's PROGRAM must be on screen, so a node
+      //     that rendered no hooks at all cannot pass by rendering nothing.
+      const shown = String(rendered ?? '')
+      ok('157 the hook PROGRAM reaches the node and its command string does not',
+        shown.includes('guard.js') && !shown.includes('SHOULD-NOT-CROSS')
+          && !shown.includes('--token'),
+        `program=${shown.includes('guard.js')} token=${shown.includes('SHOULD-NOT-CROSS')}`)
+
+      // 158 is verify:panels 103's argument applied to a FIFTH kind: the node
+      //     holds no PanelSession AND the xterm count is unchanged from before
+      //     it existed. The second clause is what rejects an implementation
+      //     that quietly demoted some other panel to pay for this one — "no
+      //     xterm of its own" is satisfied by that regression too.
+      const tbId = await wc.executeJavaScript(
+        `document.querySelector('.panel[data-panel-kind="toolbox"]').getAttribute('data-panel-id')`)
+      const hasSession = await wc.executeJavaScript(
+        `Object.prototype.hasOwnProperty.call(window.__m4aSessions(), ${JSON.stringify(tbId)})`)
+      const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+      ok('158 a toolbox node holds no PanelSession and costs no WebGL context',
+        hasSession === false && xtermsAfter === xtermsBefore,
+        `session=${hasSession} xterms ${xtermsBefore}->${xtermsAfter}`)
+
+      // 159 — closing it sends NO pty.kill for its id, and the same window
+      //     closes a real terminal panel and asserts THAT id IS recorded. A
+      //     negative against a recording mechanism is vacuous if the recorder
+      //     has stopped recording, which is the trap checks 111/111b and 137
+      //     were each built to close: a kill aimed at an id naming no session
+      //     is swallowed at every layer below the IPC door, so without the
+      //     positive half every renderer-visible fact would be identical with
+      //     the !isTerminalPanel guard removed entirely.
+      //     Its OWN terminal panel, spawned here rather than borrowed from the
+      //     canvas: this block runs last, and by now M18's move and delete
+      //     checks have left the active workspace with no terminal panel at
+      //     all — the first draft of this check read `terminal=null kills=[]`
+      //     and failed for a fixture reason rather than a behavioural one.
+      //     Check 83 already sets the precedent of spawning what a check
+      //     needs instead of assuming the canvas still holds it.
+      const killsBefore = killedPanelIds.length
+      const termId2 = await (async () => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: TB_DIR, command: '/bin/sh', args: [], w: 400, h: 300 })
+        const ids = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > before.size ? now : false
+        }, 5000)
+        return ids ? (ids.find((id) => !before.has(id)) ?? null) : null
+      })()
+      // Waited on, so the close below cannot race the spawn: a kill for a
+      // panel whose session has not landed yet is swallowed at the IPC door
+      // and the positive clause would report a false negative.
+      if (termId2 !== null) {
+        await waitUntil(async () => (await sessionMap(wc)).has(termId2), 6000)
+      }
+      await clickPanelClose(wc, tbId)
+      if (termId2 !== null) await clickPanelClose(wc, termId2)
+      await settle()
+      const killsSince = killedPanelIds.slice(killsBefore)
+      ok('159 closing a toolbox node sends no pty.kill, while a terminal close still does',
+        termId2 !== null && !killsSince.includes(tbId) && killsSince.includes(termId2),
+        `toolbox=${tbId} terminal=${String(termId2)} kills=${JSON.stringify(killsSince)}`)
+
+      try { rmSync(TB_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
   } catch (error) {

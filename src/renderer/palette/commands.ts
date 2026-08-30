@@ -168,6 +168,14 @@ export interface PaletteActions {
    */
   openReview(subjectId: string): void
   /**
+   * Open a toolbox node for the captured panel's directory.
+   *
+   * It EARNS a Command row for openReview's reason: the inspector button is
+   * its only other gesture, so a user who has not found the pane has no way to
+   * reach it at all.
+   */
+  openToolbox(panelId: string): void
+  /**
    * File a rubber-band selection into ANOTHER workspace's record.
    *
    * Touches no session on either side: a moved panel becomes a hidden
@@ -515,6 +523,25 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ctx.capturedId === null
           ? REASON_NO_FOCUS
           : (ctx.panels.length < 2 ? REASON_NOTHING_TO_LINK : undefined)
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: 'panel.toolbox',
+          title: target === undefined ? 'Open toolbox' : `Open toolbox for ${target.label}`,
+          searchText: 'toolbox skills mcp hooks commands subagents permissions what can this agent do',
+          group: 'panel',
+          run: () => { if (target !== undefined) actions.openToolbox(target.id) }
+        },
+        // ONE reason, not two, and the difference from the Restart and review
+        // rows beside it is the point: those gate on "has this panel ever
+        // spawned", because a baseline only exists once it has. A toolbox
+        // answers for a DIRECTORY, which a panel has from the moment it is
+        // minted — so a panel that never started still has a perfectly good
+        // toolbox, and refusing one here would be a wrong answer rather than
+        // a cautious one.
+        ctx.capturedId === null ? REASON_NO_FOCUS : undefined
       )
     )
     out.push(

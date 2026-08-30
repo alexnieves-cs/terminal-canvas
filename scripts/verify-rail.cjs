@@ -1303,6 +1303,282 @@ const src = { path: '/Users/x/notes/todo.md' }
   ok(86, a !== b && a === moved, `usageMoved=${a !== b} rectStable=${a === moved}`)
 }
 
+/* ==================== M21: the Toolbox section and the node ============ */
+
+// A minimal inventory fixture, built by hand rather than through readToolbox:
+// this suite's subject is the two VIEW MODELS, and the reader has its own
+// real-filesystem fixture in verify:toolbox.
+const invEntry = (over) => ({
+  id: JSON.stringify(['skill', 'user', '/h/.claude/skills/x/SKILL.md']),
+  kind: 'skill', scope: 'user', sourcePath: '/h/.claude/skills/x/SKILL.md',
+  active: { kind: 'active' }, alsoDefinedIn: [],
+  name: 'graphify', description: 'Build a graph.', descriptionTruncated: false,
+  ...over
+})
+const inventory = (over) => ({
+  kind: 'inventory',
+  inventory: {
+    cwd: '/repo', readAt: 1000, entries: [invEntry()], permissions: [], sources: [],
+    pluginsEnabled: [], pluginsDisabledCount: 0,
+    unresolved: { skillOverridesOff: [], mcpEnabled: [], mcpDisabled: [] },
+    overflow: { skills: 0, commands: 0, agents: 0, mcp: 0, hooks: 0, total: 0 },
+    freshness: { kind: 'unknown' },
+    ...over
+  }
+})
+
+// 87 is the check the section's whole hiding policy rests on, and it is M9a's
+// not-a-repo/never-started split reaching a FOURTH section. THREE states, and
+// collapsing any two is a wrong answer rather than a simplification: a panel
+// with no directory renders NOTHING ("0 skills" beside a review node is the
+// confident wrong answer that teaches a user to stop believing the section), a
+// read that has not answered yet renders a NOTE (true for one IPC round trip
+// on every selection, where an empty section reads as broken), and only an
+// actual inventory renders rows.
+{
+  const none = R.buildToolboxFields({ kind: 'no-cwd' })
+  const pending = R.buildToolboxFields(undefined)
+  const real = R.buildToolboxFields(inventory())
+  ok(87,
+    none.hidden === true
+      && pending.hidden === false && pending.rows.length === 0 && pending.summary !== ''
+      && real.hidden === false && real.rows.length === 1,
+    `three states: no-cwd hidden, in-flight notes ("${pending.summary}"), inventory renders rows`)
+}
+
+// 88 — an UNREADABLE source is named; an ABSENT one says nothing. The same
+// distinction verify:toolbox 28 pins in the reader, carried to the one surface
+// a user reads: "no skills" because the directory was read and was empty is a
+// different sentence from "no skills" because it could not be opened, and only
+// one of them means go and look.
+{
+  const quiet = R.buildToolboxFields(inventory({
+    sources: [{ path: '/repo/.claude/skills', scope: 'project', what: 'skills', status: 'absent' }]
+  }))
+  const loud = R.buildToolboxFields(inventory({
+    sources: [{ path: '/repo/.claude/settings.json', scope: 'project', what: 'settings', status: 'unreadable', detail: 'EACCES' }]
+  }))
+  ok(88, quiet.note === undefined && typeof loud.note === 'string' && loud.note !== '',
+    `absent is silent, unreadable is named: ${String(loud.note)}`)
+}
+
+// 89 is TOOLBOX_ROW_CAP, asserted on the remainder as a NUMBER rather than on
+// rendered "+N more" text — REVIEW_FILE_CAP's own rule, and the reason is that
+// a list which silently stops is indistinguishable from a directory with
+// nothing in it.
+{
+  const many = []
+  for (let i = 0; i < R.TOOLBOX_ROW_CAP + 4; i += 1) {
+    many.push(invEntry({ id: `s${i}`, name: `skill-${i}` }))
+  }
+  const m = R.buildToolboxFields(inventory({ entries: many }))
+  ok(89, m.rows.length === R.TOOLBOX_ROW_CAP && m.more === 4,
+    `pane cap ${R.TOOLBOX_ROW_CAP}, remainder counted: ${m.rows.length}+${m.more}`)
+}
+
+// 90 is the check the NODE's own model exists for, and the only one that
+// separates it from "just call buildToolboxFields" — the identical argument
+// review-node-model.ts earns against buildReviewFields. The pane is a strip in
+// a 260px column that must VANISH when it has nothing to say; a node is a
+// panel the user deliberately opened, placed and dragged, and one that renders
+// nothing at all is indistinguishable from a broken one. So `no-cwd` is HIDDEN
+// in the pane and RENDERED in the node.
+{
+  const pane = R.buildToolboxFields({ kind: 'no-cwd' })
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined, result: { kind: 'no-cwd' }
+  })
+  ok(90,
+    pane.hidden === true
+      && node.heading !== '' && node.summary !== '' && typeof node.note === 'string',
+    `no-cwd: hidden in the pane, heading AND note in the node ("${String(node.note)}")`)
+}
+
+// 91 is the honest chain's first link reaching a FIFTH kind: a user's own
+// title outranks the derived label, exactly as it already does for a terminal
+// header, a review node and a file panel. The DIRECTORY stays its own field,
+// never folded into the heading — the split inspector-fields draws for cwd.
+{
+  const derived = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined, result: undefined
+  })
+  const titled = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: 'auth toolbox', result: undefined
+  })
+  ok(91,
+    derived.heading.includes('repo') && titled.heading === 'auth toolbox'
+      && derived.directory === '/repo' && titled.directory === '/repo',
+    `title outranks the label, directory stays its own field`)
+}
+
+// 92 is the projection observed at the last surface before pixels, and that is
+// why it exists rather than trusting verify:toolbox 11: that check pins
+// projectMcpServer, and this pins that nothing between it and a rendered row
+// puts the secret back. An MCP row shows the arg COUNT and the env KEY NAMES;
+// a hook row shows the PROGRAM and the real command length. Neither can show
+// what it was never handed, which is exactly the point.
+{
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' },
+    title: undefined,
+    result: inventory({ entries: [
+      { id: 'm1', kind: 'mcp', scope: 'user', sourcePath: '/h/.claude.json',
+        active: { kind: 'active' }, alsoDefinedIn: [], name: 'railway',
+        transport: 'stdio', command: 'npx', argCount: 3,
+        envKeys: ['RAILWAY_TOKEN'], envKeysOverflow: 0 },
+      { id: 'h1', kind: 'hook', scope: 'user', sourcePath: '/h/.claude/settings.json',
+        active: { kind: 'active' }, alsoDefinedIn: [], event: 'PreToolUse',
+        matcher: 'Bash', matcherTruncated: false, index: 0, hookType: 'command',
+        program: 'node guard.js', commandChars: 92 }
+    ] })
+  })
+  const mcp = node.groups.find((g) => g.kind === 'mcp')
+  const hook = node.groups.find((g) => g.kind === 'hook')
+  ok(92,
+    !!mcp && mcp.rows[0].detail.includes('3 args') && mcp.rows[0].detail.includes('RAILWAY_TOKEN')
+      && !!hook && hook.rows[0].detail.includes('node guard.js')
+      && hook.rows[0].detail.includes('92 chars') && hook.rows[0].name.includes('PreToolUse'),
+    `arg COUNT and env KEY NAME render; hook shows PROGRAM and length`)
+}
+
+// 93 — a hook has no name, so its row renders a COORDINATE. Synthesising one
+// is the fix that breaks the feature: a fabricated name in a list starts
+// matching searches it has no business matching, the rule Command.waiting
+// already states for a count.
+{
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined,
+    result: inventory({ entries: [
+      { id: 'h1', kind: 'hook', scope: 'user', sourcePath: '/s.json',
+        active: { kind: 'active' }, alsoDefinedIn: [], event: 'Stop',
+        matcher: '', matcherTruncated: false, index: 0, hookType: 'command',
+        program: 'echo', commandChars: 9 }
+    ] })
+  })
+  const row = node.groups[0].rows[0]
+  ok(93, row.name === 'Stop' && !row.name.includes('#'),
+    `a matcherless hook renders its EVENT, never a synthesised name: ${row.name}`)
+}
+
+// 94 — every non-active state is MUTED and NAMED rather than dropped. A
+// disabled skill the user is hunting for must still be in the list saying why:
+// a row that disappears is indistinguishable from one that was never installed
+// (verify:palette 31's rule), and "why can this agent not do X" is the question
+// the whole feature exists to answer.
+{
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined,
+    result: inventory({ entries: [
+      invEntry({ id: 'a', name: 'on' }),
+      invEntry({ id: 'b', name: 'off', active: { kind: 'disabled', by: '/s.json' } }),
+      invEntry({ id: 'c', name: 'wait', active: { kind: 'needs-approval' } }),
+      invEntry({ id: 'd', name: 'huh', active: { kind: 'unknown', why: 'plugin-owned' } })
+    ] })
+  })
+  const rows = node.groups[0].rows
+  ok(94,
+    rows.length === 4
+      && rows[0].muted === false && rows[0].state === ''
+      && rows[1].muted === true && rows[1].state === 'disabled'
+      && rows[2].muted === true && rows[2].state === 'needs approval'
+      && rows[3].muted === true && rows[3].state.includes('plugin-owned'),
+    `four active states, four distinct labels, none dropped`)
+}
+
+// 95 is the freshness arm, and its WORDING is what this pins: a fact about
+// FILES, never a claim about the running agent. An mtime bump with no semantic
+// change would otherwise read as "your agent is missing X", the confident
+// wrong answer this milestone's honesty rule forbids. `unknown` is NOT stale —
+// it is what a panel that never spawned answers, and what a reattach after a
+// full relaunch answers, both ordinary.
+{
+  const fresh = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined,
+    result: inventory({ freshness: { kind: 'fresh' } })
+  })
+  const stale = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined,
+    result: inventory({ freshness: { kind: 'stale', changedPaths: ['/repo/.claude/settings.json'], since: 1 } })
+  })
+  const unknown = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined,
+    result: inventory({ freshness: { kind: 'unknown' } })
+  })
+  ok(95,
+    fresh.stale === false && unknown.stale === false
+      && stale.stale === true && typeof stale.staleNote === 'string'
+      && stale.staleNote.includes('settings.json')
+      && !stale.staleNote.toLowerCase().includes('missing'),
+    `fresh and unknown are both not-stale; stale names the FILE: ${String(stale.staleNote)}`)
+}
+
+// 96 is the node's own LARGER cap, per KIND rather than overall — a node has a
+// whole panel to fill, unlike the 260px pane, and a hundred skills must not
+// push every MCP server off the bottom of a list whose whole purpose is
+// answering "can this agent do X". The remainder is reported, never dropped.
+{
+  const many = []
+  for (let i = 0; i < R.TOOLBOX_NODE_ROW_CAP + 3; i += 1) {
+    many.push(invEntry({ id: `s${i}`, name: `skill-${i}` }))
+  }
+  many.push({ id: 'm1', kind: 'mcp', scope: 'user', sourcePath: '/h/.claude.json',
+    active: { kind: 'active' }, alsoDefinedIn: [], name: 'railway',
+    transport: 'stdio', command: 'npx', argCount: 0, envKeys: [], envKeysOverflow: 0 })
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' }, title: undefined,
+    result: inventory({ entries: many })
+  })
+  const skills = node.groups.find((g) => g.kind === 'skill')
+  const mcp = node.groups.find((g) => g.kind === 'mcp')
+  ok(96,
+    R.TOOLBOX_NODE_ROW_CAP > R.TOOLBOX_ROW_CAP
+      && !!skills && skills.rows.length === R.TOOLBOX_NODE_ROW_CAP && skills.more === 3
+      && !!mcp && mcp.rows.length === 1,
+    `per-KIND cap: skills ${skills && skills.rows.length}+${skills && skills.more}, mcp survives`)
+}
+
+// 97 is the rail and inspector arms together, and it is the FIFTH kind earning
+// the same refusal the review node and the file panel already do: a toolbox
+// row is NEVER dormant — the honest answer, since a "click to start" arrow on
+// a panel with no process is a promise nothing can keep — its tail says
+// `toolbox`, and the inspector's restartable flag refuses every process verb.
+// The dormant SET deliberately names this panel, so a kind-blind
+// implementation would render 'dormant' here and be caught.
+{
+  const panel = {
+    kind: 'toolbox',
+    rect: { id: 't1', x: 0, y: 0, w: 560, h: 620 },
+    z: 1,
+    source: { cwd: '/Users/me/repo', label: 'repo' }
+  }
+  const rows = R.buildRailRows([panel], () => undefined, new Set(['t1']))
+  const model = R.buildInspectorModel(panel, undefined)
+  ok(97,
+    rows.length === 1 && rows[0].dormant === false && rows[0].tail === 'toolbox'
+      && rows[0].label === 'toolbox: repo'
+      && model.kind === 'toolbox' && model.restartable === false && model.reattached === false
+      && model.fields.some((f) => f.key === 'toolbox-cwd' && f.value === '/Users/me/repo'),
+    `never dormant, tail '${rows[0].tail}', label '${rows[0].label}', process verbs refused`)
+}
+
+// 98 is this section's own 60Hz defence, the shape checks 26-27, 63 and 86
+// already earn — and it asserts toolboxSignature rather than
+// inspectorSignature deliberately: the inventory arrives ASYNCHRONOUSLY on its
+// own clock, so it gets its own signature rather than widening one whose
+// subject is a different fact. Canvas freezes the model on it, so a change the
+// signature does not cover renders once and never updates again.
+{
+  const a = R.buildToolboxFields(inventory())
+  const b = R.buildToolboxFields(inventory())
+  const moved = R.buildToolboxFields(inventory({ entries: [invEntry({ name: 'other' })] }))
+  ok(98,
+    R.toolboxSignature(a) === R.toolboxSignature(b)
+      && R.toolboxSignature(a) !== R.toolboxSignature(moved)
+      && R.toolboxSignature(null) !== R.toolboxSignature(a),
+    `equal models share a signature, a changed inventory moves it, null is its own`)
+}
+
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

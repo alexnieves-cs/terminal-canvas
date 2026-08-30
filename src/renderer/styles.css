@@ -2429,3 +2429,135 @@ body {
 .navgrid__cell--active { border-color: var(--line-strong); }
 .navgrid__meta { font-size: var(--t-xs); color: var(--fg-3); }
 .navgrid__hint { margin-top: var(--sp-6); font-size: var(--t-xs); color: var(--fg-3); }
+
+/* ---------------------------------------------------------- M21 toolbox --
+   Tokens only, never a literal: verify:styles 1 refuses a hardcoded colour in
+   any notation outside a theme block, and 4-6 refuse literal type, radius and
+   spacing values. */
+
+.toolbox-node__body {
+  flex: 1;
+  min-height: 0;          /* or the list refuses to shrink and the box overflows */
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-4);
+  font: var(--t-sm) / var(--lh-body) var(--font-mono);
+  color: var(--muted);
+  background: var(--panel-bg);
+  /* .panel sets user-select: none so a drag on the chrome leaves no text
+     selection. This is a READING surface — a user copying a skill name or an
+     MCP command out of it is the ordinary use — so it takes the same lift
+     .file-node__body and .review-node__body already take. */
+  user-select: text;
+}
+
+/* In the chrome row, beside the heading. --fg-3, not --fg-4: --fg-4 is the
+   DISABLED step and this is ordinary running text. */
+.toolbox-node__summary {
+  flex: none;
+  color: var(--fg-3);
+}
+
+.toolbox-node__refresh {
+  /* Never shrunk to make room for a long heading — the rule .panel__close
+     obeys, and it shares that button's chrome row. */
+  flex: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--fg-3);
+}
+
+.toolbox-node__refresh:hover { color: var(--fg); }
+
+.toolbox-node__directory {
+  margin: 0 0 var(--sp-4);
+  color: var(--fg-3);
+  word-break: break-all;
+}
+
+/* Amber, like every other honest note in this app: it is a fact the user
+   should read, not an error. */
+.toolbox-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
+
+/* The stale-config line. Amber for the same reason: it states a fact about
+   FILES and is deliberately not an error, because the agent may be fine. */
+.toolbox-node__stale {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+.toolbox-node__group { margin: 0 0 var(--sp-5); }
+
+.toolbox-node__group-heading {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-xs) / var(--lh-tight) var(--font-display);
+  letter-spacing: var(--track-display);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.toolbox-node__count { color: var(--fg-4); }
+
+.toolbox-node__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.toolbox-node__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: var(--sp-1) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Not `opacity`: verify:styles 3 refuses a fractional opacity, which compounds
+   against an already-muted token and is invisible to any audit that reads
+   declared colours. A dimmer TOKEN says the same thing and stays auditable. */
+.toolbox-node__row--muted { color: var(--fg-4); }
+
+.toolbox-node__name { color: var(--fg); }
+.toolbox-node__scope { color: var(--fg-3); }
+.toolbox-node__state { color: var(--amber); }
+
+.toolbox-node__detail {
+  flex-basis: 100%;
+  color: var(--fg-3);
+}
+
+.toolbox-node__more { margin: var(--sp-2) 0 0; color: var(--fg-3); }
+.toolbox-node__read-at { margin: var(--sp-4) 0 0; color: var(--fg-4); }
+
+/* The inspector's own Toolbox section. Narrower than the node's, because the
+   pane is 260px and was never meant to scroll. */
+.inspector__toolbox-list {
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector__toolbox-row {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  padding: var(--sp-1) 0;
+}
+
+.inspector__toolbox-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
+}
+
+.inspector__toolbox-scope { flex: none; color: var(--fg-4); }
+.inspector__toolbox-state { flex: none; color: var(--amber); }

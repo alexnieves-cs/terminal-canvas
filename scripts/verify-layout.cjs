@@ -2193,6 +2193,80 @@ const filePanelOnDisk = (id, over = {}) => ({
   ok('128 an unpinned panel writes no agent key at all', !('agent' in out))
 }
 
+
+// ======================= M21: the toolbox panel on disk ==================
+
+// 136 — a toolbox panel round-trips with its WHOLE source. The `cwd` is the
+// field that carries the milestone: a source that came back without it is a
+// node that can never ask its question again, which is check 105's argument
+// for a review subject's sha reaching a fifth kind.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 't1', kind: 'toolbox', x: 1, y: 2, w: 560, h: 620, z: 3,
+        source: { cwd: '/Users/me/repo', label: 'repo' }, title: 'auth toolbox' }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const p0 = out.snapshot.workspaces[0].panels[0]
+  ok('136 a toolbox panel round-trips with its whole source',
+    // No warning ABOUT THIS PANEL, rather than no warnings at all: this
+    // fixture carries no camera, so parseLayout legitimately reports one.
+    !out.warnings.some((w) => w.includes('t1')) && p0.kind === 'toolbox'
+      && p0.source.cwd === '/Users/me/repo' && p0.source.label === 'repo'
+      && p0.title === 'auth toolbox',
+    JSON.stringify(p0))
+}
+// 137 — a toolbox panel whose source is malformed is dropped ALONE, the
+// individual-drop rule parseLayout obeys everywhere else. The neighbour
+// surviving is the half that proves "alone": a parser that threw, or that
+// dropped the workspace, would satisfy "the bad one is gone" perfectly.
+//
+// The second clause is the label DEFAULT: a source with a usable cwd and no
+// label is NOT dropped — it falls back to the cwd, because the label is a
+// display convenience and the cwd is the fact, and dropping a whole node for a
+// missing convenience is the over-correction this check exists to refuse.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 't1', kind: 'toolbox', x: 0, y: 0, w: 560, h: 620, z: 1, source: { label: 'no cwd' } },
+      { id: 't2', kind: 'toolbox', x: 0, y: 0, w: 560, h: 620, z: 2, source: { cwd: '/r' } },
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 3, cwd: '~', args: [] }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  ok('137 a malformed toolbox source is dropped alone, and an absent label defaults to the cwd',
+    panels.length === 2
+      && panels[0].id === 't2' && panels[0].source.label === '/r'
+      && panels[1].id === 'n1'
+      && out.warnings.some((w) => w.includes('t1')),
+    `${panels.map((p) => p.id).join(',')} warnings=${out.warnings.length}`)
+}
+// 138 is check 117's argument applied to a FIFTH kind: the same union has to
+// survive layout-adapt's round trip, which is the OTHER door onto this format
+// and the one a schema-only check cannot see. The fromPanels arm must write no
+// cwd and no args keys AT ALL — `cwd: undefined` fails the terminal branch's
+// own check on the next launch, losing the panel on every relaunch, silently.
+//
+// Note which `cwd` this is about: a toolbox panel HAS a cwd, inside `source`,
+// and that is a different field with a different meaning from the terminal
+// record's own top-level one. Writing the source's cwd to the top level would
+// parse back as a TERMINAL panel and spawn a process.
+{
+  const panels = L.toPanels([
+    { id: 't1', kind: 'toolbox', x: 1, y: 2, w: 560, h: 620, z: 3,
+      source: { cwd: '/Users/me/repo', label: 'repo' }, title: 'tools' }
+  ])
+  const back = L.fromPanels(panels)
+  ok('138 a toolbox panel survives toPanels/fromPanels with no top-level cwd key',
+    panels[0].kind === 'toolbox' && panels[0].source.cwd === '/Users/me/repo'
+      && back[0].kind === 'toolbox' && back[0].source.cwd === '/Users/me/repo'
+      && back[0].source.label === 'repo' && back[0].title === 'tools'
+      && !('cwd' in back[0]) && !('args' in back[0]),
+    JSON.stringify(back[0]))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

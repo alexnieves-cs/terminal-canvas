@@ -1,8 +1,9 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import type { PanelUsage } from '@shared/cost'
+import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
-import { isFilePanel, isJiraPanel, isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -387,6 +388,27 @@ export function buildInspectorModel(
       ]
     }
   }
+  if (isToolboxPanel(panel)) {
+    return {
+      kind: 'toolbox',
+      id: panel.rect.id,
+      heading: railLabel(panel, undefined),
+      ...(panel.title === undefined ? {} : { title: panel.title }),
+      // A toolbox node owns no process, so every process verb is refused —
+      // the same refusal a review node and a file panel already earn, and for
+      // the identical reason rather than a coincidence.
+      restartable: false,
+      reattached: false,
+      links,
+      usage: NO_USAGE,
+      fields: [
+        // The DIRECTORY is its own field rather than folded into the heading,
+        // the split `cwd` already draws: a heading has room for one thing and
+        // the path is what a user needs to copy.
+        { key: 'toolbox-cwd', label: 'directory', value: panel.source.cwd }
+      ]
+    }
+  }
   if (isJiraPanel(panel)) return { kind: 'file', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
@@ -644,6 +666,130 @@ function plural(n: number, word: string): string {
  * panel model, and widening the existing signature would mean revisiting
  * verify:rail 26/27, whose subject is a different fact.
  */
+/* ------------------------------------------------ the Toolbox section -- */
+
+export interface ToolboxFieldRow {
+  /** ToolEntry.id — stable, never shown. */
+  id: string
+  kind: string
+  name: string
+  scope: string
+  /** 'active', 'disabled', 'needs approval', 'unknown'. Rendered verbatim. */
+  state: string
+  detail: string
+}
+
+export interface ToolboxFieldModel {
+  /** True when the section renders nothing at all. */
+  hidden: boolean
+  summary: string
+  /** The honest arms' explanation. Absent when there is nothing to explain. */
+  note?: string
+  rows: ToolboxFieldRow[]
+  /** Entries beyond the cap. Zero when everything fits. */
+  more: number
+}
+
+/**
+ * How many entries the 260px pane shows before collapsing the rest.
+ *
+ * REVIEW_FILE_CAP's number and REVIEW_FILE_CAP's reason: the pane was never
+ * meant to scroll, and a list that silently stops is indistinguishable from a
+ * directory with nothing in it — so the remainder is COUNTED and reported.
+ */
+export const TOOLBOX_ROW_CAP = 10
+
+/** The shared hidden instance, frozen for the reason HIDDEN above is. */
+const TOOLBOX_HIDDEN: ToolboxFieldModel = Object.freeze({
+  hidden: true,
+  summary: '',
+  rows: [],
+  more: 0
+}) as ToolboxFieldModel
+
+function activeLabel(active: ToolActive): string {
+  if (active.kind === 'active') return 'active'
+  if (active.kind === 'disabled') return 'disabled'
+  if (active.kind === 'needs-approval') return 'needs approval'
+  return 'unknown'
+}
+
+/**
+ * The Toolbox section, and its THREE states are the whole design —
+ * `buildUsageFields`' rule and M9a's `not-a-repo`/`never-started` split
+ * reaching a third section.
+ *
+ *   - A panel with no directory (a review node, a file panel, a Jira panel)
+ *     renders NOTHING. "0 skills" beside a panel that is not an agent is the
+ *     confident wrong answer that teaches a user to stop believing the
+ *     section.
+ *   - A directory whose read has not answered yet renders a NOTE. That is the
+ *     true state of every selection for one IPC round trip, and an empty
+ *     section there reads as broken rather than as "give it a moment".
+ *   - Only an actual inventory renders rows.
+ *
+ * Collapsing any two of those is a wrong answer rather than a simplification.
+ */
+export function buildToolboxFields(result: ToolInventoryResult | undefined): ToolboxFieldModel {
+  // undefined is "the query has not answered yet" — every selection change,
+  // and every panel before the first read.
+  if (result === undefined) {
+    return { hidden: false, summary: 'reading…', rows: [], more: 0 }
+  }
+  // A panel with no cwd at all. Hidden, never an empty inventory.
+  if (result.kind === 'no-cwd') return TOOLBOX_HIDDEN
+
+  const inv = result.inventory
+  const counts = new Map<string, number>()
+  for (const entry of inv.entries) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1)
+  const order: ToolKind[] = ['skill', 'command', 'agent', 'mcp', 'hook']
+  const summary = order
+    .filter((k) => (counts.get(k) ?? 0) > 0)
+    .map((k) => `${String(counts.get(k))} ${k}${counts.get(k) === 1 ? '' : 's'}`)
+    .join(' · ')
+
+  // A source that could not be READ is named, because that is the arm that
+  // tells a user to go and look. An ABSENT source is the ordinary case and
+  // says nothing — most cwds have no .claude at all.
+  const broken = inv.sources.filter((src) => src.status === 'unreadable' || src.status === 'malformed' || src.status === 'too-large')
+
+  const rows: ToolboxFieldRow[] = inv.entries.slice(0, TOOLBOX_ROW_CAP).map((entry) => ({
+    id: entry.id,
+    kind: entry.kind,
+    name: entry.kind === 'hook' ? `${entry.event} ${entry.program}`.trim() : entry.name,
+    scope: entry.scope,
+    state: activeLabel(entry.active),
+    detail:
+      entry.kind === 'mcp'
+        ? entry.command
+        : entry.kind === 'hook'
+          ? entry.matcher
+          : entry.description
+  }))
+
+  return {
+    hidden: false,
+    summary: summary === '' ? 'nothing installed for this directory' : summary,
+    // Reported rather than silently dropped, the +N more rule REVIEW_FILE_CAP
+    // already states.
+    ...(broken.length > 0
+      ? { note: `${String(broken.length)} config source(s) could not be read` }
+      : {}),
+    rows,
+    more: Math.max(0, inv.entries.length - TOOLBOX_ROW_CAP)
+  }
+}
+
+/**
+ * Its own signature rather than a field on `inspectorSignature`, for
+ * `reviewSignature`'s stated reason: the inventory arrives ASYNCHRONOUSLY on
+ * its own clock, and widening the existing signature would mean revisiting
+ * every check whose subject is a different fact.
+ */
+export function toolboxSignature(model: ToolboxFieldModel | null): string {
+  return JSON.stringify(model)
+}
+
 export function reviewSignature(model: ReviewFieldModel | null): string {
   return JSON.stringify(model)
 }

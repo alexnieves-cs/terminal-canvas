@@ -22,6 +22,7 @@ import { nextAttentionId, reachableQueue, type JumpDirection } from './attention
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
+import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
@@ -34,6 +35,8 @@ import {
 } from '@renderer/session/live-session-store'
 import { applySubagents, clearSubagents } from '@renderer/session/subagent-store'
 import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
+import { clearToolbox } from '@renderer/session/toolbox-store'
+import type { ToolInventoryResult } from '@shared/toolbox'
 import { applyUsage, clearUsage, useUsage } from '@renderer/session/usage-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
@@ -50,7 +53,8 @@ import type {
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
-  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, makeFilePanel, makeJiraPanel,
+  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
+  makeToolboxPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, removeLink, setLinkLabel,
   type Panel, type TerminalPanel as TerminalPanelModel
@@ -77,7 +81,8 @@ import {
 } from '../shell/rail-sections'
 import {
   buildInspectorModel, buildInspectorSummary, buildReviewFields, inspectorSignature,
-  isRestartable, isRunning, reviewSignature, type ReviewFieldModel
+  isRestartable, isRunning, reviewSignature, type ReviewFieldModel,
+  buildToolboxFields, toolboxSignature
 } from '../shell/inspector-fields'
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
@@ -147,6 +152,9 @@ function panelLabel(panel: Panel): string {
   // name from different directories.
   if (isFilePanel(panel)) return `file: ${panel.source.path} (${panel.rect.id})`
   if (isJiraPanel(panel)) return `jira tickets (${panel.rect.id})`
+  // The DIRECTORY, not a basename: a toolbox answers for a whole cwd, and two
+  // repositories with the same leaf name are the ordinary case.
+  if (isToolboxPanel(panel)) return `toolbox: ${panel.source.cwd} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it
@@ -340,7 +348,7 @@ export function Canvas({
       // collides on the key and parseLayout drops one silently at the next
       // load. BOTH seed sites (here and switchWorkspace) must carry the same
       // character class; missing either reopens it through the other door.
-      const match = /^[nrf](\d+)$/.exec(id)
+      const match = /^[nrfjt](\d+)$/.exec(id)
       return match ? Math.max(max, Number(match[1]) + 1) : max
     }, 1)
   )
@@ -620,7 +628,7 @@ export function Canvas({
         // undo that merely moved a panel leaves it mounted, and clearing a
         // mounted panel's result puts it back to "reading…" with nothing left
         // to re-read it, because the effect's deps did not change.
-        if (!ids.has(panel.rect.id)) clearFileResult(panel.rect.id)
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -1137,6 +1145,7 @@ export function Canvas({
         // below exist — a reset drops every panel at once, and FIRST_RUN_ID
         // makes recycled ids reachable from this very function.
         clearFileResult(panel.rect.id)
+        clearToolbox(panel.rect.id)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1403,7 +1412,7 @@ export function Canvas({
             // nextIdRef's own comment for what a regex blind to one of them
             // costs. This is the SECOND of the two seed sites and must move
             // with the first.
-            const match = /^[nrf](\d+)$/.exec(pid)
+            const match = /^[nrfjt](\d+)$/.exec(pid)
             return match ? Math.max(max, Number(match[1]) + 1) : max
           }, 1)
         )
@@ -1931,6 +1940,7 @@ export function Canvas({
       // panel's result must not survive for a recycled id to inherit. A no-op
       // for a review node, which has no entry.
       clearFileResult(id)
+      clearToolbox(id)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -2869,6 +2879,34 @@ export function Canvas({
   }, [commitHistory, selectOnly])
 
   /**
+   * Open a toolbox node for one panel's directory.
+   *
+   * Takes the cwd and a LABEL rather than a panel id, and that is the same
+   * decision `openReview` makes for `ReviewSubject`: the node must keep
+   * answering after the panel it was opened from is closed, so it snapshots
+   * what it needs at mint time and holds no reference to the panel.
+   */
+  const openToolboxPanel = useCallback((cwd: string, label: string, centre: Point) => {
+    if (cwd === '') return
+    // `t`, off the SAME counter as `n`, `r`, `f` and `j`. Minted OUTSIDE the
+    // updater for openFilePanel's stated reason: a state updater must be pure,
+    // and `nextIdRef.current++` inside one is a side effect StrictMode would
+    // run twice. See nextIdRef's two seed sites, both of which had to widen
+    // their regex to `[nrfjt]` for this prefix — and which were already blind
+    // to M19's own `j`.
+    const id = `t${nextIdRef.current++}`
+    setPanels((existing) => {
+      const next = [
+        ...existing,
+        makeToolboxPanel(id, cascadeCentre(centre, existing), nextZ(existing), { cwd, label })
+      ]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(id)
+  }, [commitHistory, selectOnly])
+
+  /**
    * The drop door, on the .canvas host.
    *
    * preventDefault on dragover is REQUIRED, not defensive: without it the
@@ -2924,6 +2962,11 @@ export function Canvas({
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
+    // M21's mint, through the SAME openToolboxPanel the inspector button and
+    // the palette row both call — so the hook proves the real path rather than
+    // a parallel one, the rule __m13Open already obeys.
+    w.__m20Toolbox = (cwd: string, label: string): void =>
+      openToolboxPanel(cwd, label, worldCentre())
   }, [openFilePanel, worldCentre])
 
   /**
@@ -3160,6 +3203,9 @@ export function Canvas({
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
               }
               if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name }
+              if (isToolboxPanel(p)) {
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
+              }
               return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name }
             })
             // One entry for the whole gesture, on commit — the rule a drag
@@ -3495,6 +3541,7 @@ export function Canvas({
                     // for what the skip buys and exactly how far it reaches.
                     if (doomedSessionlessIds.has(panelId)) {
                       clearFileResult(panelId)
+                      clearToolbox(panelId)
                       continue
                     }
                     registry.dispose(panelId)
@@ -3681,6 +3728,21 @@ export function Canvas({
       })
     },
     openReview,
+    // Reads the panel from the ref rather than closing over `panels`, the
+    // rule every other action in this object obeys: `panels` is a fresh array
+    // on every setPanelRect, so closing over it would rebuild this whole memo
+    // on every frame of a drag.
+    openToolbox: (panelId) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+      if (panel === undefined) return
+      const cwd = isTerminalPanel(panel)
+        ? panel.spec.cwd
+        : isToolboxPanel(panel)
+          ? panel.source.cwd
+          : ''
+      if (cwd === '') return
+      openToolboxPanel(cwd, railLabel(panel, registry.get(panelId)?.status), worldCentre())
+    },
     movePanelsToWorkspace,
     beginMovePanelsToNewWorkspace: (panelIds) => {
       setInputMode({
@@ -4154,6 +4216,52 @@ export function Canvas({
     })
     return () => { live = false }
   }, [selectedId, selectedIsSessionless, idleArrivals])
+  /**
+   * The Toolbox section's own query, and it copies the review effect above
+   * line for line — including the two comments that ARE the design.
+   *
+   * The cwd is the dep rather than the panel, so this re-fires when the
+   * SELECTION moves or the panel's own cwd changes, and not on every frame of
+   * a drag: `panels` is a fresh array per setPanelRect, so a `selectedPanel`
+   * dep would re-fire the query at 60Hz. A string is equal to itself.
+   */
+  const selectedToolboxCwd =
+    selectedPanel === undefined
+      ? null
+      : isTerminalPanel(selectedPanel)
+        ? selectedPanel.spec.cwd
+        : isToolboxPanel(selectedPanel)
+          ? selectedPanel.source.cwd
+          : null
+  const [toolbox, setToolbox] = useState<ToolInventoryResult | undefined>(undefined)
+  useEffect(() => {
+    // Cleared UNCONDITIONALLY, before the invoke, for the reason the review
+    // effect above states: the `live` flag prevents a stale WRITE and nothing
+    // prevents the stale RENDER, so selecting panel B would keep showing
+    // panel A's inventory under B's heading for a whole round trip.
+    setToolbox(undefined)
+    if (selectedId === null || selectedToolboxCwd === null) return
+    let live = true
+    void window.canvas.toolbox
+      .read({ panelId: selectedId, cwd: selectedToolboxCwd })
+      .then((result) => {
+        // Not defensiveness: an invoke issued for panel A can resolve after
+        // the user has selected panel B.
+        if (live) setToolbox(result)
+      })
+      .catch(() => {
+        if (live) setToolbox({ kind: 'no-cwd' })
+      })
+    return () => {
+      live = false
+    }
+  }, [selectedId, selectedToolboxCwd])
+  const toolboxFields = selectedToolboxCwd === null ? null : buildToolboxFields(toolbox)
+  // Its own signature and its own memo, never folded into inspectorSignature:
+  // this arrives asynchronously on its own clock, exactly as `review` does.
+  const toolboxSig = toolboxSignature(toolboxFields)
+  const toolboxModel = useMemo(() => toolboxFields, [toolboxSig])
+
   const reviewSig = reviewSignature(review)
   // Frozen on reviewSignature for the identical reason inspectorModel is
   // frozen on inspectorSig above: buildReviewFields returns a fresh object on
@@ -4276,6 +4384,22 @@ export function Canvas({
                 />
               )
             }
+            if (isToolboxPanel(panel)) {
+              return (
+                <ToolboxNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={panel.rect.id === selectedId}
+                  // selectAndRaise, never onSelectPanel: the latter's
+                  // clear-dormant and registry.wake are the SPAWN gesture, and
+                  // a toolbox node can never spawn anything.
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                />
+              )
+            }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
@@ -4377,6 +4501,8 @@ export function Canvas({
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}
         review={reviewModel}
+        toolbox={toolboxModel}
+        onOpenToolbox={paletteActions.openToolbox}
       />
     </div>
   )

@@ -5,7 +5,7 @@ import {
   type CanvasBridge,
   type PresetTemplate,
   type CapturedPanel,
-  type FileReadRequest,
+  type FileReadRequest, type ToolboxReadRequest, type ToolboxPermissionsRequest,
   type FileChangedEvent
 } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
@@ -140,6 +140,10 @@ const bridge: CanvasBridge = {
     close: (panelId: PanelId) => ipcRenderer.invoke(IPC.FILE_CLOSE, panelId),
     onChanged: (listener) => subscribe<FileChangedEvent>(IPC_EVENTS.FILE_CHANGED, listener),
     pathForFile: (file: File) => webUtils.getPathForFile(file)
+  },
+  toolbox: {
+    read: (req: ToolboxReadRequest) => ipcRenderer.invoke(IPC.TOOLBOX_READ, req),
+    permissions: (req: ToolboxPermissionsRequest) => ipcRenderer.invoke(IPC.TOOLBOX_PERMISSIONS, req)
   },
   platform: process.platform
 }

@@ -193,6 +193,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        credential:verify
                        jira:list
                        file:open / file:read / file:close
+                       toolbox:read / toolbox:permissions
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel
@@ -596,6 +597,7 @@ price of not killing something.
 | M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 | M18 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 | M19 | Jira context: assigned tickets and ticket-to-session handoff | ✅ done |
+| M21 | The agent's toolbox: what each panel's agent can actually do, read-only | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11, M12,

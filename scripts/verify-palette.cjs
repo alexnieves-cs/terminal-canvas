@@ -231,6 +231,7 @@ const spyActions = () => {
     restartPanel: record('restartPanel'),
     // Review IS reached from a row too (checks 67/68), same reason.
     openReview: record('openReview'),
+    openToolbox: record('openToolbox'),
     // Both move verbs ARE reached from rows, so these are not merely shape:
     // without them `row.run()` calls undefined and the check dies with a
     // TypeError, which in this single-script suite aborts every check written
@@ -1322,6 +1323,59 @@ const WS = [
       none !== undefined && none.disabledReason === P.REASON_NO_FOCUS &&
       P.REASON_NOTHING_TO_LINK !== P.REASON_NO_FOCUS,
     JSON.stringify([alone && alone.disabledReason, none && none.disabledReason]))
+}
+
+
+// 81. The toolbox row: present, ENABLED, and aimed at the CAPTURED panel —
+//     the rule panel.rename, Restart, review and link already obey, since
+//     opening the palette moves DOM focus to its input and deliberately
+//     leaves focusedId alone.
+{
+  const c = ctx({
+    capturedId: 'n2',
+    panels: [
+      { id: 'n1', label: 'claude', restartable: true },
+      { id: 'n2', label: 'zsh', restartable: true }
+    ]
+  })
+  const row = byId(P.buildCommands(c), 'panel.toolbox')
+  if (row) row.run()
+  ok('81 the toolbox row is enabled and aimed at the captured panel',
+    row !== undefined && row.disabledReason === undefined &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'openToolbox' &&
+      c.actions.calls[0][1] === 'n2',
+    JSON.stringify(c.actions.calls))
+}
+
+// 82 is the one worth knowing by number, and it is a DIFFERENCE from the two
+//     rows beside it rather than a copy of them. Restart and review are both
+//     disabled for a panel that never started, because both need a session:
+//     restart has no process to replace and review has no baseline to diff
+//     against. A toolbox answers for a DIRECTORY, which a panel has from the
+//     moment it is minted — so a panel that never spawned still has a
+//     perfectly good toolbox, and refusing one here would be a wrong answer
+//     rather than a cautious one. Only the no-capture case disables it, and
+//     the reason is compared against the EXPORTED constant.
+{
+  const never = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'zsh', restartable: false }]
+  })), 'panel.toolbox')
+  const none = byId(P.buildCommands(ctx({
+    capturedId: null,
+    panels: [{ id: 'n1', label: 'zsh', restartable: true }]
+  })), 'panel.toolbox')
+  const review = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'zsh', restartable: false }]
+  })), 'panel.review')
+  ok('82 a never-started panel still offers a toolbox, though not a review',
+    never !== undefined && never.disabledReason === undefined &&
+      review !== undefined && review.disabledReason === P.REASON_NOT_STARTED &&
+      none !== undefined && none.disabledReason === P.REASON_NO_FOCUS,
+    JSON.stringify([never && never.disabledReason, review && review.disabledReason,
+      none && none.disabledReason]))
 }
 
 const failed = results.filter((r) => !r.pass)

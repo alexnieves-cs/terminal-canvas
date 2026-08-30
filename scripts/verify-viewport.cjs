@@ -1295,6 +1295,54 @@ ok('74 a panel with no kind is not a review panel',
       && V.isFilePanel(f) === true && V.isFilePanel(t) === false)
 }
 
+
+// 91 — makeToolboxPanel centres exactly (makePanel's contract, check 48,
+// inherited by a fifth constructor) and carries its source VERBATIM without
+// rewriting it. The not-same-reference clause is makeReviewPanel's own
+// warning applied again: a shared reference means a caller mutating its own
+// object after the mint silently rewrites a panel already on the canvas. The
+// no-`panelId` clause is the OTHER half of that warning — the copy-paste that
+// stamps the minted id into the payload, which for a review node produced a
+// node reviewing itself and here would produce a toolbox describing a panel
+// id instead of a directory.
+{
+  const src = { cwd: '/Users/me/repo', label: 'repo' }
+  const t = V.makeToolboxPanel('t1', { x: 100, y: 200 }, 3, src)
+  ok('91 makeToolboxPanel centres exactly and copies its source field by field',
+    t.kind === 'toolbox'
+      && t.rect.x === 100 - V.TOOLBOX_W / 2 && t.rect.y === 200 - V.TOOLBOX_H / 2
+      && t.rect.w === V.TOOLBOX_W && t.rect.h === V.TOOLBOX_H && t.z === 3
+      && t.source.cwd === '/Users/me/repo' && t.source.label === 'repo'
+      && t.source !== src && !('panelId' in t.source) && Object.keys(t.source).length === 2,
+    `x=${t.rect.x} y=${t.rect.y} source=${JSON.stringify(t.source)}`)
+}
+// 92 is check 90b widened to a FIFTH kind, and it is the check that would
+// fail against the exact regression this milestone forces. `!isReviewPanel &&
+// !isFilePanel && !isJiraPanel` answers TRUE for a toolbox panel: it lands in
+// assignTiers and registry.ensure with no spec, burning a LIVE_BUDGET slot and
+// a WebGL context on a <div> that owns no process.
+//
+// FIVE panels in one read, because a helper that got any ONE of them
+// backwards would still look correct against the other four — and the two
+// that must read TRUE (a real terminal and a bare kind-less pre-M9b object)
+// are as load-bearing as the three that must read false.
+{
+  const t = V.makePanel('n1', { x: 0, y: 0 }, 1)
+  const f = V.makeFilePanel('f3', { x: 0, y: 0 }, 1, { path: '/tmp/c' })
+  const r = V.makeReviewPanel('r1', { x: 0, y: 0 }, 1,
+    { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'x' })
+  const j = V.makeJiraPanel('j1', { x: 0, y: 0 }, 1)
+  const tb = V.makeToolboxPanel('t2', { x: 0, y: 0 }, 1, { cwd: '/r', label: 'r' })
+  const legacy = { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } }
+  ok('92 isTerminalPanel excludes ALL FOUR non-terminal kinds and still admits a kind-less panel',
+    V.isTerminalPanel(t) === true && V.isTerminalPanel(legacy) === true
+      && V.isTerminalPanel(f) === false && V.isTerminalPanel(r) === false
+      && V.isTerminalPanel(j) === false && V.isTerminalPanel(tb) === false
+      && V.isToolboxPanel(tb) === true && V.isToolboxPanel(t) === false
+      && V.isToolboxPanel(f) === false,
+    `terminal=${V.isTerminalPanel(t)} legacy=${V.isTerminalPanel(legacy)} toolbox=${V.isTerminalPanel(tb)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

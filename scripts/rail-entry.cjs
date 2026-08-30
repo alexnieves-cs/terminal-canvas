@@ -20,5 +20,10 @@ module.exports = {
   /* M16: the file node's view model. A third pure "node model" alongside
      review-node-model.ts, joining this bundle for the identical reason —
      pure, type-only imports, no suite of its own needed. */
-  ...require('../src/renderer/file/file-node-model')
+  ...require('../src/renderer/file/file-node-model'),
+  // M21's toolbox model joins here for the reason every pure view model since
+  // M8c has: it is a pure function over plain data with no DOM and no native
+  // dependency, and a suite of its own would re-prove the same esbuild wiring
+  // for one file.
+  ...require('../src/renderer/toolbox/toolbox-node-model')
 }

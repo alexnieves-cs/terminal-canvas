@@ -2,6 +2,7 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
+import type { ToolboxSource } from '@shared/toolbox'
 
 export type { ReviewSubject }
 
@@ -105,7 +106,25 @@ export interface FilePanel extends PanelBase {
  * the next provider decides what, if anything, generalises. */
 export interface JiraPanel extends PanelBase { kind: 'jira' }
 
-export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel
+/**
+ * A toolbox node: what the agent in one DIRECTORY can actually do — skills,
+ * slash commands, subagents, MCP servers, hooks and permission counts.
+ *
+ * Addressed by CWD rather than by a subject panel id, the same decision
+ * `ReviewSubject` made for the same reason: a node must keep answering after
+ * the panel that prompted it is closed, and "what is installed for this
+ * directory" is a fact about the directory. It also means twelve panels in one
+ * repository share one answer.
+ *
+ * Holds no PanelSession and no process, exactly like a review node and a file
+ * panel — see isTerminalPanel below, the ONE line that keeps that true.
+ */
+export interface ToolboxPanel extends PanelBase {
+  kind: 'toolbox'
+  source: ToolboxSource
+}
+
+export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -133,6 +152,10 @@ export function isFilePanel(panel: Panel): panel is FilePanel {
 }
 export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kind === 'jira' }
 
+export function isToolboxPanel(panel: Panel): panel is ToolboxPanel {
+  return panel.kind === 'toolbox'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -147,10 +170,13 @@ export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kin
  * Written this way rather than as a positive `kind === 'terminal'` test
  * because absence must keep meaning terminal: `kind` is absent in every
  * layout.json written before M9b and in every verify fixture written before
- * it. A fourth kind edits exactly this one line.
+ * it. A FIFTH kind edits exactly this one line — M21's toolbox panel was the
+ * fourth, and it is the reason this sentence now says five.
  */
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
-  return !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel)
+  return (
+    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel)
+  )
 }
 
 export const PANEL_W = 720
@@ -512,6 +538,36 @@ export function makeReviewPanel(
  * A file panel is a READING surface: the review node's portrait box, for the
  * review node's reason, not the terminal's 720x460 landscape one.
  */
+export const TOOLBOX_W = 560
+export const TOOLBOX_H = 620
+
+/**
+ * A toolbox node.
+ *
+ * `source` is copied FIELD BY FIELD rather than spread, the rule
+ * `makeFilePanel` already obeys: a shared reference means a caller mutating
+ * its own object after the mint silently rewrites a panel already on the
+ * canvas. And it deliberately does NOT stamp the minted id into `source` —
+ * `makeReviewPanel`'s documented trap, which is one line, reads as
+ * consistency, and produces a node describing itself.
+ */
+export function makeToolboxPanel(
+  id: string,
+  centre: Point,
+  z: number,
+  source: ToolboxSource,
+  size?: { w?: number; h?: number }
+): ToolboxPanel {
+  const w = size?.w ?? TOOLBOX_W
+  const h = size?.h ?? TOOLBOX_H
+  return {
+    kind: 'toolbox',
+    rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
+    z,
+    source: { cwd: source.cwd, label: source.label }
+  }
+}
+
 export const FILE_W = 640
 export const FILE_H = 520
 

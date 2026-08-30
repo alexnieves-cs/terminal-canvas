@@ -42,6 +42,18 @@ const { join } = require('node:path')
    unquoted downstream consumer (a shell `cd`, an argv built by
    concatenation rather than an array) would otherwise fail exactly as
    silently as that one did. */
+/* M21's fence, and it exists for the identical reason the one below it does —
+   which that comment records as a mistake this repo made once and paid a fix
+   round for. `resolveToolboxHome()` falls back to the real homedir() in
+   production, so unfenced this harness reads the RUNNING DEVELOPER's own
+   ~/.claude on every toolbox read and attributes 22 real skills and 26 real
+   plugins to a fixture panel — green on a machine with an empty home and red
+   on one without, for a reason nothing in the suite explains. Set before
+   anything constructs a PtyManager, because configStamps() is taken inside
+   create(). */
+if (!process.env.TC_TOOLBOX_HOME || process.env.TC_TOOLBOX_HOME.trim() === '') {
+  process.env.TC_TOOLBOX_HOME = mkdtempSync(join(tmpdir(), 'tc toolbox home '))
+}
 if (!process.env.TC_CLAUDE_PROJECTS || process.env.TC_CLAUDE_PROJECTS.trim() === '') {
   process.env.TC_CLAUDE_PROJECTS = mkdtempSync(join(tmpdir(), 'tc claude projects '))
 }
@@ -81,6 +93,7 @@ module.exports = {
   // manager and a window getter, the same shape ptyManager/mainWindow already
   // take in main/index.ts.
   FileWatchers: require('../src/main/file-watch').FileWatchers,
+  ToolboxCache: require('../src/main/toolbox-cache').ToolboxCache,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
   // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
   // reloads the renderer: reload survival is a tmux property, so a direct

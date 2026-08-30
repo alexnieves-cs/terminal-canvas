@@ -2,6 +2,7 @@ import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
+import type { ToolboxSource } from './toolbox'
 import { AGENT_KINDS, type AgentKind } from './cost'
 
 /**
@@ -118,7 +119,22 @@ export interface PersistedFilePanel extends PersistedPanelBase {
 }
 export interface PersistedJiraPanel extends PersistedPanelBase { kind: 'jira' }
 
-export type PersistedPanel = PersistedTerminalPanel | PersistedReviewPanel | PersistedFilePanel | PersistedJiraPanel
+/**
+ * M21's toolbox node. Like a review node and a file panel, it carries NO cwd
+ * and NO args of its own on this record — its `source.cwd` is the directory it
+ * describes, which is a different field with a different meaning.
+ */
+export interface PersistedToolboxPanel extends PersistedPanelBase {
+  kind: 'toolbox'
+  source: ToolboxSource
+}
+
+export type PersistedPanel =
+  | PersistedTerminalPanel
+  | PersistedReviewPanel
+  | PersistedFilePanel
+  | PersistedJiraPanel
+  | PersistedToolboxPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -358,6 +374,24 @@ function parseLinks(
   return out.length === 0 ? undefined : out
 }
 
+/**
+ * All-or-drop, no defaulting — parseFileSource's rule: a node pointed at a
+ * guessed directory is worse than one that was not restored, because it looks
+ * like it worked.
+ */
+function parseToolboxSource(raw: unknown, id: string, warnings: string[]): ToolboxSource | null {
+  if (!isRecord(raw)) {
+    warnings.push(`dropped toolbox panel ${id}: source was not an object`)
+    return null
+  }
+  const { cwd, label } = raw
+  if (!isStr(cwd) || cwd === '') {
+    warnings.push(`dropped toolbox panel ${id}: source cwd was unusable`)
+    return null
+  }
+  return { cwd, label: isStr(label) ? label : cwd }
+}
+
 function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped file panel ${id}: source was not an object`)
@@ -437,6 +471,11 @@ function parsePanel(
     return { ...base, kind: 'file', source }
   }
   if (kind === 'jira') return { ...base, kind: 'jira' }
+  if (kind === 'toolbox') {
+    const source = parseToolboxSource(raw.source, id, warnings)
+    if (source === null) return null
+    return { ...base, kind: 'toolbox', source }
+  }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
     return null

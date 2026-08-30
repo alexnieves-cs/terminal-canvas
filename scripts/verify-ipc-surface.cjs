@@ -123,7 +123,10 @@ app.whenReady().then(() => {
     reviewCommitStub,
     credentialStoreStub,
     fileWatchersStub,
-    () => null
+    () => null,
+    // M21's inventory cache. A stub, like every other collaborator here: this
+    // check is about the DOOR existing, not about what is behind it.
+    { read: () => ({ kind: 'no-cwd' }), size: () => 0, clear: () => {} }
   )
 
   const channels = Object.values(IPC)
@@ -137,7 +140,12 @@ app.whenReady().then(() => {
   // (file:open/file:read/file:close) and the workspace extras' two
   // (workspace:merged, workspace:move-panels), plus M19's jira:list.
   // 35 + 3 + 2 + 1 = 41.
-  const EXPECTED_CHANNELS = 41
+  // 43 = 41 after M19, plus M21's two toolbox invokes. Deliberately NOT a
+  // third: there is no `toolbox:changed` event at all — this feature is PULL,
+  // because half its sources are shared by every panel on the canvas and a
+  // panel-keyed watcher would arm twelve of them on the same four paths. See
+  // IPC.TOOLBOX_READ's own comment.
+  const EXPECTED_CHANNELS = 43
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

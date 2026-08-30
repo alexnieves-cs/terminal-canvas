@@ -22,6 +22,7 @@ import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDif
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem } from './work-item'
 import type { FileResult } from './file-panel'
+import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, PanelUsage } from './cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
@@ -233,7 +234,41 @@ export const IPC = {
    */
   FILE_READ: 'file:read',
   /** Disarm the watch. Called from the component's unmount. */
-  FILE_CLOSE: 'file:close'
+  FILE_CLOSE: 'file:close',
+
+  /**
+   * What extends the agent CLI running in one panel's cwd: skills, slash
+   * commands, subagents, MCP servers, hooks and permission COUNTS.
+   *
+   * Addressed by CWD, never by panel id, and that is the same argument
+   * `review:at` makes one milestone over: a toolbox node must keep answering
+   * after its subject panel is closed, and "what is installed for this
+   * directory" is a fact about the directory rather than about the panel.
+   * Twelve panels in one repository share one answer, which is also what lets
+   * main cache it by cwd instead of parsing a 93 KB file twelve times.
+   *
+   * PULL, never push. There is deliberately no `toolbox:changed` event and no
+   * watcher: half the sources (~/.claude/settings.json, ~/.claude.json,
+   * ~/.claude/skills, ~/.claude/commands) are shared by EVERY panel, and
+   * FileWatchers is keyed by panel id — twelve panels would arm twelve
+   * watchers on the same four paths and emit twelve messages for one save.
+   * Doing it properly needs a path-keyed, refcounted registry, which is a
+   * different class of machinery and its own milestone. Meanwhile the node
+   * renders `readAt`, so a stale node is honest rather than silently wrong.
+   */
+  TOOLBOX_READ: 'toolbox:read',
+
+  /**
+   * One settings file's permission RULES, one bucket at a time.
+   *
+   * Its own channel rather than a field on the inventory, and the reason is a
+   * measurement: 628 allow rules in one real file and 718 in another, two
+   * orders of magnitude more than every other kind combined. Carrying them by
+   * default would be roughly 240 KB per panel per selection change for data
+   * almost nobody expands — `review:diff`'s pull-only, one-file-at-a-time
+   * shape, for `review:diff`'s reason.
+   */
+  TOOLBOX_PERMISSIONS: 'toolbox:permissions'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -366,6 +401,29 @@ export const IPC_EVENTS = {
 export interface FileReadRequest {
   panelId: PanelId
   path: string
+}
+
+/** What `toolbox:read` is asked. See TOOLBOX_READ for why it is a cwd. */
+export interface ToolboxReadRequest {
+  /**
+   * The panel's cwd, UNEXPANDED — main expands it with `resolveCwd`, the same
+   * expansion a spawn gets, so the toolbox and the agent can never disagree
+   * about which directory they are talking about.
+   */
+  cwd: string
+  /**
+   * The panel this is for, used ONLY to look up a spawn-time config stamp so
+   * the answer can carry a `freshness`. Deliberately not part of the cache
+   * key — see TOOLBOX_READ.
+   */
+  panelId: PanelId
+}
+
+/** What `toolbox:permissions` is asked. */
+export interface ToolboxPermissionsRequest {
+  /** Absolute path of the settings file, taken from a PermissionCounts row. */
+  path: string
+  bucket: 'allow' | 'deny' | 'ask'
 }
 
 export interface FileChangedEvent {
@@ -661,6 +719,14 @@ export interface CanvasBridge {
      * exist.
      */
     pathForFile(file: File): string
+  }
+  toolbox: {
+    /** Read the inventory for a panel's cwd. Pull-only; see TOOLBOX_READ. */
+    read(req: ToolboxReadRequest): Promise<ToolInventoryResult>
+    /** One settings file's permission rules, one bucket at a time. */
+    permissions(
+      req: ToolboxPermissionsRequest
+    ): Promise<{ rules: string[]; total: number; status: string }>
   }
   platform: NodeJS.Platform
 }

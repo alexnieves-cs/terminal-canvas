@@ -10,6 +10,7 @@ import {
   statSync
 } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
+import { configStamps as readConfigStamps, resolveToolboxHome } from './toolbox-read'
 import { join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import type { WebContents } from 'electron'
@@ -300,6 +301,28 @@ export class PtyManager {
    * deliberately leaves open.
    */
   private readonly firstSpawnedAt = new Map<PanelId, number>()
+
+  /**
+   * The config stat vector taken when a panel's agent actually SPAWNED.
+   *
+   * Follows firstSpawnedAt's rule exactly, including the reattach case, and
+   * for the identical reason: `new-session -A` makes "this client attached"
+   * and "this process started" the same call, so a REATTACHED session's agent
+   * has been running since before this attach. Restamping here would clear the
+   * staleness flag on every Cmd+R while the stale agent kept running — a fact
+   * silently corrected on screen and nowhere else.
+   *
+   * Recorded at spawn because it CANNOT be recovered afterwards: once the
+   * agent is running there is no way to learn what its config looked like when
+   * it booted, which is spawnedAt's own documented precedent for why a fact
+   * like this is captured early or not at all.
+   */
+  private readonly configStamps = new Map<PanelId, Map<string, string>>()
+
+  /** What this panel's config looked like when its agent started, if known. */
+  configStampsFor(panelId: PanelId): Map<string, string> | undefined {
+    return this.configStamps.get(panelId)
+  }
   /** One per manager, like idleTimer and liveTimer. See USAGE_TICK_MS. */
   private usageTimer: NodeJS.Timeout | null = null
   private usageState = createUsageState()
@@ -499,6 +522,17 @@ export class PtyManager {
       spawnedAt = Date.now()
       this.firstSpawnedAt.set(spec.panelId, spawnedAt)
     }
+    // Stamped on exactly the same condition, for exactly the same reason. It
+    // is fire-and-forget and must never delay a spawn, so a failure to stat
+    // anything is simply an absent stamp, which reads as `unknown` rather than
+    // as `fresh` — the safe direction, since `fresh` would be a claim.
+    if (!reattached || !this.configStamps.has(spec.panelId)) {
+      try {
+        this.configStamps.set(spec.panelId, readConfigStamps(cwd, resolveToolboxHome()))
+      } catch {
+        // A panel whose config cannot be stamped answers `unknown` freshness.
+      }
+    }
 
     const session: Session = {
       panelId: spec.panelId,
@@ -566,6 +600,7 @@ export class PtyManager {
         // path. A per-panel map that only some exits clear is the shape the
         // recycled-id failure keeps arriving in.
         this.firstSpawnedAt.delete(spec.panelId)
+        this.configStamps.delete(spec.panelId)
       }
       // AFTER the flush above and before the exit is announced. Order matters
       // in one direction only: 'exited' is terminal in the state machine
@@ -675,6 +710,7 @@ export class PtyManager {
       this.lastLive.delete(panelId)
       this.subagentWatch.drop(panelId)
       this.firstSpawnedAt.delete(panelId)
+      this.configStamps.delete(panelId)
       dropUsage(this.usageState, panelId)
       this.transcriptPaths.delete(panelId)
       this.forceResend.delete(panelId)
@@ -697,6 +733,7 @@ export class PtyManager {
     this.lastLive.delete(panelId)
     this.subagentWatch.drop(panelId)
     this.firstSpawnedAt.delete(panelId)
+    this.configStamps.delete(panelId)
     dropUsage(this.usageState, panelId)
     this.transcriptPaths.delete(panelId)
     this.forceResend.delete(panelId)

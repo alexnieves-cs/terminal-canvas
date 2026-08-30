@@ -814,78 +814,99 @@ dragging, snapping, and a "tidy" command.
   canvas was carrying. "Compact without reordering" is a harder algorithm and probably the
   correct one.
 
-## 26. The agent's toolbox — skills, MCP servers, plugins, subagents, hooks
+## 26. The agent's toolbox — the READ half shipped as M21; what is left
 
-One surface to see, manage, add, and update everything that extends the agent CLIs the
-canvas runs: skills, MCP servers, plugins, custom subagents, slash commands, hooks, and
-permission settings. Which of them exist, which are active *here*, what each one does, and
-an obvious way to change any of it.
+**M21 shipped the read-only inventory** — `docs/superpowers/specs/2026-08-30-m21-agent-toolbox-design.md`
+— which is exactly what item 31 of the sequencing list below said to do first,
+and it landed after M16 for that item's stated reason: it is the same
+directory-reading machinery and should not have invented a second copy of it.
+Select a panel and the inspector's Toolbox section names its skills, slash
+commands, subagents, MCP servers, hooks and permission counts, across the user
+and project scopes at once; open that as a `kind: 'toolbox'` node and it keeps
+answering after the panel it was opened from is closed, because it is addressed
+by CWD rather than by a panel id.
 
-- **Why the canvas is an unusually good home for this, and it is not "because it's a nice
-  UI".** These extensions resolve **per project**. The same `claude` binary in two panels
-  has two different sets of skills and MCP servers active, because one panel's cwd has a
-  `.claude/` and the other's does not. Every existing tool for managing this shows you
-  *one* scope at a time — you are in a directory, you see that directory's config. A
-  canvas holds twelve panels in twelve directories at once, **and each panel already knows
-  its cwd**, so it is the only place where "which of these agents can actually do X" is a
-  question the UI can answer. That is the differentiating claim, and it is worth building
-  toward rather than shipping a generic config editor that happens to live in this app.
-- **The cost is far lower than it looks, and this is the important estimate.** This reads
-  like a big integration feature — five subsystems, several vendors — and it is not. All
-  of it is **files on disk in known locations**, in two scopes:
-  - user-global: `~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/hooks/`,
-    `~/.claude/plugins/`, `~/.claude/settings.json`, and `~/.claude.json` for MCP servers;
-    `~/.codex/` for the other vendor.
-  - project-local: the `.claude/` directory beside the panel's cwd, which is also where
-    `CLAUDE.md`, `.mcp.json`, and project settings live.
-  So this is **#9's tier 1** — "local files with an open format" — not tier 2. No OAuth, no
-  token storage, no HTTP client, no new trust boundary. It is a watched directory, a
-  schema per file type, and a renderer. That is the same machinery as #3's file tree and
-  #14's watched local-file panel, which is a strong argument for building it *after* one
-  of those exists rather than in parallel with it.
-- **Read first, write second, and the line between them is sharper here than usual.**
-  Listing what is installed and what is active is inert. Editing it is not: hooks are
-  arbitrary code that runs on tool calls, permission settings decide what an agent may do
-  without asking, and an MCP server is a process with its own reach. The app is not
-  introducing that risk — an agent with shell access can already rewrite any of these files
-  — but a one-click toggle in a UI is a very different affordance from a file an agent had
-  to deliberately edit. Ship the browser, then decide about the editor.
-- **Constraint: an MCP server is a process, and #18 should count it.** MCP servers are
-  spawned by the CLI, not by `PtyManager`, so they are grandchildren of the panel's PTY
-  rather than anything main owns. A per-panel cost readout that samples only the pid and
-  misses its children will under-report a panel running four MCP servers by most of its
-  actual cost — which is exactly why #18 specifies sampling *the pid and its children*.
-  A toolbox that shows "this panel has 4 MCP servers active" alongside "this panel is
-  using 2.1 GB" is the pairing that makes both entries worth more than either alone.
-- **Constraint: config is read at CLI startup, so changing it mid-session mostly does
-  nothing.** A UI that lets a user enable a skill and then silently fails to apply it to
-  the running agent is worse than no UI. This needs an honest stance — show which panels
-  are running with stale config, and offer to restart them — and **the app has no
-  restart-in-place path today**: `dispose(id)` is the only way out of a session and it
-  burns the panel id. Adding one means a third legitimate caller into `pty.kill`, which is
-  precisely what "two lifetimes, not one" exists to police. Do not let a config UI be the
-  feature that quietly introduces it.
-- **Constraint: model the concepts vendor-neutrally.** A skill, an MCP server, and a plugin
-  are different things, but the *inventory* is the same shape: id, kind, scope
-  (user/project), source path, enabled, description. Keep that neutral with a thin adapter
-  per vendor — the same argument #12 makes for tickets and #19 makes for usage — and do not
-  build the abstraction until Codex or another CLI actually wants it.
-- **Constraint: chrome or panel kind, and it is worth deciding rather than drifting.** A
-  global inventory is chrome, like #3's sidebar and #11's pane, and lives outside the
-  `.world` transform. But "the toolbox for *this* panel" is panel-scoped information and
-  is much more natural as a panel kind sitting next to the agent it describes — which makes
-  it a good second consumer of #14's union rather than a reason to invent a third pattern.
-  Probably both, sharing one inventory model.
-- **Open question: does this overlap #11 or is it separate?** Both are "a searchable
-  surface for configuration". The honest split is that #11 owns *the canvas app's own*
-  settings, and this owns *the agents' capabilities* — different data, different owner,
-  different blast radius. They should share the search behaviour and the schema-driven
-  rendering approach, and share nothing else. Deciding otherwise means one pane where
-  turning something off changes a window colour and turning the next thing off grants an
-  agent filesystem write access, which is a bad pane.
-- **Open question: does the canvas ever *author* these, or only manage them?** "Turn this
-  panel's last hour into a skill" is a genuinely interesting feature and a much larger one.
-  Note it and move on.
+**This entry is rewritten down rather than deleted, because the differentiating
+claim it was written for is still unshipped.** What follows is what is left, and
+the ordering is roughly the order it is worth doing in.
+
+- **The cross-panel answer — the entry's whole original argument, and still the
+  best reason for any of this.** "These extensions resolve per project, so a
+  canvas holding twelve panels in twelve directories is the only place where
+  'which of these agents can actually do X' is a question the UI can answer."
+  M21 answers it for ONE panel at a time; the cross-panel form is a palette
+  scope where typing a capability name lists the panels that have it, and the
+  panels that do not. It needs a per-cwd cache across N panels, which
+  `ToolboxCache` already is — the read is keyed by resolved cwd precisely so
+  twelve panels in one repository cost one parse. **This is the next
+  milestone**, and it is much smaller now than the read was.
+- **The editing half, still deliberately unshipped.** "Ship the browser, then
+  decide about the editor." M21 shipped the browser and the decision is still
+  open. The asymmetry the original entry named is unchanged and is the reason:
+  listing is inert, while hooks are arbitrary code that runs on tool calls,
+  permission settings decide what an agent may do without asking, and an MCP
+  server is a process with its own reach. A one-click toggle is a very
+  different affordance from a file an agent had to deliberately edit. Note that
+  M21 makes editing *cheaper* to build and no safer to ship: every entry
+  already carries the absolute `sourcePath` a writer would need.
+- **Plugins as first-class entries.** M21 reads `enabledPlugins` for the one
+  cheap fact — which ids are on — and lists nothing from them, which is why
+  every `unknown/plugin-owned` arm exists. Measured on one machine:
+  `~/.claude/plugins` is **663 MB containing 700 `SKILL.md` files** under
+  `cache/`. Walking that is a different milestone with its own caps, and the
+  honest question it has to answer first is whether a user wants 700 more rows
+  at all or only wants to know which plugin a hidden skill came from.
+- **A path-keyed, refcounted watcher, if pull ever proves not enough.** M21 is
+  PULL — an invoke on selection, a refresh control on the node, a stat-sweep
+  cache — and `FileWatchers` was the wrong tool rather than merely unbuilt:
+  it is keyed by PANEL id, which is right for a file panel and wrong here,
+  because half of this feature's sources (`~/.claude/settings.json`,
+  `~/.claude.json`, `~/.claude/skills`, `~/.claude/commands`) are shared by
+  every panel on the canvas. Twelve panels would arm twelve watchers on the
+  same four paths. Doing it properly is a registry keyed by PATH with a
+  refcount, and it is its own milestone; the node renders `readAt` in the
+  meantime so a stale node is honest rather than silently wrong.
+- **The three resolution unknowns, which no amount of reading files can
+  settle.** M21 answers `unknown` for each rather than guessing, and each would
+  need confirming against the CLI itself: whether `permissions.allow` UNIONS or
+  is OVERRIDDEN across the three settings files (M21 never merges, and
+  attributes every count to its own file); whether a project skill SHADOWS a
+  same-named user one (M21 reports the LINK in `alsoDefinedIn` and refuses to
+  name a winner); and whether the newer `enabledMcpServers` pair outranks
+  `enabledMcpjsonServers` when both name one server (M21 answers
+  `contradictory-config`). Answering any of them turns an `unknown` arm into a
+  real one — and getting one wrong turns an honest refusal into a confident
+  lie, which is strictly worse than what is there now.
+- **Managed settings.** `/Library/Application Support/ClaudeCode/managed-settings.json`
+  did not exist on the machine M21 was measured against and is not read. A
+  managed DENY that this app hides is the worst possible wrong answer for a
+  feature whose whole promise is "what can this agent do", so if that path is
+  real it should be a fourth scope rather than an omission.
+- **Codex, or any second vendor.** Unchanged and still declined: "do not build
+  the abstraction until Codex or another CLI actually wants it." M21's
+  `ToolEntry` is a discriminated union with a shared base, which is the shape
+  an adapter would slot into, and no adapter exists.
+- **"Turn this panel's last hour into a skill."** Noted in the original entry
+  and still a genuinely interesting, much larger feature. Untouched.
+
+**One constraint from the original entry is now resolved and should not be
+re-raised.** It warned that "the app has no restart-in-place path today" and
+that a config UI must not be the feature that quietly introduces one. M8c
+shipped `restartPanel` for its own reasons, so the worry no longer applies —
+and M21 still declines to offer restart from the toolbox surface, because that
+would make killing a working agent one click away from an mtime. What it does
+instead is state the fact: a `stale` freshness arm says "config on disk has
+changed since this panel started", naming the files, and says nothing whatever
+about the running agent.
+
+**Two things M21 measured that any successor should not re-derive.**
+`~/.claude/settings.json` was **64,152 bytes** on the machine it was built
+against, which is 1,384 bytes short of `MAX_PROMPT_BYTES` — so `prompts.ts`'s
+cap must never be reused here, and `SETTINGS_MAX_BYTES` is 1 MB for that reason.
+And `projects[*].history` was observed PRESENT on one machine and ABSENT across
+all twelve projects on another, which is why the `~/.claude.json` read is an
+ALLOWLIST of four paths: a denylist is silently wrong on one of those two
+machines and the failure is invisible, because the payload merely gets bigger.
 
 ## 27. Prompt placeholders — the half of the prompt library that did not ship
 
@@ -2229,7 +2250,15 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
 30. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
-31. **#26 agent toolbox, read-only inventory** — after #3 or #14 tier 1, because it is
+31. ~~**#26 agent toolbox, read-only inventory**~~ — **done, M21**, at exactly the point
+   this item names and for exactly its stated reason: it landed after M16's file panel and
+   reused that milestone's shape rather than inventing a second copy. The prediction that
+   held is the sequencing one; the prediction that did NOT is the machinery — see #26's
+   own rewrite for why `FileWatchers` turned out to be the wrong tool (it is keyed by
+   PANEL id, and half of this feature's sources are shared by every panel on the canvas),
+   so M21 is PULL with a cwd-keyed cache rather than the watched-directory design this
+   item assumed. The editing half and the cross-panel query are the two pieces left.
+   The original text follows: after #3 or #14 tier 1, because it is
    the same watched-directory machinery and should not invent a second copy of it. The
    editing half is a separate, later decision.
 32. **#30 durable scrollback** — schedule it *before* #16 rather than alongside it: it is the

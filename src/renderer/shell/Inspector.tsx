@@ -1,6 +1,6 @@
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import type { InspectorModel, InspectorSummary, ReviewFieldModel } from './inspector-fields'
+import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import { agentStateLabel } from './inspector-fields'
 import { shellControl } from './shell-control'
 
@@ -26,6 +26,18 @@ export interface InspectorProps {
    * an unfrozen prop here defeats the memo outright.
    */
   review: ReviewFieldModel | null
+  /**
+   * null when the selected panel has no directory at all (a review node, a
+   * file panel, a Jira panel), and `hidden` when the inventory itself says
+   * there is nothing to show. Two different facts, and the pane must not
+   * collapse them — see buildToolboxFields' own three-state comment.
+   *
+   * Frozen by Canvas on `toolboxSignature`, exactly as `review` is on
+   * `reviewSignature`: an unfrozen prop here defeats this component's memo
+   * outright, and Canvas re-renders on every mousemove.
+   */
+  toolbox: ToolboxFieldModel | null
+  onOpenToolbox: (id: string) => void
 }
 
 /**
@@ -49,7 +61,7 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, review
+  onLink, onRemoveLink, onRelabelLink, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -68,6 +80,8 @@ function InspectorImpl({
         : <InspectorPanel
             model={model}
             review={review}
+            toolbox={toolbox}
+            onOpenToolbox={onOpenToolbox}
             onRename={onRename}
             onClose={onClose}
             onSavePreset={onSavePreset}
@@ -121,11 +135,13 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, review, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onOpenReview,
   onLink, onRemoveLink, onRelabelLink
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
+  toolbox: ToolboxFieldModel | null
+  onOpenToolbox: (id: string) => void
   onRename: (id: string, title: string) => void
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
@@ -291,6 +307,51 @@ function InspectorPanel({
           Close panel
         </button>
       </div>
+      {toolbox !== null && !toolbox.hidden && (
+        /*
+          Same hiding policy as Changes above, and the same reason: a section
+          that renders an empty body on most panels most of the time teaches
+          the user to stop reading this part of the pane. The IN-FLIGHT state
+          is deliberately NOT hidden — it renders "reading…" — because an
+          empty gap for the duration of every selection reads as broken.
+        */
+        <section className="inspector__section">
+          <h3 className="inspector__section-heading">Toolbox</h3>
+          <p className="inspector__review-summary" data-toolbox-summary>{toolbox.summary}</p>
+          {toolbox.note !== undefined && (
+            <p className="inspector__review-note" data-toolbox-note>{toolbox.note}</p>
+          )}
+          <ul className="inspector__toolbox-list">
+            {toolbox.rows.map((row) => (
+              <li className="inspector__toolbox-row" key={row.id} data-toolbox-row={row.name}>
+                <span className="inspector__toolbox-name">{row.name}</span>
+                <span className="inspector__toolbox-scope">{row.scope}</span>
+                {row.state !== 'active' && (
+                  <span className="inspector__toolbox-state">{row.state}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {toolbox.more > 0 && (
+            <p className="inspector__review-more" data-toolbox-more>+{toolbox.more} more</p>
+          )}
+          {/*
+            Present and ENABLED whenever the section renders, because a
+            toolbox needs only a DIRECTORY — unlike Open review beside it,
+            which needs a baseline and so is disabled for a panel that never
+            spawned. A row that vanished would read as a feature that was
+            never built (verify:palette 31's rule).
+          */}
+          <button
+            type="button"
+            className="inspector__action"
+            data-toolbox-open
+            {...shellControl(() => { onOpenToolbox(model.id) })}
+          >
+            Open toolbox
+          </button>
+        </section>
+      )}
       {review !== null && !review.hidden && (
         /*
           `hidden` (not-a-repo, or the invoke hasn't resolved yet) renders

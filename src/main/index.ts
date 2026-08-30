@@ -17,6 +17,7 @@ import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { FileWatchers } from './file-watch'
+import { ToolboxCache } from './toolbox-cache'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import {
   allPresets,
@@ -201,6 +202,9 @@ const ptyManager = new PtyManager(
 // renderer reload, and a real quit) — see window-lifecycle's callback and
 // before-quit below.
 const fileWatchers = new FileWatchers()
+// Keyed by cwd, so twelve panels in one repository share one answer rather
+// than parsing the same 93 KB ~/.claude.json twelve times. See ToolboxCache.
+const toolboxCache = new ToolboxCache()
 
 /**
  * Reset is the only action in the app Cmd+Z cannot take back, which is exactly
@@ -570,7 +574,8 @@ app.whenReady().then(async () => {
     reviewCommit,
     credentialStore,
     fileWatchers,
-    () => mainWindow
+    () => mainWindow,
+    toolboxCache
   )
   createWindow()
 

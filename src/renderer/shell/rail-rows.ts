@@ -1,4 +1,4 @@
-import { isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 
 /**
@@ -49,6 +49,13 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // directory is the inspector's job.
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
   if (isJiraPanel(panel)) return 'Jira tickets'
+  // A toolbox node names its DIRECTORY by basename, the same split the file
+  // branch above makes and for the same reason: a 260px row cannot hold a
+  // path, and the full cwd is the inspector's job.
+  if (isToolboxPanel(panel)) {
+    const cwd = panel.source.cwd.replace(/\/+$/, '')
+    return `toolbox: ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+  }
   return (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
     ?? 'login shell'
@@ -80,6 +87,10 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
   // this panel does not have, and `dormant` in particular would render a
   // start control that nothing can honour.
   if (kind === 'file') return 'file'
+  // Same reason again, and the same placement BEFORE the dormant test: a
+  // toolbox node owns no process, so a 'dormant' tail would render a start
+  // control nothing can honour.
+  if (kind === 'toolbox') return 'toolbox'
   if (dormant) return 'dormant'
   if (status === undefined) return 'not started'
   switch (status.kind) {

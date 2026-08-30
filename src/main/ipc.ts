@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest , ToolboxReadRequest, ToolboxPermissionsRequest } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -18,6 +18,9 @@ import type { CredentialStore } from './credential-store'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
 import { createJiraRequester, listAssignedWorkItems, verifyJiraCredential } from './jira-client'
 import type { FileWatchers } from './file-watch'
+import type { ToolboxCache } from './toolbox-cache'
+import { readPermissionRules, resolveToolboxHome } from './toolbox-read'
+import { resolveCwd } from './pty-manager'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -90,7 +93,12 @@ export function registerIpcHandlers(
    * Its own parameter rather than reaching for `palette.window`: the dialog
    * needs a parent window, and main/index.ts is the only thing that has one.
    */
-  getWindow: () => BrowserWindow | null
+  getWindow: () => BrowserWindow | null,
+  /**
+   * Appended last, like every collaborator before it, so no existing
+   * positional call site shifts — scripts/panels-entry.cjs included.
+   */
+  toolboxCache: ToolboxCache
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -277,6 +285,21 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.FILE_CLOSE, (_event, panelId: PanelId) => {
     fileWatchers.close(panelId)
+  })
+
+  ipcMain.handle(IPC.TOOLBOX_READ, (_event, req: ToolboxReadRequest) => {
+    // resolveCwd is pty-manager's — the SAME expansion a spawn gets, so the
+    // toolbox and the agent can never disagree about which directory they are
+    // describing. index.ts already reaches for it this way for prompts.
+    return toolboxCache.read({
+      cwd: req.cwd === '' ? '' : resolveCwd(req.cwd),
+      home: resolveToolboxHome(),
+      spawnStamps: ptyManager.configStampsFor(req.panelId)
+    })
+  })
+
+  ipcMain.handle(IPC.TOOLBOX_PERMISSIONS, (_event, req: ToolboxPermissionsRequest) => {
+    return readPermissionRules(req.path, req.bucket)
   })
 }
 

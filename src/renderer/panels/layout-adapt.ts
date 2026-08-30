@@ -1,5 +1,6 @@
 import type { PersistedPanel } from '@shared/layout-schema'
-import { isFilePanel, isJiraPanel, isReviewPanel, type Panel } from './panels'
+import { isFilePanel, isJiraPanel,
+  isToolboxPanel, isReviewPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -32,6 +33,13 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     if (p.kind === 'review') return { ...base, kind: 'review' as const, subject: { ...p.subject } }
     if (p.kind === 'file') return { ...base, kind: 'file' as const, source: { path: p.source.path } }
     if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
+    if (p.kind === 'toolbox') {
+      return {
+        ...base,
+        kind: 'toolbox' as const,
+        source: { cwd: p.source.cwd, label: p.source.label }
+      }
+    }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -77,6 +85,14 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // check on the next launch, losing the panel on every relaunch, silently.
     if (isFilePanel(panel)) return { ...base, kind: 'file' as const, source: { path: panel.source.path } }
     if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
+    // Same no-cwd/no-args rule as the two branches above, for the same reason.
+    if (isToolboxPanel(panel)) {
+      return {
+        ...base,
+        kind: 'toolbox' as const,
+        source: { cwd: panel.source.cwd, label: panel.source.label }
+      }
+    }
     return {
       ...base,
       kind: 'terminal' as const,

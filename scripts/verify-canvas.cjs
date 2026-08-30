@@ -135,7 +135,8 @@ app.whenReady().then(async () => {
       resolveRepo: async () => null,
       captureBaseline: async () => null,
       review: async () => ({ kind: 'not-a-repo' })
-    }
+    },
+    { read: () => ({ kind: 'no-cwd' }), size: () => 0, clear: () => {} }
   )
 
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
