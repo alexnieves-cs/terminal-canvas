@@ -261,6 +261,7 @@ export function buildInspectorModel(
       // always-enabled, and tsc says nothing about it.
       restartable: false,
       reattached: false,
+      links,
       fields: [
         { key: 'file', label: 'file', value: cut < 0 ? path : path.slice(cut + 1) },
         // The directory is its OWN field rather than folded into the one
