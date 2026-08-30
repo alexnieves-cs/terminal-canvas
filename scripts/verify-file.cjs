@@ -87,6 +87,74 @@ const p = (name) => join(DIR, name)
       && r6.lines === F.FILE_MAX_LINES + 25,
     `6 — the render cap truncates and reports the remainder: rendered=${r6.kind === 'text' ? r6.content.split('\n').length : '-'} truncated=${r6.truncatedLines} total=${r6.lines}`)
 
+  // A tiny promise helper: resolve on the next change, or null after ms.
+  const nextChange = (calls, ms) => new Promise((resolve) => {
+    const started = calls.length
+    const t = setInterval(() => {
+      if (calls.length > started) { clearInterval(t); clearTimeout(k); resolve(calls[calls.length - 1]) }
+    }, 20)
+    const k = setTimeout(() => { clearInterval(t); resolve(null) }, ms)
+  })
+
+  const watchers = new F.FileWatchers()
+
+  // 7 — THE CHECK THIS MILESTONE EXISTS FOR: the atomic-rename survival.
+  // Agents and editors do not write in place; they write a temp file and
+  // rename() it over the target, which replaces the inode. fs.watch bound to
+  // the FILE path stays bound to the dead inode and never fires again — the
+  // panel goes permanently stale showing pre-agent content, with no error,
+  // looking exactly like a watcher that was never wired up. This fails against
+  // that obvious implementation and is the only check in the repo that would.
+  writeFileSync(p('watched.txt'), 'before\n')
+  const calls7 = []
+  const first = watchers.watch('f1', p('watched.txt'), (r) => calls7.push(r))
+  ok(7.0, first.kind === 'text' && first.content === 'before\n',
+    `7.0 — watch() returns the first read, so there is no armed-but-blank window: kind=${first.kind}`)
+  writeFileSync(p('watched.tmp'), 'after\n')
+  renameSync(p('watched.tmp'), p('watched.txt'))
+  const c7 = await nextChange(calls7, 3000)
+  ok(7, c7 !== null && c7.kind === 'text' && c7.content === 'after\n',
+    `7 — an ATOMIC write (temp + rename) still fires: ${c7 === null ? 'no event' : c7.content.trim()}`)
+
+  // 8 — the dedupe. A write that does not change the content produces NO
+  // event. The window spans several debounce periods deliberately, for the
+  // reason verify:pty-manager 23's window does: a sample too short sees the
+  // same thing under either implementation and stays green against the defect.
+  const calls8 = []
+  watchers.close('f1')
+  writeFileSync(p('dedupe.txt'), 'same\n')
+  watchers.watch('f2', p('dedupe.txt'), (r) => calls8.push(r))
+  writeFileSync(p('dedupe.txt'), 'same\n')
+  writeFileSync(p('dedupe.txt'), 'same\n')
+  const c8 = await nextChange(calls8, 1500)
+  ok(8, c8 === null && calls8.length === 0,
+    `8 — rewriting identical content pushes nothing: events=${calls8.length}`)
+
+  // 9 — deletion is an EVENT, not silence, and it is `missing` rather than an
+  // empty read. The panel has to be told, or it goes on showing content for a
+  // file that is gone.
+  const calls9 = []
+  writeFileSync(p('doomed.txt'), 'here\n')
+  watchers.watch('f3', p('doomed.txt'), (r) => calls9.push(r))
+  rmSync(p('doomed.txt'))
+  const c9 = await nextChange(calls9, 3000)
+  ok(9, c9 !== null && c9.kind === 'missing',
+    `9 — deleting the file pushes missing: ${c9 === null ? 'no event' : c9.kind}`)
+
+  // 10 — closeAll() really disarms. Asserted by WRITING after the close and
+  // observing nothing, never by reading an internal count alone: a count that
+  // went to zero while the FSWatcher stayed alive is exactly the leak this
+  // guards, and it is what a Cmd+R reload would do once per file panel,
+  // forever, in a main process the reload does not restart.
+  const calls10 = []
+  writeFileSync(p('after-close.txt'), 'v1\n')
+  watchers.watch('f4', p('after-close.txt'), (r) => calls10.push(r))
+  watchers.closeAll()
+  writeFileSync(p('after-close.txt'), 'v2\n')
+  const c10 = await nextChange(calls10, 1500)
+  ok(10, c10 === null && watchers.count() === 0,
+    `10 — closeAll disarms: events=${calls10.length} count=${watchers.count()}`)
+
   console.log('')
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
