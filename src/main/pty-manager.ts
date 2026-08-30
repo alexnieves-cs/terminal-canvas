@@ -10,7 +10,14 @@ import { initialDetector, nextState, scanForBell, type AgentEvent, type Detector
 import type { SessionBackend } from './session-backend'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
 import { resolveTranscript as realResolveTranscript, readFrom as realReadFrom } from './transcript-reader'
-import { applyChunk, createUsageState, dropUsage, offsetFor, resetIfShrunk } from './usage-accumulator'
+import {
+  applyChunk,
+  createUsageState,
+  dropUsage,
+  offsetFor,
+  resetIfShrunk,
+  usageFor
+} from './usage-accumulator'
 
 /**
  * Owns every PTY in the app. The renderer never spawns a process; it only ever
@@ -135,6 +142,17 @@ export class PtyManager {
   private usageState = createUsageState()
   /** Resolved transcript paths, cached: the glob runs once per session. */
   private transcriptPaths = new Map<PanelId, string>()
+  /**
+   * Panels owed ONE forced usage:panel resend, regardless of whether the
+   * transcript grew. detachAll() marks every panel that already had usage
+   * state here: a Cmd+R reload wipes the renderer's usage-store, but
+   * pollUsage's only send trigger is applyChunk seeing genuinely NEW bytes —
+   * so a reattached panel whose agent is currently idle would otherwise show
+   * "no answer yet" indefinitely, even though this manager already holds its
+   * full totals. Consumed and cleared the first time pollUsage forces a send
+   * for that panel.
+   */
+  private forceResend = new Set<PanelId>()
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -420,6 +438,7 @@ export class PtyManager {
       this.lastLive.delete(panelId)
       dropUsage(this.usageState, panelId)
       this.transcriptPaths.delete(panelId)
+      this.forceResend.delete(panelId)
       return
     }
     session.killed = true
@@ -438,6 +457,7 @@ export class PtyManager {
     this.lastLive.delete(panelId)
     dropUsage(this.usageState, panelId)
     this.transcriptPaths.delete(panelId)
+    this.forceResend.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
   }
@@ -455,6 +475,15 @@ export class PtyManager {
    */
   detachAll(): void {
     for (const session of [...this.sessions.values()]) {
+      // A panel with existing usage state is exactly a panel whose renderer
+      // is about to lose its usage-store entirely — the reload wipes it —
+      // while THIS manager goes on holding full totals for it. Marking it
+      // here is what lets pollUsage force one resend the next time it sees
+      // this panel, instead of waiting on a byte that may not arrive for a
+      // while if the agent is currently idle.
+      if (usageFor(this.usageState, session.panelId) !== undefined) {
+        this.forceResend.add(session.panelId)
+      }
       session.killed = true
       if (session.flushTimer) clearTimeout(session.flushTimer)
       try {
@@ -607,13 +636,42 @@ export class PtyManager {
         if (path === undefined) continue
         this.transcriptPaths.set(panelId, path)
       }
-      const read = this.readFrom(path, offsetFor(this.usageState, panelId))
+      const offset = offsetFor(this.usageState, panelId)
+      let read = this.readFrom(path, offset)
       if (read === undefined) continue
-      resetIfShrunk(this.usageState, panelId, read.size)
+      // A shrink means the file was truncated or replaced: the stored offset
+      // now points PAST the file's end, so `readFrom` short-circuits at that
+      // stale offset and hands back an EMPTY read — a size, but no bytes.
+      // Resetting the state AFTER consuming that empty read (the ordering
+      // this replaces) fixes the OFFSET for next tick while `applyChunk` still
+      // runs on this tick's empty text, silently sets offset = fileSize
+      // having parsed nothing, and the whole replacement file is skipped —
+      // forever, since the offset it leaves behind already covers it. The
+      // reset has to run BEFORE the read that is actually consumed, and a
+      // second read from 0 has to follow it, so the replacement file's
+      // content is what applyChunk actually sees this tick.
+      if (read.size < offset) {
+        resetIfShrunk(this.usageState, panelId, read.size)
+        read = this.readFrom(path, 0)
+        if (read === undefined) continue
+      }
       const usage = applyChunk(this.usageState, panelId, read.text, read.size)
       // undefined means nothing changed. That dedupe IS the throttle; see
-      // applyChunk's own comment and verify:usage 18.
-      if (usage === undefined) continue
+      // applyChunk's own comment and verify:usage 18. But a panel marked in
+      // forceResend just lost its renderer-side usage-store to a reload, so
+      // "nothing changed" is exactly the case that must still send: the
+      // agent may be idle for a while, and the reattached panel would
+      // otherwise show "no answer yet" indefinitely despite this manager
+      // already holding its full totals.
+      if (usage === undefined) {
+        if (this.forceResend.has(panelId)) {
+          this.forceResend.delete(panelId)
+          const forced = usageFor(this.usageState, panelId)
+          if (forced !== undefined) this.send(IPC_EVENTS.USAGE_PANEL, { panelId, usage: forced })
+        }
+        continue
+      }
+      this.forceResend.delete(panelId)
       this.send(IPC_EVENTS.USAGE_PANEL, { panelId, usage })
     }
   }

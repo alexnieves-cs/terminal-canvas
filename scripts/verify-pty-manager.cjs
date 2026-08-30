@@ -59,6 +59,23 @@ buildSync({
 const { createDirectBackend, createTmuxBackend } = require(OUT_BACKEND)
 const DIRECT = createDirectBackend('verify: direct by default')
 
+// M15 fix-round checks 29/30 need the REAL readFrom — the function that
+// actually carries the shrink-detection bug this fix round closes — against
+// a transcript file this harness controls, rather than a real
+// ~/.claude/projects this suite must not touch (the same rule the git and
+// prompt fences in verify-panels.cjs already state). resolveTranscript is
+// still substituted per-check, so the harness never globs a real directory.
+const OUT_TRANSCRIPT = join(__dirname, '..', 'out', 'verify', 'transcript-reader.cjs')
+buildSync({
+  entryPoints: [join(__dirname, '..', 'src', 'main', 'transcript-reader.ts')],
+  outfile: OUT_TRANSCRIPT,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['node-pty', 'electron']
+})
+const { readFrom: realReadFrom } = require(OUT_TRANSCRIPT)
+
 const OUT_TMUX_ARGS = join(__dirname, '..', 'out', 'verify', 'tmux-args.cjs')
 buildSync({
   entryPoints: [join(__dirname, '..', 'src', 'main', 'tmux-args.ts')],
@@ -144,7 +161,13 @@ function makeHarness(backend, options = {}) {
     (panelId) => { if (options.onDropBaseline) options.onDropBaseline(panelId) },
     (panelId) => (options.pinnedSession ? options.pinnedSession(panelId) : undefined),
     (panelId, sessionId) => { if (options.setPinnedSession) options.setPinnedSession(panelId, sessionId) },
-    (panelId) => { if (options.onDropPinnedSession) options.onDropPinnedSession(panelId) }
+    (panelId) => { if (options.onDropPinnedSession) options.onDropPinnedSession(panelId) },
+    // Undefined falls through to the constructor's own default (the real
+    // implementations), exactly as every other optional dep above does —
+    // only checks 29/30 substitute these, to drive pollUsage against a
+    // transcript this harness controls rather than a real ~/.claude/projects.
+    options.resolveTranscript,
+    options.readFrom
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -917,12 +940,111 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       h.manager.killAll()
     }
 
-    // Check 20's obligation, inherited via 22b, 23, 24 and 28: this block
-    // must end in a definite kill-server, never a session kill that leaves a
-    // stale server for the next run — see check 20's own comment for why (a
-    // later run's client would reattach to a server still wired to THIS
-    // run's now-deleted exitDir, and check 14 would silently report the
-    // wrong exit code). Whoever appends check 29 inherits it next.
+    // An assistant record as Claude Code actually writes one — copied
+    // verbatim from verify-usage.cjs's and verify-panels.cjs's own rec()
+    // helpers, since it is another program's format and not ours. `over`
+    // sets the output token count directly, since checks 29/30 below only
+    // ever vary that one figure.
+    const usageRec = (over = {}) => JSON.stringify({
+      type: 'assistant',
+      cwd: '/tmp/x',
+      sessionId: 's1',
+      timestamp: '2026-08-30T00:00:00.000Z',
+      isSidechain: false,
+      message: {
+        model: 'claude-opus-5',
+        usage: {
+          input_tokens: 2,
+          output_tokens: over.output ?? 100,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0
+        }
+      }
+    })
+    const usageEvents = (h, panelId) =>
+      h.events.filter((e) => e.channel === 'usage:panel' && e.payload.panelId === panelId)
+
+    // 29. Fix round: pollUsage's shrink handling was sequenced backwards. A
+    //     shrunk/replaced transcript was read at the STALE offset first —
+    //     which readFrom short-circuits to an EMPTY read — and only THEN
+    //     reset, so applyChunk ran on that empty text, silently set
+    //     offset = fileSize having parsed nothing, and the whole replacement
+    //     file was skipped forever with no usage:panel correction ever sent.
+    //     This drives the REAL sequence end to end against a real file and a
+    //     real readFrom (never resetIfShrunk in isolation, which already had
+    //     a passing unit check and did not catch this bug), truncates it to
+    //     something shorter with different content, and asserts the
+    //     accumulated totals reflect ONLY the new file — not stale, not zero.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager usage-shrink '))
+      const transcriptPath = join(dir, 'sess.jsonl')
+      writeFileSync(transcriptPath, usageRec({ output: 100 }) + '\n')
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        resolveTranscript: () => transcriptPath,
+        readFrom: realReadFrom
+      })
+      await h.manager.create(spec('p13', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const gotFirst = await waitFor(() => usageEvents(h, 'p13').length > 0, 6000)
+      const firstTotal = gotFirst ? usageEvents(h, 'p13').pop().payload.usage.totals.output : undefined
+      // Replace with a SHORTER file carrying DIFFERENT content — a real
+      // rotation or truncation, not merely an append.
+      writeFileSync(transcriptPath, usageRec({ output: 7 }) + '\n')
+      const gotSecond = await waitFor(() => {
+        const evs = usageEvents(h, 'p13')
+        return evs.length > 0 && evs[evs.length - 1].payload.usage.totals.output === 7
+      }, 6000)
+      const lastTotal = usageEvents(h, 'p13').pop()?.payload.usage.totals.output
+      ok('29 a shrunk transcript is re-read from zero, and the correction actually sends',
+        gotFirst && firstTotal === 100 && gotSecond && lastTotal === 7,
+        `first=${firstTotal} last=${lastTotal}`)
+      h.manager.killAll()
+    }
+
+    // 30. Fix round: a reload never resent usage totals until the agent's
+    //     next turn. detachAll() correctly KEEPS usageState (re-reading from
+    //     zero would double-count), but a Cmd+R reload wipes the renderer's
+    //     own usage-store, and pollUsage's only send trigger was genuinely
+    //     NEW bytes — so a reattached, currently-idle panel showed "no
+    //     answer yet" indefinitely despite this manager already holding its
+    //     full totals. Simulates a reload with detachAll() + a second
+    //     create() at the same id (check 25's own shape), runs a poll tick
+    //     with NO new transcript bytes, and asserts a usage:panel message IS
+    //     sent carrying the panel's EXISTING totals.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager usage-resend '))
+      const transcriptPath = join(dir, 'sess.jsonl')
+      writeFileSync(transcriptPath, usageRec({ output: 42 }) + '\n')
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        resolveTranscript: () => transcriptPath,
+        readFrom: realReadFrom
+      })
+      await h.manager.create(spec('p14', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const gotFirst = await waitFor(() => usageEvents(h, 'p14').length > 0, 6000)
+      h.events.splice(0, h.events.length)
+      h.manager.detachAll()
+      await h.manager.create(spec('p14', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      // The transcript has NOT changed since the first read: no new bytes at
+      // all, which is exactly the case applyChunk reports as "nothing
+      // changed" and would otherwise hold back forever.
+      const resent = await waitFor(() => usageEvents(h, 'p14').length > 0, 6000)
+      const resentTotal = resent ? usageEvents(h, 'p14').pop().payload.usage.totals.output : undefined
+      ok('30 a reload forces one resend of existing totals with no new bytes',
+        gotFirst && resent && resentTotal === 42, `gotFirst=${gotFirst} resent=${resent} total=${resentTotal}`)
+      h.manager.killAll()
+    }
+
+    // Check 20's obligation, inherited via 22b, 23, 24, 28, 29 and 30: this
+    // block must end in a definite kill-server, never a session kill that
+    // leaves a stale server for the next run — see check 20's own comment for
+    // why (a later run's client would reattach to a server still wired to
+    // THIS run's now-deleted exitDir, and check 14 would silently report the
+    // wrong exit code). Whoever appends check 31 inherits it next.
     tmuxBackend.shutdown()
   }
 
