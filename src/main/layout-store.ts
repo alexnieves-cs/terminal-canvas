@@ -6,13 +6,14 @@ import {
   parseLayout,
   type CanvasState,
   type LayoutSnapshot,
+  type PersistedPanel,
   type Preset,
   type Prompt,
   type RestoreSettings,
   type Workspace
 } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
-import type { ActivateResult, WorkspaceRow } from '../shared/ipc-contract'
+import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
 import type { ReviewBaseline } from '../shared/review'
 
 /**
@@ -88,6 +89,26 @@ export interface LayoutStore {
   deletePrompt(id: string): boolean
   /** Every workspace, with the active one flagged. Copied out, like presets(). */
   workspaces(): WorkspaceRow[]
+  /**
+   * Every workspace's WHOLE panels, for a merged cross-workspace view.
+   * workspaces() carries panelIds because a rail row only needs a count;
+   * this carries full PersistedPanels because a merged lane needs geometry
+   * to lay them out. Copied out, like workspaces() and presets(): a caller
+   * mutating what it gets back must not reach the snapshot this store is
+   * about to serialise.
+   */
+  mergedWorkspaces(): MergedWorkspace[]
+  /**
+   * Relocates panels between workspace records. Touches no session — it
+   * moves rows in this store only, never pty.kill/backend.destroy/
+   * dropBaseline — and mints no PanelId and destroys none, so the full id
+   * set (see mergedWorkspaces) is unchanged across a call. Null, and
+   * nothing changed, when `target` names an unknown workspace id.
+   */
+  movePanels(
+    panelIds: string[],
+    target: { workspaceId: string } | { newName: string }
+  ): { workspaceId: string } | null
   /**
    * Mint one and return its id. Does NOT activate it: a create that also
    * switched would move the user somewhere they did not ask to go, and
@@ -320,6 +341,24 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     scheduleWrite()
   }
 
+  // Hoisted out of the returned object literal for the same reason doSave/
+  // doInitial are (see the comment above them): movePanels needs to mint a
+  // workspace for its `newName` branch, and calling the public
+  // createWorkspace() below via `this` would work today but breaks the
+  // instant a caller destructures the store — nothing else in this file
+  // relies on `this`, and this keeps it that way.
+  function doCreateWorkspace(name: string): string {
+    const id = nextWorkspaceId()
+    // Every field of a Workspace is populated by defaultWorkspace(), so the
+    // spread cannot lose an absent-vs-undefined distinction the way
+    // spreading a Preset can (see "An absent command must stay absent" in
+    // CLAUDE.md). A future optional field on Workspace would make this a
+    // hazard and should be set explicitly rather than spread.
+    snapshot.workspaces = [...snapshot.workspaces, { ...defaultWorkspace(), id, name }]
+    scheduleWrite()
+    return id
+  }
+
   return {
     load() {
       if (!existsSync(filePath)) return
@@ -437,16 +476,107 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
         active: w.id === snapshot.activeWorkspaceId
       })),
 
-    createWorkspace(name) {
-      const id = nextWorkspaceId()
-      // Every field of a Workspace is populated by defaultWorkspace(), so the
-      // spread cannot lose an absent-vs-undefined distinction the way
-      // spreading a Preset can (see "An absent command must stay absent" in
-      // CLAUDE.md). A future optional field on Workspace would make this a
-      // hazard and should be set explicitly rather than spread.
-      snapshot.workspaces = [...snapshot.workspaces, { ...defaultWorkspace(), id, name }]
+    // Every workspace's panels, for the merged view. workspaces() carries
+    // panelIds because a rail row only needs a count; this carries whole
+    // panels because a merged lane needs geometry to lay them out.
+    //
+    // The panels are COPIED, not referenced — the same rule workspaces() and
+    // presets() already obey, sharper here: the merged view's entire job is
+    // to translate these rects into lanes for display, and a shared
+    // reference would make that display-only offset the value the next
+    // coalesced save serialises — a well-formed layout.json with the wrong
+    // rects in it, found launches later, with nothing naming the view that
+    // caused it.
+    mergedWorkspaces() {
+      return snapshot.workspaces.map((w) => ({
+        id: w.id,
+        name: w.name,
+        active: w.id === snapshot.activeWorkspaceId,
+        panels: w.panels.map((p) => ({ ...p }))
+      }))
+    },
+
+    /**
+     * Relocates panels between workspace records.
+     *
+     * It mints no PanelId and destroys none — the full id set spanned by
+     * mergedWorkspaces() is unchanged across a call (verify:layout 112),
+     * which is what stops a later Cmd+N minting an id that is still live in
+     * another workspace: PanelId doubles as a tmux session name, and
+     * `new-session -A` would attach the new panel to the OLD panel's
+     * process. It also touches NO SESSION of its own: a moved panel becomes
+     * a hidden workspace's panel with a running tmux session, which is
+     * exactly the state a workspace switch already produces ("demote, not
+     * dispose" in CLAUDE.md) — process lifecycle belongs to the renderer's
+     * registry, and this function never reaches pty.kill, backend.destroy,
+     * or dropBaseline.
+     *
+     * Resolving (or minting) the target BEFORE removing anything from any
+     * source is the ordering that matters: a half-applied move — panels
+     * removed, never delivered anywhere — would lose them with no UI able
+     * to reach them again, the same orphan outcome deleteWorkspace's own
+     * design rejects.
+     */
+    movePanels(panelIds, target) {
+      const wanted = new Set(panelIds)
+      if (wanted.size === 0) return null
+
+      let targetId: string
+      if ('newName' in target) {
+        targetId = doCreateWorkspace(target.newName)
+      } else {
+        // An id naming nothing is a stale palette row or a second window —
+        // the same "changed nothing" answer activateWorkspace already gives
+        // an unknown id, rather than a half-applied transaction.
+        if (!snapshot.workspaces.some((w) => w.id === target.workspaceId)) return null
+        targetId = target.workspaceId
+      }
+
+      // Pull the wanted panels out of every OTHER workspace's record. A
+      // panel already sitting in the target is left alone: matching `wanted`
+      // against the target's own list too would duplicate it there.
+      const moving: PersistedPanel[] = []
+      for (const w of snapshot.workspaces) {
+        if (w.id === targetId) continue
+        const keep = w.panels.filter((p) => !wanted.has(p.id))
+        if (keep.length !== w.panels.length) {
+          moving.push(...w.panels.filter((p) => wanted.has(p.id)))
+          w.panels = keep
+        }
+      }
+      // None of the requested ids existed anywhere outside the target —
+      // asking to move nothing real. Nothing was removed above (the length
+      // check skipped every workspace), so there is nothing to deliver.
+      if (moving.length === 0) return null
+
+      const dest = snapshot.workspaces.find((w) => w.id === targetId)
+      // Unreachable in practice — targetId was just resolved or minted two
+      // steps up — but returning null here rather than asserting keeps this
+      // function's one failure mode "nothing changed" rather than a crash
+      // mid-move with panels already pulled out of their source.
+      if (!dest) return null
+      // The rect travels unchanged. A moved panel lands where it was, which
+      // may collide with something already in the target — visible the next
+      // time the user opens that workspace, and honest: cascading it here
+      // would move a panel to a position the user never asked for.
+      dest.panels = [...dest.panels, ...moving]
+
+      // A moved panel must not stay named as some OTHER workspace's
+      // selection or focus: those ids are per-workspace state, and a
+      // selectedId naming a panel the record no longer holds would restore,
+      // on the next switch, as a selection nothing answers to.
+      for (const w of snapshot.workspaces) {
+        if (w.id === targetId) continue
+        if (w.selectedId !== null && wanted.has(w.selectedId)) w.selectedId = null
+        if (w.focusedId !== null && wanted.has(w.focusedId)) w.focusedId = null
+      }
+
       scheduleWrite()
-      return id
+      return { workspaceId: targetId }
+    },
+
+    createWorkspace(name) {
+      return doCreateWorkspace(name)
     },
 
     renameWorkspace(id, name) {

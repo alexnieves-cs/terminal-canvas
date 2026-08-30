@@ -15,7 +15,7 @@ import type {
   PtyResizeRequest,
   PtyWriteRequest
 } from './types'
-import type { CanvasState } from './layout-schema'
+import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 
@@ -326,6 +326,23 @@ export interface WorkspaceRow {
 export interface ActivateResult {
   state: CanvasState
   allPanelIds: string[]
+}
+
+/**
+ * One workspace as a MERGED cross-workspace view needs it — every workspace
+ * at once, each carrying its WHOLE panels rather than WorkspaceRow's
+ * panelIds. A rail row only has to render a count; a merged lane has to lay
+ * panels out, which needs their rects, cwd and args, not just their ids.
+ *
+ * `active` mirrors WorkspaceRow's own field rather than a separate "is this
+ * where the user currently is" concept — one workspace is flagged active by
+ * main, everywhere main describes workspaces, for the same reason.
+ */
+export interface MergedWorkspace {
+  id: string
+  name: string
+  active: boolean
+  panels: PersistedPanel[]
 }
 
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */

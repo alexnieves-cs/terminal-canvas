@@ -1651,6 +1651,141 @@ const reviewPanelOnDisk = (id, over = {}) => ({
       back[0].rect.x === 10)
 }
 
+/* ---- M14: reading every workspace, and moving panels between them ----
+   Two new store verbs, no IPC and no UI yet — the renderer only ever holds
+   the active workspace's array, so a merged cross-workspace view and a
+   cross-workspace move both have to start in main, where every workspace's
+   record already lives. Reuses this file's own helpers (tmp(), panel(),
+   L.createLayoutStore) rather than inventing a second set, the same way
+   checks 82-94 above already build workspace fixtures. */
+
+// 109. mergedWorkspaces() spans EVERY workspace and carries WHOLE panels, not
+//      the panelIds workspaces() carries. Both halves matter: a view that
+//      could only see the active workspace would not be a merged view at
+//      all, and ids alone cannot be laid out for display because they carry
+//      no geometry — a lane needs a rect, not a name.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  const other = store.createWorkspace('School')
+  const cam = { x: 0, y: 0, scale: 1 }
+  store.save({ panels: [panel({ id: 'n1' })], camera: cam, selectedId: null, focusedId: null })
+  store.activateWorkspace(other, { panels: [panel({ id: 'n1' })], camera: cam, selectedId: null, focusedId: null })
+  store.save({ panels: [panel({ id: 'n2', x: 40, y: 40 })], camera: cam, selectedId: null, focusedId: null })
+  const merged = store.mergedWorkspaces()
+  ok('109 mergedWorkspaces spans every workspace, with whole panels',
+    merged.length === 2 &&
+      merged.every((w) => Array.isArray(w.panels)) &&
+      merged.flatMap((w) => w.panels.map((p) => p.id)).sort().join(',') === 'n1,n2' &&
+      merged.filter((w) => w.active).length === 1,
+    JSON.stringify(merged.map((w) => [w.id, w.active, w.panels.map((p) => p.id)])))
+}
+
+// 110. The returned panels are COPIES, the same rule workspaces() and
+//      presets() already obey. It is sharper here: the merged view's whole
+//      job is to offset these rects into lanes for DISPLAY, and a shared
+//      reference means that display-only offset is exactly the value the
+//      next coalesced save serialises to disk — a well-formed layout.json
+//      with the wrong rects in it, found launches later, with nothing
+//      naming the view that caused it.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.save({ panels: [panel({ id: 'n1', x: 10, y: 20 })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+  const merged = store.mergedWorkspaces()
+  merged[0].panels[0].x = 99999
+  ok('110 mergedWorkspaces hands back copies, not the live snapshot',
+    store.mergedWorkspaces()[0].panels[0].x === 10,
+    String(store.mergedWorkspaces()[0].panels[0].x))
+}
+
+// 111. The move itself: the panel leaves the source record and arrives in
+//      the target. Asserted as BOTH halves in one read, because a move that
+//      only ADDED to the target would duplicate a panel id across two
+//      workspaces — and a duplicate PanelId is two panels sharing one tmux
+//      session (PanelId doubles as the session name).
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  const target = store.createWorkspace('School')
+  store.save({
+    panels: [panel({ id: 'n1' }), panel({ id: 'n2', x: 40, y: 40 })],
+    camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+  })
+  const result = store.movePanels(['n2'], { workspaceId: target })
+  const byId = Object.fromEntries(store.mergedWorkspaces().map((w) => [w.id, w.panels.map((p) => p.id)]))
+  ok('111 a moved panel leaves the source AND arrives in the target',
+    result !== null && result.workspaceId === target &&
+      byId[L.DEFAULT_WORKSPACE_ID].join(',') === 'n1' && byId[target].join(',') === 'n2',
+    JSON.stringify(byId))
+}
+
+// 112. The full set of panel ids, across every workspace, is UNCHANGED
+//      across a move. The move mints no id and destroys none — it relocates
+//      a record. The renderer seeds nextIdRef from exactly this set (via
+//      ActivateResult.allPanelIds, main/index.ts's own internal
+//      allPanelIds()), so a move that dropped an id from it would let a
+//      later Cmd+N mint an id that is still live in another workspace, and
+//      tmux's `new-session -A` would attach the new panel to the OLD
+//      panel's process instead of starting its own.
+//
+//      store.allPanelIds() is not a public LayoutStore member — it exists
+//      only as an internal closure surfaced through activateWorkspace's
+//      return value — so this reads the same fact through mergedWorkspaces(),
+//      which is public and spans every workspace by construction (check 109).
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  const target = store.createWorkspace('School')
+  store.save({
+    panels: [panel({ id: 'n1' }), panel({ id: 'n7', x: 40, y: 40 })],
+    camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+  })
+  const idsOf = () => store.mergedWorkspaces().flatMap((w) => w.panels.map((p) => p.id)).sort().join(',')
+  const before = idsOf()
+  store.movePanels(['n7'], { workspaceId: target })
+  const after = idsOf()
+  ok('112 the full panel id set is unchanged across a move',
+    after === before, `${before} -> ${after}`)
+}
+
+// 113. An unknown target changes NOTHING and says so. A half-applied move —
+//      panels removed from the source, never delivered anywhere — loses
+//      them with no UI able to reach them again, exactly the orphan outcome
+//      deleteWorkspace's own design already rejects (see
+//      activateWorkspace's identical unknown-id branch, check 92 above).
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.save({ panels: [panel({ id: 'n1' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+  const result = store.movePanels(['n1'], { workspaceId: 'w-nope' })
+  ok('113 an unknown target moves nothing and returns null',
+    result === null && store.mergedWorkspaces()[0].panels.map((p) => p.id).join(',') === 'n1',
+    JSON.stringify(store.mergedWorkspaces().map((w) => w.panels.map((p) => p.id))))
+}
+
+// 114. Moving to a NEW name mints exactly ONE workspace and puts both panels
+//      in it. Exactly-one is half the check: minting once per panel is the
+//      obvious loop bug, and it produces N single-panel workspaces that look
+//      almost right in a rail — a user who asked to spin two panels into a
+//      new lane instead gets two new lanes, each holding one.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.save({
+    panels: [panel({ id: 'n1' }), panel({ id: 'n2', x: 40, y: 40 })],
+    camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+  })
+  const before = store.workspaces().length
+  const result = store.movePanels(['n1', 'n2'], { newName: 'Spike' })
+  const made = store.mergedWorkspaces().find((w) => w.name === 'Spike')
+  ok('114 a move to a new name mints exactly one workspace holding both panels',
+    result !== null && store.workspaces().length === before + 1 &&
+      made !== undefined && made.panels.map((p) => p.id).sort().join(',') === 'n1,n2' &&
+      made.active === false,
+    JSON.stringify(store.workspaces().map((w) => w.name)))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
