@@ -64,7 +64,16 @@ export function readFile(path: string): FileResult {
   }
 
   const all = buf.toString('utf8')
-  const allLines = all.split('\n')
+  // split('\n') manufactures a phantom trailing element for the ordinary
+  // case — a file ending in a newline — because there is nothing after that
+  // final '\n' for split to return but an empty string: "a\nb\n".split('\n')
+  // is ["a","b",""], three elements for a two-line file. `wc -l` does not
+  // make that mistake, and neither should this. An empty file is zero lines,
+  // not one (`''.split('\n')` is `['']`, length 1, which is also wrong), and
+  // a file with NO trailing newline keeps its last (unterminated) line —
+  // popping there would silently drop real content rather than an artifact
+  // of the split.
+  const allLines = all.length === 0 ? [] : all.endsWith('\n') ? all.slice(0, -1).split('\n') : all.split('\n')
   const lines = allLines.length
   const truncatedLines = Math.max(0, lines - FILE_MAX_LINES)
   // Truncate and REPORT. The remainder is a number on the result, not a
@@ -72,6 +81,10 @@ export function readFile(path: string): FileResult {
   // same division Command.waiting and RailRow.waiting already keep.
   const content = truncatedLines === 0 ? all : allLines.slice(0, FILE_MAX_LINES).join('\n')
 
+  // A second stat, deliberately not reused from the one above: this one is
+  // taken AFTER the read completes, so it reports the mtime of the file as
+  // of the content actually in hand, not of whatever was on disk before the
+  // read started — the read itself can race a concurrent write.
   let mtimeMs = 0
   try {
     mtimeMs = statSync(path).mtimeMs

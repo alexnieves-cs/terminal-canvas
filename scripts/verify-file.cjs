@@ -42,7 +42,7 @@ const p = (name) => join(DIR, name)
   // 1 — the ordinary case.
   writeFileSync(p('a.txt'), 'one\ntwo\nthree\n')
   const r1 = F.readFile(p('a.txt'))
-  ok(1, r1.kind === 'text' && r1.content === 'one\ntwo\nthree\n' && r1.bytes === 14 && r1.lines === 4 && r1.truncatedLines === 0,
+  ok(1, r1.kind === 'text' && r1.content === 'one\ntwo\nthree\n' && r1.bytes === 14 && r1.lines === 3 && r1.truncatedLines === 0,
     `1 — an ordinary file reads as text: kind=${r1.kind} bytes=${r1.bytes} lines=${r1.lines}`)
 
   // 2 — missing. Its own arm, never an empty string: "this file is gone" and
@@ -108,8 +108,8 @@ const p = (name) => join(DIR, name)
   writeFileSync(p('watched.txt'), 'before\n')
   const calls7 = []
   const first = watchers.watch('f1', p('watched.txt'), (r) => calls7.push(r))
-  ok(7.0, first.kind === 'text' && first.content === 'before\n',
-    `7.0 — watch() returns the first read, so there is no armed-but-blank window: kind=${first.kind}`)
+  ok('7b', first.kind === 'text' && first.content === 'before\n',
+    `7b — watch() returns the first read, so there is no armed-but-blank window: kind=${first.kind}`)
   writeFileSync(p('watched.tmp'), 'after\n')
   renameSync(p('watched.tmp'), p('watched.txt'))
   const c7 = await nextChange(calls7, 3000)
