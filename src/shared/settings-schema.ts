@@ -28,6 +28,9 @@ export const AGENT_CATEGORY = 'Agent state'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const SHELL_CATEGORY = 'Shell'
 
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const FILES_CATEGORY = 'Files'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -159,6 +162,36 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: true,
     category: SHELL_CATEGORY
+  },
+  {
+    id: 'files.treeOpen',
+    label: 'Show the file tree',
+    // Says what it DOES, not what it is.
+    description: 'Keep the file tree open on the far left, beside the rail.',
+    // A user who wants this has no vocabulary for "tree". They will type
+    // "files", "explorer", "sidebar" or "browser" — so a setting findable only
+    // by its own label is a setting most users will not find. The rail's own
+    // keywords make the same argument for "sidebar".
+    keywords: ['files', 'file tree', 'tree', 'explorer', 'browser', 'directory',
+      'folder', 'sidebar', 'shell', 'chrome', 'hide'],
+    type: 'boolean',
+    // CLOSED by default, unlike the rail and inspector. It is a fourth thing
+    // competing for horizontal width — at 220 + 240 + 260 a 1280px window has
+    // 560px of canvas left — so the user opens it when they want it.
+    default: false,
+    category: FILES_CATEGORY
+  },
+  {
+    id: 'files.showHidden',
+    label: 'Show hidden files',
+    description: 'List dotfiles and dot-directories in the file tree.',
+    keywords: ['hidden', 'dotfiles', 'dot files', 'invisible', 'git', 'files', 'tree'],
+    type: 'boolean',
+    // Off, because `.git` at a repository root is pure noise in a navigator.
+    // A SettingDef rather than a hardcode: this repo's standing rule is that
+    // anything a user can toggle lives in this one schema.
+    default: false,
+    category: FILES_CATEGORY
   }
 ]
 

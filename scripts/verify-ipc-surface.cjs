@@ -128,16 +128,19 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // 41, not 42. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // 42, not 43. file:changed is an IPC_EVENTS member — a main-to-renderer send,
   // handled by nobody — and this suite asserts over Object.values(IPC), the
   // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
   // records both. M14 Task 5 took the surface to 35 (four credential:* channels,
-  // none of which returns a secret). Two milestones then built on that 35 from
-  // branches that never saw each other: the file panel's three invokes
-  // (file:open/file:read/file:close) and the workspace extras' two
-  // (workspace:merged, workspace:move-panels), plus M19's jira:list.
-  // 35 + 3 + 2 + 1 = 41.
-  const EXPECTED_CHANNELS = 41
+  // none of which returns a secret). Three milestones then built on that 35
+  // from branches that never saw each other: the file panel's three invokes
+  // (file:open/file:read/file:close), the workspace extras' two
+  // (workspace:merged, workspace:move-panels), M19's jira:list, and M20's
+  // fs:list — one directory's entries for the file tree (numbered M13
+  // throughout its own design and implementation; renumbered to M20 on
+  // merge, since a different, unrelated milestone had already claimed M13).
+  // 35 + 3 + 2 + 1 + 1 = 42.
+  const EXPECTED_CHANNELS = 42
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -21,5 +21,12 @@ module.exports = {
   /* M5b: prompts.ts reads .claude/commands with node:fs against a cwd passed
      in as a parameter — same shape as layout-store.ts's file path — so it
      stays in this tier despite touching the filesystem. */
-  ...require('../src/main/prompts')
+  ...require('../src/main/prompts'),
+  /* M20: fs-tree.ts reads one directory with node:fs against a path passed in
+     as a parameter — the same shape as prompts.ts above, and it stays in this
+     tier for the same reason: it is `electron` and `node-pty` that move a
+     module out of the plain-node tier, not the filesystem. Numbered M13
+     during its own design and implementation; renumbered on merge — a
+     different, unrelated milestone had already claimed M13. */
+  ...require('../src/main/fs-tree')
 }

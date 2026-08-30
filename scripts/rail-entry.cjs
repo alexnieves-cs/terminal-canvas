@@ -20,5 +20,11 @@ module.exports = {
   /* M16: the file node's view model. A third pure "node model" alongside
      review-node-model.ts, joining this bundle for the identical reason —
      pure, type-only imports, no suite of its own needed. */
-  ...require('../src/renderer/file/file-node-model')
+  ...require('../src/renderer/file/file-node-model'),
+  /* M20: the file tree's row model (numbered M13 during its own design and
+     implementation; renumbered on merge — a different, unrelated milestone
+     had already claimed M13). A shell module joining this bundle for the
+     reason the four above it did — pure, type-only imports, and a suite of its
+     own would re-prove this esbuild wiring for one file. */
+  ...require('../src/renderer/shell/file-tree-model')
 }

@@ -93,6 +93,9 @@ const bridge: CanvasBridge = {
     save: (name: string, body: string) => ipcRenderer.invoke(IPC.PROMPT_SAVE, name, body),
     remove: (id: string) => ipcRenderer.invoke(IPC.PROMPT_DELETE, id)
   },
+  files: {
+    list: (path: string) => ipcRenderer.invoke(IPC.FS_LIST, path)
+  },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
     onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener),

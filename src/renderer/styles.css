@@ -295,11 +295,12 @@ body {
    whole reason insetting is safe; a future window measurement breaks this
    silently. */
 .shell {
+  --shell-tree-w: 220px;
   --shell-rail-w: 240px;
   --shell-inspector-w: 260px;
   display: grid;
   height: 100%;
-  grid-template-columns: var(--shell-rail-w) 1fr var(--shell-inspector-w);
+  grid-template-columns: var(--shell-tree-w) var(--shell-rail-w) 1fr var(--shell-inspector-w);
   /* SPIKE. Was `36px 1fr` under a 38px .app padding — 74px of chrome in two
      mismatched bands. Now one 56px band that absorbs both. The traffic lights
      are NOT vertically centred in it (hiddenInset pins them near the top edge
@@ -309,11 +310,12 @@ body {
   --shell-top-h: 56px;
   grid-template-rows: var(--shell-top-h) 1fr;
   grid-template-areas:
-    "top top top"
-    "rail canvas inspector";
+    "top top top top"
+    "tree rail canvas inspector";
 }
 
 .shell__top { grid-area: top; }
+.shell__tree { grid-area: tree; }
 .shell__rail { grid-area: rail; }
 .shell__inspector { grid-area: inspector; }
 .canvas { grid-area: canvas; }
@@ -328,6 +330,7 @@ body {
 }
 
 .shell__top,
+.shell__tree,
 .shell__rail,
 .shell__inspector {
   color: var(--text);
@@ -443,6 +446,7 @@ body {
    one list claim a fixed slice of it. Panels is the section that grows;
    Workspaces and Attention are short by construction and are capped so a long
    workspace list cannot push the panel outline off screen. */
+.shell__tree,
 .shell__rail {
   background: var(--s-2);
   /* The rail and inspector are continuous physical surfaces, not boxes
@@ -461,9 +465,12 @@ body {
 
 /* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
    to stay clickable or the region is unreachable without the chord. */
+.shell--tree-collapsed { --shell-tree-w: 22px; }
 .shell--rail-collapsed { --shell-rail-w: 22px; }
 .shell--inspector-collapsed { --shell-inspector-w: 22px; }
 
+.shell--tree-collapsed .shell__tree .rail-list,
+.shell--tree-collapsed .shell__tree .shell__region-title,
 .shell--rail-collapsed .shell__rail .rail-list,
 .shell--rail-collapsed .shell__rail .shell__region-title,
 .shell--inspector-collapsed .shell__inspector .shell__region-title,
@@ -471,6 +478,7 @@ body {
   display: none;
 }
 
+.shell__tree-toggle,
 .shell__rail-toggle,
 .shell__inspector-toggle {
   width: 100%;
@@ -523,6 +531,24 @@ body {
   cursor: pointer;
 }
 .shell__region-add:hover { color: var(--text); }
+
+/* .shell__tree-root has no overflow rule of its own and sits in a flex row
+   (.shell__region-title--action) beside the refresh control. A flex item's
+   default min-width is auto, not 0, so a long unbreakable directory name
+   cannot shrink — it pushes the refresh button (shell__region-add, shared
+   with SideRail's own controls) out past the column's overflow: hidden clip,
+   making a documented re-read control disappear for some users. Scoped to
+   .shell__tree so SideRail's + and rename buttons keep their existing
+   behaviour — this is a tree-heading-specific fix, not a shared one. */
+.shell__tree-root {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell__tree .shell__region-add {
+  flex-shrink: 0;
+}
 
 /* The panel outline. Scrolls on its own rather than growing the rail: the
    canvas can hold far more panels than the rail is tall, and a rail that grew
@@ -954,6 +980,28 @@ body {
   padding: var(--sp-2) var(--sp-4);
   color: var(--muted);
   font-size: var(--t-sm);
+}
+
+/* The tree's own rows. Monospace and one line each: a filename is a path
+   fragment, and a proportional face makes two similar paths hard to tell
+   apart at a glance. Ellipsised rather than wrapped — a wrapped row breaks the
+   one-row-per-entry rhythm the indentation depends on to read as depth. */
+.file-row__twist {
+  display: inline-block;
+  width: var(--sp-4);
+  color: var(--muted);
+}
+.file-row .rail-row__label {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row--note {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  padding: var(--sp-1) var(--sp-3);
 }
 
 /* The fixed viewport. Clips the world and catches every canvas event. */

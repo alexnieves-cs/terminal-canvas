@@ -193,6 +193,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        credential:verify
                        jira:list
                        file:open / file:read / file:close
+                       fs:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel
@@ -596,11 +597,12 @@ price of not killing something.
 | M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 | M18 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 | M19 | Jira context: assigned tickets and ticket-to-session handoff | ✅ done |
+| M20 | The file tree: a codebase browser rooted on the selected panel | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11, M12,
-M13, M14, M15, M16, M17 and M18 each landed on their own branch and merged in
-sequence. A gap in the numbers here is a milestone someone else is holding,
+claimed by a separate concurrent track and is not yet in this table; M11
+through M20 each landed on their own branch and merged in sequence. A gap in
+the numbers here is a milestone someone else is holding,
 not one that was skipped. Four of those rows carry a number nobody used while
 the work was being done, and the reason is the same one every time. M15, M16,
 M17 and M18 were each built and reviewed entirely as something else — main had
@@ -620,7 +622,11 @@ accounting — because all four reached `main` while it was in flight. The rule
 those renumberings settle is worth stating plainly, since it is the one this
 table is for: **the number belongs to whichever milestone reaches `main`
 first**, and the branch that arrives later renames itself — never the row that
-is already here, which other documents are already citing.
+is already here, which other documents are already citing. M20 (the file
+tree) is the fifth instance: it was built and reviewed entirely as "M13", and
+by the time it tried to merge the real M13 ("links between panels", above)
+had already landed — so it renamed itself to the next free number, which by
+then was 20.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

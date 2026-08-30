@@ -23,6 +23,7 @@ import type { CredentialMeta } from './credential-schema'
 import type { WorkItem } from './work-item'
 import type { FileResult } from './file-panel'
 import type { AgentKind, PanelUsage } from './cost'
+import type { DirResult } from './fs-tree'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -233,7 +234,24 @@ export const IPC = {
    */
   FILE_READ: 'file:read',
   /** Disarm the watch. Called from the component's unmount. */
-  FILE_CLOSE: 'file:close'
+  FILE_CLOSE: 'file:close',
+  /**
+   * One directory's entries, for the file tree. Addressed by an absolute path
+   * rather than by a panel id: the tree's root follows the SELECTED panel but
+   * a directory the user has expanded is not that panel's business, and a
+   * panel-addressed read would go blank the moment the selection moved.
+   *
+   * Names and kinds only. There is deliberately no `fs:read` — file CONTENTS
+   * never cross this boundary, which is what keeps ideas-backlog #31
+   * ("any feature that moves terminal bytes out of the panel is a disclosure
+   * surface, because agents print secrets") out of this milestone entirely.
+   * A preview pane is a separate milestone that owes #31 an answer first.
+   *
+   * Distinct from FILE_READ/FILE_OPEN above: those name and watch ONE file a
+   * user opened deliberately; FS_LIST lists a DIRECTORY's entries for
+   * navigation and never reads a file's contents.
+   */
+  FS_LIST: 'fs:list'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -574,6 +592,10 @@ export interface CanvasBridge {
     save(name: string, body: string): Promise<void>
     /** False for an id the saved store does not hold — every project id, for one. */
     remove(id: string): Promise<boolean>
+  }
+  files: {
+    /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
+    list: (path: string) => Promise<DirResult>
   }
   session: {
     info(): Promise<SessionBackendInfo>
