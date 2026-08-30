@@ -211,10 +211,24 @@ const p = (name) => join(DIR, name)
     `14 — over the byte cap fails and writes nothing: kind=${w14.kind}`)
 
   // 15 — no temp file left behind, on the SUCCESS path and on the REFUSAL
-  // path. The refusal is the one most likely to leak, because it returns
-  // early — and a stray `.foo.txt.tc-abc123.tmp` sitting in a repository the
-  // user is working in is litter with this app's fingerprints on it. Asserted
-  // by reading the directory rather than by trusting the finally block.
+  // path. What this proves: neither path leaves a stray
+  // `.foo.txt.tc-abc123.tmp` in the directory — a litter file with this
+  // app's fingerprints on it, in a repository the user is working in —
+  // asserted by reading the directory rather than by trusting the code.
+  //
+  // What it does NOT prove: that the `finally { rmSync(tmp, ...) }` block
+  // itself is exercised. `renameSync` consumes the temp file on the success
+  // path, and the stale refusal returns before `tmp` is even constructed —
+  // so neither path this check drives ever depends on that cleanup running.
+  // The block is reachable only from a throw BETWEEN `writeFileSync` and
+  // `renameSync`, and there is no honest way to force that on macOS: a
+  // read-only directory fails the temp CREATION itself (so there is no temp
+  // to leak), a directory target is refused before the temp is ever
+  // constructed, and EXDEV is unreachable because the temp is deliberately
+  // created in the target's own directory. Forcing it needs a filesystem
+  // fault injector this repo does not have, so the block stays uncovered by
+  // design rather than by oversight. Confirmed by injection: commenting out
+  // the `finally` block left this check green — 19/19, unchanged.
   mkdirSync(p('litter'), { recursive: true })
   const litter = (name) => join(DIR, 'litter', name)
   writeFileSync(litter('t.txt'), 'v1\n')
