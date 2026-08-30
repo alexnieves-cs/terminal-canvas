@@ -8096,6 +8096,222 @@ app.whenReady().then(async () => {
       try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
+    // ---------------------------------------------------------------------
+    // 118-120. M14: THE RUBBER-BAND MARQUEE, in a real renderer.
+    //
+    //          Every drag here is a REAL wc.sendInputEvent mouseDown/
+    //          mouseMove/mouseUp sequence, never a dispatched MouseEvent. A
+    //          dispatched event is untrusted and Blink runs no default action
+    //          for one — the limit checks 47 and 75c each record from their
+    //          own side — and check 120's whole subject is a default action:
+    //          where DOM focus ends up after a press on the background.
+    {
+      // The fixture is built rather than inherited: a camera left wherever
+      // check 117 stopped would make 118's count depend on which panels
+      // happened to be in view. Cmd+1 (fit all) is deliberately NOT the way
+      // to build it — check 84's rail-dormant panel is parked at world
+      // 60000,60000, so a fit clamps to MIN_SCALE and STILL cannot frame the
+      // spread: every panel near the origin ends up off screen and the first
+      // draft of this block measured `expected 0`, which reads as a broken
+      // marquee and is a broken fixture.
+      //
+      // So: reset the camera to INITIAL, spawn three panels (they cascade, so
+      // they are near the view centre and near each other), then step the
+      // zoom out twice — still above LIVE_MIN_SCALE, and wide enough that
+      // several panels and some genuine background share the canvas.
+      await zoomTo(wc, '0')
+      for (let i = 0; i < 3; i++) {
+        await zoomTo(wc, 'n')
+        await sleep(200)
+      }
+      await zoomTo(wc, '-')
+      await zoomTo(wc, '-')
+      await sleep(400)
+
+      // Reads MID-DRAG, between the last move and the mouseup. The marquee
+      // element is removed on mouseup, so "is a marquee on screen" asked
+      // AFTERWARDS is answered `no` by every implementation including a
+      // correct one — check 119's claim would be vacuous and 118 would have
+      // no positive evidence that anything was ever drawn.
+      const marqueeState = () => wc.executeJavaScript(`(() => ({
+        marquees: document.querySelectorAll('.canvas-marquee').length,
+        selected: document.querySelectorAll('.panel--selected').length
+      }))()`)
+
+      const dragFromTo = async (from, to) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+        // Four moves rather than one jump: the gesture's listeners live on
+        // `document` precisely because the cursor leaves the element it
+        // started in, and a single synthetic hop would exercise neither the
+        // tracking nor the listener lifetime a real drag produces.
+        for (let i = 1; i <= 4; i++) {
+          wc.sendInputEvent({
+            type: 'mouseMove',
+            x: Math.round(from.x + ((to.x - from.x) * i) / 4),
+            y: Math.round(from.y + ((to.y - from.y) * i) / 4),
+            // `leftButtonDown` is what makes MouseEvent.buttons read 1 in the
+            // renderer, which is what a REAL drag looks like — Chromium
+            // derives `buttons` from the modifier bitfield, not from the
+            // `button` field, the same spelling trap the auto-repeat note
+            // records for `isAutoRepeat`. The gesture ends itself on a move
+            // with no button held (a press whose mouseup never arrived), so
+            // without this every drag here would end on its first move.
+            button: 'left',
+            modifiers: ['leftButtonDown']
+          })
+        }
+        await sleep(200)
+        const during = await marqueeState()
+        wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+        await sleep(200)
+        return during
+      }
+
+      // 118. A marquee selects SEVERAL panels in one gesture. Asserted as a
+      //      COUNT, because a marquee that kept only the last panel it
+      //      touched still leaves one selected and looks almost right on
+      //      screen — and so does one that selected nothing but left the
+      //      previous selection standing.
+      //
+      //      The expected count is DERIVED from the panels' own screen rects
+      //      under marqueeSelection's strict-inequality rule, never written
+      //      here as a literal: a literal would be true of exactly one
+      //      fixture and would go stale the first time anything above this
+      //      block spawns or closes a panel.
+      const plan = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        if (!host) return null
+        const b = host.getBoundingClientRect()
+        // A start point the marquee is ALLOWED to begin at. The background
+        // handler is not "empty space" — a carded panel's click falls through
+        // to it — so the start has to be a point with no .panel under it at
+        // all, which is what hitTest returning null means in the DOM.
+        let from = null
+        for (let dy = 6; dy < b.height - 6 && !from; dy += 8) {
+          for (let dx = 6; dx < b.width - 6; dx += 8) {
+            const x = Math.round(b.left + dx), y = Math.round(b.top + dy)
+            const el = document.elementFromPoint(x, y)
+            if (el && host.contains(el) && !el.closest('.panel') && !el.closest('.canvas-hud')) {
+              from = { x, y }
+              break
+            }
+          }
+        }
+        if (!from) return null
+        const to = { x: Math.round(b.right - 4), y: Math.round(b.bottom - 4) }
+        const l = Math.min(from.x, to.x), t = Math.min(from.y, to.y)
+        const r = Math.max(from.x, to.x), bo = Math.max(from.y, to.y)
+        // Screen space answers the same question world space does here: the
+        // world transform is a uniform positive scale plus a translation, so
+        // it preserves intersection exactly.
+        const expected = [...document.querySelectorAll('.panel')].filter((el) => {
+          const p = el.getBoundingClientRect()
+          return p.left < r && p.right > l && p.top < bo && p.bottom > t
+        }).length
+        return { from, to, expected }
+      })()`)
+      if (!plan) throw new Error('118: found no background point on the canvas to start a marquee at')
+
+      const during118 = await dragFromTo(plan.from, plan.to)
+      const after118 = await marqueeState()
+      ok('118 a marquee selects every panel it sweeps, in one gesture',
+        plan.expected >= 2 && during118.marquees === 1 &&
+          after118.selected === plan.expected && after118.marquees === 0,
+        `expected ${plan.expected} panels, selected ${after118.selected}; ` +
+          `marquees during=${during118.marquees} after=${after118.marquees}`)
+
+      // 119. A drag starting ON A CARDED PANEL selects that panel and draws
+      //      NO marquee. This is the rule most likely to catch a real
+      //      regression: the background onMouseDown is not "empty space" — a
+      //      carded panel has no chrome handler of its own, so its click
+      //      falls through here and is resolved by hitTest. A marquee started
+      //      on ANY background mousedown would rubber-band instead of
+      //      selecting, every time a user clicked a card — and cards are most
+      //      of the canvas once LIVE_BUDGET is spent.
+      // Two more zoom steps take the scale below LIVE_MIN_SCALE (0.5), which
+      // makes EVERY panel a card — the tier this check is about, and the one
+      // most of a real canvas is in once LIVE_BUDGET is spent.
+      await zoomTo(wc, '-')
+      await zoomTo(wc, '-')
+      await sleep(400)
+      const card = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        if (!host) return null
+        const b = host.getBoundingClientRect()
+        for (const el of document.querySelectorAll('.panel')) {
+          // A CARD specifically, not any panel: a live panel's slot would
+          // hand the mousedown to xterm and prove nothing about this branch.
+          if (!el.querySelector('.panel__card')) continue
+          const r = el.getBoundingClientRect()
+          const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+          if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
+          // The centre must really resolve to this panel — an overlapping
+          // neighbour on top would make the check assert about the wrong one.
+          const hit = document.elementFromPoint(x, y)
+          if (!hit || hit.closest('.panel') !== el) continue
+          return { id: el.dataset.panelId, x, y }
+        }
+        return null
+      })()`)
+      if (!card) throw new Error('119: no carded panel was reachable on screen')
+
+      const during119 = await dragFromTo({ x: card.x, y: card.y }, { x: card.x + 220, y: card.y + 160 })
+      const after119 = await wc.executeJavaScript(`(() => ({
+        marquees: document.querySelectorAll('.canvas-marquee').length,
+        selected: [...document.querySelectorAll('.panel--selected')].map((el) => el.dataset.panelId)
+      }))()`)
+      ok('119 a drag from a carded panel selects it and starts no marquee',
+        during119.marquees === 0 && after119.selected.length === 1 &&
+          after119.selected[0] === card.id,
+        `marquees during=${during119.marquees}, selected ${JSON.stringify(after119.selected)} ` +
+          `(card ${card.id})`)
+
+      // 120. A marquee still RELEASES FOCUS — the job the background handler
+      //      already had before the marquee joined it. assignTiers pins the
+      //      focused panel live UNCONDITIONALLY, so a gesture that forgot
+      //      this holds a WebGL context and a LIVE_BUDGET slot for the rest
+      //      of the run, however far the user pans away, and keeps routing
+      //      Cmd+C to a panel whose textarea the browser blurred long ago.
+      //
+      //      Two reads, because neither alone is the whole claim.
+      //      activeElement is the DOM half and is a browser DEFAULT ACTION,
+      //      which is why the drag above it has to be real input. __m4aGrid()
+      //      is the app half: it answers non-null only for a focusedId naming
+      //      a LIVE session, so it is the one observable that moves when
+      //      setFocusedId(null) is deleted — DOM focus leaves the textarea on
+      //      any background mousedown whether or not React was told.
+      await zoomTo(wc, '0')
+      await waitUntil(async () => (await liveCount(wc)) > 0, 4000)
+      const focusedBefore = await clickPanelBody('.panel__slot')
+      const insideBefore = await wc.executeJavaScript(
+        `!!(document.activeElement && document.activeElement.closest('.panel'))`)
+      const plan120 = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        const b = host.getBoundingClientRect()
+        for (let dy = 6; dy < b.height - 6; dy += 8) {
+          for (let dx = 6; dx < b.width - 6; dx += 8) {
+            const x = Math.round(b.left + dx), y = Math.round(b.top + dy)
+            const el = document.elementFromPoint(x, y)
+            if (el && host.contains(el) && !el.closest('.panel') && !el.closest('.canvas-hud')) {
+              return { from: { x, y }, to: { x: Math.min(x + 200, Math.round(b.right - 4)),
+                                             y: Math.min(y + 140, Math.round(b.bottom - 4)) } }
+            }
+          }
+        }
+        return null
+      })()`)
+      if (!plan120) throw new Error('120: found no background point to marquee from')
+      await dragFromTo(plan120.from, plan120.to)
+      const released = await wc.executeJavaScript(`(() => ({
+        inPanel: !!(document.activeElement && document.activeElement.closest('.panel')),
+        grid: typeof window.__m4aGrid === 'function' ? window.__m4aGrid() : 'missing'
+      }))()`)
+      ok('120 a marquee releases focus, the job the background click already had',
+        insideBefore === true && released.inPanel === false && released.grid === null,
+        `focused before=${insideBefore} (${focusedBefore.active}), after inPanel=${released.inPanel} ` +
+          `grid=${JSON.stringify(released.grid)}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

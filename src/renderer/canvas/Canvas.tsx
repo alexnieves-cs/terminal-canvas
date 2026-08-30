@@ -3,7 +3,9 @@ import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
-import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
+import { hitTest, screenToWorld, worldToScreen, type Point, type WorldRect } from './viewport'
+import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
+import { marqueeRect, marqueeSelection } from './marquee'
 import { usePanelDrag } from './usePanelDrag'
 import type { DragMode, DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
@@ -371,6 +373,16 @@ export function Canvas({
   }, [])
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+  /**
+   * The rubber band, in SCREEN pixels, or null when no marquee is in
+   * progress. Screen rather than world because that is what the band is
+   * PAINTED in — see Marquee.tsx — while the selection it drives is computed
+   * in world units from the same two points; the two spaces are derived from
+   * one gesture rather than kept in step by hand.
+   */
+  const [marquee, setMarquee] = useState<MarqueeScreenRect | null>(null)
+  /** The gesture's origin in WORLD units, or null between gestures. */
+  const marqueeFromRef = useRef<Point | null>(null)
 
   // One shot: the backend cannot change during a run, so this is not a
   // subscription. A failure leaves it null and the HUD simply says nothing,
@@ -1444,6 +1456,75 @@ export function Canvas({
     return screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewport)
   }
 
+  /**
+   * The rubber band, from the world point the press landed on.
+   *
+   * The move and up listeners go on `document`, never on the canvas host, for
+   * the reason installPointerCorrection binds there: the cursor spends most of
+   * a marquee outside the element the gesture started in — off the far edge of
+   * the canvas, over the rail, over a panel — and a host-scoped listener would
+   * simply stop tracking there, freezing the band mid-drag and leaving the
+   * selection at whatever it was when the pointer left. They are removed on
+   * mouseup; a mousemove listener left on the document is a real leak, and one
+   * that keeps recomputing a selection nobody asked for.
+   *
+   * Both refs are read at MOVE time rather than captured at mousedown: the
+   * band's screen geometry has to follow the camera, and the panel list can
+   * change under a gesture (a spawn, an exit, a close).
+   *
+   * No history entry, deliberately, at any point in the gesture. The panel
+   * ARRAY is untouched — "one history entry per committed gesture" is about
+   * gestures that move panels — and pushing one here would make Cmd+Z undo a
+   * selection while the drag it was meant to reverse stayed put.
+   */
+  const beginMarquee = useCallback((from: Point): void => {
+    const host = hostRef.current
+    if (!host) return
+    marqueeFromRef.current = from
+
+    const onMove = (event: globalThis.MouseEvent): void => {
+      const start = marqueeFromRef.current
+      if (!start) return
+      // A move with NO button held means the press ended somewhere this
+      // listener never saw it — released over another application, or a
+      // mousedown that never got its mouseup at all. Without this the band
+      // follows a cursor whose button is up and every idle mouse movement
+      // keeps rewriting the selection, with no gesture in progress and
+      // nothing on screen explaining it. Ending here is also what stops the
+      // document listeners outliving the gesture in that case.
+      if (event.buttons === 0) {
+        endMarquee()
+        return
+      }
+      const bounds = host.getBoundingClientRect()
+      const vp = viewportRef.current
+      const to = screenToWorld(
+        { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+        vp
+      )
+      const rect = marqueeRect(start, to)
+      // Painted from the world rect rather than from the two raw screen
+      // points, so the band cannot disagree with the selection it produced —
+      // one normalisation, read twice.
+      const topLeft = worldToScreen({ x: rect.x, y: rect.y }, vp)
+      setMarquee({ x: topLeft.x, y: topLeft.y, w: rect.w * vp.scale, h: rect.h * vp.scale })
+      const ids = marqueeSelection(rect, panelsRef.current.map((p) => p.rect))
+      // The set-shaped setter directly: this is the one gesture in the app
+      // that legitimately selects MANY, which is the whole reason selectedIds
+      // is a set. EMPTY_SELECTION rather than a fresh empty Set, so a marquee
+      // over empty space does not hand React a new identity every frame.
+      setSelectedIds(ids.length === 0 ? EMPTY_SELECTION : new Set(ids))
+    }
+    function endMarquee(): void {
+      marqueeFromRef.current = null
+      setMarquee(null)
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', endMarquee)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', endMarquee)
+  }, [])
+
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
@@ -1453,7 +1534,25 @@ export function Canvas({
     // handler of its own — its click falls through to the background path, and
     // calling selectOnly here directly would select it without raising it.
     if (hit) onSelectPanel(hit)
-    else selectOnly(null)
+    else {
+      selectOnly(null)
+      // The marquee starts ONLY where hitTest found nothing, which is why it
+      // lives in this else and not at the top of the handler. "Reaching the
+      // background handler" is not the same fact as "empty space": a carded
+      // panel has no chrome handler of its own, so its press arrives here too
+      // — and cards are most of the canvas once LIVE_BUDGET is spent, so a
+      // marquee armed on any background mousedown would rubber-band instead
+      // of selecting every time a user clicked a card.
+      //
+      // It is also what makes a zero-area marquee (a click with no drag)
+      // harmless: an empty rect geometrically intersects any panel strictly
+      // containing its point, and the guard is that there is no such panel.
+      //
+      // Gated on the palette for the reason every other canvas gesture stands
+      // down while it is open (rule 3 of "who owns the keyboard"): the click
+      // that dismisses the overlay is a dismissal, not the start of a drag.
+      if (world && !palette.isOpen()) beginMarquee(world)
+    }
     // Focus is released together with selection. assignTiers pins the focused
     // panel live unconditionally — off screen, below the scale threshold,
     // budget full — so a focusedId that is never cleared holds a WebGL context
@@ -2774,6 +2873,10 @@ export function Canvas({
         {pipsEnabled && (
           <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
         )}
+        {/* Beside the pips and outside .world for the same reason — see
+            Marquee.tsx. It renders null at rest, so there is no "no marquee"
+            element for anything to find. */}
+        <Marquee rect={marquee} />
         <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
         {palette.open && (
           <Palette

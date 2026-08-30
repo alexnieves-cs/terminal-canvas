@@ -1153,6 +1153,26 @@ body {
   border-bottom: 7px solid transparent;
 }
 
+/* M14. The rubber band. A sibling of .world for the pips' reason plus one of
+   its own: the band must stay under the cursor at the cursor's own size, and
+   inside the transform it would be scaled twice — once by the caller
+   converting its world rect to screen, once by the ancestor. --blue and
+   --blue-dim are the selection accent the panels it is selecting already
+   wear; this is --blue-dim's first user, and it is a token rather than a
+   hand-mixed rgba() precisely so the fill stays in step with the ring on
+   .panel--selected instead of drifting from it. */
+.canvas-marquee {
+  position: absolute;
+  border: 1px solid var(--blue);
+  background: var(--blue-dim);
+  border-radius: var(--r-sm);
+  /* Never a click target: the band sits under the cursor for the whole
+     gesture, so a hit-testable one would swallow the very mousemoves that
+     size it — and its mousedown would reach the background handler beneath,
+     which clears focus and wakes whatever it hit-tests. */
+  pointer-events: none;
+}
+
 /* The palette is in SCREEN space — a sibling of .world, never inside it. A
    scale() ancestor would shrink it at low zoom and would put it in the
    coordinate space xterm-pointer.ts rewrites during a drag. */
