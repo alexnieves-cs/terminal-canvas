@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { resolve } from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
 import type { WebContents } from 'electron'
 import type * as pty from 'node-pty'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -153,6 +154,36 @@ export class PtyManager {
    * for that panel.
    */
   private forceResend = new Set<PanelId>()
+  /**
+   * One StringDecoder per pinned panel, carrying whatever incomplete trailing
+   * UTF-8 bytes the last read ended on. readFrom hands back RAW bytes rather
+   * than a decoded string precisely because a read can land mid-write, at any
+   * byte offset — routinely inside a multibyte codepoint, since transcripts
+   * carry non-ASCII constantly (em dashes, emoji, international source).
+   * Decoding an arbitrary byte range directly turns a split codepoint into a
+   * replacement character on BOTH sides of the split, corrupting the line
+   * that straddles it — JSON.parse then throws and the whole turn is dropped,
+   * permanently, since the byte offset has already moved past it.
+   * StringDecoder.write() buffers exactly that trailing partial sequence
+   * across calls and emits only complete characters, which is why it has to
+   * live here rather than in transcript-reader.ts: this manager already
+   * carries per-panel state for the offset and the totals, and the decoder's
+   * lifetime must track theirs — surviving a detach/reattach (the bytes it is
+   * holding are still unconsumed, exactly like the offset that already counts
+   * them), reset alongside a shrink (those buffered bytes belonged to a file
+   * that is gone), and dropped alongside dropUsage (the recycled-id hazard
+   * dropBaseline and dropPinnedSession each close on their own doors).
+   */
+  private transcriptDecoders = new Map<PanelId, StringDecoder>()
+
+  private decoderFor(panelId: PanelId): StringDecoder {
+    let d = this.transcriptDecoders.get(panelId)
+    if (!d) {
+      d = new StringDecoder('utf8')
+      this.transcriptDecoders.set(panelId, d)
+    }
+    return d
+  }
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -210,7 +241,7 @@ export class PtyManager {
     private readonly readFrom: (
       path: string,
       offset: number
-    ) => { text: string; size: number } | undefined = realReadFrom
+    ) => { bytes: Buffer; size: number } | undefined = realReadFrom
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -439,6 +470,7 @@ export class PtyManager {
       dropUsage(this.usageState, panelId)
       this.transcriptPaths.delete(panelId)
       this.forceResend.delete(panelId)
+      this.transcriptDecoders.delete(panelId)
       return
     }
     session.killed = true
@@ -458,6 +490,7 @@ export class PtyManager {
     dropUsage(this.usageState, panelId)
     this.transcriptPaths.delete(panelId)
     this.forceResend.delete(panelId)
+    this.transcriptDecoders.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
   }
@@ -652,10 +685,22 @@ export class PtyManager {
       // content is what applyChunk actually sees this tick.
       if (read.size < offset) {
         resetIfShrunk(this.usageState, panelId, read.size)
+        // The decoder's buffered partial bytes belonged to the file that is
+        // gone — carrying them into a full re-read from 0 would prepend a
+        // stray tail from a stream this panel no longer has any relationship
+        // to. A fresh decoder is exactly what a fresh offset already implies.
+        this.transcriptDecoders.delete(panelId)
         read = this.readFrom(path, 0)
         if (read === undefined) continue
       }
-      const usage = applyChunk(this.usageState, panelId, read.text, read.size)
+      // write(), never toString(): a read can land mid-write, at any byte
+      // offset, and routinely splits a multibyte UTF-8 codepoint — decoding
+      // that byte range directly would corrupt the line straddling the split
+      // on BOTH sides of it. The decoder buffers exactly the incomplete
+      // trailing bytes and folds them into the NEXT call, which is why it has
+      // to persist per panel across ticks rather than being constructed here.
+      const text = this.decoderFor(panelId).write(read.bytes)
+      const usage = applyChunk(this.usageState, panelId, text, read.size)
       // undefined means nothing changed. That dedupe IS the throttle; see
       // applyChunk's own comment and verify:usage 18. But a panel marked in
       // forceResend just lost its renderer-side usage-store to a reload, so

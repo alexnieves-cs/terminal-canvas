@@ -44,11 +44,25 @@ export function resolveTranscript(sessionId: string): string | undefined {
 }
 
 /**
- * The bytes appended since `offset`, and the file's size now.
+ * The RAW bytes appended since `offset`, and the file's size now.
  *
  * The size is returned alongside so the caller can notice a file that SHRANK,
  * which means it was truncated or replaced and the stored offset points past
  * its end — reading from there yields garbage or nothing at all, with no error.
+ *
+ * Deliberately NOT decoded to a string here. A read can land at any byte
+ * offset — mid-write — so the split point routinely falls inside a multibyte
+ * UTF-8 codepoint (transcripts carry non-ASCII constantly: em dashes, emoji,
+ * source with international identifiers). Decoding an arbitrary byte range
+ * directly turns a split codepoint into a replacement character on BOTH sides
+ * of the split, corrupting the line that straddles the boundary — JSON.parse
+ * then throws on it and the whole turn is dropped, permanently, since the
+ * byte offset has already advanced past it. Reassembling complete characters
+ * across successive reads needs a decoder that carries state BETWEEN calls
+ * (node:string_decoder's whole reason to exist), and this module is
+ * deliberately stateless and plain-node testable per-call — so the caller
+ * (pty-manager.ts, which already holds per-panel state for the offset and the
+ * totals) is where that decoder lives, one per panel, fed these raw bytes.
  *
  * Reads only the delta. The file is append-only and unbounded (a real session
  * measured 262 lines), so re-reading it per tick is quadratic in session
@@ -57,16 +71,16 @@ export function resolveTranscript(sessionId: string): string | undefined {
 export function readFrom(
   path: string,
   offset: number
-): { text: string; size: number } | undefined {
+): { bytes: Buffer; size: number } | undefined {
   let fd: number | undefined
   try {
     const size = statSync(path).size
-    if (size <= offset) return { text: '', size }
+    if (size <= offset) return { bytes: Buffer.alloc(0), size }
     fd = openSync(path, 'r')
     const length = size - offset
     const buffer = Buffer.allocUnsafe(length)
     const read = readSync(fd, buffer, 0, length, offset)
-    return { text: buffer.subarray(0, read).toString('utf8'), size }
+    return { bytes: buffer.subarray(0, read), size }
   } catch {
     return undefined
   } finally {

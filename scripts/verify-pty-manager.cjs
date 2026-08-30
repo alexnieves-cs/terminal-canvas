@@ -1039,12 +1039,81 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       h.manager.killAll()
     }
 
-    // Check 20's obligation, inherited via 22b, 23, 24, 28, 29 and 30: this
-    // block must end in a definite kill-server, never a session kill that
-    // leaves a stale server for the next run — see check 20's own comment for
-    // why (a later run's client would reattach to a server still wired to
-    // THIS run's now-deleted exitDir, and check 14 would silently report the
-    // wrong exit code). Whoever appends check 31 inherits it next.
+    // 31. Fix round: a read landing mid-write can split a multibyte UTF-8
+    //     codepoint across the boundary, and readFrom used to decode each
+    //     independent byte range with .toString('utf8') directly — turning
+    //     the split character into a replacement character on BOTH sides of
+    //     the split, corrupting the line that straddles it. Reproduces the
+    //     exact byte-level split against a REAL file and REAL readFrom (never
+    //     a decoder in isolation): the transcript's own `message.model`
+    //     carries an em dash (—, three UTF-8 bytes), and the file is written
+    //     in two pieces whose boundary lands ONE byte into that three-byte
+    //     sequence — the file's own size at the first poll IS the split
+    //     point, so no timing guess is needed. Asserts the model name comes
+    //     back byte-for-byte correct (not carrying a stray U+FFFD) and the
+    //     turn is counted exactly once — never dropped, never duplicated.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager usage-utf8 '))
+      const transcriptPath = join(dir, 'sess.jsonl')
+      const model = 'claude—5' // U+2014 EM DASH: E2 80 94 in UTF-8
+      const line = JSON.stringify({
+        type: 'assistant',
+        cwd: '/tmp/x',
+        sessionId: 's1',
+        timestamp: '2026-08-30T00:00:00.000Z',
+        isSidechain: false,
+        message: {
+          model,
+          usage: {
+            input_tokens: 1,
+            output_tokens: 55,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0
+          }
+        }
+      }) + '\n'
+      const dashCharIndex = line.indexOf('—')
+      const dashByteOffset = Buffer.byteLength(line.slice(0, dashCharIndex), 'utf8')
+      // One byte into the three-byte sequence: the first chunk gets the
+      // dash's lead byte with no continuation bytes, and the second chunk
+      // gets the two orphaned continuation bytes with no lead byte — the
+      // worst-case split for a naive independent decode of each half.
+      const splitAt = dashByteOffset + 1
+      const fullBytes = Buffer.from(line, 'utf8')
+      writeFileSync(transcriptPath, fullBytes.subarray(0, splitAt))
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        resolveTranscript: () => transcriptPath,
+        readFrom: realReadFrom
+      })
+      await h.manager.create(spec('p15', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      // Let at least one tick observe the split-mid-character partial file —
+      // this is where the old code corrupted both halves. No newline is on
+      // disk yet, so nothing should be reported as a complete turn either way.
+      await sleep(2600)
+      const midway = usageEvents(h, 'p15').length
+      // Append the rest of the line — the file is now byte-identical to a
+      // normal write, and the decoder's buffered lead byte must fold with
+      // these fresh continuation bytes into the correct character.
+      require('node:fs').appendFileSync(transcriptPath, fullBytes.subarray(splitAt))
+      const got = await waitFor(() => usageEvents(h, 'p15').length > 0, 6000)
+      const last = got ? usageEvents(h, 'p15').pop().payload.usage : undefined
+      const models = last ? Object.keys(last.byModel) : []
+      ok('31 a multibyte character split across a read boundary reassembles correctly',
+        midway === 0 && got === true && models.length === 1 && models[0] === model &&
+          last.byModel[model].output === 55 && last.turns === 1,
+        `midway=${midway} models=${JSON.stringify(models)} turns=${last?.turns}`)
+      h.manager.killAll()
+    }
+
+    // Check 20's obligation, inherited via 22b, 23, 24, 28, 29, 30 and 31:
+    // this block must end in a definite kill-server, never a session kill
+    // that leaves a stale server for the next run — see check 20's own
+    // comment for why (a later run's client would reattach to a server still
+    // wired to THIS run's now-deleted exitDir, and check 14 would silently
+    // report the wrong exit code). Whoever appends check 32 inherits it next.
     tmuxBackend.shutdown()
   }
 
