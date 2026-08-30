@@ -705,42 +705,54 @@ The universal "maximise this" gesture.
   because the user zoomed in on one is exactly the kind of decision-on-their-behalf that
   dormancy exists to avoid. Probably not — but it should be a decision, not a default.
 
-## 24. Edges between panels
+## 24. Edges between panels — the FUNCTIONAL half is what is left
 
-Draw a line from one panel to another and have it mean something: this agent's output is
-input to that one; these three are the same ticket; this shell is the server the panel
-beside it is testing against.
+**The decorative half shipped in M13**, as *links*. A user draws a directed,
+optionally labelled line from one panel to another; it persists, it survives a
+reload, and closing either endpoint removes it in the same undoable step. See
+`CLAUDE.md`'s "The code says `link`, and `edge` already means something else"
+and the eleven entries after it, and
+[`docs/superpowers/specs/2026-08-30-m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md).
 
-- **Why it fits, and why it belongs on a canvas specifically.** Relationships between
-  concurrent work are invisible in every tabbed terminal, because a tab list has one
-  dimension and relationships need two. This is the second thing (after #7) that an
-  infinite canvas can show which a multiplexer structurally cannot.
-- **#7 already needs edges, for one specific case** — parent agent to its subagents. That
-  is a good reason to build the edge *primitive* generally rather than as a private detail
-  of subagent visualisation: same renderer, same z-order question, same persistence.
-- **The rendering is nearly free and the reason is the same as #15's.** An edge is a world-
-  space object; `.world` carries one transform, so an SVG path between two panel rects
-  pans, zooms, and clips correctly with no additional math. Anchor points are a function of
-  two rects, which is `panel-interaction.ts`-shaped arithmetic — pure, and testable under
-  plain node.
-- **Two flavours, and they should not be built at once:**
-  1. **Decorative** — the edge means whatever the user says it means, like a line on a
-     whiteboard. Costs a data model, a drag gesture, and persistence. Composes naturally
-     with #15's annotation layer and is arguably a feature *of* it.
-  2. **Functional** — the edge does something: pipe this panel's output into that one's
-     input, or "restart this one when that one exits". Genuinely powerful and genuinely
-     dangerous, because it means the canvas is now writing to PTYs on its own initiative.
-     Everything #21 says about a mode you can forget you are in applies double to a rule
-     that fires without you present.
-- **Constraint:** edges join `Panel.z`'s ordering rather than inventing a second scheme —
-  same rule #15 records — and they must not participate in `LIVE_BUDGET`. They are SVG.
-- **Constraint:** an edge references two panel ids, so it needs a stance on a panel being
-  closed. Dangling edges are the standard failure of every graph UI that stored ids without
-  deciding this.
-- **Open question:** if the functional flavour ever happens, is the edge the *only* place
-  that behaviour is expressed? A rule you can only see by finding the line on the canvas is
-  hard to audit. This may be the point at which the canvas needs a plain list view of its
-  own automations.
+The entry stays because #24 named **two flavours and said they should not be
+built at once**. One was built. This is the other.
+
+- **Functional edges — the open half.** An edge that *does* something: pipe
+  this panel's output into that one's input, or "restart this one when that one
+  exits". Genuinely powerful and genuinely dangerous, because it means the
+  canvas is writing to PTYs on its own initiative. Everything #21 says about a
+  mode you can forget you are in applies double to a rule that fires while you
+  are not present.
+- **Open question, unchanged and now the blocking one:** if the functional
+  flavour happens, is the edge the *only* place that behaviour is expressed? A
+  rule you can only see by finding a line on the canvas is hard to audit. This
+  may be the point at which the canvas needs a plain list view of its own
+  automations — and that list, not the edge, is probably the real feature.
+- **What M13 leaves ready.** The primitive is built generally rather than as a
+  private detail of #7's subagent visualisation, which is what #24 asked for:
+  same renderer, same z-order answer, same persistence. #7's parent-to-subagent
+  edges can render on `LinkLayer` without inventing a second scheme.
+- **Constraint, now discharged:** edges join `Panel.z`'s ordering rather than
+  inventing a second scheme — the layer sits at `z-index: 0`, beneath every
+  panel, since `nextZ` mints `z >= 1` — and they take no `LIVE_BUDGET` slot and
+  no WebGL context.
+- **Constraint, now discharged:** the dangling-edge question has an answer in
+  two places, and it needs both. `removePanel` prunes incoming links in memory,
+  in the same committed gesture as the close, so one `Cmd+Z` restores the panel
+  and its links together; `parseWorkspace` drops a link naming a panel that did
+  not survive validation, because a file can be hand-edited between launches.
+- **Constraint the functional half inherits:** a functional edge would have to
+  survive the same rule the decorative one does — the completing gesture must
+  never wake a dormant panel (`verify:panels` 126). A rule that *fires* on a
+  dormant panel is a harder version of the same question, and M13 does not
+  answer it.
+- **Deliberately still absent, and each is a decision rather than an
+  oversight:** link selection on the canvas (the inspector is the only surface
+  that acts on a link, because a hairline at `MIN_SCALE` is a sub-pixel target
+  and hit-testing one would cost `pointer-events: none`); routing (a link is a
+  straight segment and passes under intervening panels); culling and any bound
+  on link count; and cross-workspace links, which are representable — `PanelId`
+  is global — and render as nothing.
 
 ## 25. Where a new panel goes — placement, snapping, and tidy
 
