@@ -87,6 +87,85 @@ void (async () => {
     typeof J.textToAdf === 'function' && typeof J.adfText === 'function' &&
       J.adfText(J.textToAdf(SOURCE)).trim() === SOURCE)
 
+  // A requester that records EVERY call, so the zero-call assertions below
+  // are about a probe that was demonstrably alive rather than about silence.
+  const recorder = (reply) => {
+    const calls = []
+    return { calls, requester: async (r) => { calls.push(r); return reply(r) } }
+  }
+
+  const tRec = recorder(() => ({ status: 200, body: JSON.stringify({ transitions: [
+    { id: '31', name: 'Done', to: { name: 'Done' } },
+    { id: '21', name: 'In Progress', to: { name: 'In Progress' } },
+    { id: 'skip-me' }
+  ] }) }))
+  const transitions = typeof J.listWorkItemTransitions === 'function'
+    ? await J.listWorkItemTransitions({ store: store(BUNDLE), requester: tRec.requester }, 'TC-12')
+    : null
+  ok('8 transitions are read per issue and mapped to a neutral shape',
+    transitions?.kind === 'transitions' && transitions.transitions.length === 2 &&
+      transitions.transitions[0].id === '31' && transitions.transitions[0].name === 'Done' &&
+      transitions.transitions[0].toState === 'Done' &&
+      tRec.calls[0]?.method === 'GET' &&
+      tRec.calls[0]?.url === 'https://acme.atlassian.net/rest/api/3/issue/TC-12/transitions')
+
+  const cRec = recorder(() => ({ status: 201, body: '{}' }))
+  const commented = typeof J.commentOnWorkItem === 'function'
+    ? await J.commentOnWorkItem({ store: store(BUNDLE), requester: cRec.requester }, 'TC-12', 'Agent finished\nSecond line')
+    : null
+  const sentBody = (() => { try { return JSON.parse(cRec.calls[0]?.body ?? 'null') } catch { return null } })()
+  ok('9 a comment POSTs ADF that flattens back to what was typed',
+    commented?.kind === 'done' && cRec.calls[0]?.method === 'POST' &&
+      cRec.calls[0]?.url === 'https://acme.atlassian.net/rest/api/3/issue/TC-12/comment' &&
+      cRec.calls[0]?.headers['Content-Type'] === 'application/json' &&
+      J.adfText(sentBody?.body).trim() === 'Agent finished\nSecond line')
+
+  const xRec = recorder(() => ({ status: 204, body: '' }))
+  const moved = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: xRec.requester }, 'TC-12', '31')
+    : null
+  ok('10 a transition POSTs the chosen id and treats 204 as success',
+    moved?.kind === 'done' && xRec.calls[0]?.method === 'POST' &&
+      xRec.calls[0]?.url === 'https://acme.atlassian.net/rest/api/3/issue/TC-12/transitions' &&
+      JSON.parse(xRec.calls[0]?.body ?? 'null')?.transition?.id === '31')
+
+  // 11. The rule verify:jira 4 states for the read path, restated for all
+  //     three new channels at once. A write attempted with no stored
+  //     credential must not reach the network to find that out.
+  const nRec = recorder(() => ({ status: 200, body: '{}' }))
+  const noCred = typeof J.commentOnWorkItem === 'function' ? [
+    await J.listWorkItemTransitions({ store: store(undefined), requester: nRec.requester }, 'TC-12'),
+    await J.commentOnWorkItem({ store: store(undefined), requester: nRec.requester }, 'TC-12', 'hi'),
+    await J.transitionWorkItem({ store: store(undefined), requester: nRec.requester }, 'TC-12', '31')
+  ] : []
+  ok('11 all three channels refuse a missing credential with zero requests',
+    noCred.length === 3 && noCred.every((r) => r.kind === 'no-credential') && nRec.calls.length === 0)
+
+  // 12. The split this milestone adds, and the reason it is two arms: a board
+  //     declining a transition and Jira being unreachable have two different
+  //     fixes. A check asserting only "not done" passes against the collapse.
+  const refused = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: async () => ({
+      status: 400, body: JSON.stringify({ errorMessages: ['Transition is not valid for this issue.'] })
+    }) }, 'TC-12', '31')
+    : null
+  const down = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: async () => { throw new Error('ECONNREFUSED') } }, 'TC-12', '31')
+    : null
+  ok('12 a 400 is refused with Jira\'s own message; an unreachable Jira is not',
+    refused?.kind === 'refused' && refused.reason === 'Transition is not valid for this issue.' &&
+      down?.kind === 'unavailable')
+
+  // 13. An empty comment is refused BEFORE the network, like a missing
+  //     credential — the panel's Send is disabled for it, so reaching this
+  //     branch at all means something upstream changed.
+  const eRec = recorder(() => ({ status: 201, body: '{}' }))
+  const empty = typeof J.commentOnWorkItem === 'function'
+    ? await J.commentOnWorkItem({ store: store(BUNDLE), requester: eRec.requester }, 'TC-12', '   ')
+    : null
+  ok('13 an empty comment is refused with zero requests',
+    empty?.kind === 'refused' && eRec.calls.length === 0)
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)

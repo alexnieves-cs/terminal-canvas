@@ -1,6 +1,6 @@
 import { request } from 'node:https'
 import type { CredentialMeta } from '../shared/credential-schema'
-import type { WorkItem } from '../shared/work-item'
+import type { WorkItem, WorkItemTransition } from '../shared/work-item'
 import type { CredentialStore } from './credential-store'
 
 const TIMEOUT_MS = 15000
@@ -118,6 +118,147 @@ export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListRes
     }
     return { kind: 'items', items }
   } catch { return { kind: 'malformed', reason: 'Jira returned a response this app could not read.' } }
+}
+
+export type JiraTransitionsResult =
+  | { kind: 'transitions'; transitions: WorkItemTransition[] }
+  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
+
+/**
+ * `refused` is this milestone's one new arm and is NOT a flavour of
+ * `unavailable`. It is review-commit.ts's refused/failed split: a workflow
+ * declining a transition and Jira being unreachable are two situations with
+ * two different fixes, and collapsing them sends a user to check their
+ * network when their board is what said no. On a correctly configured,
+ * fully reachable Jira, `refused` is the arm that happens routinely.
+ */
+export type JiraWriteResult =
+  | { kind: 'done' }
+  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
+
+function issueUrl(c: JiraCredential, itemId: string, suffix: string): string {
+  return `${c.site}/rest/api/3/issue/${encodeURIComponent(itemId)}${suffix}`
+}
+
+function writeAuth(c: JiraCredential): Record<string, string> {
+  return { ...auth(c), 'Content-Type': 'application/json' }
+}
+
+/**
+ * Jira's own sentence, never a phrase this app invented. The user is the one
+ * who can act on "Transition is not valid for this issue" and this app cannot
+ * derive it — the same reason review-commit carries a hook's output verbatim.
+ * This is work text, not credential material: it says nothing about the
+ * token, only about the ticket.
+ */
+function jiraMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { errorMessages?: unknown; errors?: unknown }
+    if (Array.isArray(parsed.errorMessages) && typeof parsed.errorMessages[0] === 'string') {
+      return parsed.errorMessages[0]
+    }
+    if (parsed.errors !== null && typeof parsed.errors === 'object') {
+      const first = Object.values(parsed.errors as Record<string, unknown>).find((v) => typeof v === 'string')
+      if (typeof first === 'string') return first
+    }
+    return null
+  } catch { return null }
+}
+
+/**
+ * 400 and 404 are both `refused` rather than `unavailable`, and 404
+ * deliberately so: Jira answers 404 for an issue the account may not browse,
+ * to avoid disclosing that the issue exists. That is the board saying no,
+ * not the network failing, so it takes the arm whose fix is "check your
+ * permissions" rather than "check your connection".
+ */
+function writeFailure(
+  response: { status: number; body: string },
+  okStatuses: readonly number[]
+): { kind: 'rejected' | 'refused' | 'unavailable'; reason: string } | null {
+  if (okStatuses.includes(response.status)) return null
+  if (response.status === 401 || response.status === 403) {
+    return { kind: 'rejected', reason: 'Jira rejected the credential.' }
+  }
+  if (response.status === 400 || response.status === 404) {
+    return { kind: 'refused', reason: jiraMessage(response.body) ?? 'Jira refused the change.' }
+  }
+  return { kind: 'unavailable', reason: `Jira answered ${response.status}.` }
+}
+
+/**
+ * Read on demand, ONE issue at a time, and deliberately not folded into
+ * listAssignedWorkItems: transitions are workflow-defined per issue, so
+ * folding this in would fire one extra request per ticket on every panel
+ * load, for tickets nobody is going to transition. review:diff's shape,
+ * reached by the same arithmetic.
+ */
+export async function listWorkItemTransitions(deps: JiraDeps, itemId: string): Promise<JiraTransitionsResult> {
+  const c = credential(deps.store)
+  if (c === 'missing') return { kind: 'no-credential', reason: 'Connect Jira before loading transitions.' }
+  if (c === 'invalid') return { kind: 'invalid-credential', reason: 'The stored Jira credential is malformed.' }
+  let response: { status: number; body: string }
+  try {
+    response = await deps.requester({
+      url: issueUrl(c, itemId, '/transitions'), method: 'GET', headers: auth(c), timeoutMs: TIMEOUT_MS
+    })
+  } catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
+  if (response.status === 401 || response.status === 403) return { kind: 'rejected', reason: 'Jira rejected the credential.' }
+  if (response.status !== 200) return { kind: 'unavailable', reason: `Jira answered ${response.status}.` }
+  try {
+    const raw = (JSON.parse(response.body) as { transitions?: unknown }).transitions
+    if (!Array.isArray(raw)) return { kind: 'malformed', reason: 'Jira returned no transition list.' }
+    const transitions: WorkItemTransition[] = []
+    for (const entry of raw) {
+      const record = entry as { id?: unknown; name?: unknown; to?: { name?: unknown } }
+      // An entry missing either half is dropped INDIVIDUALLY, the same
+      // per-entry tolerance parseLayout gives a malformed panel: one
+      // unusable transition must not cost the user the whole list.
+      if (typeof record.id !== 'string' || typeof record.name !== 'string') continue
+      transitions.push({
+        id: record.id,
+        name: record.name,
+        toState: typeof record.to?.name === 'string' ? record.to.name : null
+      })
+    }
+    return { kind: 'transitions', transitions }
+  } catch { return { kind: 'malformed', reason: 'Jira returned a response this app could not read.' } }
+}
+
+export async function commentOnWorkItem(deps: JiraDeps, itemId: string, text: string): Promise<JiraWriteResult> {
+  const c = credential(deps.store)
+  if (c === 'missing') return { kind: 'no-credential', reason: 'Connect Jira before commenting.' }
+  if (c === 'invalid') return { kind: 'invalid-credential', reason: 'The stored Jira credential is malformed.' }
+  const message = text.trim()
+  // Refused BEFORE the network, like a missing credential. The panel's Send
+  // is already disabled for an empty draft, so reaching this means something
+  // upstream changed — it must still not post an empty comment.
+  if (message === '') return { kind: 'refused', reason: 'A comment needs a body.' }
+  let response: { status: number; body: string }
+  try {
+    response = await deps.requester({
+      url: issueUrl(c, itemId, '/comment'), method: 'POST', headers: writeAuth(c),
+      timeoutMs: TIMEOUT_MS, body: JSON.stringify({ body: textToAdf(message) })
+    })
+  } catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
+  return writeFailure(response, [200, 201]) ?? { kind: 'done' }
+}
+
+export async function transitionWorkItem(deps: JiraDeps, itemId: string, transitionId: string): Promise<JiraWriteResult> {
+  const c = credential(deps.store)
+  if (c === 'missing') return { kind: 'no-credential', reason: 'Connect Jira before transitioning.' }
+  if (c === 'invalid') return { kind: 'invalid-credential', reason: 'The stored Jira credential is malformed.' }
+  let response: { status: number; body: string }
+  try {
+    response = await deps.requester({
+      url: issueUrl(c, itemId, '/transitions'), method: 'POST', headers: writeAuth(c),
+      timeoutMs: TIMEOUT_MS, body: JSON.stringify({ transition: { id: transitionId } })
+    })
+  } catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
+  // 204 is Jira's success for this endpoint; 200 is accepted too rather than
+  // treated as a failure, because a success status must never land in an
+  // error arm and cost the user a second, duplicate transition attempt.
+  return writeFailure(response, [200, 204]) ?? { kind: 'done' }
 }
 
 export function createJiraRequester(): JiraRequester {
