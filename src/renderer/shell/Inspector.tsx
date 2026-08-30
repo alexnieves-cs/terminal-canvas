@@ -171,12 +171,14 @@ function InspectorPanel({
           type="button"
           className="inspector__action"
           data-inspector-action="restart"
-          disabled={model.kind === 'review' || !model.restartable}
+          disabled={model.kind !== 'terminal' || !model.restartable}
           title={model.kind === 'review'
             ? 'A review node has no process to restart'
-            : model.restartable
-              ? `Restart ${model.heading} — ends the running process and starts it again`
-              : `${model.heading} has not started yet`}
+            : model.kind === 'file'
+              ? 'A file panel has no process to restart'
+              : model.restartable
+                ? `Restart ${model.heading} — ends the running process and starts it again`
+                : `${model.heading} has not started yet`}
           {...shellControl(() => onRestart(model.id))}
         >
           Restart
@@ -194,10 +196,12 @@ function InspectorPanel({
           type="button"
           className="inspector__action"
           data-inspector-action="save-preset"
-          disabled={model.kind === 'review'}
+          disabled={model.kind !== 'terminal'}
           title={model.kind === 'review'
             ? 'A review node is not a spawnable panel'
-            : `Save ${model.heading} as a preset`}
+            : model.kind === 'file'
+              ? 'A file panel is not a spawnable panel'
+              : `Save ${model.heading} as a preset`}
           {...shellControl(() => onSavePreset(model.id))}
         >
           Save as preset

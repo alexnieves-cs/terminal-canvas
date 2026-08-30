@@ -1,0 +1,101 @@
+import type { FileResult, FileSource } from '@shared/file-panel'
+
+/**
+ * The file node's view model — pure, plain data, no DOM and no React.
+ *
+ * A second pure model beside review-node-model.ts, and it makes the same
+ * divergence from the inspector pane that one does, for the same reason: a
+ * pane is a strip in a 260px column that may hide itself when it has nothing
+ * to say, while a NODE is a panel the user deliberately opened, placed and
+ * dragged. A node that renders nothing at all is indistinguishable from a
+ * broken one, and the user has no way to ask why. So every arm here renders a
+ * heading and a sentence. verify:rail 74.
+ */
+
+export interface FileLine {
+  /** 1-based, and the number of the line in the FILE. */
+  n: number
+  text: string
+}
+
+export interface FileNodeModel {
+  /** The honest chain's first link, then the basename. */
+  heading: string
+  /** The containing directory, as its own field rather than spliced in. */
+  directory: string
+  /** A short factual line: size, line count. Always present. */
+  summary: string
+  /** Present only for the non-text arms — the sentence that says what happened. */
+  note?: string
+  lines: FileLine[]
+  /** Present only when the render cap dropped something. */
+  truncatedNote?: string
+}
+
+const KB = 1024
+function humanBytes(bytes: number): string {
+  if (bytes < KB) return `${bytes} B`
+  if (bytes < KB * KB) return `${Math.round(bytes / KB)} KB`
+  return `${(bytes / (KB * KB)).toFixed(1)} MB`
+}
+
+/**
+ * Split without importing node:path. `basename`/`dirname` live in node:path,
+ * which is a main-side module: importing it here would drag a Node builtin
+ * into the renderer bundle for two string operations. Paths here are always
+ * absolute and POSIX (this is a macOS app), so the split is exact.
+ */
+function splitPath(path: string): { dir: string; base: string } {
+  const cut = path.lastIndexOf('/')
+  if (cut < 0) return { dir: '', base: path }
+  return { dir: cut === 0 ? '/' : path.slice(0, cut), base: path.slice(cut + 1) }
+}
+
+export function buildFileNodeModel(input: {
+  source: FileSource
+  title: string | undefined
+  result: FileResult | undefined
+}): FileNodeModel {
+  const { dir, base } = splitPath(input.source.path)
+  // The honest chain's first link, the one the user chose — the same rule the
+  // panel header, railLabel and the inspector heading all obey.
+  const heading = input.title ?? base
+  const shell = { heading, directory: dir, lines: [] as FileLine[] }
+
+  // Undefined is the in-flight state: the read is an IPC round trip, so this
+  // is every panel for its first moment. It renders a sentence rather than
+  // nothing, for the reason review-node-model.ts renders one — a node that
+  // shows nothing while it waits reads as a broken panel.
+  if (input.result === undefined) return { ...shell, summary: 'reading…' }
+
+  const r = input.result
+  switch (r.kind) {
+    case 'text': {
+      const lines = r.content === ''
+        ? []
+        : r.content.split('\n').map((text, i) => ({ n: i + 1, text }))
+      return {
+        ...shell,
+        summary: `${humanBytes(r.bytes)} · ${r.lines} ${r.lines === 1 ? 'line' : 'lines'}`,
+        lines,
+        // The remainder comes from the RESULT's own number, never recomputed
+        // from `lines` — the content in hand is already truncated, so a
+        // recomputation would always say zero.
+        ...(r.truncatedLines > 0
+          ? { truncatedNote: `${r.truncatedLines} more lines not shown` }
+          : {})
+      }
+    }
+    // Four arms, four DIFFERENT sentences. 'this file is gone' and 'this file
+    // is binary' are two situations with two different fixes, and collapsing
+    // any two of them tells a user the wrong one.
+    case 'missing':
+      return { ...shell, summary: 'not found', note: 'This file no longer exists. It will reappear here if it is recreated.' }
+    case 'too-large':
+      return { ...shell, summary: humanBytes(r.bytes), note: `This file is larger than the ${humanBytes(r.cap)} viewing limit.` }
+    case 'binary':
+      return { ...shell, summary: humanBytes(r.bytes), note: 'This looks like a binary file, so there is nothing to show as text.' }
+    case 'unreadable':
+      return { ...shell, summary: 'unreadable', note: `This file could not be read: ${r.detail}` }
+  }
+}
