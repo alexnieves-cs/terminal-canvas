@@ -147,6 +147,14 @@ const clickEmptyCanvas = (wc) => wc.executeJavaScript(`(() => {
     for (let x = box.left + 20; x < box.right - 20; x += 40) {
       if (!rects.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) {
         host.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y }))
+        // The mouseup is not decoration, and it was missing until M14. A
+        // background mousedown now ARMS a document-level gesture (the marquee)
+        // rather than merely being a click, so an unpaired one leaves a
+        // mousemove listener on the document that outlives this helper and
+        // rewrites the selection on the next real pointer movement — hundreds
+        // of checks later, in whichever check happens to drag next, which
+        // would then fail for a reason pointing nowhere near itself.
+        host.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y }))
         return { x, y }
       }
     }
