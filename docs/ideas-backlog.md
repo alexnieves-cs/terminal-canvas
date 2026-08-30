@@ -73,17 +73,20 @@ workspace because `PanelId` doubles as a tmux session name. See `CLAUDE.md`'s "A
 switch is a second boot", "`activateWorkspace` takes the outgoing canvas, and that parameter
 IS the mechanism", and "Panel ids are global, not per-workspace".
 
-Three pieces of the original entry are still open, and each is blocked on something specific:
+The merged all-in-one view was reconsidered after M11 and deliberately declined; see
+`docs/superpowers/specs/2026-08-30-m2-merged-workspace-overview-design.md`. A read-only
+overview would duplicate M11's Cmd+G navigation grid, while a live canvas would need a new
+cross-workspace camera, focus, persistence and global-tiering model. It must not add a third
+promotion authority beside `assignTiers` and Canvas's held-demotion budget re-check, so it is
+not a small workspace extra.
 
-- **The merged all-in-one view** — still the exact `LIVE_BUDGET` collision this entry was
-  written around. Nothing about M7 changed that constraint; it only made switching between
-  separate canvases cheap. A view that shows every workspace at once is precisely the case
-  that would try to exceed a global cap on live WebGL contexts, so tiering has to stay the
-  thing that decides which ones are live.
+Two pieces of the original entry remain, with their actual status recorded explicitly:
+
 - **Rubber-band select → *Move to new workspace*** — there is no gesture to hang it on until
   #52 (multi-select) exists.
-- **A workspace-switching keyboard shortcut**, deliberately left unassigned; see `README.md`'s
-  M7 paragraph for why.
+- **A workspace-switching keyboard shortcut** — landed in M11 as the nav grid: hold Cmd+G to
+  reveal it, choose a workspace, and release Cmd to jump. See `CLAUDE.md`'s "The nav grid is
+  the first held-modifier state in this app".
 
 ## 3. File tree / codebase browser (IDE-style left rail)
 

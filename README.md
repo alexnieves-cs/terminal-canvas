@@ -367,12 +367,12 @@ to spend. **Moving a panel from one workspace to another** has an obvious
 gesture — rubber-band select several panels, then reassign them — and that
 gesture, rubber-band selection, does not exist yet (`docs/ideas-backlog.md` #52);
 building the move without it would mean inventing a worse one-off
-picker for a feature that already has a natural home waiting. **A keyboard
-shortcut for switching workspaces** was left unassigned: `Cmd+0` and `Cmd+1`
-are already spoken for, and picking a new chord now would be a guess dressed
-up as a decision — nobody yet knows how often switching happens in practice,
-and a wrong guess is a worse outcome than a palette-only path for one more
-milestone.
+picker for a feature that already has a natural home waiting. **The deferred
+workspace-switching shortcut landed in M11:** hold `Cmd+G` to reveal the nav
+grid, choose a workspace, and release `Cmd` to jump. The merged view was
+reconsidered after that milestone and declined: a read-only version duplicates
+the grid, while a live cross-workspace canvas is a separate editing model with
+no legitimate third way to promote past the global `LIVE_BUDGET`.
 
 **The chrome is a second view over the palette, not a second implementation.**
 Until M8a the app was almost entirely chords and a hidden `Cmd+K`, and a first
@@ -527,7 +527,7 @@ contains, not only the ones that fit on screen.
 | M6b | Settings: a declarative schema, searchable in the palette | ✅ done |
 | M6c | Agent state: a border that says what each panel is doing | ✅ done |
 | M6d | Attention routing: edge pips for off-screen panels, Cmd+J to jump | ✅ done |
-| M7 | Workspaces: named canvases, switching without disposing | ✅ done |
+| M7 | Workspaces: named canvases, switching without disposing; M11 later supplied Cmd+G navigation | ✅ done |
 | M8a | The app shell: a frame, collapsible rail and inspector, a visible toolbar | ✅ done |
 | M8b | The panel outline: a rail row per panel, navigate without waking | ✅ done |
 | M8c | The inspector: what a panel is, and restart in place | ✅ done |
