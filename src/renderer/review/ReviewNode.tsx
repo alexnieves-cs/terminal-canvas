@@ -280,6 +280,11 @@ function ReviewNodeImpl({
       className={`panel review-node${selected ? ' panel--selected' : ''}`}
       data-panel-id={rect.id}
       data-review-node
+      // Named explicitly for the same reason TerminalPanel's own
+      // data-panel-kind="terminal" is: a selector meaning "the terminal
+      // panel" must not be spelled as "not a file panel", which a review
+      // node also satisfies with no marker of its own.
+      data-panel-kind="review"
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header

@@ -1,4 +1,4 @@
-import { ipcMain, type WebContents } from 'electron'
+import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
 import type {
   PanelId,
@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -16,6 +16,7 @@ import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
+import type { FileWatchers } from './file-watch'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -78,7 +79,17 @@ export function registerIpcHandlers(
   // something any existing surface (palette, review) owns, and appending it
   // rather than inserting it keeps every existing positional call site
   // (scripts/panels-entry.cjs included) from having to shift.
-  credentialStore: CredentialStore
+  credentialStore: CredentialStore,
+  /**
+   * Appended last, like reviewEngine and reviewCommit before them, so no
+   * existing positional call site shifts.
+   */
+  fileWatchers: FileWatchers,
+  /**
+   * Its own parameter rather than reaching for `palette.window`: the dialog
+   * needs a parent window, and main/index.ts is the only thing that has one.
+   */
+  getWindow: () => BrowserWindow | null
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -235,6 +246,32 @@ export function registerIpcHandlers(
   // read() directly — that would put a token on the IPC boundary.
   ipcMain.handle(IPC.CREDENTIAL_VERIFY, (_event, service: string) =>
     verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
+
+  ipcMain.handle(IPC.FILE_OPEN, async () => {
+    const win = getWindow()
+    const result = win === null
+      ? await dialog.showOpenDialog({ properties: ['openFile'] })
+      : await dialog.showOpenDialog(win, { properties: ['openFile'] })
+    // ?? null, never undefined: undefined does not survive the structured
+    // clone as a distinguishable value, the rule this file already follows.
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
+  ipcMain.handle(IPC.FILE_READ, (event, req: FileReadRequest) => {
+    // The watch's callback sends to the SAME webContents that asked. A reload
+    // replaces those contents and closeAll() runs on navigation, so a stale
+    // sender is never reached — but capturing it here rather than reaching for
+    // a module-level window is what makes that true rather than incidental.
+    const sender = event.sender
+    return fileWatchers.watch(req.panelId, req.path, (result) => {
+      if (sender.isDestroyed()) return
+      sender.send(IPC_EVENTS.FILE_CHANGED, { panelId: req.panelId, result })
+    })
+  })
+
+  ipcMain.handle(IPC.FILE_CLOSE, (_event, panelId: PanelId) => {
+    fileWatchers.close(panelId)
+  })
 }
 
 /**

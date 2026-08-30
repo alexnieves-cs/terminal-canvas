@@ -16,6 +16,7 @@ import { createReviewEngine } from './review-engine'
 import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
+import { FileWatchers } from './file-watch'
 import { IPC_EVENTS } from '../shared/ipc-contract'
 import {
   allPresets,
@@ -192,6 +193,12 @@ const ptyManager = new PtyManager(
   dropBaseline
 )
 
+// One instance for the app's whole lifetime, alongside ptyManager: both are
+// per-panel-id lifecycle managers with the same two teardown seams (a
+// renderer reload, and a real quit) — see window-lifecycle's callback and
+// before-quit below.
+const fileWatchers = new FileWatchers()
+
 /**
  * Reset is the only action in the app Cmd+Z cannot take back, which is exactly
  * why it is the only one that asks. The message NAMES what is about to be lost
@@ -333,7 +340,14 @@ function createWindow(): void {
   // the next page reattaches instead of getting a fresh shell. On the direct
   // backend there is no session behind the handle and this is exactly the old
   // behaviour.
-  attachPtyLifecycle(mainWindow, () => ptyManager.detachAll())
+  // The two seams window-lifecycle.ts already covers for PTYs, and for the
+  // same reason. Without the navigation one, every Cmd+R leaks one FSWatcher
+  // per open file panel, forever, in a main process the reload does not
+  // restart.
+  attachPtyLifecycle(mainWindow, () => {
+    ptyManager.detachAll()
+    fileWatchers.closeAll()
+  })
 
   // Belt and braces against Chromium's own pinch-to-zoom. The renderer
   // preventDefaults ctrl+wheel on every path the camera claims — but not on
@@ -551,7 +565,9 @@ app.whenReady().then(async () => {
     rebuildMenu,
     reviewEngine,
     reviewCommit,
-    credentialStore
+    credentialStore,
+    fileWatchers,
+    () => mainWindow
   )
   createWindow()
 
@@ -596,6 +612,7 @@ app.on('before-quit', () => {
   // and says so in its comment.
   try {
     ptyManager.killAll()
+    fileWatchers.closeAll()
   } catch (error) {
     console.warn('[pty] killAll failed during quit', error)
   }

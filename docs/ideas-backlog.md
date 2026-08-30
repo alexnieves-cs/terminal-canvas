@@ -31,7 +31,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 
 | Gone | What shipped it | Where the mechanism is written down |
 |---|---|---|
-| #2 the workspace extras M7 did not ship | M16 | "The merged view's obstacle is COORDINATES, not `LIVE_BUDGET`", "The merged view has no writer, and that is why geometry is read-only", "Entering the merged view resolves dormancy BEFORE it commits", "A move touches no session and pushes no history", "The marquee starts only where `hitTest` finds nothing", "The workspace chords match `event.code`" |
+| #2 the workspace extras M7 did not ship | M17 | "The merged view's obstacle is COORDINATES, not `LIVE_BUDGET`", "The merged view has no writer, and that is why geometry is read-only", "Entering the merged view resolves dormancy BEFORE it commits", "A move touches no session and pushes no history", "The marquee starts only where `hitTest` finds nothing", "The workspace chords match `event.code`" |
 | #5 agent-state glow | M6c | "A title is not a bell", "`wants-you` is sticky", "The glow reaches the card" |
 | #6 user-set panel names | M6a | "The header's honest chain, and the backfill that must never happen" |
 | #7 subagent nodes on the canvas | M15 | "Subagent nodes are derived, not a `Panel` kind", "The slug is a hint" |
@@ -46,7 +46,7 @@ Seven more entries were rewritten rather than removed, because a milestone shipp
 each and stopped somewhere deliberate: **#17** (M6d left the OS notification), **#27**
 (M5b left placeholders), **#34** (M5a left per-preset environment), **#41** (M12 left
 review's cwd resolution), **#51** (M9a-c left discard), **#25** (M6 left snapping and
-tidy) and **#52** (M16 left shift-click and group drag). The membership changed at M16
+tidy) and **#52** (M17 left shift-click and group drag). The membership changed at M17
 without the count moving, and the churn is the shape to expect: **#2** left this list for
 the gone table above, and **#52** took its place. An entry rewritten down to its open half
 is one milestone from leaving the file entirely.
@@ -303,6 +303,14 @@ is a terminal running an agent CLI or a native chat box (#8).
   handler that already exists — likely the cheaper half to build first.
 
 ## 14. Panels that *are* other apps — a live document beside a live agent
+
+**Tier 1 landed in M16** — a read-only, live-watched local-file panel: `main/file-read.ts`'s
+five-arm read (`text`/`missing`/`too-large`/`binary`/`unreadable`), `main/file-watch.ts`'s
+directory watch, `FileNode.tsx` on the canvas, and a Finder drop. Tiers 2–4 below are
+explicitly still open and unstarted; nothing about M16's design commits to how any of them
+would work. The "who wins when both edit" question in the last bullet was **deferred, not
+answered** — M16 built a read-only viewer specifically to avoid needing an answer yet, and
+the question returns the day an editor (tier 1 continued, or any later tier) lands.
 
 Not a link to another app, and not a preview of one: the app itself, running in a panel
 on the canvas. `claude` in a terminal panel, and immediately beside it a **live Excel
@@ -668,7 +676,7 @@ repos; the same prompt to four agents to compare how they answer it.
   different models side by side is also the cheapest possible version of #8's
   multi-model ambition — no API, no key, no new panel kind, just four CLIs and one
   keystroke.
-- **Almost all the machinery exists, and since M16 the selection does too.** `pty:write`
+- **Almost all the machinery exists, and since M17 the selection does too.** `pty:write`
   already takes a panel id, so broadcast is a loop, not a channel. Multi-selection was the
   missing half and this entry used to say so outright; `Canvas.tsx` now tracks
   `selectedIds: Set<string>`, built by a rubber-band marquee, and the move-to-workspace
@@ -834,7 +842,7 @@ dragging, snapping, and a "tidy" command.
      single place a drag resolves to a rect, and it is already pure — snapping is a
      function applied to its output, which keeps it plain-node testable.
   3. **Tidy** — a command that arranges the selection (or everything) onto a grid. Pure
-     rect math over `Panel[]`. "The selection" is no longer hypothetical: M16 added
+     rect math over `Panel[]`. "The selection" is no longer hypothetical: M17 added
      `selectedIds`, built by a rubber-band marquee, so a tidy has a real set to arrange
      rather than a single `selectedId` that made "tidy the selection" mean "tidy one
      panel".
@@ -1657,9 +1665,9 @@ app would have that destroys work.
   inherits `verify:rail` 57's rule: the set of paths comes from the *result*, never from the
   display-capped rows on screen.
 
-## 52. Multi-select — the two halves M16 left: shift-click and group drag
+## 52. Multi-select — the two halves M17 left: shift-click and group drag
 
-M16 shipped the selection model and the marquee. `Canvas.tsx` now tracks
+M17 shipped the selection model and the marquee. `Canvas.tsx` now tracks
 `selectedIds: Set<string>`, a background drag rubber-bands (`canvas/marquee.ts`, pure and
 plain-node tested by `verify:merged` 8–12), and the resulting multi-selection is what the
 palette's *Move to workspace* rows act on. What is still open is the other two thirds of
@@ -2221,8 +2229,8 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 12. **#32 keyboard-first navigation** — nearest-panel-in-a-direction is plain-node math over
    the same rects. The design work is the rule that traversal moves *selection*, not focus,
    so arrowing across a canvas does not spawn everything it passes.
-13. ~~**#2 workspaces**~~ — **done, M7 and M16**, and not free: the switch had to become a
-   transaction that writes the outgoing canvas before it flips the active id, and M16's
+13. ~~**#2 workspaces**~~ — **done, M7 and M17**, and not free: the switch had to become a
+   transaction that writes the outgoing canvas before it flips the active id, and M17's
    merged view and cross-workspace move both had to obey that same ordering one door
    further out.
 14. ~~**#34 panel templates**~~ — **done, M5a**, as presets. The "new workspace from a
@@ -2234,7 +2242,7 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    workspaces, self-contained once #2 (M7) gave it destinations. The other two candidates
    the original entry left open - viewport quadrants and saved bookmarks - were rejected
    in the design spec; see #42 for the bookmark half.
-17. **#21 broadcast input** - the loop is trivial, and M16's marquee has since supplied
+17. **#21 broadcast input** - the loop is trivial, and M17's marquee has since supplied
    the multi-selection this line called the work; what is left is entirely the safety
    story around a mode you can forget you are in.
 18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high

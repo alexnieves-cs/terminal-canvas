@@ -1659,7 +1659,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
    L.createLayoutStore) rather than inventing a second set, the same way
    checks 82-94 above already build workspace fixtures. */
 
-// 109. mergedWorkspaces() spans EVERY workspace and carries WHOLE panels, not
+// 118. mergedWorkspaces() spans EVERY workspace and carries WHOLE panels, not
 //      the panelIds workspaces() carries. Both halves matter: a view that
 //      could only see the active workspace would not be a merged view at
 //      all, and ids alone cannot be laid out for display because they carry
@@ -1673,7 +1673,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.activateWorkspace(other, { panels: [panel({ id: 'n1' })], camera: cam, selectedId: null, focusedId: null })
   store.save({ panels: [panel({ id: 'n2', x: 40, y: 40 })], camera: cam, selectedId: null, focusedId: null })
   const merged = store.mergedWorkspaces()
-  ok('114 mergedWorkspaces spans every workspace, with whole panels',
+  ok('118 mergedWorkspaces spans every workspace, with whole panels',
     merged.length === 2 &&
       merged.every((w) => Array.isArray(w.panels)) &&
       merged.flatMap((w) => w.panels.map((p) => p.id)).sort().join(',') === 'n1,n2' &&
@@ -1681,7 +1681,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify(merged.map((w) => [w.id, w.active, w.panels.map((p) => p.id)])))
 }
 
-// 110. The returned panels are COPIES, the same rule workspaces() and
+// 119. The returned panels are COPIES, the same rule workspaces() and
 //      presets() already obey. It is sharper here: the merged view's whole
 //      job is to offset these rects into lanes for DISPLAY, and a shared
 //      reference means that display-only offset is exactly the value the
@@ -1694,12 +1694,12 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.save({ panels: [panel({ id: 'n1', x: 10, y: 20 })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
   const merged = store.mergedWorkspaces()
   merged[0].panels[0].x = 99999
-  ok('115 mergedWorkspaces hands back copies, not the live snapshot',
+  ok('119 mergedWorkspaces hands back copies, not the live snapshot',
     store.mergedWorkspaces()[0].panels[0].x === 10,
     String(store.mergedWorkspaces()[0].panels[0].x))
 }
 
-// 111. The move itself: the panel leaves the source record and arrives in
+// 120. The move itself: the panel leaves the source record and arrives in
 //      the target. Asserted as BOTH halves in one read, because a move that
 //      only ADDED to the target would duplicate a panel id across two
 //      workspaces — and a duplicate PanelId is two panels sharing one tmux
@@ -1714,13 +1714,13 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   })
   const result = store.movePanels(['n2'], { workspaceId: target })
   const byId = Object.fromEntries(store.mergedWorkspaces().map((w) => [w.id, w.panels.map((p) => p.id)]))
-  ok('116 a moved panel leaves the source AND arrives in the target',
+  ok('120 a moved panel leaves the source AND arrives in the target',
     result !== null && result.workspaceId === target &&
       byId[L.DEFAULT_WORKSPACE_ID].join(',') === 'n1' && byId[target].join(',') === 'n2',
     JSON.stringify(byId))
 }
 
-// 112. The full set of panel ids, across every workspace, is UNCHANGED
+// 121. The full set of panel ids, across every workspace, is UNCHANGED
 //      across a move. The move mints no id and destroys none — it relocates
 //      a record. The renderer seeds nextIdRef from exactly this set (via
 //      ActivateResult.allPanelIds, main/index.ts's own internal
@@ -1745,11 +1745,11 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   const before = idsOf()
   store.movePanels(['n7'], { workspaceId: target })
   const after = idsOf()
-  ok('117 the full panel id set is unchanged across a move',
+  ok('121 the full panel id set is unchanged across a move',
     after === before, `${before} -> ${after}`)
 }
 
-// 113. An unknown target changes NOTHING and says so. A half-applied move —
+// 122. An unknown target changes NOTHING and says so. A half-applied move —
 //      panels removed from the source, never delivered anywhere — loses
 //      them with no UI able to reach them again, exactly the orphan outcome
 //      deleteWorkspace's own design already rejects (see
@@ -1759,12 +1759,12 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.load()
   store.save({ panels: [panel({ id: 'n1' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
   const result = store.movePanels(['n1'], { workspaceId: 'w-nope' })
-  ok('118 an unknown target moves nothing and returns null',
+  ok('122 an unknown target moves nothing and returns null',
     result === null && store.mergedWorkspaces()[0].panels.map((p) => p.id).join(',') === 'n1',
     JSON.stringify(store.mergedWorkspaces().map((w) => w.panels.map((p) => p.id))))
 }
 
-// 114. Moving to a NEW name mints exactly ONE workspace and puts both panels
+// 123. Moving to a NEW name mints exactly ONE workspace and puts both panels
 //      in it. Exactly-one is half the check: minting once per panel is the
 //      obvious loop bug, and it produces N single-panel workspaces that look
 //      almost right in a rail — a user who asked to spin two panels into a
@@ -1779,14 +1779,14 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   const before = store.workspaces().length
   const result = store.movePanels(['n1', 'n2'], { newName: 'Spike' })
   const made = store.mergedWorkspaces().find((w) => w.name === 'Spike')
-  ok('119 a move to a new name mints exactly one workspace holding both panels',
+  ok('123 a move to a new name mints exactly one workspace holding both panels',
     result !== null && store.workspaces().length === before + 1 &&
       made !== undefined && made.panels.map((p) => p.id).sort().join(',') === 'n1,n2' &&
       made.active === false,
     JSON.stringify(store.workspaces().map((w) => w.name)))
 }
 
-// 115. An unknown panel id with a newName target creates NOTHING. This is
+// 124. An unknown panel id with a newName target creates NOTHING. This is
 //      the fault a first draft of movePanels shipped: it minted the new
 //      workspace before it knew whether anything was actually movable, so
 //      a caller offering "Move to new workspace..." for a panel that was
@@ -1801,7 +1801,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.save({ panels: [panel({ id: 'n1' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
   const before = store.workspaces().length
   const result = store.movePanels(['nope'], { newName: 'Spike' })
-  ok('120 an unknown id with a newName target creates no workspace',
+  ok('124 an unknown id with a newName target creates no workspace',
     result === null && store.workspaces().length === before,
     `result=${JSON.stringify(result)} before=${before} after=${store.workspaces().length}`)
 }
@@ -1942,6 +1942,73 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     back[0].links.length === 1 && back[0].links[0].label === 'feeds' &&
     !('links' in back[1]) && !('links' in persisted[1]),
     JSON.stringify(persisted))
+}
+
+const filePanelOnDisk = (id, over = {}) => ({
+  id, x: 1, y: 2, w: 640, h: 520, z: 3, kind: 'file', source: { path: '/tmp/a b/c.txt' }, ...over
+})
+
+// M16 (originally numbered 109-112 under this branch's own M13, which
+// collided with main's own DIFFERENT M13 — "links between panels", which
+// independently claimed 109-113 in this file. See the milestone-wide
+// renumbering commit for the full story.)
+// 114 — a file panel round-trips with its whole source.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [filePanelOnDisk('f1')], camera: L.DEFAULT_CAMERA }],
+    activeWorkspaceId: 'w1'
+  }))
+  const p = out.snapshot.workspaces[0].panels[0]
+  ok('114 a file panel parses with its whole source',
+    p !== undefined && p.kind === 'file' && p.source.path === '/tmp/a b/c.txt' && out.warnings.length === 0,
+    JSON.stringify(p))
+}
+// 115 — a malformed source drops that panel ALONE, with a warning. The
+// individual-drop rule parseLayout obeys everywhere else; its neighbour
+// surviving is the half that says "alone".
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      filePanelOnDisk('f1', { source: { path: 42 } }),
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 2, cwd: '~', args: [] }
+    ], camera: L.DEFAULT_CAMERA }],
+    activeWorkspaceId: 'w1'
+  }))
+  const ids = out.snapshot.workspaces[0].panels.map((p) => p.id)
+  ok('115 a malformed source drops that panel alone',
+    ids.length === 1 && ids[0] === 'n1' && out.warnings.length === 1,
+    `kept=${ids.join(',')} warnings=${out.warnings.length}`)
+}
+// 116 — the two rules that must NOT have moved. Absent kind is still terminal
+// (every pre-M9b file), and a present unknown kind is still dropped. Adding an
+// arm above the unknown-kind drop is exactly the edit that could break either.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] },
+      { id: 'w2', kind: 'whiteboard', x: 0, y: 0, w: 720, h: 460, z: 2 }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  ok('116 absent kind is still terminal and an unknown kind is still dropped',
+    panels.length === 1 && panels[0].kind === undefined
+      && out.warnings.some((w) => w.includes('whiteboard')))
+}
+// 117 — the SAME union survives layout-adapt's round trip, the other door onto
+// this format and the one a schema-only check cannot see. The fromPanels arm
+// must write no cwd key AT ALL — `cwd: undefined` fails its own parse next
+// launch, losing the panel on every relaunch, silently.
+{
+  const panels = L.toPanels([
+    { id: 'f1', kind: 'file', x: 1, y: 2, w: 640, h: 520, z: 3, source: { path: '/tmp/x.txt' }, title: 'notes' }
+  ])
+  const back = L.fromPanels(panels)
+  ok('117 a file panel survives toPanels/fromPanels with no cwd key',
+    panels[0].kind === 'file' && panels[0].source.path === '/tmp/x.txt'
+      && back[0].kind === 'file' && back[0].source.path === '/tmp/x.txt'
+      && back[0].title === 'notes' && !('cwd' in back[0]) && !('args' in back[0]),
+    JSON.stringify(back[0]))
 }
 
 console.log('\n' + '='.repeat(60))

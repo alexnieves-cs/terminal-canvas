@@ -1,4 +1,4 @@
-import { isReviewPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isReviewPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 
 /**
@@ -44,6 +44,10 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // and re-deriving from a live lookup here is exactly what would blank the
   // row at the moment the node is most useful.
   if (isReviewPanel(panel)) return `review: ${panel.subject.label}`
+  // A file panel names its FILE. Same split as the review branch above: the
+  // basename, not the whole path, because a 260px row cannot hold one and the
+  // directory is the inspector's job.
+  if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
   return (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
     ?? 'login shell'
@@ -70,6 +74,11 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
   // whole status vocabulary below ('not started', 'exited 0', 'pid 4821') is
   // a sentence about a process it does not have.
   if (kind === 'review') return 'review'
+  // Same reason the review test above is here, and BEFORE the dormant test:
+  // 'not started', 'exited 0' and 'pid 4821' are all sentences about a process
+  // this panel does not have, and `dormant` in particular would render a
+  // start control that nothing can honour.
+  if (kind === 'file') return 'file'
   if (dormant) return 'dormant'
   if (status === undefined) return 'not started'
   switch (status.kind) {
@@ -101,11 +110,11 @@ export function buildRailRows(
   return panels.map((panel) => {
     const id = panel.rect.id
     const status = statusOf(id)
-    // A review node is never dormant: the rail's start control renders on
-    // dormant rows only, and a node reporting dormant would offer a "start"
-    // arrow for a panel with nothing to start — a visible control that
-    // cannot work.
-    const dormant = isReviewPanel(panel) ? false : dormantIds.has(id)
+    // Neither sessionless kind is ever dormant: the rail's start control
+    // renders on dormant rows only, and a review node or a file panel
+    // reporting dormant would offer a "start" arrow for a panel with nothing
+    // to start — a visible control that cannot work.
+    const dormant = isTerminalPanel(panel) ? dormantIds.has(id) : false
     return { id, label: railLabel(panel, status), tail: railTail(status, dormant, panel.kind), dormant }
   })
 }

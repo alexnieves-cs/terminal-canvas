@@ -243,6 +243,16 @@ export interface PaletteActions {
    * unmarked confirm is a question the user did not expect to be asked.
    */
   beginDeleteCredential(service: string): void
+  /**
+   * Put a local file on the canvas. Opens main's native file dialog and mints
+   * a file panel on a non-null reply.
+   *
+   * It EARNS a row for the reason openReview does and closePanel does not:
+   * its only other gesture is a drag-and-drop onto the canvas, which needs a
+   * Finder window already open beside this one and is unreachable from the
+   * keyboard entirely.
+   */
+  openFile(): void
 }
 
 export interface PaletteContext {
@@ -529,6 +539,24 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   }
 
   // --- New panel -----------------------------------------------------------
+
+  // NOT hiddenAtRest, unlike every administration row: this is a create verb
+  // like a preset spawn, not an admin one, and it takes no target — there is
+  // no captured panel to gate it on and therefore no state in which it is
+  // disabled. A row that is only reachable by guessing its query is
+  // indistinguishable from a feature that was never built (verify:palette 31's
+  // rule), and this feature's other gesture is a drop, which the keyboard
+  // cannot reach at all. It lives in THIS section, not Panels, for the same
+  // reason: Panels holds verbs about a panel that already exists (go to,
+  // rename, restart, review); this one mints a new one, exactly what every
+  // row below it does.
+  out.push({
+    id: 'panel.open-file',
+    title: 'Open file…',
+    searchText: 'open file read view text document',
+    group: 'spawn',
+    run: () => actions.openFile()
+  })
 
   for (const preset of ctx.presets) {
     out.push(

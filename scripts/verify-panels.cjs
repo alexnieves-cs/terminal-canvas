@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync, renameSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
@@ -23,7 +23,23 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  external: ['node-pty', 'electron']
+  external: ['node-pty', 'electron'],
+  // The same two aliases electron.vite.config.ts and every plain-node verify
+  // bundle already carry. This entry got away without them until M16 for the
+  // reason verify-viewport.cjs did: every cross-boundary import main/* made
+  // from @shared was an `import type`, which esbuild erases before bundling,
+  // so nothing was ever actually resolved. main/file-read.ts imports real
+  // VALUES from @shared/file-panel (FILE_MAX_BYTES and its siblings), and
+  // this build fails outright without them — buildSync throws HERE, at
+  // module scope, before any window, or even this harness's own setup code,
+  // exists at all; there is nothing for the harness to "wait" on. The failure
+  // still READS as a hang rather than a printed error, but that is Electron's
+  // own handling of an uncaught main-process exception, not anything this
+  // harness does.
+  alias: {
+    '@shared': join(__dirname, '..', 'src', 'shared'),
+    '@renderer': join(__dirname, '..', 'src', 'renderer')
+  }
 })
 const {
   registerIpcHandlers,
@@ -55,7 +71,8 @@ const {
   createReviewEngine,
   createGitRunner,
   createBaselineCapture,
-  createReviewCommitter
+  createReviewCommitter,
+  FileWatchers
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -262,6 +279,36 @@ const pressPlain = (wc, key) =>
 const settle = () => sleep(300)
 
 /**
+ * Clicks a panel's own `.panel__close`, by id, regardless of kind. A
+ * terminal panel's close arms on a RUNNING session (TerminalPanel.tsx's
+ * CONFIRM_CLOSE_MS) and needs a second click to confirm; a review node and
+ * a file panel close outright on one. Dispatched as `mousedown`, matching
+ * every close handler in this codebase (`onMouseDown`, never `onClick`).
+ * Returns true if the panel left the DOM.
+ */
+const clickPanelClose = async (wc, id) => {
+  const idJson = JSON.stringify(id)
+  const stillThere = () => wc.executeJavaScript(
+    `document.querySelector('[data-panel-id=' + ${JSON.stringify(idJson)} + ']') !== null`)
+  const mousedown = () => wc.executeJavaScript(`(() => {
+    const el = document.querySelector('[data-panel-id=' + ${JSON.stringify(idJson)} + '] .panel__close')
+    if (!el) return false
+    el.dispatchEvent(new MouseEvent('mousedown',
+      { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+    return true
+  })()`)
+  const first = await mousedown()
+  await settle()
+  if (await stillThere()) {
+    // The first click armed a running terminal's close; the second confirms
+    // it. A no-op mousedown on an id already gone is harmless.
+    await mousedown()
+    await settle()
+  }
+  return first
+}
+
+/**
  * True only if every panelId present in `before` is still present in `after`
  * with the IDENTICAL pid — i.e. that session was never killed, even briefly.
  * `after` may have MORE entries than `before` (new panels scrolling into
@@ -279,13 +326,31 @@ const pidsPreserved = (before, after) => {
 
 app.on('window-all-closed', () => {})
 
-// Raised from 60s at M8c. Check 91 adds a full renderer RELOAD plus the
-// reattach round trip that follows it (restore, promote, spawn, has-session
-// probe), and check 92 adds a spawn, a bell and a restart on top — together
-// comfortably more than the headroom the old bound had left. A watchdog that
-// fires on a healthy run reports a hang that is not there, and the run's real
-// failures never print at all.
-const WATCHDOG_MS = 120000
+// Raised 60s -> 120s at M8c, and 120s -> 300s at the M17 merge. It bounds the
+// WHOLE SUITE, not any one check: a single setTimeout armed once at whenReady.
+//
+// 120s was set when this file held 114 checks. It now holds 171, from five
+// tracks that landed within days of each other, and the suite MEASURED at
+// 3-4 minutes on a 2026 M-series laptop — so the old bound was no longer
+// reachable at all, and every run ended in `FAIL watchdog` with the real
+// results never printed. A watchdog that cannot be met reports a hang that is
+// not there and destroys the run's actual output, which is strictly worse
+// than no watchdog.
+//
+// WHAT THE HIGHER BOUND HIDES, recorded rather than papered over, because
+// raising this number is the obvious move and is NOT obviously the right one.
+// The suite's slowest paths are FAILURE timeouts, not work: M15's three
+// subagent checks are waitUntil()s with 12s bounds, so a fixture that does not
+// come up costs ~20s of nothing rather than failing fast. That converts a
+// fixture flake into "the suite hangs" and it is what tripped the old bound
+// three runs in four. The real fix is bounding those fixtures — or splitting
+// this file, which is 10,000 lines and rising — and a bigger number only buys
+// room for the next milestone to hit the same wall.
+//
+// 300s is ~25% headroom over the measured worst case, chosen so a genuine
+// hang still fails in minutes rather than never. Whoever finds themselves
+// raising it a third time should split the suite instead.
+const WATCHDOG_MS = 300000
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -739,7 +804,7 @@ app.whenReady().then(async () => {
     // still has to reach a callable fifth argument or a real settings-palette
     // exercise here would throw "rebuildMenu is not a function" instead of
     // testing what it means to.
-  }, reviewEngine, reviewCommit, credentialStore)
+  }, reviewEngine, reviewCommit, credentialStore, new FileWatchers(), () => win)
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -8827,18 +8892,18 @@ app.whenReady().then(async () => {
     }
 
     // ---------------------------------------------------------------------
-    // 118-120. M14: THE RUBBER-BAND MARQUEE, in a real renderer.
+    // 138-140. M17: THE RUBBER-BAND MARQUEE, in a real renderer.
     //
     //          Every drag here is a REAL wc.sendInputEvent mouseDown/
     //          mouseMove/mouseUp sequence, never a dispatched MouseEvent. A
     //          dispatched event is untrusted and Blink runs no default action
     //          for one — the limit checks 47 and 75c each record from their
-    //          own side — and check 120's whole subject is a default action:
+    //          own side — and check 140's whole subject is a default action:
     //          where DOM focus ends up after a press on the background.
     {
       // The fixture is built rather than inherited: a camera left wherever
-      // check 117 stopped would make 118's count depend on which panels
-      // happened to be in view. Cmd+1 (fit all) is deliberately NOT the way
+      // the preceding block (check 129) stopped would make 138's count
+      // depend on which panels happened to be in view. Cmd+1 (fit all) is deliberately NOT the way
       // to build it — check 84's rail-dormant panel is parked at world
       // 60000,60000, so a fit clamps to MIN_SCALE and STILL cannot frame the
       // spread: every panel near the origin ends up off screen and the first
@@ -8861,7 +8926,7 @@ app.whenReady().then(async () => {
       // Reads MID-DRAG, between the last move and the mouseup. The marquee
       // element is removed on mouseup, so "is a marquee on screen" asked
       // AFTERWARDS is answered `no` by every implementation including a
-      // correct one — check 119's claim would be vacuous and 118 would have
+      // correct one — check 139's claim would be vacuous and 138 would have
       // no positive evidence that anything was ever drawn.
       const marqueeState = () => wc.executeJavaScript(`(() => ({
         marquees: document.querySelectorAll('.canvas-marquee').length,
@@ -8897,7 +8962,7 @@ app.whenReady().then(async () => {
         return during
       }
 
-      // 134. A marquee selects SEVERAL panels in one gesture. Asserted as a
+      // 138. A marquee selects SEVERAL panels in one gesture. Asserted as a
       //      COUNT, because a marquee that kept only the last panel it
       //      touched still leaves one selected and looks almost right on
       //      screen — and so does one that selected nothing but left the
@@ -8940,17 +9005,17 @@ app.whenReady().then(async () => {
         }).length
         return { from, to, expected }
       })()`)
-      if (!plan) throw new Error('118: found no background point on the canvas to start a marquee at')
+      if (!plan) throw new Error('138: found no background point on the canvas to start a marquee at')
 
       const during118 = await dragFromTo(plan.from, plan.to)
       const after118 = await marqueeState()
-      ok('134 a marquee selects every panel it sweeps, in one gesture',
+      ok('138 a marquee selects every panel it sweeps, in one gesture',
         plan.expected >= 2 && during118.marquees === 1 &&
           after118.selected === plan.expected && after118.marquees === 0,
         `expected ${plan.expected} panels, selected ${after118.selected}; ` +
           `marquees during=${during118.marquees} after=${after118.marquees}`)
 
-      // 135. A drag starting ON A CARDED PANEL selects that panel and draws
+      // 139. A drag starting ON A CARDED PANEL selects that panel and draws
       //      NO marquee. This is the rule most likely to catch a real
       //      regression: the background onMouseDown is not "empty space" — a
       //      carded panel has no chrome handler of its own, so its click
@@ -8983,20 +9048,20 @@ app.whenReady().then(async () => {
         }
         return null
       })()`)
-      if (!card) throw new Error('119: no carded panel was reachable on screen')
+      if (!card) throw new Error('139: no carded panel was reachable on screen')
 
       const during119 = await dragFromTo({ x: card.x, y: card.y }, { x: card.x + 220, y: card.y + 160 })
       const after119 = await wc.executeJavaScript(`(() => ({
         marquees: document.querySelectorAll('.canvas-marquee').length,
         selected: [...document.querySelectorAll('.panel--selected')].map((el) => el.dataset.panelId)
       }))()`)
-      ok('135 a drag from a carded panel selects it and starts no marquee',
+      ok('139 a drag from a carded panel selects it and starts no marquee',
         during119.marquees === 0 && after119.selected.length === 1 &&
           after119.selected[0] === card.id,
         `marquees during=${during119.marquees}, selected ${JSON.stringify(after119.selected)} ` +
           `(card ${card.id})`)
 
-      // 136. A marquee still RELEASES FOCUS — the job the background handler
+      // 140. A marquee still RELEASES FOCUS — the job the background handler
       //      already had before the marquee joined it. assignTiers pins the
       //      focused panel live UNCONDITIONALLY, so a gesture that forgot
       //      this holds a WebGL context and a LIVE_BUDGET slot for the rest
@@ -9030,20 +9095,20 @@ app.whenReady().then(async () => {
         }
         return null
       })()`)
-      if (!plan120) throw new Error('120: found no background point to marquee from')
+      if (!plan120) throw new Error('140: found no background point to marquee from')
       await dragFromTo(plan120.from, plan120.to)
       const released = await wc.executeJavaScript(`(() => ({
         inPanel: !!(document.activeElement && document.activeElement.closest('.panel')),
         grid: typeof window.__m4aGrid === 'function' ? window.__m4aGrid() : 'missing'
       }))()`)
-      ok('136 a marquee releases focus, the job the background click already had',
+      ok('140 a marquee releases focus, the job the background click already had',
         insideBefore === true && released.inPanel === false && released.grid === null,
         `focused before=${insideBefore} (${focusedBefore.active}), after inPanel=${released.inPanel} ` +
           `grid=${JSON.stringify(released.grid)}`)
     }
 
     // ---------------------------------------------------------------------
-    // 121-122 — M14. Filing a selection into another workspace.
+    // 141-142 — M17. Filing a selection into another workspace.
     //
     //     The move is a RECORD edit and nothing else: main rewrites which
     //     workspace owns the panel, and this renderer drops it from its local
@@ -9063,15 +9128,15 @@ app.whenReady().then(async () => {
     {
       // Guarded rather than called bare. A missing hook rejects
       // executeJavaScript, which THROWS, which ends the whole run here and
-      // takes 122's RED down with it — the trap CLAUDE.md records for
+      // takes 142's RED down with it — the trap CLAUDE.md records for
       // test-first checks in these single-script suites.
       const hasMoveHook = await wc.executeJavaScript(
         `typeof window.__m7aWorkspace === 'function' &&
          typeof window.__m7aWorkspace().movePanels === 'function'`)
 
       if (!hasMoveHook) {
-        ok('137 a moved panel keeps its pid', false, 'no __m7aWorkspace().movePanels hook')
-        ok('138 Cmd+Z right after a move changes nothing', false,
+        ok('141 a moved panel keeps its pid', false, 'no __m7aWorkspace().movePanels hook')
+        ok('142 Cmd+Z right after a move changes nothing', false,
           'no __m7aWorkspace().movePanels hook')
       } else {
         // createAndSwitch, not create: the panel about to be spawned has to
@@ -9094,13 +9159,13 @@ app.whenReady().then(async () => {
             `Array.from(document.querySelectorAll('.panel[data-panel-id]')).map((e) => e.dataset.panelId)`)
           return ids.length === 1 ? ids[0] : null
         }, 6000)
-        if (!movedId) throw new Error('121: the fresh workspace never rendered exactly one panel')
+        if (!movedId) throw new Error('141: the fresh workspace never rendered exactly one panel')
         // MAIN's own pty:list, not the DOM: a panel is on screen well before
         // its session exists, and a move issued in that window would be
         // asserting pid identity against `undefined` on both sides — which
         // passes, vacuously, against an implementation that kills everything.
         const spawned = await waitUntil(async () => (await sessionMap(wc)).has(movedId), 15000)
-        if (!spawned) throw new Error(`121: ${movedId} never reached pty:list`)
+        if (!spawned) throw new Error(`141: ${movedId} never reached pty:list`)
 
         // create, NOT createAndSwitch: the target must stay hidden, because
         // "the session survived while its panel was filed somewhere the user
@@ -9117,7 +9182,7 @@ app.whenReady().then(async () => {
           `document.querySelectorAll('.panel[data-panel-id=${JSON.stringify(movedId)}]').length === 0`)
         const after = await sessionMap(wc)
 
-        // 137. THE CHECK THIS TASK EXISTS FOR: the moved panel's pid is
+        // 141. THE CHECK THIS TASK EXISTS FOR: the moved panel's pid is
         //      UNCHANGED. Every other observable in this milestone stays
         //      correct against a move that quietly disposed and respawned —
         //      the panel leaves this canvas either way, main's record is
@@ -9134,14 +9199,14 @@ app.whenReady().then(async () => {
         //      — which the spawned wait above already rules out, but the
         //      clause states it rather than relying on a wait staying put.
         const listed = after.has(movedId)
-        ok('137 a moved panel keeps the SAME pid, and is still running',
+        ok('141 a moved panel keeps the SAME pid, and is still running',
           gone === true && listed &&
             before.get(movedId) !== undefined &&
             after.get(movedId) === before.get(movedId),
           `home=${homeId} target=${targetId} ${movedId}: ` +
             `${before.get(movedId)} -> ${after.get(movedId) ?? 'MISSING'} gone=${gone}`)
 
-        // 138. Cmd+Z immediately after a move is INERT. history is ONE stack
+        // 142. Cmd+Z immediately after a move is INERT. history is ONE stack
         //      over ONE Panel[], and applyHistory disposes any panel the
         //      undone state no longer contains — which reaches pty.kill. An
         //      undo here would either resurrect a panel main's record no
@@ -9162,19 +9227,21 @@ app.whenReady().then(async () => {
           `document.querySelectorAll('.panel[data-panel-id]').length`)
         const afterUndo = await sessionMap(wc)
         const { ok: undoPreserved, changed: undoChanged } = pidsPreserved(after, afterUndo)
-        ok('138 Cmd+Z right after a move changes nothing, and kills nothing',
+        ok('142 Cmd+Z right after a move changes nothing, and kills nothing',
           panelsBeforeUndo === panelsAfterUndo && undoPreserved,
           `panels ${panelsBeforeUndo} -> ${panelsAfterUndo} changed=[${undoChanged.join(', ')}]`)
       }
     }
 
     // ---------------------------------------------------------------------
-    // 139. The OTHER half of the verb: into a workspace that does not
+    // 143. The OTHER half of the verb: into a workspace that does not
     //     exist yet.
     //
-    //     Check 121 covers `{ workspaceId }` and verify:palette 72 covers the
-    //     row -> begin* hop, so what was left uncovered is everything between
-    //     them: the submit handler (trim, empty-as-cancel, one composed call)
+    //     Check 141 covers the `{ workspaceId }` target end to end, and
+    //     verify:layout 120-122 cover it at the store; verify:palette 80
+    //     covers the row -> begin* hop. So what was left uncovered is
+    //     everything between them: the submit handler (trim, empty-as-cancel,
+    //     one composed call)
     //     and the `{ newName }` target shape crossing preload and IPC. Three
     //     lines and a marshalling assumption — and half of what the feature
     //     promises. Its failure is the quietest shape this palette can
@@ -9203,7 +9270,7 @@ app.whenReady().then(async () => {
       const CANCELLED = 'never minted'
       const MINTED = 'filed by hand'
 
-      // Its own fixture, for check 137's reason: by this point 137 has moved
+      // Its own fixture, for check 141's reason: by this point 141 has moved
       // its own panel away and this workspace is empty.
       await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('handmovers')`)
       await settle()
@@ -9215,13 +9282,13 @@ app.whenReady().then(async () => {
           `Array.from(document.querySelectorAll('.panel[data-panel-id]')).map((e) => e.dataset.panelId)`)
         return ids.length === 1 ? ids[0] : null
       }, 6000)
-      if (!subject) throw new Error('123: the fresh workspace never rendered exactly one panel')
+      if (!subject) throw new Error('143: the fresh workspace never rendered exactly one panel')
       const running = await waitUntil(async () => (await sessionMap(wc)).has(subject), 15000)
-      if (!running) throw new Error(`123: ${subject} never reached pty:list`)
+      if (!running) throw new Error(`143: ${subject} never reached pty:list`)
 
       // SELECTED explicitly, by a real click on its header. onSpawn
       // deliberately does not select what it spawns (its own comment says so),
-      // and check 138 cleared the selection on its way out — so without this
+      // and check 142 cleared the selection on its way out — so without this
       // the palette renders "Move 0 panels…" and the row this check is about
       // is disabled. A real sendInputEvent rather than a dispatched
       // MouseEvent, the rule check 75c records: an untrusted event runs no
@@ -9234,7 +9301,7 @@ app.whenReady().then(async () => {
         const r = p.getBoundingClientRect()
         return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 24) }
       })()`)
-      if (!header) throw new Error(`123: ${subject} has no rect to click`)
+      if (!header) throw new Error(`143: ${subject} has no rect to click`)
       wc.sendInputEvent({ type: 'mouseDown', x: header.x, y: header.y, button: 'left', clickCount: 1 })
       wc.sendInputEvent({ type: 'mouseUp', x: header.x, y: header.y, button: 'left', clickCount: 1 })
       await settle()
@@ -9333,7 +9400,7 @@ app.whenReady().then(async () => {
       const gone = await wc.executeJavaScript(
         `document.querySelectorAll('.panel[data-panel-id=${JSON.stringify(subject)}]').length === 0`)
 
-      ok('139 a move into a NEW workspace mints it, files the panel, and keeps the pid',
+      ok('143 a move into a NEW workspace mints it, files the panel, and keeps the pid',
         // (a) the workspace exists NOW and did not before — trimmed, which is
         //     what fails if the submit passes `value` through untouched.
         !namesBefore.includes(MINTED) && minted !== undefined &&
@@ -9344,7 +9411,7 @@ app.whenReady().then(async () => {
           // that changed only main's record satisfies (b) while the renderer
           // goes on rendering a panel no workspace here owns.
           gone === true &&
-          // (c) check 137's clause on the second branch, and the one that
+          // (c) check 141's clause on the second branch, and the one that
           //     makes this more than a plumbing test: minting a workspace is
           //     no excuse to restart what gets filed into it.
           before.get(subject) !== undefined && after.get(subject) === before.get(subject) &&
@@ -9360,13 +9427,13 @@ app.whenReady().then(async () => {
     }
 
     // ---------------------------------------------------------------------
-    // 124-127 — M14. THE MERGED VIEW: every workspace at once, geometry
+    // 144-147 — M17. THE MERGED VIEW: every workspace at once, geometry
     //     read-only.
     //
     //     ONE fixture serves all four, and it is built rather than inherited
-    //     for the reason check 134's block states: by this point the suite
+    //     for the reason check 138's block states: by this point the suite
     //     has created, filled and deleted several workspaces, and a check
-    //     that depended on whatever 123 left active would assert about a
+    //     that depended on whatever 143 left active would assert about a
     //     canvas nobody chose.
     //
     //     The ACTIVE workspace here is deliberately EMPTY, and that is lane
@@ -9375,11 +9442,11 @@ app.whenReady().then(async () => {
     //     plus LANE_GUTTER (400), so the foreign lane's leftmost panel always
     //     lands at world x = 1200 whatever the active workspace holds. An
     //     empty active lane is what makes the FOREIGN panels the only thing
-    //     on the merged canvas, which is what lets check 140 position the
+    //     on the merged canvas, which is what lets check 144 position the
     //     camera over them precisely (see its own comment) instead of
     //     depending on a fit whose scale would be decided by check 39's
     //     never-woken panel parked at world 50000,50000 — a fit there lands
-    //     far below LIVE_MIN_SCALE, where NOTHING is promoted and check 140
+    //     far below LIVE_MIN_SCALE, where NOTHING is promoted and check 144
     //     would be green against every implementation including a broken one.
     // ---------------------------------------------------------------------
     {
@@ -9392,7 +9459,7 @@ app.whenReady().then(async () => {
       await settle()
       // THE CAMERA IS THE FIXTURE, and it is set BEFORE the view is entered.
       //
-      // The defect check 140 exists to catch only spawns while dormantIds is
+      // The defect check 144 exists to catch only spawns while dormantIds is
       // stale — a few milliseconds — so the foreign panels have to be inside
       // the cull region at the moment the merged array commits, or a broken
       // build promotes nothing and the check is green against it. An earlier
@@ -9447,7 +9514,7 @@ app.whenReady().then(async () => {
       // workspaces that precede this one, which put an appended fixture lane
       // at world x ≈ 70000 — far outside any camera this check can reach, and
       // therefore outside the cull region, where a BROKEN build promotes
-      // nothing and check 140 is green against it. First among the non-active
+      // nothing and check 144 is green against it. First among the non-active
       // workspaces puts it at LANE_MIN_WIDTH + LANE_GUTTER = 1200, which is
       // the number the camera fixture above is built against.
       onDisk124.workspaces.unshift({
@@ -9550,7 +9617,7 @@ app.whenReady().then(async () => {
       const entered = await mergedDom()
 
       // The forcing guard, and it is a CLAUSE rather than a diagnostic on
-      // purpose: everything check 140 asserts is a NEGATIVE (nothing spawned),
+      // purpose: everything check 144 asserts is a NEGATIVE (nothing spawned),
       // and a negative is satisfied perfectly by a fixture that put the panels
       // somewhere nothing would ever be promoted from. This reproduces
       // assignTiers' own question in screen space — does the panel intersect
@@ -9588,7 +9655,7 @@ app.whenReady().then(async () => {
       const regA = registry124.find((s) => s.id === FOREIGN_A)
       const regB = registry124.find((s) => s.id === FOREIGN_B)
 
-      // 140. ENTERING THE MERGED VIEW SPAWNS NOTHING. The milestone's most
+      // 144. ENTERING THE MERGED VIEW SPAWNS NOTHING. The milestone's most
       //      dangerous line: registry.ensure early-returns for a session that
       //      already exists, so a dormantIds correction arriving one render
       //      after the merged array can never repair a session created
@@ -9600,7 +9667,7 @@ app.whenReady().then(async () => {
       //      The mass-spawn power is entirely in the ID-SCOPED clauses: the
       //      `spawned` waitUntil over FOREIGN_A/B, and regA/regB reading
       //      dormant:true spawned:false. Those are exactly what the ordering
-      //      injection flips (dormant:false spawned:true), and check 141 is
+      //      injection flips (dormant:false spawned:true), and check 145 is
       //      what stops all of it passing against a view that renders nothing.
       //
       //      The session count is scoped to THOSE TWO IDS and no longer to
@@ -9617,7 +9684,7 @@ app.whenReady().then(async () => {
       //      check's own camera fixture deliberately puts every other lane
       //      far outside the cull region, where nothing is promoted under a
       //      broken build either.
-      ok('140 entering the merged view spawns nothing',
+      ok('144 entering the merged view spawns nothing',
         opened === true && spawned !== true &&
           // The forcing guard: without it every clause below is a negative a
           // badly-placed camera satisfies for free.
@@ -9630,17 +9697,17 @@ app.whenReady().then(async () => {
           `foreign sessions ${foreignBefore} -> ${foreignAfter} ` +
           `A=${JSON.stringify(regA)} B=${JSON.stringify(regB)}`)
 
-      // 141. Foreign panels are RENDERED and addressable, and their lane says
-      //      whose they are. Without this, 124 is green against a merged view
+      // 145. Foreign panels are RENDERED and addressable, and their lane says
+      //      whose they are. Without this, 144 is green against a merged view
       //      that renders nothing at all — which is exactly what a toggle
       //      wired to nothing produces.
-      ok('141 the merged view renders foreign panels under a named lane',
+      ok('145 the merged view renders foreign panels under a named lane',
         entered.on === true &&
           entered.ids.includes(FOREIGN_A) && entered.ids.includes(FOREIGN_B) &&
           entered.lanes.some((l) => l.id === MERGED_WS_ID && l.name.includes(MERGED_WS_NAME)),
         `on=${entered.on} ids=${entered.ids.join(',')} lanes=${JSON.stringify(entered.lanes)}`)
 
-      // 142. NOTHING IS DRAGGABLE. A real sendInputEvent drag on the foreign
+      // 146. NOTHING IS DRAGGABLE. A real sendInputEvent drag on the foreign
       //      panel's chrome — the gesture that moves a panel everywhere else
       //      in this app — must leave it exactly where it was, and no close
       //      button may be rendered on any merged panel. A dispatched
@@ -9649,7 +9716,7 @@ app.whenReady().then(async () => {
       //
       //      Asserted on the SCREEN rect rather than the stored one, because
       //      a drag that moved the panel would move it visibly first; check
-      //      127 is the stored half.
+      //      147 is the stored half.
       const chrome126 = await wc.executeJavaScript(`(() => {
         const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(FOREIGN_A)}]')
         if (!p) return null
@@ -9674,7 +9741,7 @@ app.whenReady().then(async () => {
         await settle()
         dragged126 = await mergedDom()
       }
-      ok('142 a merged panel cannot be dragged, resized or closed',
+      ok('146 a merged panel cannot be dragged, resized or closed',
         chrome126 !== null && dragged126 !== null &&
           dragged126.rects[FOREIGN_A] !== undefined &&
           entered.rects[FOREIGN_A] !== undefined &&
@@ -9686,7 +9753,7 @@ app.whenReady().then(async () => {
           `after=${dragged126 ? JSON.stringify(dragged126.rects[FOREIGN_A]) : 'null'} ` +
           `closes=${dragged126 && dragged126.closes} resizes=${dragged126 && dragged126.resizes}`)
 
-      // 143. EVERY workspace's STORED rects are byte-identical after a merged
+      // 147. EVERY workspace's STORED rects are byte-identical after a merged
       //      session — enter, pan, select, leave. This is the check for the
       //      failure the read-only design exists to prevent: `panels` stays
       //      the active workspace's real array and remains the only thing the
@@ -9726,14 +9793,14 @@ app.whenReady().then(async () => {
         ...rectDrift(storedBefore, storedAfter, 'after')
       ]
       const leftMerged = await mergedDom()
-      ok('143 a merged session writes no rect into any workspace',
+      ok('147 a merged session writes no rect into any workspace',
         drifted.length === 0 && leftMerged.on === false && leftMerged.lanes.length === 0,
         `zoomed=${zoomedOut} selected=${selected127} on=${leftMerged.on} ` +
           `lanes=${leftMerged.lanes.length} drifted=[${drifted.join('; ')}]`)
     }
 
     // ---------------------------------------------------------------------
-    // 128-131 — M14. THE THREE CHORDS: Cmd+Shift+[ / Cmd+Shift+] step the
+    // 148-151 — M17. THE THREE CHORDS: Cmd+Shift+[ / Cmd+Shift+] step the
     //     workspace, Cmd+Shift+A toggles the merged view.
     //
     //     Every chord here is DELIVERED THE WAY macOS DELIVERS IT: Shift
@@ -9742,17 +9809,19 @@ app.whenReady().then(async () => {
     //     established shape for a chord check in this suite, and check 80's
     //     precedent — so a handler matching on `key === ']'` is dead on
     //     arrival while one matching on `key === '}'` is correct on a US
-    //     layout and wrong everywhere else. Check 128's own note says what
+    //     layout and wrong everywhere else. Check 148's own note says what
     //     that costs it.
     //
     //     They run last and inherit the merged block's fixture: 'mergehome'
-    //     is active, w40 exists on disk, and the merged view is off. 128 and
-    //     129 leave the active workspace where they found it; 131 does not,
-    //     and nothing follows it.
+    //     is active, w40 exists on disk, and the merged view is off. 148
+    //     parks the canvas on the LAST row deliberately and leaves it on the
+    //     first; 149 puts it back where 148 left it, and 150 moves no
+    //     workspace at all — so those two leave the active workspace where
+    //     they found it. 151 does NOT, and nothing follows it.
     // ---------------------------------------------------------------------
     {
       /**
-       * One chord press. `repeat` is supplied BY HAND — see check 145 for
+       * One chord press. `repeat` is supplied BY HAND — see check 149 for
        * what that does and does not prove.
        */
       const chord = (code, key, repeat = false) => wc.executeJavaScript(
@@ -9789,7 +9858,7 @@ app.whenReady().then(async () => {
       const first128 = ids128[0]
       const last128 = ids128[ids128.length - 1]
 
-      // 144. Cmd+Shift+] switches to the NEXT workspace and Cmd+Shift+[ comes
+      // 148. Cmd+Shift+] switches to the NEXT workspace and Cmd+Shift+[ comes
       //      back, WRAPPING. The wrap is not left to whatever this run
       //      happens to have made active: the canvas is parked on the LAST
       //      row first, so the forward press wraps by construction and the
@@ -9840,13 +9909,13 @@ app.whenReady().then(async () => {
         // plain step wearing a wrap's name.
         if (parked !== last128) stepped128 = `PARKED ${parked}`
       }
-      ok('144 the workspace chords step forward and back, wrapping',
+      ok('148 the workspace chords step forward and back, wrapping',
         ids128.length >= 2 && stepped128 === first128 && back128 === last128 &&
           foreign128 === first128,
         `n=${ids128.length} ids=${ids128.join(',')} last=${last128} ` +
           `next=${stepped128} prev=${back128} foreignLayout=${foreign128}`)
 
-      // 145. HELD, they move exactly ONE step. Neither chord joins
+      // 149. HELD, they move exactly ONE step. Neither chord joins
       //      REPEATABLE_KEYS: a held switch steps through every canvas at the
       //      OS repeat rate and lands wherever the stream happened to stop
       //      rather than where the user meant to look — the argument Cmd+J
@@ -9885,20 +9954,20 @@ app.whenReady().then(async () => {
         await waitUntil(async () => (await activeId()) === expected, 2500)
         await settle()
         held129 = { at: from, now: await activeId(), expected }
-        // Put the fixture back where 128 left it, so 130 and 131 start from a
+        // Put the fixture back where 148 left it, so 150 and 151 start from a
         // known workspace rather than wherever a failure landed.
         await wc.executeJavaScript(
           `window.__m7aWorkspace().switchTo(${JSON.stringify(from)})`)
         await settle()
       }
-      ok('145 a held workspace chord moves exactly one step',
+      ok('149 a held workspace chord moves exactly one step',
         held129 !== null && held129.now === held129.expected,
         `presses=${presses129} ` +
           (held129
             ? `${held129.at} -> ${held129.now} (expected ${held129.expected})`
             : 'SKIPPED'))
 
-      // 146. Cmd+Shift+A toggles the merged view, and pressing it twice
+      // 150. Cmd+Shift+A toggles the merged view, and pressing it twice
       //      returns to the active workspace's own canvas WITH ITS CAMERA
       //      RESTORED. The camera clause is not decoration: a merged camera
       //      is in LANE SPACE, so leaving without the restore drops the user
@@ -9920,14 +9989,14 @@ app.whenReady().then(async () => {
       await settle()
       const off130 = await mergedOn()
       const restored130 = await wc.executeJavaScript(`window.__m4aViewport()`)
-      ok('146 the merged chord enters the merged view and leaves it, camera restored',
+      ok('150 the merged chord enters the merged view and leaves it, camera restored',
         on130 === true && off130 === false &&
           !sameCamera(laneCamera130, camera130) &&
           sameCamera(restored130, camera130),
         `on=${on130} off=${off130} before=${JSON.stringify(camera130)} ` +
           `lane=${JSON.stringify(laneCamera130)} after=${JSON.stringify(restored130)}`)
 
-      // 147. A SWITCH WHILE MERGED LEAVES THE MERGED VIEW FIRST. This is the
+      // 151. A SWITCH WHILE MERGED LEAVES THE MERGED VIEW FIRST. This is the
       //      chords' own hazard: before them, switching from inside the
       //      merged view needed a rail click or a palette row; now it is one
       //      keystroke.
@@ -9973,10 +10042,10 @@ app.whenReady().then(async () => {
       const stillMerged131 = await mergedOn()
       const camera131 = await wc.executeJavaScript(`window.__m4aViewport()`)
       const outgoingStored131 = cameraOf(outgoing131)
-      ok('147 a switch while merged leaves the merged view and writes no lane camera',
+      ok('151 a switch while merged leaves the merged view and writes no lane camera',
         merged131 === true && stillMerged131 === false &&
           landed131 === expected131 &&
-          // Non-vacuity, twice, and check 146 already carries the second of
+          // Non-vacuity, twice, and check 150 already carries the second of
           // them. The two cameras the last clause separates must actually
           // differ, or it separates nothing. And the LANE camera must differ
           // from the pre-merge one, or `sameCamera(outgoingStored, preMerge)`
@@ -9995,6 +10064,43 @@ app.whenReady().then(async () => {
           `incomingStored=${JSON.stringify(incomingCamera131)} ` +
           `camera=${JSON.stringify(camera131)}`)
     }
+
+    // ---------------------------------------------------------------------
+    // Hand the canvas back with a FREE LIVE BUDGET. Not a check — a cleanup,
+    // and it exists because leaving it out broke somebody else's checks.
+    //
+    // This block ends with the camera parked over a workspace holding a
+    // dozen panels, and framing them promotes them: measured, it left the
+    // canvas at exactly LIVE_BUDGET (8 live xterms). Under lazy spawn a
+    // panel that cannot promote never spawns a PTY at all, so the NEXT
+    // block's fixture panel — M15's subagent fan-out, which needs its
+    // subject live long enough for the watcher to claim its session — came
+    // up carded and its nodes never rendered. 131/132/133 all went red
+    // reporting an empty fixture (`states=`, `nodes=0`, `parent=null`),
+    // pointing nowhere near the block that actually caused it.
+    //
+    // Measured both ways: main alone is 157/157 with subjectLive=true and 5
+    // live xterms at that point; this branch merged, without this cleanup,
+    // is 168/171 with subjectLive=false and 8. The budget is the whole
+    // difference.
+    //
+    // A fresh EMPTY workspace rather than a camera pan: switching demotes
+    // without disposing (the "demote, not dispose" rule every workspace
+    // switch already obeys), so every session this suite still needs stays
+    // alive and reattachable, while nothing is left on screen to hold a
+    // slot. A pan would work too and is worse — it depends on
+    // DEMOTE_DELAY_MS having elapsed, which is a race a later edit can lose
+    // silently.
+    //
+    // The standing obligation this block inherited from check 147 — "leaves
+    // the active workspace MOVED, and whoever appends the next check
+    // inherits that" — is DISCHARGED here rather than passed on: the next
+    // author gets an empty canvas and a spent budget freed, not a puzzle.
+    // ---------------------------------------------------------------------
+    await wc.executeJavaScript(
+      `window.__m7aWorkspace().createAndSwitch('after workspace extras')`)
+    await settle()
+
 
     // 130. The whole boundary in one window: a token entered through the
     //      REAL palette input mode is stored and listed back, and is NOT
@@ -10398,6 +10504,97 @@ app.whenReady().then(async () => {
       // to call out for the peers beside it.
       try { rmSync(SA_ROOT, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(saCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
+    // ---------------------------------------------------------------------
+    // M16: file panels — a local file, minted as a read-only, live-watched
+    // node on the canvas. A fixture file in a SPACED temp directory, the
+    // rule this repo learned from the pane-died redirect bug shipping
+    // through eight reviews on space-free fixtures.
+    //
+    // Originally numbered 125-128 under this branch's own M13, which
+    // collided with main's own DIFFERENT M13 — "links between panels" —
+    // which independently claimed 125-129 here, and with M14/M15's own
+    // renumbered ranges (130, 131-133). See the milestone-wide renumbering
+    // commit for the full story.
+    // ---------------------------------------------------------------------
+    {
+      const FILE_DIR = mkdtempSync(join(tmpdir(), 'tc filepanel '))
+      const FIXTURE = join(FILE_DIR, 'notes.md')
+      writeFileSync(FIXTURE, 'first line\nsecond line\n')
+
+      // 134 — the panel renders the file's REAL content, minted through the
+      //       real openFilePanel path via the __m13Open test hook. Asserted
+      //       on the content rather than on the panel existing: a panel that
+      //       mounted and rendered nothing satisfies "a panel exists"
+      //       completely.
+      const xtermsBefore = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+      await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+      const rendered = await waitUntil(async () => {
+        const t = await wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-panel-kind="file"] [data-scroll-host]'); return b ? b.textContent : null })()`)
+        return t && t.includes('second line') ? t : null
+      }, 5000)
+      ok('134 a file panel renders the real content of the file it names',
+        rendered !== null,
+        `content=${JSON.stringify(String(rendered).slice(0, 40))}`)
+
+      // 135 — THE LIVENESS CHECK, and the whole reason this milestone's
+      //       watcher is directory-based rather than a plain path watch: it
+      //       is driven by an ATOMIC write (temp file, then rename over the
+      //       target), because that is what an agent actually does and it is
+      //       the exact case a bare fs.watch(path) misses — the inode the
+      //       original watch pinned is gone the instant the rename lands.
+      //       WAITED on, never slept on: a fixed sleep against a watcher is
+      //       a flake and not a bound.
+      writeFileSync(join(FILE_DIR, 'notes.tmp'), 'rewritten by an agent\n')
+      renameSync(join(FILE_DIR, 'notes.tmp'), FIXTURE)
+      const updated = await waitUntil(async () => {
+        const t = await wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-panel-kind="file"] [data-scroll-host]'); return b ? b.textContent : null })()`)
+        return t && t.includes('rewritten by an agent') ? t : null
+      }, 5000)
+      ok('135 an atomic external rename-over-target reaches the live panel',
+        updated !== null,
+        updated === null ? 'never arrived' : 'arrived')
+
+      // 136 — it costs no session and no WebGL context, and BOTH clauses are
+      //       required. The second is what rejects an implementation that
+      //       quietly demoted some other panel to pay for this one — "the
+      //       file panel has no xterm" is satisfied perfectly by that alone.
+      const fileId = await wc.executeJavaScript(
+        `document.querySelector('[data-panel-kind="file"]').getAttribute('data-panel-id')`)
+      const hasSession = await wc.executeJavaScript(
+        `Boolean(window.__m4aSessions()[${JSON.stringify(fileId)}])`)
+      const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+      ok('136 a file panel holds no PanelSession and costs no WebGL context',
+        hasSession === false && xtermsAfter === xtermsBefore,
+        `session=${hasSession} xterms ${xtermsBefore}->${xtermsAfter}`)
+
+      // 137 — closing it sends NO pty.kill for its id. A negative against a
+      //       recording mechanism is vacuous if the recorder has stopped
+      //       recording, so this ALSO closes a real terminal panel in the
+      //       same window and asserts THAT id IS recorded — the same
+      //       non-vacuity shape checks 111/111b already established for
+      //       review nodes. A kill aimed at an id naming no session is
+      //       swallowed at every layer below the IPC door (the direct
+      //       backend's destroy() is a no-op, tmux's cli() eats a non-zero
+      //       exit, dropBaseline for an unknown id drops nothing), so
+      //       without the recorder every renderer-visible fact would stay
+      //       identical with the !isTerminalPanel guard removed — the exact
+      //       trap checks 111/111b were built to close.
+      const killsBefore = killedPanelIds.length
+      await clickPanelClose(wc, fileId)
+      const termId = await wc.executeJavaScript(
+        `document.querySelector('.panel[data-panel-kind="terminal"]').getAttribute('data-panel-id')`)
+      await clickPanelClose(wc, termId)
+      await settle()
+      const killsSince = killedPanelIds.slice(killsBefore)
+      ok('137 closing a file panel sends no pty.kill, while a terminal close still does',
+        !killsSince.includes(fileId) && killsSince.includes(termId),
+        `kills=${JSON.stringify(killsSince)}`)
+
+      try { rmSync(FILE_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
   } catch (error) {

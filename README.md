@@ -143,6 +143,8 @@ npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
 npm run verify:credentials   # the credential store, its schema and its refusal path, plain node
+npm run verify:subagent      # the subagent scanner and its watcher, against a fake fs, plain node
+npm run verify:file          # the file panel's five-arm read and its directory watch, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
@@ -187,8 +189,10 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:diff / review:commit
                        credential:list / credential:set / credential:delete
                        credential:verify
+                       file:open / file:read / file:close
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
+                       file:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -364,7 +368,7 @@ instead of one culled panel. A workspace's row in the palette shows how many
 of its panels are currently waiting for you, even while it is hidden.
 
 Three things this milestone's design considered and deliberately did not
-build. All three landed in M16, and one of the three reasons recorded here was
+build. All three landed in M17, and one of the three reasons recorded here was
 simply wrong — which is worth stating plainly, because a reason written down
 and never corrected is exactly what a file like this one exists to prevent.
 **A merged, all-in-one view across every workspace** was recorded as the case
@@ -375,10 +379,10 @@ four hundred panels in it spends exactly the eight slots a single canvas
 does. The real obstacle was **coordinates**: every workspace lays its panels
 out in the same world space, clustered wherever that canvas's own camera has
 been, so two workspaces' panels overlap by construction, and `cascadeCentre`
-cannot help because it separates panels within one array. M16's answer is
+cannot help because it separates panels within one array. M17's answer is
 lanes — a per-workspace translation applied for display only. **Moving a panel
 from one workspace to another** was blocked on rubber-band selection not
-existing; M16 built the marquee first (`docs/ideas-backlog.md` #52 is now down
+existing; M17 built the marquee first (`docs/ideas-backlog.md` #52 is now down
 to shift-click and group drag) and then the move on top of it, in that order,
 which is what the entry asked for. **A keyboard shortcut for switching
 workspaces** was left unassigned on the grounds that picking a chord then would
@@ -525,7 +529,7 @@ here" look identical to "not built yet". There is no amend, no branch, no remote
 and no per-file selection: the commit takes every file the node's answer
 contains, not only the ones that fit on screen.
 
-**Every workspace at once, and panels that can move between them.** M16 is the
+**Every workspace at once, and panels that can move between them.** M17 is the
 three things M7's design named and deliberately left. `Cmd+Shift+A` merges every
 workspace into one canvas, each in its own labelled lane, with every terminal
 still live and every session untouched. Getting there needed one correction:
@@ -585,21 +589,28 @@ price of not killing something.
 | M13 | Links between panels: a directed, labelled line that means something | ✅ done |
 | M14 | The credential boundary: a store main owns, and no secret reaches an agent | ✅ done |
 | M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
-| M16 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
+| M16 | File panels: a local file on the canvas, watched | ✅ done |
+| M17 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11, M12,
-M14, M15 and M16 each landed on their own branch and merged in sequence. M15 was
-built as M13 and renumbered when it merged, because both M13 and M14 were
-claimed while it was in flight — the same resolution M14 itself made for the
-same reason, and the same one M16 made after it: M16 was built as M14 and
-renumbered twice on the way in, once past the credential boundary and once past
-the subagent nodes, because both reached `main` while it was in flight. The rule
-the three of them settle is worth stating plainly, since it is the one this
-table is for: **the number belongs to whichever milestone reaches `main` first**,
-and the branch that arrives later renames itself — never the row that is already
-here, which other documents are already citing. A gap in the numbers here is a milestone someone else is holding,
-not one that was skipped.
+M13, M14, M15, M16 and M17 each landed on their own branch and merged in
+sequence. A gap in the numbers here is a milestone someone else is holding,
+not one that was skipped. Three of those rows carry a number nobody used while
+the work was being done, and the reason is the same one every time. M15, M16
+and M17 were each built and reviewed entirely as "M13" — main had already
+claimed that number, and then claimed it again through each earlier
+renumbering, by the time each of them tried to merge — so each moved to the
+next free number on merge rather than at any point during its own development.
+M15 became M15 because both the real M13 and M14 were already claimed while it
+was in flight. M16 became M16 because by the time it tried to merge, M13, M14
+AND M15 were all claimed. M17 was renumbered three times on the way in — past
+the credential boundary, past the subagent nodes, and past the file panels —
+because all three reached `main` while it was in flight. The rule those
+renumberings settle is worth stating plainly, since it is the one this table is
+for: **the number belongs to whichever milestone reaches `main` first**, and the
+branch that arrives later renames itself — never the row that is already here,
+which other documents are already citing.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

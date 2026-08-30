@@ -104,6 +104,15 @@ app.whenReady().then(() => {
     read: () => undefined,
     setLabel: () => {}
   }
+  // Never invoked here either — this suite only asserts REGISTRATION, never
+  // drives file:read/file:close — but registerIpcHandlers' body reaches into
+  // it to build the handler closures.
+  const fileWatchersStub = {
+    watch: () => ({ kind: 'missing' }),
+    close: () => {},
+    closeAll: () => {},
+    count: () => 0
+  }
   registerIpcHandlers(
     stub,
     layoutStoreStub,
@@ -112,15 +121,23 @@ app.whenReady().then(() => {
     () => {},
     reviewEngineStub,
     reviewCommitStub,
-    credentialStoreStub
+    credentialStoreStub,
+    fileWatchersStub,
+    () => null
   )
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M14 takes the surface to 37: workspace:merged and workspace:move-panels
-  // expose the merged-view store reads/mutations across the process boundary,
-  // and four credential:* channels, none of which returns a secret.
-  const EXPECTED_CHANNELS = 37
+  // 40, not 41. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // handled by nobody — and this suite asserts over Object.values(IPC), the
+  // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
+  // records both. M14 Task 5 took the surface to 35 (four credential:* channels,
+  // none of which returns a secret). Two milestones then built on that 35 from
+  // branches that never saw each other: the file panel's three invokes
+  // (file:open/file:read/file:close) and the workspace extras' two
+  // (workspace:merged, workspace:move-panels), which expose the merged-view
+  // store read and the cross-workspace move. 35 + 3 + 2 = 40.
+  const EXPECTED_CHANNELS = 40
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

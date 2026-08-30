@@ -1,6 +1,7 @@
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
+import type { FileSource } from '@shared/file-panel'
 
 export type { ReviewSubject }
 
@@ -86,7 +87,21 @@ export interface ReviewPanel extends PanelBase {
   subject: ReviewSubject
 }
 
-export type Panel = TerminalPanel | ReviewPanel
+/**
+ * A local file rendered on the canvas, watched by main.
+ *
+ * The SECOND sessionless kind, and its arrival is what forces isTerminalPanel
+ * below to exist. Like a review node it has no spec, so it never reaches
+ * assignTiers, never reaches registry.ensure, and can take neither a
+ * LIVE_BUDGET slot nor a WebGL context — structurally, via Canvas.tsx's
+ * partition, rather than by a guard anyone has to remember.
+ */
+export interface FilePanel extends PanelBase {
+  kind: 'file'
+  source: FileSource
+}
+
+export type Panel = TerminalPanel | ReviewPanel | FilePanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -107,6 +122,30 @@ export type Panel = TerminalPanel | ReviewPanel
  */
 export function isReviewPanel(panel: Panel): panel is ReviewPanel {
   return panel.kind === 'review'
+}
+
+export function isFilePanel(panel: Panel): panel is FilePanel {
+  return panel.kind === 'file'
+}
+
+/**
+ * The partition test, and the reason it is spelled as a negation of the known
+ * non-terminal kinds rather than as `kind === 'terminal'`.
+ *
+ * Canvas.tsx spelled "is a terminal panel" as `!isReviewPanel(p)` until M16,
+ * and that was correct with exactly one non-terminal kind. With two it is
+ * wrong in the DANGEROUS direction: a file panel satisfies !isReviewPanel,
+ * lands in terminalPanels, reaches assignTiers and registry.ensure with no
+ * spec, and mints a PanelSession for a <pre> — burning a LIVE_BUDGET slot and
+ * a WebGL context on a panel that has no process.
+ *
+ * Written this way rather than as a positive `kind === 'terminal'` test
+ * because absence must keep meaning terminal: `kind` is absent in every
+ * layout.json written before M9b and in every verify fixture written before
+ * it. A fourth kind edits exactly this one line.
+ */
+export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
+  return !isReviewPanel(panel) && !isFilePanel(panel)
 }
 
 export const PANEL_W = 720
@@ -460,6 +499,39 @@ export function makeReviewPanel(
     kind: 'review',
     rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
     subject,
+    z
+  }
+}
+
+/**
+ * A file panel is a READING surface: the review node's portrait box, for the
+ * review node's reason, not the terminal's 720x460 landscape one.
+ */
+export const FILE_W = 640
+export const FILE_H = 520
+
+/**
+ * Centred exactly on the point it is given, the contract makePanel has.
+ *
+ * `source` is copied field by field rather than carried by reference, so a
+ * caller reusing its object cannot mutate a mounted panel's path underneath
+ * it. It is emphatically NOT rewritten: do not copy makePanel's
+ * `{ ...spec, panelId: id }` line here — a spec's panelId names the panel
+ * itself, and there is no field here that names a panel at all.
+ */
+export function makeFilePanel(
+  id: string,
+  centre: Point,
+  z: number,
+  source: FileSource,
+  size?: { w?: number; h?: number }
+): FilePanel {
+  const w = size?.w ?? FILE_W
+  const h = size?.h ?? FILE_H
+  return {
+    kind: 'file',
+    rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
+    source: { path: source.path },
     z
   }
 }
