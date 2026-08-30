@@ -1,8 +1,41 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FilePanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
+import type { FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
+
+/**
+ * The conflict banner's wording.
+ *
+ * Two conflict STATES ('disk-changed' and 'refused'), not four or five — a
+ * third enum member per non-text arm would be the "add a state" answer the
+ * fix-round finding explicitly rejected. What varies is the SENTENCE: "this
+ * file changed on disk" is true but weak for a file that was just deleted
+ * out from under an open draft, and this repo's standing rule is that two
+ * situations with two different fixes must not read as one sentence. So the
+ * wording branches on the RESULT's own kind while `conflict` itself stays a
+ * plain binary signal of "there is a banner" vs "the save itself was
+ * refused".
+ */
+function conflictMessage(
+  conflict: 'disk-changed' | 'refused',
+  resultKind: FileResult['kind'] | undefined
+): string {
+  if (conflict === 'refused') return 'This file changed on disk, so the save was refused.'
+  switch (resultKind) {
+    case 'missing':
+      return 'This file was deleted from disk.'
+    case 'binary':
+      return 'This file was replaced with something that no longer looks like text.'
+    case 'too-large':
+      return 'This file grew past the size this app can show, so it can no longer be edited here.'
+    case 'unreadable':
+      return 'This file can no longer be read from disk.'
+    default:
+      return 'This file changed on disk.'
+  }
+}
 
 export interface FileNodeProps {
   panel: FilePanel
@@ -98,8 +131,13 @@ function FileNodeImpl({
   const seedRef = useRef<string>('')
   // Compared against what was SEEDED, not against the live store value —
   // seedRef is the anchor both `dirty` and the reseed effect below share, so
-  // the two cannot disagree about what "unsaved" means.
-  const dirty = editing && result?.kind === 'text' && draft !== seedRef.current
+  // the two cannot disagree about what "unsaved" means. Deliberately NOT
+  // gated on `result?.kind === 'text'`: whether the file on disk is
+  // currently readable has nothing to do with whether the user has unsaved
+  // work. Fix-round finding — the `kind` clause used to make `dirty` flip to
+  // false the instant a watcher push reported the file missing, so the
+  // marker vanished at exactly the moment unsaved work was most at risk.
+  const dirty = editing && draft !== seedRef.current
 
   // Captured when the draft OPENS, exactly as ReviewNode's commit draft
   // captures `focusedId` rather than clearing it, and consumed on every exit
@@ -153,7 +191,20 @@ function FileNodeImpl({
   // draft is left exactly as typed and the banner says so, at the moment it
   // happens rather than at the moment the user tries to save.
   useEffect(() => {
-    if (draft === null || result?.kind !== 'text') return
+    if (draft === null) return
+    if (result?.kind !== 'text') {
+      // The file stopped being plain, readable text out from under an open
+      // draft: deleted, replaced with something binary, grown past the size
+      // cap, or gone unreadable. Fix-round finding — this used to bail here
+      // silently, so nothing on screen said the file was gone; only
+      // model.summary quietly changed to "not found" underneath an editor
+      // that still looked perfectly normal. There is no fresh text to
+      // reseed from and no mtime to compare, so this is ALWAYS a conflict —
+      // unlike the ordinary text-vs-text case below, even a CLEAN draft has
+      // just lost the file it was going to save back to.
+      setConflict('disk-changed')
+      return
+    }
     if (result.mtimeMs === baseMtimeMs) return
     if (dirty) {
       setConflict('disk-changed')
@@ -232,6 +283,15 @@ function FileNodeImpl({
           // way to tell "I have edits" from "everything is saved" short of
           // pressing Save and hoping. Amber, matching this app's other
           // "something here wants your attention" colour.
+          //
+          // Deliberately independent of whether the file is currently
+          // READABLE (`dirty` no longer checks `result?.kind`). Whether the
+          // draft differs from what it was seeded with has nothing to do
+          // with whether disk can presently answer a read — and the case
+          // this marker matters most for is exactly the one where the two
+          // used to disagree: the file gets deleted out from under an open,
+          // edited draft, and the marker must not vanish at the one moment
+          // the unsaved work is most at risk.
           <span className="file-node__dirty" data-file-node-dirty title="Unsaved changes">●</span>
         )}
         <button
@@ -318,11 +378,15 @@ function FileNodeImpl({
           <>
             {conflict !== null && (
               <div className="file-node__conflict" data-file-node-conflict>
-                <span>
-                  {conflict === 'refused'
-                    ? 'This file changed on disk, so the save was refused.'
-                    : 'This file changed on disk.'}
-                </span>
+                <span>{conflictMessage(conflict, result?.kind)}</span>
+                {/* One label for every arm, including 'missing': the action
+                    is always closeDraft(), which discards the draft and
+                    returns to the READ view — and the read view then shows
+                    whatever the CURRENT result is (fresh text, or the
+                    "not found"/binary/too-large/unreadable note), which is
+                    honestly what "reload" means here. There is no separate
+                    "load fresh content into the editor" behaviour to word
+                    differently for a file with no text left to load. */}
                 <button
                   type="button"
                   onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); closeDraft() }}
