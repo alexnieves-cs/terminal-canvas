@@ -12,5 +12,9 @@ module.exports = {
      M8d's rail sections both did — it is pure (no React, no DOM, type-only
      imports), and a suite of its own would re-prove the same esbuild wiring
      for one file. */
-  ...require('../src/renderer/review/review-node-model')
+  ...require('../src/renderer/review/review-node-model'),
+  /* M11: the nav grid's cell arithmetic. A canvas module joining this bundle
+     for the same reason review-node-model.ts did — pure, type-only imports,
+     and a suite of its own would re-prove this esbuild wiring for one file. */
+  ...require('../src/renderer/navgrid/nav-grid')
 }

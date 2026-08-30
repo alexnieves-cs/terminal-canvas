@@ -15,11 +15,16 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  // Nothing in this bundle imports a VALUE from @shared or @renderer today —
-  // rail-rows.ts's two imports are `import type`, which esbuild erases. The
-  // aliases are here pre-emptively for the reason CLAUDE.md records about
-  // verify-palette.cjs: needing no alias YET is exactly the state
-  // verify-viewport.cjs was in right up until the day it broke.
+  // The @renderer alias is REQUIRED, not pre-emptive: nav-grid.ts imports
+  // waitingCount — a VALUE — from @renderer/shell/rail-sections, so without
+  // it this bundle does not build at all. That is exactly the transition
+  // verify-viewport.cjs broke on when panel-interaction.ts gained its first
+  // value import from @shared, which is why CLAUDE.md tells both of these
+  // bundles to carry the aliases before they are needed.
+  // @shared's is still pre-emptive — every @shared import reachable from
+  // here is an `import type`, which esbuild erases before bundling — and it
+  // stays for that same reason: needing no alias YET is precisely the state
+  // this file was in one milestone ago.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
@@ -941,6 +946,108 @@ ok('55 a review row is never dormant', R.buildRailRows(
     !keys.includes('live-cwd') && !keys.includes('live-command') &&
       keys.includes('cwd') && keys.includes('exit'),
     JSON.stringify(keys))
+}
+
+// ---- M11: the nav grid's pure cell arithmetic (65-70) ----
+// nav-grid.ts joins THIS suite rather than getting one of its own, the
+// precedent inspector-fields.ts, rail-sections.ts and review-node-model.ts
+// all set: a suite for one pure file re-proves the same esbuild wiring.
+const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelIds, active })
+
+// 65. Position is STABLE as the list grows. This is success criterion 2, and
+//     it is the whole argument for a hold-to-reveal gesture over Cmd+K: if a
+//     workspace moves cell when a neighbour is added, there is no muscle
+//     memory to build and the feature is a worse palette.
+{
+  const two = R.buildGrid([gridWs('w1', 'Main'), gridWs('w2', 'auth')], [])
+  const five = R.buildGrid(
+    [gridWs('w1', 'Main'), gridWs('w2', 'auth'), gridWs('w3', 'c'), gridWs('w4', 'd'), gridWs('w5', 'e')], [])
+  ok(65, two[1].kind === 'workspace' && two[1].workspaceId === 'w2'
+      && five[1].kind === 'workspace' && five[1].workspaceId === 'w2',
+    `w2 at cell 1 in both: ${two[1].workspaceId} / ${five[1].workspaceId}`)
+}
+
+// 66. Cell 8 is ALWAYS `more`, even when there is nothing to overflow into.
+//     A cell that appears only sometimes has no stable position, and this is
+//     the one escape hatch to a 9th+ workspace: verify:palette 31's rule, that
+//     a row which disappears is indistinguishable from a missing feature.
+{
+  const small = R.buildGrid([gridWs('w1', 'Main')], [])
+  const many = R.buildGrid(Array.from({ length: 12 }, (_, i) => gridWs('w' + i, 'n' + i)), [])
+  ok(66, small.length === 9 && many.length === 9
+      && small[8].kind === 'more' && many[8].kind === 'more',
+    `${small[8].kind} / ${many[8].kind}`)
+}
+
+// 67. Unused cells are `empty`, and a 9th workspace does NOT take cell 8.
+{
+  const nine = R.buildGrid(Array.from({ length: 9 }, (_, i) => gridWs('w' + i, 'n' + i)), [])
+  const one = R.buildGrid([gridWs('w1', 'Main')], [])
+  ok(67, nine[7].kind === 'workspace' && nine[8].kind === 'more'
+      && one[1].kind === 'empty' && one[7].kind === 'empty',
+    `cell7=${nine[7].kind} cell8=${nine[8].kind} empty=${one[1].kind}`)
+}
+
+// 68. stepCell SKIPS empty cells and REFUSES TO WRAP at each of the four
+//     edges. Both halves in one check because each alone passes against a
+//     different wrong implementation: a wrapping stepper still skips empties,
+//     and a non-wrapping one that lands on an empty cell is a dead key —
+//     stepRunnable's rule for the palette's disabled rows.
+{
+  const cells = R.buildGrid([gridWs('a', 'A'), gridWs('b', 'B')], []) // 0,1 filled; 2-7 empty; 8 more
+  const rightOffEdge = R.stepCell(cells, 2, 1, 0)   // index 2 is top-right
+  const leftOffEdge = R.stepCell(cells, 0, -1, 0)
+  const upOffEdge = R.stepCell(cells, 1, 0, -1)
+  const downOffEdge = R.stepCell(cells, 8, 0, 1)
+  const skipped = R.stepCell(cells, 1, 1, 0)        // cell 2 is empty
+  ok(68, rightOffEdge === 2 && leftOffEdge === 0 && upOffEdge === 1 && downOffEdge === 8
+      && skipped === 1,
+    `edges ${rightOffEdge}/${leftOffEdge}/${upOffEdge}/${downOffEdge} skip=${skipped}`)
+}
+
+// 69. The cursor seeds on the ACTIVE workspace's own cell, so a release with
+//     no arrow pressed is a no-op. The gesture has to be abandonable by doing
+//     nothing, which is how Cmd+Tab behaves and what makes it safe to summon
+//     speculatively.
+{
+  const cells = R.buildGrid([gridWs('w1', 'A'), gridWs('w2', 'B', [], true), gridWs('w3', 'C')], [])
+  ok(69, R.initialCursor(cells) === 1, `seeded ${R.initialCursor(cells)}`)
+}
+
+// 70. ...and seeds on cell 8 (`more`) when the ACTIVE workspace is past cell 7
+//     and therefore has no cell of its own. This is the case no fixture
+//     reaches by accident — it needs nine workspaces to exist at all — and
+//     seeding cell 0 there makes a no-arrow release jump to a DIFFERENT
+//     workspace, which is exactly the accident check 65 exists to prevent.
+{
+  const rows = Array.from({ length: 10 }, (_, i) => gridWs('w' + i, 'n' + i, [], i === 9))
+  ok(70, R.initialCursor(R.buildGrid(rows, [])) === 8,
+    `seeded ${R.initialCursor(R.buildGrid(rows, []))}`)
+}
+
+// 70b. A cell's waiting number comes from rail-sections' waitingCount, and is
+//      a NUMBER on the cell rather than composed text — the rule Command.waiting
+//      and RailRow.waiting already obey. Intersection, never a global count.
+{
+  const cells = R.buildGrid(
+    [gridWs('w1', 'Main', ['n1', 'n2']), gridWs('w2', 'auth', ['n3'])], ['n1', 'n9'])
+  ok('70b', cells[0].kind === 'workspace' && cells[0].waiting === 1
+      && cells[1].kind === 'workspace' && cells[1].waiting === 0,
+    `${cells[0].waiting} / ${cells[1].waiting}`)
+}
+
+// 71. A ZERO VECTOR on an empty cell returns the index unchanged rather than
+//     hanging. Asserted directly as a return value, on purpose, rather than
+//     by letting the suite time out: `dx===0 && dy===0` never changes
+//     col/row, so an unguarded loop re-checks the SAME empty cell forever —
+//     the idiomatic no-op default for an unrecognised key in Task 2's
+//     keyboard wiring reaches this immediately. A hang here is a frozen
+//     renderer, not a thrown error, so this suite would never print a
+//     failure for it on its own; the check exists so a regression shows up
+//     as a red assertion instead of a suite that never finishes.
+{
+  const cells = R.buildGrid([gridWs('a', 'A'), gridWs('b', 'B')], []) // cell 2 is empty
+  ok(71, R.stepCell(cells, 2, 0, 0) === 2, `stepCell(2,0,0)=${R.stepCell(cells, 2, 0, 0)}`)
 }
 
 console.log('\n' + '='.repeat(60))

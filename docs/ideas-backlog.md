@@ -38,6 +38,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #44 honest chrome | M6a | "`reattached` costs a probe because `-A` erased the question" |
 | #49 two copies of the app eating each other | M5c fix | "...and two copies of ONE build must not either" |
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
+| #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 
 Six more entries were rewritten rather than removed, because a milestone shipped most of
 each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#17**
@@ -59,22 +60,6 @@ print secrets.** Six entries here do exactly that. Each of them owes an answer b
 ships, not after.
 
 ---
-
-## 1. Cmd-held navigation grid
-
-Hold `Cmd` to summon a 3×3 grid at the centre of the screen; arrow keys or the mouse
-pick a cell, release to jump. Cells address either canvas regions or whole projects.
-
-- **Why it fits:** `Cmd` is *already* the required modifier for every canvas shortcut
-  (`useViewport.ts`), precisely because agent TUIs claim every bare key. A hold-to-reveal
-  overlay is the natural extension of a rule the codebase already enforces.
-- **Constraint:** a *held* `Cmd` is not the same input as a `Cmd`+key chord. Watch for
-  the overlay swallowing `Cmd+C`/`Cmd+V` (one Canvas-level subscription today) and
-  `Cmd+wheel` zoom. The reveal probably needs a dwell threshold so a fast `Cmd+N` never
-  flashes it.
-- **Open question:** what does a cell *mean*? Nine viewport quadrants, nine saved
-  bookmarks, and nine workspaces are three different features wearing the same UI.
-- **Depends on:** nothing hard. Could land any time after M4b.
 
 ## 2. The workspace extras M7 did not ship
 
@@ -678,8 +663,9 @@ title and status, then a coloured block.
   which has never been attached and has no buffer to `tail()`. That points the far tier at
   facts the `Panel` itself holds — title (#6), agent state (#5), cost (#19) — rather than
   terminal output, which is probably the right answer anyway.
-- **Related:** this is what makes #1's navigation grid and #17's attention arrows legible.
-  All three are about the same view: the one where you can see everything and read nothing.
+- **Related:** this is what makes the nav grid (shipped in M11) and #17's attention arrows
+  legible. All three are about the same view: the one where you can see everything and
+  read nothing.
 - **Open question:** where are the thresholds, and do they hysteresis? A card flipping
   between two renderings at a boundary while the user pinches is the same class of thrash
   `DEMOTE_DELAY_MS` and `CULL_MARGIN_PX` exist to prevent — cheaper here, since nothing is
@@ -1065,11 +1051,11 @@ Move between panels, place them, and drive the camera without the mouse — and 
 result usable by someone who cannot use a trackpad, cannot see the glow in #5, or needs the
 motion in #23 to stop.
 
-- **Why this is not the same idea as #1's nav grid.** #1 is a hold-to-reveal jump to a
-  *region*. This is the ordinary case: the focused panel is here, the next one is to its
-  right, `Cmd`+arrow should go there. The math is pure `viewport.ts` work over rects the
-  app already holds — pick the nearest panel in a direction cone — and belongs in the
-  plain-node verify bundle beside the rest of it.
+- **Why this is not the same idea as the nav grid (shipped in M11).** The nav grid is a
+  hold-to-reveal jump to a *workspace*. This is the ordinary case: the focused panel is
+  here, the next one is to its right, `Cmd`+arrow should go there. The math is pure
+  `viewport.ts` work over rects the app already holds — pick the nearest panel in a
+  direction cone — and belongs in the plain-node verify bundle beside the rest of it.
 - **The trap, and it is a good one: keyboard traversal must move *selection*, not focus.**
   `assignTiers` pins the focused panel live unconditionally. So arrowing across a
   twelve-panel canvas with focus attached to the cursor promotes twelve panels, spawns
@@ -1452,11 +1438,14 @@ numbers, which makes this the best value-per-byte item in the canvas layer.
   row on every mousemove.
 - **Constraint: `Cmd+1` is taken.** It is `fitTo` today. The keymap needs deciding rather
   than assuming, and that is the whole design cost of this entry.
-- **Nearest existing entry: #1 (Cmd-held navigation grid),** which explicitly leaves open
-  "what does a cell *mean*? Nine viewport quadrants, nine saved bookmarks, and nine
-  workspaces are three different features wearing the same UI." This is the saved-bookmark
-  answer built as a data model and a palette group, with no hold-to-reveal overlay at all.
-  #1's hard part is the gesture; this one has none.
+- **Nearest existing entry: the nav grid (shipped in M11).** Its own design spec resolved
+  the open question this entry once left — "what does a cell *mean*? Nine viewport
+  quadrants, nine saved bookmarks, and nine workspaces are three different features
+  wearing the same UI" — by landing on workspaces: the only one of the three with a stable
+  identity across launches, which a hold-to-reveal gesture needs in order to be worth
+  learning at all. This entry is the saved-bookmark answer built as a data model and a
+  palette group, with no hold-to-reveal overlay at all. The nav grid's hard part was the
+  gesture; this one has none.
 
 ## 43. Unicode 11 widths — a silent misalignment nobody has attributed yet
 
@@ -2123,7 +2112,7 @@ these. Three observations that would change it if it were:
 
 ## Rough sequencing, if these were ever scheduled
 
-**Written before M5b and never re-ordered since.** Nine of its items have shipped and are
+**Written before M5b and never re-ordered since.** Ten of its items have shipped and are
 struck below; the surviving order was computed against a codebase that had no palette, no
 settings schema, no workspaces, no shell and no review layer, so treat it as a record of
 how these were once weighed rather than as advice about what to do next.
@@ -2152,7 +2141,8 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    through `dispose(id)` is what kept the count at two, and what made `dispose` return its
    kill so the respawn could be ordered behind it.
 7. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
-   It is what makes the zoomed-out view worth having, which #1 and #17 both assume.
+   It is what makes the zoomed-out view worth having, which the nav grid (M11) and #17
+   both assume.
 8. **#33 minimap** — pure `viewport.ts` at a second scale over rects the app already holds,
    in a top corner (the bottom-right is the HUD's), on a settings toggle that defaults off.
    Schedule it *after* #22, because #22 is what decides whether a persistent locator is
@@ -2175,7 +2165,10 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 15. **#38 first run** — schedule it whenever `SEED_PANELS` goes away, and not a day later:
    an empty infinite canvas with only `Cmd`-gated shortcuts has no discoverable
    affordances at all.
-16. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
+16. ~~**#1 Cmd nav grid**~~ — **done, M11**, and the prediction held exactly: cells are
+   workspaces, self-contained once #2 (M7) gave it destinations. The other two candidates
+   the original entry left open — viewport quadrants and saved bookmarks — were rejected
+   in the design spec; see #42 for the bookmark half.
 17. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
    with #2, build it once) and the safety story around a mode you can forget you are in.
 18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high

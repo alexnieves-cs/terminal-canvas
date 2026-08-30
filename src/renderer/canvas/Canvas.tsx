@@ -9,6 +9,8 @@ import type { DragMode, DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ReviewNode } from '@renderer/review/ReviewNode'
+import { NavGrid } from '@renderer/navgrid/NavGrid'
+import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
@@ -447,11 +449,31 @@ export function Canvas({
   const panelsRef = useRef(panels)
   panelsRef.current = panels
 
-  // The one place that decides who owns a wheel gesture. Three rules, and the
-  // ORDER is the load-bearing part: the palette outranks zoom, and zoom
-  // outranks the focused panel.
+  // Same ordering problem, same fix as reloadWorkspacesRef below: the nav grid
+  // (M11) needs `switchWorkspace` for its commit, and that is declared several
+  // hundred lines further down — so useNavGrid cannot exist here, while both
+  // consumers of "is the grid open" DO: shouldYieldWheel's rule 0 immediately
+  // below, and the shouldIgnoreKeys passed into useViewport. It holds the
+  // PREDICATE rather than a mirrored boolean so both read the hook's own ref
+  // with no one-render lag, and both stay referentially stable — each sits in
+  // an effect dep array that must never be torn down and reinstalled.
+  // Populated by an effect right after useNavGrid is declared; read only from
+  // event handlers, long after mount.
+  const navGridIsOpenRef = useRef<() => boolean>(() => false)
+
+  // The one place that decides who owns a wheel gesture. Four rules, and the
+  // ORDER is the load-bearing part: the nav grid outranks everything, the
+  // palette outranks zoom, and zoom outranks the focused panel.
   const shouldYieldWheel = useCallback((event: WheelEvent): boolean => {
     const target = event.target as HTMLElement | null
+
+    // 0. While the nav grid is open every canvas gesture stands down. It has
+    // already swallowed the keyboard; it would be strange for a pinch to zoom
+    // the world behind it. Unlike rule 1 this is NOT a containment test: the
+    // grid covers the whole canvas and yields the gesture by standing the
+    // camera down rather than by handing it to a scroll host, so there is
+    // nothing under the cursor for a target test to find.
+    if (navGridIsOpenRef.current()) return true
 
     // 1. The palette owns EVERY wheel over itself, zoom gestures included. It
     // is a screen-space overlay mounted INSIDE .canvas, so useViewport's
@@ -534,10 +556,36 @@ export function Canvas({
     jumpAttentionImplRef.current(direction)
   }, [])
 
+  // Every canvas keyboard shortcut stands down while EITHER overlay owns the
+  // keyboard, and so do the four menu accelerators below (see the edit:*
+  // subscriptions). ONE predicate rather than three copies of "who owns the
+  // keyboard", which is what this file already does for the wheel.
+  //
+  // Composed here rather than passing palette.isOpen straight through,
+  // because the nav grid's own capture listener cannot be relied on to stop
+  // useViewport's. Both are bound on `window`, and a SAME-TARGET dispatch —
+  // which is exactly what verify:panels' window.dispatchEvent produces, and
+  // never what a real keypress produces — invokes every listener on that
+  // target regardless of phase, so the shared predicate is the only thing
+  // that covers it. (For a real keypress the grid's capture-phase
+  // stopPropagation at `window` DOES suppress bubble-phase listeners on
+  // `window`, so it is belt-and-braces there — but it is not useless and
+  // must not be removed: it is what stops a bare arrow reaching xterm's own
+  // target-phase handler further down the tree.)
+  //
+  // Stable identity, reading a stable callback and a ref, because it sits in
+  // useViewport's keydown effect dep array — a fresh arrow per render would
+  // tear that listener down and reinstall it on every mousemove over the
+  // canvas (Canvas re-renders on setCursor).
+  const shouldIgnoreKeys = useCallback(
+    () => palette.isOpen() || navGridIsOpenRef.current(),
+    [palette.isOpen]
+  )
+
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll
   } = useViewport(
-    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention
   )
   const version = useRegistryVersion(registry)
 
@@ -569,8 +617,12 @@ export function Canvas({
       // With the palette open the user is looking at a text field, not a
       // terminal, and focusedId still names that terminal (rule 2 keeps it).
       // Copying its selection here would put text the user cannot see on the
-      // clipboard; Palette.tsx serves its own input instead.
-      if (palette.isOpen()) return
+      // clipboard; Palette.tsx serves its own input instead. shouldIgnoreKeys
+      // rather than palette.isOpen because the nav grid is the SAME
+      // situation and a worse one: revealing it means the user is already
+      // holding Cmd, which makes a stray Cmd+C the most plausible chord in
+      // the app, aimed at a selection an opaque overlay is covering.
+      if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
@@ -578,8 +630,10 @@ export function Canvas({
     })
     const offPaste = window.canvas.edit.onPaste((text) => {
       // Rule 3. Without this the text lands in a running agent, invisibly,
-      // while the user watches an empty text field. verify:panels 35.
-      if (palette.isOpen()) return
+      // while the user watches an empty text field (palette, verify:panels
+      // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
+      // switch that follows on release takes the evidence off screen.
+      if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       if (text) session?.handle.paste(text)
@@ -588,9 +642,9 @@ export function Canvas({
       offCopy()
       offPaste()
     }
-    // palette.isOpen is referentially stable, so this stays a once-only
+    // shouldIgnoreKeys is referentially stable, so this stays a once-only
     // install; listing it makes the dependency visible rather than implied.
-  }, [palette.isOpen])
+  }, [shouldIgnoreKeys])
 
   // ONE subscription for the whole canvas, not one per panel: the payload
   // names its own panel, and the store fans it out to exactly the panel that
@@ -659,19 +713,26 @@ export function Canvas({
     // open and a name half-typed it does not undo the TYPING — it runs
     // applyHistory, which removes a panel and disposes its session, behind the
     // overlay, with no visible cause. verify:panels 37.
+    //
+    // Sharper still under the nav grid, which is why the guard is
+    // shouldIgnoreKeys and not palette.isOpen: the grid is revealed by a
+    // HELD Cmd, so Cmd+Z is one keypress away for the whole time it is up —
+    // it kills a running agent behind an opaque overlay, and the workspace
+    // switch on release then carries the evidence off screen entirely.
+    // verify:panels 123.
     const offUndo = window.canvas.edit.onUndo(() => {
-      if (palette.isOpen()) return
+      if (shouldIgnoreKeys()) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
-      if (palette.isOpen()) return
+      if (shouldIgnoreKeys()) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory, palette.isOpen])
+  }, [applyHistory, shouldIgnoreKeys])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same
@@ -1611,6 +1672,37 @@ export function Canvas({
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
+
+  // Cell 8's door. The palette's own workspaces drill-in, never a second list:
+  // the grid holds eight cells and the ninth is how you reach a ninth
+  // workspace, which is a surface that already exists.
+  const openWorkspaceScope = useCallback(
+    () => palette.openPalette('workspaces'), [palette.openPalette])
+
+  /**
+   * M11's Cmd+G grid. Declared HERE rather than beside shouldYieldWheel
+   * because it needs `workspaceRows` and `waitingIds`, neither of which exists
+   * that far up; the two consumers that DO live up there read it back through
+   * navGridIsOpenRef (see that ref's own comment).
+   *
+   * onCommit is switchWorkspace itself, not a second switching path: the grid
+   * is a GESTURE onto M7's existing transaction, the same way the rail's
+   * workspace row is.
+   */
+  const navGrid = useNavGrid({
+    workspaces: workspaceRows,
+    attentionIds: waitingIds,
+    onCommit: switchWorkspace,
+    onMore: openWorkspaceScope,
+    // The palette owns the keyboard while it is open; two surfaces both
+    // claiming Cmd is the one arrangement rule 3 of "who owns the keyboard"
+    // exists to prevent.
+    enabled: !palette.open
+  })
+  // Publishes the predicate to the two consumers declared above it — see
+  // navGridIsOpenRef's own comment. In an effect rather than a render-time
+  // assignment because navGrid.isOpen is a stable useCallback: this runs once.
+  useEffect(() => { navGridIsOpenRef.current = navGrid.isOpen }, [navGrid.isOpen])
 
   /**
    * A review node is minted from the SUBJECT's stored baseline, asked for
@@ -2719,6 +2811,10 @@ export function Canvas({
         {pipsEnabled && (
           <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
         )}
+        {/* A SIBLING of .world, like EdgeIndicators above: .world carries the
+            one translate()/scale() transform, and an overlay inside it would
+            pan and zoom away with the canvas it is pinned to. */}
+        <NavGrid controller={navGrid} />
         <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
         {palette.open && (
           <Palette
