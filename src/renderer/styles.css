@@ -9,6 +9,15 @@
   --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
   --sp-5: 12px; --sp-6: 16px; --sp-7: 24px;
 
+  /* SPIKE (editorial glass). Two steps of air above the dense scale above.
+     They exist for OVERLAYS AND CARDS ONLY — the palette, the launcher, a
+     review node, a dormant panel card. The rail and the inspector are LISTS
+     and lists want density: a 240px rail cannot afford 32px of padding, and
+     the failure mode of an editorial pass is a uniform "everything got --sp-8"
+     that halves how much the user can see. If one of these appears on a
+     .rail-* or .inspector__* rule, that is the bug. */
+  --sp-8: 32px; --sp-9: 48px;
+
   /* One-off structural constant, tokenised rather than left as a literal so
      the spacing audit can hold at zero literals. It is the hiddenInset
      traffic-light clearance and belongs to no scale. */
@@ -26,6 +35,12 @@
      circle, a pill), not scale steps. */
   --r-sm: 4px; --r-md: 6px; --r-lg: 12px; --r-full: 999px;
 
+  /* SPIKE. Glass panes read as glass partly through radius: the reference
+     card is ~26px on a 640px pane. Same containment rule as --sp-8/9 — these
+     belong to floating surfaces, never to a row in a list. The concentric
+     rule above still holds: --r-lg inside --r-2xl, not --r-2xl inside itself. */
+  --r-xl: 18px; --r-2xl: 26px;
+
   /* Type. Six sizes inside a 6px band become four with real ratios. --t-xs is
      legal below the 12px floor ONLY because every user of it is a one- or
      two-word ALL-CAPS label at 0.09em tracking. Sentence-case text at --t-xs
@@ -33,22 +48,57 @@
   --t-xs: 10.5px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px;
   --lh-tight: 1.25; --lh-body: 1.5;
 
+  /* SPIKE. The diagnosis that produced this branch: the ENTIRE application
+     rendered inside a 10.5–15px band, a ratio of about 1.4:1 between its
+     largest and smallest type. The reference this is modelled on runs about
+     5:1. Nothing here is a "bigger label" — these are DISPLAY sizes, set in
+     --font-display, and they are what carries the hierarchy the value ramp
+     alone could never carry.
+
+     --lh-display is below 1 on purpose: stacked headline lines at 40px+ set
+     at --lh-tight leave a gap that reads as three separate labels rather than
+     one block of text. */
+  --t-xl: 20px; --t-2xl: 28px; --t-3xl: 40px; --t-4xl: 56px;
+  --lh-display: .95;
+
+  /* Tracking. Heavy grotesks at display sizes need NEGATIVE tracking or the
+     counters read loose; caps micro-labels need positive or they read as a
+     smear. Both were hardcoded per-rule before this branch. */
+  --track-display: -.035em; --track-tight: -.015em; --track-caps: .09em;
+
   /* One monospace stack. There were three in CSS and a fourth in
      create-terminal.ts, which resolve to different faces on some macOS
      configurations. The xterm one moves in M11, with the terminal theme. */
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* SPIKE. The one bundled face (Inter Display Black, SIL OFL 1.1, ~108 KB,
+     see assets/fonts/OFL.txt). DISPLAY ONLY — body and label text stay on the
+     system UI stack, and the contrast between an editorial display face and a
+     plain system UI face IS the look; a single face used for everything is
+     what makes an app read as a template.
+
+     The fallback chain matters more than usual here: if the @font-face fails
+     (a CSP font-src regression is the realistic cause) headlines silently
+     fall back to system-ui at weight 900 and look ALMOST right, which is
+     exactly the kind of failure that ships. document.fonts.check() is how to
+     assert it, not the eye. */
+  --font-display: "Inter Display", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
   --dur-1: 90ms; --dur-2: 160ms;
   --ease: cubic-bezier(.2, .8, .2, 1);
 
-  /* Elevation. Panels have no shadow today, which is why they read as pasted
-     onto the canvas rather than floating above it. A shadow only reads as
-     depth when the surface beneath differs — which the ramp below provides. */
-  --e-1: 0 1px 2px rgba(0, 0, 0, .40);
-  --e-2: 0 4px 12px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .40);
-  --e-3: 0 16px 48px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .40);
+  /* Elevation MOVED to the theme block on this branch. It used to live here,
+     in bare :root, holding rgba(0,0,0,.40) — which check 7 forbids and did not
+     catch, because its regex only matches a value that STARTS with a colour
+     and these start with `0 1px 2px`. That gap is documented in
+     verify-styles.cjs's own header as a known hole.
+
+     A shadow's colour is a colour. A milestone that leans this hard on
+     shadows is the wrong moment to keep expanding through the hole, so the
+     tokens move to where they were always supposed to be. Check 8 permits it:
+     its structural regex is (sp|r|dur|t|lh|ease) and does not name --e-*. */
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -78,12 +128,25 @@
 
      Contrast RATIO is the wrong metric for large adjacent fills and is
      deliberately not quoted here; delta-L* is. Ratio is quoted for text. */
-  --s-0: #080910;   /* app ground, canvas                          */
-  --s-1: #0f111a;   /* panel body, palette list                    */
-  --s-2: #161926;   /* chrome: rail, inspector, panel header       */
-  --s-3: #1d2130;   /* raised: top bar, palette surface, HUD       */
-  --s-4: #282d40;   /* hover fill, AND the selected fill           */
-  --s-5: #343a52;   /* pressed only — transient, never a text ground */
+  /* SPIKE RETUNE. The ground drops to near-neutral black and the raised steps
+     keep their cool cast. Reason, from the screenshot diagnosis: the ground
+     was #080910 with a radial vignette lightening the TOP of the canvas
+     toward --s-2 — so the canvas behind a panel was brighter than the panel,
+     and panels sank instead of floating. Translucency reads as glass only
+     when the pane is lighter than what is behind it, so the ground has to be
+     the darkest thing in the app, without exception.
+
+     Every ratio in check 11 is measured against these grounds and DARKENING
+     them can only raise it, so this retune moves every text pair the safe
+     way. The tightest pair is --fg-4 on --s-4, which was 3.03 against a 3.0
+     floor — a third of a percent of headroom. It computes to ~3.16 here.
+     Re-run the check rather than trusting that number. */
+  --s-0: #050507;   /* app ground, canvas — the darkest thing, always */
+  --s-1: #0d0e14;   /* panel body, palette list                    */
+  --s-2: #14161f;   /* chrome: rail, inspector, panel header       */
+  --s-3: #1b1e2a;   /* raised: top bar, palette surface, HUD       */
+  --s-4: #262a39;   /* hover fill, AND the selected fill           */
+  --s-5: #323749;   /* pressed only — transient, never a text ground */
 
   /* Hairlines. Both decorative. Neither reaches 3:1 and neither is meant to:
      WCAG 1.4.11 applies to boundaries needed to identify a control or
@@ -127,6 +190,39 @@
      so a user can distinguish their own action from an agent's activity. */
   --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .12);
 
+  /* ── SPIKE: elevation, glass and bevel ──────────────────────────────────
+     Elevation, relocated from bare :root (see the note there). */
+  --e-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --e-2: 0 4px 12px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .40);
+  --e-3: 0 16px 48px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .40);
+  --e-4: 0 32px 80px rgba(0, 0, 0, .65), 0 4px 16px rgba(0, 0, 0, .50);
+
+  /* GLASS — TRANSIENT SURFACES ONLY (palette, nav grid, HUD, launcher).
+     Persistent chrome (rail, inspector, top bar) is deliberately OPAQUE and
+     fakes the same look with --sheen + --glass-edge: three permanently
+     composited backdrop-filter layers over a canvas that repaints on every
+     frame of a pan, alongside up to LIVE_BUDGET WebGL terminals, is real GPU
+     spent blurring a dot grid nobody can read through. Glass is for surfaces
+     that FLOAT OVER CONTENT, where it carries information about depth. */
+  --glass-1: rgba(20, 22, 31, .74);   /* overlay fill over the canvas   */
+  --glass-2: rgba(27, 30, 42, .84);   /* raised region inside an overlay */
+  --glass-edge: rgba(255, 255, 255, .09); /* the lit top edge of a pane */
+
+  /* SHEEN — the opaque fake. A 40%-stop top gradient on a solid surface
+     reproduces most of what the eye reads as "glass" for none of the cost.
+     This is what the rail, inspector and top bar get. */
+  --sheen: rgba(255, 255, 255, .05);
+
+  /* BEVEL — TACTILE CONTROLS ONLY, and only on VERBS (spawn, launch, commit,
+     restart). If every chip in the app is extruded then extrusion stops
+     carrying information and becomes decoration, which is precisely the
+     failure that killed neumorphism as a style. A bevel here means "this
+     does something". Rest = --bevel-hi inside-top + --bevel-lo below;
+     pressed = --press-inset inside-top and the content shifts down --sp-1. */
+  --bevel-hi: rgba(255, 255, 255, .10);
+  --bevel-lo: rgba(0, 0, 0, .45);
+  --press-inset: rgba(0, 0, 0, .55);
+
   /* Back-compat aliases. These are what let the migration land task by task
      instead of as one unreviewable diff, and they mean the file temporarily
      holds two names for one colour — the duplication M10 exists to remove.
@@ -139,6 +235,20 @@
   --panel-bg:  var(--s-1);
   --chrome-bg: var(--s-2);
   --border:    var(--line);
+}
+
+/* SPIKE. The one bundled face. `font-display: block` rather than `swap`
+   deliberately: swap paints the fallback first and then reflows, and a reflow
+   on 56px headline type is a visible jump on every launch. block holds the
+   text invisible for a short period instead — correct for a LOCAL font, which
+   resolves in a frame or two, and wrong for a network one. There is no
+   network here; the file is inside the asar. */
+@font-face {
+  font-family: "Inter Display";
+  src: url("./assets/fonts/InterDisplay-Black.woff2") format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: block;
 }
 
 * {
@@ -159,9 +269,18 @@ body {
   overflow: hidden;
 }
 
+/* SPIKE. The padding is GONE. It reserved --titlebar-h of bare --bg above the
+   shell, in a different value from the top bar directly beneath it — so the
+   window opened with two dark bands of slightly different lightness stacked at
+   the top, which is the classic unfinished tell and was visible in the very
+   first screenshot of the diagnosis.
+
+   The clearance still has to exist (hiddenInset traffic lights are painted
+   over the web contents, not beside them) but it is now paid INSIDE the top
+   bar as left padding and height, so there is one continuous chrome surface
+   from the top edge of the window down. See --shell-top-h. */
 .app {
   height: 100%;
-  padding: var(--titlebar-h) 0 0; /* clears the hiddenInset traffic lights */
 }
 
 /* M8a. The frame. The rail and inspector are grid COLUMNS with real width,
@@ -177,7 +296,14 @@ body {
   display: grid;
   height: 100%;
   grid-template-columns: var(--shell-rail-w) 1fr var(--shell-inspector-w);
-  grid-template-rows: 36px 1fr;
+  /* SPIKE. Was `36px 1fr` under a 38px .app padding — 74px of chrome in two
+     mismatched bands. Now one 56px band that absorbs both. The traffic lights
+     are NOT vertically centred in it (hiddenInset pins them near the top edge
+     and this window sets no trafficLightPosition), so the bar's own controls
+     are centred and the lights sit above-left of them, which reads as
+     deliberate at this height and does not at 36. */
+  --shell-top-h: 56px;
+  grid-template-rows: var(--shell-top-h) 1fr;
   grid-template-areas:
     "top top top"
     "rail canvas inspector";
@@ -204,29 +330,99 @@ body {
   overflow: hidden;
 }
 
+/* SPIKE. Persistent chrome, so it is OPAQUE and fakes glass rather than
+   spending a backdrop-filter (see --sheen). The gradient stops at 40% because
+   a full-height one reads as a colour change rather than as light falling on
+   a surface; the inset hairline is the lit top edge.
+
+   -webkit-app-region: drag makes the whole bar a window drag handle, which it
+   has to be now that it contains the titlebar area. Every CONTROL inside it
+   must set `no-drag` or it becomes undraggable-but-also-unclickable — see
+   .shell__top button below. */
 .shell__top {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: 0 var(--sp-4);
-  background: var(--s-3);
-  box-shadow: var(--e-1);
+  /* The left padding is the traffic-light clearance, paid here instead of as
+     dead space above the shell. */
+  padding: 0 var(--sp-5) 0 var(--sp-9);
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 40%),
+    var(--s-3);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--e-2);
+  -webkit-app-region: drag;
 }
+
+/* The app mark. Display type in the one place it costs nothing and gives the
+   window an anchor — the diagnosis found the bar using roughly a quarter of
+   its width with ~1000px of nothing in the middle. */
+.shell__mark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--t-md);
+  letter-spacing: var(--track-tight);
+  color: var(--fg);
+  margin-right: var(--sp-2);
+  -webkit-app-region: no-drag;
+}
+.shell__mark span { color: var(--iris); }
 
 /* The top bar's controls. Small, quiet chrome: the canvas is the subject and
    a toolbar that competes with it for attention is worse than no toolbar. */
 .shell__top button {
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  border: 1px solid transparent;
   border-radius: var(--r-md);
   background: transparent;
-  color: var(--text);
-  padding: var(--sp-2) var(--sp-4);
+  color: var(--fg-2);
+  padding: var(--sp-3) var(--sp-4);
   font-size: var(--t-sm);
   cursor: pointer;
+  /* The bar itself is a drag region; a control inside a drag region stops
+     receiving clicks unless it opts back out. Omitting this makes every
+     button in the bar silently dead. */
+  -webkit-app-region: no-drag;
 }
-.shell__top button:disabled { color: var(--muted); cursor: default; }
+.shell__top button:hover { background: var(--s-4); color: var(--fg); }
+.shell__top button:disabled { color: var(--fg-4); cursor: default; }
+.shell__top button:disabled:hover { background: transparent; color: var(--fg-4); }
+
+/* TACTILE — and the only tactile control in the top bar, because it is the
+   only VERB there. Zoom and Fit adjust a view; this one starts a process.
+   Rest: lit top edge inside, shadow below, so it reads as raised. */
+.shell__top .shell__spawn {
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, var(--bevel-hi), transparent 55%),
+    var(--s-4);
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 0 1px 2px var(--bevel-lo);
+}
+.shell__top .shell__spawn:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background:
+    linear-gradient(180deg, var(--bevel-hi), transparent 45%),
+    var(--s-5);
+}
+/* Pressed. The inset shadow plus a --sp-1 downward shift of the content is
+   the whole of what makes a bevel read as a button rather than a sticker —
+   without the shift the surface changes but nothing appears to MOVE. */
+.shell__top .shell__spawn:active:not(:disabled) {
+  background: var(--s-3);
+  box-shadow: inset 0 2px 4px var(--press-inset);
+  padding-top: calc(var(--sp-3) + var(--sp-1));
+  padding-bottom: calc(var(--sp-3) - var(--sp-1));
+}
+.shell__top .shell__spawn:disabled {
+  background: var(--s-2);
+  border-color: var(--line);
+  box-shadow: none;
+}
 .shell__zoom { display: flex; align-items: center; gap: var(--sp-2); }
 /* tabular-nums and a min-width so the readout does not shift the buttons
    beside it as the percentage changes width mid-gesture. */
@@ -296,12 +492,15 @@ body {
    plain one that a sliding frame buys nothing here. Don't restate the 60Hz
    claim — a confidently false why gets "fixed" by matching the code to it. */
 
+/* SPIKE. Region titles carry the tracking token rather than a literal, and
+   sit at --fg-4 so they read as captions on the surface rather than as
+   competing headings — there are three of them permanently on screen. */
 .shell__region-title {
   padding: var(--sp-4) var(--sp-5) var(--sp-3);
-  color: var(--muted);
+  color: var(--fg-3);
   font-size: var(--t-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 
@@ -338,12 +537,18 @@ body {
 .rail-list--workspaces,
 .rail-list--attention { flex: 0 1 auto; max-height: 26%; }
 
+/* SPIKE. --r-sm -> --r-md and real vertical rhythm. The rail is a LIST and
+   lists want density, so it deliberately does NOT get --sp-8/--sp-9 (see
+   their note in the token block) — but the diagnosis found twelve rows at 4px
+   of separation reading as one undifferentiated block of text, which is the
+   opposite problem from too much air. */
 .rail-row {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
 }
+.rail-list { row-gap: var(--sp-1); }
 
 /* --s-4 is the ramp's one hover/selected fill (see the token block). It was a
    hand-mixed white overlay, which is a fourth idiom for a state three other
@@ -356,7 +561,14 @@ body {
   transform: translateY(-1px);
   box-shadow: var(--e-1);
 }
-.rail-row--selected { background: var(--s-4); }
+/* SPIKE. An accent bar as well as a fill, matching .palette__row--selected.
+   The rail's selection drives what the inspector shows, so "which row is
+   selected" has to survive a glance across a 240px column. */
+.rail-row--selected {
+  background: var(--s-4);
+  box-shadow: inset 3px 0 0 var(--iris);
+}
+.rail-row--selected .rail-row__label { color: var(--fg); }
 
 /* The row body is a button, not the <li>: three sibling controls rather than
    nested interactive elements, which are invalid HTML and give the browser no
@@ -366,11 +578,11 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-2);
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-3);
   border: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--fg-2);
   font: inherit;
   font-size: var(--t-sm);
   text-align: left;
@@ -449,9 +661,18 @@ body {
   max-height: calc(100% - 60px);
 }
 
+/* SPIKE. The pane's title — the third reader of M6a's honest chain, and the
+   one with room to actually be a heading. It must never write back into
+   PanelSpec: the pane renders the resolved command AND the spec's own answer
+   as separate fields, so a backfill would make them agree and the one surface
+   built to explain the chain would be the one that misrepresents it. */
 .inspector__heading {
   color: var(--fg);
-  font-size: var(--t-lg);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--t-xl);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
   margin-bottom: var(--sp-4);
   /* A resolved command is an absolute path and a title is user text; neither
      is bounded, and the pane is 260px. Break rather than overflow: the rail
@@ -501,10 +722,10 @@ body {
 .inspector__field { margin-bottom: var(--sp-4); }
 
 .inspector__label {
-  color: var(--muted);
+  color: var(--fg-3);
   font-size: var(--t-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 
@@ -513,6 +734,24 @@ body {
   color: var(--fg);
   font-size: var(--t-sm);
   overflow-wrap: anywhere;
+}
+
+/* SPIKE. The empty-state summary rendered its LABELS as letter-spaced caps
+   and its NUMBERS at body size beneath them — so the three most scannable
+   facts in the pane were the quietest things in it. Inverted here: the number
+   is the subject, the label is the caption.
+
+   The [data-summary] hook already existed on these three <dd>s (verify:panels
+   reads them by it), so this needs no markup change. tabular-nums stops the
+   column shifting as a count crosses from 9 to 10. */
+.inspector__value[data-summary] {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--t-2xl);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  font-variant-numeric: tabular-nums;
+  margin-top: var(--sp-1);
 }
 
 .inspector__actions {
@@ -563,7 +802,7 @@ body {
   margin: 0 0 var(--sp-3);
   color: var(--muted);
   font-size: var(--t-xs);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   font-weight: 600;
 }
@@ -677,10 +916,28 @@ body {
      to take whatever ground is behind it, so tokenising it would produce an
      opaque value that stops tracking the vignette it sits on. A future theme
      overrides the ground, not the tick. */
+  /* SPIKE: THE VIGNETTE IS INVERTED, AND THAT IS THE FIX.
+
+     It ran `at 50% 0%` from --s-2 to --s-0, so the TOP of the canvas was the
+     brightest surface in the application — brighter than the panels sitting
+     on it. Panels therefore read as cut into the canvas rather than floating
+     above it, and a translucent pane over it had nothing darker to be
+     translucent against. That single gradient was the largest obstacle to
+     this whole direction, and it is invisible in any static description of
+     the file; it took a screenshot to find.
+
+     Now the light is at the BOTTOM and is far weaker: enough to keep a large
+     dark field from reading as a void (the original, correct, reason for
+     having one) without ever out-lighting a surface placed on it. The ground
+     is the darkest thing in the app, without exception.
+
+     The dot grid is unchanged and its rgba() is still the allowlisted literal
+     verify-styles check 1 names — a translucent iris tick that must take
+     whatever ground is behind it. */
   background:
     radial-gradient(circle at 1px 1px, rgba(103, 232, 249, .05) 1px, transparent 0)
       0 0 / 28px 28px,
-    radial-gradient(120% 80% at 50% 0%, var(--s-2) 0%, var(--s-0) 60%);
+    radial-gradient(140% 90% at 50% 118%, var(--s-1) 0%, var(--s-0) 55%);
   cursor: default;
 }
 
@@ -758,7 +1015,7 @@ body {
 .inspector__links-label {
   color: var(--fg-4);
   font-size: var(--t-xs);
-  letter-spacing: .09em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   margin-bottom: var(--sp-3);
 }
@@ -867,8 +1124,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  /* SPIKE: --r-lg -> --r-xl. A floating pane reads as floating partly through
+     radius; 12px reads as a list row scaled up, 18px reads as an object. */
+  border-radius: var(--r-xl);
   background: var(--panel-bg);
   user-select: none;
   /* Panels had no shadow at all, which is why they read as pasted onto the
@@ -984,22 +1243,43 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-5);
-  padding: var(--sp-3) var(--sp-5);
-  background: var(--chrome-bg);
-  border-bottom: 1px solid var(--border);
+  padding: var(--sp-4) var(--sp-5);
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 60%),
+    var(--chrome-bg);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--glass-edge);
   /* .panel moved from 10px to --r-lg (12px); a calc off the same token rather
      than a literal 11px so the relationship survives a change to the token,
      and so this stays zero literals for the audit. Without matching top
      corners here, a sliver of .panel's own background shows past the header
      at the corners. */
-  border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
+  border-radius: calc(var(--r-xl) - 1px) calc(var(--r-xl) - 1px) 0 0;
   font-size: var(--t-sm);
   user-select: none;
 }
 
 .panel__title {
-  font-weight: 550;
-  letter-spacing: 0.01em;
+  /* SPIKE. Display face at --t-md — not larger, because the chrome is 36px
+     and this has to sit beside a badge — but the WEIGHT and the negative
+     tracking are what separate it from the body text everywhere else. The
+     diagnosis found every string in the app rendering at one weight. */
+  /* SPIKE. Display face at --t-md — not larger, because the chrome is 36px
+     and this has to sit beside a badge — but the WEIGHT and the negative
+     tracking are what separate it from the body text everywhere else. The
+     diagnosis found every string in the app rendering at one weight.
+
+     flex: 1 moves the status badge off centre. With no flex the chrome's
+     space-between distributed three children evenly and parked the badge in
+     the middle of the header, aligned to nothing. min-width/ellipsis below
+     already let this shrink, so a long user title still truncates rather than
+     pushing the close button out of the panel. */
+  flex: 1;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--t-md);
+  color: var(--fg);
+  letter-spacing: var(--track-tight);
   /* A user-set title (M6a) is arbitrary-length text, unlike the fixed labels
      .panel__chrome used to hold. Flex items default to min-width: auto, which
      refuses to shrink below its content's intrinsic width — so without this,
@@ -1079,15 +1359,41 @@ body {
   scrollbar-width: thin;
 }
 
+/* SPIKE. The single highest-leverage surface in the application, and it was
+   the emptiest: panels do not spawn until clicked, so the DEFAULT VIEW of
+   this app is twelve dormant cards — and each was a ~950x580 box containing
+   the words "click to start" in italic mono, ~13px, in the top-left corner.
+   That is the first impression the app makes, and it was blank.
+
+   It is also entirely ours to draw. There is no xterm in a card, no WebGL
+   context, no agent output to fight — pure CSS over which we have total
+   authority, instanced more than anything else on screen.
+
+   NOTE FOR ANYONE EDITING THE MARKUP: this whole treatment is CSS-only, on
+   purpose. verify:panels asserts `.panel__card-idle`.textContent === 'click
+   to start' EXACTLY in three separate checks (and reads `.panel__card`'s own
+   textContent in a fourth), so adding a subtitle element inside either one
+   turns them red. The headline below is the existing string restyled, not new
+   copy. Add a hint element only if you also update those checks. */
 .panel__card {
   flex: 1;
   min-height: 0;
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-6);
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--t-md);
   line-height: var(--lh-tight);
   color: var(--muted);
+}
+
+/* Only the DORMANT card gets the editorial treatment. A spawned card is a
+   tail of real terminal output and must stay monospace, top-aligned and
+   dense — it is data, not a statement. :has() rather than a second class so
+   the markup stays untouched (see the note above). */
+.panel__card:has(.panel__card-idle) {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .panel__card-line {
@@ -1096,9 +1402,24 @@ body {
   text-overflow: ellipsis;
 }
 
+/* The headline. Same three words, ~4x the size, in the display face — this
+   is the whole of the editorial direction expressed on one element.
+
+   max-width in `ch` is what produces the stacked wrap ("click to / start")
+   that the reference image gets from a hard line break. It is a CH unit
+   deliberately: it tracks the font's own measure, so the break holds if the
+   size token changes, and it needs no literal px the spacing audit would
+   reject. --lh-display (below 1) is what keeps the two lines reading as one
+   block rather than as two separate labels. */
 .panel__card-idle {
-  color: var(--muted);
-  font-style: italic;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--t-3xl);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  color: var(--fg);
+  font-style: normal;
+  max-width: 7ch;
 }
 
 /* The card's own left rule. The card sits inside .panel, so it already gets
@@ -1402,7 +1723,7 @@ body {
 .subagent-node__type {
   margin: 0 0 var(--sp-1);
   font: var(--t-xs) / var(--lh-tight) var(--font-mono);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   color: var(--fg-3);
   overflow: hidden;
@@ -1464,10 +1785,17 @@ body {
   top: 12%;
   left: 50%;
   transform: translateX(-50%);
-  width: min(680px, 90%);
+  /* SPIKE: 680 -> 760. The list is long by construction (four rows per
+     preset, one per panel) and the extra width is what lets a row's title and
+     its right-aligned hint coexist without the hint truncating to nothing. */
+  width: min(760px, 92%);
   z-index: 1000;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-lg);
+  /* Glass reads as glass partly through radius. This is a TRANSIENT overlay
+     floating over content, which is exactly the case that earns a real
+     backdrop-filter (see --glass-1) rather than the opaque --sheen fake the
+     rail and top bar get. */
+  border-radius: var(--r-2xl);
   /* --e-3, plus a top inner highlight — the one-line move that separates a
      floating surface from its own shadow.
 
@@ -1476,13 +1804,28 @@ body {
      white, not a theme colour: it models light falling on the surface's top
      edge, so it must composite over whatever --s-3 the active theme sets
      rather than being a colour of its own that a theme has to restate. */
-  box-shadow: var(--e-3);
-  background: color-mix(in srgb, var(--s-3) 78%, transparent);
+  /* --e-4, not --e-3. The ground is near-black now, so the old shadow was
+     invisible against it and the overlay read as pasted on rather than
+     floating; a deeper, wider shadow is what re-separates them. */
+  box-shadow: var(--e-4), inset 0 1px 0 var(--glass-edge);
+  background: var(--glass-1);
   background-image: linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 40%);
   backdrop-filter: blur(20px) saturate(160%);
   overflow: hidden;
   font-size: var(--t-md);
 }
+
+/* SPIKE. An overlay that appears instantly at full opacity is the single
+   loudest "unfinished" tell in a desktop app. Opacity and transform only, on
+   the overlay's OWN element — .world is never touched (four checks read its
+   computed matrix) and this is not in .world. Standing down under
+   prefers-reduced-motion is handled by the global block at the end of the
+   file, which forces every animation to .01ms. */
+@keyframes palette-enter {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.palette { animation: palette-enter var(--dur-2) var(--ease) both; }
 
 /* The input and the scope chip share a row, so entering a drill-in reads as
    the field gaining a token rather than as the whole overlay changing. */
@@ -1490,7 +1833,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: 0 var(--sp-6);
+  padding: 0 var(--sp-7);
   border-bottom: 1px solid var(--line-strong);
 }
 
@@ -1508,14 +1851,20 @@ body {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  padding: var(--sp-5) 0;
+  padding: var(--sp-6) 0;
   background: transparent;
   border: 0;
   color: var(--fg);
   font: inherit;
-  font-size: var(--t-lg);
+  /* SPIKE: --t-lg (15px) -> --t-xl (20px). This is the one element the user
+     is looking at the instant the overlay opens, and it was two thirds the
+     size of the reference's body text. Tracking is negative because it is now
+     large enough for default tracking to read loose. */
+  font-size: var(--t-xl);
+  letter-spacing: var(--track-tight);
   outline: none;
 }
+.palette__input::placeholder { color: var(--fg-4); }
 
 /* Confirm mode has no text to edit, but the field is still what holds DOM
    focus away from xterm — the same job xterm's own hidden textarea does. So it
@@ -1571,20 +1920,30 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: var(--sp-4) var(--sp-6) var(--sp-2);
+  /* SPIKE. More air ABOVE than below, so a header groups with the rows under
+     it rather than floating between two groups. Still --t-xs: these are
+     two-word ALL-CAPS labels at wide tracking, which is the one case the type
+     scale's own comment permits below the 12px floor. */
+  padding: var(--sp-6) var(--sp-7) var(--sp-3);
+  /* Opaque, NOT --glass-1: this is position:sticky and rows scroll UNDER it.
+     A translucent sticky header shows the moving rows through itself, which
+     reads as a rendering bug. */
   background: var(--s-3);
   color: var(--fg-3);
   font-size: var(--t-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-caps);
 }
 
 .palette__row {
   display: flex;
   align-items: baseline;
   gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-6);
+  /* SPIKE. Taller rows. The list is scanned, not read, and 6px of vertical
+     padding put twelve near-identical rows into one undifferentiated block —
+     which is exactly what the palette screenshot in the diagnosis showed. */
+  padding: var(--sp-4) var(--sp-7);
   color: var(--fg-2);
   /* A row answers the pointer — hovering selects it and a mousedown runs it —
      so it must not read as inert text the way `default` makes it. */
@@ -1595,16 +1954,23 @@ body {
      of it. Without this margin, arrowing down into a new section parks the
      selected row UNDERNEATH its own header, which looks exactly like the
      selection having jumped somewhere off screen. */
-  scroll-margin-top: 28px;
+  /* MUST match .palette__section's rendered height, which grew with its
+     padding above (--sp-6 + --t-xs line + --sp-3 ~= 36px). Get this wrong and
+     arrowing into a new section parks the selected row underneath its own
+     header — which looks exactly like the selection jumping off screen. */
+  scroll-margin-top: 36px;
   scroll-margin-bottom: 6px;
 }
 
 /* An accent bar as well as a background shift: at 13px on a dark ground the
    background alone is a subtle enough change that the eye loses the selection
    while scanning, which matters more here than usual because Enter acts on it. */
+/* SPIKE. The accent bar widens and the fill lifts a step. Enter acts on this
+   row, so it is the one thing in the overlay that must never be ambiguous. */
 .palette__row--selected {
   background: var(--s-4);
-  box-shadow: inset 2px 0 0 var(--iris);
+  color: var(--fg);
+  box-shadow: inset 3px 0 0 var(--iris);
 }
 
 .palette__row--disabled {
@@ -1629,6 +1995,7 @@ body {
 .palette__title {
   flex: 1;
   min-width: 0;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1674,7 +2041,7 @@ body {
 }
 
 .palette__empty {
-  padding: var(--sp-4) var(--sp-6);
+  padding: var(--sp-5) var(--sp-7);
   color: var(--fg-3);
 }
 
@@ -1682,10 +2049,10 @@ body {
    overlay swallows rather than passes to the agent, and "esc back" vs
    "esc close" is the only place the two-stage Escape is visible at all. */
 .palette__footer {
-  padding: var(--sp-3) var(--sp-6);
+  padding: var(--sp-4) var(--sp-7);
   border-top: 1px solid var(--line-strong);
   background: var(--s-2);
-  color: var(--fg-3);
+  color: var(--fg-4);
   font-size: var(--t-sm);
 }
 
