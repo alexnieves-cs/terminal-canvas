@@ -136,10 +136,10 @@ const ambiguousKey = (sharing: number): string => `ambiguous:${sharing}`
 interface PanelState {
   /**
    * The slug this claim was derived from. Kept so the NEXT poll can notice
-   * the panel has moved: `attributable` recomputes on the live cwd every
-   * tick, but a claim is made once and nothing else re-derives it, so a panel
-   * that `cd`s into a different repository would go on rendering the first
-   * repository's nodes beside a panel that is no longer in it — a confident
+   * the panel has moved: `poll` recomputes `slugSharing` on the live cwd
+   * every tick, but a claim is made once and nothing else re-derives it, so a
+   * panel that `cd`s into a different repository would go on rendering the
+   * first repository's nodes beside a panel that is no longer in it — a confident
    * wrong attribution, which is the one outcome this whole module's
    * confirmation read exists to prevent, reached after the confirmation
    * rather than at it.
@@ -225,8 +225,11 @@ export class SubagentWatch {
     // because which panels collide can change as panels open and close.
     const slugs = new Map<string, string | null>()
     for (const panel of panels) slugs.set(panel.panelId, slugFor(panel.cwd))
-    // ONE derivation, shared by the refusal and by the count the renderer
-    // states to the user: sharing === 1 IS attributable. See slugSharing.
+    // ONE derivation, shared by the refusal below and by the count the
+    // renderer states to the user: sharing === 1 is the un-ambiguous case,
+    // the same test `attributable` (subagent-scan.ts) states as a pure
+    // function for `verify:subagent` to check — this is the live enforcement,
+    // that is the checked statement of the rule it implements.
     const sharing = slugSharing(slugs)
 
     const out: PollResult[] = []

@@ -130,6 +130,16 @@ export function chooseSession(
  * longer exercises it either: its fixture is three DISTINCT non-null slugs,
  * so the over-correction guard it exists for is proven without resting on
  * this arm.
+ *
+ * `SubagentWatch.poll` does not call this function — it inlines the identical
+ * `sharing === 1` test directly against `slugSharing`'s own map, so the
+ * refusal actually enforced on a running canvas lives there, not here. This
+ * is kept anyway as the rule's pure, checked STATEMENT: the one place the
+ * whole-canvas ambiguity refusal is expressed as a total function, provable
+ * by `verify:subagent` 11/12/12b with no `SubagentWatch` and no filesystem in
+ * earshot. This repo's own rule is that a branch defended only by a check
+ * reads as dead code to the next person who greps for callers and finds
+ * none — this paragraph is what stops that read.
  */
 export function attributable(slugs: ReadonlyMap<string, string | null>): Set<string> {
   const sharing = slugSharing(slugs)

@@ -3373,7 +3373,16 @@ has spawned nothing. Counted from the source rather than from memory: five
 `firstSpawnedAt`).** `create()` stamps `Date.now()` as a session's `spawnedAt`
 only when the session is genuinely NEW; a REATTACHED one reuses the value this
 manager already recorded, via a `firstSpawnedAt` map keyed by panel id that
-survives `detachAll()` and is cleared only in `kill()`. The reason is the same
+survives `detachAll()` and is cleared in `kill()` and in the natural-exit
+branch of `create()`'s `onExit` handler (`pty-manager.ts:437`) — the latter
+guarded by `sessions.get(spec.panelId) === session`, the same identity check
+that already protects `lastLive`, so it fires only when the process ended on
+its own (the panel's own shell typed `exit`) and not on either teardown path:
+`detachAll()` and `kill()` both delete the map entry synchronously, before
+`onExit` ever runs, so the guard is false there and the natural-exit branch
+never touches an entry either of them was responsible for — which is what
+keeps `detachAll()`'s deliberate preservation of the value intact. The reason
+the value is preserved at all through a reattach is the same
 ambiguity M6a's `reattached` flag already exists to name one layer down:
 `new-session -A` makes "this client just attached" and "this process just
 started" the same tmux call, so a reattached session's Claude Code session
