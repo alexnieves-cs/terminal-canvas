@@ -2578,6 +2578,63 @@ const filePanelOnDisk = (id, over = {}) => ({
     `providers=${JSON.stringify(L.WORK_PROVIDERS)}`)
 }
 
+// 151. Legacy `kind: 'jira'` migrates and warns NOTHING. It is every file
+// written between M17 and M24, which is exactly the standing an absent `kind`
+// has at M9b: a historical fact about earlier files, not a message from a
+// later version. A warning here would put a line in the log for every panel a
+// working user already has.
+{
+  const parsed = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+      panels: [{ id: 'j3', kind: 'jira', x: 0, y: 0, w: 640, h: 520, z: 1 }]
+    }]
+  }))
+  const p = active(parsed.snapshot).panels[0]
+  ok('151 a legacy jira panel migrates to work/jira and warns nothing',
+    p !== undefined && p.kind === 'work' && p.provider === 'jira' &&
+      !parsed.warnings.some((w) => w.includes('j3')),
+    `kind=${p && p.kind} provider=${p && p.provider} warnings=${JSON.stringify(parsed.warnings)}`)
+}
+
+// 152. An UNKNOWN provider drops THAT panel with a warning while its neighbour
+// survives — the individual-drop rule this file obeys everywhere else, plus
+// M20's closed-union rule. Both clauses are required: dropping everything
+// satisfies "the bad one is gone" while silently emptying the canvas.
+{
+  const parsed = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+      panels: [
+        { id: 'w9', kind: 'work', provider: 'linear', x: 0, y: 0, w: 640, h: 520, z: 1 },
+        { id: 'w8', kind: 'work', provider: 'github', x: 0, y: 0, w: 640, h: 520, z: 2 }
+      ]
+    }]
+  }))
+  const panels = active(parsed.snapshot).panels
+  ok('152 an unknown provider is dropped alone, with a warning',
+    panels.length === 1 && panels[0].id === 'w8' && panels[0].provider === 'github' &&
+      parsed.warnings.some((w) => w.includes('w9') && w.includes('linear')),
+    `panels=${JSON.stringify(panels.map((p) => p.id))} warnings=${JSON.stringify(parsed.warnings)}`)
+}
+
+// 153. An ABSENT provider on a `work` panel is DROPPED, never defaulted to
+// jira. Defaulting would render one provider's panel under another's name and
+// run the other's query behind it — a confident wrong answer, where a drop is
+// merely a loss the warning explains.
+{
+  const parsed = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+      panels: [{ id: 'w7', kind: 'work', x: 0, y: 0, w: 640, h: 520, z: 1 }]
+    }]
+  }))
+  ok('153 a work panel with no provider is dropped, not defaulted',
+    active(parsed.snapshot).panels.length === 0 &&
+      parsed.warnings.some((w) => w.includes('w7')),
+    `panels=${active(parsed.snapshot).panels.length} warnings=${JSON.stringify(parsed.warnings)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

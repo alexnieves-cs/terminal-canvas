@@ -3,6 +3,7 @@ import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
+import { isWorkProvider, type WorkProvider } from './work-item'
 import {
   AGENT_KINDS,
   EFFORTS,
@@ -131,7 +132,17 @@ export interface PersistedFilePanel extends PersistedPanelBase {
    */
   source: FileSource
 }
-export interface PersistedJiraPanel extends PersistedPanelBase { kind: 'jira' }
+/**
+ * M17 shipped this as `kind: 'jira'`. M24 renamed it, because a second
+ * provider arrived and the kind was never about Jira — it is about work a
+ * service says you owe. Legacy records migrate on parse; see the `'jira'` arm
+ * in parsePanel, which warns nothing because those files are every file a
+ * working user already has.
+ */
+export interface PersistedWorkPanel extends PersistedPanelBase {
+  kind: 'work'
+  provider: WorkProvider
+}
 
 /**
  * M21's toolbox node. Like a review node and a file panel, it carries NO cwd
@@ -147,7 +158,7 @@ export type PersistedPanel =
   | PersistedTerminalPanel
   | PersistedReviewPanel
   | PersistedFilePanel
-  | PersistedJiraPanel
+  | PersistedWorkPanel
   | PersistedToolboxPanel
 
 /**
@@ -489,7 +500,23 @@ function parsePanel(
     if (source === null) return null
     return { ...base, kind: 'file', source }
   }
-  if (kind === 'jira') return { ...base, kind: 'jira' }
+  // Legacy, and it warns NOTHING: every file written between M17 and M24 says
+  // 'jira', which is a historical fact about earlier files rather than a
+  // message from a later version — the standing an absent `kind` has at M9b.
+  if (kind === 'jira') return { ...base, kind: 'work', provider: 'jira' }
+  if (kind === 'work') {
+    const provider = (raw as Record<string, unknown>).provider
+    // Closed union, dropped rather than defaulted. Defaulting to jira here
+    // would render a GitHub panel under Jira's name and run Jira's query
+    // behind it — a confident wrong answer, where a drop is a loss the
+    // warning explains. Absent and unknown are one arm on purpose: neither is
+    // a provider this version can render.
+    if (!isWorkProvider(provider)) {
+      warnings.push(`dropped panel ${id}: unknown work provider ${JSON.stringify(provider)}`)
+      return null
+    }
+    return { ...base, kind: 'work', provider }
+  }
   if (kind === 'toolbox') {
     const source = parseToolboxSource(raw.source, id, warnings)
     if (source === null) return null
