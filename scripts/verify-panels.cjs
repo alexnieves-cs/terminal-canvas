@@ -8969,6 +8969,17 @@ app.whenReady().then(async () => {
         {
           const treeDir3 = mkdtempSync(join(tmpdir(), 'tc panels tree3 '))
           writeFileSync(join(treeDir3, 'stub.txt'), 'x\n')
+          // Both spellings, the same fence checks 43/117/127 already carry:
+          // macOS tmpdir() answers /var/folders/..., a resolved read answers
+          // /private/var/folders/... for the identical directory, and this
+          // fixture's own delay before the delete+refresh (waiting up to
+          // 8000ms for the session, then a settle, then the disk ops) is
+          // comfortably past M12's 2s live-cwd tick — so by the time the row
+          // renders, treeRoot may already have moved onto the RESOLVED
+          // spelling tmux reports, and a single-spelling selector goes red on
+          // a real machine even though the fix under test is correct. This
+          // was found failing on an uncontended, clean full-suite run.
+          const treeDir3Real = (() => { try { return realpathSync(treeDir3) } catch { return treeDir3 } })()
 
           const id3 = await spawnAt(treeDir3)
           if (id3) await waitUntil(async () => (await sessionMap(wc)).has(id3), 8000)
@@ -8988,9 +8999,19 @@ app.whenReady().then(async () => {
           const refreshed = switched3
             ? await dispatchClick('.shell__tree .shell__region-add')
             : false
+          // Both spellings tried, in order — the same OR check 127 already
+          // makes on `read.root`: treeRoot may have moved to the RESOLVED
+          // spelling by the time this row rendered, so a query keyed on only
+          // the raw fixture path finds nothing (querySelector on an
+          // attribute value that no longer matches returns null, exactly the
+          // false-red this produced), and this is a query-selector match, not
+          // a Set membership test, so both spellings have to be tried as
+          // actual selectors rather than compared afterward.
           const noteText = refreshed
             ? await waitUntil(() => wc.executeJavaScript(`(() => {
-                const el = document.querySelector('.shell__tree [data-file-note="${treeDir3}"]')
+                const byRaw = document.querySelector('.shell__tree [data-file-note="${treeDir3}"]')
+                const byReal = document.querySelector('.shell__tree [data-file-note="${treeDir3Real}"]')
+                const el = byRaw || byReal
                 return el ? el.textContent : null
               })()`), 5000)
             : null
