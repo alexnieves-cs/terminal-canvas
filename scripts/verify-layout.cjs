@@ -2561,6 +2561,23 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ bare, withOpts, capBare, capOpts }))
 }
 
+// 150. The provider union is CLOSED and its guard rejects everything outside
+// it. A closed union that fails safe is M20's permissionMode rule: a value
+// written by a version that knows a provider this one does not is one we
+// cannot render, and guessing renders one provider's panel under another's
+// name. The label map is asserted TOTAL in the same read, because a missing
+// entry renders a panel titled `undefined` rather than failing to compile.
+{
+  const known = L.WORK_PROVIDERS.every((p) => L.isWorkProvider(p))
+  const labelled = L.WORK_PROVIDERS.every(
+    (p) => typeof L.WORK_PROVIDER_LABEL[p] === 'string' && L.WORK_PROVIDER_LABEL[p] !== ''
+  )
+  const rejects = ['linear', '', 'JIRA', null, undefined, 7, {}].every((v) => !L.isWorkProvider(v))
+  ok('150 the provider union is closed, guarded and totally labelled',
+    known && labelled && rejects && L.WORK_PROVIDERS.length === 2,
+    `providers=${JSON.stringify(L.WORK_PROVIDERS)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

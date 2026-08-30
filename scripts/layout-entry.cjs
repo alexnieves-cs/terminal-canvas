@@ -28,5 +28,10 @@ module.exports = {
      module out of the plain-node tier, not the filesystem. Numbered M13
      during its own design and implementation; renumbered on merge — a
      different, unrelated milestone had already claimed M13. */
-  ...require('../src/main/fs-tree')
+  ...require('../src/main/fs-tree'),
+  /* M24: work-item.ts imports NOTHING at all — the same standing
+     credential-schema.ts has — so it costs this tier nothing, and the layout
+     suite is where its provider union is checked because that union is what
+     parsePanel validates a persisted `work` panel against. */
+  ...require('../src/shared/work-item')
 }
