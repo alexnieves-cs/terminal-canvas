@@ -43,17 +43,20 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 | #3 file tree / codebase browser | M20 | "Every file row mounts `shellControl`, and here that is not a convention" |
 
-Ten more entries were rewritten rather than removed, because a milestone shipped most of
-each and stopped somewhere deliberate: **#14** (M16 left tiers 2–4, and the
-who-wins-on-conflict question tier 1 was built specifically to avoid needing), **#17** (M6d
-left the OS notification), **#19** (M17 left history/retention, a second CLI adapter, the
-un-pinned panel and aggregate totals), **#24** (M13 left the functional flavour), **#25**
-(M6 left snapping and tidy), **#27** (M5b left placeholders), **#34** (M5a left per-preset
-environment), **#41** (M12 left review's cwd resolution), **#51** (M9a–c left discard) and
-**#52** (M18 left shift-click and group drag). The membership changed at M18 without the
-count moving, and the churn is the shape to expect: **#2** left this list for the gone table
-above, and **#52** took its place. An entry rewritten down to its open half is one milestone
-from leaving the file entirely.
+Thirteen more entries were rewritten rather than removed, because a milestone shipped most
+of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
+OAuth 3LO and a second provider), **#13** (the drop guard and Finder path resolution both
+landed; the handoff into the PTY did not), **#14** (M16 left tiers 2–4, and M22 answered
+the who-wins-on-conflict question), **#17** (M6d left the OS notification), **#19** (M17
+left history/retention, a second CLI adapter, the un-pinned panel and aggregate totals),
+**#24** (M13 left the functional flavour), **#25** (M6 left snapping and tidy), **#26** (M21
+left the cross-panel query and the editing half), **#27** (M5b left placeholders), **#34**
+(M5a left per-preset environment), **#41** (M12 left review's cwd resolution), **#51**
+(M9a–c left discard) and **#52** (M18 left shift-click and group drag). The membership
+churns rather than only growing, and that is the shape to expect: **#2** left this list for
+the gone table above when M18 finished it, while **#12**, **#13**, **#26** and **#52**
+joined it. An entry rewritten down to its open half is one milestone from leaving the file
+entirely.
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -226,65 +229,80 @@ A theme the user picks — light or dark — plus, presumably, "follow the syste
   so it can say the stylesheet obeys the rules and nothing at all about whether the app
   looks right. There is no visual regression test in this repo, deliberately.
 
-## 12. Jira connection — tickets as first-class canvas context
+## 12. Jira connection — landed in M19; writes, Server/DC, OAuth and a second provider are what's left
 
-Connect to Jira so the user can see tickets assigned to them or to the team, without
-leaving the canvas.
+**M19 shipped the Jira Cloud read path AND the handoff this entry called "the version worth
+building".** Jira is deliberately the first #9 tier-2 implementation rather than an invented
+integration surface: `main/jira-client.ts` behind the `jira:list` invoke, a `kind: 'jira'`
+panel listing the tickets assigned to the authenticated user, and a **Start session** control
+per ticket that spawns an ordinary titled terminal panel with the ticket's description handed
+to the agent as a bracketed `paste()` — never a raw `write()`, the distinction #27 records and
+`verify:panels` 40 is the only check able to tell apart. The vendor-neutral boundary this entry
+asked for is `shared/work-item.ts`'s `WorkItem` (`id`, `title`, `description`, `assignee`,
+`state`, `url`), and the Jira types genuinely do not leak into the panel-spawning code.
 
-- **Formally this is #9 tier 2** (an API with real auth), and it should reuse whatever
-  that tier's integration surface turns out to be. It is listed separately because its
-  *value* is different from a generic integration: a ticket is a **unit of work**, and
-  this app's unit is also a unit of work. That overlap is the interesting part.
-- **The obvious version is a panel that lists tickets.** Useful, modest, and it is what
-  most tools stop at.
-- **The version worth building is a ticket that becomes a session.** Drag a ticket onto
-  the canvas → it spawns a panel, named after the ticket (#6 already gives the header),
-  in the right repo, with the ticket's description handed to the agent as its opening
-  context. Ticket → branch → panel → PR is a real workflow and the canvas is an unusually
-  good place to see several of them running at once. Combined with #5's status glow, a
-  wall of tickets-in-progress is legible at a glance in a way a Jira board is not.
-- **Constraint:** Jira Cloud is OAuth 2.0 (3LO) with refresh tokens; Server/Data Center
-  is a different auth story entirely. Assume Cloud first and say so, rather than
-  discovering the split mid-build.
-- **Constraint:** read-only first. Writing to Jira — transitioning a ticket, commenting —
-  from an app where agents run arbitrary commands is a meaningfully different risk
-  posture than reading. Ship reads, then decide about writes deliberately.
-- **Note:** the same shape generalises to Linear and GitHub Issues. If the ticket model
-  is kept vendor-neutral (id, title, description, assignee, state, url) with a thin
-  Jira adapter, the second provider is cheap. Do not build the abstraction until the
-  second provider is actually wanted — but do keep the Jira types from leaking into the
-  panel-spawning code.
+Two decisions worth not re-litigating. **Cloud API-token Basic auth was chosen deliberately
+over OAuth 3LO** for this private client — the redirect, expiry and refresh lifecycle needs a
+milestone of its own, and #28's constraint about an OAuth callback navigating the window
+(which would kill every PTY) is the reason it is not a small one. And the credential itself
+goes through M14's store, so this integration **inherited a boundary rather than inventing
+one** — which is what #9's design-pass bullet said the first tier-2 implementation should be
+able to do.
 
-**M17 landed the Jira Cloud read-only path.** Jira is deliberately the first tier-2
-integration, not an invented integration surface: it has a Jira-specific panel and one
-vendor-neutral work-item boundary. Cloud API-token Basic auth was explicitly chosen for
-this private client; OAuth 3LO was rejected for now because its redirect, expiry and refresh
-lifecycle needs its own milestone. The panel lists assigned tickets and starts ordinary titled
-terminal sessions with descriptions inserted by bracketed paste. Writes, Server/Data Center,
-OAuth and a second provider remain open.
+What's still open:
 
-## 13. Drag and drop images into a session (terminal or chat)
+- **Writes — transitioning a ticket, commenting.** The original read-only-first constraint
+  stands unchanged and was a stance rather than a scope cut: writing to Jira from an app where
+  agents run arbitrary commands is a meaningfully different risk posture than reading. Ship
+  reads, then decide about writes deliberately — that decision has not been made.
+- **Server / Data Center.** A different auth story entirely, and still unaddressed. Cloud was
+  assumed and said so, which is what this entry asked for.
+- **OAuth 3LO**, per the deferral above.
+- **A second provider — Linear or GitHub Issues.** `WorkItem` is the vendor-neutral shape the
+  original note asked to keep, and the constraint it came with is unchanged: **do not build
+  the abstraction until the second provider is actually wanted.** One adapter exists.
+- **The wall-of-tickets-in-progress view.** Combined with the agent-state glow (M6c), several
+  ticket-spawned panels running at once are legible at a glance in a way a Jira board is not —
+  but nothing groups or labels them as such today. That is #35's territory, not this entry's.
+
+## 13. Drag and drop images into a session — the guard and the path both landed; the handoff did not
 
 Drop an image onto a panel and have the AI in it receive the image — whether that panel
 is a terminal running an agent CLI or a native chat box (#8).
 
-- **Read this constraint before anything else: an unhandled file drop can kill every
-  session in the app.** Dropping a file onto an Electron renderer makes the page navigate
-  to `file://…` by default, and `window-lifecycle.ts` kills a window's PTYs when its
-  renderer navigates — by design, for Cmd+R. So the failure mode is not "the drop does
-  nothing", it is *every running agent dies and the canvas reloads into a blank grid*.
-  `preventDefault()` on both `dragover` and `drop`, at the document level, is mandatory
-  and should arguably be added **now** as a standalone guard, before this feature is ever
-  scheduled. This is the highest-value line in this entry.
+- ~~**Read this constraint before anything else: an unhandled file drop can kill every
+  session in the app.**~~ **Done, and it was the highest-value line in this entry.**
+  `src/renderer/drop-guard.ts` now `preventDefault()`s both `dragover` and `drop` at the
+  document level, independently of whether this feature is ever built, with
+  `main/index.ts`'s `will-navigate` refusal as a second line of defence. Both listeners
+  are required and they cancel different things — cancel only `drop` and the default
+  navigation still happens; cancel only `dragover` and the drop fires uncancelled — which
+  is why `verify:canvas` 5 and 6 assert each half separately. The failure it removes was
+  never "the drop does nothing": it was *every running agent dies and the canvas reloads
+  into a blank grid*, because `window-lifecycle.ts` kills a window's PTYs on navigation by
+  design. **When this feature is built it hangs off these same two events — the handlers
+  gain behaviour, but they must keep cancelling.**
 - **The chat-box half is the straightforward one.** A chat panel talks to an API that
   takes images as base64 parts. Read the file in main, attach it to the request. Ordinary.
 - **The terminal half is the interesting one, and it has a real answer.** A PTY is a byte
   stream — you cannot hand it an image. But the agent CLIs already solved this: they
   accept **file paths** in their input and read the image themselves. So the drop
   handler's job is to produce a path and type it into the terminal. Two cases:
-  1. **A file dragged from Finder** — already has a path. In Electron 32+, `File.path` is
-     gone; use `webUtils.getPathForFile(file)` from the preload. Write the path into the
-     PTY via the existing `pty:write` channel and the feature is essentially done.
+  1. **A file dragged from Finder** — already has a path, and **half of this case is
+     already built**. M16 needed the same resolution for its file panels, so
+     `webUtils.getPathForFile(file)` is exposed through the preload as
+     `window.canvas.file.pathForFile` and `Canvas.tsx`'s `onDrop` already calls it — the
+     Electron 32+ removal of `File.path` this bullet warned about is handled, and
+     `CLAUDE.md` records why it had to be (a missing property reads as `undefined`
+     exactly like a legitimately absent one, so the mint silently does nothing). What is
+     missing is only the *destination*: a Finder drop currently mints a file panel, and
+     routing it into the hovered panel's PTY over the existing `pty:write` channel is the
+     remaining work. Note it must go through `paste()` rather than a raw write if more
+     than a bare path is ever sent, per #27.
+     **Also still unresolved: a drop now has two plausible meanings** — open this file as
+     a panel (M16) or hand it to the agent under the cursor (this entry) — and nothing
+     disambiguates them. A modifier, or the drop target, has to decide, and that choice is
+     this entry's real remaining design cost rather than the plumbing.
   2. **An image dragged from a browser or pasted from the clipboard** — bytes, no path.
      Main writes them to a temp file and the same path-typing path applies. Needs a
      cleanup policy so the temp directory does not grow without bound.
