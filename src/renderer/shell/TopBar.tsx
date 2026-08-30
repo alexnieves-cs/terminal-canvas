@@ -55,6 +55,16 @@ export function TopBar({
 
   return (
     <header className="shell__top" aria-label="Toolbar">
+      {/*
+        SPIKE. The bar was using roughly a quarter of its width — four small
+        controls hard-left, two hard-right, and ~1000px of nothing between.
+        This is the window's only fixed anchor and the one place display type
+        costs nothing (it is inside the traffic-light clearance the bar now
+        pays for itself, so it occupies space that was previously dead).
+        aria-hidden: it is decoration, and the window already has a title.
+      */}
+      <span className="shell__mark" aria-hidden="true">terminal<span>.</span></span>
+
       <button
         type="button"
         className="shell__spawn"
