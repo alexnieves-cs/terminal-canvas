@@ -162,10 +162,56 @@ ok(10, 'at least one :focus-visible rule exists', all.some((r) => /:focus-visibl
 // 11 — measured contrast for every text token against every ground it can
 //      land on. --s-5 is deliberately NOT a ground: it is a pressed state,
 //      transient, and no text is ever read against it.
-const tok = {}
-for (const r of themeRules) {
-  for (const m of r.body.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) tok[m[1]] = m[2]
+//
+//      M23a WIDENED THIS TO LOOP OVER BLOCKS, and the old shape was not merely
+//      narrow — it was WRONG in a way that got worse rather than better as
+//      themes were added. It flattened EVERY theme rule into one token map,
+//      last write wins, so a second block did not go unmeasured: it
+//      OVERWROTE whichever tokens it happened to declare and left the rest
+//      standing, and check 11 then measured a CHIMERA belonging to no theme.
+//      Measured, with a probe block declaring only --s-0/--s-4/--fg*: the
+//      check reported `--fg on --s-1 = 1.04`, pairing the probe's text with
+//      the previous block's surface. Both halves of that number were real and
+//      the pair had never existed.
+//
+//      M19's own comment in styles.css names this as the blocker for a second
+//      theme, in as many words: "A dark soft variant is a real follow-up and
+//      it needs check 11 taught to loop over blocks FIRST". This is that.
+//
+//      The grouping follows the CASCADE rather than source order, because that
+//      is what the browser will do: bare `:root` is the base layer, and a
+//      `[data-theme="X"]` block overlays it — `:root` is (0,1,0) and
+//      `:root[data-theme="X"]` is (0,2,0), so specificity decides and a block
+//      can be appended without reordering anything. A rule whose selector
+//      names BOTH (`:root, :root[data-theme="dark"]`, which is what ships
+//      today) contributes to the base AND to that theme, which is exactly what
+//      the browser resolves it to.
+const hexes = (body) => {
+  const out = {}
+  for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2]
+  return out
 }
+const themeNames = [...new Set(
+  themeRules.flatMap((r) => [...r.sel.matchAll(/\[data-theme="([a-z0-9-]+)"\]/g)].map((m) => m[1]))
+)]
+// Bare `:root` with no attribute — the base every theme inherits.
+const baseTokens = {}
+for (const r of themeRules) {
+  if (/(^|,)\s*:root\s*(,|$)/.test(r.sel)) Object.assign(baseTokens, hexes(r.body))
+}
+// One entry per theme, base overlaid with that theme's own declarations. If
+// the stylesheet declares no named theme at all, the base IS the palette and
+// is measured under the name 'default' — never skipped, or removing the
+// attribute selector would silently switch this check off.
+const palettes = themeNames.length === 0
+  ? [{ name: 'default', tok: baseTokens }]
+  : themeNames.map((name) => {
+    const tok = { ...baseTokens }
+    for (const r of themeRules) {
+      if (r.sel.includes(`[data-theme="${name}"]`)) Object.assign(tok, hexes(r.body))
+    }
+    return { name, tok }
+  })
 const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
 const lum = (h) => {
   const n = h.slice(1)
@@ -176,15 +222,22 @@ const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y
 const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4']
 const texts = { '--fg': 4.5, '--fg-2': 4.5, '--fg-3': 4.5, '--fg-4': 3.0 }
 const bad = []
-for (const [t, min] of Object.entries(texts)) {
-  for (const g of grounds) {
-    if (!tok[t] || !tok[g]) { bad.push(`${t}/${g} undeclared`); continue }
-    const r = ratio(tok[t], tok[g])
-    if (r < min) bad.push(`${t} on ${g} = ${r.toFixed(2)} (need ${min})`)
+for (const { name, tok } of palettes) {
+  for (const [t, min] of Object.entries(texts)) {
+    for (const g of grounds) {
+      if (!tok[t] || !tok[g]) { bad.push(`${name}: ${t}/${g} undeclared`); continue }
+      const r = ratio(tok[t], tok[g])
+      if (r < min) bad.push(`${name}: ${t} on ${g} = ${r.toFixed(2)} (need ${min})`)
+    }
   }
 }
-ok(11, 'every text token clears its ratio on every ground it can land on',
-  bad.length === 0, bad.join('; '))
+// `palettes.length > 0` is the NON-VACUITY guard and is not optional: a regex
+// that matched nothing would produce no palettes, push no failures, and pass —
+// a check that has quietly stopped existing, which is the shape this file's own
+// header warns about at length.
+ok(11, 'every text token clears its ratio on every ground, in every theme',
+  bad.length === 0 && palettes.length > 0,
+  bad.length ? bad.join('; ') : `${palettes.length} theme(s) measured: ${palettes.map((p) => p.name).join(', ')}`)
 
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
