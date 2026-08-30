@@ -16,7 +16,14 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  external: ['node-pty', 'electron']
+  external: ['node-pty', 'electron'],
+  // M17: main/ipc.ts now imports main/file-write.ts (for the file:write
+  // handler), which imports FILE_MAX_BYTES — a real VALUE — from
+  // @shared/file-panel. This bundle resolved no alias before that import
+  // reached it, the same gap CLAUDE.md records for verify-panels.cjs and
+  // verify-canvas.cjs: each esbuild call site needs its own alias, and this
+  // one had never needed it until now.
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
 })
 const { IPC, registerIpcHandlers } = require(OUT)
 
@@ -150,7 +157,14 @@ app.whenReady().then(() => {
   // IPC.TOOLBOX_READ's own comment. This number was 43 on the M21 branch,
   // computed against a base that predated fs:list; the merge is what makes
   // it 44, which is the arithmetic both copies of this count must agree on.
-  const EXPECTED_CHANNELS = 44
+  // 45 = 44 plus M22's file:write — the editable file panel's one new invoke,
+  // which carries the mtime a draft was seeded from so main can REFUSE a save
+  // whose view of the file is stale rather than destroy the newer bytes.
+  // M22 was built and reviewed as "M17" and renumbered on merge, since main
+  // had already claimed M17 (the Jira canvas context, and a separate
+  // M15 -> M17 renumber before that) by the time it landed. That makes it the
+  // fourth milestone in this file's own history to be renumbered at a merge.
+  const EXPECTED_CHANNELS = 45
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -11,7 +11,7 @@
    reviews because every fixture used a space-free path. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync, lstatSync, chmodSync, symlinkSync, readdirSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'file.cjs')
@@ -154,6 +154,136 @@ const p = (name) => join(DIR, name)
   const c10 = await nextChange(calls10, 1500)
   ok(10, c10 === null && watchers.count() === 0,
     `10 — closeAll disarms: events=${calls10.length} count=${watchers.count()}`)
+
+  // ── M22: the write verb ────────────────────────────────────────────────
+
+  // 11 — the ordinary case. The returned mtimeMs is asserted against a fresh
+  // stat because that value BECOMES the next save's CAS token: a write that
+  // reported a stale or invented timestamp would make the very next save
+  // refuse itself, which reads as "saving is broken" and points nowhere near
+  // the return value that caused it.
+  writeFileSync(p('edit.txt'), 'before\n')
+  const base11 = F.readFile(p('edit.txt')).mtimeMs
+  const w11 = F.writeFile(p('edit.txt'), 'after\n', base11)
+  const disk11 = readFileSync(p('edit.txt'), 'utf8')
+  ok(11, w11.kind === 'written' && disk11 === 'after\n' && w11.bytes === 6
+      && w11.mtimeMs === statSync(p('edit.txt')).mtimeMs,
+    `11 — a write with a current token lands: kind=${w11.kind} disk=${JSON.stringify(disk11)}`)
+
+  // 12 — THE CHECK THIS MILESTONE EXISTS FOR. A stale token is refused AND
+  // NOTHING IS WRITTEN. The second clause is the whole check: asserting only
+  // the refusal passes against an implementation that refused the caller and
+  // wrote the file anyway, which is the exact silent destruction the CAS is
+  // for. verify:credentials 6 states the identical rule for the credential
+  // store's refusal.
+  writeFileSync(p('cas.txt'), 'v1\n')
+  const stale12 = F.readFile(p('cas.txt')).mtimeMs
+  // A real second write by "the agent". The sleep is what makes the mtime
+  // actually move: HFS+/APFS report mtime in ms and two writes in the same
+  // millisecond would collide, making this check pass for the wrong reason.
+  await new Promise((r) => setTimeout(r, 20))
+  writeFileSync(p('cas.txt'), 'agent wrote this\n')
+  const w12 = F.writeFile(p('cas.txt'), 'my edit\n', stale12)
+  const disk12 = readFileSync(p('cas.txt'), 'utf8')
+  ok(12, w12.kind === 'stale' && disk12 === 'agent wrote this\n',
+    `12 — a stale token refuses and writes NOTHING: kind=${w12.kind} disk=${JSON.stringify(disk12)}`)
+
+  // 13 — deleted underneath the draft. Its own detail, and still `stale`
+  // rather than a silent re-creation: a file panel is opened on a file that
+  // exists, so recreating one the user (or an agent) deliberately removed is
+  // resurrecting content nobody asked for.
+  writeFileSync(p('gone.txt'), 'here\n')
+  const base13 = F.readFile(p('gone.txt')).mtimeMs
+  rmSync(p('gone.txt'))
+  const w13 = F.writeFile(p('gone.txt'), 'back?\n', base13)
+  ok(13, w13.kind === 'stale' && typeof w13.detail === 'string' && w13.detail.length > 0
+      && F.readFile(p('gone.txt')).kind === 'missing',
+    `13 — a deleted file refuses as stale and is not recreated: kind=${w13.kind}`)
+
+  // 14 — the byte cap on the way OUT. The read refuses a file over the cap,
+  // so the write must too, or a panel can grow a file past the limit it can
+  // then never display again. The file on disk is asserted unchanged, which
+  // is check 12's clause applied to the other refusal.
+  writeFileSync(p('cap.txt'), 'small\n')
+  const base14 = F.readFile(p('cap.txt')).mtimeMs
+  const w14 = F.writeFile(p('cap.txt'), 'x'.repeat(F.FILE_MAX_BYTES + 1), base14)
+  ok(14, w14.kind === 'failed' && readFileSync(p('cap.txt'), 'utf8') === 'small\n',
+    `14 — over the byte cap fails and writes nothing: kind=${w14.kind}`)
+
+  // 15 — no temp file left behind, on the SUCCESS path and on the REFUSAL
+  // path. What this proves: neither path leaves a stray
+  // `.foo.txt.tc-abc123.tmp` in the directory — a litter file with this
+  // app's fingerprints on it, in a repository the user is working in —
+  // asserted by reading the directory rather than by trusting the code.
+  //
+  // What it does NOT prove: that the `finally { rmSync(tmp, ...) }` block
+  // itself is exercised. `renameSync` consumes the temp file on the success
+  // path, and the stale refusal returns before `tmp` is even constructed —
+  // so neither path this check drives ever depends on that cleanup running.
+  // The block is reachable only from a throw BETWEEN `writeFileSync` and
+  // `renameSync`, and there is no honest way to force that on macOS: a
+  // read-only directory fails the temp CREATION itself (so there is no temp
+  // to leak), a directory target is refused before the temp is ever
+  // constructed, and EXDEV is unreachable because the temp is deliberately
+  // created in the target's own directory. Forcing it needs a filesystem
+  // fault injector this repo does not have, so the block stays uncovered by
+  // design rather than by oversight. Confirmed by injection: commenting out
+  // the `finally` block left this check green — 19/19, unchanged.
+  mkdirSync(p('litter'), { recursive: true })
+  const litter = (name) => join(DIR, 'litter', name)
+  writeFileSync(litter('t.txt'), 'v1\n')
+  const base15 = F.readFile(litter('t.txt')).mtimeMs
+  F.writeFile(litter('t.txt'), 'v2\n', base15)
+  const afterOk = readdirSync(p('litter'))
+  F.writeFile(litter('t.txt'), 'v3\n', base15 - 1000)  // deliberately stale
+  const afterStale = readdirSync(p('litter'))
+  ok(15, afterOk.length === 1 && afterOk[0] === 't.txt'
+      && afterStale.length === 1 && afterStale[0] === 't.txt',
+    `15 — no temp file survives either path: success=${JSON.stringify(afterOk)} refusal=${JSON.stringify(afterStale)}`)
+
+  // 16 — the mode is preserved. A fresh temp file is created at the umask, so
+  // an implementation that forgot the chmod silently strips the executable
+  // bit off every script it saves — a loss discovered days later by something
+  // that failed to run, with nothing pointing at the editor that caused it.
+  writeFileSync(p('script.sh'), '#!/bin/sh\necho hi\n')
+  chmodSync(p('script.sh'), 0o755)
+  const base16 = F.readFile(p('script.sh')).mtimeMs
+  F.writeFile(p('script.sh'), '#!/bin/sh\necho bye\n', base16)
+  const mode16 = statSync(p('script.sh')).mode & 0o777
+  ok(16, mode16 === 0o755, `16 — the file mode survives a save: mode=${mode16.toString(8)}`)
+
+  // 17 — a symlink's TARGET is written and the link is still a link. Without
+  // realpathSync, renameSync(tmp, real) renames onto the LINK's own path
+  // rather than the target's: the user's symlink is silently replaced by a
+  // regular file, and target.txt is never touched at all. For that
+  // regression both clauses fail TOGETHER — the target's content clause
+  // alone is the discriminator, since the write never reaches target.txt
+  // either way. Confirmed by injection (real = path instead of
+  // realpathSync(path)): both the content read and isSymbolicLink() failed
+  // in the same run. The isSymbolicLink() clause is defence-in-depth for a
+  // narrower case it alone would catch — an implementation that resolves the
+  // path correctly for the WRITE but still renames over the original
+  // (unresolved) path, which would leave the content clause green while
+  // silently destroying the link. Not the primary discriminator here, but
+  // not redundant either.
+  writeFileSync(p('target.txt'), 'original\n')
+  symlinkSync(p('target.txt'), p('link.txt'))
+  const base17 = F.readFile(p('link.txt')).mtimeMs
+  const w17 = F.writeFile(p('link.txt'), 'through the link\n', base17)
+  ok(17, w17.kind === 'written'
+      && readFileSync(p('target.txt'), 'utf8') === 'through the link\n'
+      && lstatSync(p('link.txt')).isSymbolicLink(),
+    `17 — a save through a symlink writes the target and keeps the link: kind=${w17.kind}`)
+
+  // 18 — the OVER-CORRECTION guard for check 12, and it is not a formality: a
+  // CAS that refuses unconditionally satisfies 12 perfectly and makes the
+  // feature unusable, which is a milestone that never works rather than one
+  // that works and is unsafe. null is the deliberate overwrite the user
+  // reaches only after being shown the conflict.
+  writeFileSync(p('force.txt'), 'theirs\n')
+  const w18 = F.writeFile(p('force.txt'), 'mine\n', null)
+  ok(18, w18.kind === 'written' && readFileSync(p('force.txt'), 'utf8') === 'mine\n',
+    `18 — a null token overwrites deliberately: kind=${w18.kind}`)
 
   console.log('')
   const failed = results.filter((r) => !r.pass)

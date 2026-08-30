@@ -192,7 +192,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        credential:list / credential:set / credential:delete
                        credential:verify
                        jira:list
-                       file:open / file:read / file:close
+                       file:open / file:read / file:close / file:write
                        fs:list
                        toolbox:read / toolbox:permissions
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main

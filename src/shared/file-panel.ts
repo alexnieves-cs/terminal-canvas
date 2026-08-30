@@ -82,3 +82,25 @@ export const FILE_MAX_LINES = 10_000
  * file with one replacement character is better than refusing it.
  */
 export const BINARY_SCAN_BYTES = 8 * 1024
+
+/**
+ * What a save did, and why it did not.
+ *
+ * Three arms, split POSITIONALLY rather than by parsing an error message —
+ * review-commit.ts's `refused`/`failed` distinction applied to a second verb.
+ * `stale` means the disk moved underneath you and the fix is to look at what
+ * changed; `failed` means this write did not run and the fix is your
+ * filesystem. Collapsing them tells a user with a read-only file to go and
+ * look at somebody else's changes.
+ *
+ * Declared here rather than in main/file-write.ts, the same split FileResult
+ * already draws from file-read.ts: the renderer's bridge signature needs this
+ * type too, and shared is the one tsconfig project both main and the web
+ * bundle (renderer/preload) include — main/file-write.ts is outside
+ * tsconfig.web.json entirely, so a shared consumer importing it straight from
+ * main fails cross-project typechecking with TS6307.
+ */
+export type FileWriteResult =
+  | { kind: 'written'; mtimeMs: number; bytes: number }
+  | { kind: 'stale'; detail: string }
+  | { kind: 'failed'; detail: string }

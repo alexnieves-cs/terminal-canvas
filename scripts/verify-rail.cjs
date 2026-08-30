@@ -1745,6 +1745,49 @@ const inventory = (over) => ({
 }
 
 
+// 106 — the editability gate, BOTH directions in one read. An `editable` that
+// is always false satisfies the truncated half perfectly and deletes the
+// milestone, so the untruncated clause is what makes this a check rather than
+// a restatement. Truncated text is read-only because saving a truncated
+// buffer back would delete every line past FILE_MAX_LINES with a
+// successful-looking result — "half a file is a different file" in its most
+// destructive available form.
+{
+  const editable = R.buildFileNodeModel({
+    source: { path: '/tmp/a/notes.md' },
+    title: undefined,
+    result: { kind: 'text', content: 'one\ntwo\n', bytes: 8, lines: 2, truncatedLines: 0, mtimeMs: 1 }
+  })
+  const truncated = R.buildFileNodeModel({
+    source: { path: '/tmp/a/huge.log' },
+    title: undefined,
+    result: { kind: 'text', content: 'one\n', bytes: 999, lines: 40000, truncatedLines: 30000, mtimeMs: 1 }
+  })
+  ok(106, editable.editable === true && truncated.editable === false
+      && typeof truncated.editableNote === 'string' && truncated.editableNote.length > 0,
+    `106 — untruncated text is editable, truncated text is not and says why: ` +
+    `editable=${editable.editable} truncated=${truncated.editable}`)
+}
+
+// 107 — every NON-text arm is uneditable, and each says why in its OWN
+// sentence. Four arms collapsed onto one note tells a user reading "binary"
+// that reopening the file will help; this is check 78's non-vacuity rule
+// applied to the gate rather than to the note.
+{
+  const arms = [
+    { kind: 'missing' },
+    { kind: 'too-large', bytes: 9e6, cap: 2097152 },
+    { kind: 'binary', bytes: 42 },
+    { kind: 'unreadable', detail: 'EACCES' }
+  ].map((result) => R.buildFileNodeModel({ source: { path: '/tmp/a/x' }, title: undefined, result }))
+  const notes82 = arms.map((m) => m.editableNote)
+  ok(107, arms.every((m) => m.editable === false)
+      && notes82.every((n) => typeof n === 'string' && n.length > 0)
+      && new Set(notes82).size === notes82.length,
+    `107 — no non-text arm is editable and each says why distinctly: ` +
+    `editable=${JSON.stringify(arms.map((m) => m.editable))}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

@@ -21,7 +21,7 @@ import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem } from './work-item'
-import type { FileResult } from './file-panel'
+import type { FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
@@ -285,7 +285,23 @@ export const IPC = {
    * almost nobody expands — `review:diff`'s pull-only, one-file-at-a-time
    * shape, for `review:diff`'s reason.
    */
-  TOOLBOX_PERMISSIONS: 'toolbox:permissions'
+  TOOLBOX_PERMISSIONS: 'toolbox:permissions',
+  /**
+   * Write a file the renderer has been editing, and refuse rather than
+   * destroy.
+   *
+   * `baseMtimeMs` is the mtime of the FileResult the draft was seeded from,
+   * and a mismatch against disk is REFUSED — the answer to #14's own open
+   * question about who wins when the agent and the user edit at once. `null`
+   * means overwrite regardless, reachable only from a control the user
+   * presses after being shown the conflict.
+   *
+   * A fourth file channel rather than a flag on FILE_READ: reading and
+   * writing have different failure sets, and folding them into one channel
+   * would make FileResult carry write outcomes it has no business knowing
+   * about.
+   */
+  FILE_WRITE: 'file:write'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -441,6 +457,22 @@ export interface ToolboxPermissionsRequest {
   /** Absolute path of the settings file, taken from a PermissionCounts row. */
   path: string
   bucket: 'allow' | 'deny' | 'ask'
+}
+
+/**
+ * No `panelId`, unlike FileReadRequest: the read is keyed by it because the
+ * watch it arms is keyed by it. A write is a plain request/response with
+ * nothing to key — the panel that issues it is not this channel's business.
+ */
+export interface FileWriteRequest {
+  path: string
+  content: string
+  /**
+   * The mtime the draft was seeded from, or null to overwrite deliberately.
+   * Null is NOT a default — it is a user gesture, and the only caller that
+   * passes it is the Overwrite control shown after a `stale`.
+   */
+  baseMtimeMs: number | null
 }
 
 export interface FileChangedEvent {
@@ -727,6 +759,12 @@ export interface CanvasBridge {
     read(req: FileReadRequest): Promise<FileResult>
     /** Disarm. */
     close(panelId: PanelId): Promise<void>
+    /**
+     * Save. Resolves to a three-armed result: `written`, `stale` (the disk
+     * moved underneath the draft — refused, nothing written), or `failed`
+     * (the write did not run). Never rejects.
+     */
+    write(req: FileWriteRequest): Promise<FileWriteResult>
     /** Returns its own unsubscribe, like every other on* in this bridge. */
     onChanged(listener: (event: FileChangedEvent) => void): () => void
     /**

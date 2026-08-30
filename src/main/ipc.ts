@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest , ToolboxReadRequest, ToolboxPermissionsRequest } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, ToolboxReadRequest, ToolboxPermissionsRequest } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
@@ -23,6 +23,7 @@ import { readDir } from './fs-tree'
 import type { ToolboxCache } from './toolbox-cache'
 import { readPermissionRules, resolveToolboxHome } from './toolbox-read'
 import { resolveCwd } from './pty-manager'
+import { writeFile } from './file-write'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -314,6 +315,12 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TOOLBOX_PERMISSIONS, (_event, req: ToolboxPermissionsRequest) => {
     return readPermissionRules(req.path, req.bucket)
   })
+  ipcMain.handle(IPC.FILE_WRITE, (_event, req: FileWriteRequest) =>
+    // No sender capture, unlike FILE_READ: this is a plain request/response
+    // with nothing to push afterwards. Our own write lands back through the
+    // watcher like any other change, which is what makes the panel update
+    // itself with no second code path.
+    writeFile(req.path, req.content, req.baseMtimeMs))
 }
 
 /**
