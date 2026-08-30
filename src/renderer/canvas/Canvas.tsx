@@ -557,11 +557,21 @@ export function Canvas({
   }, [])
 
   // Every canvas keyboard shortcut stands down while EITHER overlay owns the
-  // keyboard. Composed here rather than passing palette.isOpen straight
-  // through: the nav grid's own capture listener cannot stop useViewport's,
-  // because both are bound on `window` and stopPropagation does not silence
-  // listeners on the same target — so without this Cmd+N spawns a panel
-  // behind an overlay the user believes is taking their keys.
+  // keyboard, and so do the four menu accelerators below (see the edit:*
+  // subscriptions). ONE predicate rather than three copies of "who owns the
+  // keyboard", which is what this file already does for the wheel.
+  //
+  // Composed here rather than passing palette.isOpen straight through,
+  // because the nav grid's own capture listener cannot be relied on to stop
+  // useViewport's. Both are bound on `window`, and a SAME-TARGET dispatch —
+  // which is exactly what verify:panels' window.dispatchEvent produces, and
+  // never what a real keypress produces — invokes every listener on that
+  // target regardless of phase, so the shared predicate is the only thing
+  // that covers it. (For a real keypress the grid's capture-phase
+  // stopPropagation at `window` DOES suppress bubble-phase listeners on
+  // `window`, so it is belt-and-braces there — but it is not useless and
+  // must not be removed: it is what stops a bare arrow reaching xterm's own
+  // target-phase handler further down the tree.)
   //
   // Stable identity, reading a stable callback and a ref, because it sits in
   // useViewport's keydown effect dep array — a fresh arrow per render would
@@ -607,8 +617,12 @@ export function Canvas({
       // With the palette open the user is looking at a text field, not a
       // terminal, and focusedId still names that terminal (rule 2 keeps it).
       // Copying its selection here would put text the user cannot see on the
-      // clipboard; Palette.tsx serves its own input instead.
-      if (palette.isOpen()) return
+      // clipboard; Palette.tsx serves its own input instead. shouldIgnoreKeys
+      // rather than palette.isOpen because the nav grid is the SAME
+      // situation and a worse one: revealing it means the user is already
+      // holding Cmd, which makes a stray Cmd+C the most plausible chord in
+      // the app, aimed at a selection an opaque overlay is covering.
+      if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
@@ -616,8 +630,10 @@ export function Canvas({
     })
     const offPaste = window.canvas.edit.onPaste((text) => {
       // Rule 3. Without this the text lands in a running agent, invisibly,
-      // while the user watches an empty text field. verify:panels 35.
-      if (palette.isOpen()) return
+      // while the user watches an empty text field (palette, verify:panels
+      // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
+      // switch that follows on release takes the evidence off screen.
+      if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       if (text) session?.handle.paste(text)
@@ -626,9 +642,9 @@ export function Canvas({
       offCopy()
       offPaste()
     }
-    // palette.isOpen is referentially stable, so this stays a once-only
+    // shouldIgnoreKeys is referentially stable, so this stays a once-only
     // install; listing it makes the dependency visible rather than implied.
-  }, [palette.isOpen])
+  }, [shouldIgnoreKeys])
 
   // ONE subscription for the whole canvas, not one per panel: the payload
   // names its own panel, and the store fans it out to exactly the panel that
@@ -697,19 +713,26 @@ export function Canvas({
     // open and a name half-typed it does not undo the TYPING — it runs
     // applyHistory, which removes a panel and disposes its session, behind the
     // overlay, with no visible cause. verify:panels 37.
+    //
+    // Sharper still under the nav grid, which is why the guard is
+    // shouldIgnoreKeys and not palette.isOpen: the grid is revealed by a
+    // HELD Cmd, so Cmd+Z is one keypress away for the whole time it is up —
+    // it kills a running agent behind an opaque overlay, and the workspace
+    // switch on release then carries the evidence off screen entirely.
+    // verify:panels 123.
     const offUndo = window.canvas.edit.onUndo(() => {
-      if (palette.isOpen()) return
+      if (shouldIgnoreKeys()) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
-      if (palette.isOpen()) return
+      if (shouldIgnoreKeys()) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory, palette.isOpen])
+  }, [applyHistory, shouldIgnoreKeys])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same

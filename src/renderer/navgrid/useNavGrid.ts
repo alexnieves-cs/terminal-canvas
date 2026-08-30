@@ -71,6 +71,27 @@ export function useNavGrid(deps: {
         if (d.enabled === false) return
         if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
         if (event.key !== 'g' && event.key !== 'G') return
+        // A review node's open commit draft keeps the chord. That input is
+        // the second surface in this app that takes DOM focus off xterm, and
+        // it gets usePalette's rule-4 treatment for it; revealing the grid
+        // over it swallows every subsequent key in the `default:` arm below,
+        // so the field goes dead, and releasing Cmd then unmounts the node
+        // with the typed message unsaved. ReviewNode's own bubble-phase
+        // stopPropagation cannot reach us — this listener is capture-phase on
+        // `window` and has already run.
+        //
+        // Target-based, and document.activeElement is deliberately NOT the
+        // test: xterm's own helper is a <textarea>, so "a text field is
+        // focused" is TRUE over every ordinary terminal panel and would
+        // disable Cmd+G across the whole app. Chosen over plumbing draft
+        // state up into `enabled` (the way !palette.open already is) because
+        // that would put a per-node piece of state into a Canvas-level flag
+        // and re-render the canvas on every keystroke of a commit message.
+        // No preventDefault before this bail, unlike the repeat guard below:
+        // this chord is NOT ours here, so it belongs to whoever owns that
+        // field, exactly as usePalette's modifier checks bail bare.
+        const target = event.target as HTMLElement | null
+        if (target?.closest?.('.review-node__commit-form')) return
         // A held chord is ONE gesture and roughly fifteen events a second.
         // The guard's reachable case is the TAIL of a held chord after the
         // grid has already been dismissed: Escape closes, the user has not
@@ -142,6 +163,11 @@ export function useNavGrid(deps: {
      * overlay stays up forever over a canvas whose own shortcuts have stood
      * down — no key left that dismisses it, no recovery short of Cmd+R.
      */
+    // Bubble phase, deliberately — the ONE listener here that is not capture.
+    // Element `blur` does not bubble but it DOES capture, so `capture: true`
+    // would fire this for every element blur on its way down to the target:
+    // xterm's helper textarea loses focus constantly, and the grid would
+    // dismiss itself the instant anything on the canvas changed hands.
     const onBlur = (): void => { if (openRef.current) close() }
 
     window.addEventListener('keydown', onKeyDown, true)
@@ -154,5 +180,15 @@ export function useNavGrid(deps: {
     }
   }, [close])
 
-  return { open, cells, cursor, isOpen, setCursor }
+  // Memoised, and NavGrid's memo() is what makes that load-bearing rather
+  // than tidy. Canvas re-renders on every mousemove over the canvas (the HUD
+  // cursor), so a fresh object literal here would never compare equal and
+  // NavGridImpl would re-render at pointer rate — a memo() that can never
+  // skip is a 60Hz defence that only LOOKS like one, which is worse than no
+  // memo at all, because the next reader trusts it. setCursor is useState's
+  // own setter and is already stable, so it needs no dep.
+  return useMemo(
+    () => ({ open, cells, cursor, isOpen, setCursor }),
+    [open, cells, cursor, isOpen]
+  )
 }

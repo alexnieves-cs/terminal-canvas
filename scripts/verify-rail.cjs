@@ -15,11 +15,16 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  // Nothing in this bundle imports a VALUE from @shared or @renderer today —
-  // rail-rows.ts's two imports are `import type`, which esbuild erases. The
-  // aliases are here pre-emptively for the reason CLAUDE.md records about
-  // verify-palette.cjs: needing no alias YET is exactly the state
-  // verify-viewport.cjs was in right up until the day it broke.
+  // The @renderer alias is REQUIRED, not pre-emptive: nav-grid.ts imports
+  // waitingCount — a VALUE — from @renderer/shell/rail-sections, so without
+  // it this bundle does not build at all. That is exactly the transition
+  // verify-viewport.cjs broke on when panel-interaction.ts gained its first
+  // value import from @shared, which is why CLAUDE.md tells both of these
+  // bundles to carry the aliases before they are needed.
+  // @shared's is still pre-emptive — every @shared import reachable from
+  // here is an `import type`, which esbuild erases before bundling — and it
+  // stays for that same reason: needing no alias YET is precisely the state
+  // this file was in one milestone ago.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')

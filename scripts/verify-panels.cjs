@@ -7869,6 +7869,21 @@ app.whenReady().then(async () => {
       })()`)
       if (cnode) { await clickRailRow('rcommit'); await settle() }
 
+      // Both captured for check 124, which comes back to this node from
+      // inside the M11 block, hundreds of lines below.
+      //
+      // The workspace id, because a review node exists in the DOM only while
+      // the workspace holding it is the active one, and the M11 block creates
+      // and switches workspaces before 124 runs — so 124 has to switch back
+      // by id rather than hope.
+      //
+      // The peer id, because check 115 spawns a panel into this same
+      // repository to reach the `shared` arm, and `shared` DISABLES the
+      // commit control: no draft can be opened at all while that peer holds a
+      // baseline, so 124 closes it first.
+      const commitWorkspaceId = await activeWorkspaceId(wc)
+      let commitPeer = null
+
       /* Drives the node's OWN control and OWN input, never window.canvas.
          review.commit from executeJavaScript: the disabled gate, the Enter
          handler and the baseline advance are the three things this milestone
@@ -7972,6 +7987,7 @@ app.whenReady().then(async () => {
       //      one that would happily commit another agent's work.
       {
         const peer = await spawnAt(crepo)
+        commitPeer = peer // check 124 closes it again; see its declaration
         if (peer) {
           await waitUntil(async () => (await sessionMap(wc)).has(peer), 8000)
           await waitUntil(async () => {
@@ -8187,9 +8203,16 @@ app.whenReady().then(async () => {
         // 119. Cmd+N while the grid is open spawns NOTHING. Success criterion
         //      5, and the reason navGrid.isOpen has to compose into
         //      useViewport's shouldIgnoreKeys rather than the overlay merely
-        //      being painted on top: useViewport's keydown listener is on
-        //      `window` too, so a stopPropagation from the grid's own capture
-        //      listener cannot reach it — same-target listeners all run.
+        //      being painted on top. Note WHICH fact makes this check able to
+        //      fail, because it is narrower than it looks: useViewport's
+        //      keydown listener is on `window` too, and the press below is a
+        //      window.dispatchEvent — a SAME-TARGET dispatch, which invokes
+        //      every listener on that target regardless of phase, so the
+        //      grid's own stopPropagation cannot help there and only the
+        //      shared predicate can. A REAL keypress takes a different path
+        //      (the capture-phase stopPropagation at `window` does suppress
+        //      bubble-phase listeners on `window`), so this check covers the
+        //      predicate rather than the whole production story.
         // This suite has no shared panel-count helper — line ~1039 defines a
         // local `panelCount` inside another block. Define one here rather than
         // reaching into that scope.
@@ -8360,6 +8383,155 @@ app.whenReady().then(async () => {
 
         await pressPlain(wc, 'Escape')
         await settle()
+
+        // 123. Cmd+Z is INERT while the grid is up, and still undoes once it
+        //      is dismissed. Check 37's shape aimed at the second overlay,
+        //      and it covers the one keyboard path the grid CANNOT reach on
+        //      its own: edit:undo is a main-process MENU accelerator
+        //      delivered as an IPC event, so it passes through no renderer
+        //      keydown at all — neither the grid's capture-phase
+        //      stopPropagation nor useViewport's shouldIgnoreKeys is anywhere
+        //      near it, and until M11's fix wave all four edit:* guards read
+        //      palette.isOpen() alone. Unguarded, Cmd+Z runs applyHistory,
+        //      which removes a panel and calls registry.dispose — killing a
+        //      running agent behind an OPAQUE overlay revealed by a chord the
+        //      user is still holding Cmd for, with nothing on screen changing
+        //      to say so, and the switch on release then carries the evidence
+        //      away. Strictly worse than the paste check 35 covers, for the
+        //      same reason check 37 says so about the palette.
+        {
+          const ids = () => wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          // A KNOWN entry on the history stack rather than whatever the
+          // preceding checks happened to leave there — check 37's rule: an
+          // undo with nothing to undo passes without testing anything. The
+          // spawn is before the reveal on purpose, since check 119 has just
+          // pinned that a Cmd+N inside the grid spawns nothing at all.
+          const before = new Set(await ids())
+          await zoomTo(wc, 'n')
+          const spawned = await waitUntil(async () => {
+            const now = await ids()
+            return now.length > before.size ? now : false
+          }, 5000)
+          const newId = spawned ? spawned.find((id) => !before.has(id)) : undefined
+
+          await pressChord(wc, 'g')
+          const gridUp = await gridState(wc)
+          wc.send('edit:undo')
+          await sleep(400) // nothing to wait FOR: the assertion is that nothing happens
+          const survived = newId !== undefined && (await ids()).includes(newId)
+
+          // The half that stops this passing vacuously, check 37's own: with
+          // the grid CLOSED the very same event must still undo the spawn. If
+          // it does not, the guard above is not standing down — it is broken,
+          // or edit:undo never reached this renderer in the first place.
+          await pressPlain(wc, 'Escape')
+          await waitUntil(async () => (await gridState(wc)).open === false, 3000)
+          wc.send('edit:undo')
+          const undone = newId !== undefined &&
+            Boolean(await waitUntil(async () => !(await ids()).includes(newId), 5000))
+
+          ok(123, gridUp.open === true && survived && undone,
+            `gridOpen=${gridUp.open} newId=${newId} survived=${survived} undoneAfterClose=${undone}`)
+        }
+
+        // 124. Cmd+G typed into a review node's OPEN COMMIT DRAFT reveals
+        //      nothing, and the SAME chord aimed one element away still does.
+        //      That commit input is the second surface in this app that takes
+        //      DOM focus off xterm, and it defends itself by
+        //      stopPropagation-ing every key in the BUBBLE phase — enough for
+        //      usePalette and useViewport, both bubble-phase on `window`, and
+        //      useless against useNavGrid, which is capture-phase on `window`
+        //      and has already run. Unguarded, the grid reveals over the
+        //      node, every further keystroke is swallowed by the open
+        //      branch's `default:` arm so the field goes dead, and releasing
+        //      Cmd switches workspace and unmounts the node with the typed
+        //      message unsaved.
+        //
+        //      The second clause is what makes this a claim about SCOPE
+        //      rather than about elements: the same chord dispatched on the
+        //      node's own summary, with the draft still open, must reveal the
+        //      grid — so a guard that bailed for any element target, or for
+        //      the whole review node, fails here while the first clause alone
+        //      would report it as correct.
+        {
+          await wc.executeJavaScript(
+            `window.__m7aWorkspace().switchTo(${JSON.stringify(commitWorkspaceId)})`)
+          await settle()
+          const sel = '.review-node[data-panel-id="rcommit"]'
+          // Un-share first. Check 115 left a peer panel in this node's
+          // repository, and the `shared` arm renders the commit control
+          // DISABLED — so there is no draft to open until that peer's
+          // baseline is gone. Closed through the rail's own close control
+          // (shellControl runs on click, not mousedown), which is a real
+          // gesture rather than a reach into the registry.
+          const closedPeer = commitPeer === null ? false : await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('[data-rail-row=${JSON.stringify(commitPeer)}] .rail-row__close')
+            if (!el) return false
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            return true })()`)
+          await settle()
+          // The node re-reads on its own only when its subject goes idle,
+          // which may already have happened — so its refresh control is
+          // driven on every poll, the same determinism check 115 buys the
+          // same way. Polled rather than pressed once because the peer's
+          // dropBaseline and this re-read are two independent round trips.
+          const armed = closedPeer !== true ? false : await waitUntil(async () => {
+            await wc.executeJavaScript(`(() => {
+              const b = document.querySelector('${sel} .review-node__refresh')
+              if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+              return true })()`)
+            return wc.executeJavaScript(`(() => {
+              const b = document.querySelector('${sel} [data-review-node-commit]')
+              return b !== null && b.disabled === false })()`)
+          }, 20000, 1000)
+
+          const pressed = armed === true && await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('${sel} [data-review-node-commit]')
+            if (!b || b.disabled) return false
+            b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            return true })()`) === true
+          const draftOpen = pressed && await waitUntil(() => wc.executeJavaScript(
+            `document.querySelector('${sel} [data-review-node-commit-input]') !== null`), 3000) === true
+
+          // Dispatched ON the input, with bubbles, so the capture phase runs
+          // window -> ... -> input and useNavGrid sees the input as
+          // event.target — which is the only fact its guard reads. DOM focus
+          // is deliberately irrelevant to it: xterm's own helper is a
+          // <textarea>, so an activeElement test would disable Cmd+G over
+          // every ordinary terminal panel, i.e. over the whole app.
+          const chordAt = (selector) => wc.executeJavaScript(`(() => {
+            const el = document.querySelector(${JSON.stringify(selector)})
+            if (!el) return false
+            el.dispatchEvent(new KeyboardEvent('keydown',
+              { key: 'g', metaKey: true, bubbles: true }))
+            return true })()`)
+
+          const aimedAtInput = draftOpen
+            ? await chordAt(`${sel} [data-review-node-commit-input]`) : false
+          await settle()
+          const duringDraft = await gridState(wc)
+
+          const aimedAtSummary = draftOpen
+            ? await chordAt(`${sel} [data-review-node-summary]`) : false
+          await settle()
+          const elsewhere = await gridState(wc)
+
+          await pressPlain(wc, 'Escape')          // dismiss the grid
+          await settle()
+          await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('${sel} [data-review-node-commit-input]')
+            if (el) el.dispatchEvent(new KeyboardEvent('keydown',
+              { key: 'Escape', bubbles: true }))
+            return true })()`)                    // and then the draft
+          await settle()
+
+          ok(124, draftOpen === true && aimedAtInput === true
+              && duringDraft.open === false
+              && aimedAtSummary === true && elsewhere.open === true,
+            `closedPeer=${closedPeer} armed=${armed} draftOpen=${draftOpen} ` +
+            `inDraft=${duringDraft.open} elsewhere=${elsewhere.open}`)
+        }
       }
 
       // Best-effort, like the two below it and for the same reason: a throw
