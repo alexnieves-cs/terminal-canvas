@@ -47,3 +47,17 @@ export function addTotals(a: TokenTotals, b: TokenTotals): TokenTotals {
     cacheRead: a.cacheRead + b.cacheRead
   }
 }
+
+/**
+ * Which agent CLI a preset launches, when this app knows how to account for
+ * it. Absent means "we do not account for this one", which is every login
+ * shell and every preset the user wrote by hand.
+ *
+ * A UNION with one member rather than a boolean, so a second adapter is a new
+ * member rather than a rename of every use site — and deliberately not an
+ * abstraction beyond that. ideas-backlog #19's own constraint: do not build
+ * the abstraction until a second CLI actually wants it.
+ */
+export type AgentKind = 'claude-code'
+
+export const AGENT_KINDS: readonly AgentKind[] = ['claude-code']

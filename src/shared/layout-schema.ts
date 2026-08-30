@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
+import { AGENT_KINDS, type AgentKind } from './cost'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -127,6 +128,8 @@ export interface Preset {
   args: string[]
   w?: number
   h?: number
+  /** Which agent CLI this launches, when this app can account for it. */
+  agent?: AgentKind
 }
 
 /**
@@ -422,7 +425,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
     warnings.push('dropped a preset that was not an object')
     return null
   }
-  const { id, name, cwd, command, args, w, h } = raw
+  const { id, name, cwd, command, args, w, h, agent } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -450,6 +453,16 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
   // is recoverable and losing the preset is the worse answer.
   if (isNum(w)) preset.w = Math.max(MIN_PANEL_W, w)
   if (isNum(h)) preset.h = Math.max(MIN_PANEL_H, h)
+  // Present but unknown is check 107's asymmetry: it was written by a
+  // version that knew an adapter this one does not, and honouring it means
+  // passing a flag to a CLI that has never heard of it — which fails the
+  // spawn outright rather than merely failing to account.
+  if (agent !== undefined && !(AGENT_KINDS as readonly string[]).includes(agent as string)) {
+    warnings.push(`preset ${id} named an unknown agent; dropped that field`)
+  }
+  if (isStr(agent) && (AGENT_KINDS as readonly string[]).includes(agent)) {
+    preset.agent = agent as AgentKind
+  }
   return preset
 }
 

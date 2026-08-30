@@ -1861,6 +1861,37 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     String(reopened.session('n1')))
 }
 
+// 119. `agent` round-trips through a preset, and an ABSENT agent writes no
+//      key at all rather than a saved absent-marker. Absent is the ordinary
+//      case — a login-shell preset is not a Claude Code preset — and the
+//      `in` test is deliberate: `agent: undefined` is a DIFFERENT fact from
+//      the key being missing, and it is the one that survives an IPC
+//      structured clone. This is check 97's rule and the absent-command
+//      rule, applied to a second optional field.
+{
+  const warnings = []
+  const out = L.parsePresets(
+    [{ id: 'p1', name: 'Claude', cwd: '~', args: [], agent: 'claude-code' },
+     { id: 'p2', name: 'Shell', cwd: '~', args: [] }],
+    warnings)
+  ok('119 agent round-trips, and absent stays absent',
+    out[0].agent === 'claude-code' && !('agent' in out[1]) && warnings.length === 0,
+    `${out[0].agent} / ${'agent' in out[1]}`)
+}
+
+// 120. An UNKNOWN agent value is dropped with a warning rather than carried
+//      forward. Check 107's asymmetry: a value written by a version that
+//      knew an adapter this one does not must not be honoured, because
+//      honouring it means passing a flag to a CLI that has never heard of
+//      it — which fails the spawn outright rather than merely failing to
+//      account.
+{
+  const warnings = []
+  const out = L.parsePresets([{ id: 'p1', name: 'x', cwd: '~', args: [], agent: 'codex' }], warnings)
+  ok('120 an unknown agent is dropped with a warning',
+    !('agent' in out[0]) && warnings.length === 1, warnings.join('; '))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

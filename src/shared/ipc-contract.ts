@@ -18,6 +18,7 @@ import type {
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
+import type { AgentKind } from './cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -273,6 +274,8 @@ export interface PresetTemplate {
   args: string[]
   w?: number
   h?: number
+  /** Which agent CLI this launches, when this app can account for it. */
+  agent?: AgentKind
 }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
@@ -282,6 +285,8 @@ export interface CapturedPanel {
   args: string[]
   w: number
   h: number
+  /** Which agent CLI this launches, when this app can account for it. */
+  agent?: AgentKind
 }
 
 /** One row of the palette's prompt list. Mirrors PromptListRow in main. */

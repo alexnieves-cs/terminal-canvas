@@ -320,7 +320,13 @@ export function Canvas({
             placed,
             nextZ(current),
             chosen
-              ? { panelId: id, cwd: chosen.cwd, args: [...chosen.args], ...(chosen.command !== undefined ? { command: chosen.command } : {}) }
+              ? {
+                  panelId: id,
+                  cwd: chosen.cwd,
+                  args: [...chosen.args],
+                  ...(chosen.command !== undefined ? { command: chosen.command } : {}),
+                  ...(chosen.agent !== undefined ? { agent: chosen.agent } : {})
+                }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
           )
@@ -729,6 +735,7 @@ export function Canvas({
       // Absent stays absent: a captured login-shell panel must save as a
       // login-shell preset, not as whatever this machine's shell happens to be.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
+      if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
       return captured
     })
     return () => {
@@ -2412,6 +2419,7 @@ export function Canvas({
       // login-shell preset, not as whatever this machine's shell happens to
       // be. Built field by field for the same reason onCapture is.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
+      if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
       void window.canvas.preset.savePanel(captured).then(reloadPresets)
     },
     /**

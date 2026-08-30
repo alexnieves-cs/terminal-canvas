@@ -1,3 +1,5 @@
+import type { AgentKind } from './cost'
+
 /** Stable identifier for a panel. Doubles as the tmux session name from M4 onward. */
 export type PanelId = string
 
@@ -18,6 +20,12 @@ export interface PanelSpec {
   env?: Record<string, string>
   cols: number
   rows: number
+  /**
+   * Which agent CLI this is, when this app can account for it. Main uses it
+   * to decide whether to pin a session id; it never changes what gets
+   * spawned beyond that one flag.
+   */
+  agent?: AgentKind
 }
 
 export interface PtyExitInfo {
