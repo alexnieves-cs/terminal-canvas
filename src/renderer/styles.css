@@ -103,9 +103,9 @@
   --fg-3: #959db8;
   --fg-4: #6e7691;
 
-  /* Accents. Two tones each: saturated for borders, dots and icons; the tint
-     for fills, which is what lets a destructive hover read as destructive
-     without introducing a second red.
+  /* Agent-state accents. Two tones each: saturated for borders, dots and
+     icons; the tint for fills, which is what lets a destructive hover read as
+     destructive without introducing a second red.
 
      --amber MUST stay a literal colour declared here, and
      .panel--agent-wants-you MUST keep `border-color: var(--amber)`
@@ -121,6 +121,11 @@
   --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .12);
   --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .14);
   --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .12);
+
+  /* App identity, never agent state. Iris answers an interaction with the
+     interface itself — focus, navigation, palette context and HUD readouts —
+     so a user can distinguish their own action from an agent's activity. */
+  --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .12);
 
   /* Back-compat aliases. These are what let the migration land task by task
      instead of as one unreviewable diff, and they mean the file temporarily
@@ -645,12 +650,12 @@ body {
      rather than a hand-picked literal that would belong to no ramp.
 
      The dot's rgba() is a DELIBERATE literal and is allowlisted by name in
-     verify-styles check 1. It is not a theme colour: it is a translucent
-     white tick whose whole job is to take whatever ground is behind it, so
-     tokenising it would produce an opaque value that stops tracking the
-     vignette it sits on. A future theme overrides the ground, not the tick. */
+     verify-styles check 1. It is a translucent iris tick whose whole job is
+     to take whatever ground is behind it, so tokenising it would produce an
+     opaque value that stops tracking the vignette it sits on. A future theme
+     overrides the ground, not the tick. */
   background:
-    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .05) 1px, transparent 0)
+    radial-gradient(circle at 1px 1px, rgba(103, 232, 249, .05) 1px, transparent 0)
       0 0 / 28px 28px,
     radial-gradient(120% 80% at 50% 0%, var(--s-2) 0%, var(--s-0) 60%);
   cursor: default;
@@ -947,15 +952,15 @@ body {
   display: flex;
   gap: var(--sp-5);
   padding: var(--sp-3) var(--sp-5);
-  border: 1px solid var(--border);
+  border: 1px solid var(--iris-dim);
   border-radius: var(--r-full);
   /* The one place a backdrop cost is earned: the HUD sits over a moving
      world layer, and a solid fill there reads as a sticker pasted on top of
      it rather than chrome floating above it. */
   background: color-mix(in srgb, var(--s-3) 78%, transparent);
   backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: var(--e-2);
-  color: var(--muted);
+  box-shadow: 0 0 16px var(--iris-dim), var(--e-2);
+  color: var(--iris);
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -1203,8 +1208,8 @@ body {
   flex: none;
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-md);
-  background: var(--s-5);
-  color: var(--fg-2);
+  background: var(--iris-dim);
+  color: var(--iris);
   font-size: var(--t-sm);
   white-space: nowrap;
 }
@@ -1309,7 +1314,7 @@ body {
    while scanning, which matters more here than usual because Enter acts on it. */
 .palette__row--selected {
   background: var(--s-4);
-  box-shadow: inset 2px 0 0 var(--blue);
+  box-shadow: inset 2px 0 0 var(--iris);
 }
 
 .palette__row--disabled {
@@ -1458,7 +1463,7 @@ body {
    excluded here rather than given a higher-specificity `outline: none` of its
    own, so there is one place that decides which elements get the ring. */
 :where(button, [href], input, [tabindex]):not(.palette__input):focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--iris);
   outline-offset: 2px;
   /* No border-radius here. An outline already follows the element's OWN
      radius, so setting one made every focused control adopt --r-sm — visibly
@@ -1473,7 +1478,7 @@ body {
    existing outline:none defensible rather than an oversight. The generic rule
    above excludes the input by name, which is what makes that true in the
    cascade and not only in prose. */
-.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--blue); }
+.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--iris); }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M11. The nav grid: a sibling of .world, pinned to the viewport rather than
@@ -1514,7 +1519,7 @@ body {
    ground — and verify:styles 11 excludes it as a ground when it measures
    contrast. */
 .navgrid__cell--cursor {
-  border-color: var(--blue);
+  border-color: var(--iris);
   background: var(--s-4);
   color: var(--fg);
 }

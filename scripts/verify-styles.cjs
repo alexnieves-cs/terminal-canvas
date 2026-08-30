@@ -90,7 +90,7 @@ const bodyText = bodyRules.map((r) => r.body).join('\n')
 //     split this check exists to enforce. Both are commented at their site.
 //     Anything not on this list is a colour and belongs in the theme block.
 const ALLOW = new Set([
-  'rgba(255,255,255,.05)', // .canvas dot grid
+  'rgba(103,232,249,.05)', // .canvas dot grid
   'rgba(255,255,255,.07)'  // .palette top-edge highlight
 ])
 const norm = (s) => s.replace(/\s+/g, '')
