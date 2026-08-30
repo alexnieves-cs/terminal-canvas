@@ -9,11 +9,20 @@ import { WebglAddon } from '@xterm/addon-webgl'
  * must not visibly change size when it does.
  */
 
+// M19 SOFT MACHINE. background and cursorAccent track the stylesheet's
+// --well (#14161c) — the terminal is a dark screen sunk into a pale casing,
+// and the two values have to agree or the screen shows a seam against the
+// well's own fill in the frame before xterm paints.
+//
+// NOTHING ELSE HERE MOVES. The sixteen ANSI entries are the agent's palette,
+// not the app's: tmux-args.ts sets terminal-features RGB specifically to pass
+// 24-bit agent colour through undownsampled, and re-tuning these to suit a
+// light chrome would be the app overruling the thing it exists to display.
 const theme: ITheme = {
-  background: '#12131a',
+  background: '#14161c',
   foreground: '#d8dae5',
   cursor: '#7aa2f7',
-  cursorAccent: '#12131a',
+  cursorAccent: '#14161c',
   selectionBackground: '#2d3350',
   black: '#15161e',
   red: '#f7768e',
