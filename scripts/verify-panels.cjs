@@ -8446,6 +8446,197 @@ app.whenReady().then(async () => {
       }
     }
 
+    // ---------------------------------------------------------------------
+    // 123 — M14. The OTHER half of the verb: into a workspace that does not
+    //     exist yet.
+    //
+    //     Check 121 covers `{ workspaceId }` and verify:palette 72 covers the
+    //     row -> begin* hop, so what was left uncovered is everything between
+    //     them: the submit handler (trim, empty-as-cancel, one composed call)
+    //     and the `{ newName }` target shape crossing preload and IPC. Three
+    //     lines and a marshalling assumption — and half of what the feature
+    //     promises. Its failure is the quietest shape this palette can
+    //     produce: the user types a name, the overlay closes, nothing is
+    //     created, and the row reads as a feature that was never built.
+    //
+    //     Driven through the REAL row rather than the __m7aWorkspace hook —
+    //     the hook is aimed at movePanelsToWorkspace and would skip the
+    //     begin*/input-mode/submit path that is the entire uncovered
+    //     surface. The row is located by its own rendered text, which is a
+    //     second assertion wearing a locator's clothes: only move-new reads
+    //     "to a new workspace", and the "1 panel" in it is the selection
+    //     having actually reached buildCommands.
+    //
+    //     The name is typed with LEADING AND TRAILING SPACE and asserted
+    //     TRIMMED — a workspace named "  x  " is one no row can ever match.
+    //     Be honest about what that clause can and cannot see: Palette.tsx
+    //     ALREADY trims before it calls an input mode's submit, so this does
+    //     not discriminate the submit's own trim (measured — injecting an
+    //     untrimmed `value` there left this check green, because the trim had
+    //     already happened one layer up). What it pins is the end-to-end
+    //     fact: whatever the user types arrives at the record trimmed, from
+    //     whichever layer keeps doing it.
+    // ---------------------------------------------------------------------
+    {
+      const CANCELLED = 'never minted'
+      const MINTED = 'filed by hand'
+
+      // Its own fixture, for check 121's reason: by this point 121 has moved
+      // its own panel away and this workspace is empty.
+      await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('handmovers')`)
+      await settle()
+      await zoomTo(wc, '0')
+      await settle()
+      await zoomTo(wc, 'n')
+      const subject = await waitUntil(async () => {
+        const ids = await wc.executeJavaScript(
+          `Array.from(document.querySelectorAll('.panel[data-panel-id]')).map((e) => e.dataset.panelId)`)
+        return ids.length === 1 ? ids[0] : null
+      }, 6000)
+      if (!subject) throw new Error('123: the fresh workspace never rendered exactly one panel')
+      const running = await waitUntil(async () => (await sessionMap(wc)).has(subject), 15000)
+      if (!running) throw new Error(`123: ${subject} never reached pty:list`)
+
+      // SELECTED explicitly, by a real click on its header. onSpawn
+      // deliberately does not select what it spawns (its own comment says so),
+      // and check 122 cleared the selection on its way out — so without this
+      // the palette renders "Move 0 panels…" and the row this check is about
+      // is disabled. A real sendInputEvent rather than a dispatched
+      // MouseEvent, the rule check 75c records: an untrusted event runs no
+      // browser default action, and this click has to move DOM focus off the
+      // background the same way a user's would. The header strip (top + 24),
+      // never the body — a click into a live panel's slot belongs to xterm.
+      const header = await wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(subject)}]')
+        if (!p) return null
+        const r = p.getBoundingClientRect()
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 24) }
+      })()`)
+      if (!header) throw new Error(`123: ${subject} has no rect to click`)
+      wc.sendInputEvent({ type: 'mouseDown', x: header.x, y: header.y, button: 'left', clickCount: 1 })
+      wc.sendInputEvent({ type: 'mouseUp', x: header.x, y: header.y, button: 'left', clickCount: 1 })
+      await settle()
+      const selected = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel--selected')].map((e) => e.dataset.panelId)`)
+
+      const before = await settledSessionMap(wc)
+      const namesBefore = (await wc.executeJavaScript(`window.canvas.workspace.list()`))
+        .map((w) => w.name)
+
+      /**
+       * Opens the palette, surfaces the move-new row by query, and runs it —
+       * leaving the palette in INPUT mode with the name field focused.
+       * Returns a diagnostic string on any failure rather than throwing, so a
+       * broken step reports itself instead of aborting the run and taking the
+       * rest of this check's assertions with it.
+       *
+       * A mousedown on the row rather than Enter on the selection, the same
+       * route check 38 uses: the fuzzy matcher decides which row Enter runs,
+       * and this check has no business asserting about that ranking.
+       */
+      const openMoveNewDraft = () => wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 120))
+        const input = document.querySelector('.palette__input')
+        if (!input) return 'the palette did not open'
+        nativeSet(input, 'move new workspace')
+        await new Promise((r) => setTimeout(r, 80))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('Move 1 panel to a new workspace'))
+        if (!row) return 'no move-to-new row for a one-panel selection'
+        if (row.className.includes('palette__row--disabled')) return 'the move-new row was disabled'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 120))
+        const draft = document.querySelector('.palette__input')
+        if (!draft) return 'the palette closed instead of entering input mode'
+        if (document.querySelector('.palette__list')) return 'still in command mode'
+        return 'ok'
+      })()`)
+
+      /** Types into whatever input is open and sends one plain key to it. */
+      const submitDraft = (value, key) => wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        // Guarded: a native setter .call'd on null throws "Illegal
+        // invocation", which reports as an infrastructure crash and buries
+        // whichever assertion actually went wrong.
+        if (!input) return 'no input to submit'
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, ${JSON.stringify(value)})
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 300))
+        return 'ok'
+      })()`)
+
+      /** Leaves the overlay shut whatever state the previous step left. */
+      const closePalette = () => wc.executeJavaScript(`(async () => {
+        for (let i = 0; i < 3 && document.querySelector('.palette'); i++) {
+          const target = document.activeElement || document.body
+          target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 80))
+        }
+        return document.querySelector('.palette') === null
+      })()`)
+
+      // (d) FIRST, on its own name: Escape must mint NOTHING. Sequenced ahead
+      //     of the successful move because the move consumes the selection —
+      //     after it there is no one-panel selection left to open the row
+      //     with. Read back out of workspace.list(), never off the overlay,
+      //     the rule check 50 states for the palette's confirm: a cancel that
+      //     cancels unconditionally is as invisible as one that does not.
+      const cancelOpened = await openMoveNewDraft()
+      const cancelSubmitted = cancelOpened === 'ok'
+        ? await submitDraft(CANCELLED, 'Escape')
+        : 'skipped'
+      await closePalette()
+      const namesAfterCancel = (await wc.executeJavaScript(`window.canvas.workspace.list()`))
+        .map((w) => w.name)
+
+      // (a)-(c): the real thing.
+      const mintOpened = await openMoveNewDraft()
+      const mintSubmitted = mintOpened === 'ok'
+        ? await submitDraft(`  ${MINTED}  `, 'Enter')
+        : 'skipped'
+      await settle()
+      const rowsAfter = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const after = await sessionMap(wc)
+      const minted = rowsAfter.find((w) => w.name === MINTED)
+      const gone = await wc.executeJavaScript(
+        `document.querySelectorAll('.panel[data-panel-id=${JSON.stringify(subject)}]').length === 0`)
+
+      ok('123 a move into a NEW workspace mints it, files the panel, and keeps the pid',
+        // (a) the workspace exists NOW and did not before — trimmed, which is
+        //     what fails if the submit passes `value` through untouched.
+        !namesBefore.includes(MINTED) && minted !== undefined &&
+          // (b) it actually holds the panel. A mint that filed nothing leaves
+          //     an empty workspace and a panel stranded in the old one.
+          minted.panelIds.includes(subject) &&
+          // Non-vacuity: this canvas really did lose it. Without this, a move
+          // that changed only main's record satisfies (b) while the renderer
+          // goes on rendering a panel no workspace here owns.
+          gone === true &&
+          // (c) check 121's clause on the second branch, and the one that
+          //     makes this more than a plumbing test: minting a workspace is
+          //     no excuse to restart what gets filed into it.
+          before.get(subject) !== undefined && after.get(subject) === before.get(subject) &&
+          // (d) Escape minted nothing at all.
+          !namesAfterCancel.includes(CANCELLED) &&
+          !rowsAfter.some((w) => w.name === CANCELLED),
+        `selected=${JSON.stringify(selected)} ` +
+          `open=[${cancelOpened}, ${mintOpened}] submit=[${cancelSubmitted}, ${mintSubmitted}] ` +
+          `${subject}: ${before.get(subject)} -> ${after.get(subject) ?? 'MISSING'} gone=${gone} ` +
+          `minted=${minted ? minted.panelIds.join('|') : 'ABSENT'} ` +
+          `cancelled=${rowsAfter.some((w) => w.name === CANCELLED)} ` +
+          `names=${rowsAfter.map((w) => w.name).join(',')}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
