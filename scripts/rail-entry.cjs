@@ -31,5 +31,9 @@ module.exports = {
   // M8c has: it is a pure function over plain data with no DOM and no native
   // dependency, and a suite of its own would re-prove the same esbuild wiring
   // for one file.
-  ...require('../src/renderer/toolbox/toolbox-node-model')
+  ...require('../src/renderer/toolbox/toolbox-node-model'),
+  // M23a: the nav dock's own model. Joins this bundle for the reason every
+  // view model since M8c has — pure, type-only imports, and a suite of its own
+  // would re-prove the same esbuild wiring for one file.
+  ...require('../src/renderer/shell/nav-dock')
 }

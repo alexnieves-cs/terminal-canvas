@@ -1871,6 +1871,61 @@ const inventory = (over) => ({
     JSON.stringify({ rectStable: a === moved, modeMoves: a !== b, effortMoves: a !== c }))
 }
 
+
+// ---------------------------------------------------------- M23a nav dock --
+// The dock's pure model, joining this suite for the reason every view model
+// since M8c has: pure, type-only imports, and a suite of its own would
+// re-prove the same esbuild wiring for one file.
+
+// One entry per pane, in DOCK_ORDER, with exactly one active. The expectation
+// is DERIVED from the exported constant rather than restated, which is the
+// rule verify:palette 30 was rewritten to follow: an order written down twice
+// is an order that drifts, and the copy nobody is looking at goes stale.
+{
+  const d = R.buildDock('panels', { panels: 4, workspaces: 2, attention: 0 })
+  const ids = d.map((e) => e.id)
+  const actives = d.filter((e) => e.active)
+  ok(110,
+    JSON.stringify(ids) === JSON.stringify([...R.DOCK_ORDER])
+      && actives.length === 1 && actives[0].id === 'panels',
+    `ids=${ids.join(',')} active=${actives.map((e) => e.id).join(',')}`)
+}
+
+// THE ONE WORTH KNOWING BY NUMBER. A zero count renders NO badge —
+// `undefined`, never 0. A badge reading "0" beside Attention says an agent is
+// waiting and then contradicts itself, which is worse than no badge; and empty
+// is the state Attention is in nearly all the time, so it is the one an
+// implementation is least likely to have looked at. Both directions in one
+// read, because a builder that always omitted the badge satisfies the zero
+// half perfectly and deletes the feature.
+{
+  const empty = R.buildDock(null, { panels: 0, workspaces: 1, attention: 0 })
+  const busy = R.buildDock(null, { panels: 3, workspaces: 1, attention: 2 })
+  const att = (d) => d.find((e) => e.id === 'attention')
+  ok(111,
+    att(empty).badge === undefined && att(busy).badge === 2,
+    `empty=${att(empty).badge} busy=${att(busy).badge}`)
+}
+
+// A null active pane — every pane collapsed, which is the Compact resting
+// state — leaves every entry inactive rather than defaulting one on. A dock
+// that always highlights something claims a pane is open when none is.
+{
+  const d = R.buildDock(null, { panels: 1, workspaces: 1, attention: 0 })
+  ok(112, d.every((e) => !e.active) && d.length === R.DOCK_ORDER.length,
+    `actives=${d.filter((e) => e.active).length} len=${d.length}`)
+}
+
+// The badge is a NUMBER on the entry, never composed text. The rule
+// Command.waiting and RailRow.waiting already keep: a count baked into a label
+// reaches whatever haystack a future search scans, and "3" then matches every
+// entry whose text happens to contain the digit.
+{
+  const d = R.buildDock(null, { panels: 12, workspaces: 1, attention: 3 })
+  const att = d.find((e) => e.id === 'attention')
+  ok(113, typeof att.badge === 'number' && !/\d/.test(att.label),
+    `badge=${typeof att.badge} label=${att.label}`)
+}
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
