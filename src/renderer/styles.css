@@ -705,6 +705,36 @@ body {
   pointer-events: none;
 }
 
+/* M13. The armed link mode's banner. Success criterion 6: there is no state
+   in which the mode is armed and invisible, and this is the half that makes
+   that true — the mode is one-shot, so the only way to be IN it is to be
+   looking at this.
+
+   OUTSIDE .world, so it is viewport-pinned chrome: a banner that panned away
+   with the camera would describe a mode that is still armed while sitting
+   somewhere the user is no longer looking. pointer-events: none so it can
+   never intercept the very click it is asking for. */
+.link-banner {
+  position: absolute;
+  top: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--s-3);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  pointer-events: none;
+}
+
+.link-banner strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
 .link-layer__line {
   stroke: var(--line-strong);
   stroke-width: 2px;
