@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync, renameSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
@@ -264,6 +264,36 @@ const pressPlain = (wc, key) =>
  * above), comfortably above two local IPC round trips to an idle process.
  */
 const settle = () => sleep(300)
+
+/**
+ * Clicks a panel's own `.panel__close`, by id, regardless of kind. A
+ * terminal panel's close arms on a RUNNING session (TerminalPanel.tsx's
+ * CONFIRM_CLOSE_MS) and needs a second click to confirm; a review node and
+ * a file panel close outright on one. Dispatched as `mousedown`, matching
+ * every close handler in this codebase (`onMouseDown`, never `onClick`).
+ * Returns true if the panel left the DOM.
+ */
+const clickPanelClose = async (wc, id) => {
+  const idJson = JSON.stringify(id)
+  const stillThere = () => wc.executeJavaScript(
+    `document.querySelector('[data-panel-id=' + ${JSON.stringify(idJson)} + ']') !== null`)
+  const mousedown = () => wc.executeJavaScript(`(() => {
+    const el = document.querySelector('[data-panel-id=' + ${JSON.stringify(idJson)} + '] .panel__close')
+    if (!el) return false
+    el.dispatchEvent(new MouseEvent('mousedown',
+      { bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, detail: 1 }))
+    return true
+  })()`)
+  const first = await mousedown()
+  await settle()
+  if (await stillThere()) {
+    // The first click armed a running terminal's close; the second confirms
+    // it. A no-op mousedown on an id already gone is harmless.
+    await mousedown()
+    await settle()
+  }
+  return first
+}
 
 /**
  * True only if every panelId present in `before` is still present in `after`
@@ -8558,6 +8588,91 @@ app.whenReady().then(async () => {
       // up must never turn a green suite red.
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
+    // ---------------------------------------------------------------------
+    // M13: file panels — a local file, minted as a read-only, live-watched
+    // node on the canvas. A fixture file in a SPACED temp directory, the
+    // rule this repo learned from the pane-died redirect bug shipping
+    // through eight reviews on space-free fixtures.
+    // ---------------------------------------------------------------------
+    {
+      const FILE_DIR = mkdtempSync(join(tmpdir(), 'tc filepanel '))
+      const FIXTURE = join(FILE_DIR, 'notes.md')
+      writeFileSync(FIXTURE, 'first line\nsecond line\n')
+
+      // 125 — the panel renders the file's REAL content, minted through the
+      //       real openFilePanel path via the __m13Open test hook. Asserted
+      //       on the content rather than on the panel existing: a panel that
+      //       mounted and rendered nothing satisfies "a panel exists"
+      //       completely.
+      const xtermsBefore = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+      await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+      const rendered = await waitUntil(async () => {
+        const t = await wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-panel-kind="file"] [data-scroll-host]'); return b ? b.textContent : null })()`)
+        return t && t.includes('second line') ? t : null
+      }, 5000)
+      ok('125 a file panel renders the real content of the file it names',
+        rendered !== null,
+        `content=${JSON.stringify(String(rendered).slice(0, 40))}`)
+
+      // 126 — THE LIVENESS CHECK, and the whole reason this milestone's
+      //       watcher is directory-based rather than a plain path watch: it
+      //       is driven by an ATOMIC write (temp file, then rename over the
+      //       target), because that is what an agent actually does and it is
+      //       the exact case a bare fs.watch(path) misses — the inode the
+      //       original watch pinned is gone the instant the rename lands.
+      //       WAITED on, never slept on: a fixed sleep against a watcher is
+      //       a flake and not a bound.
+      writeFileSync(join(FILE_DIR, 'notes.tmp'), 'rewritten by an agent\n')
+      renameSync(join(FILE_DIR, 'notes.tmp'), FIXTURE)
+      const updated = await waitUntil(async () => {
+        const t = await wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-panel-kind="file"] [data-scroll-host]'); return b ? b.textContent : null })()`)
+        return t && t.includes('rewritten by an agent') ? t : null
+      }, 5000)
+      ok('126 an atomic external rename-over-target reaches the live panel',
+        updated !== null,
+        updated === null ? 'never arrived' : 'arrived')
+
+      // 127 — it costs no session and no WebGL context, and BOTH clauses are
+      //       required. The second is what rejects an implementation that
+      //       quietly demoted some other panel to pay for this one — "the
+      //       file panel has no xterm" is satisfied perfectly by that alone.
+      const fileId = await wc.executeJavaScript(
+        `document.querySelector('[data-panel-kind="file"]').getAttribute('data-panel-id')`)
+      const hasSession = await wc.executeJavaScript(
+        `Boolean(window.__m4aSessions()[${JSON.stringify(fileId)}])`)
+      const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+      ok('127 a file panel holds no PanelSession and costs no WebGL context',
+        hasSession === false && xtermsAfter === xtermsBefore,
+        `session=${hasSession} xterms ${xtermsBefore}->${xtermsAfter}`)
+
+      // 128 — closing it sends NO pty.kill for its id. A negative against a
+      //       recording mechanism is vacuous if the recorder has stopped
+      //       recording, so this ALSO closes a real terminal panel in the
+      //       same window and asserts THAT id IS recorded — the same
+      //       non-vacuity shape checks 111/111b already established for
+      //       review nodes. A kill aimed at an id naming no session is
+      //       swallowed at every layer below the IPC door (the direct
+      //       backend's destroy() is a no-op, tmux's cli() eats a non-zero
+      //       exit, dropBaseline for an unknown id drops nothing), so
+      //       without the recorder every renderer-visible fact would stay
+      //       identical with the !isTerminalPanel guard removed — the exact
+      //       trap checks 111/111b were built to close.
+      const killsBefore = killedPanelIds.length
+      await clickPanelClose(wc, fileId)
+      const termId = await wc.executeJavaScript(
+        `document.querySelector('.panel:not([data-panel-kind])').getAttribute('data-panel-id')`)
+      await clickPanelClose(wc, termId)
+      await settle()
+      const killsSince = killedPanelIds.slice(killsBefore)
+      ok('128 closing a file panel sends no pty.kill, while a terminal close still does',
+        !killsSince.includes(fileId) && killsSince.includes(termId),
+        `kills=${JSON.stringify(killsSince)}`)
+
+      try { rmSync(FILE_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
   } catch (error) {
