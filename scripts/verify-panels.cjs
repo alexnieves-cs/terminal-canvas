@@ -8167,6 +8167,15 @@ app.whenReady().then(async () => {
       // race checks 99 and 101 already guard against for captureBaseline.
       if (saPanelId) await waitUntil(async () => (await sessionMap(wc)).has(saPanelId), 8000)
 
+      // The BEFORE half of check 119's real registry clause, captured here
+      // rather than any later point: the subject panel's own session
+      // already exists (the wait above just confirmed it), and no subagent
+      // fixture file exists yet — seedSession runs below — so no node can
+      // possibly have rendered. Whatever __m4aSessions().length reads here
+      // is the count check 119 must still see once the nodes exist.
+      const sessionsBeforeNodes = await wc.executeJavaScript(
+        `(window.__m4aSessions ? window.__m4aSessions() : []).length`)
+
       // Seeds one session directory plus its parent transcript under a given
       // slug. Called for BOTH spellings of saCwd below — see that call's own
       // comment for why one alone is not enough.
@@ -8217,13 +8226,38 @@ app.whenReady().then(async () => {
       ok('118 a seeded subagents/ dir paints one node per subagent, with its real state',
         appeared && states === 'done,running', `states=${states}`)
 
-      // 119. The check the milestone's central claim rests on, and it
-      // asserts BOTH halves in one read. The registry clause is read from
-      // __m4aSessions — the RENDERER's registry, not pty:list — because the
-      // claim is about what the renderer minted. The xterm clause is what
-      // rejects an implementation that quietly demoted some other panel to
-      // pay for the nodes: "the node has no terminal" is satisfied perfectly
-      // by that. Check 103's shape.
+      // 119. The check the milestone's central claim rests on. Two
+      // INDEPENDENT clauses, not one restated two ways — a review found the
+      // first draft's comment overclaimed what the second one actually
+      // proves, and this is the corrected pair.
+      //
+      // heldByRegistry tests whether a subagent record's own id
+      // (`agent-a1`, derived from a `.meta.json` filename) collides with a
+      // PanelId key in __m4aSessions(). Those are DISJOINT namespaces BY
+      // DESIGN — nothing threads a record id into registry.ensure(), and
+      // SubagentLayer's own architecture comment says so — so this clause
+      // can only ever go red for ONE narrow regression: literally reusing a
+      // record id as a panel id. It does NOT establish "no node holds a
+      // PanelSession" the way it looks like it does, and the way the
+      // identically-shaped clause genuinely does for a review node in check
+      // 103 — a review node's id IS a PanelId, minted from the very same
+      // `nextIdRef` counter every terminal panel's is (see "Panel ids are
+      // one sequence with two prefixes" in CLAUDE.md). A subagent record's
+      // id is never minted from that counter at all, so the two checks only
+      // LOOK alike.
+      //
+      // sessionsAfterNodes is the clause that actually proves the claim:
+      // the registry's session COUNT, unchanged across the whole fan-out.
+      // sessionsBeforeNodes (captured above, before any subagent fixture
+      // file existed) already includes the subject panel's own session, so
+      // that session cancels out of the comparison — what is left is
+      // "the nodes arrived and minted nothing", independent of what a node
+      // might be keyed by. This is the clause a future regression that gave
+      // subagent nodes their own PanelSession would actually trip.
+      //
+      // Kept both: heldByRegistry is cheap and still catches the id-reuse
+      // case it always could; sessionsAfterNodes is what earns the "no
+      // PanelSession" wording in the ok() title below.
       const nodeIds = await wc.executeJavaScript(`
         Array.from(document.querySelectorAll('[data-subagent-id]'))
           .map((n) => n.getAttribute('data-subagent-id'))
@@ -8237,6 +8271,8 @@ app.whenReady().then(async () => {
            return (${JSON.stringify(nodeIds)}).some((id) => ids.has(id))
          })()`
       )
+      const sessionsAfterNodes = await wc.executeJavaScript(
+        `(window.__m4aSessions ? window.__m4aSessions() : []).length`)
       const xtermsAfter = await liveCount(wc)
       // NOT a bare "+1". By this point roughly 117 checks' worth of panels
       // have spawned across this suite and LIVE_BUDGET (8) is a real
@@ -8250,9 +8286,18 @@ app.whenReady().then(async () => {
       // trust for "is this panel's PTY up".
       const subjectLive = saPanelId ? (await sessionMap(wc)).has(saPanelId) : false
       const expectedXterms = xtermsBefore + (subjectLive ? 1 : 0)
-      ok('119 no node holds a PanelSession, and the live xterm count moves only by the subject panel\'s own liveness',
-        heldByRegistry === false && xtermsAfter === expectedXterms,
-        `held=${heldByRegistry} before=${xtermsBefore} after=${xtermsAfter} subjectLive=${subjectLive}`)
+      // nodeIds.length > 0 is the non-vacuity guard: without it, a feature
+      // that silently rendered NO nodes at all would satisfy every other
+      // clause here (an empty array collides with nothing, the session
+      // count is trivially unchanged, and the xterm delta is explained by
+      // the subject panel alone) — checks 102/103 carry the identical guard
+      // for a review node, and 119 should not have to lean on 118 next door
+      // to mean anything on its own.
+      ok('119 no node holds a PanelSession — the session count is unchanged by the fan-out — and the live xterm count moves only by the subject panel\'s own liveness',
+        nodeIds.length > 0 && heldByRegistry === false &&
+          sessionsAfterNodes === sessionsBeforeNodes && xtermsAfter === expectedXterms,
+        `nodes=${nodeIds.length} held=${heldByRegistry} sessions ${sessionsBeforeNodes} -> ${sessionsAfterNodes} ` +
+        `xterms before=${xtermsBefore} after=${xtermsAfter} subjectLive=${subjectLive}`)
       // +0 or +1, never anything else: a bare inequality against `before`
       // would also pass against an implementation that quietly demoted one
       // panel to promote another while adding a node's worth of nothing —
@@ -8300,19 +8345,16 @@ app.whenReady().then(async () => {
           Math.abs(afterBox.x - beforeBox.x - 120) < 4,
         `parent=${domParentId} before=${JSON.stringify(beforeBox)} after=${JSON.stringify(afterBox)}`)
 
-      // Best-effort, the rule every fixture cleanup in this file already
-      // follows: a failure to clean up must never turn a green suite red.
-      // SA_ROOT itself is left alone — it is panels-entry.cjs's fence for
-      // the whole harness, not a fixture this block owns, and the watcher
-      // is still ticking against it for the rest of the run.
-      try {
-        rmSync(join(SA_ROOT, saCwd.replace(/[^A-Za-z0-9]/g, '-')), { recursive: true, force: true })
-      } catch { /* best effort */ }
-      if (realSaCwd !== saCwd) {
-        try {
-          rmSync(join(SA_ROOT, realSaCwd.replace(/[^A-Za-z0-9]/g, '-')), { recursive: true, force: true })
-        } catch { /* best effort */ }
-      }
+      // Best-effort, the rule every other fixture root in this file
+      // already follows (`repo`, `notRepo`, `crepo` above are all
+      // explicitly rmSync'd): a failure to clean up must never turn a
+      // green suite red. SA_ROOT is removed WHOLESALE rather than only its
+      // two slug subdirectories — this is the last block in the run to
+      // touch it, so there is nothing left for the watcher to poll against
+      // it for, and leaving it behind would be a fixture directory this
+      // suite minted and never removed, the exact thing this comment exists
+      // to call out for the peers beside it.
+      try { rmSync(SA_ROOT, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(saCwd, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
