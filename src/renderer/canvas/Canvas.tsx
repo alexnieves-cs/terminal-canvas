@@ -21,6 +21,7 @@ import {
 import {
   applyLiveSession, clearLiveSession, getLiveSession, useLiveSession
 } from '@renderer/session/live-session-store'
+import { applyUsage, clearUsage } from '@renderer/session/usage-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -435,6 +436,7 @@ export function Canvas({
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
         clearLiveSession(panel.rect.id)
+        clearUsage(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -704,6 +706,13 @@ export function Canvas({
     applyLiveSession(update.panelId, update.cwd, update.currentCommand)
   }), [])
 
+  // One subscription for the whole canvas, like the two above and for the
+  // same reason: the store fans out per panel id, so a per-panel subscription
+  // here would deliver every panel's usage update to every panel.
+  useEffect(() => window.canvas.session.onUsage(({ panelId, usage }) => {
+    applyUsage(panelId, usage)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -808,6 +817,7 @@ export function Canvas({
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
       clearLiveSession(panel.rect.id)
+      clearUsage(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1260,6 +1270,7 @@ export function Canvas({
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
     clearLiveSession(id)
+    clearUsage(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -2369,6 +2380,7 @@ export function Canvas({
                     registry.dispose(panelId)
                     clearAgentState(panelId)
                     clearLiveSession(panelId)
+                    clearUsage(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -2484,6 +2496,7 @@ export function Canvas({
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
       clearLiveSession(id)
+      clearUsage(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it (the × and the rail's close control are
