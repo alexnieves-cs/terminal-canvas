@@ -14,7 +14,7 @@
 > number in it, and a proposal read without its number reads as taste.
 
 **Status:** design approved 2026-08-30. Not yet planned; see
-[Sequencing](#sequencing) for the six phases and which of them are
+[Sequencing](#10-sequencing) for the six phases and which of them are
 independently shippable.
 
 ---
@@ -695,7 +695,7 @@ is a position rather than an omission.**
 
 ## 10. Sequencing
 
-Six phases. **Each is independently shippable** — the app is coherent after any
+Six phases, 0 through 5. **Each is independently shippable** — the app is coherent after any
 of them — and they are ordered so the largest measurable win lands first.
 
 ### Phase 0 — Foundations (no visual change)
@@ -752,7 +752,7 @@ inside 260px.
 tiers (#22).
 
 **Success:**
-1. All five kinds render through one frame; the three ×3 CSS duplicates
+1. All five kinds render through one frame; the five ×3 CSS duplicates
    (`__summary`, `__refresh`, `__note`, `__more`, `__body`) are **one each**.
 2. `.pf__body` carries **no transform at any scale** — asserted as source text
    *and* by `__m4aCellToScreen` at a scale ≠ 1, because this is the failure with
@@ -785,7 +785,7 @@ tiers (#22).
 4. `appearance.theme` round-trips through a write and a reopen, and a value
    outside its `values` array is dropped with a warning.
 
-### Phase 6 — *(not in this milestone)*
+### Beyond — what Phases 1–2 make cheap *(not scheduled here)*
 
 `⌕` Search (#16), `✎` Annotate (#15) and the minimap (#33) each land as one
 dock entry and one pane, which is the whole point of Phases 1–2. They are named
