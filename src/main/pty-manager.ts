@@ -519,18 +519,22 @@ export class PtyManager {
     // may be never. lastLive is supposed to be cleared alongside the
     // session; kill() already does both, detachAll() must too.
     this.lastLive.clear()
-    // subagentWatch follows lastLive here too: this manager survives the
-    // detach and keeps its per-panel claims (session dir, offset, records)
-    // otherwise, so a stale claim would sit unrefreshed rather than being
-    // re-established against whatever spawnedAt the reattaching create()
-    // records. Known gap this leaves open: a panel that reattaches carries a
-    // NEW, later spawnedAt, and chooseSession only accepts a directory
-    // created ON OR AFTER it — so a Claude Code session dir that already
-    // existed before the reload will not be re-claimed until it (or a newer
-    // one) is created again. Left as a limitation for this milestone, the
-    // same shape as review's own unresolved "survival across a full app
-    // quit" gap.
-    this.subagentWatch.clear()
+    // subagentWatch.clearDedupe(), deliberately NOT .clear(). detachAll()
+    // is a re-send trigger, not a teardown — main's PtyManager and the tmux
+    // sessions it holds both survive a Cmd+R, only the renderer is new, so
+    // its empty store must be told every fact again rather than have them
+    // deduped away, the identical reason lastLive.clear() exists two lines
+    // up. A full clear() here would ALSO drop the claimed session directory,
+    // so the next poll would re-derive it from the REATTACHING create()
+    // call's new, later spawnedAt — and chooseSession only accepts a
+    // directory created ON OR AFTER spawnedAt, which the real one, predating
+    // the reload, no longer is. That was this file's first draft, caught in
+    // review: a panel's subagents would have vanished at the first Cmd+R and
+    // never come back for the life of that panel, with nothing in any log —
+    // exactly the failure this milestone is supposed to be about. See
+    // SubagentWatch.clearDedupe()'s own comment for the same story from the
+    // other side.
+    this.subagentWatch.clearDedupe()
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
 

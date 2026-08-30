@@ -286,6 +286,42 @@ const tree1 = () => ({
     JSON.stringify({ first, second }))
 }
 
+// 22. clearDedupe() versus clear() -- the split R8 exists for. detachAll()'s
+// Cmd+R path is a RE-SEND trigger, not a teardown: main's PtyManager and the
+// tmux sessions it holds both survive a reload, only the renderer's store is
+// empty, so it must forget the DEDUPE and nothing else. Dropping the CLAIM
+// too (clear()'s job) would force the next poll to re-derive it from the
+// REATTACHING create() call's new, later spawnedAt -- and chooseSession only
+// accepts a session directory created ON OR AFTER spawnedAt, which the real
+// one, predating the reload, no longer is. A panel's subagents would vanish
+// at the first Cmd+R and never come back for the life of that panel, with
+// nothing in any log -- the exact failure this milestone is supposed to be
+// about, and a real defect this suite's own instructions once specified by
+// mistake (a global clear() call where a clearDedupe() belonged).
+//
+// The second poll is deliberately given a LATER spawnedAt -- exactly what a
+// reattach produces -- so a clear() mislabelled as clearDedupe() is caught
+// rather than accidentally passing: with the claim gone, poll() would have
+// to re-claim, chooseSession would reject the now-too-old session directory
+// against the later spawnedAt, and the panel would report NOTHING. A correct
+// clearDedupe() never re-claims at all -- the existing claim is reused
+// untouched -- so the later spawnedAt changes nothing about its answer. Both
+// halves are asserted in one condition, because either alone passes against
+// the wrong implementation: a bare clear() satisfies "reports again" only by
+// accident (it does not, here -- it reports nothing) but a check that only
+// asked "did SOMETHING come back" would not say which behaviour it saw.
+{
+  const w = new S.SubagentWatch(fakeFs(tree1()))
+  const first = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  w.clearDedupe()
+  const second = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 600 }])
+  ok('22 clearDedupe() forgets the dedupe (reports again) but keeps the claim (same record survives a later spawnedAt)',
+    first.length === 1 && first[0].records.length === 1 &&
+      second.length === 1 && second[0].records.length === 1 &&
+      second[0].records[0].toolUseId === first[0].records[0].toolUseId,
+    JSON.stringify({ first, second }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

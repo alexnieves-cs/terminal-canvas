@@ -199,6 +199,28 @@ export class SubagentWatch {
   }
 
   /**
+   * Every panel's DEDUPE forgotten; every panel's CLAIM (its session dir,
+   * byte offset and records map) kept. For detachAll()'s reload path, which
+   * is a re-send trigger and not a teardown: main's PtyManager and the tmux
+   * sessions it holds both survive a Cmd+R, only the renderer is new, so its
+   * empty store has to be told every fact again rather than have them
+   * deduped away against a memory the fresh renderer never had — the
+   * identical reason PtyManager's own lastLive.clear() exists.
+   *
+   * clear() (above) would satisfy that alone and is the wrong choice: it
+   * also drops the claimed session directory, so the next poll would
+   * re-derive it from the REATTACHING create() call's new, later spawnedAt —
+   * and chooseSession only accepts a directory created ON OR AFTER
+   * spawnedAt, which the real one, predating the reload, no longer is. A
+   * panel's subagents would vanish at the first Cmd+R and never come back
+   * for the life of that panel, with nothing in any log. See
+   * pty-manager.ts's detachAll() for where this is called.
+   */
+  clearDedupe(): void {
+    this.lastKeys.clear()
+  }
+
+  /**
    * Claims a session directory for a panel that holds no state yet, or
    * returns null having claimed nothing. Every step below can fail on an
    * ordinary state — no Claude Code, no session created yet, an unreadable
