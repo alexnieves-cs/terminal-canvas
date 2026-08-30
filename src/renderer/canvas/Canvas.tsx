@@ -368,6 +368,19 @@ export function Canvas({
    * stays private to this component so a caller cannot grow the selection by
    * accident before the gesture that is supposed to exists.
    */
+  /**
+   * The selection as an ARRAY, memoised on the Set's identity.
+   *
+   * Not `[...selectedIds]` inline at the JSX: this flows into Palette's
+   * `commands` memo, whose [rows] effect re-seats the selected row, so a fresh
+   * array on every render would re-seat the palette's selection on every
+   * mousemove over the canvas — the silent-selection-move defect
+   * "resetViewport must stay a useCallback" documents. `selectedIds` keeps its
+   * identity across renders that do not change the selection (EMPTY_SELECTION
+   * and retainSelection both preserve it), which is what makes this stable.
+   */
+  const selectedPanelIds = useMemo(() => [...selectedIds], [selectedIds])
+
   const selectOnly = useCallback((id: string | null): void => {
     setSelectedIds(id === null ? EMPTY_SELECTION : new Set([id]))
   }, [])
@@ -997,6 +1010,98 @@ export function Canvas({
   // click just switched TO, which is silently unclickable from then on.
   const reloadWorkspacesRef = useRef<(() => void) | null>(null)
 
+  /**
+   * File a selection of panels into another workspace's record.
+   *
+   * Two absences carry this whole verb, and both fail SILENTLY if undone.
+   *
+   * NO registry.dispose, and no pty.kill. A moved panel becomes a HIDDEN
+   * workspace's panel with a running tmux session — exactly the state a
+   * workspace switch already produces ("demote, not dispose"), reached
+   * through a third door. Disposing here would kill a running agent as a
+   * side effect of FILING it, and every count-based observable stays correct
+   * against that bug: the panel leaves this canvas either way, main's record
+   * is right either way, the rail is right either way. Only the pid tells
+   * them apart, which is why verify:panels 121 reads pty:list.
+   *
+   * NO commitHistory. `history` is ONE stack over ONE Panel[], and
+   * applyHistory disposes any panel an undone state no longer contains —
+   * which reaches pty.kill. An undo after a move would either resurrect
+   * panels main's record no longer lists here, or kill sessions that now
+   * belong to another workspace. Cmd+Z doing nothing after a move is the
+   * honest failure; doing something kills someone else's agents. The same
+   * ruling switchWorkspace records for clearing the stack, and M9c's commit
+   * records for pushing no entry.
+   */
+  const movePanelsToWorkspace = useCallback(
+    (panelIds: string[], target: { workspaceId: string } | { newName: string }): void => {
+      // Nothing selected is not an error and must not mint a workspace: the
+      // `newName` branch would otherwise create an empty canvas as the
+      // side effect of a verb that then moved nothing into it.
+      if (panelIds.length === 0) return
+      void (async (): Promise<void> => {
+        let result: { workspaceId: string } | null
+        try {
+          result = await window.canvas.workspace.movePanels(panelIds, target)
+        } catch (error: unknown) {
+          // Unhandled otherwise: `void`ing the chain silences the lint, not
+          // the rejection — the same treatment switchWorkspace's own await
+          // gets, and for the same reason. Main changed nothing it did not
+          // finish, so leaving this canvas exactly as it is is the honest
+          // response to a throw.
+          console.warn('[workspace] could not move panels', panelIds, error)
+          return
+        }
+        // Null means the target named nothing and main changed NOTHING — a
+        // stale palette row, or a workspace deleted out from under an
+        // in-flight move. Dropping the panels locally here would leave them
+        // rendered by no workspace at all while their sessions ran on, so
+        // this takes the same branch activateWorkspace's unknown-id case
+        // takes, for the same reason.
+        if (!result) return
+        const moved = new Set(panelIds)
+        // Read once from the ref and used for BOTH commits below, so the
+        // panels React renders and the panels history is re-seeded from
+        // cannot disagree — the same source switchWorkspace reads for the
+        // outgoing canvas.
+        const remaining = panelsRef.current.filter((p) => !moved.has(p.rect.id))
+        setPanels(remaining)
+        // HISTORY IS CLEARED, and pushing no entry is NOT enough on its own.
+        // That was the first implementation and verify:panels 122 caught it:
+        // `history.present` still held the pre-move array, so one Cmd+Z
+        // stepped back to a state that predates the moved panel, and
+        // applyHistory disposes every panel an undone state no longer
+        // contains — killing a running agent that now belongs to ANOTHER
+        // workspace, from a keystroke aimed at this one. Measured, not
+        // reasoned: `n105: 85186 -> MISSING`.
+        //
+        // The same clearing switchWorkspace does, for the same reason, and it
+        // has the same cost: gestures made in this canvas before the move
+        // stop being undoable. The surgical alternative — strip the moved ids
+        // out of every past and future entry, so earlier gestures survive —
+        // is real machinery over history.ts and is not what this milestone
+        // scoped. Cmd+Z doing nothing after a move is the honest failure;
+        // doing something kills someone else's agents.
+        setHistory(createHistory(remaining))
+        // EMPTY_SELECTION rather than a fresh Set, so a move that selected
+        // nothing new keeps the identity stable for the memos downstream.
+        setSelectedIds(EMPTY_SELECTION)
+        // assignTiers pins the focused panel live UNCONDITIONALLY, so a
+        // focusedId naming a panel that is no longer on this canvas holds a
+        // budget slot for the rest of the run and keeps routing Cmd+C to a
+        // panel the user cannot see.
+        if (focusedId !== null && moved.has(focusedId)) setFocusedId(null)
+        // The rail's Workspaces section renders each workspace's panel count
+        // and is ALWAYS mounted, so without this both the source and the
+        // destination row keep their pre-move counts until something else
+        // happens to reload. A ref for the reason switchWorkspace uses one:
+        // reloadWorkspaces is declared further down this component.
+        reloadWorkspacesRef.current?.()
+      })()
+    },
+    [focusedId]
+  )
+
   // Test hooks for verify:panels. The registry (and, since M7, the workspace
   // surface) is a module-level/main-owned concept with no other route in for
   // executeJavaScript. Kept to narrow, single-purpose reads/writes — named
@@ -1102,6 +1207,10 @@ export function Canvas({
       createAndSwitch: (name: string) => Promise<string>
       allPanelIds: () => Promise<string[]>
       deleteWorkspace: (workspaceId: string) => void
+      movePanels: (
+        panelIds: string[],
+        target: { workspaceId: string } | { newName: string }
+      ) => void
     } => ({
       switchTo: (workspaceId: string) => switchWorkspace(workspaceId),
       // Returns the id the store actually minted, not just a fire-and-forget
@@ -1133,9 +1242,15 @@ export function Canvas({
             workspaceId, row?.name ?? workspaceId, row?.panelIds.length ?? 0
           )
         })
-      }
+      },
+      // The SAME callback the palette's move rows run — not a second path to
+      // main's movePanels. A hook that invoked window.canvas.workspace
+      // .movePanels directly would prove main's record edit works and say
+      // nothing at all about whether this renderer disposes the sessions on
+      // its way out, which is the entire subject of verify:panels 121.
+      movePanels: (panelIds, target) => movePanelsToWorkspace(panelIds, target)
     })
-  }, [applyHistory, resetCanvas, switchWorkspace])
+  }, [applyHistory, resetCanvas, switchWorkspace, movePanelsToWorkspace])
 
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
@@ -2503,11 +2618,44 @@ export function Canvas({
         // not a line to sneak into a fix wave.
       })
     },
-    openReview
+    openReview,
+    movePanelsToWorkspace,
+    beginMovePanelsToNewWorkspace: (panelIds) => {
+      setInputMode({
+        kind: 'text',
+        label: `Move ${panelIds.length} panel${panelIds.length === 1 ? '' : 's'} to a new workspace named…`,
+        initial: '',
+        submit: (value) => {
+          const name = value.trim()
+          // An empty trimmed value is a CANCEL, not "name this workspace the
+          // empty string" — the same rule beginCreateWorkspace states, and
+          // worse here: an empty name would round-trip to disk on a
+          // workspace that now holds the user's panels, leaving every row
+          // that names it blank with no way back short of deleting the
+          // workspace those panels are in.
+          if (name.length === 0) {
+            setInputMode(null)
+            return
+          }
+          // ONE call, not create-then-move: main mints the workspace inside
+          // movePanels and defers the mint until the move is known non-empty,
+          // so a name that turns out to move nothing leaves no empty
+          // workspace behind. Composing it here out of create() + a move
+          // would put that ordering in a second place and lose it.
+          movePanelsToWorkspace(panelIds, { newName: name })
+          setInputMode(null)
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE running a row's command, so
+      // without reopening, the mode would be set on a palette that is already
+      // gone and the clear-on-close effect would wipe it — the same pairing
+      // beginCreateWorkspace and beginRenamePreset both make.
+      palette.openPalette()
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
-       onClosePanel, onSelectPanel, openReview])
+       onClosePanel, onSelectPanel, openReview, movePanelsToWorkspace])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2894,6 +3042,7 @@ export function Canvas({
             // author of a fact this side already folds correctly.
             attentionIds={waitingIds}
             hasSelection={hasSelection()}
+            selectedIds={selectedPanelIds}
             inputMode={inputMode}
           />
         )}

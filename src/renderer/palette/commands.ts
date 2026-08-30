@@ -151,6 +151,29 @@ export interface PaletteActions {
    * inspector can be collapsed.
    */
   openReview(subjectId: string): void
+  /**
+   * File a rubber-band selection into ANOTHER workspace's record.
+   *
+   * Touches no session on either side: a moved panel becomes a hidden
+   * workspace's panel with a running tmux session, which is exactly the state
+   * a workspace switch already produces. Takes the ids explicitly rather than
+   * reading a selection, for the reason savePanelAsPreset takes an id — the
+   * palette acts on the CAPTURED state, and a callback that re-read "whatever
+   * is selected now" would act on a selection the user has since changed.
+   */
+  movePanelsToWorkspace(
+    panelIds: string[],
+    target: { workspaceId: string } | { newName: string }
+  ): void
+  /**
+   * The same move into a workspace that does not exist yet, as TWO steps: this
+   * only opens the palette's text input, and the submit does the move. A row
+   * wired straight to movePanelsToWorkspace with an invented name would run on
+   * one Enter and file the user's panels into a workspace they never named and
+   * cannot cancel out of — the two-step shape beginRenamePreset already uses is
+   * what makes Escape a real cancel.
+   */
+  beginMovePanelsToNewWorkspace(panelIds: string[]): void
 }
 
 export interface PaletteContext {
@@ -178,6 +201,12 @@ export interface PaletteContext {
    */
   capturedId: string | null
   hasSelection: boolean
+  /**
+   * The rubber-band selection, as ids. A plain array rather than the Set
+   * Canvas holds, for the reason every other field here is plain data: this
+   * module stays in the plain-node verify tier and its fixtures stay literals.
+   */
+  selectedIds: string[]
   actions: PaletteActions
 }
 
@@ -193,6 +222,11 @@ export const REASON_ALREADY_DEFAULT = 'already the default'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 export const REASON_NOT_STARTED = 'that panel has not started'
+// Deliberately NOT REASON_NO_SELECTION, which is about a TEXT selection inside
+// a panel (the save-prompt row). Two different selections with two different
+// gestures: collapsing them would tell a user who has selected text that they
+// need to select text, which sends them to do the thing they already did.
+export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag first'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -611,6 +645,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // eight-row budget M6p sized it to. They stay findable by query — typing
   // "delete" surfaces them — because a row that disappears is
   // indistinguishable from a feature that is missing.
+  // The selection size, phrased once. Every move row says it, because the row
+  // is the only place a user learns HOW MANY panels the verb is about — the
+  // marquee that built the selection is long gone by the time the palette is
+  // open, and a row reading only "Move to school" is a verb with an invisible
+  // object.
+  const count = `${ctx.selectedIds.length} panel${ctx.selectedIds.length === 1 ? '' : 's'}`
+
   for (const w of ctx.workspaces) {
     out.push({
       id: `workspace.rename.${w.id}`,
@@ -620,6 +661,38 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       hiddenAtRest: true,
       run: () => actions.beginRenameWorkspace(w.id, w.name)
     })
+    // A move row per OTHER workspace. The ACTIVE one is skipped rather than
+    // disabled: moving panels to the workspace they are already in is a no-op
+    // wearing the costume of a verb — it would run, close the palette, clear
+    // the selection and change nothing, which reads as a broken feature rather
+    // than as a no-op. That is the opposite ruling from the switch row above,
+    // which IS disabled-with-a-reason for the active workspace, and the
+    // difference is that "you are already here" is a useful thing to be told
+    // about a destination and a meaningless thing to be told about a filing
+    // cabinet.
+    if (!w.active) {
+      out.push(
+        withReason(
+          {
+            id: `workspace.move.${w.id}`,
+            title: `Move ${count} to “${w.name}”`,
+            searchText: 'move panels to workspace file relocate send',
+            group: 'manage',
+            scope: 'workspaces',
+            hiddenAtRest: true,
+            // NO `destructive`, deliberately, one line above a row that has
+            // it. `Command.destructive` is typed `?: true` rather than
+            // `boolean` precisely so absent is the only way to say "benign" —
+            // and a move IS benign: nothing is killed on either side, the
+            // panel and its running agent both survive. Marking it would put a
+            // confirm gate in front of a reversible edit and train the user to
+            // dismiss the gate that guards the delete row below it.
+            run: () => actions.movePanelsToWorkspace(ctx.selectedIds, { workspaceId: w.id })
+          },
+          ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined
+        )
+      )
+    }
     out.push({
       id: `workspace.delete.${w.id}`,
       title: `Delete workspace “${w.name}”…`,
@@ -633,6 +706,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => actions.deleteWorkspace(w.id, w.name, w.panelIds.length)
     })
   }
+
+  out.push(
+    withReason(
+      {
+        id: 'workspace.move-new',
+        title: `Move ${count} to a new workspace…`,
+        searchText: 'move panels new workspace file relocate send',
+        group: 'manage',
+        scope: 'workspaces',
+        hiddenAtRest: true,
+        // No `destructive` either — see the per-workspace row above.
+        // begin*, never the move itself: the name has to be typed, and the
+        // ellipsis is a promise that Escape still gets the user out.
+        run: () => actions.beginMovePanelsToNewWorkspace(ctx.selectedIds)
+      },
+      // Present and DISABLED, never absent — the rule the whole file obeys: a
+      // row that disappears is indistinguishable from a feature that was never
+      // built, and a user who has not yet discovered that the rubber-band drag
+      // is what feeds this verb has nowhere else to learn it.
+      ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined
+    )
+  )
 
   return out
 }

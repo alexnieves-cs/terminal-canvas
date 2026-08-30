@@ -219,7 +219,13 @@ const spyActions = () => {
     // this single-script suite aborts every check written after it.
     restartPanel: record('restartPanel'),
     // Review IS reached from a row too (checks 67/68), same reason.
-    openReview: record('openReview')
+    openReview: record('openReview'),
+    // Both move verbs ARE reached from rows (checks 70/72), so these are not
+    // merely shape: without them `row.run()` calls undefined and the check
+    // dies with a TypeError, which in this single-script suite aborts every
+    // check written after it.
+    movePanelsToWorkspace: record('movePanelsToWorkspace'),
+    beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace')
   }
 }
 
@@ -232,6 +238,7 @@ const ctx = (over = {}) => ({
   attentionIds: [],
   capturedId: null,
   hasSelection: false,
+  selectedIds: [],
   actions: spyActions(),
   ...over
 })
@@ -1068,6 +1075,70 @@ const WS = [
   ok('69 a review node is navigable and its process verbs are disabled',
     rows.some((r) => r.id === 'panel.goto.r1' && r.disabledReason === undefined) &&
       rows.find((r) => r.id === 'panel.restart')?.disabledReason === P.REASON_NOT_STARTED)
+}
+
+// 70. A move row exists per OTHER workspace, and the selection's own
+//     workspace is NOT among them. Moving panels to the workspace they are
+//     already in is a no-op wearing the costume of a verb: it would run,
+//     close the palette, clear the selection and change nothing, which reads
+//     as "the move feature is broken" rather than as "that was a no-op".
+//
+//     Asserted as an exact id set rather than as a count, so a row aimed at
+//     the wrong workspace — the failure that actually files a user's panels
+//     somewhere they never asked for — cannot satisfy it. The run() clause
+//     is what pins the row to its OWN workspace id and to the SELECTED ids:
+//     a row that passed the whole canvas, or a neighbour's id, still renders
+//     identically.
+{
+  const c = ctx({ workspaces: WS, selectedIds: ['n1', 'n2'] })
+  const rows = P.buildCommands(c)
+  const moves = rows.filter((r) => r.id.startsWith('workspace.move.')).map((r) => r.id).sort()
+  const row = byId(rows, 'workspace.move.w2')
+  if (row) row.run()
+  ok('70 one move row per OTHER workspace, aimed at that workspace',
+    moves.join(',') === 'workspace.move.w2' &&
+      row !== undefined && row.disabledReason === undefined &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'movePanelsToWorkspace' &&
+      JSON.stringify(c.actions.calls[0][1]) === '["n1","n2"]' &&
+      JSON.stringify(c.actions.calls[0][2]) === '{"workspaceId":"w2"}',
+    `moves=[${moves.join(',')}] calls=${JSON.stringify(c.actions.calls)}`)
+}
+
+// 71. With an EMPTY selection both move rows are PRESENT and DISABLED with a
+//     reason, never absent — check 31's rule: a row that disappears is
+//     indistinguishable from a feature that was never built, and a user who
+//     has not yet learned that the marquee is what feeds this verb has no way
+//     to discover it from an empty list. Compared against the EXPORTED
+//     constant rather than a string literal, which would keep passing while
+//     the text the user actually reads said something else entirely.
+{
+  const rows = P.buildCommands(ctx({ workspaces: WS, selectedIds: [] }))
+  const move = byId(rows, 'workspace.move.w2')
+  const moveNew = byId(rows, 'workspace.move-new')
+  ok('71 an empty selection disables the move rows rather than hiding them',
+    move !== undefined && move.disabledReason === P.REASON_NO_PANELS_SELECTED &&
+      moveNew !== undefined && moveNew.disabledReason === P.REASON_NO_PANELS_SELECTED,
+    JSON.stringify([move && move.disabledReason, moveNew && moveNew.disabledReason]))
+}
+
+// 72. "Move to new workspace…" is present and enters TEXT INPUT mode rather
+//     than running the move immediately — the two-step shape
+//     beginRenamePreset already uses, which is what makes Escape a real
+//     cancel. The discriminating clause is WHICH action it calls: a row wired
+//     straight to movePanelsToWorkspace with an invented name renders
+//     identically, runs on one Enter, and files the user's panels into a
+//     workspace they never named and cannot cancel out of.
+{
+  const c = ctx({ workspaces: WS, selectedIds: ['n1', 'n2'] })
+  const row = byId(P.buildCommands(c), 'workspace.move-new')
+  if (row) row.run()
+  ok('72 move-to-new begins an input mode rather than moving immediately',
+    row !== undefined && row.disabledReason === undefined &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'beginMovePanelsToNewWorkspace' &&
+      JSON.stringify(c.actions.calls[0][1]) === '["n1","n2"]',
+    JSON.stringify(c.actions.calls))
 }
 
 const failed = results.filter((r) => !r.pass)

@@ -87,6 +87,8 @@ export interface PaletteProps {
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
+  /** The rubber-band selection, as ids — what the move rows act on. */
+  selectedIds: string[]
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
 }
@@ -141,10 +143,12 @@ export function Palette(props: PaletteProps): JSX.Element {
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
+        selectedIds: props.selectedIds,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
-     props.attentionIds, controller.capturedId, props.hasSelection, props.actions]
+     props.attentionIds, controller.capturedId, props.hasSelection, props.selectedIds,
+     props.actions]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 

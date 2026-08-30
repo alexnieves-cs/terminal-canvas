@@ -8320,6 +8320,132 @@ app.whenReady().then(async () => {
           `grid=${JSON.stringify(released.grid)}`)
     }
 
+    // ---------------------------------------------------------------------
+    // 121-122 — M14. Filing a selection into another workspace.
+    //
+    //     The move is a RECORD edit and nothing else: main rewrites which
+    //     workspace owns the panel, and this renderer drops it from its local
+    //     panels array. Every session on both sides is untouched — a moved
+    //     panel becomes a hidden workspace's panel with a running tmux
+    //     session, which is exactly the state a workspace SWITCH already
+    //     produces ("demote, not dispose"). Nothing cheaper than a real
+    //     renderer holding a real PanelSession can see the difference, which
+    //     is check 64's argument reaching a third door.
+    //
+    //     Its own fixture — a fresh workspace, one fresh panel, a fresh
+    //     target — rather than whatever the blocks above left behind: by this
+    //     point the canvas has been reset, reloaded, marqueed and panned
+    //     several times, and a check that moved "whichever panel happens to
+    //     be here" could not name the pid it is asserting about.
+    // ---------------------------------------------------------------------
+    {
+      // Guarded rather than called bare. A missing hook rejects
+      // executeJavaScript, which THROWS, which ends the whole run here and
+      // takes 122's RED down with it — the trap CLAUDE.md records for
+      // test-first checks in these single-script suites.
+      const hasMoveHook = await wc.executeJavaScript(
+        `typeof window.__m7aWorkspace === 'function' &&
+         typeof window.__m7aWorkspace().movePanels === 'function'`)
+
+      if (!hasMoveHook) {
+        ok('121 a moved panel keeps its pid', false, 'no __m7aWorkspace().movePanels hook')
+        ok('122 Cmd+Z right after a move changes nothing', false,
+          'no __m7aWorkspace().movePanels hook')
+      } else {
+        // createAndSwitch, not create: the panel about to be spawned has to
+        // live in the workspace this check is moving FROM, and the id is
+        // captured rather than guessed for the reason check 64 records —
+        // nextWorkspaceId() mints over whatever already exists, and a wrong
+        // literal fails silently because an unknown id changes nothing.
+        const homeId = await wc.executeJavaScript(
+          `window.__m7aWorkspace().createAndSwitch('movers')`)
+        await settle()
+        // The camera has been zoomed and panned repeatedly above; a spawn
+        // outside the cull region is never promoted and therefore never
+        // spawns a PTY at all, which would leave this check asserting pid
+        // identity about a panel that has no pid.
+        await zoomTo(wc, '0')
+        await settle()
+        await zoomTo(wc, 'n')
+        const movedId = await waitUntil(async () => {
+          const ids = await wc.executeJavaScript(
+            `Array.from(document.querySelectorAll('.panel[data-panel-id]')).map((e) => e.dataset.panelId)`)
+          return ids.length === 1 ? ids[0] : null
+        }, 6000)
+        if (!movedId) throw new Error('121: the fresh workspace never rendered exactly one panel')
+        // MAIN's own pty:list, not the DOM: a panel is on screen well before
+        // its session exists, and a move issued in that window would be
+        // asserting pid identity against `undefined` on both sides — which
+        // passes, vacuously, against an implementation that kills everything.
+        const spawned = await waitUntil(async () => (await sessionMap(wc)).has(movedId), 15000)
+        if (!spawned) throw new Error(`121: ${movedId} never reached pty:list`)
+
+        // create, NOT createAndSwitch: the target must stay hidden, because
+        // "the session survived while its panel was filed somewhere the user
+        // is not looking" is the whole claim.
+        const targetId = await wc.executeJavaScript(`window.canvas.workspace.create('filed')`)
+        const before = await settledSessionMap(wc)
+
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().movePanels(${JSON.stringify([movedId])}, ` +
+          `{ workspaceId: ${JSON.stringify(targetId)} })`)
+        await settle()
+
+        const gone = await wc.executeJavaScript(
+          `document.querySelectorAll('.panel[data-panel-id=${JSON.stringify(movedId)}]').length === 0`)
+        const after = await sessionMap(wc)
+
+        // 121. THE CHECK THIS TASK EXISTS FOR: the moved panel's pid is
+        //      UNCHANGED. Every other observable in this milestone stays
+        //      correct against a move that quietly disposed and respawned —
+        //      the panel leaves this canvas either way, main's record is
+        //      right either way, the rail is right either way — and only the
+        //      pid separates them.
+        //
+        //      Three clauses, and the first two are not redundant with the
+        //      third. `gone` is the non-vacuity guard: a move that did
+        //      NOTHING AT ALL preserves every pid perfectly, so without it
+        //      this check is green against a stub. `listed` is the other
+        //      direction: a dispose with no respawn leaves the id absent
+        //      from pty:list, and `after.get(id) === before.get(id)` reads
+        //      undefined === undefined as agreement if before was empty too
+        //      — which the spawned wait above already rules out, but the
+        //      clause states it rather than relying on a wait staying put.
+        const listed = after.has(movedId)
+        ok('121 a moved panel keeps the SAME pid, and is still running',
+          gone === true && listed &&
+            before.get(movedId) !== undefined &&
+            after.get(movedId) === before.get(movedId),
+          `home=${homeId} target=${targetId} ${movedId}: ` +
+            `${before.get(movedId)} -> ${after.get(movedId) ?? 'MISSING'} gone=${gone}`)
+
+        // 122. Cmd+Z immediately after a move is INERT. history is ONE stack
+        //      over ONE Panel[], and applyHistory disposes any panel the
+        //      undone state no longer contains — which reaches pty.kill. An
+        //      undo here would either resurrect a panel main's record no
+        //      longer lists in this workspace, or kill a session that now
+        //      belongs to another workspace. Doing nothing is the honest
+        //      failure; doing something kills another workspace's agents.
+        //
+        //      Driven through __m4bUndo() rather than a synthetic 'z'
+        //      keydown, for the reason check 67 records at length: Cmd+Z is
+        //      a main-process menu accelerator and this harness has no menu,
+        //      so a keydown would assert a no-op against a path that could
+        //      never have run.
+        const panelsBeforeUndo = await wc.executeJavaScript(
+          `document.querySelectorAll('.panel[data-panel-id]').length`)
+        await wc.executeJavaScript(`window.__m4bUndo()`)
+        await settle()
+        const panelsAfterUndo = await wc.executeJavaScript(
+          `document.querySelectorAll('.panel[data-panel-id]').length`)
+        const afterUndo = await sessionMap(wc)
+        const { ok: undoPreserved, changed: undoChanged } = pidsPreserved(after, afterUndo)
+        ok('122 Cmd+Z right after a move changes nothing, and kills nothing',
+          panelsBeforeUndo === panelsAfterUndo && undoPreserved,
+          `panels ${panelsBeforeUndo} -> ${panelsAfterUndo} changed=[${undoChanged.join(', ')}]`)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
