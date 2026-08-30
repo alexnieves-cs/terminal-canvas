@@ -8664,7 +8664,7 @@ app.whenReady().then(async () => {
       const killsBefore = killedPanelIds.length
       await clickPanelClose(wc, fileId)
       const termId = await wc.executeJavaScript(
-        `document.querySelector('.panel:not([data-panel-kind])').getAttribute('data-panel-id')`)
+        `document.querySelector('.panel[data-panel-kind="terminal"]').getAttribute('data-panel-id')`)
       await clickPanelClose(wc, termId)
       await settle()
       const killsSince = killedPanelIds.slice(killsBefore)

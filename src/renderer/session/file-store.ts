@@ -55,10 +55,6 @@ export function clearFileResult(panelId: PanelId): void {
   notify(panelId)
 }
 
-export function getFileResult(panelId: PanelId): FileResult | undefined {
-  return results.get(panelId)
-}
-
 function subscribe(panelId: PanelId, listener: () => void): () => void {
   let set = listeners.get(panelId)
   if (!set) {

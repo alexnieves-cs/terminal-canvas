@@ -85,13 +85,15 @@ function FileNodeImpl({
 
   return (
     <div
-      className={`panel file-node${selected ? ' panel--selected' : ''}`}
+      className={`panel${selected ? ' panel--selected' : ''}`}
       data-panel-id={id}
       // The kind, as an attribute rather than as a class the styles happen to
       // use: verify:panels reads it to tell a file panel apart from a terminal
-      // one in a canvas where both are just `.panel`.
+      // one in a canvas where both are just `.panel`. There is no `.file-node`
+      // class and no bare `data-file-node` marker beside it — both were
+      // redundant with this attribute and neither was read by any CSS rule
+      // or selector.
       data-panel-kind="file"
-      data-file-node
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header

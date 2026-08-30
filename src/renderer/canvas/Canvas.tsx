@@ -1879,6 +1879,11 @@ export function Canvas({
    * browser's default action for a dropped file is to NAVIGATE to it, which
    * destroys the app's own page — every panel, every camera, the whole
    * renderer — and looks like a crash rather than like a missing handler.
+   *
+   * Known, currently-unaddressed edge case: these handlers are on `.canvas`,
+   * and both the palette and the nav grid mount as children of it too — so a
+   * drop while either overlay is open mints a file panel underneath it,
+   * unseen until the overlay closes. Worth a note, not a fix.
    */
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()

@@ -128,6 +128,12 @@ function TerminalPanelImpl({
     <div
       className={`panel${selected ? ' panel--selected' : ''}${agentClass}`}
       data-panel-id={session.id}
+      // A file panel carries data-panel-kind="file" and a review node
+      // data-panel-kind="review"; this is the third kind's own marker,
+      // named explicitly rather than left absent so a selector meaning "the
+      // terminal panel" reads as one rather than as "not a file panel" (which
+      // a review node would also match).
+      data-panel-kind="terminal"
       data-agent-state={glow ? agentState : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
