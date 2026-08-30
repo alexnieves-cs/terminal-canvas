@@ -93,10 +93,6 @@ const credentialStore = createCredentialStore({
   crypto: createSafeStorageCrypto(),
   onWarning: (m) => console.warn('[credentials]', m)
 })
-// Not yet consumed — Task 5 wires the IPC handlers that read this. The
-// explicit `void` is what keeps noUnusedLocals from failing typecheck in the
-// meantime without disabling the rule.
-void credentialStore
 
 /**
  * The ABSOLUTE path to git, resolved from the login env at whenReady — null
@@ -554,7 +550,8 @@ app.whenReady().then(async () => {
     },
     rebuildMenu,
     reviewEngine,
-    reviewCommit
+    reviewCommit,
+    credentialStore
   )
   createWindow()
 

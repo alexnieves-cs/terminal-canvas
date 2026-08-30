@@ -3,7 +3,29 @@
    Electron entry point (see the sibling verify-*.cjs scripts), so nothing
    else registers ipcMain handlers for it — without this, pty:create/pty:list
    have no handler and every renderer call against window.canvas.pty rejects. */
+const { mkdtempSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
+
+// M13 Task 5: registerIpcHandlers now takes a CredentialStore as its final
+// positional parameter, so this harness needs one too or every credential:*
+// handler throws the moment a check reaches it (Task 8). A fake, reversible
+// crypto — the same one verify-credentials.cjs uses — and a scratch temp
+// directory, so this suite never touches the real OS keychain or the real
+// userData credentials.json.
+const fakeCredentialCrypto = {
+  available: () => true,
+  encrypt: (s) => Buffer.from('enc:' + s, 'utf8'),
+  decrypt: (b) => b.toString('utf8').replace(/^enc:/, '')
+}
+const credentialDir = mkdtempSync(join(tmpdir(), 'tc panels credentials '))
+const credentialStore = require('../src/main/credential-store').createCredentialStore({
+  filePath: join(credentialDir, 'credentials.json'),
+  crypto: fakeCredentialCrypto
+})
+
 module.exports = {
+  credentialStore,
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
