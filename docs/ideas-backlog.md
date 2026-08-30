@@ -31,6 +31,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 
 | Gone | What shipped it | Where the mechanism is written down |
 |---|---|---|
+| #2 the workspace extras M7 did not ship | M14 | "The merged view's obstacle is COORDINATES, not `LIVE_BUDGET`", "The merged view has no writer, and that is why geometry is read-only", "Entering the merged view resolves dormancy BEFORE it commits", "A move touches no session and pushes no history", "The marquee starts only where `hitTest` finds nothing", "The workspace chords match `event.code`" |
 | #5 agent-state glow | M6c | "A title is not a bell", "`wants-you` is sticky", "The glow reaches the card" |
 | #6 user-set panel names | M6a | "The header's honest chain, and the backfill that must never happen" |
 | #11 a settings surface with search | M6b | "One map, and a typed view over it", "Settings are a drill-in, not a flat list" |
@@ -40,10 +41,12 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 
 Six more entries were rewritten rather than removed, because a milestone shipped most of
-each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#17**
-(M6d left the OS notification), **#27** (M5b left placeholders), **#34** (M5a left
-per-preset environment), **#51** (M9a–c left discard) and **#25** (M6 left snapping and
-tidy).
+each and stopped somewhere deliberate: **#17** (M6d left the OS notification), **#27**
+(M5b left placeholders), **#34** (M5a left per-preset environment), **#51** (M9a–c left
+discard), **#25** (M6 left snapping and tidy) and **#52** (M14 left shift-click and group
+drag). The membership changed at M14 without the count moving, and the churn is the shape
+to expect: **#2** left this list for the gone table above, and **#52** took its place. An
+entry rewritten down to its open half is one milestone from leaving the file entirely.
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -75,27 +78,6 @@ pick a cell, release to jump. Cells address either canvas regions or whole proje
 - **Open question:** what does a cell *mean*? Nine viewport quadrants, nine saved
   bookmarks, and nine workspaces are three different features wearing the same UI.
 - **Depends on:** nothing hard. Could land any time after M4b.
-
-## 2. The workspace extras M7 did not ship
-
-M7 shipped named canvases with create/rename/delete from the palette and the rail, switching
-that demotes rather than disposes (a hidden workspace keeps its tmux sessions and loses only
-its DOM), a per-workspace waiting count, and panel ids kept globally unique across every
-workspace because `PanelId` doubles as a tmux session name. See `CLAUDE.md`'s "A workspace
-switch is a second boot", "`activateWorkspace` takes the outgoing canvas, and that parameter
-IS the mechanism", and "Panel ids are global, not per-workspace".
-
-Three pieces of the original entry are still open, and each is blocked on something specific:
-
-- **The merged all-in-one view** — still the exact `LIVE_BUDGET` collision this entry was
-  written around. Nothing about M7 changed that constraint; it only made switching between
-  separate canvases cheap. A view that shows every workspace at once is precisely the case
-  that would try to exceed a global cap on live WebGL contexts, so tiering has to stay the
-  thing that decides which ones are live.
-- **Rubber-band select → *Move to new workspace*** — there is no gesture to hang it on until
-  #52 (multi-select) exists.
-- **A workspace-switching keyboard shortcut**, deliberately left unassigned; see `README.md`'s
-  M7 paragraph for why.
 
 ## 3. File tree / codebase browser (IDE-style left rail)
 
@@ -629,11 +611,12 @@ repos; the same prompt to four agents to compare how they answer it.
   different models side by side is also the cheapest possible version of #8's
   multi-model ambition — no API, no key, no new panel kind, just four CLIs and one
   keystroke.
-- **Almost all the machinery exists.** `pty:write` already takes a panel id, so broadcast
-  is a loop, not a channel. What is missing is **multi-selection**, which the canvas does
-  not have today: `Canvas.tsx` tracks a single `selectedId` and a single `focusedId`.
-  #2 already wants a rubber-band select for "move these to a new workspace", so the
-  selection model is shared work — build it once, for both.
+- **Almost all the machinery exists, and since M14 the selection does too.** `pty:write`
+  already takes a panel id, so broadcast is a loop, not a channel. Multi-selection was the
+  missing half and this entry used to say so outright; `Canvas.tsx` now tracks
+  `selectedIds: Set<string>`, built by a rubber-band marquee, and the move-to-workspace
+  rows are the first consumer. What is still missing from #52 is shift-click and group
+  drag, neither of which broadcast needs.
 - **Constraint, and it is the dangerous one:** input routing today is *unambiguous* —
   keystrokes go to the focused session, and exactly one panel is focused. Broadcast makes
   the destination of a keystroke a mode, and a mode you can forget you are in. Typing
@@ -781,7 +764,10 @@ dragging, snapping, and a "tidy" command.
      single place a drag resolves to a rect, and it is already pure — snapping is a
      function applied to its output, which keeps it plain-node testable.
   3. **Tidy** — a command that arranges the selection (or everything) onto a grid. Pure
-     rect math over `Panel[]`.
+     rect math over `Panel[]`. "The selection" is no longer hypothetical: M14 added
+     `selectedIds`, built by a rubber-band marquee, so a tidy has a real set to arrange
+     rather than a single `selectedId` that made "tidy the selection" mean "tidy one
+     panel".
 - **Constraint:** all of it is *world-space* arithmetic, and the snap threshold is the
   place that gets it wrong. A snap distance in world units becomes visually huge when
   zoomed out and invisible when zoomed in; it should be specified in **screen** pixels and
@@ -1614,26 +1600,35 @@ app would have that destroys work.
   inherits `verify:rail` 57's rule: the set of paths comes from the *result*, never from the
   display-capped rows on screen.
 
-## 52. Multi-select — rubber-band, shift-click, and group drag
+## 52. Multi-select — the two halves M14 left: shift-click and group drag
 
-`Canvas.tsx` tracks a single `selectedId` and a single `focusedId`, and `hitTest` returns
-exactly one id. Build the selection model once: `selectedIds: Set<string>`, a background drag
-that rubber-bands, shift-click to add, and `applyDrag` run per member so a group moves as one.
+M14 shipped the selection model and the marquee. `Canvas.tsx` now tracks
+`selectedIds: Set<string>`, a background drag rubber-bands (`canvas/marquee.ts`, pure and
+plain-node tested by `verify:merged` 8–12), and the resulting multi-selection is what the
+palette's *Move to workspace* rows act on. What is still open is the other two thirds of
+the original sentence: **shift-click to add to a selection**, and **group drag**, so a
+selection moves as one instead of only being a thing verbs are aimed at.
 
-- **Three entries above each independently assume this already exists** — #2's "move to new
-  workspace", #21's broadcast, and #25's tidy-the-selection. #21 says so outright: "what is
-  missing is **multi-selection**, which the canvas does not have today." This proposes it as
-  its own scheduled piece of machinery, deliberately *without* #21's broadcast half, which is
-  the dangerous part ("a mode you can forget you are in").
-- **Constraint: the background `onMouseDown` currently means "clear selection and release
-  focus".** A marquee has to claim that drag without breaking the focus-release rule — an
-  uncleared `focusedId` holds a WebGL context and a budget slot for the rest of the run.
+- **The dangerous constraint of the original entry is discharged**, and it is worth knowing
+  which one. "The background `onMouseDown` currently means clear selection and release
+  focus" — the marquee had to claim that drag without dropping the focus release, because
+  an uncleared `focusedId` holds a WebGL context and a `LIVE_BUDGET` slot for the rest of
+  the run. It does: the release is unconditional and sits outside the hit/miss branch, and
+  `verify:panels` 120 asserts both halves at once, the DOM's idea of focus and `__m4aGrid()`
+  answering null. See `CLAUDE.md`'s "The marquee starts only where `hitTest` finds nothing".
 - **Constraint: group drag is `applyDrag` N times from N origin rects,** never one delta
-  applied to a bounding box. The recompute-from-origin rule is caller-side, and a bounding-box
-  implementation is exactly the accumulate-drift bug wearing a group costume.
-- **Constraint: one history push for the whole group,** per the one-entry-per-committed-gesture
-  rule.
-- **Nearest existing entry: #21,** which needs this and says so.
+  applied to a bounding box. The recompute-from-origin rule is caller-side, and a
+  bounding-box implementation is exactly the accumulate-drift bug wearing a group costume.
+- **Constraint: one history push for the whole group,** per the one-entry-per-committed-
+  gesture rule.
+- **Constraint the marquee added, and shift-click inherits:** a selection must not span
+  workspaces. The marquee is simply gated off in the merged view, which is structural and
+  costs nothing; shift-click in that view would have to make the same call deliberately,
+  since the move verbs act on whatever the set contains and their source records are the
+  active workspace's alone.
+- **Nearest existing entries: #21** (broadcast to a selection) **and #25** (tidy the
+  selection), both of which named this as the missing machinery and both of which now have
+  a selection to build on.
 
 ## 53. Cards that show the last real screen, not a text tail
 
@@ -2168,16 +2163,19 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 12. **#32 keyboard-first navigation** — nearest-panel-in-a-direction is plain-node math over
    the same rects. The design work is the rule that traversal moves *selection*, not focus,
    so arrowing across a canvas does not spawn everything it passes.
-13. ~~**#2 workspaces**~~ — **done, M7**, and not free: the switch had to become a
-   transaction that writes the outgoing canvas before it flips the active id.
+13. ~~**#2 workspaces**~~ — **done, M7 and M14**, and not free: the switch had to become a
+   transaction that writes the outgoing canvas before it flips the active id, and M14's
+   merged view and cross-workspace move both had to obey that same ordering one door
+   further out.
 14. ~~**#34 panel templates**~~ — **done, M5a**, as presets. The "new workspace from a
    template set" half is what #34 has been rewritten down to.
 15. **#38 first run** — schedule it whenever `SEED_PANELS` goes away, and not a day later:
    an empty infinite canvas with only `Cmd`-gated shortcuts has no discoverable
    affordances at all.
 16. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
-17. **#21 broadcast input** — the loop is trivial; the work is multi-selection (shared
-   with #2, build it once) and the safety story around a mode you can forget you are in.
+17. **#21 broadcast input** — the loop is trivial, and M14's marquee has since supplied
+   the multi-selection this line called the work; what is left is entirely the safety
+   story around a mode you can forget you are in.
 18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
    feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
    API, or token is involved. Ink and panel-anchored annotations follow once the mode

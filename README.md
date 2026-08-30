@@ -31,7 +31,9 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   attention while off screen get an edge pip pointing at them, and `Cmd+J`
   flies to the next one.
 - **Workspaces.** Named canvases you switch between without killing anything;
-  the agents in the canvas you left keep working.
+  the agents in the canvas you left keep working. `Cmd+Shift+A` shows all of
+  them at once, side by side, and a rubber-band selection can be refiled from
+  one canvas into another without a single process restarting.
 - **A command palette.** `Cmd+K` for panels, presets, saved prompts, settings
   and workspaces, with drill-in scopes and fuzzy matching.
 - **A review layer.** Each panel is diffed against the snapshot taken when its
@@ -85,6 +87,8 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+=` / `Cmd+-` | Zoom in / out |
 | `Cmd+\` | Toggle the side rail |
 | `Cmd+Shift+\` | Toggle the inspector |
+| `Cmd+Shift+[` / `Cmd+Shift+]` | Previous / next workspace |
+| `Cmd+Shift+A` | Every workspace at once, side by side |
 | `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
 | **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**: `Ctrl+C` as SIGINT, `Ctrl+Z` as SIGTSTP, and `Ctrl+B` because tmux's own prefix is deliberately disabled |
@@ -125,6 +129,7 @@ npm run verify:viewport      # canvas coordinate math + LOD tiering + drag/point
 npm run verify:registry      # session lifecycle against a fake bridge/terminal, plain node
 npm run verify:layout        # on-disk layout format + the store that owns it, plain node
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
+npm run verify:merged        # the merged view's lane placement + the marquee's math, plain node
 npm run verify:rail          # the rail's three sections and the inspector's read model, plain node
 npm run verify:review        # git argv, the review engine's result arms, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
@@ -344,19 +349,30 @@ instead of one culled panel. A workspace's row in the palette shows how many
 of its panels are currently waiting for you, even while it is hidden.
 
 Three things this milestone's design considered and deliberately did not
-build. **A merged, all-in-one view across every workspace** is the exact case
+build. All three landed in M14, and one of the three reasons recorded here was
+simply wrong — which is worth stating plainly, because a reason written down
+and never corrected is exactly what a file like this one exists to prevent.
+**A merged, all-in-one view across every workspace** was recorded as the case
 that would try to exceed `LIVE_BUDGET` — a cap on live WebGL contexts that is
-global, not per-workspace, so a merged view has no natural budget of its own
-to spend. **Moving a panel from one workspace to another** has an obvious
-gesture — rubber-band select several panels, then reassign them — and that
-gesture, rubber-band selection, does not exist yet (`docs/ideas-backlog.md` #52);
-building the move without it would mean inventing a worse one-off
-picker for a feature that already has a natural home waiting. **A keyboard
-shortcut for switching workspaces** was left unassigned: `Cmd+0` and `Cmd+1`
-are already spoken for, and picking a new chord now would be a guess dressed
-up as a decision — nobody yet knows how often switching happens in practice,
-and a wrong guess is a worse outcome than a palette-only path for one more
-milestone.
+global, not per-workspace. That is not the obstacle. The global cap is the
+*answer*: tiering keeps deciding which panels are live, and a merged view with
+four hundred panels in it spends exactly the eight slots a single canvas
+does. The real obstacle was **coordinates**: every workspace lays its panels
+out in the same world space, clustered wherever that canvas's own camera has
+been, so two workspaces' panels overlap by construction, and `cascadeCentre`
+cannot help because it separates panels within one array. M14's answer is
+lanes — a per-workspace translation applied for display only. **Moving a panel
+from one workspace to another** was blocked on rubber-band selection not
+existing; M14 built the marquee first (`docs/ideas-backlog.md` #52 is now down
+to shift-click and group drag) and then the move on top of it, in that order,
+which is what the entry asked for. **A keyboard shortcut for switching
+workspaces** was left unassigned on the grounds that picking a chord then would
+be a guess dressed up as a decision. That reason was sound and it expired: a
+milestone of using workspaces is the evidence it was waiting for, and
+`Cmd+Shift+[` / `Cmd+Shift+]` are now the chords — matched on `event.code` and
+not on `event.key`, because Shift rewrites the printed character and a `'}'`
+test works perfectly for whoever has a US layout and does nothing at all for
+everyone else.
 
 **The chrome is a second view over the palette, not a second implementation.**
 Until M8a the app was almost entirely chords and a hidden `Cmd+K`, and a first
@@ -494,6 +510,36 @@ here" look identical to "not built yet". There is no amend, no branch, no remote
 and no per-file selection: the commit takes every file the node's answer
 contains, not only the ones that fit on screen.
 
+**Every workspace at once, and panels that can move between them.** M14 is the
+three things M7's design named and deliberately left. `Cmd+Shift+A` merges every
+workspace into one canvas, each in its own labelled lane, with every terminal
+still live and every session untouched. Getting there needed one correction:
+M7 recorded the obstacle as `LIVE_BUDGET`, the global cap on live WebGL
+contexts, and that was the wrong reason. The cap is the answer, not the problem
+— tiering goes on deciding which panels are worth a live terminal, and a merged
+view of four hundred panels spends the same eight slots a single canvas does.
+The real obstacle was coordinates: every workspace stores its panels in the
+same world space, clustered wherever its own camera has been, so two workspaces
+overlap by construction and nothing had ever kept them apart. Lanes are a
+per-workspace translation computed on the way to the screen and never written
+back, which is why the merged view is read-only geometry: you can read a foreign
+panel, scroll it, click into it and type at its agent, but you cannot drag,
+resize or close it, because a lane offset saved into `layout.json` is a
+well-formed file with wrong coordinates in it.
+
+**A rubber-band selection, and moving it somewhere else.** Dragging from empty
+canvas sweeps a marquee — starting only where the hit test found nothing, so
+clicking a card still selects that card rather than rubber-banding past it — and
+the resulting selection is what the palette's *Move to workspace* rows act on,
+into an existing canvas or a brand-new one you name. A move is a records
+operation: no process is disposed, no session restarted, and the moved panel's
+pid on the other side is the same pid it had before. It costs one thing, stated
+rather than hidden — the undo stack is cleared, exactly as a workspace switch
+already clears it, because leaving it standing meant one `Cmd+Z` could step back
+to a state predating the move and dispose an agent that by then belonged to
+another canvas. Earlier gestures stop being undoable after a move; that is the
+price of not killing something.
+
 ## Milestones
 
 | | Scope | Status |
@@ -520,6 +566,7 @@ contains, not only the ones that fit on screen.
 | M9b | The panel kind: a review node on the canvas | ✅ done |
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
+| M14 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) and M11
 (themes) are claimed by a separate concurrent track; M12 shares no source file with
