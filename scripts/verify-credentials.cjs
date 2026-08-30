@@ -40,6 +40,114 @@ ok('1 SERVICES declares github with a label and help text', (() => {
 // set()'s rejection rests on.
 ok('2 an undeclared service id is not found', mod.findService('gitlab') === undefined)
 
+// A fake crypto. Reversible and obviously not encryption — the point is that
+// the store CALLS it, not that this suite tests cryptography.
+const fakeCrypto = (available = true) => ({
+  available: () => available,
+  encrypt: (s) => Buffer.from('enc:' + s, 'utf8'),
+  decrypt: (b) => b.toString('utf8').replace(/^enc:/, '')
+})
+
+const dir = mkdtempSync(join(tmpdir(), 'tc credentials '))
+const filePath = join(dir, 'credentials.json')
+const TOKEN = 'ghp_supersecrettokenvalue123456'
+
+// 3. Round trip: a set is listed back as metadata.
+{
+  const store = mod.createCredentialStore({ filePath, crypto: fakeCrypto() })
+  const res = store.set('github', TOKEN)
+  const list = store.list()
+  ok('3 a stored credential is listed back as metadata',
+    res.ok === true && list.length === 1 && list[0].service === 'github' && !!list[0].addedAt)
+}
+
+// 4. THE CHECK RULE 1 RESTS ON. list() must not carry the ciphertext, asserted
+// on the object's own KEYS rather than on a value — a spread that carried
+// `cipher` through would satisfy any assertion phrased about the token itself,
+// since the token is encrypted and would not match anyway.
+{
+  const store = mod.createCredentialStore({ filePath, crypto: fakeCrypto() })
+  const keys = Object.keys(store.list()[0])
+  ok('4 list() exposes no cipher and no token key',
+    !keys.includes('cipher') && !keys.includes('token'), keys.join(','))
+}
+
+// 5. The plaintext is genuinely on disk only in encrypted form.
+{
+  const raw = readFileSync(filePath, 'utf8')
+  ok('5 the raw file does not contain the plaintext token', !raw.includes(TOKEN))
+}
+
+// 6. REFUSES, NEVER FALLS BACK. With the keychain unavailable, set() fails and
+// writes NOTHING. A plaintext fallback is indistinguishable from success at
+// every surface — the credential lists, the label appears — so the user learns
+// their token was in the clear from somebody else.
+{
+  const p2 = join(dir, 'unavailable.json')
+  const store = mod.createCredentialStore({ filePath: p2, crypto: fakeCrypto(false) })
+  const res = store.set('github', TOKEN)
+  ok('6 unavailable crypto refuses and writes no file',
+    res.ok === false && !existsSync(p2), res.ok === false ? res.reason : 'stored anyway')
+}
+
+// 7. The refusal must not quote the token back. A reason string interpolating
+// the plaintext puts it in a log, which is the one place #31 says a secret
+// must never reach. Checked on BOTH the refusal above and a warning.
+{
+  const p3 = join(dir, 'noleak.json')
+  const warnings = []
+  const store = mod.createCredentialStore({
+    filePath: p3, crypto: fakeCrypto(false), onWarning: (m) => warnings.push(m)
+  })
+  const res = store.set('github', TOKEN)
+  const leaked = (res.ok === false && res.reason.includes(TOKEN)) ||
+    warnings.some((w) => w.includes(TOKEN))
+  ok('7 no refusal reason or warning contains the token', !leaked)
+}
+
+// 8. An undeclared service is rejected rather than stored — Task 1 check 2's
+// fact, reached through the write path.
+{
+  const p4 = join(dir, 'unknown.json')
+  const store = mod.createCredentialStore({ filePath: p4, crypto: fakeCrypto() })
+  const res = store.set('gitlab', TOKEN)
+  ok('8 an undeclared service id is refused', res.ok === false && store.list().length === 0)
+}
+
+// 9. A malformed file warns and resolves to EMPTY rather than throwing — the
+// absent-vs-malformed line parseLayout already draws everywhere else. Throwing
+// here would take the whole app's startup down for one bad file.
+{
+  const p5 = join(dir, 'malformed.json')
+  writeFileSync(p5, '{ not json at all', 'utf8')
+  const warnings = []
+  const store = mod.createCredentialStore({
+    filePath: p5, crypto: fakeCrypto(), onWarning: (m) => warnings.push(m)
+  })
+  ok('9 a malformed file warns and reads as empty',
+    store.list().length === 0 && warnings.length === 1)
+}
+
+// 10. Delete REMOVES the entry rather than blanking it. Writing cipher:"" would
+// leave the previous ciphertext in whatever backup or editor history touched
+// the file.
+//
+// PRE-FLIGHT RULING: the store's flush() unlinks the file when the last entry
+// is removed — an empty credentials.json implies a credential that is not
+// there — so a bare readFileSync after the delete throws ENOENT and aborts the
+// whole suite, taking every check after this one down with it silently. Guard
+// the read instead of asserting the file still exists.
+{
+  const store = mod.createCredentialStore({ filePath, crypto: fakeCrypto() })
+  const gone = store.delete('github')
+  const reread = mod.createCredentialStore({ filePath, crypto: fakeCrypto() })
+  const raw = existsSync(filePath) ? readFileSync(filePath, 'utf8') : ''
+  ok('10 delete removes the entry entirely',
+    gone === true && reread.list().length === 0 && !raw.includes('cipher'))
+}
+
+rmSync(dir, { recursive: true, force: true })
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length ? 1 : 0)

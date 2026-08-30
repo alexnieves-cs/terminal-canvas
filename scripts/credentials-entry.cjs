@@ -9,4 +9,5 @@
    to the first draft of the M9 plan. See scripts/review-entry.cjs. */
 module.exports = {
   ...require('../src/shared/credential-schema'),
+  ...require('../src/main/credential-store'),
 }
