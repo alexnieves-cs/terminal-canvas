@@ -33,6 +33,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 |---|---|---|
 | #5 agent-state glow | M6c | "A title is not a bell", "`wants-you` is sticky", "The glow reaches the card" |
 | #6 user-set panel names | M6a | "The header's honest chain, and the backfill that must never happen" |
+| #7 subagent nodes on the canvas | M13 | "Subagent nodes are derived, not a `Panel` kind", "The slug is a hint" |
 | #11 a settings surface with search | M6b | "One map, and a typed view over it", "Settings are a drill-in, not a flat list" |
 | #29 restart a panel in place | M8c | "Restart is dispose-then-ensure at one id", "`bumpVersion()` exists because `ensure()` deliberately does not bump" |
 | #44 honest chrome | M6a | "`reattached` costs a probe because `-A` erased the question" |
@@ -130,27 +131,6 @@ changes have reached GitHub or are still local.
 - **The git-status half is separable and much cheaper:** per-panel badge for
   ahead/behind/dirty, polled from the panel's cwd. Worth doing on its own regardless of
   multiplayer.
-
-## 7. Visualise an agent's subagents on the canvas
-
-When a terminal's AI CLI launches subagents, show them on the canvas — child nodes,
-edges to the parent, live status.
-
-- **Why it fits the product thesis:** this is the thing an infinite canvas can show that
-  a tabbed terminal fundamentally cannot. It is arguably the most *differentiating* idea
-  on this list.
-- **Detection is the same unsolved problem as #5, harder.** Subagent launches are not
-  announced on any channel we control. Most likely routes: parse the CLI's rendered
-  output, or — much better — read a machine-readable side channel if one exists (Claude
-  Code writes session transcripts as JSONL; a file watcher on that is a real option and
-  needs no output parsing at all).
-- **Constraint:** subagent nodes must be **cheap** — not terminal panels. They have no
-  PTY and no xterm, so they must not consume `LIVE_BUDGET` or a WebGL context. A
-  lightweight node type distinct from `Panel` is the right shape; `lod.ts` would need to
-  learn that some nodes are never "live".
-- **Open question:** ephemeral or persistent? A finished subagent that vanishes loses
-  the history; one that lingers clutters the canvas. Probably: fades to a dim node,
-  cleared with the parent.
 
 ## 8. Chat-box mode, model choice, and effort/permission modes
 

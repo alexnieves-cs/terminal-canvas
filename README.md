@@ -40,6 +40,13 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **Project prompts.** `.claude/commands/*.md` in a panel's working directory
   are read and offered as insertable prompts, in Claude Code's own format, so
   they version-control with the project rather than with this app.
+- **Subagent nodes.** A `claude` panel that fans out to subagents shows a small
+  node per subagent beside it, labelled with the model's own description,
+  dimming when the subagent finishes. This reads Claude Code's own per-session
+  files under `~/.claude/projects` and is therefore **absent for other agent
+  CLIs** — `codex` and the rest write no such directory, so a panel running one
+  of them shows no nodes, which is a CLI this feature does not support rather
+  than a bug.
 
 ## Install
 
@@ -519,11 +526,12 @@ contains, not only the ones that fit on screen.
 | M9b | The panel kind: a review node on the canvas | ✅ done |
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
+| M13 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) and M11
-(themes) are claimed by a separate concurrent track; M12 shares no source file with
-either, so it landed first. A gap in the numbers here is a milestone someone else is
-holding, not one that was skipped.
+(themes) are claimed by a separate concurrent track; M12 and M13 share no source file
+with either, so they landed first. A gap in the numbers here is a milestone someone
+else is holding, not one that was skipped.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

@@ -385,9 +385,18 @@ check green and the screen plausible.
   else's nodes) into an availability one (no nodes), which is the trade this
   whole milestone makes wherever it can.
 - **Attribution across a tmux reattach.** A panel whose session survived a
-  reload has a spawn time from a previous run, so "created after the panel
-  spawned" is weaker there. The fallback is the ambiguity refusal, which is the
-  safe direction.
+  `Cmd+R` reload keeps its ORIGINAL `spawnedAt` — `PtyManager` records the
+  first one it ever sees for a panel id, in a `firstSpawnedAt` map that
+  survives `detachAll()` — so "created after the panel spawned" is unweakened
+  for a reload specifically. A full app QUIT and relaunch is a different
+  process with no such map, so a session that survived the quit falls back to
+  a fresh `Date.now()` at the moment it is reattached, and its own, older
+  session directory becomes permanently unclaimable for that panel's
+  lifetime — the safe direction, no nodes rather than wrong ones, but
+  unsolved. Fixing it needs the tmux session's own start time, which is not a
+  value this app currently reads back from `tmux list-panes` — a seventh
+  `LIST_FORMAT` column and a `verify:tmux` count change, deliberately out of
+  scope for this milestone.
 - **First-attach back-scan is bounded.** A subagent that finished well before
   the app attached gets no node. Judged correct — nodes are cleared with the
   parent anyway, so they describe the current run.
