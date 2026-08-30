@@ -11,7 +11,7 @@
    reviews because every fixture used a space-free path. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync, lstatSync, chmodSync, symlinkSync, readdirSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'file.cjs')
@@ -209,6 +209,58 @@ const p = (name) => join(DIR, name)
   const w14 = F.writeFile(p('cap.txt'), 'x'.repeat(F.FILE_MAX_BYTES + 1), base14)
   ok(14, w14.kind === 'failed' && readFileSync(p('cap.txt'), 'utf8') === 'small\n',
     `14 — over the byte cap fails and writes nothing: kind=${w14.kind}`)
+
+  // 15 — no temp file left behind, on the SUCCESS path and on the REFUSAL
+  // path. The refusal is the one most likely to leak, because it returns
+  // early — and a stray `.foo.txt.tc-abc123.tmp` sitting in a repository the
+  // user is working in is litter with this app's fingerprints on it. Asserted
+  // by reading the directory rather than by trusting the finally block.
+  mkdirSync(p('litter'), { recursive: true })
+  const litter = (name) => join(DIR, 'litter', name)
+  writeFileSync(litter('t.txt'), 'v1\n')
+  const base15 = F.readFile(litter('t.txt')).mtimeMs
+  F.writeFile(litter('t.txt'), 'v2\n', base15)
+  const afterOk = readdirSync(p('litter'))
+  F.writeFile(litter('t.txt'), 'v3\n', base15 - 1000)  // deliberately stale
+  const afterStale = readdirSync(p('litter'))
+  ok(15, afterOk.length === 1 && afterOk[0] === 't.txt'
+      && afterStale.length === 1 && afterStale[0] === 't.txt',
+    `15 — no temp file survives either path: success=${JSON.stringify(afterOk)} refusal=${JSON.stringify(afterStale)}`)
+
+  // 16 — the mode is preserved. A fresh temp file is created at the umask, so
+  // an implementation that forgot the chmod silently strips the executable
+  // bit off every script it saves — a loss discovered days later by something
+  // that failed to run, with nothing pointing at the editor that caused it.
+  writeFileSync(p('script.sh'), '#!/bin/sh\necho hi\n')
+  chmodSync(p('script.sh'), 0o755)
+  const base16 = F.readFile(p('script.sh')).mtimeMs
+  F.writeFile(p('script.sh'), '#!/bin/sh\necho bye\n', base16)
+  const mode16 = statSync(p('script.sh')).mode & 0o777
+  ok(16, mode16 === 0o755, `16 — the file mode survives a save: mode=${mode16.toString(8)}`)
+
+  // 17 — a symlink's TARGET is written and the link is still a link. Without
+  // realpathSync the rename replaces the link with a regular file: the user's
+  // symlink silently gone, the real file untouched, and an agent reading the
+  // old target forever. Both clauses are needed — asserting only the target's
+  // content passes against an implementation that also clobbered the link.
+  writeFileSync(p('target.txt'), 'original\n')
+  symlinkSync(p('target.txt'), p('link.txt'))
+  const base17 = F.readFile(p('link.txt')).mtimeMs
+  const w17 = F.writeFile(p('link.txt'), 'through the link\n', base17)
+  ok(17, w17.kind === 'written'
+      && readFileSync(p('target.txt'), 'utf8') === 'through the link\n'
+      && lstatSync(p('link.txt')).isSymbolicLink(),
+    `17 — a save through a symlink writes the target and keeps the link: kind=${w17.kind}`)
+
+  // 18 — the OVER-CORRECTION guard for check 12, and it is not a formality: a
+  // CAS that refuses unconditionally satisfies 12 perfectly and makes the
+  // feature unusable, which is a milestone that never works rather than one
+  // that works and is unsafe. null is the deliberate overwrite the user
+  // reaches only after being shown the conflict.
+  writeFileSync(p('force.txt'), 'theirs\n')
+  const w18 = F.writeFile(p('force.txt'), 'mine\n', null)
+  ok(18, w18.kind === 'written' && readFileSync(p('force.txt'), 'utf8') === 'mine\n',
+    `18 — a null token overwrites deliberately: kind=${w18.kind}`)
 
   console.log('')
   const failed = results.filter((r) => !r.pass)
