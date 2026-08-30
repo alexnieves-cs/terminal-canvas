@@ -714,6 +714,82 @@ body {
    with the camera would describe a mode that is still armed while sitting
    somewhere the user is no longer looking. pointer-events: none so it can
    never intercept the very click it is asking for. */
+/* M13. The inspector's Links section: every link touching the selected panel,
+   in BOTH directions, each with a label and a remove control.
+
+   This is the only surface that acts on a link. There is deliberately no link
+   SELECTION on the canvas: selecting one means hit-testing a hairline, which
+   at MIN_SCALE (0.1) is a sub-pixel target — an affordance that exists in the
+   code and not on the screen — and it would force .link-layer to take pointer
+   events, giving up the guarantee that a link can never swallow a click. */
+.inspector__links {
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+.inspector__links-label {
+  color: var(--fg-4);
+  font-size: var(--t-xs);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  margin-bottom: var(--sp-3);
+}
+
+.inspector__link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  font-size: var(--t-sm);
+  color: var(--fg-2);
+}
+
+/* The direction is the one thing a row cannot afford to lose: an incoming and
+   an outgoing link read identically without it. */
+.inspector__link-dir {
+  color: var(--fg-4);
+  flex: none;
+}
+
+.inspector__link-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector__link-label {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.inspector__link-action {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0 var(--sp-2);
+  color: var(--fg-4);
+  cursor: pointer;
+  font-size: var(--t-sm);
+}
+
+.inspector__link-action:hover {
+  color: var(--fg);
+}
+
+.inspector__link-action:focus-visible {
+  outline: 1px solid var(--blue);
+}
+
 .link-banner {
   position: absolute;
   top: var(--sp-5);

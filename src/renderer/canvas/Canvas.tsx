@@ -36,7 +36,7 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
   cascadeCentre, firstRunPanels, isReviewPanel, makePanel, makeReviewPanel, nextZ, raisePanel,
-  removePanel, reviewCentre, setPanelRect, addLink,
+  removePanel, reviewCentre, setPanelRect, addLink, removeLink, setLinkLabel,
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
@@ -2506,11 +2506,51 @@ export function Canvas({
         // not a line to sneak into a fix wave.
       })
     },
-    openReview
+    openReview,
+    beginLink: (id) => {
+      linkMode.arm(id)
+      // The overlay must be GONE: the completing gesture is a click on the
+      // canvas, and a palette sitting over it would swallow that click as its
+      // own outside-click dismissal. runRow already closes before running a
+      // command, so this is belt and braces for the inspector's button, which
+      // does not go through runRow at all.
+      palette.closePalette()
+    },
+    removeLink: (from, to) => {
+      setPanels((current) => {
+        const next = removeLink(current, from, to)
+        commitHistory(next)
+        return next
+      })
+    },
+    beginRelabelLink: (from, to, current) => {
+      setInputMode({
+        kind: 'text',
+        label: 'Label this link',
+        initial: current,
+        submit: (value) => {
+          setPanels((panelsNow) => {
+            // Trimmed, and an empty result CLEARS the label rather than
+            // storing '' — see setLinkLabel. Otherwise a user who wants a
+            // label gone has no verb for it, and a blank label round-trips to
+            // disk as a row they can neither see nor explain.
+            const next = setLinkLabel(panelsNow, from, to, value.trim())
+            commitHistory(next)
+            return next
+          })
+          setInputMode(null)
+        }
+      })
+      // The same reopen beginRenamePreset makes, for the same reason: the
+      // overlay is closed BEFORE a row's command runs, so without this the
+      // mode would be set on a palette that is already gone and the
+      // clear-on-close effect would wipe it again.
+      palette.openPalette()
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
-       palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
-       onClosePanel, onSelectPanel, openReview])
+       palette.openPalette, palette.closePalette, palette.capturedId, reloadPrompts,
+       commitHistory, reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
+       onClosePanel, onSelectPanel, openReview, linkMode])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2691,7 +2731,13 @@ export function Canvas({
     : buildInspectorModel(
         selectedPanel,
         registry.get(selectedPanel.rect.id)?.status,
-        selectedLive
+        selectedLive,
+        // M13. The whole panel list, so the Links section can name the other
+        // end of each link and drop one whose other end is not on this canvas.
+        // The parameter is optional and this is its only production caller;
+        // omitting it renders an always-empty section that looks like a
+        // feature nobody built.
+        panels
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
@@ -2925,6 +2971,9 @@ export function Canvas({
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
         onOpenReview={paletteActions.openReview}
+        onLink={paletteActions.beginLink}
+        onRemoveLink={paletteActions.removeLink}
+        onRelabelLink={paletteActions.beginRelabelLink}
         review={reviewModel}
       />
     </div>
