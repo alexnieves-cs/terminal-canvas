@@ -1,5 +1,7 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
+import type { PanelUsage } from '@shared/cost'
+import { costOf } from '@shared/pricing'
 import { isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
@@ -51,6 +53,15 @@ export interface InspectorModel {
    * missed would render once and then never update again. verify:rail 75.
    */
   links: InspectorLinkRow[]
+  /**
+   * What this panel's agent has spent, when it is pinned and anything is
+   * known. M15.
+   *
+   * It is part of the model, so inspectorSignature — JSON.stringify over the
+   * whole model — covers it with no edit, exactly as `links` does. verify:rail
+   * 81 pins it anyway, because "covered for free today" is not "covered".
+   */
+  usage: UsageFieldModel
 }
 
 export interface InspectorLinkRow {
@@ -201,6 +212,95 @@ export function buildLinkRows(panel: Panel, panels: Panel[]): InspectorLinkRow[]
   return rows
 }
 
+export interface UsageRow {
+  label: string
+  tokens: number
+}
+
+export interface UsageFieldModel {
+  /** True when the section renders nothing at all. */
+  hidden: boolean
+  /** Rendered instead of rows when there is a reason to explain. */
+  note?: string
+  rows: UsageRow[]
+  turns: number
+  subagentTurns: number
+  /** List-price dollars, or undefined when no model here is priced. */
+  cost?: number
+  /** Always set when `cost` is, and always says whose price it is. */
+  costLabel?: string
+}
+
+/**
+ * The Cost section.
+ *
+ * THREE states, and collapsing any two is a wrong answer rather than a
+ * simplification. `pinned === false` is a panel whose preset declared no agent
+ * — a login shell, most panels — and it renders NOTHING: "$0.00" beside a
+ * working agent is the confident wrong answer M9a's not-a-repo arm exists to
+ * refuse, and it trains the user to disbelieve the section. `pinned === true`
+ * with no usage yet is the first seconds of every pinned panel and renders a
+ * NOTE, because a heading with an empty body reads as broken.
+ *
+ * Four figures, never one sum: "the inspector shows the links, not the answer"
+ * applied to a third pair. A single total is unanswerable when the user asks
+ * why it is large, and cache reads are usually most of it.
+ */
+export function buildUsageFields(
+  usage: PanelUsage | undefined,
+  pinned: boolean
+): UsageFieldModel {
+  if (!pinned) return { hidden: true, rows: [], turns: 0, subagentTurns: 0 }
+  if (!usage || usage.turns === 0) {
+    return {
+      hidden: false,
+      note: 'no answer from this agent yet',
+      rows: [],
+      turns: 0,
+      subagentTurns: 0
+    }
+  }
+  const rows: UsageRow[] = [
+    { label: 'input', tokens: usage.totals.input },
+    { label: 'output', tokens: usage.totals.output },
+    { label: 'cache write', tokens: usage.totals.cacheWrite },
+    { label: 'cache read', tokens: usage.totals.cacheRead }
+  ]
+  // Priced PER MODEL and summed, never by pricing the flat total against one
+  // model: a session that changed model mid-way cannot be priced from a flat
+  // total at all. A model the table does not know contributes nothing and
+  // makes the whole figure undefined — a partial sum presented as a total is
+  // worse than no figure, because it is plausible.
+  let cost: number | undefined = 0
+  for (const [model, totals] of Object.entries(usage.byModel)) {
+    const c = costOf(totals, model)
+    if (c === undefined) {
+      cost = undefined
+      break
+    }
+    cost += c
+  }
+  return {
+    hidden: false,
+    rows,
+    turns: usage.turns,
+    subagentTurns: usage.subagentTurns,
+    ...(cost !== undefined
+      ? { cost, costLabel: 'API list price — not what a subscription is charged' }
+      : {})
+  }
+}
+
+/** A review node has no process, so it can have no spend, and the section
+ *  must not render for it. Shared instance, the same shape HIDDEN below takes
+ *  for the Changes section. */
+const NO_USAGE: UsageFieldModel = Object.freeze({
+  hidden: true,
+  rows: Object.freeze([] as UsageRow[]) as UsageRow[],
+  turns: 0,
+  subagentTurns: 0
+}) as UsageFieldModel
+
 export function buildInspectorModel(
   panel: Panel,
   status: PanelStatus | undefined,
@@ -221,7 +321,16 @@ export function buildInspectorModel(
    * and review-engine.ts's `notARepo` made in M9a. A required parameter would
    * change what a dozen existing checks assert while looking like a widening.
    */
-  panels?: Panel[]
+  panels?: Panel[],
+  /**
+   * What this panel's agent has spent, when it is pinned and anything is
+   * known.
+   *
+   * OPTIONAL and defaulted, so every pre-M15 caller and every pre-M15 check
+   * keeps its exact meaning — the trade `live` made in M12, `panels` made in
+   * M13 and review-engine.ts's `notARepo` made in M9a.
+   */
+  usage?: PanelUsage | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isReviewPanel(panel)) {
@@ -237,6 +346,9 @@ export function buildInspectorModel(
       restartable: false,
       reattached: false,
       links,
+      // A node has no process, so it can have no spend, and the section must
+      // not render for it.
+      usage: NO_USAGE,
       fields: [
         { key: 'reviews', label: 'reviews', value: panel.subject.label },
         { key: 'subject', label: 'panel', value: panel.subject.subjectId },
@@ -293,12 +405,20 @@ export function buildInspectorModel(
   if (status?.kind === 'error') {
     fields.push({ key: 'error', label: 'error', value: status.message })
   }
+  // `panel` is narrowed to the terminal branch by the isReviewPanel check
+  // above (isReviewPanel), never `!isTerminalPanel`, so a third kind added
+  // later inherits this path only where the type system says it is safe.
+  // `spec.agent` is set only by presets this app knows how to account for
+  // (see PanelSpec.agent's own comment) — undefined means a login shell or a
+  // hand-written preset, which can never have a cost.
+  const pinned = panel.spec.agent !== undefined
   return {
     kind: 'terminal',
     id: panel.rect.id,
     ...(panel.title !== undefined ? { title: panel.title } : {}),
     heading: railLabel(panel, status),
     links,
+    usage: buildUsageFields(usage, pinned),
     fields,
     reattached: running?.reattached === true,
     restartable: isRestartable(status)

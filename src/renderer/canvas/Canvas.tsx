@@ -21,7 +21,7 @@ import {
 import {
   applyLiveSession, clearLiveSession, getLiveSession, useLiveSession
 } from '@renderer/session/live-session-store'
-import { applyUsage, clearUsage } from '@renderer/session/usage-store'
+import { applyUsage, clearUsage, useUsage } from '@renderer/session/usage-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -2762,6 +2762,11 @@ export function Canvas({
   // conditional, and `selectedId ?? ''` is a panel id that matches nothing,
   // which the store answers undefined for.
   const selectedLive = useLiveSession(selectedId ?? '')
+  // M15. Unconditional and above the ternary for the same reason
+  // useLiveSession is: a hook cannot live inside a conditional, and
+  // `selectedId ?? ''` is a panel id that matches nothing, which the store
+  // answers undefined for.
+  const selectedUsage = useUsage(selectedId ?? '')
   const inspectorBuilt = selectedPanel === undefined
     ? null
     : buildInspectorModel(
@@ -2773,7 +2778,10 @@ export function Canvas({
         // The parameter is optional and this is its only production caller;
         // omitting it renders an always-empty section that looks like a
         // feature nobody built.
-        panels
+        panels,
+        // M15. The Cost section's data. Optional and this is its only
+        // production caller, the same trade `live` and `panels` made.
+        selectedUsage
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

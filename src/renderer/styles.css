@@ -626,6 +626,61 @@ body {
   font-size: var(--t-xs);
 }
 
+/* The Cost section (M15). Same shapes as the Changes section immediately
+   above — a muted note for the "nothing to explain yet" state, a row list
+   for the figures, a muted trailer for the turn counts and the price caveat —
+   reusing the identical tokens rather than introducing new ones. */
+.inspector__usage-note {
+  margin: 0 0 var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+}
+
+.inspector__usage-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.inspector__usage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--t-xs);
+}
+
+.inspector__usage-label {
+  color: var(--fg);
+}
+
+.inspector__usage-tokens {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector__usage-turns {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.inspector__usage-cost {
+  margin: var(--sp-2) 0 0;
+  color: var(--fg);
+  font-size: var(--t-sm);
+}
+
+.inspector__usage-cost-suffix {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
 .rail-row__start,
 .rail-row__rename,
 .rail-row__close {
