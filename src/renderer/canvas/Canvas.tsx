@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
+import { LinkLayer } from './LinkLayer'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
@@ -2760,6 +2761,11 @@ export function Canvas({
           className="world"
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
+          {/* First child, and z-index 0 in the stylesheet, so it paints
+              beneath every panel — nextZ mints z >= 1. It is inside .world so
+              it pans and zooms with the panels, and it takes no pointer
+              events at all, so it can never swallow a click. See LinkLayer. */}
+          <LinkLayer panels={panels} />
           {panels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls

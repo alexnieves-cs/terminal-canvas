@@ -666,6 +666,67 @@ body {
   will-change: transform;
 }
 
+/* M13. Every link on the canvas, as one SVG layer.
+
+   INSIDE .world, so it inherits the one translate()/scale() and pans and zooms
+   with the panels for free — the opposite of .edge-indicators, which is a
+   SIBLING of .world precisely because a viewport-pinned pip must not zoom
+   away. Two unrelated features with confusingly similar names, which is why
+   this one is `link` everywhere and never `edge`.
+
+   ZERO-SIZED with overflow visible, and that pair is load-bearing rather than
+   a trick. .world is `position: absolute; top: 0; left: 0` with NO width or
+   height — it is a positioning origin, not a box — so `width: 100%` here would
+   resolve to 0 and an svg's UA default `overflow: hidden` would then clip
+   every link out of existence, silently, with the elements still in the DOM
+   and still carrying correct geometry. World coordinates are also freely
+   negative, which no percentage size could ever cover. Sizing it 0 and letting
+   it paint outside is what makes the coordinate system here simply BE world
+   space, the same way a panel's left/top are world pixels.
+
+   z-index 0 puts it beneath every panel, and that IS Panel.z's scheme rather
+   than a second one: nextZ returns max(..., 0) + 1, so a minted panel is
+   always >= 1. Beneath is also right on its own merits — a line painted over a
+   terminal hides the agent output the app exists to show — and costs nothing,
+   because linkAnchors anchors both ends ON the panel borders, so the whole
+   segment is outside both rects.
+
+   pointer-events: none is a property of the LAYER, not a hit test anyone has
+   to remember: a link can never swallow a click meant for a panel, nor the
+   background click that clears focusedId. */
+.link-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.link-layer__line {
+  stroke: var(--line-strong);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.link-layer__head {
+  fill: var(--line-strong);
+}
+
+/* paint-order: stroke draws the halo UNDER the glyphs, so a label stays
+   readable over a panel edge or the dot grid without a background rect that
+   would have to be measured. */
+.link-layer__label {
+  fill: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+}
+
 /* A panel is positioned once in WORLD pixels. Only .world's transform moves. */
 .panel {
   position: absolute;
