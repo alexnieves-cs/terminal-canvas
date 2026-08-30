@@ -8989,6 +8989,241 @@ app.whenReady().then(async () => {
           `lanes=${leftMerged.lanes.length} drifted=[${drifted.join('; ')}]`)
     }
 
+    // ---------------------------------------------------------------------
+    // 128-131 — M14. THE THREE CHORDS: Cmd+Shift+[ / Cmd+Shift+] step the
+    //     workspace, Cmd+Shift+A toggles the merged view.
+    //
+    //     Every chord here is DELIVERED THE WAY macOS DELIVERS IT: Shift
+    //     rewrites the printed character, so Cmd+Shift+] arrives carrying
+    //     key '}' and code 'BracketRight'. Both fields are supplied — the
+    //     established shape for a chord check in this suite, and check 80's
+    //     precedent — so a handler matching on `key === ']'` is dead on
+    //     arrival while one matching on `key === '}'` is correct on a US
+    //     layout and wrong everywhere else. Check 128's own note says what
+    //     that costs it.
+    //
+    //     They run last and inherit the merged block's fixture: 'mergehome'
+    //     is active, w40 exists on disk, and the merged view is off. 128 and
+    //     129 leave the active workspace where they found it; 131 does not,
+    //     and nothing follows it.
+    // ---------------------------------------------------------------------
+    {
+      /**
+       * One chord press. `repeat` is supplied BY HAND — see check 129 for
+       * what that does and does not prove.
+       */
+      const chord = (code, key, repeat = false) => wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', {` +
+        ` key: ${JSON.stringify(key)}, code: ${JSON.stringify(code)},` +
+        ` metaKey: true, shiftKey: true, repeat: ${repeat}, bubbles: true })), true`)
+      const NEXT = () => chord('BracketRight', '}')
+      const PREV = () => chord('BracketLeft', '{')
+      const MERGE = () => chord('KeyA', 'A')
+
+      const wsRows = () => wc.executeJavaScript(`window.canvas.workspace.list()`)
+      const activeId = async () => {
+        const rows = await wsRows()
+        const row = rows.find((w) => w.active)
+        return row ? row.id : null
+      }
+      /** The class the top bar's merged toggle carries while the view is on. */
+      const mergedOn = () => wc.executeJavaScript(
+        `document.querySelector('.shell__merge--on') !== null`)
+      /** One workspace's STORED camera, forced past main's 500ms coalescing. */
+      const cameraOf = (wsId) => {
+        flushLayoutStore()
+        const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const w = (disk.workspaces || []).find((x) => x.id === wsId)
+        return w && w.camera ? w.camera : null
+      }
+      const sameCamera = (a, b) =>
+        a !== null && a !== undefined && b !== null && b !== undefined &&
+        Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 &&
+        Math.abs(a.scale - b.scale) < 0.001
+
+      const rows128 = await wsRows()
+      const ids128 = rows128.map((w) => w.id)
+      const first128 = ids128[0]
+      const last128 = ids128[ids128.length - 1]
+
+      // 128. Cmd+Shift+] switches to the NEXT workspace and Cmd+Shift+[ comes
+      //      back, WRAPPING. The wrap is not left to whatever this run
+      //      happens to have made active: the canvas is parked on the LAST
+      //      row first, so the forward press wraps by construction and the
+      //      backward press wraps straight back — two presses, both of them
+      //      the case a naive `rows[at + delta]` returns undefined for.
+      //
+      //      WHAT IT CANNOT DO, stated rather than implied: it supplies BOTH
+      //      `key` and `code`, so it separates a `key === ']'` implementation
+      //      (dead on arrival — no such key is ever delivered under Shift)
+      //      from a correct one, and it CANNOT separate a `key === '}'` one,
+      //      which is right on the US layout this event is modelled on and
+      //      silently wrong on every layout that prints '}' elsewhere. No
+      //      synthetic event can, because the layout lives below the DOM.
+      //      That rule is held by review, not by this check.
+      let stepped128 = null
+      let back128 = null
+      if (ids128.length >= 2) {
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().switchTo(${JSON.stringify(last128)})`)
+        await settle()
+        const parked = await activeId()
+        await NEXT()
+        await waitUntil(async () => (await activeId()) === first128, 2500)
+        stepped128 = await activeId()
+        await PREV()
+        await waitUntil(async () => (await activeId()) === last128, 2500)
+        back128 = await activeId()
+        // Non-vacuity: starting anywhere but the last row would make this a
+        // plain step wearing a wrap's name.
+        if (parked !== last128) stepped128 = `PARKED ${parked}`
+      }
+      ok('128 the workspace chords step forward and back, wrapping',
+        ids128.length >= 2 && stepped128 === first128 && back128 === last128,
+        `n=${ids128.length} ids=${ids128.join(',')} last=${last128} ` +
+          `next=${stepped128} prev=${back128}`)
+
+      // 129. HELD, they move exactly ONE step. Neither chord joins
+      //      REPEATABLE_KEYS: a held switch steps through every canvas at the
+      //      OS repeat rate and lands wherever the stream happened to stop
+      //      rather than where the user meant to look — the argument Cmd+J
+      //      already carries.
+      //
+      //      Like checks 7b, 33b and 75b it supplies `repeat: true` BY HAND,
+      //      so it proves the guard READS the flag and says NOTHING about who
+      //      SETS it: whether macOS marks a physically held Cmd-modified key
+      //      as a repeat is checked by a hand on the keyboard, not here.
+      //
+      //      The repeats are SPACED rather than fired as one burst, and that
+      //      is what makes the count mean anything. stepWorkspace reads the
+      //      ACTIVE row, so a burst delivered before the first switch lands
+      //      would have every press compute the same destination — six steps
+      //      and one step would be indistinguishable and the check green
+      //      against an implementation with no repeat bail at all.
+      //
+      //      The number of presses is DERIVED for the neighbouring reason:
+      //      with P presses a bail-less implementation lands P steps along,
+      //      and P % n === 1 puts it exactly where a correct one lands. The
+      //      first P that cannot collide with this fixture's workspace count
+      //      is the one used.
+      let held129 = null
+      let presses129 = 0
+      if (ids128.length >= 2) {
+        const n = ids128.length
+        presses129 = [6, 7, 8].find((p) => p % n !== 1 % n)
+        const from = await activeId()
+        const at = ids128.indexOf(from)
+        await NEXT()
+        for (let i = 1; i < presses129; i++) {
+          await sleep(200)
+          await chord('BracketRight', '}', true)
+        }
+        const expected = ids128[(at + 1) % n]
+        await waitUntil(async () => (await activeId()) === expected, 2500)
+        await settle()
+        held129 = { at: from, now: await activeId(), expected }
+        // Put the fixture back where 128 left it, so 130 and 131 start from a
+        // known workspace rather than wherever a failure landed.
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().switchTo(${JSON.stringify(from)})`)
+        await settle()
+      }
+      ok('129 a held workspace chord moves exactly one step',
+        held129 !== null && held129.now === held129.expected,
+        `presses=${presses129} ` +
+          (held129
+            ? `${held129.at} -> ${held129.now} (expected ${held129.expected})`
+            : 'SKIPPED'))
+
+      // 130. Cmd+Shift+A toggles the merged view, and pressing it twice
+      //      returns to the active workspace's own canvas WITH ITS CAMERA
+      //      RESTORED. The camera clause is not decoration: a merged camera
+      //      is in LANE SPACE, so leaving without the restore drops the user
+      //      in front of empty space with nothing on screen explaining why.
+      //      The pan happens WHILE MERGED — without it the restore is
+      //      asserted against a camera that never moved, which an
+      //      implementation restoring nothing satisfies for free.
+      await zoomTo(wc, '0')
+      await settle()
+      const camera130 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      await MERGE()
+      await settle()
+      const on130 = await mergedOn()
+      await zoomTo(wc, '-')
+      await zoomTo(wc, '-')
+      await settle()
+      const laneCamera130 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      await MERGE()
+      await settle()
+      const off130 = await mergedOn()
+      const restored130 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      ok('130 the merged chord enters the merged view and leaves it, camera restored',
+        on130 === true && off130 === false &&
+          !sameCamera(laneCamera130, camera130) &&
+          sameCamera(restored130, camera130),
+        `on=${on130} off=${off130} before=${JSON.stringify(camera130)} ` +
+          `lane=${JSON.stringify(laneCamera130)} after=${JSON.stringify(restored130)}`)
+
+      // 131. A SWITCH WHILE MERGED LEAVES THE MERGED VIEW FIRST. This is the
+      //      chords' own hazard: before them, switching from inside the
+      //      merged view needed a rail click or a palette row; now it is one
+      //      keystroke.
+      //
+      //      Both halves of the corruption are asserted, because each is
+      //      silent on its own and each has its own fix. The OUTGOING
+      //      workspace's record must keep its PRE-MERGE camera rather than
+      //      the lane-space one the user panned to — otherwise it is a
+      //      well-formed layout.json full of coordinates that mean nothing
+      //      outside the lane arrangement they came from. And the canvas must
+      //      end on the INCOMING workspace's OWN stored camera, which is what
+      //      says preMergeRef did not survive pointing at a workspace that is
+      //      no longer active: a surviving snapshot is written into the
+      //      incoming record by every save after the switch, and restored
+      //      over the switch's own camera the next time the view is left.
+      const outgoing131 = await activeId()
+      // The pre-merge camera is deliberately moved OFF the incoming
+      // workspace's own stored one. Cmd+0 alone put both at INITIAL, and the
+      // last clause below then could not tell "landed on the incoming
+      // workspace's camera" from "kept the outgoing one's pre-merge camera"
+      // — the exact defect it exists to catch. Two zoom steps make the three
+      // cameras this check compares three distinct values, which the
+      // non-vacuity clause holds it to.
+      await zoomTo(wc, '0')
+      await zoomTo(wc, '-')
+      await zoomTo(wc, '-')
+      await settle()
+      const preMerge131 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      await MERGE()
+      await settle()
+      const merged131 = await mergedOn()
+      await zoomTo(wc, '-')
+      await zoomTo(wc, '-')
+      await zoomTo(wc, '-')
+      await settle()
+      const expected131 = ids128[(ids128.indexOf(outgoing131) + 1) % ids128.length]
+      const incomingCamera131 = cameraOf(expected131)
+      await NEXT()
+      await waitUntil(async () => (await activeId()) === expected131, 2500)
+      await settle()
+      const landed131 = await activeId()
+      const stillMerged131 = await mergedOn()
+      const camera131 = await wc.executeJavaScript(`window.__m4aViewport()`)
+      const outgoingStored131 = cameraOf(outgoing131)
+      ok('131 a switch while merged leaves the merged view and writes no lane camera',
+        merged131 === true && stillMerged131 === false &&
+          landed131 === expected131 &&
+          // Non-vacuity: the two cameras the last clause separates must
+          // actually differ, or it separates nothing.
+          !sameCamera(preMerge131, incomingCamera131) &&
+          sameCamera(outgoingStored131, preMerge131) &&
+          sameCamera(camera131, incomingCamera131),
+        `merged=${merged131} -> ${stillMerged131} ${outgoing131} -> ${landed131} ` +
+          `(expected ${expected131}) preMerge=${JSON.stringify(preMerge131)} ` +
+          `outgoingStored=${JSON.stringify(outgoingStored131)} ` +
+          `incomingStored=${JSON.stringify(incomingCamera131)} ` +
+          `camera=${JSON.stringify(camera131)}`)
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

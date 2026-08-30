@@ -694,10 +694,29 @@ export function Canvas({
     jumpAttentionImplRef.current(direction)
   }, [])
 
+  // The same indirection, for the same reason, for M14's two workspace
+  // chords: stepWorkspace needs `workspaceRows`, which is state declared
+  // hundreds of lines below this call, and toggleMerged needs the merged
+  // state — referencing either here would be a TDZ error rather than a stale
+  // closure. The OUTER callbacks have a fixed, empty-deps identity so
+  // useViewport's keydown effect is installed once (a fresh identity there
+  // would tear the window listener down and reinstall it on every mousemove
+  // over the canvas), while the implementations are assigned into the refs
+  // once they exist and refreshed every render.
+  const stepWorkspaceImplRef = useRef<(delta: 1 | -1) => void>(() => {})
+  const onStepWorkspace = useCallback((delta: 1 | -1) => {
+    stepWorkspaceImplRef.current(delta)
+  }, [])
+  const toggleMergedImplRef = useRef<() => void>(() => {})
+  const onToggleMerged = useCallback(() => {
+    toggleMergedImplRef.current()
+  }, [])
+
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll
   } = useViewport(
-    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention,
+    onStepWorkspace, onToggleMerged
   )
   const version = useRegistryVersion(registry)
 
@@ -948,11 +967,62 @@ export function Canvas({
    */
   const switchWorkspace = useCallback(
     (id: string) => {
+      /**
+       * A SWITCH WHILE MERGED LEAVES THE MERGED VIEW FIRST, and it happens
+       * HERE rather than in the chord that made it a one-keystroke gesture:
+       * the rail row and the palette's workspace rows reach this same
+       * function, so a guard in one caller would leave the other two
+       * producing the corruption below.
+       *
+       * Two things are wrong about switching from inside the merged view and
+       * both are silent. The outgoing state would carry a LANE-SPACE camera
+       * — and possibly a FOREIGN selection — into the outgoing workspace's
+       * own record, coordinates that mean nothing outside the lane
+       * arrangement they came from, and this is the LAST write that record
+       * ever gets. And `preMergeRef` would survive pointing at a workspace
+       * that is no longer active, so every save after the switch writes the
+       * PREVIOUS workspace's pre-merge camera and selection into the INCOMING
+       * one (the layout.save effect reads that ref while `merged` is true),
+       * and leaving the view then restores that camera over the switch's own.
+       *
+       * Leaving first is also what a user predicts. In the merged view every
+       * workspace is already on screen, so "switch" can only mean "take me to
+       * that canvas" — and it is not a no-op either, because the active
+       * workspace is still what decides where Cmd+N spawns.
+       */
+      const wasMerged = mergedRef.current
+      const preMerge = preMergeRef.current
+      if (wasMerged) {
+        setMerged(false)
+        setMergedData(null)
+        preMergeRef.current = null
+        // The ref is normally mirrored from state on the next render, and the
+        // mutating-gesture guards (drag, resize, close, marquee) read it —
+        // so it is written by hand here. The window between this line and the
+        // commit below is a real one: the activate is an IPC round trip.
+        mergedRef.current = false
+        // The same two clears toggleMerged's own leave makes, for the same
+        // reason: a foreign id must not survive as this workspace's stored
+        // selection, and the save effect fires the instant `merged` flips —
+        // before the switch's own selectOnly lands.
+        const own = new Set(panelsRef.current.map((p) => p.rect.id))
+        setSelectedIds((current) => retainSelection(current, (pid) => own.has(pid)))
+        setFocusedId((fid) => (fid !== null && own.has(fid) ? fid : null))
+        // Back to where the user was standing before the merge, so the
+        // instant between here and the incoming workspace's own camera is not
+        // spent looking at lane space. restoreCamera below is what the user
+        // actually ends on.
+        if (preMerge) restoreCamera(preMerge.camera)
+      }
       const outgoing: CanvasState = {
         panels: fromPanels(panelsRef.current),
-        camera: viewportRef.current,
-        selectedId,
-        focusedId
+        // The pre-merge snapshot, for the reason the layout.save effect reads
+        // the same one: while merged these three are lane-space or foreign.
+        // `panels` is untouched either way — it stays the active workspace's
+        // real array, which is the read-only split displayPanels describes.
+        camera: wasMerged && preMerge ? preMerge.camera : viewportRef.current,
+        selectedId: wasMerged && preMerge ? preMerge.selectedId : selectedId,
+        focusedId: wasMerged && preMerge ? preMerge.focusedId : focusedId
       }
       void (async (): Promise<void> => {
         let result: ActivateResult | null
@@ -1185,6 +1255,10 @@ export function Canvas({
       setMerged(true)
     })()
   }, [resolveDormant, restoreCamera, selectedId, focusedId])
+  // Cmd+Shift+A's implementation, handed to useViewport through the ref
+  // declared beside its call — see that ref's own comment for why the
+  // indirection exists rather than a direct argument.
+  toggleMergedImplRef.current = toggleMerged
 
   /**
    * Keep the merged view current while it is open.
@@ -2121,6 +2195,36 @@ export function Canvas({
   // Keeps reloadWorkspacesRef current for switchWorkspace, declared earlier
   // in this component — see that ref's own comment for why.
   useEffect(() => { reloadWorkspacesRef.current = reloadWorkspaces }, [reloadWorkspaces])
+
+  /**
+   * Cmd+Shift+] and Cmd+Shift+[: the next or previous workspace, WRAPPING.
+   *
+   * It walks `workspaceRows` — the rail's own list, in main's own order — so
+   * the chord and the rail's Workspaces section cannot disagree about what
+   * "next" means, and it wraps rather than stopping at the ends: an
+   * unwrapped `rows[at + delta]` is `undefined` at both edges, which reads as
+   * a chord that stopped working rather than as a boundary.
+   *
+   * A single workspace is a deliberate no-op. `switchWorkspace` on the
+   * ALREADY-active id is a real activate round trip that rewrites the record
+   * it just read, and there is nowhere to go, so the honest answer is
+   * nothing at all. Everything else — including leaving the merged view
+   * first — is switchWorkspace's, so this cannot become a second switching
+   * path.
+   */
+  const stepWorkspace = useCallback((delta: 1 | -1) => {
+    if (workspaceRows.length < 2) return
+    const at = workspaceRows.findIndex((w) => w.active)
+    // No active row means the list has not loaded yet (mount, or a failed
+    // reload that logged its own warning) — stepping from an unknown index
+    // would land on an arbitrary workspace, which is worse than nothing.
+    if (at < 0) return
+    const next = workspaceRows[(at + delta + workspaceRows.length) % workspaceRows.length]
+    switchWorkspace(next.id)
+  }, [workspaceRows, switchWorkspace])
+  // Handed to useViewport through the ref declared beside its call, for the
+  // ordering reason that ref's own comment gives.
+  stepWorkspaceImplRef.current = stepWorkspace
   useEffect(() => {
     if (palette.open) reloadWorkspaces()
   }, [palette.open, reloadWorkspaces])

@@ -130,6 +130,22 @@ export function useViewport(
    * Must be referentially stable: it sits in the keydown effect's dep array.
    */
   onJumpAttention?: (direction: JumpDirection) => void
+  ,
+  /**
+   * Cmd+Shift+] : the next workspace, Cmd+Shift+[ : the previous one, both
+   * wrapping. The hook holds no knowledge of WHICH workspaces exist or which
+   * one is active — that is main's list, mirrored into Canvas.tsx — so like
+   * onJumpAttention it only turns a chord into a direction.
+   *
+   * Must be referentially stable: it sits in the keydown effect's dep array.
+   */
+  onStepWorkspace?: (delta: 1 | -1) => void
+  ,
+  /**
+   * Cmd+Shift+A: enter or leave the merged view. The same shape and the same
+   * stability requirement as onStepWorkspace above.
+   */
+  onToggleMerged?: () => void
 ): ViewportControls {
   const [viewport, setViewport] = useState<Viewport>(initialViewport ?? INITIAL)
   const viewportRef = useRef(viewport)
@@ -240,6 +256,46 @@ export function useViewport(
       if (event.ctrlKey || event.altKey) return
       if (shouldIgnoreKeys?.()) return
 
+      // The three Shift chords, and they are matched on event.code — NEVER
+      // on event.key — because Shift REWRITES the printed character: Cmd+Shift+]
+      // arrives as key '}' and Cmd+Shift+[ as '{', exactly as Cmd+Shift+\
+      // arrives as '|' (useShellChrome.ts obeys the same rule, verify:panels
+      // 80). A `key === ']'` test is dead on arrival — no such key is ever
+      // delivered under Shift — and a `key === '}'` test is the WORSE failure,
+      // because it is correct on the US layout of whoever wrote it and
+      // silently dead on every layout that prints '}' somewhere else.
+      //
+      // They sit ABOVE the general repeat bail rather than in the switch
+      // below, which is what lets each one preventDefault BEFORE declining a
+      // repeat — the ordering usePalette.ts uses. The modifier checks above
+      // reject chords that are NOT ours; this rejects a chord that IS ours
+      // and which we are declining to act on, so the tail of a held chord
+      // must still be swallowed rather than leaking to the focused agent's
+      // PTY.
+      if (event.shiftKey) {
+        if (event.code === 'BracketLeft' || event.code === 'BracketRight') {
+          event.preventDefault()
+          // Deliberately NOT in REPEATABLE_KEYS: a held switching chord steps
+          // through every canvas at the OS repeat rate and lands wherever the
+          // stream happened to stop rather than where the user meant to look
+          // — the argument Cmd+J already carries. verify:panels 129.
+          if (event.repeat) return
+          onStepWorkspace?.(event.code === 'BracketRight' ? 1 : -1)
+          return
+        }
+        if (event.code === 'KeyA') {
+          event.preventDefault()
+          // A held toggle strobes the whole canvas at the repeat rate, leaves
+          // it merged or not depending on whether the user released on an odd
+          // or an even repeat, and re-runs a workspace:merged plus a pty:list
+          // round trip on every flip. For a toggle the repeat stream is never
+          // the feature — the same ruling useShellChrome.ts records for Cmd+\.
+          if (event.repeat) return
+          onToggleMerged?.()
+          return
+        }
+      }
+
       // A held chord is ONE gesture but many events: the OS emits the real
       // press and then an auto-repeat stream at roughly 15/sec, and every one
       // of them arrives here as an ordinary keydown. Unguarded, `case 'n'`
@@ -310,7 +366,10 @@ export function useViewport(
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, zoomBy, fitAll])
+  }, [
+    hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, onStepWorkspace, onToggleMerged,
+    zoomBy, fitAll
+  ])
 
   // The SETTER stays private — nothing outside should move the camera — but a
   // READ of where the camera is looking is what a menu-driven spawn needs, and
