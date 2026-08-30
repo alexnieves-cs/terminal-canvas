@@ -15,7 +15,8 @@ import type {
   PtyDataChunk,
   PtyExitInfo,
   PtyResizeRequest,
-  PtyWriteRequest
+  PtyWriteRequest,
+  SubagentUpdate
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
 import type { SettingValue } from '../shared/settings-schema'
@@ -91,7 +92,8 @@ const bridge: CanvasBridge = {
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
-    onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener)
+    onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener),
+    onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener)
   },
   settings: {
     list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),

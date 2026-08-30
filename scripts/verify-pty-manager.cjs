@@ -9,8 +9,41 @@ const { buildSync } = require('esbuild')
 const { join } = require('node:path')
 const os = require('node:os')
 const { execFileSync } = require('node:child_process')
-const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync, realpathSync } = require('node:fs')
 const { tmpdir } = require('node:os')
+
+/* THE FENCE, at MODULE SCOPE and not inside any one check.
+
+   Every PtyManager this suite constructs resolves its Claude Code projects
+   root ONCE, synchronously, in its own field initializer
+   (`subagentWatch = new SubagentWatch(createFsWatchDeps())`), and
+   resolveProjectsRoot() falls back to homedir()/.claude/projects when
+   TC_CLAUDE_PROJECTS is unset. This suite's default `spec()` uses
+   os.homedir() as the panel cwd, so with no override every manager here —
+   including check 25's, whose whole subject is "this panel has NO Claude Code
+   session" — polls the running developer's REAL ~/.claude/projects every two
+   seconds and slugs straight to a directory that, on the machine this repo is
+   developed on, genuinely exists.
+
+   Two failures, and the loud one is not the worse one. A real session
+   directory CREATED DURING THE RUN (this repo is developed with `claude` open
+   in the very directory these fixture panels point at) post-dates the panel's
+   spawn, so chooseSession accepts it, the claim confirms against a cwd that
+   really does match, and check 25 goes red reporting subagents that belong to
+   the developer's own conversation — a failure nothing in the suite explains
+   and which does not reproduce on a machine without one. Quietly, and always,
+   it is a per-tick read into a directory this repo does not own: the rule
+   M9a's git fence and the prompt fence each cost a fix round to learn, and
+   which panels-entry.cjs already states in full for the Electron tier.
+
+   Checks 26 and 27 still set their own roots and restore what they found;
+   what they restore to is now this fenced default rather than the real home.
+   The path carries a SPACE for the reason every fixture path in this repo
+   does — see the `pane-died` redirect bug. */
+if (!process.env.TC_CLAUDE_PROJECTS || process.env.TC_CLAUDE_PROJECTS.trim() === '') {
+  process.env.TC_CLAUDE_PROJECTS = mkdtempSync(join(tmpdir(), 'tc claude projects '))
+}
+console.log(`[verify:pty-manager] claude projects root: ${process.env.TC_CLAUDE_PROJECTS}`)
 
 /** Absolute path or null. A GUI app has a bare PATH, so never rely on the name. */
 function findTmux() {
@@ -808,7 +841,247 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // server for the next run — see check 20's own comment for why (a later
       // run's client would reattach to a server still wired to THIS run's
       // now-deleted exitDir, and check 14 would silently report the wrong
-      // exit code). Whoever appends check 25 inherits it next.
+      // exit code). Check 25 is next, so the shutdown moves below it.
+    }
+
+    // 25. The subagent poll wired to a real filesystem, for a panel with NO
+    // Claude Code session directory at all — the ordinary case for most
+    // panels, since most panels never run Claude Code. Main's poll must stay
+    // SILENT rather than announcing an empty state; that silence is success
+    // criterion 6.
+    //
+    // This is precise about what it does NOT prove, because the honest
+    // reading matters more than a reassuring one: it CANNOT test the dedupe.
+    // With nothing to claim, there is nothing that could change between
+    // ticks either — zero messages is exactly what a correct implementation
+    // and a completely undeduped one both produce here, since neither ever
+    // has anything to send in the first place. The dedupe itself — an
+    // unchanged claim reporting once and then falling silent — is proven
+    // where it can actually be exercised: verify:subagent 16 (an unchanged
+    // poll reports nothing) and 21 (an unbroken run of ambiguous ticks
+    // reports once, not on every poll), both against a fake filesystem that
+    // can hold something to be silent ABOUT. Check 26 below is where the
+    // dedupe is proven against a REAL one.
+    //
+    // This is a CHARACTERISATION check, in the shape check 20 already names:
+    // it pins that the real fs wiring this milestone adds does not
+    // manufacture output where the pure watcher has nothing to report, and it
+    // earns its place by fault injection — point createFsWatchDeps at a
+    // TC_CLAUDE_PROJECTS root that does not exist and confirm nothing throws
+    // and nothing sends — not by ever having failed on its own. The WINDOW
+    // still matters for a reason that is not the dedupe: 7s is long enough
+    // that a future change which made the poll invent a message per tick for
+    // an unclaimed panel would be caught here too.
+    {
+      const seen = []
+      const { manager } = makeHarness(tmuxBackend, {
+        onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
+      })
+      const subagentDir = mkdtempSync(join(tmpdir(), 'tc pty-manager subagent '))
+      await manager.create({ panelId: 'sa1', cwd: subagentDir, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+      await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
+      ok('25 no subagent:state for a panel with no Claude Code session dir',
+        seen.length === 0, `expected no subagent:state, got ${seen.length}`)
+      manager.kill('sa1')
+      try { rmSync(subagentDir, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
+    // 26. THE POSITIVE PATH, and the only place anywhere — this suite or
+    // verify:subagent — that proves the dedupe survives contact with a REAL
+    // filesystem read through a REAL PtyManager. verify:subagent 16 and 21
+    // pin the dedupe against a FAKE fs; this is what proves createFsWatchDeps
+    // itself (real readdirSync/readFileSync/statSync, reached through
+    // TC_CLAUDE_PROJECTS — see R2) doesn't silently break that guarantee on
+    // the way from a fake dependency to a real disk.
+    //
+    // TC_CLAUDE_PROJECTS is read ONCE, inside createFsWatchDeps(), at
+    // PtyManager CONSTRUCTION — so it has to be set before makeHarness() is
+    // called, not merely before the panel spawns, or this manager's
+    // subagentWatch would be pointed at whatever root an earlier check left
+    // behind (or the real default, ~/.claude/projects).
+    //
+    // The seeded session directory is created AFTER manager.create()
+    // resolves, deliberately: chooseSession requires the directory's own
+    // createdAt to be >= the panel's spawnedAt, which create() stamps before
+    // this fixture writes anything — seed it first and the fixture would
+    // defeat its own claim, the identical post-spawn filter verify:subagent 9
+    // pins for chooseSession in isolation.
+    //
+    // Both temp roots are REALPATH'd before use, not left as mkdtempSync
+    // hands them back. This manager is on the TMUX backend, so by the first
+    // tick pollLive's own SESSION_LIVE half has already asked tmux for this
+    // panel's live cwd and handed the RESOLVED spelling
+    // (/private/var/folders/... on macOS) to the subagent half as the cwd to
+    // poll with — CLAUDE.md's own "one cosmetic consequence" note. Building
+    // the slug and the transcript's confirmation line from the UNRESOLVED
+    // /var/folders/... spelling would make claim()'s own recordedCwd check
+    // fail against the resolved cwd tmux actually reports, and the panel
+    // would never be claimed at all — the same two-spelling trap
+    // verify:panels' prompt fence exists to close, reached through a new
+    // door.
+    //
+    // The WINDOW is what makes "exactly one, then nothing" mean anything, and
+    // a future editor must not shrink it below 7s for check 25's own stated
+    // reason: an implementation with no dedupe emits once per LIVE_TICK_MS
+    // tick, so a sample spanning a single tick sees one message either way.
+    {
+      const seen = []
+      const projectsRoot = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager projects ')))
+      const subagentCwd = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager subagent-cwd ')))
+      const priorProjectsRoot = process.env.TC_CLAUDE_PROJECTS
+      process.env.TC_CLAUDE_PROJECTS = projectsRoot
+      try {
+        const { manager } = makeHarness(tmuxBackend, {
+          onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
+        })
+        await manager.create({ panelId: 'sa2', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+
+        // The ONE rule slugFor states in subagent-scan.ts, restated here
+        // rather than imported: this suite bundles pty-manager.ts alone and
+        // does not export it, which is why this fixture's directories and
+        // files are hand-built instead of driven through the real watcher's
+        // own API.
+        const slug = subagentCwd.replace(/[^A-Za-z0-9]/g, '-')
+        const sessionDir = join(projectsRoot, slug, 'S1')
+        mkdirSync(join(sessionDir, 'subagents'), { recursive: true })
+        writeFileSync(join(sessionDir, 'subagents', 'agent-x.meta.json'), JSON.stringify({
+          agentType: 'general-purpose', description: 'positive path', toolUseId: 'toolu_verify26',
+          spawnDepth: 1, model: 'sonnet'
+        }))
+        // THE CONFIRMATION line: claim() rejects a session whose own first
+        // transcript line records a DIFFERENT cwd, however well the slug
+        // matched — see the realpath note above for why this must be the
+        // RESOLVED cwd tmux will report, not the raw mkdtempSync path.
+        writeFileSync(`${sessionDir}.jsonl`, JSON.stringify({ type: 'user', cwd: subagentCwd }) + '\n')
+
+        await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
+        const record = seen[0]?.records?.[0]
+        ok('26 a real Claude Code session directory produces exactly one subagent:state carrying one running record, then nothing further',
+          seen.length === 1 && seen[0].panelId === 'sa2' && seen[0].ambiguous === false &&
+            seen[0].records.length === 1 && record?.id === 'agent-x' && record?.state === 'running' &&
+            // Field by field, never a spread (see pollLive's own comment):
+            // toolUseId is main's internal completion key and must not reach
+            // the wire, where it means nothing and belongs to a format this
+            // repo does not own.
+            !('toolUseId' in record),
+          `seen=${JSON.stringify(seen)}`)
+
+        manager.kill('sa2')
+      } finally {
+        if (priorProjectsRoot === undefined) delete process.env.TC_CLAUDE_PROJECTS
+        else process.env.TC_CLAUDE_PROJECTS = priorProjectsRoot
+        try { rmSync(projectsRoot, { recursive: true, force: true }) } catch { /* best effort */ }
+        try { rmSync(subagentCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+      }
+
+      // Check 20's obligation, inherited via 22b, 23, 24 and 25: this block
+      // must end in a definite kill-server, never a session kill that leaves
+      // a stale server for the next run — see check 20's own comment for why
+      // (a later run's client would reattach to a server still wired to
+      // THIS run's now-deleted exitDir, and check 14 would silently report
+      // the wrong exit code). Check 27 is next, so the shutdown moves below it.
+    }
+
+    // 27. R10: a REATTACHED session must reuse its ORIGINAL spawnedAt, never
+    // a fresh Date.now() taken at the moment of reattachment. new-session -A
+    // makes "this client just attached" and "this process just started" the
+    // same tmux call — M6a's reattached flag exists for the identical
+    // ambiguity one layer down — and for a reattached session the agent has
+    // been running since BEFORE this attach, so its Claude Code session
+    // directory NECESSARILY predates it. Treating the attach moment as the
+    // spawn moment makes chooseSession's post-spawn filter
+    // (createdAt >= spawnedAt) reject the panel's own, still-valid session
+    // directory — permanently, since nothing ever re-derives spawnedAt again
+    // for a session this manager keeps alive.
+    //
+    // This is the sibling door check 26 does not open and R8 alone did not
+    // close: a panel reloaded BEFORE its first successful poll, so
+    // SubagentWatch never claimed it in the first place. detachAll()'s
+    // clearDedupe() (R8) has nothing to preserve for a panel with no claim
+    // yet — that property rests entirely on spawnedAt surviving in
+    // PtyManager itself, which is what this check is actually pinning. The
+    // fixture seeds the session directory and then detaches and reattaches
+    // to the SAME session BEFORE the first LIVE_TICK_MS tick can fire —
+    // comfortably under LIVE_TICK_MS even with the settle margins checks
+    // 16/16b need for a real reattach to happen at all (see below) — so
+    // there is no successful poll in between to let R8's own fix quietly
+    // cover for this one.
+    //
+    // Asserted as the actual user-visible property, not as a value read off
+    // any internal field (PtyManager exposes no such thing to assert on
+    // directly): a session directory created BEFORE the reattach is STILL
+    // CLAIMABLE afterwards, producing exactly one subagent:state for it.
+    // Under the bug this reports nothing at all, ever — the same silent,
+    // unrecoverable failure R8 exists to close, reached through a sibling
+    // door.
+    {
+      const seen = []
+      const projectsRoot = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager projects ')))
+      const subagentCwd = realpathSync(mkdtempSync(join(tmpdir(), 'tc pty-manager reattach-cwd ')))
+      const priorProjectsRoot = process.env.TC_CLAUDE_PROJECTS
+      process.env.TC_CLAUDE_PROJECTS = projectsRoot
+      try {
+        const { manager } = makeHarness(tmuxBackend, {
+          onSend: (channel, payload) => { if (channel === 'subagent:state') seen.push(payload) }
+        })
+        await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+        // Let the session settle before touching it, the same margin checks
+        // 16/16b give a fresh session before detaching it — new-session -A's
+        // local client needs a moment to actually attach before the session
+        // is one detachAll() can hand back cleanly; skip this and the
+        // "reattach" below silently spawns a SECOND, unrelated session
+        // instead (reattached: false), which is a fixture bug, not the one
+        // this check exists to find.
+        await sleep(700)
+
+        // Seeded after settling, still well before detachAll(): its
+        // createdAt postdates the ORIGINAL spawn — the same ordering check
+        // 26 needs and for the identical reason (verify:subagent 9's
+        // post-spawn filter, restated end to end).
+        const slug = subagentCwd.replace(/[^A-Za-z0-9]/g, '-')
+        const sessionDir = join(projectsRoot, slug, 'S1')
+        mkdirSync(join(sessionDir, 'subagents'), { recursive: true })
+        writeFileSync(join(sessionDir, 'subagents', 'agent-y.meta.json'), JSON.stringify({
+          agentType: 'general-purpose', description: 'reattach path', toolUseId: 'toolu_verify27',
+          spawnDepth: 1, model: 'sonnet'
+        }))
+        writeFileSync(`${sessionDir}.jsonl`, JSON.stringify({ type: 'user', cwd: subagentCwd }) + '\n')
+
+        // Detach and reattach to the SAME panel id with NO POLL in between:
+        // 700ms settle + 500ms post-detach margin (checks 16/16b's own
+        // numbers) is comfortably under one LIVE_TICK_MS (2000ms), and this
+        // manager's live tick stops outright the instant detachAll() empties
+        // its session map — it does not restart until the reattaching
+        // create() below runs — so the first tick that could possibly claim
+        // this session is the first one AFTER reattachment, exactly the
+        // window this check needs to isolate.
+        manager.detachAll()
+        await sleep(500)
+        const reattachResult = await manager.create({ panelId: 'sa3', cwd: subagentCwd, command: '/bin/sh', args: [], cols: 80, rows: 24 })
+
+        await sleep(7000) // comfortably more than three LIVE_TICK_MS ticks
+        const record = seen[0]?.records?.[0]
+        ok('27 a reattached session reuses its ORIGINAL spawnedAt, so a session directory that predates the reattach is still claimable',
+          reattachResult.reattached === true &&
+          seen.length === 1 && seen[0].panelId === 'sa3' && seen[0].ambiguous === false &&
+            seen[0].records.length === 1 && record?.id === 'agent-y' && record?.state === 'running',
+          `seen=${JSON.stringify(seen)}`)
+
+        manager.kill('sa3')
+      } finally {
+        if (priorProjectsRoot === undefined) delete process.env.TC_CLAUDE_PROJECTS
+        else process.env.TC_CLAUDE_PROJECTS = priorProjectsRoot
+        try { rmSync(projectsRoot, { recursive: true, force: true }) } catch { /* best effort */ }
+        try { rmSync(subagentCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+      }
+
+      // Check 20's obligation, inherited via 22b, 23, 24, 25 and 26: this
+      // block must end in a definite kill-server, never a session kill that
+      // leaves a stale server for the next run — see check 20's own comment
+      // for why (a later run's client would reattach to a server still
+      // wired to THIS run's now-deleted exitDir, and check 14 would
+      // silently report the wrong exit code). Whoever appends check 28
+      // inherits it next.
       tmuxBackend.shutdown()
     }
   }

@@ -40,6 +40,13 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **Project prompts.** `.claude/commands/*.md` in a panel's working directory
   are read and offered as insertable prompts, in Claude Code's own format, so
   they version-control with the project rather than with this app.
+- **Subagent nodes.** A `claude` panel that fans out to subagents shows a small
+  node per subagent beside it, labelled with the model's own description,
+  dimming when the subagent finishes. This reads Claude Code's own per-session
+  files under `~/.claude/projects` and is therefore **absent for other agent
+  CLIs** — `codex` and the rest write no such directory, so a panel running one
+  of them shows no nodes, which is a CLI this feature does not support rather
+  than a bug.
 
 ## Install
 
@@ -175,7 +182,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        credential:list / credential:set / credential:delete
                        credential:verify
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
-                       agent:state / session:live
+                       agent:state / session:live / subagent:state
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -530,11 +537,15 @@ contains, not only the ones that fit on screen.
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
 | M13 | Links between panels: a directed, labelled line that means something | ✅ done |
 | M14 | The credential boundary: a store main owns, and no secret reaches an agent | ✅ done |
+| M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11, M12
-and M14 each landed on their own branch and merged in sequence. A gap in the
-numbers here is a milestone someone else is holding, not one that was skipped.
+claimed by a separate concurrent track and is not yet in this table; M11, M12,
+M14 and M15 each landed on their own branch and merged in sequence. M15 was
+built as M13 and renumbered when it merged, because both M13 and M14 were
+claimed while it was in flight — the same resolution M14 itself made for the
+same reason. A gap in the numbers here is a milestone someone else is holding,
+not one that was skipped.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

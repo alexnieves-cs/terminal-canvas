@@ -3,6 +3,7 @@ import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
+import { SubagentLayer } from './SubagentLayer'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
@@ -21,6 +22,7 @@ import {
 import {
   applyLiveSession, clearLiveSession, getLiveSession, useLiveSession
 } from '@renderer/session/live-session-store'
+import { applySubagents, clearSubagents } from '@renderer/session/subagent-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -436,6 +438,7 @@ export function Canvas({
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
         clearLiveSession(panel.rect.id)
+        clearSubagents(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -705,6 +708,13 @@ export function Canvas({
     applyLiveSession(update.panelId, update.cwd, update.currentCommand)
   }), [])
 
+  // One subscription for the whole canvas, like session.onLive above and for
+  // the same reason: the store fans out per panel id, so a per-panel
+  // subscription here would deliver every panel's update to every panel.
+  useEffect(() => window.canvas.session.onSubagents((update) => {
+    applySubagents(update.panelId, update)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -808,6 +818,7 @@ export function Canvas({
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
       clearLiveSession(panel.rect.id)
+      clearSubagents(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1260,6 +1271,7 @@ export function Canvas({
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
     clearLiveSession(id)
+    clearSubagents(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -2385,6 +2397,7 @@ export function Canvas({
                     registry.dispose(panelId)
                     clearAgentState(panelId)
                     clearLiveSession(panelId)
+                    clearSubagents(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -2499,6 +2512,7 @@ export function Canvas({
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
       clearLiveSession(id)
+      clearSubagents(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it (the × and the rail's close control are
@@ -3057,6 +3071,14 @@ export function Canvas({
               />
             )
           })}
+          {/* Inside .world, not beside it — the opposite of EdgeIndicators
+              and for the mirror-image reason: a pip must stay pinned to the
+              viewport's edge, a subagent node belongs to a place beside its
+              parent panel, so it has to pan and zoom with it. terminalPanels,
+              never `panels`: a review node has no subagents of its own, and
+              it is already outside this array for the identical reason it is
+              outside assignTiers' input. */}
+          <SubagentLayer panels={terminalPanels} />
         </div>
         {pipsEnabled && (
           <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />

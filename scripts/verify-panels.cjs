@@ -8959,6 +8959,269 @@ app.whenReady().then(async () => {
     // a green suite red.
     try { rmSync(credentialDir, { recursive: true, force: true }) } catch { /* best effort */ }
 
+
+    // ---------------------------------------------------------------------
+    // M15, checks 131-133. One fixture serves all three: a fake ~/.claude
+    // projects root, fenced in panels-entry.cjs (never homedir(), and set
+    // BEFORE the PtyManager above was constructed — see that file's own
+    // comment) so this suite can never read the running developer's real
+    // transcripts, seeded with one session directory holding two subagents —
+    // one still running, one already completed by a tool_result in the
+    // parent transcript, so 118 can assert the two STATES rather than only a
+    // count.
+    //
+    // Deliberately OUTSIDE the GIT_OK-gated block above: subagent detection
+    // is filesystem-only and needs no git binary, so gating it the same way
+    // would skip real coverage on a machine that has git but transiently
+    // fails the version probe, for no reason connected to this feature.
+    const nodeCount = (wc) =>
+      wc.executeJavaScript(`document.querySelectorAll('[data-subagent-id]').length`)
+    const nodeBox = (wc, id) => wc.executeJavaScript(`(() => {
+      const n = document.querySelector('[data-subagent-id="' + ${JSON.stringify(id)} + '"]')
+      if (!n) return null
+      const r = n.getBoundingClientRect()
+      return { x: r.left, y: r.top }
+    })()`)
+
+    {
+      // The already-fenced root. process.env.TC_CLAUDE_PROJECTS was set at
+      // module load in panels-entry.cjs — long before the PtyManager above
+      // was constructed — and resolveProjectsRoot() reads it exactly once,
+      // inside that constructor's own field initializer, baking the value in
+      // for the rest of this run. A fresh mkdtempSync here would create a
+      // directory the already-built SubagentWatch can never see: this is
+      // the trap the task brief names explicitly, one door further in than
+      // the post-spawn ordering trap below. Reusing this value is what makes
+      // the fixture below visible to the watcher at all.
+      const SA_ROOT = process.env.TC_CLAUDE_PROJECTS
+
+      // The panel whose subagents these are, spawned at a cwd minted just
+      // for this block so its slug cannot collide with any of the dozens of
+      // panels already open elsewhere in this long-running suite. Through
+      // the SAME PRESET_SPAWN event checks 99-101 use above — copied rather
+      // than reused, because their own `spawnAt` is declared inside the
+      // GIT_OK block and out of reach down here.
+      const saCwd = mkdtempSync(join(tmpdir(), 'tc sa cwd '))
+      const spawnFixturePanel = async (cwd) => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd, command: '/bin/sh', args: [], w: 400, h: 300 })
+        const ids = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > before.size ? now : false
+        }, 3000)
+        return ids ? ids.find((id) => !before.has(id)) : undefined
+      }
+
+      const xtermsBefore = await liveCount(wc)
+      const saPanelId = await spawnFixturePanel(saCwd)
+
+      // THE TRAP the task brief names by name: chooseSession (subagent-
+      // scan.ts) only accepts a session directory created ON OR AFTER the
+      // panel's own spawnedAt — the post-spawn filter that stops a shell in
+      // a directory somebody used yesterday from adopting a stranger's
+      // session. spawnedAt is stamped inside PtyManager.create(), which is
+      // exactly what waiting on sessionMap confirms has already run, so the
+      // directory created only AFTER this resolves is guaranteed to postdate
+      // it. Creating the directory before the spawn (or before confirming it
+      // landed) makes the claim silently never happen: the failure then
+      // surfaces as 118 timing out on nodeCount, which reads exactly like a
+      // broken renderer and points nowhere near the real cause — the same
+      // race checks 99 and 101 already guard against for captureBaseline.
+      if (saPanelId) await waitUntil(async () => (await sessionMap(wc)).has(saPanelId), 8000)
+
+      // The BEFORE half of check 119's real registry clause, captured here
+      // rather than any later point: the subject panel's own session
+      // already exists (the wait above just confirmed it), and no subagent
+      // fixture file exists yet — seedSession runs below — so no node can
+      // possibly have rendered. Whatever __m4aSessions().length reads here
+      // is the count check 119 must still see once the nodes exist.
+      const sessionsBeforeNodes = await wc.executeJavaScript(
+        `(window.__m4aSessions ? window.__m4aSessions() : []).length`)
+
+      // Seeds one session directory plus its parent transcript under a given
+      // slug. Called for BOTH spellings of saCwd below — see that call's own
+      // comment for why one alone is not enough.
+      const seedSession = (cwdForSlug) => {
+        const slug = cwdForSlug.replace(/[^A-Za-z0-9]/g, '-')
+        const sessionDir = join(SA_ROOT, slug, 'S1')
+        mkdirSync(join(sessionDir, 'subagents'), { recursive: true })
+        const meta = (t, d) => JSON.stringify({
+          agentType: 'general-purpose', description: d, toolUseId: t, spawnDepth: 1, model: 'sonnet'
+        })
+        writeFileSync(join(sessionDir, 'subagents', 'agent-a1.meta.json'), meta('toolu_01A', 'still going'))
+        writeFileSync(join(sessionDir, 'subagents', 'agent-a2.meta.json'), meta('toolu_01B', 'already done'))
+        // The parent transcript. Its FIRST line is the confirmation read —
+        // cwdOf must find our cwd here or the session is not claimed at all
+        // — and the second line is what completes a2 while a1 stays running.
+        writeFileSync(join(SA_ROOT, slug, 'S1.jsonl'),
+          JSON.stringify({ type: 'user', cwd: cwdForSlug, sessionId: 'S1' }) + '\n' +
+          JSON.stringify({ message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_01B' }] } }) + '\n')
+      }
+      // Two spellings, the standing rule this suite's git fence and prompt
+      // fence already carry: macOS tmpdir() answers /var/folders/… while a
+      // REAL live cwd — tmux's own pane_current_path, live only if checks
+      // 116-117 above found tmux and swapped `backend` onto it — answers the
+      // resolved /private/var/folders/…, and the DIRECT backend by contrast
+      // never resolves the spawn cwd at all (pollLive's liveCwd map is empty
+      // by contract there, so PanelSpec.cwd — our literal saCwd — flows
+      // straight through to subagentWatch.poll unresolved). Seeding only one
+      // spelling makes this check's result depend on which backend happens
+      // to be active on the machine running it, for a reason that has
+      // nothing to do with the scanner under test.
+      const realSaCwd = realpathSync(saCwd)
+      seedSession(saCwd)
+      if (realSaCwd !== saCwd) seedSession(realSaCwd)
+
+      // 118. WAITS on a live tick rather than sleeping: a fixed sleep against
+      // a 2s poll is a flake, not a bound. This is the first thing to
+      // exercise the watcher, the one canvas-wide subscription and the store
+      // TOGETHER — verify:subagent proves the scanner and says nothing about
+      // the wiring between it and a painted node.
+      const appeared = await waitUntil(async () => (await nodeCount(wc)) >= 2, 12000, 250)
+      const states = await wc.executeJavaScript(`
+        Array.from(document.querySelectorAll('[data-subagent-id]'))
+          .map((n) => n.getAttribute('data-subagent-state')).sort().join(',')
+      `)
+      // Both STATES, not just a count: a layer that rendered every record as
+      // running would satisfy a count perfectly, and "done" is half the
+      // feature.
+      ok('131 a seeded subagents/ dir paints one node per subagent, with its real state',
+        appeared && states === 'done,running', `states=${states}`)
+
+      // 119. The check the milestone's central claim rests on. Two
+      // INDEPENDENT clauses, not one restated two ways — a review found the
+      // first draft's comment overclaimed what the second one actually
+      // proves, and this is the corrected pair.
+      //
+      // heldByRegistry tests whether a subagent record's own id
+      // (`agent-a1`, derived from a `.meta.json` filename) collides with a
+      // PanelId key in __m4aSessions(). Those are DISJOINT namespaces BY
+      // DESIGN — nothing threads a record id into registry.ensure(), and
+      // SubagentLayer's own architecture comment says so — so this clause
+      // can only ever go red for ONE narrow regression: literally reusing a
+      // record id as a panel id. It does NOT establish "no node holds a
+      // PanelSession" the way it looks like it does, and the way the
+      // identically-shaped clause genuinely does for a review node in check
+      // 103 — a review node's id IS a PanelId, minted from the very same
+      // `nextIdRef` counter every terminal panel's is (see "Panel ids are
+      // one sequence with two prefixes" in CLAUDE.md). A subagent record's
+      // id is never minted from that counter at all, so the two checks only
+      // LOOK alike.
+      //
+      // sessionsAfterNodes is the clause that actually proves the claim:
+      // the registry's session COUNT, unchanged across the whole fan-out.
+      // sessionsBeforeNodes (captured above, before any subagent fixture
+      // file existed) already includes the subject panel's own session, so
+      // that session cancels out of the comparison — what is left is
+      // "the nodes arrived and minted nothing", independent of what a node
+      // might be keyed by. This is the clause a future regression that gave
+      // subagent nodes their own PanelSession would actually trip.
+      //
+      // Kept both: heldByRegistry is cheap and still catches the id-reuse
+      // case it always could; sessionsAfterNodes is what earns the "no
+      // PanelSession" wording in the ok() title below.
+      const nodeIds = await wc.executeJavaScript(`
+        Array.from(document.querySelectorAll('[data-subagent-id]'))
+          .map((n) => n.getAttribute('data-subagent-id'))
+      `)
+      // __m4aSessions() answers an ARRAY of {id, dormant, spawned} — not a
+      // Set/Map — the same shape check 103 already reads for the identical
+      // question about a review node's id.
+      const heldByRegistry = await wc.executeJavaScript(
+        `(() => {
+           const ids = new Set((window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id))
+           return (${JSON.stringify(nodeIds)}).some((id) => ids.has(id))
+         })()`
+      )
+      const sessionsAfterNodes = await wc.executeJavaScript(
+        `(window.__m4aSessions ? window.__m4aSessions() : []).length`)
+      const xtermsAfter = await liveCount(wc)
+      // NOT a bare "+1". By this point roughly 117 checks' worth of panels
+      // have spawned across this suite and LIVE_BUDGET (8) is a real
+      // constraint none of the earlier fixtures clear away, so whether THIS
+      // panel wins a live slot is genuinely undetermined rather than
+      // assumed. The check's real substance survives that uncertainty
+      // unchanged: whatever the subject panel's own liveness turns out to
+      // be, the fan-out itself must explain nothing beyond it — no node may
+      // cost some OTHER panel its terminal, and no node may mint one of its
+      // own. subjectLive is read from the same sessionMap 99-101 already
+      // trust for "is this panel's PTY up".
+      const subjectLive = saPanelId ? (await sessionMap(wc)).has(saPanelId) : false
+      const expectedXterms = xtermsBefore + (subjectLive ? 1 : 0)
+      // nodeIds.length > 0 is the non-vacuity guard: without it, a feature
+      // that silently rendered NO nodes at all would satisfy every other
+      // clause here (an empty array collides with nothing, the session
+      // count is trivially unchanged, and the xterm delta is explained by
+      // the subject panel alone) — checks 102/103 carry the identical guard
+      // for a review node, and 119 should not have to lean on 118 next door
+      // to mean anything on its own.
+      ok('132 no node holds a PanelSession — the session count is unchanged by the fan-out — and the live xterm count moves only by the subject panel\'s own liveness',
+        nodeIds.length > 0 && heldByRegistry === false &&
+          sessionsAfterNodes === sessionsBeforeNodes && xtermsAfter === expectedXterms,
+        `nodes=${nodeIds.length} held=${heldByRegistry} sessions ${sessionsBeforeNodes} -> ${sessionsAfterNodes} ` +
+        `xterms before=${xtermsBefore} after=${xtermsAfter} subjectLive=${subjectLive}`)
+      // +0 or +1, never anything else: a bare inequality against `before`
+      // would also pass against an implementation that quietly demoted one
+      // panel to promote another while adding a node's worth of nothing —
+      // two changes cancelling out. Pinning the exact expected value, backed
+      // by an independent read of the one thing that's allowed to move it,
+      // is what a bare "unchanged or +1" cannot rule out.
+
+      // 120. The node follows a dragged parent. The failure it guards is a
+      // node placed against a stale rect — it detaches and floats — and it
+      // is invisible until something moves, because a node placed once at
+      // mount looks entirely correct. Dragged through the panel's own
+      // chrome, the same route check 9 uses, rather than by moving the
+      // camera: a camera move would translate the whole .world and pass
+      // against a node welded to the wrong panel.
+      //
+      // The parent panel id is read back OUT OF THE DOM — a node's own
+      // data-panel-id attribute — rather than assumed to be saPanelId: the
+      // two happen to agree here, but the DOM is the fact a real drag has to
+      // act on, and the brief's own note ("read it back out of the DOM
+      // rather than assuming it") is asking for exactly this.
+      const domParentId = nodeIds.length > 0 ? await wc.executeJavaScript(`(() => {
+        const n = document.querySelector('[data-subagent-id="' + ${JSON.stringify(nodeIds[0])} + '"]')
+        return n ? n.getAttribute('data-panel-id') : null
+      })()`) : null
+
+      const beforeBox = nodeIds.length > 0 ? await nodeBox(wc, nodeIds[0]) : null
+      let afterBox = null
+      if (domParentId) {
+        await wc.executeJavaScript(`(() => {
+          const panel = document.querySelector('[data-panel-id="' + ${JSON.stringify(domParentId)} + '"] .panel__chrome')
+          if (!panel) return false
+          const r = panel.getBoundingClientRect()
+          const opts = { bubbles: true, button: 0, buttons: 1,
+            clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
+          panel.dispatchEvent(new MouseEvent('mousedown', opts))
+          document.dispatchEvent(new MouseEvent('mousemove', { ...opts, clientX: opts.clientX + 120 }))
+          document.dispatchEvent(new MouseEvent('mouseup', { ...opts, clientX: opts.clientX + 120, buttons: 0 }))
+          return true
+        })()`)
+        await settle()
+        afterBox = await nodeBox(wc, nodeIds[0])
+      }
+      ok('133 a node follows its parent through a drag',
+        domParentId !== null && beforeBox !== null && afterBox !== null &&
+          Math.abs(afterBox.x - beforeBox.x - 120) < 4,
+        `parent=${domParentId} before=${JSON.stringify(beforeBox)} after=${JSON.stringify(afterBox)}`)
+
+      // Best-effort, the rule every other fixture root in this file
+      // already follows (`repo`, `notRepo`, `crepo` above are all
+      // explicitly rmSync'd): a failure to clean up must never turn a
+      // green suite red. SA_ROOT is removed WHOLESALE rather than only its
+      // two slug subdirectories — this is the last block in the run to
+      // touch it, so there is nothing left for the watcher to poll against
+      // it for, and leaving it behind would be a fixture directory this
+      // suite minted and never removed, the exact thing this comment exists
+      // to call out for the peers beside it.
+      try { rmSync(SA_ROOT, { recursive: true, force: true }) } catch { /* best effort */ }
+      try { rmSync(saCwd, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
