@@ -16,7 +16,14 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  external: ['node-pty', 'electron']
+  external: ['node-pty', 'electron'],
+  // M17: main/ipc.ts now imports main/file-write.ts (for the file:write
+  // handler), which imports FILE_MAX_BYTES — a real VALUE — from
+  // @shared/file-panel. This bundle resolved no alias before that import
+  // reached it, the same gap CLAUDE.md records for verify-panels.cjs and
+  // verify-canvas.cjs: each esbuild call site needs its own alias, and this
+  // one had never needed it until now.
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
 })
 const { IPC, registerIpcHandlers } = require(OUT)
 
@@ -132,11 +139,12 @@ app.whenReady().then(() => {
   // handled by nobody — and this suite asserts over Object.values(IPC), the
   // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
   // records both. M14 Task 5 took the surface to 35 (four credential:*
-  // channels, none of which returns a secret) — the base this milestone's
-  // three new invokes (file:open/file:read/file:close) build on. This
-  // milestone was built and reviewed as "M13" and renumbered to M16 when it
-  // merged, since main had already claimed M13 three times over by then.
-  const EXPECTED_CHANNELS = 38
+  // channels, none of which returns a secret) — the base M16's three new
+  // invokes (file:open/file:read/file:close) built on, taking it to 38. M16
+  // was built and reviewed as "M13" and renumbered when it merged, since main
+  // had already claimed M13 three times over by then. M17 adds one more,
+  // file:write, taking it to 39.
+  const EXPECTED_CHANNELS = 39
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

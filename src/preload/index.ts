@@ -6,6 +6,7 @@ import {
   type PresetTemplate,
   type CapturedPanel,
   type FileReadRequest,
+  type FileWriteRequest,
   type FileChangedEvent
 } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
@@ -131,6 +132,7 @@ const bridge: CanvasBridge = {
     open: () => ipcRenderer.invoke(IPC.FILE_OPEN),
     read: (req: FileReadRequest) => ipcRenderer.invoke(IPC.FILE_READ, req),
     close: (panelId: PanelId) => ipcRenderer.invoke(IPC.FILE_CLOSE, panelId),
+    write: (req: FileWriteRequest) => ipcRenderer.invoke(IPC.FILE_WRITE, req),
     onChanged: (listener) => subscribe<FileChangedEvent>(IPC_EVENTS.FILE_CHANGED, listener),
     pathForFile: (file: File) => webUtils.getPathForFile(file)
   },

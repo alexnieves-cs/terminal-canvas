@@ -2,21 +2,9 @@ import { chmodSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } 
 import { randomBytes } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { FILE_MAX_BYTES } from '@shared/file-panel'
+import type { FileWriteResult } from '@shared/file-panel'
 
-/**
- * What a save did, and why it did not.
- *
- * Three arms, split POSITIONALLY rather than by parsing an error message —
- * review-commit.ts's `refused`/`failed` distinction applied to a second verb.
- * `stale` means the disk moved underneath you and the fix is to look at what
- * changed; `failed` means this write did not run and the fix is your
- * filesystem. Collapsing them tells a user with a read-only file to go and
- * look at somebody else's changes.
- */
-export type FileWriteResult =
-  | { kind: 'written'; mtimeMs: number; bytes: number }
-  | { kind: 'stale'; detail: string }
-  | { kind: 'failed'; detail: string }
+export type { FileWriteResult }
 
 /**
  * Write one file, and refuse rather than destroy.

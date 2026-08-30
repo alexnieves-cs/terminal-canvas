@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, FileReadRequest } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, FileReadRequest, FileWriteRequest } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -17,6 +17,7 @@ import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
 import type { FileWatchers } from './file-watch'
+import { writeFile } from './file-write'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -261,6 +262,13 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.FILE_CLOSE, (_event, panelId: PanelId) => {
     fileWatchers.close(panelId)
   })
+
+  ipcMain.handle(IPC.FILE_WRITE, (_event, req: FileWriteRequest) =>
+    // No sender capture, unlike FILE_READ: this is a plain request/response
+    // with nothing to push afterwards. Our own write lands back through the
+    // watcher like any other change, which is what makes the panel update
+    // itself with no second code path.
+    writeFile(req.path, req.content, req.baseMtimeMs))
 }
 
 /**

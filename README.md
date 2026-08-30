@@ -181,7 +181,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:diff / review:commit
                        credential:list / credential:set / credential:delete
                        credential:verify
-                       file:open / file:read / file:close
+                       file:open / file:read / file:close / file:write
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed
