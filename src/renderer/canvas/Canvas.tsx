@@ -71,6 +71,33 @@ const EMPTY_SETTINGS: SettingRow[] = []
 const EMPTY_WORKSPACES: WorkspaceRow[] = []
 
 /**
+ * The empty selection, as ONE module-scope value, for the reason stated
+ * directly above: a fresh `new Set()` per render has a new identity every
+ * render, and the selection reaches dependency arrays and memo comparisons —
+ * a new identity there is re-render churn on the 60Hz pan/drag path, which is
+ * the class of bug `panelRows`, `railSignature` and `resetViewport`'s
+ * `useCallback` each exist to keep off this file.
+ */
+const EMPTY_SELECTION: ReadonlySet<string> = new Set()
+
+/**
+ * Drop every id the predicate rejects, PRESERVING the set's identity when
+ * nothing was dropped. That half is what keeps this byte-identical to the
+ * `(id) => (id && ids.has(id) ? id : null)` updaters it replaced: an
+ * unchanged selection was not a state change there, and must not become one
+ * here — a set rebuilt on every panel close and every undo would re-render
+ * the canvas for a selection that did not move.
+ */
+function retainSelection(
+  current: ReadonlySet<string>,
+  keep: (id: string) => boolean
+): ReadonlySet<string> {
+  const next = new Set([...current].filter(keep))
+  if (next.size === current.size) return current
+  return next.size === 0 ? EMPTY_SELECTION : next
+}
+
+/**
  * What the switcher calls a panel. This is always the command/cwd/id shape —
  * autoName()'s shape in main/presets.ts — regardless of whether the panel has
  * a user-set title: the goto row's TITLE stays stable so `verify:panels`
@@ -237,7 +264,7 @@ export function Canvas({
 
   // Declared before onSpawn (which uses it) rather than grouped with the
   // other undo plumbing below applyHistory needs: applyHistory itself needs
-  // setSelectedId/setFocusedId/setDormantIds, which are not declared until
+  // setSelectedIds/setFocusedId/setDormantIds, which are not declared until
   // further down, so it is defined after them. commitHistory has no such
   // dependency and can be pushed up here instead of forward-declaring onSpawn.
   //
@@ -313,7 +340,35 @@ export function Canvas({
     },
     [commitHistory]
   )
-  const [selectedId, setSelectedId] = useState<string | null>(initial.selectedId)
+  // The selection is a SET, so a later marquee can build a multi-selection
+  // without renaming forty call sites. Nothing in this milestone creates one
+  // with more than a single member yet.
+  //
+  // focusedId is deliberately NOT widened alongside it. assignTiers pins the
+  // focused panel live unconditionally, so focus is a budget-and-WebGL-context
+  // claim rather than a highlight — a set of them would hold LIVE_BUDGET slots
+  // for the rest of the run, with nothing on screen saying so.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() =>
+    initial.selectedId === null ? EMPTY_SELECTION : new Set([initial.selectedId])
+  )
+  /**
+   * The one selected panel, or null when zero OR MANY are selected. Every
+   * existing reader of the selection — the inspector, the review query, the
+   * rail, the HUD, the CanvasState written to disk — is asking "which single
+   * panel is this about", and a multi-selection correctly reads as none: the
+   * inspector's empty state is already a first-class state (verify:rail 27b),
+   * not an error path that needs a new case adding to it.
+   */
+  const selectedId = selectedIds.size === 1 ? [...selectedIds][0] : null
+  /**
+   * Replace the whole selection with one panel, or clear it. The verb every
+   * pre-existing `setSelectedId(x)` call site wanted; the set-shaped setter
+   * stays private to this component so a caller cannot grow the selection by
+   * accident before the gesture that is supposed to exists.
+   */
+  const selectOnly = useCallback((id: string | null): void => {
+    setSelectedIds(id === null ? EMPTY_SELECTION : new Set([id]))
+  }, [])
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
 
@@ -431,7 +486,7 @@ export function Canvas({
       }
       return merged
     })
-    setSelectedId((id) => (id && ids.has(id) ? id : null))
+    setSelectedIds((current) => retainSelection(current, (id) => ids.has(id)))
     setFocusedId((id) => (id && ids.has(id) ? id : null))
   }, [])
 
@@ -708,7 +763,7 @@ export function Canvas({
     const fresh = firstRunPanels()
     setPanels(fresh)
     setDormantIds(new Set())
-    setSelectedId(null)
+    selectOnly(null)
     setFocusedId(null)
     setHistory(createHistory(fresh))
     // firstRunPanels() places its panel at the world origin. Without
@@ -858,7 +913,7 @@ export function Canvas({
         // entries.
         setPanels(next)
         setDormantIds(dormant)
-        setSelectedId(result.state.selectedId)
+        selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)
         restoreCamera(result.state.camera)
         // HISTORY IS CLEARED, not carried. history is ONE stack over ONE
@@ -1139,7 +1194,7 @@ export function Canvas({
         commitHistory(next)
         return next
       })
-      setSelectedId((current) => (current === id ? null : current))
+      setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
       setFocusedId((current) => (current === id ? null : current))
       return
     }
@@ -1161,7 +1216,7 @@ export function Canvas({
       commitHistory(next)
       return next
     })
-    setSelectedId((current) => (current === id ? null : current))
+    setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
     setFocusedId((current) => (current === id ? null : current))
   }, [commitHistory])
   /**
@@ -1171,7 +1226,7 @@ export function Canvas({
    * start a process, while registry.wake — onSelectPanel's other half — is not.
    */
   const selectAndRaise = useCallback((id: string) => {
-    setSelectedId(id)
+    selectOnly(id)
     setPanels((current) => {
       // Skip the raise (and the history push it would trigger) when `id` is
       // already topmost. onFocusPanel calls this on every click into a panel
@@ -1393,12 +1448,12 @@ export function Canvas({
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
     const hit = world ? hitTest(hitOrder, world) : null
-    // Through onSelectPanel, not setSelectedId: selecting raises. A live
+    // Through onSelectPanel, not selectOnly: selecting raises. A live
     // panel's own chrome handler already does that, but a CARDED panel has no
     // handler of its own — its click falls through to the background path, and
-    // calling setSelectedId here directly would select it without raising it.
+    // calling selectOnly here directly would select it without raising it.
     if (hit) onSelectPanel(hit)
-    else setSelectedId(null)
+    else selectOnly(null)
     // Focus is released together with selection. assignTiers pins the focused
     // panel live unconditionally — off screen, below the scale threshold,
     // budget full — so a focusedId that is never cleared holds a WebGL context
@@ -1665,7 +1720,7 @@ export function Canvas({
         commitHistory(next)
         return next
       })
-      setSelectedId(id)
+      selectOnly(id)
     })
   }, [commitHistory])
 
@@ -2679,7 +2734,7 @@ export function Canvas({
                 <ReviewNode
                   key={panel.rect.id}
                   panel={panel}
-                  selected={panel.rect.id === selectedId}
+                  selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
@@ -2704,7 +2759,7 @@ export function Canvas({
                 rect={panel.rect}
                 z={panel.z}
                 title={panel.title}
-                selected={panel.rect.id === selectedId}
+                selected={selectedIds.has(panel.rect.id)}
                 onSelect={onSelectPanel}
                 onSlotMount={onSlotMount}
                 onSlotUnmount={onSlotUnmount}
