@@ -414,7 +414,7 @@ export function Canvas({
     // even when this renderer holds no local session for that id") — so an
     // unguarded node undone out of existence sends a tmux kill-session named
     // after a panel that never had one, and drops in main the baseline of
-    // whatever panel later recycles that id. M13's file panel is the SECOND
+    // whatever panel later recycles that id. M16's file panel is the SECOND
     // sessionless kind, and its arrival is what turns the old positive test
     // (`isReviewPanel`) from safe into wrong: a file panel satisfies
     // !isReviewPanel, so it would have taken the dispose branch and sent
@@ -810,7 +810,7 @@ export function Canvas({
     // call, for the two reasons applyHistory's own guard states.
     for (const panel of panelsRef.current) {
       if (!isTerminalPanel(panel)) {
-        // M13: `!isTerminalPanel`, not `isReviewPanel`. A file panel is the
+        // M16: `!isTerminalPanel`, not `isReviewPanel`. A file panel is the
         // second sessionless kind and would otherwise have taken the dispose
         // branch below, sending a kill for a panel that never had a session.
         // Its cached content goes with it, the same reason the two clears
@@ -1258,7 +1258,7 @@ export function Canvas({
     // node through it would send a tmux kill-session for a panel that never
     // had one — and, worse, drop the baseline of whatever panel later
     // recycles that id.
-    // M13 widens this from `isReviewPanel` to "any panel that is not a
+    // M16 widens this from `isReviewPanel` to "any panel that is not a
     // terminal": a file panel owns no session either, so routing it through
     // the dispose below would send the same stray kill for the same reason.
     if (panelsRef.current.some((p) => p.rect.id === id && !isTerminalPanel(p))) {
@@ -2423,7 +2423,7 @@ export function Canvas({
                   // never spawned), and closable only by teaching
                   // WORKSPACE_LIST to carry a kind, which is a channel
                   // change this milestone did not scope.
-                  // M13: every SESSIONLESS kind, not only review nodes — a
+                  // M16: every SESSIONLESS kind, not only review nodes — a
                   // file panel owns no PanelSession either, so an unguarded
                   // id here sends the same stray kill.
                   const doomedSessionlessIds = doomed.active

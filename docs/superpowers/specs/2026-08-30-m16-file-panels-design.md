@@ -1,4 +1,8 @@
-# M13: File panels — a live document beside a live agent
+# M16: File panels — a live document beside a live agent
+
+> Written as M13, renumbered to M16 on merge — main had already claimed M13
+> (twice over, via M14/M15's own earlier renumbering) while this branch was
+> in flight. See the milestone-wide renumbering commit for the full story.
 
 **Status:** designed, not yet implemented.
 **Predecessor:** by DEPENDENCY, M9b. That milestone turned `Panel` from a single

@@ -29,9 +29,9 @@ buildSync({
   format: 'cjs',
   external: ['node-pty', 'electron'],
   // The same two aliases electron.vite.config.ts, every plain-node verify
-  // bundle, and (since M13) verify-panels.cjs's own copy of this exact
+  // bundle, and (since M16) verify-panels.cjs's own copy of this exact
   // panels-entry.cjs build already carry. This bundle got away without them
-  // for the identical reason verify-panels.cjs did until M13: every
+  // for the identical reason verify-panels.cjs did until M16: every
   // cross-boundary import main/* made from @shared was an `import type`,
   // erased before bundling, so nothing was ever actually resolved.
   // main/file-read.ts now imports real VALUES from @shared/file-panel

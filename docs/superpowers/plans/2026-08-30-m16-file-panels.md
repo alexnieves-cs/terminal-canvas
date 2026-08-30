@@ -1,5 +1,12 @@
-# M13: File Panels Implementation Plan
+# M16: File Panels Implementation Plan
 
+> Written and executed as M13. Renumbered to M16 on merge: main had already
+> claimed M13 for "links between panels" while this branch was in flight, and
+> renumbered M14/M15 had claimed it too before that. Numbers inside this
+> document (milestone name, check numbers) reflect the plan AS WRITTEN;
+> the actual merged code uses the renumbered values — see the milestone-wide
+> renumbering commit for the mapping.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put a local text file on the canvas as a third panel kind, read-only, watched, so it updates within about a second when an agent rewrites it.

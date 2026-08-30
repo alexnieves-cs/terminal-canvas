@@ -1132,7 +1132,7 @@ body {
   word-break: break-word;
 }
 
-/* M13. A file panel reuses .panel for its box, its chrome and its resize
+/* M16. A file panel reuses .panel for its box, its chrome and its resize
    handles — see FileNode.tsx — and adds only what a scrollable text body
    needs. The body is the ONE element carrying data-scroll-host, which is what
    gives this kind the wheel over itself; shouldYieldWheel needed no edit for

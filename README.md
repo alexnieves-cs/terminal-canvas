@@ -522,13 +522,17 @@ contains, not only the ones that fit on screen.
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
 | M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
-| M13 | File panels: a local file on the canvas, watched | ✅ done |
+| M16 | File panels: a local file on the canvas, watched | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11,
-M12 and M13 each landed on their own branch and merged in sequence. A gap in
-the numbers here is a milestone someone else is holding, not one that was
-skipped.
+M12, M13, M14, M15 and M16 each landed on their own branch and merged in
+sequence. A gap in the numbers here is a milestone someone else is holding,
+not one that was skipped. M16 was built and reviewed entirely as "M13" — main
+had already claimed that number three times over (the real M13, plus M14 and
+M15, both themselves renumbered from an original "M13" for the identical
+reason) by the time this branch tried to merge, so it moved to the next free
+number on merge rather than at any point during its own development.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

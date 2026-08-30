@@ -25,7 +25,7 @@ buildSync({
   format: 'cjs',
   external: ['node-pty', 'electron'],
   // The same two aliases electron.vite.config.ts and every plain-node verify
-  // bundle already carry. This entry got away without them until M13 for the
+  // bundle already carry. This entry got away without them until M16 for the
   // reason verify-viewport.cjs did: every cross-boundary import main/* made
   // from @shared was an `import type`, which esbuild erases before bundling,
   // so nothing was ever actually resolved. main/file-read.ts imports real
@@ -8594,17 +8594,23 @@ app.whenReady().then(async () => {
     }
 
     // ---------------------------------------------------------------------
-    // M13: file panels — a local file, minted as a read-only, live-watched
+    // M16: file panels — a local file, minted as a read-only, live-watched
     // node on the canvas. A fixture file in a SPACED temp directory, the
     // rule this repo learned from the pane-died redirect bug shipping
     // through eight reviews on space-free fixtures.
+    //
+    // Originally numbered 125-128 under this branch's own M13, which
+    // collided with main's own DIFFERENT M13 — "links between panels" —
+    // which independently claimed 125-129 here, and with M14/M15's own
+    // renumbered ranges (130, 131-133). See the milestone-wide renumbering
+    // commit for the full story.
     // ---------------------------------------------------------------------
     {
       const FILE_DIR = mkdtempSync(join(tmpdir(), 'tc filepanel '))
       const FIXTURE = join(FILE_DIR, 'notes.md')
       writeFileSync(FIXTURE, 'first line\nsecond line\n')
 
-      // 125 — the panel renders the file's REAL content, minted through the
+      // 134 — the panel renders the file's REAL content, minted through the
       //       real openFilePanel path via the __m13Open test hook. Asserted
       //       on the content rather than on the panel existing: a panel that
       //       mounted and rendered nothing satisfies "a panel exists"
@@ -8616,11 +8622,11 @@ app.whenReady().then(async () => {
           `(() => { const b = document.querySelector('[data-panel-kind="file"] [data-scroll-host]'); return b ? b.textContent : null })()`)
         return t && t.includes('second line') ? t : null
       }, 5000)
-      ok('125 a file panel renders the real content of the file it names',
+      ok('134 a file panel renders the real content of the file it names',
         rendered !== null,
         `content=${JSON.stringify(String(rendered).slice(0, 40))}`)
 
-      // 126 — THE LIVENESS CHECK, and the whole reason this milestone's
+      // 135 — THE LIVENESS CHECK, and the whole reason this milestone's
       //       watcher is directory-based rather than a plain path watch: it
       //       is driven by an ATOMIC write (temp file, then rename over the
       //       target), because that is what an agent actually does and it is
@@ -8635,11 +8641,11 @@ app.whenReady().then(async () => {
           `(() => { const b = document.querySelector('[data-panel-kind="file"] [data-scroll-host]'); return b ? b.textContent : null })()`)
         return t && t.includes('rewritten by an agent') ? t : null
       }, 5000)
-      ok('126 an atomic external rename-over-target reaches the live panel',
+      ok('135 an atomic external rename-over-target reaches the live panel',
         updated !== null,
         updated === null ? 'never arrived' : 'arrived')
 
-      // 127 — it costs no session and no WebGL context, and BOTH clauses are
+      // 136 — it costs no session and no WebGL context, and BOTH clauses are
       //       required. The second is what rejects an implementation that
       //       quietly demoted some other panel to pay for this one — "the
       //       file panel has no xterm" is satisfied perfectly by that alone.
@@ -8648,11 +8654,11 @@ app.whenReady().then(async () => {
       const hasSession = await wc.executeJavaScript(
         `Boolean(window.__m4aSessions()[${JSON.stringify(fileId)}])`)
       const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
-      ok('127 a file panel holds no PanelSession and costs no WebGL context',
+      ok('136 a file panel holds no PanelSession and costs no WebGL context',
         hasSession === false && xtermsAfter === xtermsBefore,
         `session=${hasSession} xterms ${xtermsBefore}->${xtermsAfter}`)
 
-      // 128 — closing it sends NO pty.kill for its id. A negative against a
+      // 137 — closing it sends NO pty.kill for its id. A negative against a
       //       recording mechanism is vacuous if the recorder has stopped
       //       recording, so this ALSO closes a real terminal panel in the
       //       same window and asserts THAT id IS recorded — the same
@@ -8671,7 +8677,7 @@ app.whenReady().then(async () => {
       await clickPanelClose(wc, termId)
       await settle()
       const killsSince = killedPanelIds.slice(killsBefore)
-      ok('128 closing a file panel sends no pty.kill, while a terminal close still does',
+      ok('137 closing a file panel sends no pty.kill, while a terminal close still does',
         !killsSince.includes(fileId) && killsSince.includes(termId),
         `kills=${JSON.stringify(killsSince)}`)
 

@@ -98,7 +98,7 @@ export function isFilePanel(panel: Panel): panel is FilePanel {
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
  *
- * Canvas.tsx spelled "is a terminal panel" as `!isReviewPanel(p)` until M13,
+ * Canvas.tsx spelled "is a terminal panel" as `!isReviewPanel(p)` until M16,
  * and that was correct with exactly one non-terminal kind. With two it is
  * wrong in the DANGEROUS direction: a file panel satisfies !isReviewPanel,
  * lands in terminalPanels, reaches assignTiers and registry.ensure with no

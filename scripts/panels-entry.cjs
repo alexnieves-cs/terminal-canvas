@@ -6,7 +6,7 @@
 module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
-  // registerIpcHandlers' two trailing M13 parameters need a real watcher
+  // registerIpcHandlers' two trailing M16 parameters need a real watcher
   // manager and a window getter, the same shape ptyManager/mainWindow already
   // take in main/index.ts.
   FileWatchers: require('../src/main/file-watch').FileWatchers,

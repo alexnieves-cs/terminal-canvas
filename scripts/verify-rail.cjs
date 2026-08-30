@@ -1050,26 +1050,30 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
   ok(71, R.stepCell(cells, 2, 0, 0) === 2, `stepCell(2,0,0)=${R.stepCell(cells, 2, 0, 0)}`)
 }
 
-// M13: the file node's view model, and the rail/inspector arms it feeds.
+// M16: the file node's view model, and the rail/inspector arms it feeds.
+// Renumbered from M13's original 72-76: main landed a DIFFERENT M13 while
+// this branch was in flight ("links between panels", backlog #24), which
+// independently claimed 72-75 in this same file. See the milestone-wide
+// renumbering commit for the full story.
 const src = { path: '/Users/x/notes/todo.md' }
-// 72 — the ordinary case: a heading that is the BASENAME, the directory as its
+// 76 — the ordinary case: a heading that is the BASENAME, the directory as its
 // own field, and the lines numbered from 1.
 {
   const m = R.buildFileNodeModel({ source: src, title: undefined,
     result: { kind: 'text', content: 'a\nb', bytes: 3, lines: 2, truncatedLines: 0, mtimeMs: 0 } })
-  ok(72, m.heading === 'todo.md' && m.directory === '/Users/x/notes'
+  ok(76, m.heading === 'todo.md' && m.directory === '/Users/x/notes'
       && m.lines.length === 2 && m.lines[0].n === 1 && m.lines[0].text === 'a'
       && m.truncatedNote === undefined,
-    `72 — a text file renders numbered lines under its basename: ${m.heading} / ${m.directory}`)
+    `76 — a text file renders numbered lines under its basename: ${m.heading} / ${m.directory}`)
 }
-// 73 — the user's own title outranks the basename, the honest chain's first
+// 77 — the user's own title outranks the basename, the honest chain's first
 // link, for BOTH other kinds already and now for a third.
 {
   const m = R.buildFileNodeModel({ source: src, title: 'the plan',
     result: { kind: 'text', content: 'a', bytes: 1, lines: 1, truncatedLines: 0, mtimeMs: 0 } })
-  ok(73, m.heading === 'the plan', `73 — a titled file panel uses its own title: ${m.heading}`)
+  ok(77, m.heading === 'the plan', `77 — a titled file panel uses its own title: ${m.heading}`)
 }
-// 74 — THE CHECK THIS MODEL EXISTS FOR, and the one that separates it from
+// 78 — THE CHECK THIS MODEL EXISTS FOR, and the one that separates it from
 // 'just call buildReviewFields': every non-text arm renders a NOTE and a
 // heading, never nothing. The inspector pane may hide itself when it has
 // nothing to say; a panel the user deliberately opened and dragged must not,
@@ -1089,28 +1093,28 @@ const src = { path: '/Users/x/notes/todo.md' }
   // file is binary' are two situations with two different fixes, and
   // collapsing them tells a user the wrong one.
   const distinct = new Set(models.map((m) => m.note)).size === 4
-  ok(74, allNoted && distinct,
-    `74 — every non-text arm renders a heading and its OWN note: noted=${allNoted} distinct=${distinct}`)
+  ok(78, allNoted && distinct,
+    `78 — every non-text arm renders a heading and its OWN note: noted=${allNoted} distinct=${distinct}`)
 }
-// 75 — truncation is reported, and it reports the NUMBER it was given rather
+// 79 — truncation is reported, and it reports the NUMBER it was given rather
 // than recomputing one from the rendered lines. A model that recomputed would
 // always say 0, because the content it was handed is already truncated.
 {
   const m = R.buildFileNodeModel({ source: src, title: undefined,
     result: { kind: 'text', content: 'a\nb', bytes: 99, lines: 27, truncatedLines: 25, mtimeMs: 0 } })
-  ok(75, m.lines.length === 2 && typeof m.truncatedNote === 'string' && m.truncatedNote.includes('25'),
-    `75 — the truncated remainder is reported: ${JSON.stringify(m.truncatedNote)}`)
+  ok(79, m.lines.length === 2 && typeof m.truncatedNote === 'string' && m.truncatedNote.includes('25'),
+    `79 — the truncated remainder is reported: ${JSON.stringify(m.truncatedNote)}`)
 }
-// 76 — the rail and inspector arms. A file row is NEVER dormant (a start arrow
+// 80 — the rail and inspector arms. A file row is NEVER dormant (a start arrow
 // on it is a promise nothing can keep), its tail says 'file', and the
 // inspector refuses the process verbs.
 {
   const panel = { kind: 'file', rect: { id: 'f1', x: 0, y: 0, w: 640, h: 520 }, z: 1, source: src }
   const rows = R.buildRailRows([panel], () => undefined, new Set(['f1']))
   const im = R.buildInspectorModel(panel, undefined)
-  ok(76, rows[0].label === 'todo.md' && rows[0].tail === 'file' && rows[0].dormant === false
+  ok(80, rows[0].label === 'todo.md' && rows[0].tail === 'file' && rows[0].dormant === false
       && im.kind === 'file' && im.restartable === false,
-    `76 — the rail and inspector arms: label=${rows[0].label} tail=${rows[0].tail} dormant=${rows[0].dormant} restartable=${im.restartable}`)
+    `80 — the rail and inspector arms: label=${rows[0].label} tail=${rows[0].tail} dormant=${rows[0].dormant} restartable=${im.restartable}`)
 }
 
 console.log('\n' + '='.repeat(60))

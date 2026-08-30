@@ -117,11 +117,15 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // 34, not 35. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // 38, not 39. file:changed is an IPC_EVENTS member — a main-to-renderer send,
   // handled by nobody — and this suite asserts over Object.values(IPC), the
   // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
-  // records both.
-  const EXPECTED_CHANNELS = 34
+  // records both. The base of 35 (before this milestone's 3 new invokes) is
+  // main's count after M13 (links between panels), M14 (credential boundary)
+  // and M15 (subagent nodes) each added their own — this milestone (M16) was
+  // built as M13 and renumbered when it merged, since main had already
+  // claimed that number three times over by then.
+  const EXPECTED_CHANNELS = 38
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
