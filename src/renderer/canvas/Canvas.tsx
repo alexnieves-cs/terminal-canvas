@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
+import { SubagentLayer } from './SubagentLayer'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
@@ -2728,6 +2729,14 @@ export function Canvas({
               />
             )
           })}
+          {/* Inside .world, not beside it — the opposite of EdgeIndicators
+              and for the mirror-image reason: a pip must stay pinned to the
+              viewport's edge, a subagent node belongs to a place beside its
+              parent panel, so it has to pan and zoom with it. terminalPanels,
+              never `panels`: a review node has no subagents of its own, and
+              it is already outside this array for the identical reason it is
+              outside assignTiers' input. */}
+          <SubagentLayer panels={terminalPanels} />
         </div>
         {pipsEnabled && (
           <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />

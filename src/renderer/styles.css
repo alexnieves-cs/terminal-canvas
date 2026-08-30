@@ -1153,6 +1153,78 @@ body {
   border-bottom: 7px solid transparent;
 }
 
+/* M13. Subagent nodes: one per subagent, positioned beside the panel that
+   spawned it. Unlike .edge-indicators immediately above — and deliberately
+   the mirror image of it — these are INSIDE .world (see SubagentLayer.tsx):
+   a pip has to stay pinned to the viewport's physical edge, but a subagent
+   node belongs to a place beside its parent, so it must pan and zoom with
+   the panel rather than stay fixed on screen. pointer-events: none on all
+   three rules below for the same reason .edge-indicator carries it: there is
+   no verb to click here, only a fact to read, and a click target would reach
+   .canvas's background handler and hit-test a world point that was never
+   meant to be one. */
+.subagent-node {
+  position: absolute;
+  box-sizing: border-box;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--s-1);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* --fg-4, never opacity: opacity compounds against an already-muted token
+   and is invisible to any audit that only reads declared colours
+   (verify:styles check 3 forbids it outright). Nothing is REMOVED when a
+   subagent finishes — the node stays, dimmer. */
+.subagent-node--done { color: var(--fg-4); }
+
+.subagent-node__type {
+  margin: 0 0 var(--sp-1);
+  font: var(--t-xs) / var(--lh-tight) var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subagent-node--done .subagent-node__type { color: var(--fg-4); }
+
+.subagent-node__desc {
+  margin: 0;
+  font: var(--t-sm) / var(--lh-tight) var(--font-mono);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subagent-node--done .subagent-node__desc { color: var(--fg-4); }
+
+/* The straight horizontal run from the panel's right edge to the node's left
+   edge — a border rather than a filled div, the same convention
+   .review-node__hunks' left-rule already uses. Not an <svg>: it would need
+   its own coordinate space nested inside a transformed ancestor, where a
+   plain absolutely-positioned div needs none. */
+.subagent-edge {
+  position: absolute;
+  height: 0;
+  border-top: 1px solid var(--line);
+  pointer-events: none;
+}
+
+/* The ambiguous case: one line instead of nodes, because there is no correct
+   per-panel attribution to draw a node for. --fg-3, not --fg-4 — this is an
+   ordinary sentence the user is meant to read, not a disabled control. */
+.subagent-ambiguous {
+  position: absolute;
+  padding: var(--sp-2) var(--sp-3);
+  font: var(--t-sm) / var(--lh-tight) var(--font-mono);
+  color: var(--fg-3);
+  pointer-events: none;
+}
+
 /* The palette is in SCREEN space — a sibling of .world, never inside it. A
    scale() ancestor would shrink it at low zoom and would put it in the
    coordinate space xterm-pointer.ts rewrites during a drag. */
