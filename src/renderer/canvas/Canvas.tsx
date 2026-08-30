@@ -40,6 +40,7 @@ import { createHistory, pushHistory, undoHistory, redoHistory, type History } fr
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
+import { findService, type CredentialMeta } from '@shared/credential-schema'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -71,6 +72,12 @@ const EMPTY_SETTINGS: SettingRow[] = []
 // call below resolves. attentionIds has no equivalent placeholder — it
 // reads live off useAttentionIds(), which starts at its own empty snapshot.
 const EMPTY_WORKSPACES: WorkspaceRow[] = []
+// Loaded LAZILY, on palette open, exactly like EMPTY_SETTINGS above and for
+// the same reason: nothing here needs it before the first Cmd+K the way the
+// top bar needs presetRows at first paint, and calling credential.list() at
+// boot would fire it against verify-canvas.cjs's stub registerIpcHandlers
+// wiring, which has no credential store to answer it.
+const EMPTY_CREDENTIALS: CredentialMeta[] = []
 
 /**
  * What the switcher calls a panel. This is always the command/cwd/id shape —
@@ -1577,6 +1584,22 @@ export function Canvas({
     if (palette.open) reloadSettings()
   }, [palette.open, reloadSettings])
 
+  // Credential metadata, reloaded on palette open ONLY — the same shape as
+  // reloadSettings immediately above, and deliberately not also on mount the
+  // way reloadPresets is: nothing outside the palette reads this list, so
+  // there is no top-bar-shaped reason to have it ready before a first Cmd+K.
+  // That absence is also what keeps credential:list off the boot path —
+  // scripts/verify-canvas.cjs's registerIpcHandlers wiring has no credential
+  // store to answer it, and firing this at mount would surface as an
+  // unrelated-looking canvas failure that points nowhere near this feature.
+  const [credentialRows, setCredentialRows] = useState<CredentialMeta[]>(EMPTY_CREDENTIALS)
+  const reloadCredentials = useCallback(() => {
+    void window.canvas.credential.list().then(setCredentialRows)
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadCredentials()
+  }, [palette.open, reloadCredentials])
+
   // The workspace list, reloaded after every mutation the palette's own
   // create/rename/delete commands drive below — the same "main is the only
   // side that knows what the store now says" rule reloadPresets/
@@ -2441,11 +2464,74 @@ export function Canvas({
         // not a line to sneak into a fix wave.
       })
     },
-    openReview
+    openReview,
+    /**
+     * Masked token entry, gated the same way beginEditSetting's number edit
+     * is: RE-ENTRANT, so a refusal from main (an unreachable network, a
+     * malformed token) can reopen the same prompt with the reason on screen
+     * rather than closing silently. The one deliberate difference from
+     * beginEditSetting is `initial`, which stays '' on every call — see
+     * InputMode's 'secret' doc comment in Palette.tsx for why a masked field
+     * must never be re-seeded with what the user just typed, refusal or not.
+     */
+    beginSetCredential: (service) => {
+      const label = findService(service)?.label ?? service
+      const openEntry = (refused?: string): void => {
+        setInputMode({
+          kind: 'secret',
+          label: refused
+            ? `${label} token — ${refused}`
+            : (findService(service)?.help ?? `Paste the ${label} token…`),
+          initial: '',
+          ...(refused ? { feedback: true as const } : {}),
+          submit: (value) => {
+            void window.canvas.credential.set({ service, token: value }).then((res) => {
+              if (!res.ok) {
+                openEntry(res.reason)
+                return
+              }
+              setInputMode(null)
+              reloadCredentials()
+            })
+          }
+        })
+        // Palette.tsx closes the overlay BEFORE running a row's command, so
+        // without this the mode would be set on a palette that is already
+        // gone — the same pairing beginRenamePreset and beginEditSetting both
+        // make, for the same reason, including on the refusal reopen.
+        palette.openPalette()
+      }
+      openEntry()
+    },
+    verifyCredential: (service) => {
+      // No input mode: there is nothing to type, only a round trip to main.
+      // The row's own title already reads "Verify X (label)"; a stored,
+      // never-verified credential shows the service's own label until this
+      // succeeds and CredentialMeta.label updates to what the remote service
+      // actually calls the account.
+      void window.canvas.credential.verify(service).then(reloadCredentials)
+    },
+    beginDeleteCredential: (service) => {
+      // Gated, not instant — the same reason deletePreset and deleteWorkspace
+      // above are: a delete row sat one Enter away from destroying a stored
+      // credential, styled identically to every other row until the confirm
+      // question is on screen.
+      const label = findService(service)?.label ?? service
+      setInputMode({
+        kind: 'confirm',
+        label: `Delete the stored ${label} token?`,
+        initial: '',
+        submit: () => {
+          void window.canvas.credential.remove(service).then(reloadCredentials)
+        }
+      })
+      // Same reason beginRenamePreset/deletePreset both do this.
+      palette.openPalette()
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
        palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
        reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
-       onClosePanel, onSelectPanel, openReview])
+       onClosePanel, onSelectPanel, openReview, reloadCredentials])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2825,6 +2911,7 @@ export function Canvas({
             panels={panelRows}
             settings={settingRows}
             workspaces={workspaceRows}
+            credentials={credentialRows}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are
             // wants-you" as a set, only individual agent:state transitions,

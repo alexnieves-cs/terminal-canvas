@@ -219,7 +219,12 @@ const spyActions = () => {
     // this single-script suite aborts every check written after it.
     restartPanel: record('restartPanel'),
     // Review IS reached from a row too (checks 67/68), same reason.
-    openReview: record('openReview')
+    openReview: record('openReview'),
+    // The three credential verbs (checks 70-72 exercise buildCredentialRows
+    // directly, but buildCommands also reaches these through ctx.actions).
+    beginSetCredential: record('beginSetCredential'),
+    verifyCredential: record('verifyCredential'),
+    beginDeleteCredential: record('beginDeleteCredential')
   }
 }
 
@@ -233,6 +238,7 @@ const ctx = (over = {}) => ({
   capturedId: null,
   hasSelection: false,
   actions: spyActions(),
+  credentials: [],
   ...over
 })
 
@@ -429,8 +435,17 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     ]
   }))
   const found = P.filterCommands(rows, 'auth')
-  ok('33 a titled panel is findable in the palette by its title',
-    found.length === 1 && found[0].id === 'panel.goto.p1', found.map((c) => c.id).join(','))
+  // found[0] rather than found.length === 1: M13 adds a standing credential
+  // row ("Add GitHub token…") whose haystack ("credential token sign in
+  // GitHub Add GitHub token…") happens to contain a,u,t,h as a scattered
+  // SUBSEQUENCE too — an incidental collision of fuzzy.ts's subsequence
+  // matcher, not a defect in either row. It sorts to the CREDENTIAL section,
+  // strictly after the panel this check is actually about (filterCommands
+  // sorts by section index before score — see palette-model.ts), so the
+  // panel's own row is still what Enter would run; that ordering, not
+  // exclusivity, is what this check was ever really pinning.
+  ok('33 a titled panel is findable in the palette by its title, and ranks first',
+    found[0]?.id === 'panel.goto.p1', found.map((c) => c.id).join(','))
 }
 
 
@@ -1068,6 +1083,46 @@ const WS = [
   ok('69 a review node is navigable and its process verbs are disabled',
     rows.some((r) => r.id === 'panel.goto.r1' && r.disabledReason === undefined) &&
       rows.find((r) => r.id === 'panel.restart')?.disabledReason === P.REASON_NOT_STARTED)
+}
+
+// 70. A declared service with no stored credential renders an ADD row, and
+//     it is unconditionally runnable — a service that vanishes from the list
+//     when it has no credential would be indistinguishable from a service
+//     this app does not support (check 31's rule, applied here).
+{
+  const rows = P.buildCredentialRows([], P.SERVICES, spyActions())
+  const add = rows.find((r) => r.id === 'credential.set.github')
+  ok('70 a service with no stored credential renders an enabled ADD row',
+    add !== undefined && add.disabledReason === undefined,
+    JSON.stringify(add))
+}
+
+// 71. Credential rows are hiddenAtRest and live in the credentials scope, the
+//     rule every settings row already obeys — M6p sized the resting list to
+//     about eight rows deliberately.
+{
+  const rows = P.buildCredentialRows([], P.SERVICES, spyActions())
+  const add = rows.find((r) => r.id === 'credential.set.github')
+  ok('71 a credential row is hiddenAtRest and scoped to credentials',
+    add !== undefined && add.hiddenAtRest === true && add.scope === 'credentials',
+    JSON.stringify(add))
+}
+
+// 72. A service WITH a stored credential renders VERIFY and DELETE rows
+//     instead of the ADD row. The delete row is destructive, and the verify
+//     row shows the LABEL — what the remote service says the account is
+//     called — never anything derived from the token.
+{
+  const meta = [{ service: 'github', label: 'octocat', addedAt: 'x' }]
+  const rows = P.buildCredentialRows(meta, P.SERVICES, spyActions())
+  const add = rows.find((r) => r.id === 'credential.set.github')
+  const del = rows.find((r) => r.id === 'credential.delete.github')
+  const verify = rows.find((r) => r.id === 'credential.verify.github')
+  ok('72 a stored credential renders verify/delete rows, delete is destructive, verify shows the label',
+    add === undefined &&
+      del !== undefined && del.destructive === true &&
+      verify !== undefined && verify.title.includes('octocat'),
+    JSON.stringify({ add, del, verify }))
 }
 
 const failed = results.filter((r) => !r.pass)
