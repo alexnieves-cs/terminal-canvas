@@ -72,9 +72,8 @@ In:
   into rows, `treeSignature`, `relativePath`, `shellQuote`.
 - **`src/renderer/shell/FileTree.tsx`** — presentational, `memo`'d.
 - **`files.showHidden`**, a second boolean `SettingDef`, default off.
-- **A new plain-node suite, `verify:files`**, covering both pure modules, and
-  its own link in `package.json`'s `verify` chain — placed with the other
-  plain-node suites, ahead of `build`, because that is the tier it belongs to.
+- **No new verify suite.** Both pure modules join the suite their own
+  precedent already sits in; see "Verification".
 
 Out, and each for its own reason — see "What is deliberately out".
 
@@ -308,12 +307,29 @@ writes, which is one more reason writing is out.
 
 ## Verification
 
-**`verify:files` (new, plain node)** — both pure modules, needing a
-`scripts/files-entry.cjs` esbuild entry that carries the `@shared` alias
-pre-emptively, on the standing rule that needing no alias *yet* is exactly the
-state `verify-viewport.cjs` was in until the day it broke.
+**No new suite.** Each pure module joins the one its own precedent already
+sits in, which is this repo's stated discipline rather than a judgment call:
+`scripts/rail-entry.cjs` has absorbed four pure modules from three directories
+and records the same reason each time — *"a suite of its own would re-prove the
+same esbuild wiring for one file"* — and `scripts/layout-entry.cjs` says of
+`main/prompts.ts`, a `node:fs` reader, that *"it stays in this tier despite
+touching the filesystem."*
 
-Main, against a real **spaced** temp directory throughout — the `pane-died`
+- **`main/fs-tree.ts` -> `verify:layout`**, beside `main/prompts.ts`. Numbering
+  continues from the current last check, **108** (the suite reports 112/112,
+  the difference being its lettered sub-checks), so the main-side checks below
+  are **109-114**.
+- **`renderer/shell/file-tree-model.ts` -> `verify:rail`**, beside
+  `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts` and
+  `nav-grid.ts`. Numbering continues from **71** (75/75 reported), so the
+  renderer checks below are **72-78**.
+
+Neither entry file needs a new alias: `@shared` is already wired into both, and
+`fs-tree.ts`'s import of the shared types is an `import type`, erased before
+bundling — which is exactly the "pre-emptive today, required tomorrow" state
+`rail-entry.cjs`'s own comment describes, and the reason the alias stays.
+
+Main (**109-114**), against a real **spaced** temp directory throughout — the `pane-died`
 quoting bug's standing lesson, that a fixture with no space in its path cannot
 see a whole class of defect:
 
@@ -330,7 +346,7 @@ see a whole class of defect:
    is deliberately over the cap so the two lists cannot coincide.
 6. A symlink to a directory is reported as `symlink` and is not descended.
 
-Renderer:
+Renderer (**72-78**):
 
 7. Nothing expanded yields the root's own children at depth 0.
 8. Expanding splices children beneath their parent at depth+1 **without
@@ -347,7 +363,10 @@ Renderer:
     absolute, which is the state a panel that `cd`'d away produces.
 13. `shellQuote`, three clauses, separately.
 
-**`verify:panels` (real Electron)**, five additions:
+**`verify:panels` (real Electron)**, five additions, numbered **125-129** —
+continuing from 124, which `CLAUDE.md` records as the current last number and
+which the implementer re-derives from a real run rather than trusting, the same
+caution this repo applies to its own `dispose` call-site count:
 
 14. The **exact** four-column inset identity —
     `canvasWidth === windowWidth - treeW - railW - inspectorW`, ±1 for
