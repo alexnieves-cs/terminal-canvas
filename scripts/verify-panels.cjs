@@ -9360,6 +9360,133 @@ app.whenReady().then(async () => {
       try { rmSync(FILE_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
+    // ---------------------------------------------------------------------
+    // M17: the editable file panel, end to end through a real renderer.
+    // Tasks 1-5 built the write verb, the file:write channel, the
+    // editability gate and the edit-mode UI in isolation; this is the
+    // milestone's only proof those pieces are actually wired to each other.
+    // No production code here — a red check below is a wiring defect in one
+    // of those tasks, fixed there rather than loosened here. A fixture
+    // directory with a SPACE, the same rule the M16 block above states: this
+    // repo's most expensive silent bug shipped through eight reviews on
+    // space-free fixtures. Brief numbered these 158/159; this suite's own
+    // last check was 137 (the M16 block above), so these are 138/139 —
+    // continuing from the file's REAL last number rather than the brief's
+    // stale guess, per the task instructions.
+    // ---------------------------------------------------------------------
+    {
+      const M17_DIR = mkdtempSync(join(tmpdir(), 'tc panels m17 '))
+
+      // 138 — type and save, read back OFF DISK. Reading the panel back
+      //       would only prove the textarea holds what was typed into it;
+      //       the bytes on disk are the actual claim this milestone makes.
+      //       The value is set through the NATIVE textarea setter plus a
+      //       bubbling `input` event, because assigning `.value` directly
+      //       leaves React's controlled state untouched and the save would
+      //       go out carrying the SEEDED content — the identical trap check
+      //       113 already records for the review node's own commit message.
+      //       The edit button's own `waitUntil` waits for it to be present
+      //       AND ENABLED (`:not([disabled])`) rather than merely present:
+      //       the button renders — disabled — the instant the panel mounts,
+      //       before file:read resolves (buildFileNodeModel's `editable`
+      //       defaults to false while `result === undefined`), so a bare
+      //       presence check races the read and dispatches a mousedown the
+      //       handler's own `!model.editable` guard silently swallows.
+      {
+        const FIXTURE = join(M17_DIR, 'edit me.txt')
+        writeFileSync(FIXTURE, 'before\n')
+        await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+        await waitUntil(() => wc.executeJavaScript(
+          `!!document.querySelector('[data-panel-kind="file"] [data-file-node-edit]:not([disabled])')`), 5000)
+        await wc.executeJavaScript(`
+          document.querySelector('[data-panel-kind="file"] [data-file-node-edit]')
+            .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        `)
+        await waitUntil(() => wc.executeJavaScript(
+          `!!document.querySelector('[data-file-node-editor]')`), 5000)
+        await wc.executeJavaScript(`
+          (() => {
+            const ta = document.querySelector('[data-file-node-editor]')
+            const setter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype, 'value').set
+            setter.call(ta, 'after my edit\\n')
+            ta.dispatchEvent(new Event('input', { bubbles: true }))
+            ta.dispatchEvent(new KeyboardEvent('keydown',
+              { key: 's', metaKey: true, bubbles: true }))
+          })()
+        `)
+        await waitUntil(async () => readFileSync(FIXTURE, 'utf8') === 'after my edit\n', 4000)
+        const disk138 = readFileSync(FIXTURE, 'utf8')
+        ok('138 typing then Cmd+S writes the edited bytes to disk',
+          disk138 === 'after my edit\n',
+          `disk=${JSON.stringify(disk138)}`)
+      }
+
+      // 139 — an external write while the draft is DIRTY. Both clauses are
+      //       required and neither implies the other: the draft surviving
+      //       alone is satisfied by a panel that never received the watcher
+      //       push at all, and the banner alone is satisfied by a panel
+      //       that raised it and clobbered the user's draft anyway. Waited
+      //       on the banner APPEARING, never slept on: WATCH_DEBOUNCE_MS is
+      //       an upper bound, not a duration to sleep for.
+      {
+        const FIXTURE = join(M17_DIR, 'raced.txt')
+        writeFileSync(FIXTURE, 'v1\n')
+        await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+        // Check 138 above exits edit mode on a successful save (closeDraft
+        // runs), so ordinarily only one file panel is mid-edit at once — but
+        // target the NEWEST file panel explicitly rather than trust that,
+        // since a bare unscoped query could silently match a stale panel if
+        // that assumption ever stops holding. Scoped to the newest panel's
+        // OWN edit button for the same reason 138's wait is scoped to
+        // `:not([disabled])`: an unscoped wait would resolve the instant
+        // check 138's now-idle panel's own (already-enabled) edit button
+        // matched, before this second panel's file:read ever resolved.
+        await waitUntil(() => wc.executeJavaScript(`
+          (() => {
+            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
+            const last = nodes[nodes.length - 1]
+            const btn = last && last.querySelector('[data-file-node-edit]')
+            return !!(btn && !btn.disabled)
+          })()
+        `), 5000)
+        await wc.executeJavaScript(`
+          (() => {
+            const nodes = [...document.querySelectorAll('[data-panel-kind="file"]')]
+            nodes[nodes.length - 1].querySelector('[data-file-node-edit]')
+              .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          })()
+        `)
+        await waitUntil(() => wc.executeJavaScript(
+          `!!document.querySelector('[data-file-node-editor]')`), 5000)
+        await wc.executeJavaScript(`
+          (() => {
+            const ta = document.querySelector('[data-file-node-editor]')
+            const setter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype, 'value').set
+            setter.call(ta, 'my unsaved work\\n')
+            ta.dispatchEvent(new Event('input', { bubbles: true }))
+          })()
+        `)
+        // "The agent" writes, from outside the app entirely.
+        writeFileSync(FIXTURE, 'the agent wrote this\n')
+        await waitUntil(() => wc.executeJavaScript(
+          `!!document.querySelector('[data-file-node-conflict]')`), 5000)
+        const state139 = await wc.executeJavaScript(`
+          ({
+            draft: document.querySelector('[data-file-node-editor]')?.value ?? null,
+            banner: !!document.querySelector('[data-file-node-conflict]')
+          })
+        `)
+        ok('139 a write under a dirty draft raises the conflict banner and does not clobber the draft',
+          state139.draft === 'my unsaved work\n' && state139.banner === true,
+          `draft=${JSON.stringify(state139.draft)} banner=${state139.banner}`)
+      }
+
+      try { rmSync(M17_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
