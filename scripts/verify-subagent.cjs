@@ -266,6 +266,26 @@ const tree1 = () => ({
     JSON.stringify(out))
 }
 
+// Ambiguity is a STEADY state, not a transient one — two panels sitting in
+// one repository is an ordinary, long-lived configuration, so re-announcing
+// it every 2s tick for the life of the app is precisely the failure the
+// dedupe exists to prevent. Same argument as check 16, reached through the
+// arm check 16 does not cover: an undeduped implementation would report both
+// panels ambiguous on EVERY poll forever, and that failure has no pixel — it
+// is only ever visible as heat.
+{
+  const w = new S.SubagentWatch(fakeFs(tree1()))
+  const panels = [
+    { panelId: 'n1', cwd: '/repo', spawnedAt: 100 },
+    { panelId: 'n2', cwd: '/repo', spawnedAt: 100 }
+  ]
+  const first = w.poll(panels)
+  const second = w.poll(panels)
+  ok('21 an unbroken run of ambiguous ticks reports ONCE, not on every poll',
+    first.length === 2 && first.every((o) => o.ambiguous === true) && second.length === 0,
+    JSON.stringify({ first, second }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

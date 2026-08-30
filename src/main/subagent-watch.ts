@@ -68,13 +68,29 @@ export const BACK_SCAN_BYTES = 262144
 const META_SUFFIX = '.meta.json'
 
 /**
- * Per-panel memory. `records` is keyed by the file's own id (its basename
- * without `.meta.json`) rather than by `toolUseId` — the two happen to be
- * distinct values in practice (Claude Code mints its own file ids), and the
- * id is what a `listFiles` result actually hands back, so keying on it is
- * what lets "not already known" be answered by a single map lookup instead
- * of re-reading and re-parsing a file just to learn the key it would be
- * stored under.
+ * The dedupe key reported for an ambiguous panel. A sentinel string rather
+ * than `JSON.stringify([])` — the empty array a genuinely CLAIMED panel with
+ * no subagents yet would also serialise to — because the two are different
+ * facts wearing the same "no records" shape, and colliding their keys would
+ * suppress the real transition from "claimed, nothing running yet" straight
+ * into "ambiguous" the instant they happened to be adjacent. Any string that
+ * cannot come out of `JSON.stringify` on an array (which always starts with
+ * `[`) is safe; this one is chosen to read as intent if it ever surfaces in
+ * a log.
+ */
+const AMBIGUOUS_KEY = 'ambiguous'
+
+/**
+ * Per-panel claim state. `records` is keyed by the file's own id (its
+ * basename without `.meta.json`) rather than by `toolUseId` — the two happen
+ * to be distinct values in practice (Claude Code mints its own file ids),
+ * and the id is what a `listFiles` result actually hands back, so keying on
+ * it is what lets "not already known" be answered by a single map lookup
+ * instead of re-reading and re-parsing a file just to learn the key it would
+ * be stored under.
+ *
+ * Deliberately does NOT carry the dedupe key — see `lastKeys` on the class
+ * below for why that lives in a separate, longer-lived map.
  */
 interface PanelState {
   sessionDir: string
@@ -82,13 +98,27 @@ interface PanelState {
   subagentsDir: string
   offset: number
   records: Map<string, SubagentRecordInternal>
-  /** The last dedupe key reported for this panel, or undefined if never. */
-  lastKey: string | undefined
 }
 
 export class SubagentWatch {
   private readonly deps: WatchDeps
   private readonly panels = new Map<string, PanelState>()
+  /**
+   * The last dedupe key reported per panel, kept in a map SEPARATE from
+   * `panels` and with a different lifetime. Ambiguity is a steady state, not
+   * a transient one — two panels sharing one repository is an ordinary,
+   * long-lived configuration — so re-announcing it every tick for the life
+   * of the app is exactly the failure the dedupe exists to prevent, and it
+   * is invisible on screen: it shows up as heat, never a wrong pixel, the
+   * same argument check 16 makes for a claimed panel's unchanged records.
+   * `panels` is cleared the moment a panel goes ambiguous (see `poll`), but
+   * `lastKeys` is not, which is what lets a run of ambiguous ticks dedupe
+   * against ITSELF while an ambiguous -> unambiguous -> ambiguous round trip
+   * still reports on the second arrival: the middle, unambiguous state
+   * writes a real records key in between, so the second ambiguous report
+   * differs from what came immediately before it and is not suppressed.
+   */
+  private readonly lastKeys = new Map<string, string>()
 
   constructor(deps: WatchDeps) {
     this.deps = deps
@@ -110,19 +140,21 @@ export class SubagentWatch {
     for (const panel of panels) {
       if (!allowed.has(panel.panelId)) {
         // Refused by attributable — most often two panels sharing one
-        // repository. The claim, offset and records this panel may have
-        // held are dropped rather than merely left stale: an ambiguous
-        // panel has nothing this tick can vouch for, and leaving the old
-        // state in place would let it silently resume the instant the
-        // colliding neighbour closed, on a claim that was never re-confirmed
-        // for this tick.
+        // repository. The claim itself — session dir, offset, records — is
+        // dropped rather than merely left stale: an ambiguous panel has
+        // nothing this tick can vouch for, and leaving the old claim in
+        // place would let it silently resume the instant the colliding
+        // neighbour closed, on a claim that was never re-confirmed for this
+        // tick. If the ambiguity later clears, the panel re-claims from
+        // scratch and re-scans from a fresh offset rather than resuming a
+        // stale one.
         this.panels.delete(panel.panelId)
-        // Reported unconditionally, deliberately not deduped against a
-        // prior key: dropping the state above means there IS no prior key,
-        // so a canvas stuck ambiguous says so on every tick rather than
-        // announcing once and then going quiet — an absent feature must not
-        // look like a broken one (see the check-11/12 comment this mirrors
-        // in subagent-scan.ts).
+        // The dedupe key, by contrast, is NOT dropped here — see `lastKeys`'
+        // own comment for why ambiguity is a steady state that must dedupe
+        // like any other, rather than re-announcing itself every 2s tick
+        // forever.
+        if (this.lastKeys.get(panel.panelId) === AMBIGUOUS_KEY) continue
+        this.lastKeys.set(panel.panelId, AMBIGUOUS_KEY)
         out.push({ panelId: panel.panelId, records: [], ambiguous: true })
         continue
       }
@@ -146,22 +178,24 @@ export class SubagentWatch {
       // two calls over an unchanged records map serialise identically.
       const records = [...state.records.values()]
       const key = JSON.stringify(records)
-      if (key === state.lastKey) continue
-      state.lastKey = key
+      if (key === this.lastKeys.get(panel.panelId)) continue
+      this.lastKeys.set(panel.panelId, key)
       out.push({ panelId: panel.panelId, records, ambiguous: false })
     }
 
     return out
   }
 
-  /** A panel is gone: drop its offset, its claimed dir and its records. */
+  /** A panel is gone: drop its offset, its claimed dir, its records and its dedupe key. */
   drop(panelId: string): void {
     this.panels.delete(panelId)
+    this.lastKeys.delete(panelId)
   }
 
   /** Every panel is gone (a reload). */
   clear(): void {
     this.panels.clear()
+    this.lastKeys.clear()
   }
 
   /**
@@ -205,8 +239,7 @@ export class SubagentWatch {
       parentPath,
       subagentsDir: `${this.deps.projectsRoot}/${slug}/${sessionDir}/subagents`,
       offset,
-      records: new Map(),
-      lastKey: undefined
+      records: new Map()
     }
   }
 
