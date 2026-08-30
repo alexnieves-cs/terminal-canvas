@@ -164,7 +164,11 @@ app.whenReady().then(() => {
   // had already claimed M17 (the Jira canvas context, and a separate
   // M15 -> M17 renumber before that) by the time it landed. That makes it the
   // fourth milestone in this file's own history to be renumbered at a merge.
-  const EXPECTED_CHANNELS = 45
+  // 48 = 45 plus M24's three: jira:transitions (the legal next states for one
+  // issue, its own channel rather than a field on jira:list — see
+  // IPC.JIRA_TRANSITIONS' own comment) and the two Jira writes, jira:comment
+  // and jira:transition.
+  const EXPECTED_CHANNELS = 48
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

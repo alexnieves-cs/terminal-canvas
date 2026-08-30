@@ -17,7 +17,14 @@ import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
-import { createJiraRequester, listAssignedWorkItems, verifyJiraCredential } from './jira-client'
+import {
+  commentOnWorkItem,
+  createJiraRequester,
+  listAssignedWorkItems,
+  listWorkItemTransitions,
+  transitionWorkItem,
+  verifyJiraCredential
+} from './jira-client'
 import type { FileWatchers } from './file-watch'
 import { readDir } from './fs-tree'
 import type { ToolboxCache } from './toolbox-cache'
@@ -274,6 +281,15 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.JIRA_LIST, () =>
     listAssignedWorkItems({ store: credentialStore, requester: createJiraRequester() }))
+
+  ipcMain.handle(IPC.JIRA_TRANSITIONS, (_event, itemId: string) =>
+    listWorkItemTransitions({ store: credentialStore, requester: createJiraRequester() }, itemId))
+  // The two writes. Each performs ONE named mutation and returns an arm —
+  // never the credential bundle, never anything derived from it.
+  ipcMain.handle(IPC.JIRA_COMMENT, (_event, req: { itemId: string; body: string }) =>
+    commentOnWorkItem({ store: credentialStore, requester: createJiraRequester() }, req.itemId, req.body))
+  ipcMain.handle(IPC.JIRA_TRANSITION, (_event, req: { itemId: string; transitionId: string }) =>
+    transitionWorkItem({ store: credentialStore, requester: createJiraRequester() }, req.itemId, req.transitionId))
 
   ipcMain.handle(IPC.FILE_OPEN, async () => {
     const win = getWindow()

@@ -137,7 +137,12 @@ const bridge: CanvasBridge = {
     remove: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_DELETE, service),
     verify: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_VERIFY, service)
   },
-  jira: { list: () => ipcRenderer.invoke(IPC.JIRA_LIST) },
+  jira: {
+    list: () => ipcRenderer.invoke(IPC.JIRA_LIST),
+    transitions: (itemId: string) => ipcRenderer.invoke(IPC.JIRA_TRANSITIONS, itemId),
+    comment: (req: { itemId: string; body: string }) => ipcRenderer.invoke(IPC.JIRA_COMMENT, req),
+    transition: (req: { itemId: string; transitionId: string }) => ipcRenderer.invoke(IPC.JIRA_TRANSITION, req)
+  },
   file: {
     open: () => ipcRenderer.invoke(IPC.FILE_OPEN),
     read: (req: FileReadRequest) => ipcRenderer.invoke(IPC.FILE_READ, req),
