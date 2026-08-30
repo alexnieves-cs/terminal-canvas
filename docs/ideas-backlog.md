@@ -31,9 +31,10 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 
 | Gone | What shipped it | Where the mechanism is written down |
 |---|---|---|
-| #2 the workspace extras M7 did not ship | M14 | "The merged view's obstacle is COORDINATES, not `LIVE_BUDGET`", "The merged view has no writer, and that is why geometry is read-only", "Entering the merged view resolves dormancy BEFORE it commits", "A move touches no session and pushes no history", "The marquee starts only where `hitTest` finds nothing", "The workspace chords match `event.code`" |
+| #2 the workspace extras M7 did not ship | M16 | "The merged view's obstacle is COORDINATES, not `LIVE_BUDGET`", "The merged view has no writer, and that is why geometry is read-only", "Entering the merged view resolves dormancy BEFORE it commits", "A move touches no session and pushes no history", "The marquee starts only where `hitTest` finds nothing", "The workspace chords match `event.code`" |
 | #5 agent-state glow | M6c | "A title is not a bell", "`wants-you` is sticky", "The glow reaches the card" |
 | #6 user-set panel names | M6a | "The header's honest chain, and the backfill that must never happen" |
+| #7 subagent nodes on the canvas | M15 | "Subagent nodes are derived, not a `Panel` kind", "The slug is a hint" |
 | #11 a settings surface with search | M6b | "One map, and a typed view over it", "Settings are a drill-in, not a flat list" |
 | #29 restart a panel in place | M8c | "Restart is dispose-then-ensure at one id", "`bumpVersion()` exists because `ensure()` deliberately does not bump" |
 | #44 honest chrome | M6a | "`reattached` costs a probe because `-A` erased the question" |
@@ -45,7 +46,7 @@ Seven more entries were rewritten rather than removed, because a milestone shipp
 each and stopped somewhere deliberate: **#17** (M6d left the OS notification), **#27**
 (M5b left placeholders), **#34** (M5a left per-preset environment), **#41** (M12 left
 review's cwd resolution), **#51** (M9a-c left discard), **#25** (M6 left snapping and
-tidy) and **#52** (M14 left shift-click and group drag). The membership changed at M14
+tidy) and **#52** (M16 left shift-click and group drag). The membership changed at M16
 without the count moving, and the churn is the shape to expect: **#2** left this list for
 the gone table above, and **#52** took its place. An entry rewritten down to its open half
 is one milestone from leaving the file entirely.
@@ -99,27 +100,6 @@ changes have reached GitHub or are still local.
 - **The git-status half is separable and much cheaper:** per-panel badge for
   ahead/behind/dirty, polled from the panel's cwd. Worth doing on its own regardless of
   multiplayer.
-
-## 7. Visualise an agent's subagents on the canvas
-
-When a terminal's AI CLI launches subagents, show them on the canvas — child nodes,
-edges to the parent, live status.
-
-- **Why it fits the product thesis:** this is the thing an infinite canvas can show that
-  a tabbed terminal fundamentally cannot. It is arguably the most *differentiating* idea
-  on this list.
-- **Detection is the same unsolved problem as #5, harder.** Subagent launches are not
-  announced on any channel we control. Most likely routes: parse the CLI's rendered
-  output, or — much better — read a machine-readable side channel if one exists (Claude
-  Code writes session transcripts as JSONL; a file watcher on that is a real option and
-  needs no output parsing at all).
-- **Constraint:** subagent nodes must be **cheap** — not terminal panels. They have no
-  PTY and no xterm, so they must not consume `LIVE_BUDGET` or a WebGL context. A
-  lightweight node type distinct from `Panel` is the right shape; `lod.ts` would need to
-  learn that some nodes are never "live".
-- **Open question:** ephemeral or persistent? A finished subagent that vanishes loses
-  the history; one that lingers clutters the canvas. Probably: fades to a dim node,
-  cleared with the parent.
 
 ## 8. Chat-box mode, model choice, and effort/permission modes
 
@@ -192,6 +172,27 @@ together: the canvas as an agentic super app, not a terminal multiplexer.**
   main owns everything." Tokens for N services, stored somewhere, reachable by agents
   that run arbitrary commands. That deserves its own design pass before the *first*
   integration ships, not the fifth.
+- **The design pass that constraint asks for has LANDED, and the answer is written down.**
+  M14 — `docs/superpowers/specs/2026-08-30-m14-credential-boundary-design.md` — is that
+  pass, plus the smallest store and consumer that keep it from being a customer-free
+  abstraction (the failure #11 warns about, and a credential store with nothing storing
+  credentials is its purest instance). **The decision: a stored credential never reaches an
+  agent's process** — not in the environment, not in argv, not in a file the agent can read.
+  It ships as `main/credential-store.ts` over its own `userData/credentials.json`, encrypted
+  through `safeStorage`, four `credential:*` invokes of which **none returns a secret**, and
+  two source-text checks (`verify:meta` 20/21) rather than behavioural ones, because neither
+  rule has a runtime symptom when broken. The reasoning is stricter than the app's existing
+  posture on purpose and the spec says why at length: `shell-env.ts` already pours the user's
+  whole login environment into every PTY and must, since that is how `claude` finds its API
+  key — the axis is not the secrets' sensitivity but **whose decision it was**, and a token
+  this app obtained through UI this app built is one the app would be handing over
+  gratuitously. **A broker was considered and deliberately deferred**: agents reaching a
+  loopback socket that holds no secret and proxies authorised calls is genuinely the
+  strongest design, and the only one that survives an agent pasting its own environment into
+  a log — but it is a milestone of its own, and it is strictly easier to build later on top
+  of a store that never leaked than to retrofit onto one that did. The practical consequence
+  for this entry: **the tier-1 and tier-2 reference implementations below are now
+  unblocked**, and each inherits a boundary rather than having to invent one.
 - **Sequencing advice:** pick **one** from tier 1 and **one** from tier 2 — Obsidian and
   GitHub — and build them as the two reference implementations. What they have in common
   becomes the integration surface; what they don't becomes the list of things that
@@ -520,7 +521,7 @@ process trees, each of which may be running a compiler.
   a user to break the app. A cost readout is the honest companion to any such knob: it is
   what makes a number the user is turning mean something.
 
-## 19. Token and dollar accounting per panel
+## 19. Token and dollar accounting per panel — the correlation problem is solved, and the trap is cache reads
 
 What each agent has spent — tokens, and the money they represent — per panel, per
 workspace, and in total.
@@ -528,7 +529,10 @@ workspace, and in total.
 - **Why it fits:** this is the cost of the canvas in the currency the user actually cares
   about, and it is the one number that scales linearly with the thing the product
   encourages (more agents at once). "Twelve agents running" is a very different sentence
-  depending on whether it is two dollars or two hundred.
+  depending on whether it is two dollars or two hundred. It is also a number *only this
+  app can produce*: `claude` will report `/cost` for one session, and nothing on the
+  machine knows that eight of them are running at once — which is the premise of the
+  canvas, and the reason several of them are off screen behind an edge pip.
 - **The mechanism is a file watcher, not output parsing, and that is the whole point.**
   Agent CLIs write structured session transcripts to disk — Claude Code writes JSONL.
   Totalling usage from those files needs no scraping of rendered TUI output, survives a
@@ -536,20 +540,86 @@ workspace, and in total.
   anything. **This is the same side-channel #7 identifies for subagent detection**, and it
   is a strong argument for building that watcher once, deliberately, as shared machinery
   rather than twice for two features.
-- **Constraint:** main-side, like every other filesystem access in this app (#3, #14). The
+- **Measured 2026-08-30, against the installed CLI, so the shape is no longer a guess.**
+  The file is `~/.claude/projects/<cwd-slug>/<sessionId>.jsonl`, one JSON object per line,
+  and every `type: "assistant"` line carries a full `message.usage` — `input_tokens`,
+  `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`,
+  `output_tokens_details.thinking_tokens` — beside `message.model`, `timestamp`, `cwd`,
+  `gitBranch` and `sessionId`. Everything the accounting model below needs is already
+  there; none of it has to be inferred.
+- **The correlation constraint is RESOLVED, and the answer is `--session-id`.** This entry
+  previously called correlating a transcript to a panel "the unsolved part" and offered
+  two routes. The second one exists: `claude --session-id <uuid>` is a real flag on the
+  installed CLI, so a panel can mint a UUID at spawn and *own* its transcript path
+  outright — a bijection, not a heuristic. Take it. The cwd-plus-start-time route is
+  ambiguous in exactly the way `review-engine.ts`'s `shared` arm is ambiguous, and for the
+  identical reason: two panels in one repository, and no attribution that is honest. Note
+  where the cost lands, though — injecting a per-vendor flag is a change to the *argv*
+  path, which is `CLAUDE.md`'s "An absent `command` must stay absent through four layers"
+  minefield, and a per-vendor spawn flag belongs beside #8's per-model configuration and
+  #34's per-preset environment rather than hardcoded into `BUILT_IN_PRESETS`.
+- **The trap is cache reads, and it is an order of magnitude.** Measured on one real line:
+  `input_tokens: 2`, `cache_read_input_tokens: 20,935`, `cache_creation_input_tokens:
+  176,977`. A single summed "total tokens" priced at input rates overstates the cost of a
+  cached session by roughly ten times — and it overstates it *confidently*, in the
+  direction that makes the feature look like it is working. Fresh, cache-write and
+  cache-read are three numbers with three prices and must stay three numbers. This is the
+  rule "the inspector shows the links, not the answer" already states for the resolved
+  command and the spec's own: a merged field renders something entirely plausible while
+  deleting the fact the pane exists to show.
+- **Tokens are a fact; dollars are an estimate, and the two must not be rendered as one
+  kind of thing.** The transcript carries tokens and a model name, never a price. Any
+  dollar figure needs a price table this repo maintains, which goes stale *silently* the
+  next time a model is repriced — and a confidently wrong dollar amount is worse than no
+  dollar amount, because it is the number the user will repeat to somebody else. One
+  table, in one file, carrying the date it was last checked; tokens rendered as the
+  primary; cost rendered beside them and explicitly marked an estimate.
+- **Constraint: most panels are not tracked at all, and that arm IS the design.** A
+  `codex` panel, a login shell, or a `claude` panel spawned before this shipped has no
+  transcript and never will. "Not tracked" has to be its own rendered arm and must never
+  render as `$0.00` — this is M9a's `baselineOf` lesson with money attached, where
+  "this panel never started" and "this panel is not in a repository" wore one signal and
+  the pane confidently misdiagnosed a panel that had been running an agent for an hour.
+  The same mistake here reports zero spend for an agent that is spending, which is the one
+  failure direction a cost readout cannot afford.
+- **Constraint: main-side, like every other filesystem access in this app (#3, #14).** The
   renderer has no `fs` and should keep not having it.
-- **Constraint:** correlating a transcript file to a *panel* is the unsolved part. The
-  session file is keyed by the CLI's own session id, which the panel does not know. The
-  honest routes are the panel's cwd plus start time, or launching the CLI with a flag that
-  pins its session id where the panel can see it — the second is much more robust and is
-  a per-vendor detail, so it belongs beside #8's per-model configuration.
-- **Constraint:** vendor-specific by nature. Keep the accounting model neutral (panel id,
-  tokens in, tokens out, model, cost) with a thin adapter per CLI, exactly as #12 argues
-  for tickets — and do not build the abstraction until a second CLI actually wants it.
-- **Open question:** is this a live readout, a history, or both? A number on a card is
+- **Constraint: it must not bump `registry.version()`** — the same rule #5, #17 and #18
+  obey, and it bites harder here because a usage total moves on every turn of every panel.
+  It wants a module-level store subscribed **per panel id**, the shape
+  `agent-state-store.ts` and M12's `live-session-store.ts` already share, with a dedupe on
+  the way out of main. A number that changes per turn must not re-render every panel on
+  the canvas.
+- **Constraint: vendor-specific by nature.** Keep the accounting model neutral (panel id,
+  tokens in, cache-write, cache-read, tokens out, model, cost) with a thin adapter per
+  CLI, exactly as #12 argues for tickets — and do not build the abstraction until a second
+  CLI actually wants it.
+- **Constraint: reading a transcript is not #31's disclosure surface, but rendering one
+  is.** #31's standing rule is about moving terminal *bytes* somewhere new; totals are
+  metadata, and stay outside it for the same reason #46's ledger does. The line is crossed
+  the moment a usage readout shows transcript *content* — a last-prompt preview, a turn
+  summary — and any such addition owes #31 an answer before it ships.
+- **Where it lands, smallest honest slice first.** An **Inspector section** beside Changes
+  is the first one: per-panel, panel-scoped, and the pane is already the surface built to
+  show a fact and its provenance side by side. A **rail section** is the second — canvas
+  total and the top few panels by spend — dropping in beside `waitingCount` and
+  `buildAttentionRows` in `rail-sections.ts`, pure and plain-node testable in the
+  `verify:rail` tier, frozen on a signature the way `railSignature` already freezes rows
+  against a 60Hz drag. A **`kind: 'usage'` canvas panel** is the version that looks like a
+  dashboard, and it is deliberately last: M9b's panel union is built for exactly this (and
+  `isReviewPanel` is a positive test so a third kind is a compile error at every `switch`
+  rather than a silent terminal spawn), but designing five panes before knowing which one
+  number you actually glance at is the customer-free abstraction #11 warns against.
+- **Open question: is this a live readout, a history, or both?** A number on a card is
   cheap; "what did this canvas cost me last week" is a data-retention feature with its own
-  storage question, and it should share whatever #11 and M4b settle on rather than
-  inventing a third store.
+  storage question. Note that #46's run ledger reaches the identical question one file
+  over and wants the identical writer — an append-only stream beside `layout.json`, which
+  is explicitly *not* `layout-store.ts`'s write-temp-then-rename pattern. Whichever of the
+  two ships first should build that writer for both.
+- **Nearest existing entries: #18 (what the canvas costs the machine)** — the honest
+  companion, and the two readouts want the same rail real estate and the same slow-timer
+  discipline — **and #46 (the run ledger)**, which is the same append-stream question for
+  a different fact.
 
 ## 20. Two windows, one canvas
 
@@ -598,7 +668,7 @@ repos; the same prompt to four agents to compare how they answer it.
   different models side by side is also the cheapest possible version of #8's
   multi-model ambition — no API, no key, no new panel kind, just four CLIs and one
   keystroke.
-- **Almost all the machinery exists, and since M14 the selection does too.** `pty:write`
+- **Almost all the machinery exists, and since M16 the selection does too.** `pty:write`
   already takes a panel id, so broadcast is a loop, not a channel. Multi-selection was the
   missing half and this entry used to say so outright; `Canvas.tsx` now tracks
   `selectedIds: Set<string>`, built by a rubber-band marquee, and the move-to-workspace
@@ -764,7 +834,7 @@ dragging, snapping, and a "tidy" command.
      single place a drag resolves to a rect, and it is already pure — snapping is a
      function applied to its output, which keeps it plain-node testable.
   3. **Tidy** — a command that arranges the selection (or everything) onto a grid. Pure
-     rect math over `Panel[]`. "The selection" is no longer hypothetical: M14 added
+     rect math over `Panel[]`. "The selection" is no longer hypothetical: M16 added
      `selectedIds`, built by a rubber-band marquee, so a tidy has a real set to arrange
      rather than a single `selectedId` that made "tidy the selection" mean "tidy one
      panel".
@@ -1484,6 +1554,11 @@ beside `layout.json`. That is the difference between "this panel exited with cod
 - **Nearest existing entry: #30 (durable scrollback),** which persists what a session
   *said* and is gated on retention, caps and secret redaction. This persists only what it
   *ran and returned*.
+- **The same writer serves #19.** Token accounting reaches this identical question — an
+  append-only stream of small metadata records, beside `layout.json` and deliberately not
+  through `layout-store.ts` — from the other side. Whichever of the two ships first should
+  build the writer for both rather than leaving the second to discover the same
+  constraints again.
 
 ## 47. The environment report — everything main already knows and never says
 
@@ -1582,9 +1657,9 @@ app would have that destroys work.
   inherits `verify:rail` 57's rule: the set of paths comes from the *result*, never from the
   display-capped rows on screen.
 
-## 52. Multi-select — the two halves M14 left: shift-click and group drag
+## 52. Multi-select — the two halves M16 left: shift-click and group drag
 
-M14 shipped the selection model and the marquee. `Canvas.tsx` now tracks
+M16 shipped the selection model and the marquee. `Canvas.tsx` now tracks
 `selectedIds: Set<string>`, a background drag rubber-bands (`canvas/marquee.ts`, pure and
 plain-node tested by `verify:merged` 8–12), and the resulting multi-selection is what the
 palette's *Move to workspace* rows act on. What is still open is the other two thirds of
@@ -1596,7 +1671,7 @@ selection moves as one instead of only being a thing verbs are aimed at.
   focus" — the marquee had to claim that drag without dropping the focus release, because
   an uncleared `focusedId` holds a WebGL context and a `LIVE_BUDGET` slot for the rest of
   the run. It does: the release is unconditional and sits outside the hit/miss branch, and
-  `verify:panels` 120 asserts both halves at once, the DOM's idea of focus and `__m4aGrid()`
+  `verify:panels` 136 asserts both halves at once, the DOM's idea of focus and `__m4aGrid()`
   answering null. See `CLAUDE.md`'s "The marquee starts only where `hitTest` finds nothing".
 - **Constraint: group drag is `applyDrag` N times from N origin rects,** never one delta
   applied to a bounding box. The recompute-from-origin rule is caller-side, and a
@@ -2146,8 +2221,8 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 12. **#32 keyboard-first navigation** — nearest-panel-in-a-direction is plain-node math over
    the same rects. The design work is the rule that traversal moves *selection*, not focus,
    so arrowing across a canvas does not spawn everything it passes.
-13. ~~**#2 workspaces**~~ — **done, M7 and M14**, and not free: the switch had to become a
-   transaction that writes the outgoing canvas before it flips the active id, and M14's
+13. ~~**#2 workspaces**~~ — **done, M7 and M16**, and not free: the switch had to become a
+   transaction that writes the outgoing canvas before it flips the active id, and M16's
    merged view and cross-workspace move both had to obey that same ordering one door
    further out.
 14. ~~**#34 panel templates**~~ — **done, M5a**, as presets. The "new workspace from a
@@ -2159,7 +2234,7 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    workspaces, self-contained once #2 (M7) gave it destinations. The other two candidates
    the original entry left open - viewport quadrants and saved bookmarks - were rejected
    in the design spec; see #42 for the bookmark half.
-17. **#21 broadcast input** - the loop is trivial, and M14's marquee has since supplied
+17. **#21 broadcast input** - the loop is trivial, and M16's marquee has since supplied
    the multi-selection this line called the work; what is left is entirely the safety
    story around a mode you can forget you are in.
 18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
@@ -2210,21 +2285,20 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 35. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
 36. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
-37. **#7 subagent visualisation** — highest ceiling, gated on a detection spike.
-38. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
-39. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
+37. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
+38. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
    (one live panel in two windows) waits for M4c for the same reason #4 does.
-40. **#28 accounts** — free to run, but only *after* #9's trust-boundary pass, and only
+39. **#28 accounts** — free to run, but only *after* #9's trust-boundary pass, and only
    once #2 has given the persisted format names worth syncing. Google sign-in and the
    email-code flow are the small half; deciding the machine-owns-processes rule is the
    half that makes it either shippable or M4c in disguise.
-41. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
-42. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
+40. **#4 multiplayer** — largest; revisit after M4c, when tmux may have done half of it.
+41. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
    argument for #28's accounts than sync is.
-43. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-44. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
+42. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
+43. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
    Only after there is somewhere to audit automations that is not the canvas itself.
-45. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
+44. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
 ## The structural decision underneath all of this — **made in M9b**

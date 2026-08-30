@@ -14,19 +14,17 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  // @renderer is NOT pre-emptive and has not been since M8d: commands.ts
-  // imports the VALUE waitingCount from @renderer/shell/rail-sections, so
-  // the palette and the rail share one derivation of a workspace's waiting
-  // count — and this bundle does not build without the alias. Measured in
-  // M14 by removing it, not read off the imports, which is the only way to
-  // answer this question reliably.
-  //
-  // @shared is still the pre-emptive one: every @shared import reachable from
-  // here is `import type`, which esbuild erases before bundling, so nothing
-  // resolves it today. It stays for the reason verify-viewport.cjs learned
-  // the hard way — needing no alias YET is exactly the state that bundle was
-  // in right up until the day panel-interaction.ts grew a real value import
-  // and it broke.
+  // @renderer became load-bearing in M8d: commands.ts imports the VALUE
+  // waitingCount from shell/rail-sections so the palette and the rail share
+  // one derivation of a workspace's waiting count — measured in M14 by
+  // REMOVING the alias and watching this bundle fail to build, which is the
+  // only way to answer this question reliably rather than reading it off the
+  // imports. @shared became load-bearing too, in M14: commands.ts now imports
+  // the VALUE SERVICES from @shared/credential-schema (not just types, the
+  // way every earlier @shared import here was), so both aliases are exercised
+  // on every build now — the "needing no alias YET" state
+  // verify-viewport.cjs's own comment warns about is no longer this file's
+  // state for either one.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
@@ -233,12 +231,18 @@ const spyActions = () => {
     restartPanel: record('restartPanel'),
     // Review IS reached from a row too (checks 67/68), same reason.
     openReview: record('openReview'),
-    // Both move verbs ARE reached from rows (checks 70/72), so these are not
-    // merely shape: without them `row.run()` calls undefined and the check
-    // dies with a TypeError, which in this single-script suite aborts every
-    // check written after it.
+    // Both move verbs ARE reached from rows, so these are not merely shape:
+    // without them `row.run()` calls undefined and the check dies with a
+    // TypeError, which in this single-script suite aborts every check written
+    // after it.
     movePanelsToWorkspace: record('movePanelsToWorkspace'),
-    beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace')
+    beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace'),
+    // The three credential verbs (the credential checks exercise
+    // buildCredentialRows directly, but buildCommands also reaches these
+    // through ctx.actions).
+    beginSetCredential: record('beginSetCredential'),
+    verifyCredential: record('verifyCredential'),
+    beginDeleteCredential: record('beginDeleteCredential')
   }
 }
 
@@ -253,6 +257,7 @@ const ctx = (over = {}) => ({
   hasSelection: false,
   selectedIds: [],
   actions: spyActions(),
+  credentials: [],
   ...over
 })
 
@@ -449,8 +454,18 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     ]
   }))
   const found = P.filterCommands(rows, 'auth')
-  ok('33 a titled panel is findable in the palette by its title',
-    found.length === 1 && found[0].id === 'panel.goto.p1', found.map((c) => c.id).join(','))
+  // found[0] rather than found.length === 1: M14 adds a standing credential
+  // row ("Add GitHub token…") whose haystack ("credential token sign in
+  // GitHub Add GitHub token…") happens to contain a,u,t,h as a scattered
+  // SUBSEQUENCE too — an incidental collision of fuzzy.ts's subsequence
+  // matcher, not a defect in either row. It sorts to the CREDENTIAL section,
+  // strictly after the panel this check is actually about (filterCommands
+  // sorts by section index before score — see palette-model.ts), so the
+  // panel's own row is still what Enter would run; that ordering, not
+  // exclusivity, is what this check was ever really pinning.
+  ok('33 a titled panel is findable in the palette by its title, ranks first, and p2 stays absent',
+    found[0]?.id === 'panel.goto.p1' && !found.some((c) => c.id === 'panel.goto.p2'),
+    found.map((c) => c.id).join(','))
 }
 
 
@@ -1090,7 +1105,7 @@ const WS = [
       rows.find((r) => r.id === 'panel.restart')?.disabledReason === P.REASON_NOT_STARTED)
 }
 
-// 70. A move row exists per OTHER workspace, and the selection's own
+// 78. A move row exists per OTHER workspace, and the selection's own
 //     workspace is NOT among them. Moving panels to the workspace they are
 //     already in is a no-op wearing the costume of a verb: it would run,
 //     close the palette, clear the selection and change nothing, which reads
@@ -1108,7 +1123,7 @@ const WS = [
   const moves = rows.filter((r) => r.id.startsWith('workspace.move.')).map((r) => r.id).sort()
   const row = byId(rows, 'workspace.move.w2')
   if (row) row.run()
-  ok('70 one move row per OTHER workspace, aimed at that workspace',
+  ok('78 one move row per OTHER workspace, aimed at that workspace',
     moves.join(',') === 'workspace.move.w2' &&
       row !== undefined && row.disabledReason === undefined &&
       c.actions.calls.length === 1 &&
@@ -1118,7 +1133,7 @@ const WS = [
     `moves=[${moves.join(',')}] calls=${JSON.stringify(c.actions.calls)}`)
 }
 
-// 71. With an EMPTY selection both move rows are PRESENT and DISABLED with a
+// 79. With an EMPTY selection both move rows are PRESENT and DISABLED with a
 //     reason, never absent — check 31's rule: a row that disappears is
 //     indistinguishable from a feature that was never built, and a user who
 //     has not yet learned that the marquee is what feeds this verb has no way
@@ -1129,13 +1144,13 @@ const WS = [
   const rows = P.buildCommands(ctx({ workspaces: WS, selectedIds: [] }))
   const move = byId(rows, 'workspace.move.w2')
   const moveNew = byId(rows, 'workspace.move-new')
-  ok('71 an empty selection disables the move rows rather than hiding them',
+  ok('79 an empty selection disables the move rows rather than hiding them',
     move !== undefined && move.disabledReason === P.REASON_NO_PANELS_SELECTED &&
       moveNew !== undefined && moveNew.disabledReason === P.REASON_NO_PANELS_SELECTED,
     JSON.stringify([move && move.disabledReason, moveNew && moveNew.disabledReason]))
 }
 
-// 72. "Move to new workspace…" is present and enters TEXT INPUT mode rather
+// 80. "Move to new workspace…" is present and enters TEXT INPUT mode rather
 //     than running the move immediately — the two-step shape
 //     beginRenamePreset already uses, which is what makes Escape a real
 //     cancel. The discriminating clause is WHICH action it calls: a row wired
@@ -1146,12 +1161,77 @@ const WS = [
   const c = ctx({ workspaces: WS, selectedIds: ['n1', 'n2'] })
   const row = byId(P.buildCommands(c), 'workspace.move-new')
   if (row) row.run()
-  ok('72 move-to-new begins an input mode rather than moving immediately',
+  ok('80 move-to-new begins an input mode rather than moving immediately',
     row !== undefined && row.disabledReason === undefined &&
       c.actions.calls.length === 1 &&
       c.actions.calls[0][0] === 'beginMovePanelsToNewWorkspace' &&
       JSON.stringify(c.actions.calls[0][1]) === '["n1","n2"]',
     JSON.stringify(c.actions.calls))
+}
+
+// 70. A declared service with no stored credential renders an ADD row, and
+//     it is unconditionally runnable — a service that vanishes from the list
+//     when it has no credential would be indistinguishable from a service
+//     this app does not support (check 31's rule, applied here). run() is
+//     called and the recorded call checked, not just the row's shape — the
+//     same rule the row builder's own comment invokes (a row that does
+//     nothing is indistinguishable from a feature never built) applies to
+//     THIS check too: checks 32/53/66 all run their row rather than only
+//     inspecting it, and a row wired to run: () => {} would have passed
+//     every earlier version of this check.
+{
+  const actions = spyActions()
+  const rows = P.buildCredentialRows([], P.SERVICES, actions)
+  const add = rows.find((r) => r.id === 'credential.set.github')
+  if (add) add.run()
+  ok('70 a service with no stored credential renders an enabled ADD row wired to beginSetCredential',
+    add !== undefined && add.disabledReason === undefined &&
+      actions.calls.length === 1 &&
+      actions.calls[0][0] === 'beginSetCredential' && actions.calls[0][1] === 'github',
+    JSON.stringify(actions.calls))
+}
+
+// 71. Credential rows are hiddenAtRest and live in the credentials scope, the
+//     rule every settings row already obeys — M6p sized the resting list to
+//     about eight rows deliberately. Same run()-and-assert shape as 70.
+{
+  const actions = spyActions()
+  const rows = P.buildCredentialRows([], P.SERVICES, actions)
+  const add = rows.find((r) => r.id === 'credential.set.github')
+  if (add) add.run()
+  ok('71 a credential row is hiddenAtRest, scoped to credentials, and runnable',
+    add !== undefined && add.hiddenAtRest === true && add.scope === 'credentials' &&
+      actions.calls.length === 1 &&
+      actions.calls[0][0] === 'beginSetCredential' && actions.calls[0][1] === 'github',
+    JSON.stringify({ add, calls: actions.calls }))
+}
+
+// 72. A service WITH a stored credential renders VERIFY and DELETE rows
+//     instead of the ADD row. The delete row is destructive, and the verify
+//     row shows the LABEL — what the remote service says the account is
+//     called. There is no token anywhere in the CredentialMeta fixture to
+//     derive one from, so "never derived from the token" is a STRUCTURAL
+//     guarantee of the CredentialMeta type this check cannot itself exercise
+//     — it is the type that keeps a token out of reach, not this assertion.
+//     Both rows are run and both recorded calls checked, the same reason 70
+//     and 71 are.
+{
+  const meta = [{ service: 'github', label: 'octocat', addedAt: 'x' }]
+  const actions = spyActions()
+  const rows = P.buildCredentialRows(meta, P.SERVICES, actions)
+  const add = rows.find((r) => r.id === 'credential.set.github')
+  const del = rows.find((r) => r.id === 'credential.delete.github')
+  const verify = rows.find((r) => r.id === 'credential.verify.github')
+  if (verify) verify.run()
+  if (del) del.run()
+  ok('72 a stored credential renders verify/delete rows wired to their actions, delete is destructive, verify shows the label',
+    add === undefined &&
+      del !== undefined && del.destructive === true &&
+      verify !== undefined && verify.title.includes('octocat') &&
+      actions.calls.length === 2 &&
+      actions.calls[0][0] === 'verifyCredential' && actions.calls[0][1] === 'github' &&
+      actions.calls[1][0] === 'beginDeleteCredential' && actions.calls[1][1] === 'github',
+    JSON.stringify({ add, del, verify, calls: actions.calls }))
 }
 
 // ---------------------------------------------------------------------------

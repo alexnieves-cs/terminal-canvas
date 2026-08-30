@@ -9,6 +9,19 @@ import type { Command } from './palette-model'
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'
+// A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
+// of credential-holding services, and credential-schema.ts imports nothing —
+// not electron, not node, not a sibling — so pulling it in here costs this
+// module nothing it does not already pay for waitingCount above. findService
+// stays out of this file; the palette only needs the id/label/help triple
+// SERVICES already carries, and the label lookup for a REFUSAL message lives
+// in Canvas.tsx, where the input-mode re-prompt actually happens.
+import { SERVICES, type CredentialMeta, type CredentialService } from '@shared/credential-schema'
+// Re-exported so verify-palette.cjs's bundle (fuzzy.ts + palette-model.ts +
+// commands.ts) can drive buildCredentialRows directly against the same
+// SERVICES this module builds rows from, rather than bundling
+// credential-schema.ts a second time under a different entry point.
+export { SERVICES }
 
 /**
  * The palette's command list, built from PLAIN DATA and callbacks.
@@ -212,6 +225,24 @@ export interface PaletteActions {
   removeLink(from: string, to: string): void
   /** Label one link, through the palette's existing text input mode. */
   beginRelabelLink(from: string, to: string, current: string): void
+  /**
+   * Open the palette's input mode on a masked token entry for `service`.
+   * REQUIRED, not optional, for the reason toggleSetting and beginEditSetting
+   * already are: an optional member here is a compile-time hole a
+   * half-finished wiring passes straight through, and this app's own rule —
+   * no stored secret ever reaches an agent process or an IPC reply — has no
+   * runtime check that would catch a row silently doing nothing.
+   */
+  beginSetCredential(service: string): void
+  /** Ask main to verify the stored token against the remote service. */
+  verifyCredential(service: string): void
+  /**
+   * Gated by a confirm — see commands.ts's `credential.delete.*` row, whose
+   * `destructive` flag is the OTHER half of the same rule deleteWorkspace and
+   * deletePreset already state: a red row still runs on one Enter, and an
+   * unmarked confirm is a question the user did not expect to be asked.
+   */
+  beginDeleteCredential(service: string): void
 }
 
 export interface PaletteContext {
@@ -226,6 +257,13 @@ export interface PaletteContext {
    */
   settings: SettingRow[]
   workspaces: WorkspaceRow[]
+  /**
+   * Metadata only, from window.canvas.credential.list() — never a token, and
+   * there is no bridge member that would hand one back. See CLAUDE.md and
+   * credential-schema.ts's own comment on CredentialMeta for why that absence
+   * is the design rather than an omission.
+   */
+  credentials: readonly CredentialMeta[]
   /**
    * Panel ids currently in wants-you, from the renderer's own attention set.
    * Intersected with each row's panelIds — which is why WORKSPACE_LIST returns
@@ -304,6 +342,65 @@ const withReason = (command: Command, reason: string | undefined): Command =>
  */
 const SPAWN_TERMS = 'new panel from preset spawn'
 const INSERT_TERMS = 'insert prompt paste'
+
+/**
+ * One row per declared service (an ADD row) or two (VERIFY and DELETE),
+ * standalone and testable without going through buildCommands — the same
+ * split waitingCount already earns for a shared derivation. A service absent
+ * from `stored` renders its add row; a service WITH a stored credential
+ * never renders that row again, which is what makes "paste a token" and
+ * "manage the one you already pasted" two different questions the palette
+ * never conflates.
+ *
+ * A service that vanished from this list entirely — rather than rendering an
+ * add row with no credential — would be indistinguishable from a service
+ * this app does not support at all: verify:palette 31's rule, stated there
+ * for the four preset/prompt admin row kinds, applies here unchanged.
+ *
+ * Every row is hiddenAtRest and scoped to 'credentials': a resting palette
+ * with one row per declared service is exactly the kind of growth M6p sized
+ * the resting list against, and the always-visible door into this scope is
+ * `manage.credentials` below.
+ */
+export function buildCredentialRows(
+  stored: readonly CredentialMeta[],
+  services: readonly CredentialService[],
+  actions: Pick<PaletteActions, 'beginSetCredential' | 'verifyCredential' | 'beginDeleteCredential'>
+): Command[] {
+  return services.flatMap((svc): Command[] => {
+    const meta = stored.find((m) => m.service === svc.id)
+    const base = { group: 'credential' as const, scope: 'credentials' as const, hiddenAtRest: true as const }
+    if (!meta) {
+      return [{
+        ...base,
+        id: `credential.set.${svc.id}`,
+        title: `Add ${svc.label} token…`,
+        searchText: `credential token sign in ${svc.label}`,
+        run: () => actions.beginSetCredential(svc.id)
+      }]
+    }
+    return [
+      {
+        ...base,
+        id: `credential.verify.${svc.id}`,
+        // The LABEL — what the remote service says the account is called, or
+        // the service's own label before a first successful verify — never
+        // anything derived from the token. See CredentialMeta's own comment.
+        title: `Verify ${svc.label} (${meta.label})`,
+        searchText: `credential check ${svc.label}`,
+        run: () => actions.verifyCredential(svc.id)
+      },
+      {
+        ...base,
+        id: `credential.delete.${svc.id}`,
+        title: `Delete ${svc.label} token`,
+        destructive: true,
+        searchText: `credential remove ${svc.label}`,
+        run: () => actions.beginDeleteCredential(svc.id)
+      }
+    ]
+  })
+}
 
 /**
  * Build the whole list. Section membership — not position — is what orders it:
@@ -613,6 +710,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // warns about for the schema itself. Falls through to nothing pushed.
   }
 
+  // --- Credentials -----------------------------------------------------------
+  //
+  // One shared builder, not a second copy of the ADD/VERIFY/DELETE branching
+  // written inline here — buildCredentialRows is exported precisely so it can
+  // be driven directly by verify:palette without constructing a whole
+  // PaletteContext.
+  out.push(...buildCredentialRows(ctx.credentials, SERVICES, actions))
+
   // --- Manage --------------------------------------------------------------
   //
   // Everything below is hiddenAtRest except the two doors, and the doors are
@@ -669,6 +774,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     subtitle: `${ctx.workspaces.length} workspace${ctx.workspaces.length === 1 ? '' : 's'}`,
     group: 'manage',
     entersScope: 'workspaces',
+    run: () => {}
+  })
+  out.push({
+    id: 'manage.credentials',
+    title: 'Manage credentials…',
+    subtitle: `${ctx.credentials.length} of ${SERVICES.length} connected`,
+    group: 'manage',
+    entersScope: 'credentials',
     run: () => {}
   })
 

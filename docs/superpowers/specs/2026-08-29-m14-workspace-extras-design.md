@@ -1,8 +1,16 @@
-# M14: The workspace extras M7 did not ship — Design
+# M16: The workspace extras M7 did not ship — Design
 
 **Status:** designed, not yet implemented.
-**Number:** M13 is claimed by a concurrent track (`m13-subagent-nodes`); M10 and
-M11 are claimed by the visual-system track. This milestone shares no source file
+**Number:** M16, and it has been renumbered TWICE. This milestone was designed and
+built as M14; while it was in flight the credential boundary reached `main` and took
+M14, and the subagent nodes reached `main` behind it and took M15 (that track is the
+`m13-subagent-nodes` referenced below, itself renumbered on the way in). The rule
+applied each time is the one the README's milestone table now states: the number
+belongs to whichever milestone reaches `main` first, and the branch arriving later
+renames itself rather than renaming the row other documents are already citing. **The
+FILENAME of this spec and of its plan deliberately still say `m14`** — renaming them
+would lose their history for no benefit, and the heading above is the authority on the
+number. M10 and M11 are claimed by the visual-system track. This milestone shares no source file
 with any of the three — it touches `Canvas.tsx`, `lod.ts`'s callers (not
 `lod.ts`), the IPC contract, `layout-store.ts`, `layout-schema.ts` and two new
 pure renderer modules. The number records claim order, not build order.

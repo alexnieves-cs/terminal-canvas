@@ -42,6 +42,13 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **Project prompts.** `.claude/commands/*.md` in a panel's working directory
   are read and offered as insertable prompts, in Claude Code's own format, so
   they version-control with the project rather than with this app.
+- **Subagent nodes.** A `claude` panel that fans out to subagents shows a small
+  node per subagent beside it, labelled with the model's own description,
+  dimming when the subagent finishes. This reads Claude Code's own per-session
+  files under `~/.claude/projects` and is therefore **absent for other agent
+  CLIs** — `codex` and the rest write no such directory, so a panel running one
+  of them shows no nodes, which is a CLI this feature does not support rather
+  than a bug.
 
 ## Install
 
@@ -135,6 +142,7 @@ npm run verify:review        # git argv, the review engine's result arms, plain 
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
+npm run verify:credentials   # the credential store, its schema and its refusal path, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
@@ -177,8 +185,10 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:merged / workspace:move-panels
                        review:panel / review:baseline / review:at
                        review:diff / review:commit
+                       credential:list / credential:set / credential:delete
+                       credential:verify
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
-                       agent:state / session:live
+                       agent:state / session:live / subagent:state
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -188,7 +198,12 @@ The invoke direction is the load-bearing part. Preset and prompt mutations, the
 workspace verbs and the review reads are all renderer→main because main is the
 only process that can answer them: only main can resolve an absent `command`
 into the user's real login shell, only main owns the reset confirmation dialog,
-and only main can reach a git binary. A renderer-side reconstruction of any of
+and only main can reach a git binary. The four `credential:*` channels are that
+argument at its strongest and are the only ones on this list defined as much by
+what they do **not** carry: main holds the encrypted store, and none of the four
+ever returns a stored secret — there is deliberately no `credential:get`, and
+`credential:verify` sends the token to the service and hands back only what the
+service said. A renderer-side reconstruction of any of
 them would drift from main's answer silently, and the two would then disagree
 only in the cases nobody tests.
 
@@ -349,7 +364,7 @@ instead of one culled panel. A workspace's row in the palette shows how many
 of its panels are currently waiting for you, even while it is hidden.
 
 Three things this milestone's design considered and deliberately did not
-build. All three landed in M14, and one of the three reasons recorded here was
+build. All three landed in M16, and one of the three reasons recorded here was
 simply wrong — which is worth stating plainly, because a reason written down
 and never corrected is exactly what a file like this one exists to prevent.
 **A merged, all-in-one view across every workspace** was recorded as the case
@@ -360,10 +375,10 @@ four hundred panels in it spends exactly the eight slots a single canvas
 does. The real obstacle was **coordinates**: every workspace lays its panels
 out in the same world space, clustered wherever that canvas's own camera has
 been, so two workspaces' panels overlap by construction, and `cascadeCentre`
-cannot help because it separates panels within one array. M14's answer is
+cannot help because it separates panels within one array. M16's answer is
 lanes — a per-workspace translation applied for display only. **Moving a panel
 from one workspace to another** was blocked on rubber-band selection not
-existing; M14 built the marquee first (`docs/ideas-backlog.md` #52 is now down
+existing; M16 built the marquee first (`docs/ideas-backlog.md` #52 is now down
 to shift-click and group drag) and then the move on top of it, in that order,
 which is what the entry asked for. **A keyboard shortcut for switching
 workspaces** was left unassigned on the grounds that picking a chord then would
@@ -510,7 +525,7 @@ here" look identical to "not built yet". There is no amend, no branch, no remote
 and no per-file selection: the commit takes every file the node's answer
 contains, not only the ones that fit on screen.
 
-**Every workspace at once, and panels that can move between them.** M14 is the
+**Every workspace at once, and panels that can move between them.** M16 is the
 three things M7's design named and deliberately left. `Cmd+Shift+A` merges every
 workspace into one canvas, each in its own labelled lane, with every terminal
 still live and every session untouched. Getting there needed one correction:
@@ -568,12 +583,23 @@ price of not killing something.
 | M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
 | M13 | Links between panels: a directed, labelled line that means something | ✅ done |
-| M14 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
+| M14 | The credential boundary: a store main owns, and no secret reaches an agent | ✅ done |
+| M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
+| M16 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11 and
-M12 each landed on their own branch and merged in sequence. A gap in the
-numbers here is a milestone someone else is holding, not one that was skipped.
+claimed by a separate concurrent track and is not yet in this table; M11, M12,
+M14, M15 and M16 each landed on their own branch and merged in sequence. M15 was
+built as M13 and renumbered when it merged, because both M13 and M14 were
+claimed while it was in flight — the same resolution M14 itself made for the
+same reason, and the same one M16 made after it: M16 was built as M14 and
+renumbered twice on the way in, once past the credential boundary and once past
+the subagent nodes, because both reached `main` while it was in flight. The rule
+the three of them settle is worth stating plainly, since it is the one this
+table is for: **the number belongs to whichever milestone reaches `main` first**,
+and the branch that arrives later renames itself — never the row that is already
+here, which other documents are already citing. A gap in the numbers here is a milestone someone else is holding,
+not one that was skipped.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

@@ -94,6 +94,16 @@ app.whenReady().then(() => {
   // Never invoked here either, for the identical reason reviewEngineStub is
   // not: this suite only asserts REGISTRATION, never drives review:commit.
   const reviewCommitStub = async () => ({ kind: 'nothing-to-commit' })
+  // Never invoked here either — registration only. A real store would be
+  // just as harmless, but a stub keeps this suite from touching a file at
+  // all, the same posture every other stub above takes.
+  const credentialStoreStub = {
+    list: () => [],
+    set: () => ({ ok: false, reason: 'stub' }),
+    delete: () => false,
+    read: () => undefined,
+    setLabel: () => {}
+  }
   registerIpcHandlers(
     stub,
     layoutStoreStub,
@@ -101,14 +111,16 @@ app.whenReady().then(() => {
     presetsStub,
     () => {},
     reviewEngineStub,
-    reviewCommitStub
+    reviewCommitStub,
+    credentialStoreStub
   )
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M14 takes the surface to 33: workspace:merged and workspace:move-panels
-  // expose Task 1's store reads/mutations across the process boundary.
-  const EXPECTED_CHANNELS = 33
+  // M14 takes the surface to 37: workspace:merged and workspace:move-panels
+  // expose the merged-view store reads/mutations across the process boundary,
+  // and four credential:* channels, none of which returns a secret.
+  const EXPECTED_CHANNELS = 37
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

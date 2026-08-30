@@ -13,11 +13,13 @@ import type {
   PtyDataChunk,
   PtyExitInfo,
   PtyResizeRequest,
-  PtyWriteRequest
+  PtyWriteRequest,
+  SubagentUpdate
 } from './types'
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
+import type { CredentialMeta } from './credential-schema'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -198,7 +200,13 @@ export const IPC = {
    * legitimately thirty seconds — so the renderer must render an in-flight
    * state rather than assuming a prompt reply.
    */
-  REVIEW_COMMIT: 'review:commit'
+  REVIEW_COMMIT: 'review:commit',
+  /** Metadata only. There is deliberately no credential:get — see CLAUDE.md. */
+  CREDENTIAL_LIST: 'credential:list',
+  CREDENTIAL_SET: 'credential:set',
+  CREDENTIAL_DELETE: 'credential:delete',
+  /** Uses the token to make one request; returns what the service said. */
+  CREDENTIAL_VERIFY: 'credential:verify'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -270,7 +278,18 @@ export const IPC_EVENTS = {
    * unconditional send would be thirty messages a minute per panel describing a
    * fact that changes when a human types `cd`.
    */
-  SESSION_LIVE: 'session:live'
+  SESSION_LIVE: 'session:live',
+  /**
+   * Which subagents a panel's agent has running, pushed when the set CHANGES.
+   *
+   * An IPC_EVENTS member and not an IPC one, which decides a number:
+   * verify:ipc asserts over Object.values(IPC) — invoke channels, each needing
+   * an ipcMain.handle — and is unmoved by this. It stays at 31. M6d hit this
+   * boundary and correctly added no channel; a draft of M12's spec said
+   * "31 to 32" and would have made a task fail the suite by fixing a correct
+   * count. This is the third time it has been reachable.
+   */
+  SUBAGENT_STATE: 'subagent:state'
 } as const
 
 export interface SessionBackendInfo {
@@ -364,6 +383,11 @@ export interface MergedWorkspace {
   active: boolean
   panels: PersistedPanel[]
 }
+
+/** Mirrors CredentialStore's SetResult / credential-verify's VerifyResult — never a cipher, never a token. */
+export type CredentialSetResult =
+  | { ok: true; meta: CredentialMeta }
+  | { ok: false; reason: string }
 
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
@@ -469,6 +493,11 @@ export interface CanvasBridge {
      * a React effect can clean up without stacking listeners.
      */
     onLive(listener: (update: LiveSessionUpdate) => void): () => void
+    /**
+     * Subagent-set updates for one panel. Each subscribe returns its own
+     * unsubscribe, so a React effect can clean up without stacking listeners.
+     */
+    onSubagents(listener: (update: SubagentUpdate) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>
@@ -509,6 +538,16 @@ export interface CanvasBridge {
     at(subject: ReviewSubject): Promise<ReviewResult>
     diff(req: ReviewDiffRequest): Promise<ReviewDiff>
     commit(req: ReviewCommitRequest): Promise<ReviewCommitResult>
+  }
+  /**
+   * Metadata only. Deliberately no `get` here — there is no channel that
+   * would let it exist, and no bridge member returns a token. See CLAUDE.md.
+   */
+  credential: {
+    list(): Promise<CredentialMeta[]>
+    set(req: { service: string; token: string }): Promise<CredentialSetResult>
+    remove(service: string): Promise<boolean>
+    verify(service: string): Promise<CredentialSetResult>
   }
   platform: NodeJS.Platform
 }

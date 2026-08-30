@@ -10,6 +10,8 @@ import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { createLayoutStore } from './layout-store'
+import { createCredentialStore } from './credential-store'
+import { createSafeStorageCrypto } from './credential-crypto'
 import { createReviewEngine } from './review-engine'
 import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
@@ -80,6 +82,16 @@ let loginEnv: Record<string, string> = {}
 // valid once the app module is loaded, which it is by the time this module runs.
 const layoutStore = createLayoutStore({
   filePath: join(app.getPath('userData'), 'layout.json')
+})
+
+// Its own file, deliberately not a key in layout.json. That file is rewritten
+// in full on a 500ms debounce, CLAUDE.md documents hand-editing it as a
+// supported path, and parseLayout copies a future-version one to .bak — which
+// is correct for a canvas and would silently duplicate a ciphertext.
+const credentialStore = createCredentialStore({
+  filePath: join(app.getPath('userData'), 'credentials.json'),
+  crypto: createSafeStorageCrypto(),
+  onWarning: (m) => console.warn('[credentials]', m)
 })
 
 /**
@@ -538,7 +550,8 @@ app.whenReady().then(async () => {
     },
     rebuildMenu,
     reviewEngine,
-    reviewCommit
+    reviewCommit,
+    credentialStore
   )
   createWindow()
 

@@ -1,12 +1,29 @@
-import { existsSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync
+} from 'node:fs'
 import { homedir, userInfo } from 'node:os'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { WebContents } from 'electron'
 import type * as pty from 'node-pty'
 import { IPC_EVENTS } from '../shared/ipc-contract'
-import type { AgentState, PanelId, PanelSpec, PtyCreateResult } from '../shared/types'
+import type {
+  AgentState,
+  PanelId,
+  PanelSpec,
+  PtyCreateResult,
+  SubagentRecord,
+  SubagentUpdate
+} from '../shared/types'
 import { initialDetector, nextState, scanForBell, type AgentEvent, type Detector } from './agent-state'
 import type { SessionBackend } from './session-backend'
+import { SubagentWatch, type WatchDeps } from './subagent-watch'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
 
 /**
@@ -70,6 +87,119 @@ function resolveCommand(spec: PanelSpec, loginEnv: Record<string, string>): stri
   return loginEnv.SHELL || process.env.SHELL || userInfo().shell || '/bin/zsh'
 }
 
+/**
+ * Where Claude Code keeps its project transcripts. An env override, not a
+ * setting: Task 7's Electron test harness cannot fence itself off from the
+ * developer's REAL ~/.claude/projects without one, and this repo already
+ * paid for the unfenced version once, in its own git fixtures (see
+ * CLAUDE.md's project-prompts fence). TC_TMUX_SOCKET is the established
+ * shape for exactly this — a developer flag with no UI. A blank or
+ * whitespace-only value is treated as unset, the same rule TC_TMUX_SOCKET's
+ * own handling records: an empty override is not a deliberate choice of
+ * "no directory", it is a shell mistake, and treating it as one would send
+ * every subagent poll at a path nobody meant.
+ */
+function resolveProjectsRoot(): string {
+  const override = process.env.TC_CLAUDE_PROJECTS
+  return override !== undefined && override.trim() !== '' ? override : join(homedir(), '.claude', 'projects')
+}
+
+/**
+ * The real filesystem half of SubagentWatch. Kept out of subagent-watch.ts
+ * so its whole state machine stays drivable against a fake filesystem with
+ * no real ~/.claude anywhere in earshot — see that module's own comment.
+ *
+ * Every method answers null rather than throwing, on ANY failure: a missing
+ * ~/.claude is the ordinary case for a user who has never run Claude Code, a
+ * missing subagents/ directory is the ordinary case for a session with none
+ * yet, and this runs per panel, per LIVE_TICK_MS tick, for the life of the
+ * app — a throw here would take pollLive's whole live-cwd loop down with it,
+ * for a directory this app does not own and cannot assume exists.
+ */
+function createFsWatchDeps(): WatchDeps {
+  return {
+    listDirs(path) {
+      try {
+        return readdirSync(path, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => ({
+            name: entry.name,
+            // birthtimeMs, not mtimeMs: chooseSession picks the most
+            // RECENTLY CREATED session directory after the panel spawned,
+            // and a session's transcript file is appended to for the whole
+            // life of the conversation — its mtime keeps moving long after
+            // creation, which would make an old, still-active session look
+            // newer than one actually started after this panel spawned.
+            createdAt: statSync(join(path, entry.name)).birthtimeMs
+          }))
+      } catch {
+        return null
+      }
+    },
+    listFiles(path) {
+      try {
+        return readdirSync(path)
+      } catch {
+        return null
+      }
+    },
+    readText(path) {
+      try {
+        return readFileSync(path, 'utf8')
+      } catch {
+        return null
+      }
+    },
+    readHead(path, max) {
+      try {
+        const fd = openSync(path, 'r')
+        try {
+          // A bounded read, never readFileSync: the one caller is the claim's
+          // confirmation, and its file is a parent transcript that grows for
+          // the whole life of a conversation — megabytes, read for one line,
+          // on every tick a claim keeps failing. See SubagentWatch.claim.
+          const buffer = Buffer.alloc(max)
+          const read = readSync(fd, buffer, 0, max, 0)
+          return buffer.subarray(0, read).toString('utf8')
+        } finally {
+          closeSync(fd)
+        }
+      } catch {
+        return null
+      }
+    },
+    readFrom(path, from) {
+      try {
+        const fd = openSync(path, 'r')
+        try {
+          const end = fstatSync(fd).size
+          // A transcript that shrank since the last offset was recorded
+          // (rotated, truncated) is a surprise, not an error: report nothing
+          // new rather than a negative-length read, and let the caller's
+          // offset settle back to the file's real end.
+          if (end <= from) return { text: '', end }
+          const buffer = Buffer.alloc(end - from)
+          readSync(fd, buffer, 0, buffer.length, from)
+          return { text: buffer.toString('utf8'), end }
+        } finally {
+          closeSync(fd)
+        }
+      } catch {
+        return null
+      }
+    },
+    sizeOf(path) {
+      try {
+        return statSync(path).size
+      } catch {
+        return null
+      }
+    },
+    projectsRoot: resolveProjectsRoot(),
+    now: () => Date.now()
+  }
+}
+
 interface Session {
   panelId: PanelId
   proc: pty.IPty
@@ -89,6 +219,13 @@ interface Session {
    * with no entry here at all — cannot produce a state.
    */
   detector: Detector
+  /**
+   * When this session's process was started. SubagentWatch.poll needs it to
+   * pick which Claude Code project subdirectory belongs to THIS spawn rather
+   * than a stale one from a directory somebody used yesterday — see
+   * chooseSession's own comment in subagent-scan.ts.
+   */
+  spawnedAt: number
 }
 
 export class PtyManager {
@@ -113,6 +250,31 @@ export class PtyManager {
    * real send.
    */
   private lastLive = new Map<PanelId, string>()
+  /**
+   * One per manager, like idleTimer and liveTimer — a panel's whole claimed
+   * session, offset and dedupe state lives here for the life of the process,
+   * per SubagentWatch's own comment. Constructed with REAL node:fs deps
+   * (createFsWatchDeps): the watcher itself stays fs-free so its state
+   * machine can be driven against a fake filesystem in verify:subagent, with
+   * no real ~/.claude anywhere in earshot.
+   */
+  private readonly subagentWatch = new SubagentWatch(createFsWatchDeps())
+  /**
+   * The FIRST spawnedAt this manager ever recorded for a panel id, kept
+   * across a detachAll() reload the same way capturedBaselineIds is (see
+   * that field's own comment): a Cmd+R reattach must not treat "this client
+   * just attached" as "this process just started". Under tmux those are
+   * NOT the same fact -- M6a's reattached flag exists for the identical
+   * ambiguity one layer down, because new-session -A makes create and
+   * reattach the same call -- and for a reattached session the agent has
+   * been running since BEFORE this attach, so its Claude Code session
+   * directory necessarily predates it. Cleared only by kill(), never by
+   * detachAll(): a reload's tmux session is still running the same agent it
+   * always was, so the original spawn time is still the true one. See
+   * create()'s own comment for the failure this closes and the one case it
+   * deliberately leaves open.
+   */
+  private readonly firstSpawnedAt = new Map<PanelId, number>()
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -180,6 +342,34 @@ export class PtyManager {
 
     const proc = this.getBackend().spawn(spec, command, cwd, env)
 
+    // A genuinely NEW session's spawnedAt is now, recorded in firstSpawnedAt
+    // for the life of this manager (or until kill()). A REATTACHED one
+    // reuses whatever this manager already holds for this panel id, because
+    // the Claude Code session directory it needs to re-claim necessarily
+    // predates this moment, not this attach -- see firstSpawnedAt's own
+    // comment. Treating the attach as the spawn would make chooseSession's
+    // post-spawn filter (createdAt >= spawnedAt) reject the panel's own,
+    // still-valid session directory, permanently: the exact silent failure
+    // detachAll()'s clearDedupe() (R8) exists to prevent for an
+    // ALREADY-CLAIMED panel, reachable again here for one that had not been
+    // claimed yet at the moment of the reload (a panel reloaded before its
+    // first successful poll, or one two colliding panels' shared ambiguity
+    // had already dropped the claim for).
+    //
+    // Deliberate limit, left as-is: after a full app RELAUNCH this manager
+    // is new and firstSpawnedAt is empty, so a reattached panel still falls
+    // back to Date.now() and its pre-existing session stays unclaimable.
+    // Fixing that needs the tmux session's own start time -- a seventh
+    // LIST_FORMAT column and a verify:tmux count change -- which is out of
+    // scope here. The safe direction is no nodes rather than wrong nodes,
+    // this milestone's own stated principle, so the fallback is correct
+    // even though it is lossy.
+    let spawnedAt = this.firstSpawnedAt.get(spec.panelId)
+    if (!reattached || spawnedAt === undefined) {
+      spawnedAt = Date.now()
+      this.firstSpawnedAt.set(spec.panelId, spawnedAt)
+    }
+
     const session: Session = {
       panelId: spec.panelId,
       proc,
@@ -189,7 +379,8 @@ export class PtyManager {
       command,
       cwd,
       reattached,
-      detector: initialDetector(Date.now())
+      detector: initialDetector(Date.now()),
+      spawnedAt
     }
     this.sessions.set(spec.panelId, session)
     // Only ever ticks while something is in the map; see startIdleTick.
@@ -229,6 +420,21 @@ export class PtyManager {
         // dispose -> pty.kill first (see Canvas.tsx's five dispose call sites),
         // which is a property of the renderer's call sites, not of this class.
         this.lastLive.delete(spec.panelId)
+        // subagentWatch follows lastLive at every site it is cleared, for the
+        // identical reason: a recycled panel id must not inherit a dead
+        // panel's claimed session directory and report a stranger's
+        // subagents as its own.
+        this.subagentWatch.drop(spec.panelId)
+        // And firstSpawnedAt with them, for symmetry with kill(): this is the
+        // third route out of the sessions map and was the one that left the
+        // entry standing. Harmless TODAY only because create() overwrites it
+        // whenever `reattached` is false, so the stale value is replaced
+        // before anything reads it — but that is a property of create()'s
+        // branch, not of this map, and it sits three lines under a comment
+        // whose whole subject is a map that WAS left stale on this exact
+        // path. A per-panel map that only some exits clear is the shape the
+        // recycled-id failure keeps arriving in.
+        this.firstSpawnedAt.delete(spec.panelId)
       }
       // AFTER the flush above and before the exit is announced. Order matters
       // in one direction only: 'exited' is terminal in the state machine
@@ -335,6 +541,8 @@ export class PtyManager {
       this.dropBaseline(panelId)
       this.capturedBaselineIds.delete(panelId)
       this.lastLive.delete(panelId)
+      this.subagentWatch.drop(panelId)
+      this.firstSpawnedAt.delete(panelId)
       return
     }
     session.killed = true
@@ -350,6 +558,8 @@ export class PtyManager {
     this.dropBaseline(panelId)
     this.capturedBaselineIds.delete(panelId)
     this.lastLive.delete(panelId)
+    this.subagentWatch.drop(panelId)
+    this.firstSpawnedAt.delete(panelId)
     this.sessions.delete(panelId)
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
@@ -383,6 +593,22 @@ export class PtyManager {
     // may be never. lastLive is supposed to be cleared alongside the
     // session; kill() already does both, detachAll() must too.
     this.lastLive.clear()
+    // subagentWatch.clearDedupe(), deliberately NOT .clear(). detachAll()
+    // is a re-send trigger, not a teardown — main's PtyManager and the tmux
+    // sessions it holds both survive a Cmd+R, only the renderer is new, so
+    // its empty store must be told every fact again rather than have them
+    // deduped away, the identical reason lastLive.clear() exists two lines
+    // up. A full clear() here would ALSO drop the claimed session directory,
+    // so the next poll would re-derive it from the REATTACHING create()
+    // call's new, later spawnedAt — and chooseSession only accepts a
+    // directory created ON OR AFTER spawnedAt, which the real one, predating
+    // the reload, no longer is. That was this file's first draft, caught in
+    // review: a panel's subagents would have vanished at the first Cmd+R and
+    // never come back for the life of that panel, with nothing in any log —
+    // exactly the failure this milestone is supposed to be about. See
+    // SubagentWatch.clearDedupe()'s own comment for the same story from the
+    // other side.
+    this.subagentWatch.clearDedupe()
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
   }
 
@@ -434,34 +660,96 @@ export class PtyManager {
   }
 
   /**
-   * One poll for every panel. backend.list() is null on the direct backend by
-   * contract — not "nothing is running", but "ask the manager", and the manager
-   * holds only spawn-time values — so there is no live answer there and none is
-   * invented.
+   * One poll for every panel, on LIVE_TICK_MS. Two independent halves live
+   * here now, and they disagree on whether tmux is required — which is why
+   * the null-backend early return that used to guard the whole method now
+   * guards only the first half.
+   *
+   * The live cwd/command half: backend.list() is null on the direct backend
+   * by contract — not "nothing is running", but "ask the manager", and the
+   * manager holds only spawn-time values — so there is no live answer there
+   * and none is invented.
+   *
+   * The subagent half runs UNCONDITIONALLY, after that guarded block, never
+   * inside it: it reads the filesystem, not tmux, and a direct-backend panel
+   * has a real Claude Code session running just the same. Gating it on
+   * backend.list() would silently disable subagent detection whenever this
+   * app runs without tmux — which is a real, supported, production
+   * configuration (see "The probe checks that the SERVER starts" in
+   * CLAUDE.md), not an edge case.
    */
   private pollLive(): void {
     const entries = this.getBackend().list()
-    if (!entries) return
-    for (const entry of entries) {
-      // Only panels this manager is actually holding. An entry for a session
-      // this renderer has no local session for belongs to a panel nothing is
-      // subscribed to, and sending for it would grow lastLive with ids the map
-      // will never clear.
-      if (!this.sessions.has(entry.panelId)) continue
-      // NUL, not a space: a path may contain a space, so ('/a b', 'sh')
-      // and ('/a', 'b sh') would collide into one key under a space
-      // delimiter — a panel whose update is silently suppressed, for the
-      // users whose directories happen to contain the delimiter and nobody
-      // else. NUL is the one byte a POSIX path cannot contain, the same
-      // collision railSignature avoids with JSON.stringify.
-      const key = `${entry.cwd}\u0000${entry.currentCommand}`
-      if (this.lastLive.get(entry.panelId) === key) continue
-      this.lastLive.set(entry.panelId, key)
-      this.send(IPC_EVENTS.SESSION_LIVE, {
+    // Every live cwd this tick has an answer for, regardless of whether that
+    // answer changed — used below as the subagent half's live-cwd source, so
+    // that half need not re-derive it from lastLive's packed dedupe string.
+    const liveCwd = new Map<PanelId, string>()
+    if (entries) {
+      for (const entry of entries) {
+        liveCwd.set(entry.panelId, entry.cwd)
+        // Only panels this manager is actually holding. An entry for a
+        // session this renderer has no local session for belongs to a panel
+        // nothing is subscribed to, and sending for it would grow lastLive
+        // with ids the map will never clear.
+        if (!this.sessions.has(entry.panelId)) continue
+        // NUL, not a space: a path may contain a space, so ('/a b', 'sh')
+        // and ('/a', 'b sh') would collide into one key under a space
+        // delimiter — a panel whose update is silently suppressed, for the
+        // users whose directories happen to contain the delimiter and nobody
+        // else. NUL is the one byte a POSIX path cannot contain, the same
+        // collision railSignature avoids with JSON.stringify.
+        const key = `${entry.cwd}\u0000${entry.currentCommand}`
+        if (this.lastLive.get(entry.panelId) === key) continue
+        this.lastLive.set(entry.panelId, key)
+        this.send(IPC_EVENTS.SESSION_LIVE, {
+          panelId: entry.panelId,
+          cwd: entry.cwd,
+          currentCommand: entry.currentCommand
+        })
+      }
+    }
+
+    const panels = [...this.sessions.values()].map((session) => ({
+      panelId: session.panelId,
+      // M12's consumer-fallback rule: a consumer that needs A directory,
+      // rather than one making a present-tense claim, falls back happily to
+      // the resolved spawn cwd when there is no live answer yet — or, under
+      // the direct backend, ever.
+      cwd: liveCwd.get(session.panelId) ?? session.cwd,
+      spawnedAt: session.spawnedAt
+    }))
+
+    for (const entry of this.subagentWatch.poll(panels)) {
+      // The watcher already deduped (see SubagentWatch.poll's own comment);
+      // this is not a second gate, only the wire mapping.
+      const payload: SubagentUpdate = {
         panelId: entry.panelId,
-        cwd: entry.cwd,
-        currentCommand: entry.currentCommand
-      })
+        ambiguous: entry.ambiguous,
+        // Both numbers are main's own derivations, carried rather than
+        // recomputed on the far side: `sharing` because the renderer cannot
+        // see the other panels' slugs at all, and `overflow` because the
+        // renderer is handed the CAPPED list and so has nothing left to count
+        // it from.
+        sharing: entry.sharing,
+        overflow: entry.overflow,
+        // Field by field, never a spread: spreading would carry toolUseId
+        // onto the wire, where it is both meaningless and the internal key
+        // of a format this repo does not own. Same rule M5a's absent
+        // `command` forces on four other layers, for the same reason — a
+        // structured clone carries whatever the object actually has.
+        records: entry.records.map(
+          (r): SubagentRecord => ({
+            id: r.id,
+            agentType: r.agentType,
+            description: r.description,
+            model: r.model,
+            spawnDepth: r.spawnDepth,
+            state: r.state,
+            startedAt: r.startedAt
+          })
+        )
+      }
+      this.send(IPC_EVENTS.SUBAGENT_STATE, payload)
     }
   }
 

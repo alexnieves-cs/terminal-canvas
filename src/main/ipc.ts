@@ -14,6 +14,8 @@ import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
+import type { CredentialStore } from './credential-store'
+import { verifyCredential, createHttpsFetcher } from './credential-verify'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -70,7 +72,13 @@ export function registerIpcHandlers(
    * a different failure model, and folding it in would make every engine
    * fixture carry a filesystem dependency it has no use for.
    */
-  reviewCommit: (req: ReviewCommitRequest) => Promise<ReviewCommitResult>
+  reviewCommit: (req: ReviewCommitRequest) => Promise<ReviewCommitResult>,
+  // Appended last, for the identical reason reviewEngine and rebuildMenu are:
+  // a collaborator main/index.ts constructs once at module scope, not
+  // something any existing surface (palette, review) owns, and appending it
+  // rather than inserting it keeps every existing positional call site
+  // (scripts/panels-entry.cjs included) from having to shift.
+  credentialStore: CredentialStore
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -198,6 +206,35 @@ export function registerIpcHandlers(
     reviewEngine.fileDiff(req))
 
   ipcMain.handle(IPC.REVIEW_COMMIT, (_event, req: ReviewCommitRequest) => reviewCommit(req))
+
+  // Metadata only, on every arm. The store's list() already projects field by
+  // field; this handler must not re-widen it, and verify:meta 20/21 pin
+  // that as source text because no runtime behaviour can observe the
+  // difference — everything keeps working, and the renderer simply holds a
+  // secret it should never have.
+  ipcMain.handle(IPC.CREDENTIAL_LIST, () => credentialStore.list())
+
+  ipcMain.handle(IPC.CREDENTIAL_SET, (_event, req: { service: string; token: string }) => {
+    // A malformed payload must refuse like any other rejection, not throw: an
+    // uncaught TypeError from `token.trim()` still crosses back as a rejected
+    // invoke, but the renderer's `.then` never runs and the prompt hangs open
+    // with no feedback. The reason stays generic — it must not echo the
+    // payload back.
+    if (typeof req?.service !== 'string' || typeof req?.token !== 'string') {
+      return { ok: false, reason: 'malformed request' }
+    }
+    return credentialStore.set(req.service, req.token)
+  })
+
+  ipcMain.handle(IPC.CREDENTIAL_DELETE, (_event, service: string) =>
+    credentialStore.delete(service))
+
+  // The one caller of credentialStore.read(), and it never returns what it
+  // reads: read() supplies the token to a request and verifyCredential
+  // answers with what the service said. No handler in this file may call
+  // read() directly — that would put a token on the IPC boundary.
+  ipcMain.handle(IPC.CREDENTIAL_VERIFY, (_event, service: string) =>
+    verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
 }
 
 /**

@@ -3,7 +3,78 @@
    Electron entry point (see the sibling verify-*.cjs scripts), so nothing
    else registers ipcMain handlers for it — without this, pty:create/pty:list
    have no handler and every renderer call against window.canvas.pty rejects. */
+const { mkdtempSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
+
+/* THE FENCE. pty-manager.ts's resolveProjectsRoot() reads
+   TC_CLAUDE_PROJECTS, falling back to the real homedir()/.claude/projects
+   in production — that fallback exists precisely so a developer's real
+   installation needs no override. This harness is not a developer's real
+   installation: verify-panels.cjs (and verify-canvas.cjs, which bundles
+   this same file) constructs exactly ONE PtyManager, inside
+   app.whenReady(), and resolveProjectsRoot() runs once, synchronously,
+   inside that constructor's own field initializer
+   (`subagentWatch = new SubagentWatch(createFsWatchDeps())`). So whatever
+   this env var holds at that moment is baked in for the life of the run —
+   there is no second chance to fence it once that line has executed.
+
+   This module is required (via esbuild's bundled ENTRY_OUT) at the very
+   top of verify-panels.cjs, long before app.whenReady() ever runs, which
+   is what makes setting it here — at module load, not inside
+   app.whenReady() — early enough. Left unset, PtyManager's subagent
+   watcher polls the running developer's REAL ~/.claude/projects every 2s
+   for the whole suite and attributes whatever real sessions it finds
+   there to fixture panels that were never involved in them — the exact
+   mistake M9a's git fixtures made against the developer's whole home
+   directory (see CLAUDE.md's note on `verify:panels` 99-101 fencing its
+   git runner to its own temp prefixes), caught only because it blew the
+   suite's own watchdog rather than failing a check that pointed at the
+   cause.
+
+   Checks 118-120 read this SAME value back out of process.env — a single
+   process, so the assignment is visible everywhere — and write their
+   fixture session/transcript data into it, rather than minting a second
+   root of their own that the already-constructed PtyManager could never
+   see.
+
+   Spaced, this repo's standing rule since the pane-died quoting bug: an
+   unquoted downstream consumer (a shell `cd`, an argv built by
+   concatenation rather than an array) would otherwise fail exactly as
+   silently as that one did. */
+if (!process.env.TC_CLAUDE_PROJECTS || process.env.TC_CLAUDE_PROJECTS.trim() === '') {
+  process.env.TC_CLAUDE_PROJECTS = mkdtempSync(join(tmpdir(), 'tc claude projects '))
+}
+
+// M14 Task 5: registerIpcHandlers now takes a CredentialStore as its final
+// positional parameter, so this harness needs one too or every credential:*
+// handler throws the moment a check reaches it (Task 8). A fake, reversible
+// crypto — the same one verify-credentials.cjs uses — and a scratch temp
+// directory, so this suite never touches the real OS keychain or the real
+// userData credentials.json.
+const fakeCredentialCrypto = {
+  available: () => true,
+  encrypt: (s) => Buffer.from('enc:' + s, 'utf8'),
+  decrypt: (b) => b.toString('utf8').replace(/^enc:/, '')
+}
+const credentialDir = mkdtempSync(join(tmpdir(), 'tc panels credentials '))
+const credentialStore = require('../src/main/credential-store').createCredentialStore({
+  filePath: join(credentialDir, 'credentials.json'),
+  crypto: fakeCredentialCrypto
+})
+
 module.exports = {
+  credentialStore,
+  // Task 8's check is the first thing that ever writes through this store, so
+  // this directory is empty on every run before it. Once it isn't,
+  // 'enc:' + token is a trivially reversible fixture token left behind in the
+  // OS temp directory forever unless something rmSyncs it — the same
+  // obligation verify-credentials.cjs discharges for its own scratch dir.
+  // Exported rather than removed here, because this module has no run-end
+  // hook of its own; verify-panels.cjs already owns exactly this cleanup
+  // shape for its other fixture directories (crepo/repo/notRepo) and is
+  // where the credential check itself runs.
+  credentialDir,
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
