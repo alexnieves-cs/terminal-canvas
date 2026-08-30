@@ -8,7 +8,20 @@ const MAX_BODY_BYTES = 1024 * 1024
 const ASSIGNED_JQL = 'assignee = currentUser() ORDER BY updated DESC'
 
 export interface JiraCredential { site: string; email: string; token: string }
-export interface JiraRequest { url: string; headers: Record<string, string>; timeoutMs: number }
+/**
+ * The injected seam. `method` is REQUIRED and not optional-with-a-default,
+ * because an optional method means a write function that forgot to set it
+ * performs a GET against a POST endpoint — a request that succeeds and does
+ * nothing. Required makes tsc list every call site instead.
+ */
+export interface JiraRequest {
+  url: string
+  method: 'GET' | 'POST'
+  headers: Record<string, string>
+  timeoutMs: number
+  /** JSON, already serialised. Absent on every GET. */
+  body?: string
+}
 export type JiraRequester = (request: JiraRequest) => Promise<{ status: number; body: string }>
 export interface JiraDeps { store: CredentialStore; requester: JiraRequester }
 export type JiraVerifyResult = { ok: true; meta: CredentialMeta } | { ok: false; reason: string }
@@ -44,7 +57,7 @@ export async function verifyJiraCredential(deps: JiraDeps): Promise<JiraVerifyRe
   if (c === 'missing') return { ok: false, reason: 'no stored credential to verify' }
   if (c === 'invalid') return { ok: false, reason: 'stored Jira credential is malformed' }
   let response: { status: number; body: string }
-  try { response = await deps.requester({ url: `${c.site}/rest/api/3/myself`, headers: auth(c), timeoutMs: TIMEOUT_MS }) }
+  try { response = await deps.requester({ url: `${c.site}/rest/api/3/myself`, method: 'GET', headers: auth(c), timeoutMs: TIMEOUT_MS }) }
   catch { return { ok: false, reason: 'the request to Jira failed' } }
   if (response.status === 401 || response.status === 403) return { ok: false, reason: 'Jira rejected the credential' }
   if (response.status !== 200) return { ok: false, reason: `Jira answered ${response.status}` }
@@ -57,7 +70,7 @@ export async function verifyJiraCredential(deps: JiraDeps): Promise<JiraVerifyRe
   } catch { return { ok: false, reason: 'Jira returned a response this app could not read' } }
 }
 
-function adfText(value: unknown): string {
+export function adfText(value: unknown): string {
   if (typeof value === 'string') return value
   if (value === null || typeof value !== 'object') return ''
   const node = value as { type?: unknown; text?: unknown; content?: unknown }
@@ -66,13 +79,31 @@ function adfText(value: unknown): string {
   return node.type === 'paragraph' ? `${own}${children}\n` : node.type === 'hardBreak' ? '\n' : `${own}${children}`
 }
 
+/**
+ * The inverse of adfText, and deliberately no more capable than it: Jira
+ * Cloud's v3 comment endpoint requires Atlassian Document Format going in,
+ * and this builds exactly the subset adfText can flatten back out. Reaching
+ * for a Markdown-to-ADF converter here would invent a format the read half
+ * cannot round-trip, so a comment would not read back as it was typed.
+ */
+export function textToAdf(text: string): unknown {
+  return {
+    type: 'doc',
+    version: 1,
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      content: line === '' ? [] : [{ type: 'text', text: line }]
+    }))
+  }
+}
+
 export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListResult> {
   const c = credential(deps.store)
   if (c === 'missing') return { kind: 'no-credential', reason: 'Connect Jira before loading tickets.' }
   if (c === 'invalid') return { kind: 'invalid-credential', reason: 'The stored Jira credential is malformed.' }
   const query = new URLSearchParams({ jql: ASSIGNED_JQL, maxResults: '50', fields: 'summary,description,assignee,status' })
   let response: { status: number; body: string }
-  try { response = await deps.requester({ url: `${c.site}/rest/api/3/search/jql?${query}`, headers: auth(c), timeoutMs: TIMEOUT_MS }) }
+  try { response = await deps.requester({ url: `${c.site}/rest/api/3/search/jql?${query}`, method: 'GET', headers: auth(c), timeoutMs: TIMEOUT_MS }) }
   catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
   if (response.status === 401 || response.status === 403) return { kind: 'rejected', reason: 'Jira rejected the credential.' }
   if (response.status !== 200) return { kind: 'unavailable', reason: `Jira answered ${response.status}.` }
@@ -90,16 +121,28 @@ export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListRes
 }
 
 export function createJiraRequester(): JiraRequester {
-  return ({ url, headers, timeoutMs }) => new Promise((resolve, reject) => {
-    const req = request(url, { method: 'GET', headers, timeout: timeoutMs }, (res) => {
-      let body = ''; let bytes = 0
+  return ({ url, method, headers, timeoutMs, body }) => new Promise((resolve, reject) => {
+    // Content-Length is computed from the BYTE length, never the string
+    // length: a ticket comment routinely contains non-ASCII, and a
+    // character count there truncates the body Jira actually reads.
+    const payload = body === undefined ? undefined : Buffer.from(body, 'utf8')
+    const sent = payload === undefined
+      ? headers
+      : { ...headers, 'Content-Length': String(payload.byteLength) }
+    const req = request(url, { method, headers: sent, timeout: timeoutMs }, (res) => {
+      let received = ''; let bytes = 0
       res.setEncoding('utf8')
-      res.on('data', (part: string) => { bytes += Buffer.byteLength(part); if (bytes > MAX_BODY_BYTES) res.destroy(new Error('response too large')); else body += part })
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
+      res.on('data', (part: string) => {
+        bytes += Buffer.byteLength(part)
+        if (bytes > MAX_BODY_BYTES) res.destroy(new Error('response too large'))
+        else received += part
+      })
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, body: received }))
       res.on('error', reject)
     })
     req.on('timeout', () => req.destroy(new Error('timeout')))
     req.on('error', reject)
+    if (payload !== undefined) req.write(payload)
     req.end()
   })
 }

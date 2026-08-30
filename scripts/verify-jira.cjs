@@ -71,6 +71,22 @@ void (async () => {
       item.assignee === 'Ada Lovelace' && item.state === 'In Progress' && item.url === 'https://acme.atlassian.net/browse/TC-12' &&
       request?.url.includes('/rest/api/3/search/jql') && request?.url.includes('maxResults=50'))
 
+  // 6. The seam that keeps this suite offline. `method` is REQUIRED on the
+  //    record rather than optional-with-a-GET-default: an optional field lets
+  //    a write function that forgot to set it silently perform a GET against a
+  //    POST endpoint, which returns something plausible instead of failing.
+  ok('6 the requester contract carries an explicit method',
+    request?.method === 'GET')
+
+  // 7. textToAdf is the deliberate INVERSE of adfText, so the pair is asserted
+  //    as a ROUND TRIP rather than as two independent guesses about a format
+  //    this repo does not own. A blank line between paragraphs is included
+  //    because that is the case a naive one-paragraph builder loses.
+  const SOURCE = 'First line\nSecond line\n\nAfter a blank'
+  ok('7 textToAdf and adfText are inverses over the text a comment can hold',
+    typeof J.textToAdf === 'function' && typeof J.adfText === 'function' &&
+      J.adfText(J.textToAdf(SOURCE)).trim() === SOURCE)
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)
