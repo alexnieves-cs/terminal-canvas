@@ -23,7 +23,20 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  external: ['node-pty', 'electron']
+  external: ['node-pty', 'electron'],
+  // The same two aliases electron.vite.config.ts and every plain-node verify
+  // bundle already carry. This entry got away without them until M13 for the
+  // reason verify-viewport.cjs did: every cross-boundary import main/* made
+  // from @shared was an `import type`, which esbuild erases before bundling,
+  // so nothing was ever actually resolved. main/file-read.ts imports real
+  // VALUES from @shared/file-panel (FILE_MAX_BYTES and its siblings), and
+  // this build fails outright without them — the app then throws during
+  // load, and the harness waits on a window that will never open rather
+  // than reporting anything, so the failure reads as a hang.
+  alias: {
+    '@shared': join(__dirname, '..', 'src', 'shared'),
+    '@renderer': join(__dirname, '..', 'src', 'renderer')
+  }
 })
 const {
   registerIpcHandlers,
