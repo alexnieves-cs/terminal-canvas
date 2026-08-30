@@ -19,6 +19,10 @@
      bare :root: a length in a theme block is a length every future theme has
      to remember to repeat. */
   --navgrid-cell: 150px;
+  /* Wide enough for five digits at --t-sm, which is FILE_MAX_LINES' 10000 plus
+     one. A gutter narrower than its widest number reflows the text column
+     partway down a long file. */
+  --file-gutter-w: 40px;
 
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
@@ -1128,6 +1132,90 @@ body {
   word-break: break-word;
 }
 
+/* M13. A file panel reuses .panel for its box, its chrome and its resize
+   handles — see FileNode.tsx — and adds only what a scrollable text body
+   needs. The body is the ONE element carrying data-scroll-host, which is what
+   gives this kind the wheel over itself; shouldYieldWheel needed no edit for
+   it, because rule 3 asks the DOM rather than the panel's kind. */
+.file-node__body {
+  flex: 1;
+  min-height: 0;          /* or the <pre> refuses to shrink and the box overflows */
+  /* BOTH axes, unlike .review-node__body's overflow-y. Lines here do not wrap
+     (see .file-node__text), so a long line has to scroll INSIDE this element
+     — the alternative is the page itself scrolling sideways, which no other
+     surface in this app ever does. */
+  overflow: auto;
+  padding: var(--sp-4) var(--sp-4);
+  font: var(--t-sm) / var(--lh-body) var(--font-mono);
+  color: var(--muted);
+  background: var(--panel-bg);
+  /* .panel sets user-select: none so a drag on the chrome never leaves a text
+     selection behind. This is a READING surface, and inheriting that rule
+     makes a file impossible to copy out of the only place it is rendered —
+     the same lift .review-node__body takes, for the same reason. */
+  user-select: text;
+}
+
+/* In the chrome row, beside the heading. --fg-3, not --fg-4: --fg-4 is the
+   DISABLED step and this is ordinary running text. */
+.file-node__summary {
+  flex: none;
+  color: var(--fg-3);
+}
+
+.file-node__directory {
+  margin: 0 0 var(--sp-4);
+  color: var(--fg-3);
+  word-break: break-all;
+}
+
+/* Amber, like .review-node__note: every non-text arm (missing, too-large,
+   binary, unreadable) lands here, and each is a state the user may want to act
+   on rather than an error. */
+.file-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
+
+.file-node__pre {
+  margin: 0;
+  font: inherit;
+}
+
+.file-node__line {
+  display: flex;
+  gap: var(--sp-4);
+}
+
+/* Right-aligned and non-shrinking, so the text column starts at one x for
+   every line — a gutter that reflows with its own digits is a column of text
+   that jitters as it scrolls. */
+.file-node__gutter {
+  flex: none;
+  min-width: var(--file-gutter-w);
+  text-align: right;
+  color: var(--fg-4);
+  user-select: none;
+}
+
+/* pre, never pre-wrap. A wrapped line renumbers nothing but makes the gutter
+   lie about which line the text belongs to, which is the one thing a gutter
+   is for. The body scrolls instead. */
+.file-node__text { white-space: pre; }
+
+.file-node__more { margin: var(--sp-4) 0 0; color: var(--fg-3); }
+
+.file-node__refresh {
+  /* Never shrunk to make room for a long heading — the same rule
+     .panel__close obeys, and it shares that button's chrome row. */
+  flex: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--fg-3);
+}
+
+.file-node__refresh:hover { color: var(--fg); }
+
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
 .canvas-hud__warn {
@@ -1421,7 +1509,8 @@ body {
 .panel__close,
 .review-node__file-button,
 .review-node__refresh,
-.review-node__commit {
+.review-node__commit,
+.file-node__refresh {
   transition:
     background-color var(--dur-1) var(--ease),
     color            var(--dur-1) var(--ease),
