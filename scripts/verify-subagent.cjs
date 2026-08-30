@@ -152,6 +152,120 @@ ok('7 cwdOf reads the cwd off a transcript line, and answers null for a line wit
     found.has('toolu_01A') && !found.has('toolu_01B'), [...found].join(','))
 }
 
+// ---------------------------------------------------------------------------
+// 15-20. The watcher, against a FAKE filesystem. subagent-watch.ts takes its
+// reads as injected deps for the reason review-engine.ts takes its GitRunner:
+// the whole state machine is drivable with no real ~/.claude in earshot.
+
+const fakeFs = (tree) => {
+  // tree: { 'path': ['file', ...] } for listings, { 'path': 'text' } for files.
+  const reads = []
+  return {
+    reads,
+    listDirs: (p) => (tree.dirs[p] ?? null),
+    listFiles: (p) => (tree.files[p] ?? null),
+    readText: (p) => { reads.push(p); return tree.text[p] ?? null },
+    readFrom: (p, from) => {
+      const t = tree.text[p]
+      if (t === undefined) return null
+      reads.push(`${p}@${from}`)
+      return { text: t.slice(from), end: t.length }
+    },
+    sizeOf: (p) => (tree.text[p] === undefined ? null : tree.text[p].length),
+    projectsRoot: '/root',
+    now: () => 1000
+  }
+}
+
+const META = (id, tool) => JSON.stringify({
+  agentType: 'general-purpose', description: `d-${id}`,
+  toolUseId: tool, spawnDepth: 1, model: 'sonnet'
+})
+
+const tree1 = () => ({
+  dirs: { '/root/-repo': [{ name: 'S1', createdAt: 500 }] },
+  files: { '/root/-repo/S1/subagents': ['agent-a1.meta.json', 'agent-a1.jsonl'] },
+  text: {
+    '/root/-repo/S1/subagents/agent-a1.meta.json': META('a1', 'toolu_01A'),
+    '/root/-repo/S1.jsonl': JSON.stringify({ type: 'user', cwd: '/repo' }) + '\n'
+  }
+})
+
+{
+  const w = new S.SubagentWatch(fakeFs(tree1()))
+  const out = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  ok('15 a meta file in subagents/ becomes one running record',
+    out.length === 1 && out[0].panelId === 'n1' && out[0].records.length === 1 &&
+      out[0].records[0].state === 'running' && out[0].records[0].description === 'd-a1',
+    JSON.stringify(out))
+}
+
+// THE DEDUPE, and it is the design rather than an optimisation. Its failure
+// changes no pixel — it shows up as heat — so the only thing that can ever
+// notice it is a check that COUNTS. A second poll with nothing changed must
+// report nothing at all.
+{
+  const w = new S.SubagentWatch(fakeFs(tree1()))
+  w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  const again = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  ok('16 an unchanged second poll reports NOTHING', again.length === 0, JSON.stringify(again))
+}
+
+// The confirmation read. A session whose own transcript records a DIFFERENT
+// cwd is not this panel's, however well the slug matched — which is what makes
+// slugFor safe to be wrong about.
+{
+  const t = tree1()
+  t.text['/root/-repo/S1.jsonl'] = JSON.stringify({ type: 'user', cwd: '/somewhere/else' }) + '\n'
+  const w = new S.SubagentWatch(fakeFs(t))
+  const out = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  ok('17 a session whose recorded cwd disagrees is not claimed',
+    out.length === 0 || out[0].records.length === 0, JSON.stringify(out))
+}
+
+// Completion, through the tail read.
+{
+  const t = tree1()
+  const w = new S.SubagentWatch(fakeFs(t))
+  w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  t.text['/root/-repo/S1.jsonl'] +=
+    JSON.stringify({ message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_01A' }] } }) + '\n'
+  const out = w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  ok('18 a tool_result appended to the parent transcript moves the record to done',
+    out.length === 1 && out[0].records[0].state === 'done', JSON.stringify(out))
+}
+
+// The offset. Re-reading a megabyte every 2s is invisible on screen and shows
+// up only as heat, so this asserts the READ ARGUMENT rather than an outcome —
+// the one place the cost is observable at all.
+{
+  const t = tree1()
+  const fs = fakeFs(t)
+  const w = new S.SubagentWatch(fs)
+  w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  const before = t.text['/root/-repo/S1.jsonl'].length
+  t.text['/root/-repo/S1.jsonl'] += 'x'
+  fs.reads.length = 0
+  w.poll([{ panelId: 'n1', cwd: '/repo', spawnedAt: 100 }])
+  ok('19 the second read starts at the previous EOF, not at 0',
+    fs.reads.some((r) => r === `/root/-repo/S1.jsonl@${before}`) &&
+      !fs.reads.some((r) => r === '/root/-repo/S1.jsonl@0'),
+    fs.reads.join(' '))
+}
+
+// The ambiguity refusal reaching the watcher, and reported as a FLAG rather
+// than as silence: an absent feature must not look like a broken one.
+{
+  const w = new S.SubagentWatch(fakeFs(tree1()))
+  const out = w.poll([
+    { panelId: 'n1', cwd: '/repo', spawnedAt: 100 },
+    { panelId: 'n2', cwd: '/repo', spawnedAt: 100 }
+  ])
+  ok('20 two panels in one repository each report ambiguous with no records',
+    out.length === 2 && out.every((o) => o.ambiguous === true && o.records.length === 0),
+    JSON.stringify(out))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
