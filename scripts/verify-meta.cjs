@@ -30,12 +30,33 @@ const read = (rel) => {
 // thing they name must NOT appear in code. A bare substring search over the
 // raw file would fail against the correct, current tree; stripping comments
 // first is what lets the check match CODE syntax instead of English sentences
-// that happen to contain the same characters. Order matters: block comments
-// are removed first, because `/* // not a line comment */` would otherwise
-// leave a dangling `*/` behind if line-comment stripping ran first and ate
-// past the block's own closing delimiter.
-const stripComments = (text) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+// that happen to contain the same characters.
+//
+// ONE alternation, not two chained `.replace()` calls, and the single pass is
+// load-bearing rather than a style choice. A first cut ran block-stripping
+// before line-stripping, on the reasoning that `/* // not a line comment */`
+// would otherwise leave a dangling `*/` if line-stripping ran first. That
+// reasoning is correct as far as it goes and misses the reachable case in the
+// OTHER direction: a `/*` sitting inside an ordinary `//` comment (e.g.
+// `// TODO: unwrap a /* block`) is invisible to a line-comment pass that
+// hasn't run yet, so block-stripping-first opens a FAKE block there and
+// consumes forward to the next real `*/` — and ipc.ts and ipc-contract.ts are
+// dense with `/** ... */` doc comments, so that swallows a whole handler
+// block, including real code, and the check reports a false PASS. A single
+// alternated regex scans left to right and picks whichever comment form
+// starts first at each position: reaching the `//` first consumes the rest of
+// that physical line before any `/*` inside it is ever considered a
+// delimiter, so the fake block can never open. Measured:
+// `stripComments("// TODO: unwrap a /* block\ncredentialStore.read(x)\n/** next doc */\n")`
+// now returns the real call intact, where the two-pass version returned only
+// a blank line — the violation had vanished along with everything around it.
+// What this does NOT close: a `//` or `/*` inside a STRING or template
+// literal is still read as a real comment delimiter, because this is a
+// regex stripper, not a tokenizer. None of the files these checks read
+// contain such a literal today (verified by grepping for `http` in all of
+// them and finding nothing) — recorded as the residual risk rather than
+// something believed fixed.
+const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -287,45 +308,100 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     unwired.length ? `unwired: ${unwired.join(', ')}` : `${suites.length} suites`)
 }
 
-// 20. RULE 1, AS SOURCE TEXT: there is no credential:get channel and no
-// handler returns a cipher. Neither half has a runtime symptom when broken —
-// the app keeps working exactly as before, just with a plaintext-returning
-// channel nobody exercises yet, which is why this can only be pinned as
-// prose-shaped code rather than as behaviour. Both `contract` and `ipc` are
-// COMMENT-STRIPPED before matching (see `stripComments` above): the raw
-// tree contains `credential:get` once, in the doc comment on line ~183 of
-// ipc-contract.ts explaining that it deliberately does not exist, and
-// contains `cipher` once, in a doc comment on `CredentialSetResult`
-// describing what the result type must NEVER carry — a bare substring test
-// over the raw files would report both as violations of the very rule they
-// document.
+// 20. RULE 1, AS SOURCE TEXT: there is no credential:get channel, and no
+// credential channel of ANY name returns a cipher. Neither half has a
+// runtime symptom when broken — the app keeps working exactly as before,
+// just with a plaintext-returning channel nobody exercises yet, which is why
+// this can only be pinned as prose-shaped code rather than as behaviour.
+//
+// The channel half is an ALLOWLIST, not two literal spellings. An earlier cut
+// of this check tested for the string `credential:get` and the identifier
+// `CREDENTIAL_GET` alone, which pins the SPELLING rather than the RULE —
+// "no channel returns plaintext" — and a sibling added under any other name
+// (`CREDENTIAL_REVEAL`, `CREDENTIAL_PEEK`, ...) sailed through unnoticed.
+// Every `CREDENTIAL_*` key is parsed out of the `IPC` object (comment-
+// stripped first, for the reason `stripComments` exists at all) and the set
+// is asserted EXACTLY equal to the four channels this milestone actually
+// grants: list, set, delete, verify. A fifth key of ANY name fails this,
+// and so does one of the four going missing.
+//
+// The cipher half is scanned across BOTH `ipc.ts`, where a handler could
+// return one directly, AND `credential-schema.ts`, where `CredentialMeta` —
+// the shape `CREDENTIAL_LIST` actually returns — is declared; a plaintext or
+// cipher field added to the type would never show up in ipc.ts at all, since
+// the handler just returns `list()` and never repeats the field names.
 {
   const contract = stripComments(read('src/shared/ipc-contract.ts') ?? '')
+  const objMatch = contract.match(/export const IPC = \{([\s\S]*?)\n\} as const/)
+  const body = objMatch ? objMatch[1] : ''
+  const keys = [...body.matchAll(/\bCREDENTIAL_[A-Z_]+\b/g)].map((m) => m[0])
+  const ALLOWED = ['CREDENTIAL_LIST', 'CREDENTIAL_SET', 'CREDENTIAL_DELETE', 'CREDENTIAL_VERIFY']
+  const unexpected = keys.filter((k) => !ALLOWED.includes(k))
+  const missing = ALLOWED.filter((k) => !keys.includes(k))
+  const allowlisted = objMatch !== null && unexpected.length === 0 && missing.length === 0
+
   const ipc = stripComments(read('src/main/ipc.ts') ?? '')
-  const noGet = !/credential:get/.test(contract) && !/CREDENTIAL_GET/.test(contract)
-  const noCipher = !/cipher/i.test(ipc)
-  ok('20 no credential:get channel exists and no handler names a cipher',
-    noGet && noCipher, `noGet=${noGet} noCipher=${noCipher}`)
+  const schema = stripComments(read('src/shared/credential-schema.ts') ?? '')
+  const noCipher = !/cipher/i.test(ipc) && !/cipher/i.test(schema)
+
+  ok('20 the CREDENTIAL_* channel set is exactly {list,set,delete,verify}, and no cipher field exists',
+    allowlisted && noCipher,
+    `parsed=${objMatch !== null} unexpected=${JSON.stringify(unexpected)} missing=${JSON.stringify(missing)} noCipher=${noCipher}`)
 }
 
 // 21. RULE 2, AS SOURCE TEXT: a stored credential must never reach a PTY, so
 // the three modules that build a process environment must not import the
-// credential store, and no IPC handler may call the store's read() — the one
-// function that returns plaintext, main-internal, and callable only from
-// credential-verify.ts. Prose alone has already lost this kind of invariant
-// in this repo once: CLAUDE.md's `dispose` call-site count went stale inside
-// the very commit that recorded it. Both reads are COMMENT-STRIPPED: the raw
-// ipc.ts contains the substring `.read(` inside a comment explaining that no
-// handler here may call it, which a bare substring test would misreport as
-// the violation itself.
+// credential store — directly OR transitively — and no IPC handler may call
+// or alias the store's read() — the one function that returns plaintext,
+// main-internal, and callable only from credential-verify.ts. Prose alone
+// has already lost this kind of invariant in this repo once: CLAUDE.md's
+// `dispose` call-site count went stale inside the very commit that recorded
+// it. All reads are COMMENT-STRIPPED (see `stripComments`'s own comment for
+// why the two-pass version of that was itself a false-negative risk here):
+// the raw ipc.ts contains the substring `.read(` inside a comment explaining
+// that no handler here may call it, which a bare substring test would
+// misreport as the violation itself.
+//
+// The import half matches `credential-(store|verify|crypto)`, not the
+// literal `credential-store` alone. `credential-verify.ts` is the ONE module
+// allowed to import the store, precisely because it is the one place
+// `read()` may legitimately run — so an env-building module reaching the
+// store BY WAY OF credential-verify (or credential-crypto, which the store
+// itself is built on) is the identical violation wearing an extra hop, and a
+// check that only named the store's own filename would miss it entirely.
+// The three-file offender list is a HARDCODED SNAPSHOT of "the modules that
+// build a process environment" as of this milestone, not a derived fact —
+// a fourth one added later (a new module that also touches `env` before a
+// spawn) is UNCHECKED by construction until someone adds it here. Writing
+// that down is the honest version of a limit that would otherwise be
+// discovered the hard way.
+//
+// The read half must catch an ALIAS, not just the literal call spelling
+// `credentialStore.read(`. A destructured, renamed binding —
+// `const { read: peek } = credentialStore`, then calling `peek(...)` — never
+// contains the substring `credentialStore.read(` anywhere, so it is checked
+// by SHAPE: any destructuring assignment sourced from `credentialStore`
+// (`{ ...props... } = credentialStore`) whose property list names `read`,
+// aliased or not, is the same violation as the direct call. This still does
+// not follow a SECOND hop of indirection — reassigning `credentialStore` to
+// a new identifier and destructuring or calling through THAT is unchecked —
+// which is the same class of honest limit as the hardcoded offender list
+// above, not a claim of exhaustiveness.
 {
   const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/session-backend.ts']
-    .filter((f) => /credential-store/.test(stripComments(read(f) ?? '')))
+    .filter((f) => /credential-(store|verify|crypto)/.test(stripComments(read(f) ?? '')))
+
   const ipc = stripComments(read('src/main/ipc.ts') ?? '')
-  const readsPlaintext = /credentialStore\.read\(/.test(ipc)
-  ok('21 no env-building module imports the credential store, and no handler calls read()',
+  const directCall = /credentialStore\s*\.\s*read\s*\(/.test(ipc)
+  const destructures = [...ipc.matchAll(/\{\s*([^{}]*?)\s*\}\s*=\s*credentialStore\b/g)]
+  const aliasedRead = destructures.some((m) => /\bread\b/.test(m[1]))
+  const readsPlaintext = directCall || aliasedRead
+
+  ok('21 no env-building module reaches the credential store (directly or transitively), and no handler calls or aliases read()',
     offenders.length === 0 && !readsPlaintext,
-    offenders.length ? offenders.join(',') : `readsPlaintext=${readsPlaintext}`)
+    offenders.length
+      ? offenders.join(',')
+      : `directCall=${directCall} aliasedRead=${aliasedRead}`)
 }
 
 console.log('\n' + '='.repeat(60))
