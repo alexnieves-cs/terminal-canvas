@@ -41,11 +41,13 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 
-Seven more entries were rewritten rather than removed, because a milestone shipped most of
-each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#17**
-(M6d left the OS notification), **#27** (M5b left placeholders), **#34** (M5a left
-per-preset environment), **#51** (M9a–c left discard), **#25** (M6 left snapping and
-tidy), and **#41** (M12 left review's cwd resolution).
+Nine more entries were rewritten rather than removed, because a milestone shipped most of
+each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#14** (M16 left
+tiers 2–4, and the who-wins-on-conflict question tier 1 was built specifically to avoid
+needing), **#17** (M6d left the OS notification), **#24** (M13 left the functional flavour),
+**#25** (M6 left snapping and tidy), **#27** (M5b left placeholders), **#34** (M5a left
+per-preset environment), **#41** (M12 left review's cwd resolution), and **#51** (M9a–c left
+discard).
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
