@@ -40,11 +40,11 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 
-Six more entries were rewritten rather than removed, because a milestone shipped most of
+Seven more entries were rewritten rather than removed, because a milestone shipped most of
 each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#17**
 (M6d left the OS notification), **#27** (M5b left placeholders), **#34** (M5a left
-per-preset environment), **#51** (M9a–c left discard) and **#25** (M6 left snapping and
-tidy).
+per-preset environment), **#51** (M9a–c left discard), **#25** (M6 left snapping and
+tidy), and **#41** (M12 left review's cwd resolution).
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -1385,42 +1385,21 @@ Three of these entries are corrections rather than features, and they are marked
 **#41** repairs a false assumption that four earlier entries rest on, and **#49** and **#43**
 are live defects that happen to be shaped like features.
 
-## 41. Live cwd and live command — a correction, not a feature — **landed in M12**
+## 41. Live cwd and live command — landed in M12; review's cwd resolution is what's left
 
-**Still not solved:** review resolves a panel's repository against its SPAWN cwd, so a
-panel that `cd`'d into a second repository is still reviewed against the first. The
-stored baseline sha lives in that first repository, so correcting it needs a
+M12 shipped the correction: `parseListOutput`'s `#{pane_current_path}`/
+`#{pane_current_command}` are polled on a slow timer, deduped, and fanned out through a
+third per-panel-id store (`live-session-store.ts`) that deliberately never rides
+`registry.version()`. The inspector shows the live cwd and command **beside** the
+spawn-time ones rather than over them, both preset-save surfaces read the live cwd when one
+exists, and project-prompt reading does too — falling back to the spawn cwd exactly where no
+live answer exists (no tmux, or a session's first tick has not landed). See `CLAUDE.md`'s
+"Live cwd is a poll, a dedupe, and a third store" for the mechanism and its accepted costs.
+
+What's still open: review resolves a panel's repository against its SPAWN cwd, not its live
+one, so a panel that `cd`'d into a second repository is still reviewed against the first.
+The stored baseline sha lives in that first repository, so correcting it needs a
 recapture-or-refuse policy — a design of its own, and the natural successor to M12.
-
-> **In flight.** A design spec and a plan exist (`docs/superpowers/specs/2026-08-29-m12-live-cwd-design.md`),
-> and the work is on the `m12-live-cwd` branch. This entry stays until it merges.
-
-`parseListOutput` already pulls `#{pane_current_path}` and `#{pane_start_command}` out of
-tmux, and the result is consumed exactly once, at boot reconciliation, and thrown away.
-Adding `#{pane_current_command}` to the format string and polling on a slow timer gives
-every panel its **current** directory and **currently running program**.
-
-- **This exists because four entries above are wrong.** #3's open question, #4's git badge,
-  #19's transcript correlation and #26's per-project config each assert that "each panel
-  already knows its cwd". It does not. It knows its *spawn* cwd, which is stale the moment
-  the user types `cd`, and every one of those four features is silently wrong for a panel
-  that moved. This is the entry that makes the assertion true.
-- **Constraint: the `#{pane_dead}` filter is not optional here either.** `parseListOutput`
-  drops dead panes because `remain-on-exit on` leaves a finished process listed as existing.
-  A poller inherits that requirement exactly — an unfiltered poll reports a corpse's last
-  known directory as a live fact.
-- **Constraint: it must degrade honestly with no tmux.** `SessionBackend.list()` returns
-  `null` by contract on the direct backend, so none of this data exists there. Falling back
-  to the spawn cwd would be worse than reporting nothing, because it is indistinguishable
-  from a correct answer.
-- **Constraint: this must not ride `registry.version()`.** A fact that changes every two
-  seconds is precisely the re-render source that counter exists to exclude — "`version`
-  bumps only on tier/status/focus/exit, never on 16ms-batched PTY data". Same rule #5, #17
-  and #18 each record independently; this is the fourth.
-- **Nearest existing entry: #6 (user-set panel names).** #6 is a string the user types and
-  the layout stores. This is a fact only main can observe, that changes without anyone
-  touching the panel, and its real value is as the missing input to #3, #4, #19 and #26
-  rather than as a label of its own.
 
 ## 42. Camera bookmarks — named viewports, saved and jumped to
 
