@@ -1,11 +1,12 @@
-# M17: The workspace extras M7 did not ship — Design
+# M18: The workspace extras M7 did not ship — Design
 
 **Status:** designed, not yet implemented.
-**Number:** M17, and it has been renumbered THREE times. This milestone was designed and
+**Number:** M18, and it has been renumbered FOUR times. This milestone was designed and
 built as M14; while it was in flight the credential boundary reached `main` and took
 M14, the subagent nodes reached `main` behind it and took M15 (that track is the
-`m13-subagent-nodes` referenced below, itself renumbered on the way in), and the file
-panels reached `main` behind THAT and took M16. The rule
+`m13-subagent-nodes` referenced below, itself renumbered on the way in), the file
+panels reached `main` behind THAT and took M16, and the token/dollar accounting
+reached `main` behind THAT and took M17. The rule
 applied each time is the one the README's milestone table now states: the number
 belongs to whichever milestone reaches `main` first, and the branch arriving later
 renames itself rather than renaming the row other documents are already citing. **The

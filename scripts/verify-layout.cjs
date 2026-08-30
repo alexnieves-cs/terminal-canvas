@@ -1659,7 +1659,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
    L.createLayoutStore) rather than inventing a second set, the same way
    checks 82-94 above already build workspace fixtures. */
 
-// 118. mergedWorkspaces() spans EVERY workspace and carries WHOLE panels, not
+// 129. mergedWorkspaces() spans EVERY workspace and carries WHOLE panels, not
 //      the panelIds workspaces() carries. Both halves matter: a view that
 //      could only see the active workspace would not be a merged view at
 //      all, and ids alone cannot be laid out for display because they carry
@@ -1673,7 +1673,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.activateWorkspace(other, { panels: [panel({ id: 'n1' })], camera: cam, selectedId: null, focusedId: null })
   store.save({ panels: [panel({ id: 'n2', x: 40, y: 40 })], camera: cam, selectedId: null, focusedId: null })
   const merged = store.mergedWorkspaces()
-  ok('118 mergedWorkspaces spans every workspace, with whole panels',
+  ok('129 mergedWorkspaces spans every workspace, with whole panels',
     merged.length === 2 &&
       merged.every((w) => Array.isArray(w.panels)) &&
       merged.flatMap((w) => w.panels.map((p) => p.id)).sort().join(',') === 'n1,n2' &&
@@ -1681,7 +1681,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify(merged.map((w) => [w.id, w.active, w.panels.map((p) => p.id)])))
 }
 
-// 119. The returned panels are COPIES, the same rule workspaces() and
+// 130. The returned panels are COPIES, the same rule workspaces() and
 //      presets() already obey. It is sharper here: the merged view's whole
 //      job is to offset these rects into lanes for DISPLAY, and a shared
 //      reference means that display-only offset is exactly the value the
@@ -1694,12 +1694,12 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.save({ panels: [panel({ id: 'n1', x: 10, y: 20 })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
   const merged = store.mergedWorkspaces()
   merged[0].panels[0].x = 99999
-  ok('119 mergedWorkspaces hands back copies, not the live snapshot',
+  ok('130 mergedWorkspaces hands back copies, not the live snapshot',
     store.mergedWorkspaces()[0].panels[0].x === 10,
     String(store.mergedWorkspaces()[0].panels[0].x))
 }
 
-// 120. The move itself: the panel leaves the source record and arrives in
+// 131. The move itself: the panel leaves the source record and arrives in
 //      the target. Asserted as BOTH halves in one read, because a move that
 //      only ADDED to the target would duplicate a panel id across two
 //      workspaces — and a duplicate PanelId is two panels sharing one tmux
@@ -1714,13 +1714,13 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   })
   const result = store.movePanels(['n2'], { workspaceId: target })
   const byId = Object.fromEntries(store.mergedWorkspaces().map((w) => [w.id, w.panels.map((p) => p.id)]))
-  ok('120 a moved panel leaves the source AND arrives in the target',
+  ok('131 a moved panel leaves the source AND arrives in the target',
     result !== null && result.workspaceId === target &&
       byId[L.DEFAULT_WORKSPACE_ID].join(',') === 'n1' && byId[target].join(',') === 'n2',
     JSON.stringify(byId))
 }
 
-// 121. The full set of panel ids, across every workspace, is UNCHANGED
+// 132. The full set of panel ids, across every workspace, is UNCHANGED
 //      across a move. The move mints no id and destroys none — it relocates
 //      a record. The renderer seeds nextIdRef from exactly this set (via
 //      ActivateResult.allPanelIds, main/index.ts's own internal
@@ -1745,11 +1745,11 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   const before = idsOf()
   store.movePanels(['n7'], { workspaceId: target })
   const after = idsOf()
-  ok('121 the full panel id set is unchanged across a move',
+  ok('132 the full panel id set is unchanged across a move',
     after === before, `${before} -> ${after}`)
 }
 
-// 122. An unknown target changes NOTHING and says so. A half-applied move —
+// 133. An unknown target changes NOTHING and says so. A half-applied move —
 //      panels removed from the source, never delivered anywhere — loses
 //      them with no UI able to reach them again, exactly the orphan outcome
 //      deleteWorkspace's own design already rejects (see
@@ -1759,12 +1759,12 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.load()
   store.save({ panels: [panel({ id: 'n1' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
   const result = store.movePanels(['n1'], { workspaceId: 'w-nope' })
-  ok('122 an unknown target moves nothing and returns null',
+  ok('133 an unknown target moves nothing and returns null',
     result === null && store.mergedWorkspaces()[0].panels.map((p) => p.id).join(',') === 'n1',
     JSON.stringify(store.mergedWorkspaces().map((w) => w.panels.map((p) => p.id))))
 }
 
-// 123. Moving to a NEW name mints exactly ONE workspace and puts both panels
+// 134. Moving to a NEW name mints exactly ONE workspace and puts both panels
 //      in it. Exactly-one is half the check: minting once per panel is the
 //      obvious loop bug, and it produces N single-panel workspaces that look
 //      almost right in a rail — a user who asked to spin two panels into a
@@ -1779,14 +1779,14 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   const before = store.workspaces().length
   const result = store.movePanels(['n1', 'n2'], { newName: 'Spike' })
   const made = store.mergedWorkspaces().find((w) => w.name === 'Spike')
-  ok('123 a move to a new name mints exactly one workspace holding both panels',
+  ok('134 a move to a new name mints exactly one workspace holding both panels',
     result !== null && store.workspaces().length === before + 1 &&
       made !== undefined && made.panels.map((p) => p.id).sort().join(',') === 'n1,n2' &&
       made.active === false,
     JSON.stringify(store.workspaces().map((w) => w.name)))
 }
 
-// 124. An unknown panel id with a newName target creates NOTHING. This is
+// 135. An unknown panel id with a newName target creates NOTHING. This is
 //      the fault a first draft of movePanels shipped: it minted the new
 //      workspace before it knew whether anything was actually movable, so
 //      a caller offering "Move to new workspace..." for a panel that was
@@ -1801,7 +1801,7 @@ const reviewPanelOnDisk = (id, over = {}) => ({
   store.save({ panels: [panel({ id: 'n1' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
   const before = store.workspaces().length
   const result = store.movePanels(['nope'], { newName: 'Spike' })
-  ok('124 an unknown id with a newName target creates no workspace',
+  ok('135 an unknown id with a newName target creates no workspace',
     result === null && store.workspaces().length === before,
     `result=${JSON.stringify(result)} before=${before} after=${store.workspaces().length}`)
 }
@@ -2009,6 +2009,188 @@ const filePanelOnDisk = (id, over = {}) => ({
       && back[0].kind === 'file' && back[0].source.path === '/tmp/x.txt'
       && back[0].title === 'notes' && !('cwd' in back[0]) && !('args' in back[0]),
     JSON.stringify(back[0]))
+}
+
+// ---------------------------------------------------------------------------
+// M17. A panel's pinned agent session id, on disk. A sibling of `baselines`,
+// same shape and same reasoning: PanelId is global (it doubles as a tmux
+// session name), so this map is keyed globally too rather than nested inside
+// a workspace.
+
+// 118. Absent warns NOTHING. Every layout.json written before M17 has no
+//      sessions key, and shouting about those would make the first launch
+//      after an upgrade complain about a file that is perfectly fine — the
+//      line parsePresets, parsePreferences and parseBaselines all already draw.
+{
+  const warnings = []
+  const out = L.parseSessions(undefined, warnings)
+  ok('118 an absent sessions map warns nothing',
+    Object.keys(out).length === 0 && warnings.length === 0,
+    `warnings=${warnings.length}`)
+}
+
+// 119. Present but MALFORMED warns rather than vanishing silently. The rule
+//      check 41 states for presets and 99 for baselines: a map dropped without
+//      a word is every pinned panel's accounting gone with nothing said.
+{
+  const warnings = []
+  L.parseSessions([], warnings)
+  ok('119 a malformed sessions map warns', warnings.length === 1, warnings.join('; '))
+}
+
+// 120. A malformed ENTRY drops alone while its neighbour survives — the
+//      individual-drop rule parseLayout obeys everywhere else. A non-string
+//      session id is the reachable case: a hand-edited file, or a future
+//      version writing an object here.
+{
+  const warnings = []
+  const out = L.parseSessions({ n1: 'abc-123', n2: 42 }, warnings)
+  ok('120 a malformed session entry drops alone',
+    out.n1 === 'abc-123' && out.n2 === undefined && warnings.length === 1,
+    JSON.stringify(out))
+}
+
+// 121. A session id survives a write and a reopen through the real coalesced
+//      store. This is success criterion 2's storage half: without it a Cmd+R
+//      reload re-mints, the new uuid names a transcript that does not exist,
+//      and the panel's cost freezes with nothing in any log.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setSession('n1', 'abc-123')
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('121 a session id survives a write and a reopen',
+    b.session('n1') === 'abc-123', String(b.session('n1')))
+}
+
+// 122. dropSession removes it. The same recycled-id hazard dropBaseline
+//      closes: a panel reusing a dead one's id must not inherit its session,
+//      because --session-id naming an EXISTING session is a resume — that
+//      panel would come back holding a stranger's conversation.
+{
+  const path = tmp()
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  s.setSession('n1', 'abc-123')
+  s.dropSession('n1')
+  s.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  ok('122 dropSession removes the pin', reopened.session('n1') === undefined,
+    String(reopened.session('n1')))
+}
+
+// 123. `agent` round-trips through a preset, and an ABSENT agent writes no
+//      key at all rather than a saved absent-marker. Absent is the ordinary
+//      case — a login-shell preset is not a Claude Code preset — and the
+//      `in` test is deliberate: `agent: undefined` is a DIFFERENT fact from
+//      the key being missing, and it is the one that survives an IPC
+//      structured clone. This is check 97's rule and the absent-command
+//      rule, applied to a second optional field.
+{
+  const warnings = []
+  const out = L.parsePresets(
+    [{ id: 'p1', name: 'Claude', cwd: '~', args: [], agent: 'claude-code' },
+     { id: 'p2', name: 'Shell', cwd: '~', args: [] }],
+    warnings)
+  ok('123 agent round-trips, and absent stays absent',
+    out[0].agent === 'claude-code' && !('agent' in out[1]) && warnings.length === 0,
+    `${out[0].agent} / ${'agent' in out[1]}`)
+}
+
+// 124. An UNKNOWN agent value is dropped with a warning rather than carried
+//      forward. Check 107's asymmetry: a value written by a version that
+//      knew an adapter this one does not must not be honoured, because
+//      honouring it means passing a flag to a CLI that has never heard of
+//      it — which fails the spawn outright rather than merely failing to
+//      account.
+{
+  const warnings = []
+  const out = L.parsePresets([{ id: 'p1', name: 'x', cwd: '~', args: [], agent: 'codex' }], warnings)
+  ok('124 an unknown agent is dropped with a warning',
+    !('agent' in out[0]) && warnings.length === 1, warnings.join('; '))
+}
+
+// ---------------------------------------------------------------------------
+// Final review fix. PersistedTerminalPanel had no `agent` field at all: a
+// preset's own agent round-tripped (123/124) while a PANEL's did not, so
+// every restart dropped spec.agent off a restored panel, buildInspectorModel's
+// `pinned` test went false, and the Cost section vanished — silently, and
+// permanently, even though main's PtyManager kept accumulating and sending
+// usage:panel for a session layout.json's own record no longer named.
+
+// 125. A panel's `agent` round-trips through the schema parser with no
+//      warning — the same absent-vs-malformed line 123 draws for a preset,
+//      drawn here for the SECOND record type that carries the field.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({ agent: 'claude-code' }), panel({ id: 'p2' })],
+      camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null
+    }],
+    settings: { layout: true, camera: true, focus: true }
+  }))
+  const w = active(snapshot)
+  const [p1, p2] = w.panels
+  ok('125 a panel agent round-trips, and absent stays absent',
+    p1.agent === 'claude-code' && !('agent' in p2) && warnings.length === 0,
+    `${p1.agent} / ${'agent' in p2}`)
+}
+
+// 126. An unknown agent value on a PANEL is dropped with a warning rather
+//      than carried into the map — 124's rule, on the record type that
+//      actually reaches buildInspectorModel's `pinned` test.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({ agent: 'codex-cli-but-misspelled' })],
+      camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null
+    }],
+    settings: { layout: true, camera: true, focus: true }
+  }))
+  const w = active(snapshot)
+  ok('126 an unknown panel agent is dropped with a warning',
+    !('agent' in w.panels[0]) && warnings.length === 1, warnings.join('; '))
+}
+
+// 127. `spec.agent` survives a real write and a real reopen through
+//      layout-adapt's fromPanels/toPanels round trip, which is the OTHER
+//      door onto this field and the one a schema-only check (125) cannot
+//      see — the exact gap this fix round found, since 123/124 only ever
+//      exercised Preset.agent, never PanelSpec.agent.
+{
+  const [persisted] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'], agent: 'claude-code' },
+    z: 1
+  }])
+  ok('127 fromPanels carries spec.agent out', persisted.agent === 'claude-code')
+  const [back] = L.toPanels([persisted])
+  ok('127b toPanels carries agent back into spec', back.spec.agent === 'claude-code')
+}
+
+// 128. An untitled — unpinned — panel writes no `agent` key at all, the same
+//      rule check 60 states for `title`: a spread would put `agent: undefined`
+//      in layout.json, where `'agent' in panel` reads true for a panel that
+//      was never pinned to anything.
+{
+  const [out] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'] },
+    z: 1
+  }])
+  ok('128 an unpinned panel writes no agent key at all', !('agent' in out))
 }
 
 console.log('\n' + '='.repeat(60))

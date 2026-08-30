@@ -1,13 +1,14 @@
-# M17: The workspace extras M7 did not ship — Implementation Plan
+# M18: The workspace extras M7 did not ship — Implementation Plan
 
-**Number:** renumbered from M14 to M17 on merge — the credential boundary took
-M14, the subagent nodes took M15 and the file panels took M16 by reaching `main`
-first. The filename still says `m14` on purpose; see the design spec's "Number"
-note. The `verify:*` check NUMBERS quoted in the body below are PLAN-TIME numbers
-and several of them are now wrong: this milestone's `verify:panels` block was
-renumbered three times on merge (to 138–151), its `verify:layout` checks once (to
-118–124) and its `verify:palette` rows once (to 78–80). `CLAUDE.md`'s suite table is
-the authority; this file is left as the record of what was planned.
+**Number:** renumbered from M14 to M18 on merge — the credential boundary took
+M14, the subagent nodes took M15, the file panels took M16 and the token/dollar
+accounting took M17, each by reaching `main` first. The filename still says `m14`
+on purpose; see the design spec's "Number" note. The `verify:*` check NUMBERS
+quoted in the body below are PLAN-TIME numbers and several of them are now wrong:
+this milestone's `verify:panels` block was renumbered four times on merge (to
+142–155), its `verify:layout` checks twice (to 129–135) and its `verify:palette`
+rows once (to 78–80). `CLAUDE.md`'s suite table is the authority; this file is
+left as the record of what was planned.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -100,7 +101,7 @@ movePanels(
 Append to `scripts/verify-layout.cjs`, before the summary. Match the file's existing `ok(n, pass, detail)` style and give each a **descriptive label** — checks 98–103 shipped with bare numeric ones and printed no title on failure, which `CLAUDE.md` records as a mistake not to repeat.
 
 ```js
-/* ---- M17: reading every workspace, and moving panels between them ---- */
+/* ---- M18: reading every workspace, and moving panels between them ---- */
 
 // 109. mergedWorkspaces() spans EVERY workspace and carries whole panels,
 //      not the panelIds workspaces() carries. Both halves matter: a view
@@ -1277,11 +1278,11 @@ Add to the plain-node tier paragraph why `merged-layout.ts` and `marquee.ts` qua
 
 - [ ] **Step 2: `README.md`**
 
-Add an M17 row to the milestone table and a paragraph in the prose section. Rewrite the M7 paragraph's "three things this milestone deliberately did not build" so it names M17 as where each landed — and say plainly that its stated reason for the merged view was the wrong one, since a reason recorded and never corrected is the kind of thing this file exists to prevent.
+Add an M18 row to the milestone table and a paragraph in the prose section. Rewrite the M7 paragraph's "three things this milestone deliberately did not build" so it names M18 as where each landed — and say plainly that its stated reason for the merged view was the wrong one, since a reason recorded and never corrected is the kind of thing this file exists to prevent.
 
 - [ ] **Step 3: `docs/ideas-backlog.md`**
 
-- **Delete #2** and add it to the "numbers that are gone" table: `| #2 the workspace extras M7 did not ship | M17 | "The merged view's obstacle is coordinates, not budget", "A move touches no session and pushes no history" |`.
+- **Delete #2** and add it to the "numbers that are gone" table: `| #2 the workspace extras M7 did not ship | M18 | "The merged view's obstacle is coordinates, not budget", "A move touches no session and pushes no history" |`.
 - **Rewrite #52** down to shift-click and group drag, keeping the `applyDrag`-per-member and one-history-push constraints and noting that its background-mousedown focus-release constraint is discharged.
 - Update the "Six more entries were rewritten" sentence, which currently names #2 as one of them.
 - Add a line to **#21** and **#25** noting a selection now exists, marquee-built.

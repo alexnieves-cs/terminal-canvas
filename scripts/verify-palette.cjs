@@ -16,7 +16,7 @@ buildSync({
   format: 'cjs',
   // @renderer became load-bearing in M8d: commands.ts imports the VALUE
   // waitingCount from shell/rail-sections so the palette and the rail share
-  // one derivation of a workspace's waiting count — measured in M17 by
+  // one derivation of a workspace's waiting count — measured in M18 by
   // REMOVING the alias and watching this bundle fail to build, which is the
   // only way to answer this question reliably rather than reading it off the
   // imports. @shared became load-bearing too, in M14: commands.ts now imports

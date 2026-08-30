@@ -92,6 +92,23 @@ buildSync({
 const { createDirectBackend, createTmuxBackend } = require(OUT_BACKEND)
 const DIRECT = createDirectBackend('verify: direct by default')
 
+// M17 fix-round checks 32/33 need the REAL readFrom — the function that
+// actually carries the shrink-detection bug this fix round closes — against
+// a transcript file this harness controls, rather than a real
+// ~/.claude/projects this suite must not touch (the same rule the git and
+// prompt fences in verify-panels.cjs already state). resolveTranscript is
+// still substituted per-check, so the harness never globs a real directory.
+const OUT_TRANSCRIPT = join(__dirname, '..', 'out', 'verify', 'transcript-reader.cjs')
+buildSync({
+  entryPoints: [join(__dirname, '..', 'src', 'main', 'transcript-reader.ts')],
+  outfile: OUT_TRANSCRIPT,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['node-pty', 'electron']
+})
+const { readFrom: realReadFrom } = require(OUT_TRANSCRIPT)
+
 const OUT_TMUX_ARGS = join(__dirname, '..', 'out', 'verify', 'tmux-args.cjs')
 buildSync({
   entryPoints: [join(__dirname, '..', 'src', 'main', 'tmux-args.ts')],
@@ -147,6 +164,21 @@ async function waitFor(predicate, timeoutMs = 4000, stepMs = 25) {
  */
 function makeHarness(backend, options = {}) {
   const events = []
+  const baseBackend = backend ?? DIRECT
+  // Check 27's observation point: this suite's fake backend cannot see argv
+  // any other way, since PtyManager hands the spec straight to
+  // SessionBackend.spawn. Wrapping rather than adding a hook to PtyManager
+  // itself keeps the seam here, where every other test-only hook in this
+  // harness already lives.
+  const effectiveBackend = options.onSpawnArgs
+    ? {
+        ...baseBackend,
+        spawn: (spec, command, cwd, env) => {
+          options.onSpawnArgs(spec.args)
+          return baseBackend.spawn(spec, command, cwd, env)
+        }
+      }
+    : baseBackend
   const manager = new PtyManager(
     () => ({
       isDestroyed: () => false,
@@ -155,20 +187,30 @@ function makeHarness(backend, options = {}) {
         if (options.onSend) options.onSend(channel, payload)
       }
     }),
-    () => backend ?? DIRECT,
+    () => effectiveBackend,
     () => options.idleAfterMs ?? 1500,
     () => options.bellEnabled ?? true,
     (panelId) => { if (options.onCaptureBaseline) options.onCaptureBaseline(panelId) },
-    (panelId) => { if (options.onDropBaseline) options.onDropBaseline(panelId) }
+    (panelId) => { if (options.onDropBaseline) options.onDropBaseline(panelId) },
+    (panelId) => (options.pinnedSession ? options.pinnedSession(panelId) : undefined),
+    (panelId, sessionId) => { if (options.setPinnedSession) options.setPinnedSession(panelId, sessionId) },
+    (panelId) => { if (options.onDropPinnedSession) options.onDropPinnedSession(panelId) },
+    // Undefined falls through to the constructor's own default (the real
+    // implementations), exactly as every other optional dep above does —
+    // only checks 32/33 substitute these, to drive pollUsage against a
+    // transcript this harness controls rather than a real ~/.claude/projects.
+    options.resolveTranscript,
+    options.readFrom
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
 
-const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
+const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = undefined) => ({
   panelId,
   cwd: os.homedir(),
   command,
   args,
+  agent,
   cols: 80,
   rows: 24
 })
@@ -1084,6 +1126,276 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30']) => ({
       // inherits it next.
       tmuxBackend.shutdown()
     }
+
+    // 28. The pin is minted ONCE and REUSED on a second create at the same
+    //     panel id. That second create is exactly what a Cmd+R reload does
+    //     for every restored panel, and under tmux it REATTACHES to a
+    //     session that may have been working for an hour — so a re-mint
+    //     there names a transcript that does not exist while the real one
+    //     goes on growing, and the panel's cost freezes forever with nothing
+    //     in any log. This is success criterion 2's mechanism, and it is
+    //     check 21's shape (the once-only baseline capture) applied to a
+    //     second thing create() must not do twice.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      await h.manager.create(spec('p9', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const first = pins.get('p9')
+      h.manager.detachAll()
+      await h.manager.create(spec('p9', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      ok('28 the pin is minted once and reused on a second create at the same id',
+        typeof first === 'string' && first.length > 0 && pins.get('p9') === first,
+        `first=${first} second=${pins.get('p9')}`)
+      h.manager.killAll()
+    }
+
+    // 29. A panel whose preset declares NO agent is never pinned. The whole
+    //     honesty rule rests on this: a login shell must reach the PTY
+    //     exactly as the user wrote it, and a pin for it would also make the
+    //     inspector render a Cost section for a panel that can never have
+    //     one.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      await h.manager.create(spec('p10'))
+      ok('29 a panel with no declared agent is never pinned', pins.get('p10') === undefined,
+        String(pins.get('p10')))
+      h.manager.killAll()
+    }
+
+    // 30. The flag actually reaches the spawn's ARGV, carrying the pinned
+    //     id. 25 proves the id is stable and says nothing about whether it
+    //     is ever passed to anything — a manager that minted, stored and
+    //     never spawned with it satisfies 25 completely and accounts for
+    //     nothing at all.
+    {
+      const pins = new Map()
+      const seen = []
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        onSpawnArgs: (args) => seen.push(args)
+      })
+      await h.manager.create(spec('p11', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const args = seen[0] ?? []
+      const i = args.indexOf('--session-id')
+      ok('30 the flag reaches the spawn argv carrying the pinned id',
+        i >= 0 && args[i + 1] === pins.get('p11'),
+        `args=${JSON.stringify(args)} pin=${pins.get('p11')}`)
+      h.manager.killAll()
+    }
+
+    // 31. The usage tick DEDUPES. Its failure changes no pixel — it is heat —
+    //     so this counts MESSAGES rather than reading a value, exactly as
+    //     check 23 does for session:live. The WINDOW is what makes the count
+    //     mean anything and a future editor must not shrink it: an
+    //     implementation with no dedupe emits once per USAGE_TICK_MS, so a
+    //     sample spanning a single tick sees one message either way and
+    //     stays green against the defect. This waits three ticks over a
+    //     transcript that does not change.
+    //
+    //     What this actually asserts: this panel's agent is a fixture shell,
+    //     not a real `claude`, so NO transcript is ever written and the
+    //     correct number of messages is zero. That makes it a check about the
+    //     tick not INVENTING traffic when it has nothing to report — real
+    //     accumulation is Task 10's job, end to end, against a transcript the
+    //     harness writes itself. A green 28 is not proof that anything is
+    //     ever counted; do not read it as that.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      await h.manager.create(spec('p12', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      await sleep(7000)
+      const sent = h.events.filter((e) => e.channel === 'usage:panel' && e.payload.panelId === 'p12')
+      ok('31 the usage tick sends no traffic for a panel with no real transcript',
+        sent.length === 0, `messages=${sent.length}`)
+      h.manager.killAll()
+    }
+
+    // An assistant record as Claude Code actually writes one — copied
+    // verbatim from verify-usage.cjs's and verify-panels.cjs's own rec()
+    // helpers, since it is another program's format and not ours. `over`
+    // sets the output token count directly, since checks 32/33 below only
+    // ever vary that one figure.
+    const usageRec = (over = {}) => JSON.stringify({
+      type: 'assistant',
+      cwd: '/tmp/x',
+      sessionId: 's1',
+      timestamp: '2026-08-30T00:00:00.000Z',
+      isSidechain: false,
+      message: {
+        model: 'claude-opus-5',
+        usage: {
+          input_tokens: 2,
+          output_tokens: over.output ?? 100,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0
+        }
+      }
+    })
+    const usageEvents = (h, panelId) =>
+      h.events.filter((e) => e.channel === 'usage:panel' && e.payload.panelId === panelId)
+
+    // 32. Fix round: pollUsage's shrink handling was sequenced backwards. A
+    //     shrunk/replaced transcript was read at the STALE offset first —
+    //     which readFrom short-circuits to an EMPTY read — and only THEN
+    //     reset, so applyChunk ran on that empty text, silently set
+    //     offset = fileSize having parsed nothing, and the whole replacement
+    //     file was skipped forever with no usage:panel correction ever sent.
+    //     This drives the REAL sequence end to end against a real file and a
+    //     real readFrom (never resetIfShrunk in isolation, which already had
+    //     a passing unit check and did not catch this bug), truncates it to
+    //     something shorter with different content, and asserts the
+    //     accumulated totals reflect ONLY the new file — not stale, not zero.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager usage-shrink '))
+      const transcriptPath = join(dir, 'sess.jsonl')
+      writeFileSync(transcriptPath, usageRec({ output: 100 }) + '\n')
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        resolveTranscript: () => transcriptPath,
+        readFrom: realReadFrom
+      })
+      await h.manager.create(spec('p13', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const gotFirst = await waitFor(() => usageEvents(h, 'p13').length > 0, 6000)
+      const firstTotal = gotFirst ? usageEvents(h, 'p13').pop().payload.usage.totals.output : undefined
+      // Replace with a SHORTER file carrying DIFFERENT content — a real
+      // rotation or truncation, not merely an append.
+      writeFileSync(transcriptPath, usageRec({ output: 7 }) + '\n')
+      const gotSecond = await waitFor(() => {
+        const evs = usageEvents(h, 'p13')
+        return evs.length > 0 && evs[evs.length - 1].payload.usage.totals.output === 7
+      }, 6000)
+      const lastTotal = usageEvents(h, 'p13').pop()?.payload.usage.totals.output
+      ok('32 a shrunk transcript is re-read from zero, and the correction actually sends',
+        gotFirst && firstTotal === 100 && gotSecond && lastTotal === 7,
+        `first=${firstTotal} last=${lastTotal}`)
+      h.manager.killAll()
+    }
+
+    // 33. Fix round: a reload never resent usage totals until the agent's
+    //     next turn. detachAll() correctly KEEPS usageState (re-reading from
+    //     zero would double-count), but a Cmd+R reload wipes the renderer's
+    //     own usage-store, and pollUsage's only send trigger was genuinely
+    //     NEW bytes — so a reattached, currently-idle panel showed "no
+    //     answer yet" indefinitely despite this manager already holding its
+    //     full totals. Simulates a reload with detachAll() + a second
+    //     create() at the same id (check 28's own shape), runs a poll tick
+    //     with NO new transcript bytes, and asserts a usage:panel message IS
+    //     sent carrying the panel's EXISTING totals.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager usage-resend '))
+      const transcriptPath = join(dir, 'sess.jsonl')
+      writeFileSync(transcriptPath, usageRec({ output: 42 }) + '\n')
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        resolveTranscript: () => transcriptPath,
+        readFrom: realReadFrom
+      })
+      await h.manager.create(spec('p14', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      const gotFirst = await waitFor(() => usageEvents(h, 'p14').length > 0, 6000)
+      h.events.splice(0, h.events.length)
+      h.manager.detachAll()
+      await h.manager.create(spec('p14', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      // The transcript has NOT changed since the first read: no new bytes at
+      // all, which is exactly the case applyChunk reports as "nothing
+      // changed" and would otherwise hold back forever.
+      const resent = await waitFor(() => usageEvents(h, 'p14').length > 0, 6000)
+      const resentTotal = resent ? usageEvents(h, 'p14').pop().payload.usage.totals.output : undefined
+      ok('33 a reload forces one resend of existing totals with no new bytes',
+        gotFirst && resent && resentTotal === 42, `gotFirst=${gotFirst} resent=${resent} total=${resentTotal}`)
+      h.manager.killAll()
+    }
+
+    // 34. Fix round: a read landing mid-write can split a multibyte UTF-8
+    //     codepoint across the boundary, and readFrom used to decode each
+    //     independent byte range with .toString('utf8') directly — turning
+    //     the split character into a replacement character on BOTH sides of
+    //     the split, corrupting the line that straddles it. Reproduces the
+    //     exact byte-level split against a REAL file and REAL readFrom (never
+    //     a decoder in isolation): the transcript's own `message.model`
+    //     carries an em dash (—, three UTF-8 bytes), and the file is written
+    //     in two pieces whose boundary lands ONE byte into that three-byte
+    //     sequence — the file's own size at the first poll IS the split
+    //     point, so no timing guess is needed. Asserts the model name comes
+    //     back byte-for-byte correct (not carrying a stray U+FFFD) and the
+    //     turn is counted exactly once — never dropped, never duplicated.
+    {
+      const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager usage-utf8 '))
+      const transcriptPath = join(dir, 'sess.jsonl')
+      const model = 'claude—5' // U+2014 EM DASH: E2 80 94 in UTF-8
+      const line = JSON.stringify({
+        type: 'assistant',
+        cwd: '/tmp/x',
+        sessionId: 's1',
+        timestamp: '2026-08-30T00:00:00.000Z',
+        isSidechain: false,
+        message: {
+          model,
+          usage: {
+            input_tokens: 1,
+            output_tokens: 55,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0
+          }
+        }
+      }) + '\n'
+      const dashCharIndex = line.indexOf('—')
+      const dashByteOffset = Buffer.byteLength(line.slice(0, dashCharIndex), 'utf8')
+      // One byte into the three-byte sequence: the first chunk gets the
+      // dash's lead byte with no continuation bytes, and the second chunk
+      // gets the two orphaned continuation bytes with no lead byte — the
+      // worst-case split for a naive independent decode of each half.
+      const splitAt = dashByteOffset + 1
+      const fullBytes = Buffer.from(line, 'utf8')
+      writeFileSync(transcriptPath, fullBytes.subarray(0, splitAt))
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid),
+        resolveTranscript: () => transcriptPath,
+        readFrom: realReadFrom
+      })
+      await h.manager.create(spec('p15', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      // Let at least one tick observe the split-mid-character partial file —
+      // this is where the old code corrupted both halves. No newline is on
+      // disk yet, so nothing should be reported as a complete turn either way.
+      await sleep(2600)
+      const midway = usageEvents(h, 'p15').length
+      // Append the rest of the line — the file is now byte-identical to a
+      // normal write, and the decoder's buffered lead byte must fold with
+      // these fresh continuation bytes into the correct character.
+      require('node:fs').appendFileSync(transcriptPath, fullBytes.subarray(splitAt))
+      const got = await waitFor(() => usageEvents(h, 'p15').length > 0, 6000)
+      const last = got ? usageEvents(h, 'p15').pop().payload.usage : undefined
+      const models = last ? Object.keys(last.byModel) : []
+      ok('34 a multibyte character split across a read boundary reassembles correctly',
+        midway === 0 && got === true && models.length === 1 && models[0] === model &&
+          last.byModel[model].output === 55 && last.turns === 1,
+        `midway=${midway} models=${JSON.stringify(models)} turns=${last?.turns}`)
+      h.manager.killAll()
+    }
+
+    // Check 20's obligation, inherited via 22b, 23, 24, 28, 29, 30 and 31:
+    // this block must end in a definite kill-server, never a session kill
+    // that leaves a stale server for the next run — see check 20's own
+    // comment for why (a later run's client would reattach to a server still
+    // wired to THIS run's now-deleted exitDir, and check 14 would silently
+    // report the wrong exit code). Whoever appends check 32 inherits it next.
+    tmuxBackend.shutdown()
   }
 
   console.log('\n' + '='.repeat(60))

@@ -162,6 +162,10 @@ export interface LayoutStore {
    * attributed answer.
    */
   baselinePeers(root: string, exceptPanelId: string): number
+  /** The agent session id this panel is pinned to, if it has one. */
+  session(panelId: string): string | undefined
+  setSession(panelId: string, sessionId: string): void
+  dropSession(panelId: string): void
 }
 
 const defaultSchedule = (fn: () => void, ms: number): Cancel => {
@@ -721,6 +725,18 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     baselinePeers(root, exceptPanelId) {
       return Object.entries(snapshot.baselines)
         .filter(([id, b]) => id !== exceptPanelId && b.root === root).length
+    },
+    session(panelId) {
+      return snapshot.sessions[panelId]
+    },
+    setSession(panelId, sessionId) {
+      snapshot.sessions[panelId] = sessionId
+      scheduleWrite()
+    },
+    dropSession(panelId) {
+      if (snapshot.sessions[panelId] === undefined) return
+      delete snapshot.sessions[panelId]
+      scheduleWrite()
     }
   }
 }
