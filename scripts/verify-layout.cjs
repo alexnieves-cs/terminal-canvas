@@ -2561,6 +2561,105 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ bare, withOpts, capBare, capOpts }))
 }
 
+// ─────────────────────────────────────────────────────── M23a: string defs --
+
+// 150. A 'string' SettingDef declares its permitted values, and the WRITE door
+//      refuses anything outside them. The second clause is the whole check:
+//      asserting only the refusal passes against an implementation that
+//      refused the caller and wrote the value anyway — the same rule
+//      verify:credentials 6 states for the credential store's own refusal.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('appearance.theme', 'light')
+  const accepted = a.getSetting('appearance.theme')
+  a.setPreference('appearance.theme', 'chartreuse')
+  // Asserted on the STORE rather than on a return value, which is this file's
+  // existing idiom (72, 72b) because setPreference is void. The clause that
+  // carries this check is the second one: the refused write must leave the
+  // PREVIOUS value standing. Asserting only that the bad value is absent
+  // passes against an implementation that refused it and cleared the entry,
+  // and asserting only the first write passes against one with no guard at
+  // all — verify:credentials 6's "refuses, never falls back", one door over.
+  ok('150 a string setting accepts a declared value and refuses an undeclared one',
+    accepted === 'light' && a.getSetting('appearance.theme') === 'light',
+    `accepted=${accepted} after-bad=${a.getSetting('appearance.theme')}`)
+}
+
+// 151. A wrong-TYPED value for a string def is refused too, which is the arm
+//      72b already states for a boolean given a number. Kept separate from 150
+//      because they reach two different guards: 150 is the values list, this is
+//      the typeof test above it, and an implementation with only one of them
+//      passes the other check completely.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('appearance.theme', true)
+  // Not in the map at all — never present-and-defaulted. `getSetting` resolves
+  // an absent id to the schema default, so reading 'system' back is satisfied
+  // both by a correct refusal and by a write that stored something wrong and
+  // happened to resolve the same way; `'appearance.theme' in preferences()` is
+  // the clause that separates them.
+  ok('151 a string setting refuses a wrong-typed value',
+    !('appearance.theme' in a.preferences()) &&
+      a.getSetting('appearance.theme') === 'system',
+    `inMap=${'appearance.theme' in a.preferences()} value=${a.getSetting('appearance.theme')}`)
+}
+
+// 152. The LOAD door: a hand-edited value outside `values` is DROPPED with a
+//      warning rather than carried into the map or coerced to the default.
+//      This is the load-path half of the same bound the write path enforces —
+//      the split 78/79 and 80b already draw for agent.idleAfterMs, and shipping
+//      one door leaves the other unguarded, because a hand-edited layout.json
+//      never passes through setPreference at all. Its neighbour surviving is
+//      the half that proves "alone".
+{
+  const w = []
+  const out = L.parsePreferences(
+    { 'appearance.theme': 'chartreuse', 'shell.railOpen': false }, w)
+  // The warning must name the PERMITTED VALUES, not merely the id. Without
+  // that clause this check passes for the wrong reason and cannot be watched
+  // failing at all: before appearance.theme is declared, parsePreferences
+  // drops it as an UNKNOWN ID — also with a warning naming the id, also
+  // leaving the neighbour alone — so every other clause here is satisfied by
+  // a schema that has never heard of this setting. Naming a value is
+  // something only the values-list branch can do.
+  ok('152 an undeclared string value is dropped on load, with a warning, alone',
+    !('appearance.theme' in out) &&
+      out['shell.railOpen'] === false &&
+      w.some((m) => m.includes('appearance.theme') && m.includes('system')),
+    JSON.stringify(out) + ' | ' + w.join('|'))
+}
+
+// 153. appearance.theme is declared like every other def. It is the CUSTOMER
+//      that makes the 'string' type non-speculative: CLAUDE.md records that an
+//      earlier draft added an enum type and it was removed "rather than given a
+//      type-mapping layer, since a customer-free abstraction is exactly what
+//      ideas-backlog #11 warns against". A string def with no def using it
+//      would be that same abstraction wearing a different name.
+{
+  const def = L.settingDef('appearance.theme')
+  const declared = def !== undefined && def.type === 'string' &&
+    def.default === 'system' &&
+    Array.isArray(def.values) && def.values.includes('system') &&
+    def.values.includes('light') && def.values.includes('dark') &&
+    typeof def.label === 'string' && def.label.length > 0 &&
+    typeof def.description === 'string' && def.description.length > 0 &&
+    Array.isArray(def.keywords) && def.keywords.includes('dark')
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setPreference('appearance.theme', 'dark')
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('153 appearance.theme is declared and round-trips',
+    declared && b.getSetting('appearance.theme') === 'dark',
+    `declared=${declared} reopened=${b.getSetting('appearance.theme')}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

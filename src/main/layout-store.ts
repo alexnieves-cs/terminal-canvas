@@ -256,6 +256,17 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       if (def.min !== undefined && value < def.min) return
       if (def.max !== undefined && value > def.max) return
     }
+    // M23a. The declared-values guard for a `string` def, and it is on this
+    // door for the reason the range check above is on it: parsePreferences
+    // enforces the same rule on the LOAD path, and a guard on one door only is
+    // a guard with a hole in it. Refused here rather than stored, because an
+    // undeclared value that reached the map would be dropped by
+    // parsePreferences on the very next load — a setting that appears to take
+    // and is gone after a relaunch, which is the failure this function's own
+    // header comment exists to prevent.
+    if (def.type === 'string' && typeof value === 'string') {
+      if (def.values !== undefined && !def.values.includes(value)) return
+    }
     snapshot.preferences[id] = value
     scheduleWrite()
   }

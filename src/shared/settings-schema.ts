@@ -31,6 +31,9 @@ export const SHELL_CATEGORY = 'Shell'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const FILES_CATEGORY = 'Files'
 
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const APPEARANCE_CATEGORY = 'Appearance'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -46,8 +49,25 @@ export interface SettingDef {
    */
   keywords: string[]
   /** Tracks what `typeof` can actually answer — see parsePreferences/setPreference. */
-  type: 'boolean' | 'number'
+  type: 'boolean' | 'number' | 'string'
   default: SettingValue
+  /**
+   * The permitted values for a `'string'` def, and the whole of what makes one
+   * an enumeration.
+   *
+   * Spelled `'string'` rather than `'enum'` deliberately, and the field above
+   * says why: it tracks what `typeof` can answer, and `typeof 'light'` is
+   * `'string'`. An `'enum'` member would be the first thing to break that
+   * invariant, and it would break the one comparison both validators are
+   * written in terms of (`typeof value !== def.type`).
+   *
+   * Declared here rather than checked at each call site for the reason
+   * `min`/`max` below are: both doors into the preferences map have to agree,
+   * and two copies of a permitted-value list drift the first time one of them
+   * is wrong. `parsePreferences` is the load door and `writePreference` is the
+   * write door; a guard on one is a guard with a hole in it.
+   */
+  values?: readonly string[]
   /** Groups rows in the palette and names the menu submenu they came from. */
   category: string
   /**
@@ -192,6 +212,34 @@ export const SETTINGS: readonly SettingDef[] = [
     // anything a user can toggle lives in this one schema.
     default: false,
     category: FILES_CATEGORY
+  },
+  {
+    // M23a. The first `'string'` def, and the reason that type exists at all.
+    // CLAUDE.md records that an earlier draft added an enum type and it was
+    // removed "rather than given a type-mapping layer, since a customer-free
+    // abstraction is exactly what ideas-backlog #11 warns against". This is
+    // that customer: light/dark/system is genuinely one-of-a-fixed-set, and
+    // the honest alternative — two booleans — produces two switches that can
+    // contradict each other, which is the drift "One map, and a typed view
+    // over it" exists to prevent.
+    id: 'appearance.theme',
+    label: 'Theme',
+    description: 'Match the system, or force light or dark.',
+    // "dark" and "light" carry more weight than the label here, for the reason
+    // shell.railOpen's "sidebar" does: a user hunting for this types the thing
+    // they want, not the category it lives in.
+    keywords: ['theme', 'dark', 'light', 'appearance', 'colour', 'color', 'mode', 'system'],
+    type: 'string',
+    values: ['system', 'light', 'dark'],
+    // `system`, not `dark`. The app is dark today because no data-theme
+    // attribute is set, and following the OS is the answer that is right for
+    // the most people without anyone choosing it — the same reasoning the
+    // sparse preferences map runs on. M23d wires the attribute; until then
+    // this def stores a preference nothing reads, which is deliberate: it is
+    // what lets the 'string' type ship with a real customer rather than as an
+    // abstraction waiting for one.
+    default: 'system',
+    category: APPEARANCE_CATEGORY
   }
 ]
 

@@ -727,6 +727,24 @@ export function parsePreferences(
         continue
       }
     }
+    // M23a. The same rule one type across: a `string` def declares its
+    // permitted values, and a value outside them is DROPPED with a warning
+    // rather than coerced to the default — for the reason the block above
+    // states at length, and which applies here unchanged.
+    //
+    // The warning names the PERMITTED VALUES rather than only the id, and that
+    // is load-bearing rather than friendly: an unknown id is dropped four
+    // lines up with a warning that also names the id, so a message carrying
+    // only the id cannot distinguish "this build has never heard of this
+    // setting" from "this build knows it and refused this value" — two facts
+    // with two different fixes. It is also the only thing that lets a check
+    // tell the two branches apart (verify:layout 152).
+    if (def.type === 'string' && typeof value === 'string') {
+      if (def.values !== undefined && !def.values.includes(value)) {
+        warnings.push(`dropped setting ${id}: ${value} is not one of ${def.values.join('/')}`)
+        continue
+      }
+    }
     out[id] = value as SettingValue
   }
   return out
