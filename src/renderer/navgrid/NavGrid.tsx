@@ -1,4 +1,4 @@
-import { memo, type JSX } from 'react'
+import { memo, type JSX, type MouseEvent } from 'react'
 import type { NavGridController } from './useNavGrid'
 
 /**
@@ -16,7 +16,25 @@ import type { NavGridController } from './useNavGrid'
 function NavGridImpl({ controller }: { controller: NavGridController }): JSX.Element | null {
   if (!controller.open) return null
   return (
-    <div className="navgrid" role="presentation">
+    <div
+      className="navgrid"
+      role="presentation"
+      // The same guard Palette.tsx carries, for the same reason and in the
+      // same parent. This mounts INSIDE .canvas, whose onMouseDown is the
+      // background handler: without this, a click on the overlay is hit-tested
+      // against the WORLD point underneath it and handed to onSelectPanel,
+      // which clears the dormant id and calls registry.wake — so a click on a
+      // cell SPAWNS an agent in the workspace the user is about to leave, and
+      // clears focusedId, demoting the panel they were working in. The overlay
+      // is opaque, so none of that is visible and nothing reaches any log.
+      // Clicking a highlighted cell is the natural instinct here precisely
+      // because hover already moves the cursor.
+      //
+      // Bubble phase, and deliberately NO preventDefault: the palette needs
+      // one so its input still places a caret, and this overlay takes no DOM
+      // focus and has no caret to place. verify:panels 122b.
+      onMouseDown={(e: MouseEvent<HTMLDivElement>): void => e.stopPropagation()}
+    >
       <div className="navgrid__grid">
         {controller.cells.map((cell, i) => {
           const cursor = i === controller.cursor

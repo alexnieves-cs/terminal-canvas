@@ -8264,6 +8264,16 @@ app.whenReady().then(async () => {
         //       dead handler. The active-workspace clause is what proves
         //       nothing was committed — read back out of workspace.list(), not
         //       off the overlay.
+        //
+        //       It also carries the MOUSEDOWN guard, which needs panels on
+        //       screen to be able to fail at all — check 122 has just landed
+        //       on a freshly created and therefore empty workspace, so this
+        //       switches back to the one the block started in first. That
+        //       switch also re-aims the no-commit clause at activeBeforeGrid,
+        //       which is the same claim read from the same place.
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().switchTo(${JSON.stringify(firstId)})`)
+        await settle()
         await pressChord(wc, 'g')
         const hoverStart = await gridState(wc)
         const hoverable = await wc.executeJavaScript(`(() => {
@@ -8280,11 +8290,54 @@ app.whenReady().then(async () => {
           return true
         })()`)
         const afterEmptyHover = await gridState(wc)
+        // A CLICK on the overlay must reach nothing underneath it. .navgrid is
+        // a child of .canvas, whose onMouseDown hit-tests the click's WORLD
+        // point and hands it to onSelectPanel — select, raise, clear-dormant,
+        // registry.wake — so an unguarded mousedown on a cell spawns an agent
+        // behind an opaque overlay. The rule "The palette swallows its own
+        // mousedowns" already states, and verify:panels 41 already pins, for
+        // the same overlay in the same parent.
+        //
+        // The coordinates are what make this able to fail: they are a real
+        // panel's own screen centre, so an unguarded click has something to
+        // hit. A bare `new MouseEvent('mousedown', { bubbles: true })` is at
+        // client 0,0 — a world point with no panel under it — where the
+        // background path only re-clears an already-null selection and the
+        // clause is green against a missing guard. The aim is an UNSELECTED
+        // panel for the same reason: clicking the one already selected changes
+        // nothing observable either.
+        //
+        // What is asserted is that the selection did not MOVE, not that it did
+        // not move to the panel aimed at. Those are different claims and the
+        // second one does not discriminate: panels overlap, hitTest answers
+        // with the top of the z-order at that point, so the first draft of
+        // this clause aimed at n22 and watched the unguarded build select n97
+        // — a wrong panel woken, and a green check.
+        const selectedBeforeClick = await wc.executeJavaScript(
+          `(document.querySelector('.panel--selected') || {}).dataset?.panelId ?? null`)
+        const clickProbe = await wc.executeJavaScript(`(() => {
+          const cell = document.querySelector('.navgrid__cell')
+          const panel = [...document.querySelectorAll('.panel')]
+            .find((p) => !p.classList.contains('panel--selected'))
+          if (!cell || !panel) return null
+          const box = panel.getBoundingClientRect()
+          cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true,
+            clientX: Math.round(box.left + box.width / 2),
+            clientY: Math.round(box.top + box.height / 2) }))
+          return { target: panel.dataset.panelId }
+        })()`)
+        const afterClick = await gridState(wc)
+        const selectedAfterClick = await wc.executeJavaScript(
+          `(document.querySelector('.panel--selected') || {}).dataset?.panelId ?? null`)
         const activeAfterHover = await activeWorkspaceId(wc)
         ok('122b', hoverable === true && hovered.cursor !== hoverStart.cursor
             && afterEmptyHover.cursor === hovered.cursor
-            && activeAfterHover === activeAfterRelease,
-          `${hoverStart.cursor} -> ${hovered.cursor}, empty left it ${afterEmptyHover.cursor}, active=${activeAfterHover}`)
+            && clickProbe !== null && afterClick.open === true
+            && selectedAfterClick === selectedBeforeClick
+            && activeAfterHover === activeBeforeGrid,
+          `${hoverStart.cursor} -> ${hovered.cursor}, empty left it ${afterEmptyHover.cursor}, ` +
+          `click aimed at ${clickProbe && clickProbe.target} left open=${afterClick.open} ` +
+          `selected ${selectedBeforeClick} -> ${selectedAfterClick}, active=${activeAfterHover}`)
 
         // 122c. A wheel over the open grid moves NO camera. shouldYieldWheel's
         //       rule 0. Asserted as the camera being unmoved rather than as
