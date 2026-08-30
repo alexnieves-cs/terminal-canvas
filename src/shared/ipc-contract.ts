@@ -18,7 +18,7 @@ import type {
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
-import type { AgentKind } from './cost'
+import type { AgentKind, PanelUsage } from './cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -251,7 +251,22 @@ export const IPC_EVENTS = {
    * unconditional send would be thirty messages a minute per panel describing a
    * fact that changes when a human types `cd`.
    */
-  SESSION_LIVE: 'session:live'
+  SESSION_LIVE: 'session:live',
+  /**
+   * What a panel's agent has spent, pushed when it CHANGES.
+   *
+   * An IPC_EVENTS member and not an IPC one, which decides a number:
+   * verify:ipc asserts over Object.values(IPC) — invoke channels, each needing
+   * an ipcMain.handle — and is unmoved by this. M6d and M12 both hit this same
+   * boundary and both recorded the count staying put; an earlier draft of one
+   * of those specs said otherwise and would have failed the suite by "fixing"
+   * a correct number.
+   *
+   * Deduped in main for the reason AGENT_STATE and SESSION_LIVE are: this
+   * rides a slow tick and an unconditional send would be a message per tick
+   * per panel describing a fact that changes once per agent turn.
+   */
+  USAGE_PANEL: 'usage:panel'
 } as const
 
 export interface SessionBackendInfo {
@@ -437,6 +452,8 @@ export interface CanvasBridge {
      * a React effect can clean up without stacking listeners.
      */
     onLive(listener: (update: LiveSessionUpdate) => void): () => void
+    /** What this panel's agent has spent. Fires only on a change. */
+    onUsage(listener: (payload: { panelId: PanelId; usage: PanelUsage }) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>

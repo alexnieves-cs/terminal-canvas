@@ -887,12 +887,42 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       h.manager.killAll()
     }
 
-    // Check 20's obligation, inherited via 22b, 23 and 24: this block must
-    // end in a definite kill-server, never a session kill that leaves a
+    // 28. The usage tick DEDUPES. Its failure changes no pixel — it is heat —
+    //     so this counts MESSAGES rather than reading a value, exactly as
+    //     check 23 does for session:live. The WINDOW is what makes the count
+    //     mean anything and a future editor must not shrink it: an
+    //     implementation with no dedupe emits once per USAGE_TICK_MS, so a
+    //     sample spanning a single tick sees one message either way and
+    //     stays green against the defect. This waits three ticks over a
+    //     transcript that does not change.
+    //
+    //     What this actually asserts: this panel's agent is a fixture shell,
+    //     not a real `claude`, so NO transcript is ever written and the
+    //     correct number of messages is zero. That makes it a check about the
+    //     tick not INVENTING traffic when it has nothing to report — real
+    //     accumulation is Task 10's job, end to end, against a transcript the
+    //     harness writes itself. A green 28 is not proof that anything is
+    //     ever counted; do not read it as that.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      await h.manager.create(spec('p12', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
+      await sleep(7000)
+      const sent = h.events.filter((e) => e.channel === 'usage:panel' && e.payload.panelId === 'p12')
+      ok('28 the usage tick sends no traffic for a panel with no real transcript',
+        sent.length === 0, `messages=${sent.length}`)
+      h.manager.killAll()
+    }
+
+    // Check 20's obligation, inherited via 22b, 23, 24 and 28: this block
+    // must end in a definite kill-server, never a session kill that leaves a
     // stale server for the next run — see check 20's own comment for why (a
     // later run's client would reattach to a server still wired to THIS
     // run's now-deleted exitDir, and check 14 would silently report the
-    // wrong exit code). Whoever appends check 28 inherits it next.
+    // wrong exit code). Whoever appends check 29 inherits it next.
     tmuxBackend.shutdown()
   }
 

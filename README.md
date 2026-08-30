@@ -172,7 +172,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:panel / review:baseline / review:at
                        review:diff / review:commit
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
-                       agent:state / session:live
+                       agent:state / session:live / usage:panel
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
