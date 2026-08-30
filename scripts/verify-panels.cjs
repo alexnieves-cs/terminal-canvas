@@ -160,6 +160,56 @@ const zoomTo = (wc, key) =>
   )
 
 /**
+ * Cmd+G, the nav grid's reveal chord. `repeat` is supplied BY HAND by the
+ * caller — like checks 7b/33b/75b this proves the guard READS the flag and
+ * says nothing at all about who sets it.
+ */
+const pressChord = (wc, key, opts = {}) =>
+  wc.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify({ key, metaKey: true, ...opts })})), true`
+  )
+
+/**
+ * An arrow inside the nav grid: Cmd is still held through the whole gesture,
+ * so the event is byte-identical to zoomTo's. It is a separate name rather
+ * than a reuse because `zoomTo(wc, 'ArrowRight')` at a nav-grid call site
+ * reads as a camera command, which is the one thing these presses must not be.
+ */
+const pressArrow = (wc, key) =>
+  wc.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
+  )
+
+/**
+ * Releasing Cmd. The commit test is `key === 'Meta'` and NOT `!metaKey`:
+ * sendInputEvent echoes back exactly the modifiers array it is handed, so a
+ * check written against the bitfield would be circular — it would prove only
+ * that the harness repeats its own input. See the M11 spec.
+ */
+const releaseMeta = (wc) =>
+  wc.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Meta' })), true`
+  )
+
+/**
+ * The nav grid as the screen actually shows it. Answers `{ open: false }`
+ * rather than throwing when `.navgrid` is absent, so a missing overlay is a
+ * clean individual FAIL in every check that reads it — CLAUDE.md's rule that
+ * a throw aborts the whole run and takes every later check's RED with it.
+ */
+const gridState = (wc) => wc.executeJavaScript(`(() => {
+  const el = document.querySelector('.navgrid')
+  if (!el) return { open: false }
+  const cur = el.querySelector('.navgrid__cell--cursor')
+  return { open: true, cursor: cur ? Number(cur.dataset.cellIndex) : -1,
+           label: cur ? (cur.dataset.cellLabel || '') : '' }
+})()`)
+
+/** The id of whichever workspace main currently says is active. */
+const activeWorkspaceId = (wc) => wc.executeJavaScript(
+  `window.canvas.workspace.list().then((r) => (r.find((w) => w.active) || {}).id)`)
+
+/**
  * An unmodified keydown — Enter/Escape at the workspace confirm gate (checks
  * 69-70), which must NOT carry metaKey the way every other synthetic key
  * this suite dispatches does. zoomTo's name and shape are both wrong for
@@ -8082,6 +8132,181 @@ app.whenReady().then(async () => {
           `)
           rmSync(moved, { recursive: true, force: true })
         }
+      }
+
+      // ---- M11: the Cmd-held navigation grid (118-122) ----
+      {
+        await zoomTo(wc, '0')
+        await settle()
+
+        // Two workspaces at minimum, or a release has nowhere to go and check
+        // 122 would pass vacuously against a commit that did nothing. The
+        // ACTIVE one is then pinned to cell 0 — buildGrid lays the list out in
+        // stored order and initialCursor seeds on the active cell, so from
+        // cell 0 a single ArrowRight always lands on cell 1, which is a
+        // workspace whenever two exist. Every other seat depends on how many
+        // workspaces the run happens to have left behind, and from the last
+        // one ArrowRight walks off the edge and stepCell correctly refuses to
+        // move — a check that then reads as a broken cursor.
+        await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('navgrid-b')`)
+        await settle()
+        const wsRows = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+        const firstId = wsRows[0] && wsRows[0].id
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().switchTo(${JSON.stringify(firstId)})`)
+        await settle()
+        const activeBeforeGrid = await activeWorkspaceId(wc)
+        // The fixture premise rides as CLAUSES of check 118 rather than as a
+        // check of its own: if it did not land where it meant to, 118's cursor
+        // move is measuring the wrong grid, and a green 118 beside a red
+        // fixture check would be the more confusing of the two reports.
+        const fixtureOk = wsRows.length >= 2 && activeBeforeGrid === firstId
+
+        // 118. Cmd+G reveals, an arrow moves the cursor, and the TAIL of a
+        //      held chord does not re-reveal a grid the user has dismissed.
+        //      The repeat clause is asserted AFTER an Escape deliberately:
+        //      while the overlay is up every key is swallowed by the open
+        //      branch, so a repeat pressed there leaves it open under an
+        //      implementation with no `event.repeat` guard at all — the
+        //      obvious placement is the one that cannot fail. Closed, the
+        //      repeat stream is exactly the flicker the guard exists for.
+        await pressChord(wc, 'g')
+        const revealed = await gridState(wc)
+        const before = revealed.cursor
+        await pressArrow(wc, 'ArrowRight')
+        const moved = await gridState(wc)
+        await pressPlain(wc, 'Escape')
+        for (let i = 0; i < 4; i++) await pressChord(wc, 'g', { repeat: true })
+        const afterRepeat = await gridState(wc)
+        ok(118, fixtureOk && revealed.open === true && moved.open === true
+            && moved.cursor !== before && moved.cursor >= 0
+            && afterRepeat.open === false,
+          `fixture=${fixtureOk} (${wsRows.length} workspaces, active=${activeBeforeGrid}) ` +
+          `open=${revealed.open} ${before} -> ${moved.cursor}, repeatOpen=${afterRepeat.open}`)
+
+        // 119. Cmd+N while the grid is open spawns NOTHING. Success criterion
+        //      5, and the reason navGrid.isOpen has to compose into
+        //      useViewport's shouldIgnoreKeys rather than the overlay merely
+        //      being painted on top: useViewport's keydown listener is on
+        //      `window` too, so a stopPropagation from the grid's own capture
+        //      listener cannot reach it — same-target listeners all run.
+        // This suite has no shared panel-count helper — line ~1039 defines a
+        // local `panelCount` inside another block. Define one here rather than
+        // reaching into that scope.
+        const countPanels = () => wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        await pressChord(wc, 'g')
+        const panelsBefore = await countPanels()
+        await zoomTo(wc, 'n')
+        await settle()
+        const panelsAfter = await countPanels()
+        ok(119, panelsAfter === panelsBefore, `${panelsBefore} -> ${panelsAfter}`)
+
+        // 120. Escape commits NOTHING, read back out of workspace.list()
+        //      rather than off the overlay — check 50's rule for the palette's
+        //      confirm, that a cancel which cancels unconditionally is
+        //      invisible and so is one that does not. The arrow first is what
+        //      makes it a cancel rather than a no-op: the cursor is on a
+        //      DIFFERENT workspace when Escape lands.
+        await pressArrow(wc, 'ArrowRight')
+        const escapeTarget = await gridState(wc)
+        await pressPlain(wc, 'Escape')
+        await settle()
+        const afterEscape = await gridState(wc)
+        const activeAfterEscape = await activeWorkspaceId(wc)
+        ok(120, afterEscape.open === false && escapeTarget.cursor > 0
+            && activeAfterEscape === activeBeforeGrid,
+          `cursor=${escapeTarget.cursor} open=${afterEscape.open} active=${activeAfterEscape} (was ${activeBeforeGrid})`)
+
+        // 121. A window blur DISMISSES and commits nothing. This is success
+        //      criterion 4 and it is not a formality: Cmd+Tab delivers the
+        //      keyup for Cmd to the OTHER application, so a keyup-only design
+        //      leaves the overlay up over a canvas whose shortcuts have stood
+        //      down, with no key left that dismisses it and no recovery short
+        //      of Cmd+R. The cursor is moved off the active cell first, so the
+        //      "commits nothing" half is a claim about the handler rather than
+        //      about the already-active guard one layer down.
+        await pressChord(wc, 'g')
+        await pressArrow(wc, 'ArrowRight')
+        const beforeBlur = await gridState(wc)
+        await wc.executeJavaScript(`window.dispatchEvent(new Event('blur')), true`)
+        await settle()
+        const afterBlur = await gridState(wc)
+        const activeAfterBlur = await activeWorkspaceId(wc)
+        ok(121, beforeBlur.open === true && beforeBlur.cursor > 0
+            && afterBlur.open === false && activeAfterBlur === activeBeforeGrid,
+          `open ${beforeBlur.open} -> ${afterBlur.open}, active=${activeAfterBlur}`)
+
+        // 122. Release SWITCHES, and every pid is PRESERVED. The pid clause is
+        //      the whole check, on check 64's argument: a dispose-and-respawn
+        //      satisfies every count, every layout read and the file on disk,
+        //      and only the pid separates it from the demote this milestone
+        //      requires. pty:list is main's GLOBAL session list, so it spans
+        //      the workspace being left as well as the one being entered.
+        //      Success criterion 3.
+        const pidsBefore = await settledSessionMap(wc)
+        await pressChord(wc, 'g')
+        await pressArrow(wc, 'ArrowRight')
+        const target = await gridState(wc)
+        await releaseMeta(wc)
+        await settle()
+        const activeAfterRelease = await activeWorkspaceId(wc)
+        const closed = await gridState(wc)
+        const pidsAfter = await settledSessionMap(wc)
+        const pids = pidsPreserved(pidsBefore, pidsAfter)
+        ok(122, closed.open === false && activeAfterRelease !== activeBeforeGrid
+            && activeAfterRelease !== undefined && target.cursor > 0 && pids.ok,
+          `active ${activeBeforeGrid} -> ${activeAfterRelease}; pids ${pids.changed.join(', ') || 'preserved'}`)
+
+        // 122b. Hover MOVES the cursor and does NOT commit, and hovering an
+        //       EMPTY cell moves nothing. Both clauses in one read: asserting
+        //       only the move passes against a cell that also switches on
+        //       mouseover, and asserting only the no-commit passes against a
+        //       dead handler. The active-workspace clause is what proves
+        //       nothing was committed — read back out of workspace.list(), not
+        //       off the overlay.
+        await pressChord(wc, 'g')
+        const hoverStart = await gridState(wc)
+        const hoverable = await wc.executeJavaScript(`(() => {
+          const cells = [...document.querySelectorAll('.navgrid__cell')]
+          const target = cells.find((c) => !c.classList.contains('navgrid__cell--empty')
+            && !c.classList.contains('navgrid__cell--cursor'))
+          if (target) target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))
+          return !!target
+        })()`)
+        const hovered = await gridState(wc)
+        await wc.executeJavaScript(`(() => {
+          const empty = [...document.querySelectorAll('.navgrid__cell--empty')][0]
+          if (empty) empty.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))
+          return true
+        })()`)
+        const afterEmptyHover = await gridState(wc)
+        const activeAfterHover = await activeWorkspaceId(wc)
+        ok('122b', hoverable === true && hovered.cursor !== hoverStart.cursor
+            && afterEmptyHover.cursor === hovered.cursor
+            && activeAfterHover === activeAfterRelease,
+          `${hoverStart.cursor} -> ${hovered.cursor}, empty left it ${afterEmptyHover.cursor}, active=${activeAfterHover}`)
+
+        // 122c. A wheel over the open grid moves NO camera. shouldYieldWheel's
+        //       rule 0. Asserted as the camera being unmoved rather than as
+        //       cancellation, because unlike the palette (check 47) and the
+        //       review node (105) there is nothing here that scrolls — the
+        //       grid yields the gesture by standing the camera down, not by
+        //       handing it to a scroll host. A ctrlKey wheel is deliberately
+        //       the fixture: it is the one gesture rule 2 would otherwise
+        //       claim outright for the camera.
+        const scaleBefore = await wc.executeJavaScript(`window.__m4aScale()`)
+        await wc.executeJavaScript(`(() => {
+          const host = document.querySelector('.canvas')
+          host.dispatchEvent(new WheelEvent('wheel',
+            { deltaY: 240, ctrlKey: true, bubbles: true, cancelable: true }))
+          return true
+        })()`)
+        await settle()
+        const scaleAfter = await wc.executeJavaScript(`window.__m4aScale()`)
+        ok('122c', scaleAfter === scaleBefore, `${scaleBefore} -> ${scaleAfter}`)
+
+        await pressPlain(wc, 'Escape')
+        await settle()
       }
 
       // Best-effort, like the two below it and for the same reason: a throw

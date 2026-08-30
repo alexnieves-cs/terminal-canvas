@@ -14,6 +14,12 @@
      traffic-light clearance and belongs to no scale. */
   --titlebar-h: 38px;
 
+  /* M11. One nav-grid cell. Structural like --titlebar-h and belonging to no
+     scale, so it is tokenised rather than left as a literal and it lives on
+     bare :root: a length in a theme block is a length every future theme has
+     to remember to repeat. */
+  --navgrid-cell: 150px;
+
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
      is right, and today's 6-inside-10 is not. 50% and --r-full are SHAPES (a
@@ -1468,3 +1474,50 @@ body {
    above excludes the input by name, which is what makes that true in the
    cascade and not only in prose. */
 .palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--blue); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M11. The nav grid: a sibling of .world, pinned to the viewport rather than
+   riding the pan/zoom transform.
+   ───────────────────────────────────────────────────────────────────────── */
+.navgrid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* --s-0 at full opacity, never a fractional `opacity` on the element:
+     verify:styles 3 forbids that, because it compounds against an already
+     muted token and is invisible to any audit that reads declared colours. */
+  background: var(--s-0);
+  z-index: 1000; /* the palette's layer; only one of the two is ever up */
+}
+.navgrid__grid {
+  display: grid;
+  grid-template-columns: repeat(3, var(--navgrid-cell));
+  grid-auto-rows: var(--navgrid-cell);
+  gap: var(--sp-4);
+}
+.navgrid__cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--s-1);
+  color: var(--fg-2);
+  font-size: var(--t-md);
+}
+.navgrid__cell--empty { background: var(--s-0); border-style: dashed; }
+/* --s-4 is the selected fill, and the cursor IS a selection. --s-5 is
+   deliberately not used: it is the pressed state — transient, never a text
+   ground — and verify:styles 11 excludes it as a ground when it measures
+   contrast. */
+.navgrid__cell--cursor {
+  border-color: var(--blue);
+  background: var(--s-4);
+  color: var(--fg);
+}
+.navgrid__cell--active { border-color: var(--line-strong); }
+.navgrid__meta { font-size: var(--t-xs); color: var(--fg-3); }
+.navgrid__hint { margin-top: var(--sp-6); font-size: var(--t-xs); color: var(--fg-3); }
