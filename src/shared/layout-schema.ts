@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
+import type { FileSource } from './file-panel'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -82,7 +83,13 @@ export interface PersistedReviewPanel extends PersistedPanelBase {
   subject: ReviewSubject
 }
 
-export type PersistedPanel = PersistedTerminalPanel | PersistedReviewPanel
+export interface PersistedFilePanel extends PersistedPanelBase {
+  kind: 'file'
+  /** An absolute path. See FileSource: main expands `~` before this is built. */
+  source: FileSource
+}
+
+export type PersistedPanel = PersistedTerminalPanel | PersistedReviewPanel | PersistedFilePanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -265,6 +272,22 @@ function parseReviewSubject(raw: unknown, id: string, warnings: string[]): Revie
   return { subjectId, repoRoot, baselineSha, label }
 }
 
+function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
+  if (!isRecord(raw)) {
+    warnings.push(`dropped file panel ${id}: source was not an object`)
+    return null
+  }
+  const { path } = raw
+  // All-or-drop, like parseReviewSubject. There is no defaulting a path: a
+  // panel pointed at a guessed file is worse than a panel that was not
+  // restored, because it looks like it worked.
+  if (!isStr(path) || path === '') {
+    warnings.push(`dropped file panel ${id}: source path was unusable`)
+    return null
+  }
+  return { path }
+}
+
 function parsePanel(
   raw: unknown,
   seen: Set<string>,
@@ -315,6 +338,11 @@ function parsePanel(
     const subject = parseReviewSubject((raw as Record<string, unknown>).subject, id, warnings)
     if (subject === null) return null
     return { ...base, kind: 'review', subject }
+  }
+  if (kind === 'file') {
+    const source = parseFileSource((raw as Record<string, unknown>).source, id, warnings)
+    if (source === null) return null
+    return { ...base, kind: 'file', source }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
