@@ -206,6 +206,105 @@ const rec = (over = {}) => JSON.stringify({
     String(U.costOf(U.emptyTotals(), 'claude-opus-5')))
 }
 
+// A file-size argument the accumulator can compare against its offset. The
+// tests pass `offset + text.length` for the ordinary growing case.
+const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + text.length)
+
+// 14. Totals accumulate ACROSS chunks and the offset advances by the bytes
+//     consumed. Two records in two reads must total the same as two in one.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n')
+  const after = grow(st, 'n1', rec() + '\n')
+  ok(14, after.totals.output === 2190 && after.turns === 2
+      && U.offsetFor(st, 'n1') === (rec() + '\n').length * 2,
+    `output=${after && after.totals.output} turns=${after && after.turns} offset=${U.offsetFor(st, 'n1')}`)
+}
+
+// 15. byModel keeps models apart. A session that changed model mid-way cannot
+//     be priced from a flat total at all, so this is not bookkeeping — it is
+//     the unit costOf is applied to.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n')
+  const u = grow(st, 'n1', rec({ message: { model: 'claude-sonnet-5', usage: { input_tokens: 10, output_tokens: 20 } } }) + '\n')
+  ok(15, Object.keys(u.byModel).length === 2
+      && u.byModel['claude-sonnet-5'].output === 20
+      && u.byModel['claude-opus-5'].output === 1095,
+    JSON.stringify(Object.keys(u.byModel)))
+}
+
+// 16. subagentTurns counts isSidechain records and is INCLUDED in turns. Both
+//     clauses matter: reporting them separately is what keeps "why is this
+//     number so large" answerable, and excluding them from `turns` would make
+//     the two figures fail to reconcile on screen.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n' + rec({ isSidechain: true }) + '\n')
+  const u = U.usageFor(st, 'n1')
+  ok(16, u.turns === 2 && u.subagentTurns === 1, `turns=${u.turns} sub=${u.subagentTurns}`)
+}
+
+// 17. A SPLIT record spanning two applyChunk calls is counted exactly once.
+//     This is checks 2/3 driven through the layer that actually stores the
+//     carry — the parser can be perfect and the accumulator can still throw
+//     its carry away, which loses the turn just as completely.
+{
+  const whole = rec()
+  const st = U.createUsageState()
+  grow(st, 'n1', whole.slice(0, 40))
+  const u = grow(st, 'n1', whole.slice(40) + '\n')
+  ok(17, u && u.turns === 1 && u.totals.output === 1095,
+    u ? `turns=${u.turns} output=${u.totals.output}` : 'no change reported')
+}
+
+// 18. The DEDUPE: a read that added nothing returns undefined rather than a
+//     fresh equal object. Without it every tick sends a message describing a
+//     fact that changes once per agent turn — invisible on screen, and
+//     purely heat, which is why only a check can ever notice it.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n')
+  const again = grow(st, 'n1', '')
+  ok(18, again === undefined, String(again))
+}
+
+// 19. A file that SHRANK resets the offset to 0. A truncated or replaced
+//     transcript read from a stale offset yields garbage or nothing, with no
+//     error anywhere — the offset only ever advances against a file that only
+//     ever grows, and this is the branch for when that stops being true.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n')
+  U.resetIfShrunk(st, 'n1', 10)
+  ok(19, U.offsetFor(st, 'n1') === 0 && U.usageFor(st, 'n1') === undefined,
+    `offset=${U.offsetFor(st, 'n1')} usage=${U.usageFor(st, 'n1')}`)
+}
+
+// 20. dropUsage clears everything for a panel — totals, offset and carry.
+//     The same recycled-id hazard dropBaseline and clearLiveSession each
+//     close: without it the map grows for the life of the process and a panel
+//     reusing a dead one's id inherits a stranger's spend.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n')
+  U.dropUsage(st, 'n1')
+  ok(20, U.usageFor(st, 'n1') === undefined && U.offsetFor(st, 'n1') === 0,
+    `usage=${U.usageFor(st, 'n1')} offset=${U.offsetFor(st, 'n1')}`)
+}
+
+// 21. Panels are independent. One flat store keyed by nothing would total
+//     every panel's spend into whichever panel asked last, which reads as
+//     "every agent costs the same" and is the shape a single shared
+//     accumulator produces.
+{
+  const st = U.createUsageState()
+  grow(st, 'n1', rec() + '\n')
+  grow(st, 'n2', rec() + '\n')
+  ok(21, U.usageFor(st, 'n1').turns === 1 && U.usageFor(st, 'n2').turns === 1,
+    `n1=${U.usageFor(st, 'n1').turns} n2=${U.usageFor(st, 'n2').turns}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
