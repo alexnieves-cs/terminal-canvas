@@ -17,10 +17,14 @@ buildSync({
   // @renderer became load-bearing in M8d: commands.ts imports the VALUE
   // waitingCount from shell/rail-sections so the palette and the rail share
   // one derivation of a workspace's waiting count. @shared is still
-  // pre-emptive (every @shared import here is `import type`, which esbuild
-  // erases) and stays for the reason verify-viewport.cjs learned the hard
-  // way: needing no alias YET is exactly the state it was in until the day
-  // panel-interaction.ts grew a real value import and the bundle broke.
+  // @shared is the pre-emptive one (every @shared import here is `import
+  // type`, which esbuild erases) and stays for the reason verify-viewport.cjs
+  // learned the hard way: needing no alias YET is exactly the state it was in
+  // until the day panel-interaction.ts grew a real value import and the bundle
+  // broke. @renderer is NOT pre-emptive and has not been since M8d — commands.ts
+  // imports waitingCount, a VALUE, from @renderer/shell/rail-sections, so this
+  // bundle does not build without it. Measured in M14, not read off the
+  // imports, which is the only way to answer this question reliably.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')

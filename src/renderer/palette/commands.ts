@@ -1,8 +1,11 @@
 import type { Command } from './palette-model'
 // Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
 // Erased by esbuild, so it costs verify:palette nothing that the bundle
-// otherwise has no @shared import at all (the alias is wired pre-emptively
-// for exactly this day).
+// otherwise has no @shared VALUE import at all (that alias is wired
+// pre-emptively for exactly this day). The @renderer import below is a
+// different matter and this comment used to be read as covering it: waitingCount
+// is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
+// pre-emptive. Measured in M14 by deleting the alias and building.
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'

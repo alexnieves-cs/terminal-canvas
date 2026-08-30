@@ -16,10 +16,13 @@ buildSync({
   platform: 'node',
   format: 'cjs',
   // Required here, not pre-emptive: merged-layout.ts imports a real VALUE
-  // (toPanels) from @renderer, unlike verify-rail.cjs's bundle, which carries
-  // the alias only in case a future edit needs it. See CLAUDE.md's entry on
-  // "The plain-node verify bundles now configure a @shared alias" for what
-  // happens the day a bundle that needed no alias suddenly does.
+  // (toPanels) from @renderer. @shared is the pre-emptive one here. This
+  // comment used to add "unlike verify-rail.cjs's bundle, which carries the
+  // alias only in case a future edit needs it" — false: verify-rail.cjs's
+  // @renderer alias has been load-bearing since M9b, and verify-palette.cjs's
+  // since M8d, both measured in M14. See CLAUDE.md's entry on "The plain-node
+  // verify bundles now configure a @shared alias" for the corrected table and
+  // for why the answer has to be measured by deleting the alias and building.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')

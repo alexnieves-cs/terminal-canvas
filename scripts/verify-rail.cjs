@@ -15,11 +15,18 @@ buildSync({
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  // Nothing in this bundle imports a VALUE from @shared or @renderer today —
-  // rail-rows.ts's two imports are `import type`, which esbuild erases. The
-  // aliases are here pre-emptively for the reason CLAUDE.md records about
-  // verify-palette.cjs: needing no alias YET is exactly the state
-  // verify-viewport.cjs was in right up until the day it broke.
+  // @renderer is LOAD-BEARING here and has been since M9b; @shared is the
+  // pre-emptive one. This comment claimed the opposite until M14 measured it:
+  // rail-rows.ts:1 and inspector-fields.ts:3 both import isReviewPanel — a
+  // VALUE, not a type — from @renderer/panels/panels, so building this entry
+  // with no alias block fails with two "Could not resolve" errors, with
+  // @renderer alone it builds, and with @shared alone it fails identically.
+  // A required alias that is present looks exactly like a pre-emptive one,
+  // which is why the honest way to answer the question is to DELETE the alias
+  // and build rather than to read the imports. See CLAUDE.md's "The plain-node
+  // verify bundles now configure a @shared alias" for the corrected table.
+  // @shared stays for the original reason: needing no alias YET is exactly the
+  // state verify-viewport.cjs was in right up until the day it broke.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
