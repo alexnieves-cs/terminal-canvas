@@ -351,8 +351,8 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 
 // 21. RULE 2, AS SOURCE TEXT: a stored credential must never reach a PTY, so
 // the three modules that build a process environment must not import the
-// credential store — directly OR transitively — and no IPC handler may call
-// or alias the store's read() — the one function that returns plaintext,
+// credential store, and no IPC handler may call or alias the store's read() —
+// the one function that returns plaintext,
 // main-internal, and callable only from credential-verify.ts. Prose alone
 // has already lost this kind of invariant in this repo once: CLAUDE.md's
 // `dispose` call-site count went stale inside the very commit that recorded
@@ -376,6 +376,15 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 // that down is the honest version of a limit that would otherwise be
 // discovered the hard way.
 //
+// The import half also does NOT follow a genuine second hop: it greps each
+// offender file's OWN source for the credential-adjacent filenames, so it
+// catches shell-env.ts (etc.) importing credential-store.ts directly, or by
+// way of credential-verify.ts / credential-crypto.ts — but a future offender
+// -> some OTHER, non-credential module -> credential-store chain contains
+// none of those three names in the offender file itself and is invisible to
+// this regex. This is the same class of honest limit the read half's alias
+// check states below, not a claim that the import half is exhaustive.
+//
 // The read half must catch an ALIAS, not just the literal call spelling
 // `credentialStore.read(`. A destructured, renamed binding —
 // `const { read: peek } = credentialStore`, then calling `peek(...)` — never
@@ -397,7 +406,7 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   const aliasedRead = destructures.some((m) => /\bread\b/.test(m[1]))
   const readsPlaintext = directCall || aliasedRead
 
-  ok('21 no env-building module reaches the credential store (directly or transitively), and no handler calls or aliases read()',
+  ok('21 no env-building module directly imports the credential store, and no handler calls or aliases read()',
     offenders.length === 0 && !readsPlaintext,
     offenders.length
       ? offenders.join(',')
