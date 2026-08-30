@@ -2401,6 +2401,166 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify(back[0]))
 }
 
+// ---------------------------------------------------------------------------
+// M23 — the agent options a panel and a preset carry (ideas-backlog #8 part 1).
+//
+// These mirror the `agent` quartet at 125-128 exactly, because the failure
+// shape is identical: an optional key rebuilt field-by-field at nine separate
+// sites, every one of which can drop it silently with `tsc` saying nothing.
+// The record is ONE key rather than three so there are nine such sites and not
+// twenty-seven; these checks are what stop that key going missing at any of
+// them.
+// ---------------------------------------------------------------------------
+
+// 145. The whole record survives fromPanels -> parseLayout. The ROUND TRIP is
+//      the subject rather than the parse alone: layout-adapt.ts is the OTHER
+//      door onto this format, and a schema-only check cannot see it — the
+//      argument check 108b already makes for the panel union, and the exact
+//      gap M17's fix round found when 123/124 covered Preset.agent and nothing
+//      covered PanelSpec.agent.
+{
+  const [persisted] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: {
+      panelId: 'p1', cwd: '~', args: [], command: 'claude', agent: 'claude-code',
+      agentOptions: { permissionMode: 'plan', effort: 'high', model: 'opus' }
+    },
+    z: 1
+  }])
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas', panels: [persisted],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const [back] = L.toPanels(active(snapshot).panels)
+  const o = back && back.spec.agentOptions
+  ok('145 a panel agentOptions record round-trips whole',
+    o !== undefined && o.permissionMode === 'plan' && o.effort === 'high' &&
+      o.model === 'opus' && warnings.length === 0,
+    JSON.stringify({ persisted: persisted.agentOptions, back: o, warnings }))
+}
+
+// 146. An unknown permissionMode drops THAT FIELD — not the panel, and not the
+//      sibling knob beside it. Dropping the field fails SAFE, which is the
+//      whole reason mode is a closed union while `model` is not: the CLI's own
+//      default is more restrictive than any value we failed to recognise, so a
+//      drop can only ever tighten. The `effort` clause is what stops this
+//      passing against an implementation that threw the record away wholesale.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({
+        command: 'claude',
+        agentOptions: { permissionMode: 'yolo', effort: 'high' }
+      })],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const w = active(snapshot)
+  const o = w.panels[0] && w.panels[0].agentOptions
+  ok('146 an unknown permissionMode drops that field alone, with a warning',
+    w.panels.length === 1 && o !== undefined &&
+      !('permissionMode' in o) && o.effort === 'high' &&
+      warnings.some((x) => x.includes('permissionMode')),
+    JSON.stringify({ panels: w.panels.length, opts: o, warnings }))
+}
+
+// 147. The SAME guard in parsePreset. Two parsers that agree on the day they
+//      are written is exactly what this file's shape invites getting half
+//      right — the copy-paste-one-of-two — and it is why parseAgentOptions is
+//      one shared function rather than a block pasted into each.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas', panels: [panel()],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }],
+    presets: [{
+      id: 'a', name: 'A', cwd: '~', args: [], command: 'claude',
+      agentOptions: { permissionMode: 'plan', effort: 'nope' }
+    }]
+  }))
+  const o = snapshot.presets[0] && snapshot.presets[0].agentOptions
+  ok('147 parsePreset applies the same per-field guard',
+    o !== undefined && o.permissionMode === 'plan' && !('effort' in o) &&
+      warnings.some((x) => x.includes('effort')),
+    JSON.stringify({ opts: o, warnings }))
+}
+
+// 148. The model guard — the only check here about a shared artifact being
+//      HOSTILE rather than merely stale. There is no shell anywhere on this
+//      path (args reach node-pty as an argv array, and tmux execs the
+//      multi-argument new-session form directly rather than through `sh -c`),
+//      so the surface is `claude`'s OWN parser: a value of
+//      `--dangerously-skip-permissions` is read as a FLAG rather than as
+//      --model's operand, and layout.json and presets are both shareable.
+//      The leading-`-` rejection therefore earns its own distinct warning, so
+//      an attempt is visible in a log rather than merged into "malformed".
+{
+  const preset = (model) => JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas', panels: [panel()],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }],
+    presets: [{ id: 'a', name: 'A', cwd: '~', args: [], agentOptions: { model } }]
+  })
+  const modelOf = (r) => {
+    const o = r.snapshot.presets[0] && r.snapshot.presets[0].agentOptions
+    return o && o.model
+  }
+  const good = L.parseLayout(preset('claude-fable-5'))
+  const flag = L.parseLayout(preset('--dangerously-skip-permissions'))
+  const space = L.parseLayout(preset('a b'))
+  const long = L.parseLayout(preset('x'.repeat(200)))
+  ok('148 the model guard takes a real id and refuses a flag, a space and 200 chars',
+    modelOf(good) === 'claude-fable-5' && good.warnings.length === 0 &&
+      modelOf(flag) === undefined &&
+      flag.warnings.some((w) => w.toLowerCase().includes('flag')) &&
+      modelOf(space) === undefined &&
+      modelOf(long) === undefined,
+    JSON.stringify({
+      good: modelOf(good), flagW: flag.warnings,
+      space: modelOf(space), long: modelOf(long)
+    }))
+}
+
+// 149. templateOf and presetFromCapture preserve ABSENCE, asserted with `in`
+//      rather than with a truthiness or an undefined test — check 97's rule
+//      for `command`, applied to the record beside it. `agentOptions:
+//      undefined` is a DIFFERENT fact from the key being absent, and it is the
+//      one that survives an IPC structured clone, where `'agentOptions' in
+//      template` then reads true for a preset that never carried one.
+{
+  const bare = L.templateOf({ id: 'a', name: 'A', cwd: '~', args: [] })
+  const withOpts = L.templateOf({
+    id: 'b', name: 'B', cwd: '~', args: [], command: 'claude',
+    agentOptions: { permissionMode: 'plan' }
+  })
+  const capBare = L.presetFromCapture([], { cwd: '/Users/x/proj', args: [], w: 720, h: 460 })
+  const capOpts = L.presetFromCapture([], {
+    cwd: '/Users/x/proj', args: [], w: 720, h: 460, command: 'claude',
+    agentOptions: { effort: 'max' }
+  })
+  ok('149 templateOf and presetFromCapture keep an absent agentOptions absent',
+    !('agentOptions' in bare) &&
+      withOpts.agentOptions !== undefined &&
+      withOpts.agentOptions.permissionMode === 'plan' &&
+      !('agentOptions' in capBare) &&
+      capOpts.agentOptions !== undefined && capOpts.agentOptions.effort === 'max',
+    JSON.stringify({ bare, withOpts, capBare, capOpts }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

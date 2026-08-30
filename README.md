@@ -600,6 +600,7 @@ price of not killing something.
 | M19 | Jira context: assigned tickets and ticket-to-session handoff | ✅ done |
 | M20 | The file tree: a codebase browser rooted on the selected panel | ✅ done |
 | M21 | The agent's toolbox: what each panel's agent can actually do, read-only | ✅ done |
+| M23 | Agent modes: permission mode, effort and model, per panel | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11

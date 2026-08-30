@@ -6,7 +6,7 @@ import {
   type PresetTemplate,
   type PresetListRow
 } from '../shared/ipc-contract'
-import type { AgentKind } from '../shared/cost'
+import type { AgentKind, AgentOptions } from '../shared/cost'
 
 /**
  * The preset helpers, and deliberately NOTHING that touches the disk, the
@@ -33,6 +33,25 @@ import type { AgentKind } from '../shared/cost'
 export const BUILT_IN_PRESETS: Preset[] = [
   { id: DEFAULT_PRESET_ID, name: 'Login shell', cwd: '~', args: ['-l'] },
   { id: 'claude', name: 'Claude', cwd: '~', command: 'claude', args: [], agent: 'claude-code' },
+  {
+    id: 'claude-plan',
+    name: 'Claude (plan mode)',
+    cwd: '~',
+    command: 'claude',
+    args: [],
+    agent: 'claude-code',
+    // M20. The knobs ride in agentOptions rather than in `args` so they are
+    // VALIDATED on the way in and READABLE on the way out — a hand-written
+    // args entry spawns identically but shows nothing in the chrome, because
+    // nothing can tell a permission mode from any other argument.
+    //
+    // `plan` and not bypassPermissions, deliberately: a built-in ships to
+    // everyone and is the one preset a new user is most likely to try, so the
+    // one that comes in the box is the one that CANNOT write. A
+    // bypassPermissions built-in would be this app shipping an agent with no
+    // permission checks as a default affordance.
+    agentOptions: { permissionMode: 'plan' }
+  },
   { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [] }
 ]
 
@@ -66,12 +85,14 @@ export function templateOf(preset: {
   w?: number
   h?: number
   agent?: AgentKind
+  agentOptions?: AgentOptions
 }): PresetTemplate {
   const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
   if (preset.command !== undefined) template.command = preset.command
   if (preset.w !== undefined) template.w = preset.w
   if (preset.h !== undefined) template.h = preset.h
   if (preset.agent !== undefined) template.agent = preset.agent
+  if (preset.agentOptions !== undefined) template.agentOptions = preset.agentOptions
   return template
 }
 
@@ -158,7 +179,8 @@ export function presetFromCapture(user: Preset[], captured: CapturedPanel): Pres
     args: [...captured.args],
     w: captured.w,
     h: captured.h,
-    ...(captured.agent !== undefined ? { agent: captured.agent } : {})
+    ...(captured.agent !== undefined ? { agent: captured.agent } : {}),
+    ...(captured.agentOptions !== undefined ? { agentOptions: captured.agentOptions } : {})
   }
 }
 

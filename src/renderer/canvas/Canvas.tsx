@@ -448,6 +448,13 @@ export function Canvas({
                   args: [...chosen.args],
                   ...(chosen.command !== undefined ? { command: chosen.command } : {}),
                   ...(chosen.agent !== undefined ? { agent: chosen.agent } : {})
+                  ,
+                  // M20. The knobs, same absent-stays-absent rule as the two
+                  // fields above it — this is the copy verify:panels 156
+                  // exists to catch, because a key dropped here is legal
+                  // TypeScript and produces a panel with no knobs, which
+                  // looks exactly like a user who never asked for any.
+                  ...(chosen.agentOptions !== undefined ? { agentOptions: chosen.agentOptions } : {})
                 }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
@@ -1079,6 +1086,12 @@ export function Canvas({
       // login-shell preset, not as whatever this machine's shell happens to be.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
       if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
+      // M20. Both capture surfaces carry it, never one — presetFromCapture is
+      // the shared mint precisely so the menu's path and the inspector's
+      // cannot disagree about what a saved preset is, and a knob added to one
+      // only would give a user two different presets for one panel depending
+      // on which surface saved it.
+      if (panel.spec.agentOptions !== undefined) captured.agentOptions = panel.spec.agentOptions
       return captured
     })
     return () => {
@@ -3005,6 +3018,38 @@ export function Canvas({
         : p))
   }, [])
 
+  /**
+   * The restart sequence, shared by `restartPanel` and `restartPanelWithMode`
+   * so the two can never drift.
+   *
+   * `nextSpec` is what the panel should come back as. `restartPanel` passes
+   * the spec unchanged; `restartPanelWithMode` passes one carrying a new
+   * permission mode, which is the ONLY way a knob ever changes on a live
+   * panel — see restartPanelWithMode's own comment for why a bare edit is
+   * unsound.
+   *
+   * Every ordering note on the old restartPanel still applies verbatim and is
+   * left where it was; this function is that body with one parameter added.
+   */
+  const restartWithSpec = useCallback(
+    (id: string, nextSpec: PanelSpecTemplate) => {
+      if (!isRestartable(registry.get(id)?.status)) return
+      clearAgentState(id)
+      clearLiveSession(id)
+      clearSubagents(id)
+      clearUsage(id)
+      void registry.dispose(id).then(() => {
+        // RE-CHECKED, never captured: the await is a real gap and the panel
+        // can be closed inside it.
+        if (!panelsRef.current.some((p) => p.rect.id === id)) return
+        registry.ensure(id, nextSpec, { dormant: false })
+        registry.touch(id)
+        registry.bumpVersion()
+      })
+    },
+    [registry]
+  )
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -3624,6 +3669,12 @@ export function Canvas({
       // be. Built field by field for the same reason onCapture is.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
       if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
+      // M20. Both capture surfaces carry it, never one — presetFromCapture is
+      // the shared mint precisely so the menu's path and the inspector's
+      // cannot disagree about what a saved preset is, and a knob added to one
+      // only would give a user two different presets for one panel depending
+      // on which surface saved it.
+      if (panel.spec.agentOptions !== undefined) captured.agentOptions = panel.spec.agentOptions
       void window.canvas.preset.savePanel(captured).then(reloadPresets)
     },
     /**
@@ -3676,64 +3727,53 @@ export function Canvas({
     restartPanel: (id) => {
       const panel = panelsRef.current.find((p) => p.rect.id === id)
       // A sessionless panel has no process to restart. The isRestartable gate
-      // below would refuse either kind anyway (neither holds a session, so the
-      // status is undefined), but the narrowing has to happen before
-      // `panel.spec` is read at all.
+      // inside restartWithSpec would refuse either kind anyway (neither holds
+      // a session, so the status is undefined), but the narrowing has to
+      // happen before `panel.spec` is read at all.
       if (!panel || !isTerminalPanel(panel)) return
-      // The same gate the Restart row and the inspector button render, read
-      // from the same function rather than re-expressed here: a verb that
-      // acted on a never-started panel would end a process that does not
-      // exist and then ensure a session the user never asked to start —
-      // waking a panel from a verb whose name says the opposite.
-      if (!isRestartable(registry.get(id)?.status)) return
-      clearAgentState(id)
-      clearLiveSession(id)
-      clearSubagents(id)
-      clearUsage(id)
-      void registry.dispose(id).then(() => {
-        // RE-CHECKED, never captured: the await is a real gap and the panel
-        // can be closed inside it (the × and the rail's close control are
-        // both one click away). Re-ensuring a closed panel would mint a
-        // session no UI can ever reach or stop again — the orphan dispose()'s
-        // own comment exists to prevent, arriving through a new door.
-        if (!panelsRef.current.some((p) => p.rect.id === id)) return
-        registry.ensure(id, panel.spec, { dormant: false })
-        // TOUCH, then bump. Both are deliberate and neither substitutes for
-        // the other. ensure() mints the new session at lastFocusedAt 0, and
-        // assignTiers fills its LIVE_BUDGET slots in lastFocusedAt order — so
-        // without the stamp the restarted panel joins at the BACK of the
-        // eviction queue and is the first candidate denied a slot on a canvas
-        // already at budget. attachSlot is the ONLY caller of spawn(), so a
-        // denied slot means this verb killed and never respawned. The reach is
-        // ordinary, not theoretical: the inspector acts on selectedId, and the
-        // rail's row click selects WITHOUT focusing, so "pick a panel in the
-        // rail, press Restart" is exactly the gesture that lands here.
-        //
-        // touch bumps too, so the bumpVersion below is nominally redundant —
-        // it is kept because the re-render is a SEPARATE requirement with its
-        // own reason (see this verb's doc comment), and leaning on a member
-        // named for the eviction queue to also supply it would make a silent
-        // blank panel the cost of ever reordering these two lines. The two
-        // notifications land in one synchronous block and React batches them.
-        registry.touch(id)
-        registry.bumpVersion()
-        // NOT registry.focus(id), and the residue is recorded rather than
-        // papered over. When the palette drove this restart, runRow already
-        // called restoreFocus(capturedId) -> handle.focus() on the very handle
-        // dispose() then destroyed, so DOM focus is on <body> and the next
-        // keystroke goes nowhere until the user clicks the panel — the same
-        // silent failure usePalette's rule 4 exists to prevent. focus(id)
-        // CANNOT fix it from here: the session was re-ensured at tier 'card'
-        // one line ago, and focus() only calls handle.focus() on a LIVE
-        // session, so the call would stamp, bump, and move no keyboard at all
-        // — a line that reads as a fix and is not one. The new handle cannot
-        // take focus until React has mounted its slot and attachSlot() has
-        // opened it, which is at minimum a render away and is not guaranteed
-        // to happen at all (see the off-screen residue in CLAUDE.md). Landing
-        // it needs the REGISTRY to own a one-shot "focus on next attach",
-        // consumed inside attachSlot; that is a deliberate design decision,
-        // not a line to sneak into a fix wave.
+      restartWithSpec(id, panel.spec)
+    },
+    /**
+     * M20. Set a panel's permission mode AND restart it, as ONE gesture.
+     *
+     * Compound rather than two verbs, and the compounding is the design. A
+     * bare "change this panel's mode" is unsound twice: `registry.ensure`
+     * returns an existing session unchanged, so the spec would move while the
+     * process kept the old flags — every surface reading the session would
+     * then disagree with every surface reading the panel — and an undo of the
+     * spec edit would lie in the other direction, restoring a spec the running
+     * process never had. Restarting closes both, because a restart is the one
+     * thing that re-reads the argv: tmux `new-session -A` ignores it entirely
+     * on a reattach.
+     *
+     * It is also what lets the inspector label its rows plainly rather than
+     * hedging each with "requested". With this as the only mutation path, the
+     * session's spec and the running process cannot disagree.
+     *
+     * ONE history entry, pushed through commitHistory like every other
+     * committed gesture — unlike plain restartPanel, which pushes none
+     * because the panel array genuinely does not change there. Here it does:
+     * the spec is part of the panel, so an undo has something real to undo.
+     */
+    restartPanelWithMode: (id, mode) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (!panel || !isTerminalPanel(panel)) return
+      // Gated on the SESSION's agent, matching agentArgs: a flag appended to a
+      // panel main will not treat as an agent is emitted nowhere, so the verb
+      // would look like it worked and do nothing.
+      if (registry.get(id)?.spec.agent === undefined) return
+      const nextSpec: PanelSpecTemplate = {
+        ...panel.spec,
+        agentOptions: { ...panel.spec.agentOptions, permissionMode: mode }
+      }
+      setPanels((current) => {
+        const next = current.map((p) =>
+          p.rect.id === id && isTerminalPanel(p) ? { ...p, spec: nextSpec } : p
+        )
+        commitHistory(next)
+        return next
       })
+      restartWithSpec(id, nextSpec)
     },
     openReview,
     // Reads the panel from the ref rather than closing over `panels`, the
@@ -4011,12 +4051,16 @@ export function Canvas({
                 id: p.rect.id,
                 label: panelLabel(p),
                 title: p.title,
-                restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false
+                restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
+                // M20. From the SESSION's spec, like everything else that
+                // reports what a panel is actually running.
+                agent: registry.get(p.rect.id)?.spec.agent !== undefined
               }
             : {
                 id: p.rect.id,
                 label: panelLabel(p),
-                restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false
+                restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
+                agent: registry.get(p.rect.id)?.spec.agent !== undefined
               }
         )
       : EMPTY_PANELS),
@@ -4143,7 +4187,13 @@ export function Canvas({
         panels,
         // M15. The Cost section's data. Optional and this is its only
         // production caller, the same trade `live` and `panels` made.
-        selectedUsage
+        selectedUsage,
+        // M20. The SESSION's knobs, never selectedPanel.spec.agentOptions.
+        // registry.ensure returns an existing session unchanged, so the
+        // session's spec is what actually reached pty.create while the panel's
+        // is merely what this canvas currently holds — and a pane that read the
+        // panel could claim a permission mode the running agent is not in.
+        registry.get(selectedPanel.rect.id)?.spec.agentOptions
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

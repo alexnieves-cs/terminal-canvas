@@ -3,7 +3,16 @@ import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
-import { AGENT_KINDS, type AgentKind } from './cost'
+import {
+  AGENT_KINDS,
+  EFFORTS,
+  MODEL_PATTERN,
+  PERMISSION_MODES,
+  type AgentKind,
+  type AgentOptions,
+  type Effort,
+  type PermissionMode
+} from './cost'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -97,6 +106,11 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
    * still measuring it.
    */
   agent?: AgentKind
+  /**
+   * The spawn-time knobs for that agent CLI. Absent means the CLI's own
+   * defaults, which is every panel and preset written before M20.
+   */
+  agentOptions?: AgentOptions
 }
 
 export interface PersistedReviewPanel extends PersistedPanelBase {
@@ -169,6 +183,11 @@ export interface Preset {
   h?: number
   /** Which agent CLI this launches, when this app can account for it. */
   agent?: AgentKind
+  /**
+   * The spawn-time knobs for that agent CLI. Absent means the CLI's own
+   * defaults, which is every panel and preset written before M20.
+   */
+  agentOptions?: AgentOptions
 }
 
 /**
@@ -417,7 +436,7 @@ function parsePanel(
     warnings.push('dropped a panel that was not an object')
     return null
   }
-  const { id, x, y, w, h, z, cwd, command, args, title, agent } = raw
+  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a panel with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -511,7 +530,80 @@ function parsePanel(
   if (isStr(agent) && (AGENT_KINDS as readonly string[]).includes(agent)) {
     panel.agent = agent as AgentKind
   }
+  const panelOptions = parseAgentOptions(agentOptions, `panel ${id}`, warnings)
+  if (panelOptions !== undefined) panel.agentOptions = panelOptions
   return panel
+}
+
+/**
+ * The agent knobs a panel or a preset carries, validated per FIELD.
+ *
+ * ONE function rather than a block pasted into parsePanel and parsePreset,
+ * because two parsers for one format agree on the day they are written and
+ * drift the first time only one of them is edited — the copy-paste-one-of-two
+ * this file's shape invites, and the exact gap M17's fix round found when
+ * Preset.agent was guarded and PanelSpec.agent was not.
+ *
+ * Every arm drops the FIELD and keeps its siblings, never the whole record and
+ * never the whole panel: that is `parseLayout`'s individual-drop rule applied
+ * one level down, and for mode and effort it also fails SAFE, since the CLI's
+ * own default is more restrictive than any value we failed to recognise.
+ *
+ * Returns undefined when nothing valid survives, so an absent record is never
+ * spelled `{}` — `'agentOptions' in preset` has to keep answering false for a
+ * preset that never carried one.
+ */
+export function parseAgentOptions(
+  raw: unknown,
+  label: string,
+  warnings: string[]
+): AgentOptions | undefined {
+  if (raw === undefined) return undefined
+  if (!isRecord(raw)) {
+    warnings.push(`${label} had a malformed agentOptions; dropped it`)
+    return undefined
+  }
+  const { permissionMode, effort, model } = raw
+  const out: AgentOptions = {}
+
+  if (permissionMode !== undefined) {
+    if (isStr(permissionMode) && (PERMISSION_MODES as readonly string[]).includes(permissionMode)) {
+      out.permissionMode = permissionMode as PermissionMode
+    } else {
+      warnings.push(`${label} named an unknown permissionMode; dropped that field`)
+    }
+  }
+
+  if (effort !== undefined) {
+    if (isStr(effort) && (EFFORTS as readonly string[]).includes(effort)) {
+      out.effort = effort as Effort
+    } else {
+      warnings.push(`${label} named an unknown effort; dropped that field`)
+    }
+  }
+
+  if (model !== undefined) {
+    if (isStr(model) && MODEL_PATTERN.test(model)) {
+      out.model = model
+    } else if (isStr(model) && model.startsWith('-')) {
+      // Its OWN warning, deliberately not merged into the generic malformed
+      // one below. There is no shell on this path, so this is not injection —
+      // args reach node-pty as an argv array and tmux execs the multi-argument
+      // new-session form directly. The surface is `claude`'s own parser: a
+      // leading dash makes the value a FLAG rather than --model's operand, and
+      // layout.json and presets are both shareable artifacts. Someone reading
+      // a log after a surprising spawn needs to see that distinction.
+      warnings.push(
+        `${label} gave a model that looks like a flag (${model}); dropped that field`
+      )
+    } else {
+      warnings.push(`${label} gave an unusable model; dropped that field`)
+    }
+  }
+
+  return out.permissionMode === undefined && out.effort === undefined && out.model === undefined
+    ? undefined
+    : out
 }
 
 function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Preset | null {
@@ -519,7 +611,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
     warnings.push('dropped a preset that was not an object')
     return null
   }
-  const { id, name, cwd, command, args, w, h, agent } = raw
+  const { id, name, cwd, command, args, w, h, agent, agentOptions } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -557,6 +649,8 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
   if (isStr(agent) && (AGENT_KINDS as readonly string[]).includes(agent)) {
     preset.agent = agent as AgentKind
   }
+  const presetOptions = parseAgentOptions(agentOptions, `preset ${id}`, warnings)
+  if (presetOptions !== undefined) preset.agentOptions = presetOptions
   return preset
 }
 

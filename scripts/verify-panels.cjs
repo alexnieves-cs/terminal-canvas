@@ -9038,6 +9038,99 @@ app.whenReady().then(async () => {
         return clicked
       }
 
+      // ---------------------------------------------------------------
+      // M23 — the agent knobs, end to end (ideas-backlog #8 part 1).
+      // ---------------------------------------------------------------
+
+      // Same shape as spawnAgentPanel above, with the knobs on the template.
+      // The `-c 'sleep N'` trick that helper documents is what makes this work
+      // at all: pty-manager appends --permission-mode/--effort/--model after
+      // the -c command string, where they become ordinary positional
+      // parameters the script never references, so the shell runs as asked
+      // instead of exiting 2 on an option it does not know.
+      let m20ChipPanel
+      const spawnWithMode = async (cwd, agentOptions) => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        wc.send(IPC_EVENTS.PRESET_SPAWN, {
+          cwd, command: '/bin/sh', args: ['-c', 'sleep 120'], w: 400, h: 300,
+          agent: 'claude-code', agentOptions
+        })
+        const ids = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > before.size ? now : false
+        }, 3000)
+        return ids ? ids.find((id) => !before.has(id)) : undefined
+      }
+
+      // 172. A PresetTemplate carrying agentOptions reaches the spawned
+      //      panel's SPEC, and the chip renders it.
+      //
+      //      This is the highest-value check in the milestone, and `tsc`
+      //      cannot see the bug it catches: Canvas's template -> spec copy is
+      //      field-by-field, so a dropped key there is legal TypeScript and
+      //      silently produces a panel with no knobs — which looks exactly
+      //      like a user who did not ask for any. The chip clause is what
+      //      makes it end-to-end rather than a spec read: it goes through
+      //      session.spec, the component, and the CSS attribute together.
+      {
+        const id = await spawnWithMode(usageFixtureDir, { permissionMode: 'plan' })
+        const chip = id ? await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-panel-id="${id}"] .panel__mode')
+          return el ? el.getAttribute('data-permission-mode') : null
+        })()`) : null
+        // Read through the INSPECTOR too, not through a spec hook. __m4aSessions
+        // exposes only {id, dormant, spawned} by design ("keep the set narrow"),
+        // and widening it to carry a spec would be a worse trade than this:
+        // the chip and the inspector row are two independent components
+        // rendering the same session.spec, so both agreeing is stronger
+        // evidence than one raw read of the value they share.
+        const railed = id ? await selectPanelViaRailRow(id) : false
+        const field = id ? await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-inspector-field="agent-mode"] dd')
+          return el ? el.textContent : null
+        })()`) : null
+        ok('172 a template\'s agentOptions reach the spawned panel, the chip and the pane',
+          id !== undefined && chip === 'plan' && railed === true && field === 'plan',
+          `id=${id} chip=${chip} railed=${railed} field=${field}`)
+        // Left ALIVE deliberately, and closed at the end of 157 instead: 157
+        // asserts that a panel with a chip still exists while a panel without
+        // one shows none, which is what stops "no chip anywhere" passing as
+        // success. Closing it here would make 157 vacuous.
+        m20ChipPanel = id
+      }
+
+      // 173. A panel with NO knobs renders NO chip.
+      //
+      //      Asserted as the element being ABSENT rather than as empty text,
+      //      because an empty-but-present chip is a visible gap in a 36px
+      //      header. It is a NEGATIVE and therefore passes vacuously before
+      //      the feature exists — it is a regression guard, trustworthy only
+      //      now that 156 has been watched green, which is why the same read
+      //      also demands 156's panel still HAS its chip: the pair in one
+      //      window is what stops "no chip anywhere" passing as success.
+      {
+        const bare = await spawnAgentPanel(usageFixtureDir)
+        const bareChip = bare ? await wc.executeJavaScript(
+          `document.querySelector('[data-panel-id="${bare}"] .panel__mode') !== null`) : null
+        const anyChip = await wc.executeJavaScript(
+          `document.querySelectorAll('.panel__mode').length`)
+        ok('173 a panel with no knobs renders no chip, while a panel with one still does',
+          bare !== undefined && bareChip === false && anyChip >= 1,
+          `bare=${bare} bareChip=${bareChip} chipsOnCanvas=${anyChip}`)
+
+        // CLEAN UP AFTER OURSELVES, and this is not tidiness. These two panels
+        // outlive the block otherwise, and every panel on the canvas is
+        // LIVE_BUDGET pressure: check 144 clicks a panel body to take focus,
+        // and a panel demoted to a card has no `.panel__slot` to click, so it
+        // failed with `focused before=false` for a reason that had nothing to
+        // do with marquees. Watched exactly that way. Any check appended here
+        // that spawns inherits this obligation.
+        if (bare) await clickPanelClose(wc, bare)
+        if (m20ChipPanel) await clickPanelClose(wc, m20ChipPanel)
+      }
+
       const usageOutputText = () => wc.executeJavaScript(`(() => {
         const el = document.querySelector('[data-usage-output]')
         return el ? el.textContent : null

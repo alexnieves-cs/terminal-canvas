@@ -55,6 +55,11 @@ function findTmux() {
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'pty-manager.cjs')
 buildSync({
+  // M18: pty-manager now transitively imports a real VALUE from @shared
+  // (agent-args.ts's AGENT_FLAGS), where every main/* import from there used
+  // to be an `import type` esbuild erased before resolving anything. See
+  // CLAUDE.md's "The plain-node verify bundles now configure a @shared alias".
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') },
   entryPoints: [join(__dirname, '..', 'src', 'main', 'pty-manager.ts')],
   outfile: OUT,
   bundle: true,
@@ -82,6 +87,11 @@ console.log(`[verify:pty-manager] tmux socket: ${VERIFY_SOCKET}`)
 
 const OUT_BACKEND = join(__dirname, '..', 'out', 'verify', 'session-backend.cjs')
 buildSync({
+  // M18: pty-manager now transitively imports a real VALUE from @shared
+  // (agent-args.ts's AGENT_FLAGS), where every main/* import from there used
+  // to be an `import type` esbuild erased before resolving anything. See
+  // CLAUDE.md's "The plain-node verify bundles now configure a @shared alias".
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') },
   entryPoints: [join(__dirname, '..', 'src', 'main', 'session-backend.ts')],
   outfile: OUT_BACKEND,
   bundle: true,
@@ -100,6 +110,11 @@ const DIRECT = createDirectBackend('verify: direct by default')
 // still substituted per-check, so the harness never globs a real directory.
 const OUT_TRANSCRIPT = join(__dirname, '..', 'out', 'verify', 'transcript-reader.cjs')
 buildSync({
+  // M18: pty-manager now transitively imports a real VALUE from @shared
+  // (agent-args.ts's AGENT_FLAGS), where every main/* import from there used
+  // to be an `import type` esbuild erased before resolving anything. See
+  // CLAUDE.md's "The plain-node verify bundles now configure a @shared alias".
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') },
   entryPoints: [join(__dirname, '..', 'src', 'main', 'transcript-reader.ts')],
   outfile: OUT_TRANSCRIPT,
   bundle: true,
@@ -109,8 +124,27 @@ buildSync({
 })
 const { readFrom: realReadFrom } = require(OUT_TRANSCRIPT)
 
+// M18: agentArgs is the args assembly lifted out of create() so the argv can
+// be checked in a cheap tier with no real `claude` anywhere — the same trade
+// tmux-args.ts makes, and the reason it imports neither node-pty nor electron.
+const OUT_AGENT_ARGS = join(__dirname, '..', 'out', 'verify', 'agent-args.cjs')
+buildSync({
+  entryPoints: [join(__dirname, '..', 'src', 'main', 'agent-args.ts')],
+  outfile: OUT_AGENT_ARGS,
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['node-pty', 'electron'],
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+})
+
 const OUT_TMUX_ARGS = join(__dirname, '..', 'out', 'verify', 'tmux-args.cjs')
 buildSync({
+  // M18: pty-manager now transitively imports a real VALUE from @shared
+  // (agent-args.ts's AGENT_FLAGS), where every main/* import from there used
+  // to be an `import type` esbuild erased before resolving anything. See
+  // CLAUDE.md's "The plain-node verify bundles now configure a @shared alias".
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') },
   entryPoints: [join(__dirname, '..', 'src', 'main', 'tmux-args.ts')],
   outfile: OUT_TMUX_ARGS,
   bundle: true,
@@ -456,6 +490,66 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     ok('19 a real bell wants you, and typing clears it', rang && cleared,
       JSON.stringify(states))
     h.manager.kill('a3')
+  }
+
+  // ---------------------------------------------------------------------
+  // M18 — the agent flag argv (ideas-backlog #8 part 1).
+  //
+  // These drive the PURE `agentArgs`, extracted out of create()'s own args
+  // assembly for the reason tmux-args.ts is pure: an argv builder is testable
+  // without a real `claude` on PATH, and a check that shelled out to one would
+  // skip on every machine without it and quietly stop existing.
+  // ---------------------------------------------------------------------
+  {
+    const A = require(OUT_AGENT_ARGS)
+
+    // 35. Every knob is spelled correctly and the session id still leads.
+    //     Spelling is the whole risk here: a flag `claude` has never heard of
+    //     fails the spawn OUTRIGHT rather than being ignored, which is why
+    //     pty-manager refuses to append flags to a command the user typed.
+    const full = A.agentArgs(
+      { agent: 'claude-code', args: [], agentOptions: { permissionMode: 'plan', effort: 'high', model: 'opus' } },
+      'sess-1'
+    )
+    ok('35 every agent knob reaches the argv with its measured flag spelling',
+      full.join(' ') === '--session-id sess-1 --permission-mode plan --effort high --model opus',
+      JSON.stringify(full))
+
+    // 36. A user-supplied flag wins, PER FLAG. One `includes` check covering
+    //     all three (or none) is the plausible wrong implementation, and it is
+    //     invisible: a duplicated flag makes the CLI reject the invocation
+    //     outright, so the panel simply never starts — the same failure the
+    //     --session-id guard beside it was written to prevent. The effort
+    //     clause is what proves the suppression is per-flag rather than
+    //     all-or-nothing.
+    const userWins = A.agentArgs(
+      {
+        agent: 'claude-code',
+        args: ['--permission-mode', 'acceptEdits'],
+        agentOptions: { permissionMode: 'plan', effort: 'high' }
+      },
+      'sess-2'
+    )
+    const modes = userWins.filter((a) => a === '--permission-mode')
+    ok('36 a user-supplied flag suppresses ours, per flag, without duplicating',
+      modes.length === 1 &&
+        userWins[userWins.indexOf('--permission-mode') + 1] === 'acceptEdits' &&
+        userWins.includes('--effort') && userWins.includes('high'),
+      JSON.stringify(userWins))
+
+    // 37. Knobs present, `agent` ABSENT -> nothing emitted at all, not even
+    //     the session id. This is the check that pins the gate on spec.agent
+    //     rather than on the knob: gating on the knob would append flags to
+    //     whatever command the user typed, which is precisely the move
+    //     resolveCommand deliberately refuses one function up. A login shell
+    //     with a stray agentOptions must spawn exactly as it always did.
+    const notAnAgent = A.agentArgs(
+      { args: ['-l'], agentOptions: { permissionMode: 'bypassPermissions' } },
+      'sess-3'
+    )
+    ok('37 knobs with no agent emit nothing — the gate is spec.agent, not the knob',
+      notAnAgent.length === 1 && notAnAgent[0] === '-l',
+      JSON.stringify(notAnAgent))
   }
 
   // 11-15 need a real tmux. Skipping is reported, never silent: a suite that

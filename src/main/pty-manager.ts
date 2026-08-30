@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { agentArgs } from './agent-args'
 import {
   closeSync,
   existsSync,
@@ -491,20 +492,17 @@ export class PtyManager {
     //
     // Gated on spec.agent, never on the resolved command: appending a flag to
     // a command the user typed is the move resolveCommand deliberately refuses.
-    let args = spec.args
-    if (spec.agent === 'claude-code') {
-      let sessionId = this.pinnedSession(spec.panelId)
-      if (sessionId === undefined) {
-        sessionId = randomUUID()
-        this.setPinnedSession(spec.panelId, sessionId)
-      }
-      // Only when the user has not already said otherwise. A preset whose args
-      // carry their own --session-id is the user being explicit, and a second
-      // one would make the CLI reject the invocation outright.
-      if (!args.includes('--session-id')) {
-        args = [...args, '--session-id', sessionId]
-      }
+    //
+    // M20: the assembly itself now lives in the pure `agentArgs`, so the argv
+    // — including the spawn-time knobs from spec.agentOptions — is checkable
+    // without a real `claude` on PATH. The read-then-mint of the session id
+    // stays HERE, because it writes to the store and is therefore not pure.
+    let sessionId = this.pinnedSession(spec.panelId)
+    if (spec.agent === 'claude-code' && sessionId === undefined) {
+      sessionId = randomUUID()
+      this.setPinnedSession(spec.panelId, sessionId)
     }
+    const args = agentArgs(spec, sessionId ?? '')
 
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
     // is missing, so a probe taken afterwards answers true unconditionally and
