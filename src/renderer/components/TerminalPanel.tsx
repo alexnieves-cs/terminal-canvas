@@ -57,6 +57,9 @@ export interface TerminalPanelProps {
    * the same reason `version` and `title` are props.
    */
   glow: boolean
+  /** Ticket context is pasted as one bracketed-paste transaction after spawn. */
+  openingContext?: string
+  onContextPasted?: (id: string) => void
 }
 
 const CARD_LINES = 6
@@ -66,7 +69,7 @@ const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount, onClose,
-  glow, entering, onEntryEnd
+  glow, entering, onEntryEnd, openingContext, onContextPasted
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -91,6 +94,11 @@ function TerminalPanelImpl({
   }, [])
 
   const running = session.status.kind === 'running' || session.status.kind === 'starting'
+  useEffect(() => {
+    if (openingContext === undefined || session.status.kind !== 'running') return
+    session.handle.paste(openingContext)
+    onContextPasted?.(session.id)
+  }, [openingContext, onContextPasted, session])
 
   const handleClose = (event: ReactMouseEvent): void => {
     event.stopPropagation()

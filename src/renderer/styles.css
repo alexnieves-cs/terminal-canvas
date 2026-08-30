@@ -1735,6 +1735,9 @@ body {
 .file-node__text { white-space: pre; }
 
 .file-node__more { margin: var(--sp-4) 0 0; color: var(--fg-3); }
+.jira-node__item { border-bottom: 1px solid var(--s-3); padding: var(--sp-3) 0; }
+.jira-node__item small { display: block; color: var(--fg-3); margin-top: var(--sp-1); }
+.jira-node__item p { white-space: pre-wrap; margin: var(--sp-2) 0; }
 
 .file-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule

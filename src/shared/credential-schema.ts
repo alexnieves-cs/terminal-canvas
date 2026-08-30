@@ -32,6 +32,11 @@ export const SERVICES: readonly CredentialService[] = [
     id: 'github',
     label: 'GitHub',
     help: 'Paste a personal access token (classic or fine-grained) with read access to your account.'
+  },
+  {
+    id: 'jira',
+    label: 'Jira',
+    help: 'Paste three lines: your https://site.atlassian.net URL, Atlassian email, then Jira API token.'
   }
 ]
 

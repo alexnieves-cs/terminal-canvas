@@ -4277,6 +4277,12 @@ a future reader comparing the spec to the code should not mistake the smaller
 field set for a missed requirement.
 ## Gotchas
 
+- **Jira ticket context is `paste()`, never `write()` (`TerminalPanel.tsx`).** A ticket
+  description is agent context, not a credential, so it may cross to a session; but it is
+  usually multi-paragraph. Raw writes submit every newline separately, firing incomplete
+  fragments into the agent before the description arrives. The terminal's `paste()` is the
+  bracketed-paste path and is the only acceptable handoff.
+
 - **`Cannot read properties of undefined (reading 'whenReady')`** — your shell exports
   `ELECTRON_RUN_AS_NODE=1` (VS Code's extension host does this), so the Electron binary boots
   as plain Node. `dev`/`start` already `unset` it; you only hit this invoking `electron-vite`

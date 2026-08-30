@@ -101,7 +101,11 @@ export interface FilePanel extends PanelBase {
   source: FileSource
 }
 
-export type Panel = TerminalPanel | ReviewPanel | FilePanel
+/** Jira's first concrete panel. It deliberately carries no provider machinery:
+ * the next provider decides what, if anything, generalises. */
+export interface JiraPanel extends PanelBase { kind: 'jira' }
+
+export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -127,6 +131,7 @@ export function isReviewPanel(panel: Panel): panel is ReviewPanel {
 export function isFilePanel(panel: Panel): panel is FilePanel {
   return panel.kind === 'file'
 }
+export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kind === 'jira' }
 
 /**
  * The partition test, and the reason it is spelled as a negation of the known
@@ -145,7 +150,7 @@ export function isFilePanel(panel: Panel): panel is FilePanel {
  * it. A fourth kind edits exactly this one line.
  */
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
-  return !isReviewPanel(panel) && !isFilePanel(panel)
+  return !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel)
 }
 
 export const PANEL_W = 720
@@ -534,4 +539,10 @@ export function makeFilePanel(
     source: { path: source.path },
     z
   }
+}
+
+export const JIRA_W = 640
+export const JIRA_H = 520
+export function makeJiraPanel(id: string, centre: Point, z: number): JiraPanel {
+  return { kind: 'jira', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'Jira tickets' }
 }

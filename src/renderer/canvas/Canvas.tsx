@@ -42,7 +42,7 @@ import type {
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
-  cascadeCentre, firstRunPanels, isFilePanel, isReviewPanel, isTerminalPanel, makeFilePanel,
+  cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, makeFilePanel, makeJiraPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, removeLink, setLinkLabel,
   type Panel, type TerminalPanel as TerminalPanelModel
@@ -52,6 +52,8 @@ import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
 import type { PaletteActions, PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { findService, type CredentialMeta } from '@shared/credential-schema'
+import type { WorkItem } from '@shared/work-item'
+import { JiraNode } from '@renderer/jira/JiraNode'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -109,6 +111,7 @@ function panelLabel(panel: Panel): string {
   // because two panels on one canvas can easily hold two files of the same
   // name from different directories.
   if (isFilePanel(panel)) return `file: ${panel.source.path} (${panel.rect.id})`
+  if (isJiraPanel(panel)) return `jira tickets (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it
@@ -323,7 +326,7 @@ export function Canvas({
   const defaultTemplateRef = useRef<PresetTemplate | undefined>(defaultTemplate)
 
   const onSpawn = useCallback(
-    (centre: Point, template?: PresetTemplate) => {
+    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string }) => {
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
       setEnteringPanelIds((current) => new Set(current).add(id))
@@ -346,7 +349,7 @@ export function Canvas({
         const placed = cascadeCentre(centre, current)
         const next = [
           ...current,
-          makePanel(
+          { ...makePanel(
             id,
             placed,
             nextZ(current),
@@ -354,7 +357,7 @@ export function Canvas({
               ? { panelId: id, cwd: chosen.cwd, args: [...chosen.args], ...(chosen.command !== undefined ? { command: chosen.command } : {}) }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
-          )
+          ), ...(opening?.title === undefined ? {} : { title: opening.title }) }
         ]
         commitHistory(next)
         return next
@@ -362,6 +365,17 @@ export function Canvas({
     },
     [commitHistory]
   )
+  const [openingContexts, setOpeningContexts] = useState<Map<string, string>>(() => new Map())
+  const spawnJiraTicket = useCallback((item: WorkItem) => {
+    const id = `n${nextIdRef.current}`
+    setOpeningContexts((current) => new Map(current).set(id, `Jira ticket ${item.id}: ${item.title}\n\n${item.description}`))
+    onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
+  }, [onSpawn])
+  const openJiraPanel = useCallback(() => {
+    const id = `j${nextIdRef.current++}`
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
+    setSelectedId(id)
+  }, [commitHistory])
   const onPanelEntryEnd = useCallback((id: string) => {
     setEnteringPanelIds((current) => {
       if (!current.has(id)) return current
@@ -2263,6 +2277,7 @@ export function Canvas({
               if (isFilePanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
               }
+              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name }
               return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name }
             })
             // One entry for the whole gesture, on commit — the rule a drag
@@ -2806,7 +2821,12 @@ export function Canvas({
           initial: '',
           ...(refused ? { feedback: true as const } : {}),
           submit: (value) => {
-            void window.canvas.credential.set({ service, token: value }).then((res) => {
+            const jiraLines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+            const token = service === 'jira' && jiraLines.length === 3
+              ? JSON.stringify({ site: jiraLines[0], email: jiraLines[1], token: jiraLines[2] })
+              : value
+            if (service === 'jira' && jiraLines.length !== 3) { openEntry('enter site URL, email, and API token on three lines'); return }
+            void window.canvas.credential.set({ service, token }).then((res) => {
               if (!res.ok) {
                 openEntry(res.reason)
                 return
@@ -2894,13 +2914,14 @@ export function Canvas({
         if (path === null) return
         openFilePanel(path, worldCentre())
       })
-    }
+    },
+    openJira: () => openJiraPanel()
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
-       openFilePanel, worldCentre])
+       openFilePanel, openJiraPanel, worldCentre])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -3279,6 +3300,7 @@ export function Canvas({
                 />
               )
             }
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (
@@ -3297,6 +3319,8 @@ export function Canvas({
                 onBeginDrag={onBeginDrag}
                 onClose={onClosePanel}
                 glow={glowEnabled}
+                openingContext={openingContexts.get(panel.rect.id)}
+                onContextPasted={(id) => setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })}
                 entering={enteringPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
               />

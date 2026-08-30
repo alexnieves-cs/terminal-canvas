@@ -45,10 +45,11 @@
     "verify:agent-state": "node scripts/verify-agent-state.cjs",
     "verify:styles": "node scripts/verify-styles.cjs",
     "verify:credentials": "node scripts/verify-credentials.cjs",
+    "verify:jira": "node scripts/verify-jira.cjs",
     "verify:canvas": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-canvas.cjs",
     "verify:xterm": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-xterm-detach.cjs",
     "verify:panels": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels.cjs",
-    "verify": "npm run verify:meta && npm run verify:styles && npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:credentials && npm run verify:palette && npm run verify:rail && npm run verify:review && npm run verify:subagent && npm run verify:file && npm run verify:tmux && npm run verify:agent-state && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
+    "verify": "npm run verify:meta && npm run verify:styles && npm run verify:viewport && npm run verify:registry && npm run verify:layout && npm run verify:credentials && npm run verify:jira && npm run verify:palette && npm run verify:rail && npm run verify:review && npm run verify:subagent && npm run verify:file && npm run verify:tmux && npm run verify:agent-state && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels"
   },
   "dependencies": {
     "node-pty": "1.1.0"

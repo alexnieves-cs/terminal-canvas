@@ -217,6 +217,10 @@ together: the canvas as an agentic super app, not a terminal multiplexer.**
   surface deliberately doesn't cover. Building a general plugin API before two concrete
   integrations exist is the classic way to get an abstraction that fits neither.
 
+  Jira is currently the first tier-2 implementation; it deliberately does not claim this
+  surface. GitHub remains the preferred second reference implementation, at which point the
+  common boundary can be derived rather than guessed.
+
 ## 10. Light mode / dark mode
 
 A theme the user picks — light or dark — plus, presumably, "follow the system".
@@ -281,6 +285,14 @@ leaving the canvas.
   Jira adapter, the second provider is cheap. Do not build the abstraction until the
   second provider is actually wanted — but do keep the Jira types from leaking into the
   panel-spawning code.
+
+**M17 landed the Jira Cloud read-only path.** Jira is deliberately the first tier-2
+integration, not an invented integration surface: it has a Jira-specific panel and one
+vendor-neutral work-item boundary. Cloud API-token Basic auth was explicitly chosen for
+this private client; OAuth 3LO was rejected for now because its redirect, expiry and refresh
+lifecycle needs its own milestone. The panel lists assigned tickets and starts ordinary titled
+terminal sessions with descriptions inserted by bracketed paste. Writes, Server/Data Center,
+OAuth and a second provider remain open.
 
 ## 13. Drag and drop images into a session (terminal or chat)
 
