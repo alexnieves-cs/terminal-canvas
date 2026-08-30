@@ -162,6 +162,54 @@ const p = (id, x, y, w = 720, h = 460) => ({ id, x, y, w, h, z: 1, cwd: '~', arg
     JSON.stringify(out.lanes.map((l) => l.bounds)))
 }
 
+/* ---- the marquee ---- */
+const r = (id, x, y, w = 100, h = 100) => ({ id, x, y, w, h })
+
+// 8. A drag normalises in every direction. Dragging up-and-left is as
+//    ordinary as down-and-right, and a rect with negative width selects
+//    nothing at all — a marquee that only worked one way would look like an
+//    intermittently broken gesture rather than a missing normalisation.
+{
+  const a = R.marqueeRect({ x: 300, y: 300 }, { x: 100, y: 100 })
+  ok('8 a marquee normalises whichever way it is dragged',
+    a.x === 100 && a.y === 100 && a.w === 200 && a.h === 200, JSON.stringify(a))
+}
+
+// 9. Selection is by INTERSECTION, not containment. A marquee that required
+//    full containment could never select a panel bigger than the visible
+//    canvas, which at ordinary zoom levels is most of them — a gesture that
+//    silently does nothing on the common case.
+{
+  const picked = R.marqueeSelection(r('m', 50, 50, 20, 20), [r('n1', 0, 0, 720, 460)])
+  ok('9 a marquee selects on intersection, not containment',
+    picked.join(',') === 'n1', picked.join(','))
+}
+
+// 10. A panel merely TOUCHING the marquee's edge is not selected. Zero-area
+//     overlap is what a user gets when they drag a marquee up against a panel
+//     deliberately to exclude it, and selecting it there makes the gesture
+//     feel imprecise in exactly the situation precision was intended.
+{
+  const picked = R.marqueeSelection(r('m', 100, 0, 50, 50), [r('n1', 0, 0, 100, 100)])
+  ok('10 an edge-touching panel is not selected', picked.length === 0, picked.join(','))
+}
+
+// 11. Nothing intersected is an EMPTY selection, not a null and not the
+//     previous one. A drag on empty space is how a user clears a selection.
+{
+  ok('11 a marquee over nothing selects nothing',
+    R.marqueeSelection(r('m', 5000, 5000, 10, 10), [r('n1', 0, 0)]).length === 0)
+}
+
+// 12. Order follows the panels array, so a selection is stable across
+//     re-renders rather than reordering under the user between the marquee
+//     and the command that acts on it.
+{
+  const picked = R.marqueeSelection(r('m', -10, -10, 5000, 5000),
+    [r('n1', 0, 0), r('n2', 200, 0), r('n3', 400, 0)])
+  ok('12 selection order follows the panel array', picked.join(',') === 'n1,n2,n3', picked.join(','))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
