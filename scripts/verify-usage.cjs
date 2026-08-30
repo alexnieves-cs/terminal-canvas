@@ -150,6 +150,62 @@ const rec = (over = {}) => JSON.stringify({
     JSON.stringify(t))
 }
 
+// 9. The four classes are priced SEPARATELY, and the fixture is built so an
+//    input+output implementation is NUMERICALLY distinguishable — cache read
+//    dominates by a factor of 60,000 here, which is the ordinary shape of a
+//    long session rather than a contrived one. A check with a balanced
+//    fixture cannot tell the two implementations apart and is worth nothing.
+{
+  const heavy = { input: 2, output: 1000, cacheWrite: 0, cacheRead: 120000 }
+  const light = { input: 2, output: 1000, cacheWrite: 0, cacheRead: 0 }
+  const a = U.costOf(heavy, 'claude-opus-5')
+  const b = U.costOf(light, 'claude-opus-5')
+  ok(9, typeof a === 'number' && typeof b === 'number' && a > b,
+    `withCache=${a} withoutCache=${b}`)
+}
+
+// 10. A cache READ costs less than the same count of FRESH input. This is the
+//     direction the whole four-class model exists for, and a table with the
+//     two rates transposed satisfies check 9 perfectly — 9 only asks that
+//     cache reads cost SOMETHING.
+{
+  const asRead = { input: 0, output: 0, cacheWrite: 0, cacheRead: 100000 }
+  const asInput = { input: 100000, output: 0, cacheWrite: 0, cacheRead: 0 }
+  ok(10, U.costOf(asRead, 'claude-opus-5') < U.costOf(asInput, 'claude-opus-5'),
+    `read=${U.costOf(asRead, 'claude-opus-5')} input=${U.costOf(asInput, 'claude-opus-5')}`)
+}
+
+// 11. An unknown model yields UNDEFINED, never 0. A new model shipping while
+//     this table is old must read as "not priced here" — a zero would render
+//     as "$0.00" beside an agent that is plainly spending, which is the
+//     confident wrong answer this milestone's whole honesty rule forbids.
+{
+  const t = { input: 100, output: 100, cacheWrite: 0, cacheRead: 0 }
+  ok(11, U.costOf(t, 'some-model-shipped-next-year') === undefined,
+    String(U.costOf(t, 'some-model-shipped-next-year')))
+}
+
+// 12. Every declared rate is a positive finite number for all four classes.
+//     A table entry with a missing class silently prices that class at
+//     undefined, and `undefined * n` is NaN, which propagates to a dollar
+//     figure that renders as nothing at all.
+{
+  const bad = Object.entries(U.MODEL_RATES).filter(([, r]) =>
+    !['input', 'output', 'cacheWrite', 'cacheRead'].every(
+      (k) => typeof r[k] === 'number' && Number.isFinite(r[k]) && r[k] > 0))
+  ok(12, Object.keys(U.MODEL_RATES).length > 0 && bad.length === 0,
+    bad.length ? `bad: ${bad.map(([m]) => m).join(', ')}` : `${Object.keys(U.MODEL_RATES).length} models`)
+}
+
+// 13. Zero tokens is zero dollars for a KNOWN model — distinct from check
+//     11's undefined for an unknown one. The two must not collapse: "this
+//     model is not priced" and "this panel has spent nothing yet" are
+//     different sentences and the pane renders them differently.
+{
+  ok(13, U.costOf(U.emptyTotals(), 'claude-opus-5') === 0,
+    String(U.costOf(U.emptyTotals(), 'claude-opus-5')))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
