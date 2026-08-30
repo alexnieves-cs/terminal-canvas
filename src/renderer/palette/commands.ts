@@ -217,6 +217,14 @@ export interface PaletteContext {
    * module stays in the plain-node verify tier and its fixtures stay literals.
    */
   selectedIds: string[]
+  /**
+   * Whether the merged view is open. REQUIRED, not optional, for the reason
+   * `settings` is: an optional flag here is a compile-time hole a surface
+   * that forgot to wire it passes straight through — and what it gates is a
+   * WRITE into a workspace record the user is not in (see the move rows
+   * below), which is the last thing that should degrade quietly to "false".
+   */
+  merged: boolean
   actions: PaletteActions
 }
 
@@ -237,6 +245,15 @@ export const REASON_NOT_STARTED = 'that panel has not started'
 // gestures: collapsing them would tell a user who has selected text that they
 // need to select text, which sends them to do the thing they already did.
 export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag first'
+/**
+ * The merged view is read-only, so the move rows refuse there.
+ *
+ * An EXPORTED constant, like every reason above it, because checks compare
+ * against the constant and never against the literal — a reason asserted as a
+ * string literal keeps passing while the text the user actually reads says
+ * something else entirely (the rule verify:palette 66b records).
+ */
+export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -712,7 +729,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
             // dismiss the gate that guards the delete row below it.
             run: () => actions.movePanelsToWorkspace(ctx.selectedIds, { workspaceId: w.id })
           },
-          ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined
+          // The merged reason is tested FIRST and outranks the empty one: in
+          // the merged view a selection is easy to have (one click on any
+          // lane's panel) and telling that user to select something is
+          // telling them to do the thing they have already done. Disabled
+          // WITH a reason, never absent — a row that disappears is
+          // indistinguishable from a feature that was never built, and this
+          // one is genuinely available one toggle away.
+          ctx.merged
+            ? REASON_MERGED_READ_ONLY
+            : (ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined)
         )
       )
     }
@@ -748,7 +774,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       // row that disappears is indistinguishable from a feature that was never
       // built, and a user who has not yet discovered that the rubber-band drag
       // is what feeds this verb has nowhere else to learn it.
-      ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined
+      // Same precedence as the per-workspace rows above, and for the same
+      // reason. This one matters slightly more: it MINTS a workspace, so a
+      // merged-view run would file another workspace's panels into a canvas
+      // that did not exist a moment ago.
+      ctx.merged
+        ? REASON_MERGED_READ_ONLY
+        : (ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined)
     )
   )
 

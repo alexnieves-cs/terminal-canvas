@@ -3,7 +3,9 @@ import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
-import { hitTest, screenToWorld, worldToScreen, type Point, type WorldRect } from './viewport'
+import {
+  hitTest, screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect
+} from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { marqueeRect, marqueeSelection } from './marquee'
 import { MergedLanes } from './MergedLanes'
@@ -581,6 +583,27 @@ export function Canvas({
    */
   const mergedRef = useRef(merged)
   mergedRef.current = merged
+  /**
+   * What the canvas looked like the instant before the merged view opened:
+   * the camera, the selection and the focus.
+   *
+   * The merged view's whole design claim is that it writes nothing, and until
+   * this ref existed that claim was false for three of the four fields
+   * layout.save persists. Panning while merged wrote a LANE-SPACE camera into
+   * the active workspace's record — coordinates that mean nothing outside the
+   * lane arrangement they came from — and selecting a foreign panel wrote its
+   * id there too. Neither is recoverable by leaving, because the damage is
+   * already on disk: quit while merged and the next launch opens onto empty
+   * space with a selectedId naming a panel this workspace has never held.
+   *
+   * A ref rather than state because nothing renders from it and it must not
+   * re-run the save effect on its own; null exactly when `merged` is false.
+   */
+  const preMergeRef = useRef<{
+    camera: Viewport
+    selectedId: string | null
+    focusedId: string | null
+  } | null>(null)
   const displayPanelsRef = useRef(displayPanels)
   displayPanelsRef.current = displayPanels
 
@@ -1119,6 +1142,18 @@ export function Canvas({
         const own = new Set(panelsRef.current.map((p) => p.rect.id))
         setSelectedIds((current) => retainSelection(current, (id) => own.has(id)))
         setFocusedId((id) => (id !== null && own.has(id) ? id : null))
+        // The camera goes back to where the user left it, through the named
+        // verb rather than by letting the next save sort it out. A merged
+        // camera is in LANE SPACE — the active workspace's own panels were
+        // normalised to their lane's origin, so the coordinates the user
+        // panned to describe a canvas that no longer exists the instant the
+        // view closes. Leaving it would put the user in front of empty space
+        // with nothing on screen explaining why, and Cmd+0 is a recovery they
+        // would have to already know about. restoreCamera, not centreOn: the
+        // ZOOM is part of what was left behind too.
+        const before = preMergeRef.current
+        if (before) restoreCamera(before.camera)
+        preMergeRef.current = null
         return
       }
       let workspaces: MergedWorkspace[]
@@ -1135,11 +1170,21 @@ export function Canvas({
       const dormant = await resolveDormant(
         workspaces.flatMap((w) => w.panels.map((p) => p.id))
       )
+      // Captured in the SAME synchronous block that commits the view, and the
+      // camera comes from the REF rather than from this closure: the two
+      // awaits above are a real window, and `viewport` changes on every wheel
+      // event, so a closure read here is a camera the leave would restore to
+      // wherever the user was standing when toggleMerged was last rebuilt.
+      // The selection and focus come from the closure, which is exactly the
+      // split switchWorkspace makes for its own outgoing state and for the
+      // same reason — both are in this callback's dep list, so neither can be
+      // more than one render stale.
+      preMergeRef.current = { camera: viewportRef.current, selectedId, focusedId }
       setMergedData(workspaces)
       setDormantIds(dormant)
       setMerged(true)
     })()
-  }, [resolveDormant])
+  }, [resolveDormant, restoreCamera, selectedId, focusedId])
 
   /**
    * Keep the merged view current while it is open.
@@ -1235,6 +1280,18 @@ export function Canvas({
       // `newName` branch would otherwise create an empty canvas as the
       // side effect of a verb that then moved nothing into it.
       if (panelIds.length === 0) return
+      // The merged view is read-only, and this is the AUTHORITY for that —
+      // the palette's own rows are disabled with REASON_MERGED_READ_ONLY, but
+      // a disabled row is an affordance and this is the verb. Reached from
+      // the merged view, a single CLICK on any lane's panel is a selection,
+      // so the move rows would refile a panel out of a workspace the user is
+      // not even in — the hazard the marquee gate already covers, reachable
+      // with one fewer step and no rubber band to notice. Worse, `panels`
+      // does not contain that id, so nothing here would change on screen and
+      // `panels.length` would not move — the refetch never fires, and the
+      // panel goes on rendering in a lane it no longer belongs to until the
+      // view is toggled.
+      if (mergedRef.current) return
       void (async (): Promise<void> => {
         let result: { workspaceId: string } | null
         try {
@@ -1777,14 +1834,34 @@ export function Canvas({
   // second arriving continuously at the renderer's event loop; this is sixty
   // small JSON payloads a second reaching an otherwise-idle main process, and
   // only while a gesture is in progress.
+  //
+  // While merged, three of the four fields come from the PRE-MERGE snapshot
+  // rather than from live state, and that is the whole of this effect's
+  // special-casing — `panels` is untouched and stays the only array written,
+  // which is the split displayPanels' own comment describes.
+  //
+  // Two ways to stop the merged view writing a lane-space camera were
+  // available and only one of them is safe. Capture-on-enter plus
+  // restore-on-leave ALONE lets the next save correct the record, which is
+  // fine for a user who leaves the view — and wrong for the one who quits
+  // inside it, because before-quit flushes whatever the last save left and
+  // there is no "next save" to correct anything. So the snapshot is read
+  // HERE too: every save issued while merged writes exactly what the save
+  // issued one instant before the toggle would have written. `panels` is
+  // still live, so a Cmd+N while merged is persisted normally.
   useEffect(() => {
+    // Read at call time rather than through a dep, because a ref cannot
+    // trigger this effect and does not need to: it is written once, in the
+    // same synchronous block that sets `merged`, so the render that flips the
+    // flag already sees it.
+    const before = preMergeRef.current
     void window.canvas.layout.save({
       panels: fromPanels(panels),
-      camera: viewport,
-      selectedId,
-      focusedId
+      camera: merged && before ? before.camera : viewport,
+      selectedId: merged && before ? before.selectedId : selectedId,
+      focusedId: merged && before ? before.focusedId : focusedId
     })
-  }, [panels, viewport, selectedId, focusedId])
+  }, [panels, viewport, selectedId, focusedId, merged])
 
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
     const host = hostRef.current
@@ -3305,6 +3382,7 @@ export function Canvas({
             attentionIds={waitingIds}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
+            merged={merged}
             inputMode={inputMode}
           />
         )}

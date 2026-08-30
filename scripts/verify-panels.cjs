@@ -8668,7 +8668,30 @@ app.whenReady().then(async () => {
 
       await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('mergehome')`)
       await settle()
-      await zoomTo(wc, '0') // camera INITIAL, scale 1 — check 124 needs a known scale
+      // THE CAMERA IS THE FIXTURE, and it is set BEFORE the view is entered.
+      //
+      // The defect check 124 exists to catch only spawns while dormantIds is
+      // stale — a few milliseconds — so the foreign panels have to be inside
+      // the cull region at the moment the merged array commits, or a broken
+      // build promotes nothing and the check is green against it. An earlier
+      // draft positioned the camera from INSIDE the view (enter, navigate by
+      // rail row, leave, re-enter); that stopped working the moment leaving
+      // began restoring the pre-merge camera, which is correct behaviour and
+      // exactly why the positioning now happens out here where the restore
+      // preserves it rather than undoing it.
+      //
+      // Cmd+0 puts the camera at INITIAL (x 120, y 120, scale 1) and three
+      // zoom-out steps take it to 1/1.2³ = 0.579 — still above
+      // LIVE_MIN_SCALE (0.5), where a broken build WOULD promote, and wide
+      // enough that the foreign lane at world x 1200 is inside the
+      // CULL_MARGIN-expanded viewport. Both halves matter: one step fewer and
+      // the lane is outside the margin, one step more and the scale is below
+      // the threshold where nothing is promoted at all. The `inCullRegion`
+      // clause below is what makes that arithmetic self-checking rather than
+      // a comment that can quietly stop being true.
+      await zoomTo(wc, '0')
+      await settle()
+      for (let i = 0; i < 3; i++) await zoomTo(wc, '-')
       await settle()
 
       // The workspace under test is seeded ON DISK and never rendered by this
@@ -8693,7 +8716,19 @@ app.whenReady().then(async () => {
       // workspace some earlier check created.
       flushLayoutStore()
       const onDisk124 = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
-      onDisk124.workspaces.push({
+      // UNSHIFT, not push, and the position is load-bearing. mergedLayout
+      // sorts the active workspace's lane first and keeps every other
+      // workspace in INPUT ORDER, and each lane is as wide as its own
+      // bounding box — so a lane appended last starts after the sum of every
+      // preceding lane's width. Measured: check 39's never-woken panel is
+      // parked at world 50000,50000 and check 84's at 60000,60000, both in
+      // workspaces that precede this one, which put an appended fixture lane
+      // at world x ≈ 70000 — far outside any camera this check can reach, and
+      // therefore outside the cull region, where a BROKEN build promotes
+      // nothing and check 124 is green against it. First among the non-active
+      // workspaces puts it at LANE_MIN_WIDTH + LANE_GUTTER = 1200, which is
+      // the number the camera fixture above is built against.
+      onDisk124.workspaces.unshift({
         id: MERGED_WS_ID,
         name: MERGED_WS_NAME,
         // Small boxes, close together: the whole lane has to fit on screen at
@@ -8752,40 +8787,67 @@ app.whenReady().then(async () => {
         return out
       }
 
+      /**
+       * Compares two storedRects() reads, and compares the panel-id SETS as
+       * well as the rects of ids both reads share.
+       *
+       * The set half is not belt-and-braces, it is the half that catches the
+       * failure this check is named for. A save effect written
+       * `fromPanels(displayPanels)` would stuff every workspace's lane-offset
+       * panels into the ACTIVE workspace's record while merged — every one of
+       * them an ADDED id, none of them a changed rect for an id that was
+       * already there — so a comparison that only walked the ids present
+       * BEFORE would see nothing at all and report a canvas that had just
+       * been corrupted as untouched.
+       */
+      const rectDrift = (before, after, when) => {
+        const out = []
+        for (const [wsId, was] of Object.entries(before)) {
+          const now = after[wsId]
+          if (!now) { out.push(`${when} ${wsId}: workspace gone`); continue }
+          for (const [panelId, rect] of Object.entries(was)) {
+            if (now[panelId] !== rect) {
+              out.push(`${when} ${wsId}/${panelId}: ${rect} -> ${now[panelId] ?? 'MISSING'}`)
+            }
+          }
+          for (const panelId of Object.keys(now)) {
+            if (was[panelId] === undefined) out.push(`${when} ${wsId}/${panelId}: ADDED ${now[panelId]}`)
+          }
+        }
+        for (const wsId of Object.keys(after)) {
+          if (before[wsId] === undefined) out.push(`${when} ${wsId}: workspace ADDED`)
+        }
+        return out
+      }
+
       const sessionsBefore = await settledSessionMap(wc, 4000)
       const storedBefore = await storedRects()
 
-      // The FIRST entry is a positioning device, and the double entry is what
-      // makes check 124 able to fail at all. The injected defect — committing
-      // the merged array before pty:list resolves — only spawns while
-      // dormantIds is stale, which is a few milliseconds; a panel outside the
-      // cull region during that window is never promoted, the corrected set
-      // lands, and the run stays green against a genuinely broken build. So:
-      // enter once to learn where the lane is and navigate the camera onto it
-      // (goToPanel — centreOn plus selectAndRaise, which is navigation and
-      // never a wake, the rule check 39 pins), leave, and enter AGAIN with the
-      // camera already framing the foreign panels. On that second entry the
-      // stale window and the visible region coincide, which is the only
-      // arrangement in which the defect can reach attachSlot.
       const opened = await clickMerged()
       await settle()
-      const firstEntry = await mergedDom()
-      // Through the panel's own RAIL ROW rather than a coordinate click: the
-      // foreign lane is off screen at this point, so there is nothing to
-      // click at, and the rail listing a foreign panel at all is itself part
-      // of what routing railRows through displayPanels buys.
-      const navigated = await wc.executeJavaScript(`(() => {
-        const row = document.querySelector('.rail-row[data-rail-row=${JSON.stringify(FOREIGN_A)}] .rail-row__main')
-        if (!row) return false
-        row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-        return true
+      const entered = await mergedDom()
+
+      // The forcing guard, and it is a CLAUSE rather than a diagnostic on
+      // purpose: everything check 124 asserts is a NEGATIVE (nothing spawned),
+      // and a negative is satisfied perfectly by a fixture that put the panels
+      // somewhere nothing would ever be promoted from. This reproduces
+      // assignTiers' own question in screen space — does the panel intersect
+      // the canvas expanded by CULL_MARGIN_PX — so a future change to the
+      // camera, the lane arithmetic or the window size turns the check RED
+      // instead of quietly turning it into a check that cannot fail.
+      const inCullRegion = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(FOREIGN_A)}]')
+        if (!host || !p) return null
+        const M = 240 // CULL_MARGIN_PX
+        const h = host.getBoundingClientRect(), r = p.getBoundingClientRect()
+        return {
+          hit: r.left < h.right + M && r.right > h.left - M &&
+               r.top < h.bottom + M && r.bottom > h.top - M,
+          scale: window.__m4aScale ? window.__m4aScale() : null,
+          panel: { x: Math.round(r.left), y: Math.round(r.top) }
+        }
       })()`)
-      await settle()
-      await clickMerged()
-      await settle()
-      await clickMerged()
-      await settle()
-      const secondEntry = await mergedDom()
 
       // Waits for the FAILURE condition rather than reading absence at once,
       // the rule check 68 states: a spawn is several IPC round trips deep, so
@@ -8814,10 +8876,14 @@ app.whenReady().then(async () => {
       //      is the other half of that guard).
       ok('124 entering the merged view spawns nothing',
         opened === true && spawned !== true &&
+          // The forcing guard: without it every clause below is a negative a
+          // badly-placed camera satisfies for free.
+          inCullRegion !== null && inCullRegion.hit === true &&
+          typeof inCullRegion.scale === 'number' && inCullRegion.scale >= 0.5 &&
           sessionsAfter.size === sessionsBefore.size &&
           regA !== undefined && regA.dormant === true && regA.spawned === false &&
           regB !== undefined && regB.dormant === true && regB.spawned === false,
-        `opened=${opened} navigated=${navigated} spawned=${spawned} ` +
+        `opened=${opened} promotable=${JSON.stringify(inCullRegion)} spawned=${spawned} ` +
           `sessions ${sessionsBefore.size} -> ${sessionsAfter.size} ` +
           `A=${JSON.stringify(regA)} B=${JSON.stringify(regB)}`)
 
@@ -8826,11 +8892,10 @@ app.whenReady().then(async () => {
       //      that renders nothing at all — which is exactly what a toggle
       //      wired to nothing produces.
       ok('125 the merged view renders foreign panels under a named lane',
-        secondEntry.on === true &&
-          secondEntry.ids.includes(FOREIGN_A) && secondEntry.ids.includes(FOREIGN_B) &&
-          secondEntry.lanes.some((l) => l.id === MERGED_WS_ID && l.name.includes(MERGED_WS_NAME)),
-        `on=${secondEntry.on} ids=${secondEntry.ids.join(',')} ` +
-          `lanes=${JSON.stringify(secondEntry.lanes)} first=${JSON.stringify(firstEntry.lanes)}`)
+        entered.on === true &&
+          entered.ids.includes(FOREIGN_A) && entered.ids.includes(FOREIGN_B) &&
+          entered.lanes.some((l) => l.id === MERGED_WS_ID && l.name.includes(MERGED_WS_NAME)),
+        `on=${entered.on} ids=${entered.ids.join(',')} lanes=${JSON.stringify(entered.lanes)}`)
 
       // 126. NOTHING IS DRAGGABLE. A real sendInputEvent drag on the foreign
       //      panel's chrome — the gesture that moves a panel everywhere else
@@ -8869,12 +8934,12 @@ app.whenReady().then(async () => {
       ok('126 a merged panel cannot be dragged, resized or closed',
         chrome126 !== null && dragged126 !== null &&
           dragged126.rects[FOREIGN_A] !== undefined &&
-          secondEntry.rects[FOREIGN_A] !== undefined &&
-          dragged126.rects[FOREIGN_A].x === secondEntry.rects[FOREIGN_A].x &&
-          dragged126.rects[FOREIGN_A].y === secondEntry.rects[FOREIGN_A].y &&
+          entered.rects[FOREIGN_A] !== undefined &&
+          dragged126.rects[FOREIGN_A].x === entered.rects[FOREIGN_A].x &&
+          dragged126.rects[FOREIGN_A].y === entered.rects[FOREIGN_A].y &&
           dragged126.closes === 0 && dragged126.resizes === 0,
         `chrome=${JSON.stringify(chrome126)} ` +
-          `before=${JSON.stringify(secondEntry.rects[FOREIGN_A])} ` +
+          `before=${JSON.stringify(entered.rects[FOREIGN_A])} ` +
           `after=${dragged126 ? JSON.stringify(dragged126.rects[FOREIGN_A]) : 'null'} ` +
           `closes=${dragged126 && dragged126.closes} resizes=${dragged126 && dragged126.resizes}`)
 
@@ -8898,6 +8963,14 @@ app.whenReady().then(async () => {
         return true
       })()`)
       await settle()
+      // Read WHILE STILL MERGED, and this read is the one with teeth. Leaving
+      // re-derives dormancy, restores the camera and issues a fresh save from
+      // the true `panels` — so a record corrupted while merged is RESTORED on
+      // the way out, and a check that only looked afterwards would watch the
+      // damage be repaired and call it absence. The flush is what makes the
+      // read describe main's own snapshot rather than a debounce window.
+      flushLayoutStore()
+      const storedDuring = await storedRects()
       await clickMerged() // leave
       await settle()
       // The save is coalesced at 500ms in main, so the write this check reads
@@ -8905,16 +8978,10 @@ app.whenReady().then(async () => {
       // uses before reading layout.json.
       flushLayoutStore()
       const storedAfter = await storedRects()
-      const drifted = []
-      for (const [wsId, before] of Object.entries(storedBefore)) {
-        const after = storedAfter[wsId]
-        if (!after) { drifted.push(`${wsId}: workspace gone`); continue }
-        for (const [panelId, rect] of Object.entries(before)) {
-          if (after[panelId] !== rect) {
-            drifted.push(`${wsId}/${panelId}: ${rect} -> ${after[panelId] ?? 'MISSING'}`)
-          }
-        }
-      }
+      const drifted = [
+        ...rectDrift(storedBefore, storedDuring, 'during'),
+        ...rectDrift(storedBefore, storedAfter, 'after')
+      ]
       const leftMerged = await mergedDom()
       ok('127 a merged session writes no rect into any workspace',
         drifted.length === 0 && leftMerged.on === false && leftMerged.lanes.length === 0,

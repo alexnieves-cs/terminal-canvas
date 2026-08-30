@@ -89,6 +89,8 @@ export interface PaletteProps {
   hasSelection: boolean
   /** The rubber-band selection, as ids — what the move rows act on. */
   selectedIds: string[]
+  /** Whether the merged view is open; the move rows refuse there. */
+  merged: boolean
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
 }
@@ -144,11 +146,12 @@ export function Palette(props: PaletteProps): JSX.Element {
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         selectedIds: props.selectedIds,
+        merged: props.merged,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
      props.attentionIds, controller.capturedId, props.hasSelection, props.selectedIds,
-     props.actions]
+     props.merged, props.actions]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
 
