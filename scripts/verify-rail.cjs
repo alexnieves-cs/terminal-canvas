@@ -1150,16 +1150,36 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     const shut = R.treeSignature(R.buildFileRows(ROOT, dirs, new Set()))
     const open = R.treeSignature(R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/a`])))
 
-    // Two one-row trees whose single filename differs only by where the
-    // separator sits. Under a `${name}|${depth}|${kind}` join both serialise
-    // to the same string and the tree freezes on stale rows.
-    const forge = (n) => R.treeSignature(R.buildFileRows(ROOT, new Map([[ROOT, okDir([n])]]), new Set()))
-    const a = forge('a|0|file')
-    const b = forge('a')
+    // A genuine MULTI-row collision under the naive scheme
+    // `rows.map(r => `${name}|${depth}|${kind}`).join(';')` — a single-row
+    // fixture cannot exercise this at all, because one row's name differing
+    // from another's produces distinct output under nearly any scheme, safe
+    // or not; there is no second row for a join separator to be mistaken for
+    // a boundary of. Constructed as FileRow arrays directly (bypassing
+    // buildFileRows), since this half is testing treeSignature itself, not
+    // the flattening.
+    //
+    // rowsB is two ordinary rows: naive(B) = "a|0|file" + ";" + "b|0|file"
+    //                                       = "a|0|file;b|0|file"
+    // rowsA is ONE row whose name is itself "a|0|file;b" — a filename an
+    // agent can write with nothing more exotic than a semicolon and a pipe —
+    // so naive(A) = "a|0|file;b" + "|0|file" = "a|0|file;b|0|file", BYTE FOR
+    // BYTE equal to naive(B). Under the naive join these two entirely
+    // different trees (one row vs. two) collide into one string and the tree
+    // would freeze on stale rows. JSON.stringify must still tell them apart.
+    const naiveJoin = (rows) => rows.map((r) => `${r.name}|${r.depth}|${r.kind}`).join(';')
+    const rowsA = [{ path: `${ROOT}/a|0|file;b`, name: 'a|0|file;b', depth: 0, kind: 'file', state: 'collapsed' }]
+    const rowsB = [
+      { path: `${ROOT}/a`, name: 'a', depth: 0, kind: 'file', state: 'collapsed' },
+      { path: `${ROOT}/b`, name: 'b', depth: 0, kind: 'file', state: 'collapsed' }
+    ]
+    const collides = naiveJoin(rowsA) === naiveJoin(rowsB)
+    const a = R.treeSignature(rowsA)
+    const b = R.treeSignature(rowsB)
 
-    ok('76 the signature moves on an expand and a filename cannot forge a field',
-      shut !== open && a !== b,
-      `expand=${shut !== open} forge=${a !== b}`)
+    ok('76 the signature moves on an expand and a multi-row filename collision cannot forge a field',
+      shut !== open && collides && a !== b,
+      `expand=${shut !== open} naiveCollides=${collides} forge=${a !== b}`)
   }
 
   // 77. relativePath strips the root; a path NOT under the root falls back to
