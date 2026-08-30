@@ -1031,6 +1031,20 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     `${cells[0].waiting} / ${cells[1].waiting}`)
 }
 
+// 71. A ZERO VECTOR on an empty cell returns the index unchanged rather than
+//     hanging. Asserted directly as a return value, on purpose, rather than
+//     by letting the suite time out: `dx===0 && dy===0` never changes
+//     col/row, so an unguarded loop re-checks the SAME empty cell forever —
+//     the idiomatic no-op default for an unrecognised key in Task 2's
+//     keyboard wiring reaches this immediately. A hang here is a frozen
+//     renderer, not a thrown error, so this suite would never print a
+//     failure for it on its own; the check exists so a regression shows up
+//     as a red assertion instead of a suite that never finishes.
+{
+  const cells = R.buildGrid([gridWs('a', 'A'), gridWs('b', 'B')], []) // cell 2 is empty
+  ok(71, R.stepCell(cells, 2, 0, 0) === 2, `stepCell(2,0,0)=${R.stepCell(cells, 2, 0, 0)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

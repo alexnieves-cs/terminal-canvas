@@ -96,6 +96,25 @@ export function initialCursor(cells: readonly GridCell[]): number {
  * edge teleports the cursor to the far left of the row, which reads as a
  * mis-fire rather than as navigation. An out-of-bounds step, or a step whose
  * every candidate is empty, returns the index unchanged.
+ *
+ * Two inputs would otherwise hang the loop forever rather than obeying that
+ * "returns the index unchanged" promise, and Task 2 wires real keyboard
+ * input directly onto this function, so both are reachable in production,
+ * not merely in a fuzzer: a zero vector (`dx === 0 && dy === 0`, the
+ * idiomatic no-op default for an unrecognised key) never moves `col`/`row`,
+ * so the bounds check below never trips and the loop spins on the SAME cell
+ * forever; a non-finite `index` (e.g. `NaN`, from a caller's own arithmetic
+ * bug) makes every comparison against `col`/`row` `false` — `NaN` is never
+ * `< 0` or `>= GRID_COLS` — so the escape hatch never fires either, and
+ * `cells[NaN]` stays `undefined` forever. This is a single-threaded
+ * renderer, so either one is a hung UI, not an exception. The zero-vector
+ * case gets its own early return because it is the common one (Task 2's
+ * default); the loop is ALSO bounded by a step counter rather than trusting
+ * the bounds check alone, because that is what closes the non-finite case
+ * without a second special case for `NaN` specifically — the grid can never
+ * legitimately need more than `GRID_COLS + rows` hops in one direction
+ * before running off an edge, so that many iterations is already more than
+ * any genuine input would use.
  */
 export function stepCell(
   cells: readonly GridCell[],
@@ -103,10 +122,13 @@ export function stepCell(
   dx: number,
   dy: number
 ): number {
+  if (dx === 0 && dy === 0) return index
+
   let col = index % GRID_COLS
   let row = Math.floor(index / GRID_COLS)
   const rows = Math.ceil(GRID_CELLS / GRID_COLS)
-  for (;;) {
+  const maxSteps = GRID_COLS + rows
+  for (let step = 0; step < maxSteps; step++) {
     col += dx
     row += dy
     if (col < 0 || col >= GRID_COLS || row < 0 || row >= rows) return index
@@ -116,4 +138,5 @@ export function stepCell(
     // rather than stopping on it or giving up: a lone gap in the middle of a
     // row must not become a wall.
   }
+  return index
 }
