@@ -8,5 +8,11 @@ module.exports = {
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),
   ...require('../src/renderer/panels/panels'),
+  /* M13: the link geometry. Pure — its only value import is linksOf from
+     panels.ts, which is already in this bundle — so it belongs in the cheapest
+     tier beside viewport.ts and lod.ts. Note that this import is what forced
+     verify-viewport.cjs's esbuild config to resolve @renderer as well as
+     @shared: every other cross-boundary import here is `import type`. */
+  ...require('../src/renderer/canvas/link-geometry'),
   ...require('../src/renderer/panels/history')
 }

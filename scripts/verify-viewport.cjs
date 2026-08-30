@@ -17,7 +17,14 @@ buildSync({
   // because every cross-boundary import was `import type` (erased by esbuild).
   // panel-interaction.ts now imports a real VALUE from @shared, so the alias
   // has to exist or the bundle fails with "Could not resolve".
-  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+  alias: {
+    '@shared': join(__dirname, '..', 'src', 'shared'),
+    // M13: link-geometry.ts imports linksOf — a real VALUE — from
+    // @renderer/panels/panels. This bundle resolved only @shared until now for
+    // the reason recorded just above: every other cross-boundary import in it
+    // is an `import type`, which esbuild erases before resolving anything.
+    '@renderer': join(__dirname, '..', 'src', 'renderer')
+  }
 })
 const V = require(OUT)
 
@@ -1145,6 +1152,105 @@ ok('74 a panel with no kind is not a review panel',
   ok('82 a panel with no links key reads as no links, and stays that way',
     Array.isArray(V.linksOf(bare)) && V.linksOf(bare).length === 0 &&
     V.linksOf(pruned).length === 0 && !('links' in pruned))
+}
+
+// 83. The anchors sit on the two rects' BORDERS, not their centres. A line
+//     drawn to a centre disappears under the panel it points at, so the
+//     arrowhead — the only thing carrying direction — would never be visible.
+//     Asserted on a horizontal pair, where the answer is exact and the check
+//     cannot pass by being approximately right.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 300, y: 0, w: 100, h: 100 }
+  const s = V.linkAnchors(a, b)
+  ok('83 linkAnchors lands on both borders, not the centres',
+    s !== null && near(s.x1, 100) && near(s.y1, 50) && near(s.x2, 300) && near(s.y2, 50))
+}
+
+// 84. THE ONE WORTH KNOWING BY NUMBER, and the only check that separates a ray
+//     CLIP from a per-axis CLAMP. This is edgeIndicator's documented mistake
+//     one file over (see "edgeIndicator clips a ray" in CLAUDE.md), and it
+//     fails the same silent way: clamping dx to the half-width and dy to the
+//     half-height independently sends every diagonal to a corner, so every
+//     link leaves and enters a panel at the same four points regardless of the
+//     true bearing — and still renders, and still looks like a working feature.
+//
+//     The fixture is deliberately a SHALLOW diagonal (dx 400, dy 100) on a
+//     SQUARE rect: the x crossing binds, so the correct answer is on the right
+//     EDGE at a y strictly between the centre and the corner, while the clamp
+//     shorthand puts it exactly on the corner. A 45-degree fixture — the one
+//     you would naturally reach for — could not tell them apart, because both
+//     answers ARE the corner there. That is why the two deltas are unequal.
+{
+  const a = { id: 'a', x: -50, y: -50, w: 100, h: 100 }
+  const b = { id: 'b', x: 350, y: 50, w: 100, h: 100 }
+  const s = V.linkAnchors(a, b)
+  // centre a = (0,0), centre b = (400,100). t binds on x at 50/400, so the
+  // exit is (50, 12.5) — not the corner (50, 50) the clamp shorthand answers.
+  const expectedY = 100 * (50 / 400)
+  ok('84 linkAnchors CLIPS the ray rather than clamping the two axes',
+    s !== null && near(s.x1, 50) && near(s.y1, expectedY) &&
+    Math.abs(s.y1 - 50) > 1,
+    s === null ? 'null' : `exit ${s.x1},${s.y1} (clamp would say 50,50)`)
+}
+
+// 85. Coincident centres answer null. There is no direction to draw, and
+//     normalising a zero-length vector is how a NaN gets into a transform and
+//     takes the WHOLE layer's paint with it — every link gone, not just this
+//     one, with nothing thrown anywhere.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 20, y: 20, w: 60, h: 60 }
+  ok('85 coincident centres answer null rather than a NaN segment',
+    V.linkAnchors(a, b) === null && V.linkAnchors(a, a) === null)
+}
+
+// 86. buildLinkSegments flattens the adjacency into drawables, carrying the
+//     label through. The key must be stable and must distinguish DIRECTION, or
+//     a->b and b->a collide as one React key and one of the two silently stops
+//     rendering — which is exactly the pair addLink deliberately allows.
+{
+  const mk = (id, x, links) => ({ kind: 'terminal', rect: { id, x, y: 0, w: 100, h: 100 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', 0, [{ to: 'b', label: 'feeds' }]), mk('b', 300, [{ to: 'a' }])]
+  const segs = V.buildLinkSegments(panels)
+  ok('86 buildLinkSegments carries the label and keys both directions apart',
+    segs.length === 2 &&
+    segs.find((s) => s.from === 'a').label === 'feeds' &&
+    segs.find((s) => s.from === 'b').label === undefined &&
+    new Set(segs.map((s) => s.key)).size === 2)
+}
+
+// 87. A link whose target is not in the panel array is DROPPED, and its
+//     neighbour still renders. This is the second, deliberately redundant
+//     prune — removePanel is the first — and it covers a state removePanel
+//     cannot see: PanelId is global across workspaces (CLAUDE.md, "Panel ids
+//     are global, not per-workspace"), so a link naming a panel that lives in
+//     a DIFFERENT workspace resolves to nothing on this canvas and must render
+//     nothing rather than throw. A hand-edited file reaches the same state.
+//
+//     The surviving-neighbour clause is what stops a fix from dropping the
+//     whole source panel's links on one bad target.
+{
+  const mk = (id, x, links) => ({ kind: 'terminal', rect: { id, x, y: 0, w: 100, h: 100 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', 0, [{ to: 'gone' }, { to: 'b' }]), mk('b', 300)]
+  const segs = V.buildLinkSegments(panels)
+  ok('87 a link to an absent panel is dropped and its neighbour survives',
+    segs.length === 1 && segs[0].from === 'a' && segs[0].to === 'b')
+}
+
+// 88. A review node is an ordinary endpoint, in BOTH directions. `links` sits
+//     on PanelBase rather than on the terminal arm, so nothing in the geometry
+//     needed a kind check — which is the property being pinned. A later
+//     "optimisation" that filtered the panel list by kind before flattening
+//     would silently delete every link touching a review node, on a canvas
+//     where linking a node to a second agent's panel is what the feature is
+//     for. It is the same argument check 78 makes for the cascade lattice.
+{
+  const term = { kind: 'terminal', rect: { id: 'n1', x: 0, y: 0, w: 100, h: 100 }, spec: { panelId: 'n1', cwd: '~', args: [] }, z: 1, links: [{ to: 'r1' }] }
+  const node = { kind: 'review', rect: { id: 'r1', x: 300, y: 0, w: 100, h: 100 }, z: 2, links: [{ to: 'n1' }], subject: { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'claude' } }
+  const segs = V.buildLinkSegments([term, node])
+  ok('88 a review node is an ordinary link endpoint in both directions',
+    segs.length === 2 && segs.some((s) => s.to === 'r1') && segs.some((s) => s.from === 'r1'))
 }
 
 console.log('\n' + '='.repeat(60))
