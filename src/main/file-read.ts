@@ -6,13 +6,6 @@ import {
   type FileResult
 } from '@shared/file-panel'
 
-// Re-exported so the caps this function is bound by are visible from the same
-// module the function itself lives in — verify:file's fixture builds its
-// over/at-cap files from these rather than restating the numbers, the same
-// reason FILE_MAX_BYTES and FILE_MAX_LINES exist as named constants at all
-// instead of literals scattered through the file.
-export { BINARY_SCAN_BYTES, FILE_MAX_BYTES, FILE_MAX_LINES }
-
 /**
  * Read one file, and say honestly what happened.
  *
