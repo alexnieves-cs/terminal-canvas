@@ -1,6 +1,6 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
-import { isReviewPanel, type Panel } from '@renderer/panels/panels'
+import { isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -37,6 +37,30 @@ export interface InspectorModel {
   fields: InspectorField[]
   reattached: boolean
   restartable: boolean
+  /**
+   * Every link touching this panel, in both directions. M13.
+   *
+   * REQUIRED rather than optional, the rule `restartable` already states: an
+   * optional field lets a half-finished wiring compile with the section
+   * silently always-empty, and tsc says nothing at all about it. A panel with
+   * no links carries an empty array.
+   *
+   * It is part of the model, so inspectorSignature — which is JSON.stringify
+   * over the whole model — covers it without an edit. That is not incidental:
+   * Canvas freezes the model on that signature, so a link change the signature
+   * missed would render once and then never update again. verify:rail 75.
+   */
+  links: InspectorLinkRow[]
+}
+
+export interface InspectorLinkRow {
+  /** The panel at the OTHER end, whichever direction this link runs. */
+  to: string
+  /** 'out' is this panel -> other; 'in' is other -> this panel. */
+  direction: 'out' | 'in'
+  label?: string
+  /** The other panel's name, by the honest chain. Never its bare id. */
+  title: string
 }
 
 export interface InspectorSummary {
@@ -123,6 +147,60 @@ export function isRestartable(status: PanelStatus | undefined): boolean {
  * function for why the gate is shared with the palette rather than written
  * twice.
  */
+/**
+ * Every link touching this panel, in both directions.
+ *
+ * BOTH directions, because a pane listing only outgoing links answers "what
+ * does this feed" and leaves "what feeds this" answerable only by selecting
+ * every other panel in turn. The direction is a FIELD rather than baked into
+ * the title, so the view composes the arrow — the rule Command.waiting and
+ * RailRow.waiting already keep, for the reason verify:palette 64 records: a
+ * count or a glyph spliced into text reaches the fuzzy haystack and starts
+ * matching queries it has no business matching.
+ *
+ * A link whose other end is not in `panels` contributes NO row, which is
+ * buildLinkSegments' prune at the pane and is reachable the same two ways: a
+ * hand-edited file, and a link naming a panel in another workspace, since
+ * PanelId is global. A row for a panel the user cannot select is a dead entry.
+ *
+ * The name comes from railLabel — the same honest chain the panel header, the
+ * rail row and the attention section walk — so this is a fourth READER of it
+ * and never a fourth re-derivation. verify:rail 73, whose fixture is titled
+ * for exactly that reason.
+ *
+ * O(n) over the panel list for the incoming half, which is the stated cost of
+ * adjacency-on-source: answering "what points at me" is a scan rather than a
+ * lookup. On a canvas LIVE_BUDGET already caps interaction with at eight live
+ * panels, that is not worth an index.
+ */
+export function buildLinkRows(panel: Panel, panels: Panel[]): InspectorLinkRow[] {
+  const byId = new Map(panels.map((p) => [p.rect.id, p]))
+  const id = panel.rect.id
+  const rows: InspectorLinkRow[] = []
+  const push = (
+    other: Panel | undefined,
+    to: string,
+    direction: 'out' | 'in',
+    label: string | undefined
+  ): void => {
+    if (!other) return
+    rows.push({
+      to,
+      direction,
+      ...(label === undefined ? {} : { label }),
+      title: railLabel(other, undefined)
+    })
+  }
+  for (const link of linksOf(panel)) push(byId.get(link.to), link.to, 'out', link.label)
+  for (const source of panels) {
+    if (source.rect.id === id) continue
+    for (const link of linksOf(source)) {
+      if (link.to === id) push(source, source.rect.id, 'in', link.label)
+    }
+  }
+  return rows
+}
+
 export function buildInspectorModel(
   panel: Panel,
   status: PanelStatus | undefined,
@@ -133,8 +211,19 @@ export function buildInspectorModel(
    * the same reason: a required dep would change what a dozen existing checks
    * assert while looking like a widening.
    */
-  live?: LiveSession | undefined
+  live?: LiveSession | undefined,
+  /**
+   * Every panel on this canvas, so the link rows can name the other end and
+   * drop a link whose other end is not here.
+   *
+   * OPTIONAL and defaulted to an empty list, so every pre-M13 caller and every
+   * pre-M13 check keeps its exact meaning — the same trade `live` made in M12
+   * and review-engine.ts's `notARepo` made in M9a. A required parameter would
+   * change what a dozen existing checks assert while looking like a widening.
+   */
+  panels?: Panel[]
 ): InspectorModel {
+  const links = buildLinkRows(panel, panels ?? [])
   if (isReviewPanel(panel)) {
     return {
       kind: 'review',
@@ -147,6 +236,7 @@ export function buildInspectorModel(
       // always-enabled, and tsc says nothing at all about it.
       restartable: false,
       reattached: false,
+      links,
       fields: [
         { key: 'reviews', label: 'reviews', value: panel.subject.label },
         { key: 'subject', label: 'panel', value: panel.subject.subjectId },
@@ -208,6 +298,7 @@ export function buildInspectorModel(
     id: panel.rect.id,
     ...(panel.title !== undefined ? { title: panel.title } : {}),
     heading: railLabel(panel, status),
+    links,
     fields,
     reattached: running?.reattached === true,
     restartable: isRestartable(status)

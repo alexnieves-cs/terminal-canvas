@@ -1050,6 +1050,93 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
   ok(71, R.stepCell(cells, 2, 0, 0) === 2, `stepCell(2,0,0)=${R.stepCell(cells, 2, 0, 0)}`)
 }
 
+// ---------------------------------------------------------------------------
+// M13. The inspector's link rows. `link`, never `edge` — see panels.ts.
+
+// 72. Both directions, and they are DISTINGUISHED. A pane that listed only
+//     outgoing links answers "what does this feed" and leaves "what feeds
+//     this" unanswerable from the panel that is selected — the user would have
+//     to select every other panel in turn to find out. The direction is a
+//     FIELD rather than baked into the row's text, so the view composes the
+//     arrow: the rule Command.waiting and RailRow.waiting already keep.
+{
+  const panels = [
+    panel('a', { links: [{ to: 'b' }] }),
+    panel('b'),
+    panel('c', { links: [{ to: 'a', label: 'feeds' }] })
+  ]
+  const rows = R.buildLinkRows(panels[0], panels)
+  ok('72 buildLinkRows reports both directions and keeps them apart',
+    rows.length === 2 &&
+    rows.filter((r) => r.direction === 'out').length === 1 &&
+    rows.filter((r) => r.direction === 'in').length === 1 &&
+    rows.find((r) => r.direction === 'out').to === 'b' &&
+    rows.find((r) => r.direction === 'in').to === 'c' &&
+    rows.find((r) => r.direction === 'in').label === 'feeds',
+    JSON.stringify(rows))
+}
+
+// 73. A row NAMES the other panel by the honest chain, never by its bare id:
+//     `n7` tells the user nothing. This is a fourth READER of that chain (the
+//     panel header, railLabel and the attention section are the others), so
+//     the fixture is a TITLED panel — the only fixture that can tell a
+//     re-derivation from spec.command apart from a real read, because the
+//     wrong implementation says `/bin/zsh` here while the Panels row three
+//     lines up says `auth refactor`. rail-sections.ts 35's argument, at a
+//     second surface.
+{
+  const panels = [
+    panel('a', { links: [{ to: 'b' }], spec: { cwd: '~', command: '/bin/zsh', args: [] } }),
+    panel('b', { title: 'auth refactor', spec: { cwd: '~', command: '/bin/zsh', args: [] } })
+  ]
+  const rows = R.buildLinkRows(panels[0], panels)
+  ok('73 a link row names the other panel by its title, not its id',
+    rows.length === 1 && rows[0].title === 'auth refactor',
+    JSON.stringify(rows))
+}
+
+// 74. A link whose other end is not on this canvas contributes NO row —
+//     buildLinkSegments' prune, at the pane. It is reachable the same two
+//     ways: a hand-edited file, and a link naming a panel in ANOTHER
+//     workspace, since PanelId is global. A row for a panel the user cannot
+//     select is a dead entry whose remove control is the only part that works,
+//     and it reads as a bug in the pane rather than in the file.
+{
+  const panels = [panel('a', { links: [{ to: 'ghost' }, { to: 'b' }] }), panel('b')]
+  const rows = R.buildLinkRows(panels[0], panels)
+  ok('74 a link whose other end is not on this canvas renders no row',
+    rows.length === 1 && rows[0].to === 'b',
+    JSON.stringify(rows))
+}
+
+// 75. THE ONE WORTH KNOWING BY NUMBER, and the check that stops the pane
+//     freezing. Canvas freezes the inspector model on inspectorSignature, so a
+//     value the signature does not cover renders once and then never updates
+//     again — stuck at whatever it was when the panel was selected, with
+//     nothing throwing. Adding, removing AND relabelling are asserted as three
+//     separate movers, because an implementation that hashed only the link
+//     COUNT passes the first two and freezes on the third.
+//
+//     The first clause is the non-vacuity guard, and it is not decoration: the
+//     fourth parameter is OPTIONAL (every pre-M13 caller and every pre-M13
+//     check must keep its exact meaning — the trade `live` already made in M12
+//     and review-engine.ts's `notARepo` made in M9a), so a model built without
+//     it must carry an EMPTY array rather than undefined. Without that clause
+//     every comparison below could be undefined-vs-undefined and would pass
+//     against a model that has no links field at all.
+{
+  const sig = (panels) =>
+    R.inspectorSignature(R.buildInspectorModel(panels[0], undefined, undefined, panels))
+  const noArg = R.buildInspectorModel(panel('a'), undefined)
+  const none = sig([panel('a'), panel('b')])
+  const one = sig([panel('a', { links: [{ to: 'b' }] }), panel('b')])
+  const labelled = sig([panel('a', { links: [{ to: 'b', label: 'feeds' }] }), panel('b')])
+  ok('75 inspectorSignature moves on a link added, removed and relabelled',
+    Array.isArray(noArg.links) && noArg.links.length === 0 &&
+    none !== one && one !== labelled && none !== labelled,
+    `noArg=${JSON.stringify(noArg.links)} distinct=${new Set([none, one, labelled]).size}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

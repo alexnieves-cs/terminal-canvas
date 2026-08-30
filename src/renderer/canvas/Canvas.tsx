@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
+import { LinkLayer } from './LinkLayer'
+import { useLinkMode } from './useLinkMode'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import { hitTest, screenToWorld, type Point, type WorldRect } from './viewport'
@@ -34,7 +36,8 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
   cascadeCentre, firstRunPanels, isReviewPanel, makePanel, makeReviewPanel, nextZ, raisePanel,
-  removePanel, reviewCentre, setPanelRect, type Panel, type TerminalPanel as TerminalPanelModel
+  removePanel, reviewCentre, setPanelRect, addLink, removeLink, setLinkLabel,
+  type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
@@ -192,6 +195,12 @@ export function Canvas({
     () => [...panels].sort((a, b) => a.z - b.z).map((p) => p.rect),
     [panels]
   )
+
+  // M13. Armed by the palette's `panel.link` row and the inspector's Link
+  // button; resolved by the next mousedown on the canvas (see
+  // onLinkModeMouseDownCapture). Declared up here because the mousedown
+  // handler and the render both read it.
+  const linkMode = useLinkMode()
   // Declared before useViewport (which takes it as an argument) rather than
   // grouped with the other callbacks below: a const used before its
   // declaration is a TDZ error, not just a style preference.
@@ -603,6 +612,18 @@ export function Canvas({
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention
   )
   const version = useRegistryVersion(registry)
+
+  // What the banner calls the source panel. railLabel is the honest chain's
+  // one reader — the panel header, the rail row, the attention section and
+  // the inspector's link rows all go through it — so the banner reads it too
+  // rather than becoming a fifth re-derivation that says `/bin/zsh` where
+  // every other surface says `auth refactor`. Falls back to the bare id only
+  // if the panel is gone, which a disarm makes very short-lived.
+  const linkSourceName = useMemo(() => {
+    if (linkMode.from === null) return ''
+    const panel = panels.find((p) => p.rect.id === linkMode.from)
+    return panel ? railLabel(panel, registry.get(panel.rect.id)?.status) : linkMode.from
+  }, [linkMode.from, panels, version])
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
   // than an effect: ensure() runs synchronously during render (so a session
@@ -1463,6 +1484,50 @@ export function Canvas({
     if (!host) return null
     const bounds = host.getBoundingClientRect()
     return screenToWorld({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewport)
+  }
+
+  /**
+   * Resolves an armed link mode, and it MUST be capture phase.
+   *
+   * Every panel's own chrome handler stopPropagations its mousedown, so a
+   * listener on the background onMouseDown below never sees a click on a
+   * PANEL — which is every click that can complete a link. Worse, letting the
+   * click reach a panel's own handler reaches onSelectPanel, which clears the
+   * dormant id and calls registry.wake: completing a link onto a dormant panel
+   * would SPAWN AN AGENT. That is success criterion 2 failing, and on a
+   * restored canvas it is one agent CLI per link the user draws — exactly the
+   * accident the dormancy rule exists to prevent. Stopping the event here is
+   * what makes the completing click do one thing and only one.
+   *
+   * It hit-tests the WORLD point rather than reading event.target, so a click
+   * on a panel's chrome, its card and its terminal body all mean the same
+   * thing — and it reuses hitOrder, arithmetic that is already pinned.
+   *
+   * Returns true when it consumed the event, so the caller can stand down.
+   */
+  const onLinkModeMouseDownCapture = (event: MouseEvent<HTMLDivElement>): boolean => {
+    const source = linkMode.from
+    if (source === null) return false
+    event.preventDefault()
+    event.stopPropagation()
+    // Disarmed on ANY resolving click, including a cancel: one shot.
+    linkMode.disarm()
+    const world = toWorld(event)
+    const hit = world ? hitTest(hitOrder, world) : null
+    // A click on the background, or back on the source, cancels. addLink
+    // refuses a self-link anyway; returning here is what keeps the cancel
+    // silent rather than a no-op that reads as a link which failed.
+    if (!hit || hit === source) return true
+    setPanels((current) => {
+      const next = addLink(current, source, hit)
+      // addLink returns the SAME array when it refuses (a duplicate), and
+      // committing unconditionally would push a history entry for a gesture
+      // that changed nothing — one wasted Cmd+Z. The rule is one entry per
+      // COMMITTED gesture, not one per attempt.
+      if (next !== current) commitHistory(next)
+      return next
+    })
+    return true
   }
 
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
@@ -2456,11 +2521,51 @@ export function Canvas({
         // not a line to sneak into a fix wave.
       })
     },
-    openReview
+    openReview,
+    beginLink: (id) => {
+      linkMode.arm(id)
+      // The overlay must be GONE: the completing gesture is a click on the
+      // canvas, and a palette sitting over it would swallow that click as its
+      // own outside-click dismissal. runRow already closes before running a
+      // command, so this is belt and braces for the inspector's button, which
+      // does not go through runRow at all.
+      palette.closePalette()
+    },
+    removeLink: (from, to) => {
+      setPanels((current) => {
+        const next = removeLink(current, from, to)
+        commitHistory(next)
+        return next
+      })
+    },
+    beginRelabelLink: (from, to, current) => {
+      setInputMode({
+        kind: 'text',
+        label: 'Label this link',
+        initial: current,
+        submit: (value) => {
+          setPanels((panelsNow) => {
+            // Trimmed, and an empty result CLEARS the label rather than
+            // storing '' — see setLinkLabel. Otherwise a user who wants a
+            // label gone has no verb for it, and a blank label round-trips to
+            // disk as a row they can neither see nor explain.
+            const next = setLinkLabel(panelsNow, from, to, value.trim())
+            commitHistory(next)
+            return next
+          })
+          setInputMode(null)
+        }
+      })
+      // The same reopen beginRenamePreset makes, for the same reason: the
+      // overlay is closed BEFORE a row's command runs, so without this the
+      // mode would be set on a palette that is already gone and the
+      // clear-on-close effect would wipe it again.
+      palette.openPalette()
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
-       palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
-       onClosePanel, onSelectPanel, openReview])
+       palette.openPalette, palette.closePalette, palette.capturedId, reloadPrompts,
+       commitHistory, reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
+       onClosePanel, onSelectPanel, openReview, linkMode])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2641,7 +2746,13 @@ export function Canvas({
     : buildInspectorModel(
         selectedPanel,
         registry.get(selectedPanel.rect.id)?.status,
-        selectedLive
+        selectedLive,
+        // M13. The whole panel list, so the Links section can name the other
+        // end of each link and drop one whose other end is not on this canvas.
+        // The parameter is optional and this is its only production caller;
+        // omitting it renders an always-empty section that looks like a
+        // feature nobody built.
+        panels
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
@@ -2768,6 +2879,7 @@ export function Canvas({
       <div
         className="canvas"
         ref={hostRef}
+        onMouseDownCapture={onLinkModeMouseDownCapture}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
       >
@@ -2775,6 +2887,11 @@ export function Canvas({
           className="world"
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
+          {/* First child, and z-index 0 in the stylesheet, so it paints
+              beneath every panel — nextZ mints z >= 1. It is inside .world so
+              it pans and zooms with the panels, and it takes no pointer
+              events at all, so it can never swallow a click. See LinkLayer. */}
+          <LinkLayer panels={panels} />
           {panels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -2831,6 +2948,15 @@ export function Canvas({
         {/* A SIBLING of .world, like EdgeIndicators above: .world carries the
             one translate()/scale() transform, and an overlay inside it would
             pan and zoom away with the canvas it is pinned to. */}
+        {/* M13. Success criterion 6: an armed mode must never be invisible.
+            A SIBLING of .world like NavGrid above, so it is viewport-pinned
+            chrome rather than something that pans away from the user while
+            the mode it describes is still armed. */}
+        {linkMode.from !== null && (
+          <div className="link-banner" role="status">
+            Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
+          </div>
+        )}
         <NavGrid controller={navGrid} />
         <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
         {palette.open && (
@@ -2862,6 +2988,9 @@ export function Canvas({
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
         onOpenReview={paletteActions.openReview}
+        onLink={paletteActions.beginLink}
+        onRemoveLink={paletteActions.removeLink}
+        onRelabelLink={paletteActions.beginRelabelLink}
         review={reviewModel}
       />
     </div>

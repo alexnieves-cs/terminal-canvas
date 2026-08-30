@@ -17,7 +17,14 @@ buildSync({
   // because every cross-boundary import was `import type` (erased by esbuild).
   // panel-interaction.ts now imports a real VALUE from @shared, so the alias
   // has to exist or the bundle fails with "Could not resolve".
-  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+  alias: {
+    '@shared': join(__dirname, '..', 'src', 'shared'),
+    // M13: link-geometry.ts imports linksOf — a real VALUE — from
+    // @renderer/panels/panels. This bundle resolved only @shared until now for
+    // the reason recorded just above: every other cross-boundary import in it
+    // is an `import type`, which esbuild erases before resolving anything.
+    '@renderer': join(__dirname, '..', 'src', 'renderer')
+  }
 })
 const V = require(OUT)
 
@@ -1052,6 +1059,198 @@ ok('74 a panel with no kind is not a review panel',
   const next = V.cascadeCentre(c, [existing])
   ok('78 a second review node cascades off the first',
     next.x === c.x + V.CASCADE_STEP && next.y === c.y + V.CASCADE_STEP)
+}
+
+// ---------------------------------------------------------------------------
+// M13. Links between panels. `link`, never `edge`: EdgeIndicators.tsx and
+// viewport.ts's edgeIndicator already mean the off-screen attention pip, and a
+// second unrelated `edge` in renderer/canvas/ would make every future grep
+// ambiguous between two features with nothing to do with each other.
+
+// 79. addLink refuses a self-link and refuses a duplicate, and BOTH clauses
+//     are required. A self-link is a segment with no direction — linkAnchors
+//     answers null for it (check 85) — so it would persist forever as a link
+//     that renders nothing, which is indistinguishable from a broken feature.
+//     A duplicate A->B paints two identical overlapping paths, which is
+//     cascadeCentre's indistinguishability argument reached through a
+//     different door: the canvas looks like it holds one link while holding
+//     two, and removing "the" link leaves one behind.
+//
+//     B->A alongside A->B is explicitly still allowed — they are different
+//     claims — and that clause is what stops a fix for the duplicate case
+//     over-correcting into "one link per pair".
+{
+  const mk = (id) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1 })
+  const base = [mk('a'), mk('b')]
+  const self = V.addLink(base, 'a', 'a')
+  const once = V.addLink(base, 'a', 'b')
+  const twice = V.addLink(once, 'a', 'b')
+  const both = V.addLink(once, 'b', 'a')
+  ok('79 addLink refuses a self-link and a duplicate, but allows the reverse',
+    V.linksOf(self[0]).length === 0 &&
+    V.linksOf(once[0]).length === 1 && V.linksOf(once[0])[0].to === 'b' &&
+    V.linksOf(twice[0]).length === 1 &&
+    V.linksOf(both[1]).length === 1 && V.linksOf(both[1])[0].to === 'a')
+}
+
+// 80. THE ONE WORTH KNOWING BY NUMBER. removePanel strips INCOMING links, not
+//     only the outgoing ones that leave with the panel holding them. This is
+//     backlog #24's named failure — "dangling edges are the standard failure
+//     of every graph UI that stored ids without deciding this" — and putting
+//     the prune inside removePanel rather than at its two call sites is what
+//     makes the close and the prune land in ONE history entry, so one Cmd+Z
+//     restores both (verify:panels 128).
+//
+//     Its second clause is the over-correction guard and is not redundant: an
+//     implementation that stripped every link from every survivor satisfies
+//     the first clause perfectly and silently empties the canvas of links on
+//     any close at all.
+{
+  const mk = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', [{ to: 'b' }, { to: 'c' }]), mk('b', [{ to: 'c' }]), mk('c')]
+  const next = V.removePanel(panels, 'c')
+  const a = next.find((p) => p.rect.id === 'a')
+  const b = next.find((p) => p.rect.id === 'b')
+  ok('80 removePanel strips links POINTING AT the removed panel, and only those',
+    next.length === 2 &&
+    V.linksOf(a).length === 1 && V.linksOf(a)[0].to === 'b' &&
+    V.linksOf(b).length === 0)
+}
+
+// 81. removeLink and setLinkLabel act on the ONE named link and leave its
+//     neighbours alone. Asserted together because each alone passes against an
+//     implementation that clears the whole array: removeLink's own success is
+//     indistinguishable from "removed everything" when the fixture has one
+//     link, so the fixture carries two.
+{
+  const mk = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', [{ to: 'b' }, { to: 'c' }])]
+  const removed = V.removeLink(panels, 'a', 'b')
+  const labelled = V.setLinkLabel(panels, 'a', 'c', 'feeds')
+  const rows = V.linksOf(labelled[0])
+  ok('81 removeLink and setLinkLabel touch one link each, never the array',
+    V.linksOf(removed[0]).length === 1 && V.linksOf(removed[0])[0].to === 'c' &&
+    rows.length === 2 &&
+    rows.find((l) => l.to === 'c').label === 'feeds' &&
+    rows.find((l) => l.to === 'b').label === undefined)
+}
+
+// 82. A panel with NO links key at all reads as no links, and that is the
+//     ordinary case rather than an exotic one: it is every panel in every
+//     layout.json ever written, and every panel this app mints. linksOf is the
+//     one place that absence is normalised, so nothing downstream has to
+//     remember `?? []` — a missed one is a TypeError inside a render, which
+//     takes the whole canvas down rather than one link.
+//
+//     Its second clause pins that pruning a panel that pointed nowhere leaves
+//     no `links: []` residue behind: otherwise every close rewrites an empty
+//     array onto every survivor in layout.json, which is noise in a file
+//     people read and diff.
+{
+  const bare = { kind: 'terminal', rect: { id: 'a', x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: 'a', cwd: '~', args: [] }, z: 1 }
+  const pruned = V.removePanel([bare], 'zz')[0]
+  ok('82 a panel with no links key reads as no links, and stays that way',
+    Array.isArray(V.linksOf(bare)) && V.linksOf(bare).length === 0 &&
+    V.linksOf(pruned).length === 0 && !('links' in pruned))
+}
+
+// 83. The anchors sit on the two rects' BORDERS, not their centres. A line
+//     drawn to a centre disappears under the panel it points at, so the
+//     arrowhead — the only thing carrying direction — would never be visible.
+//     Asserted on a horizontal pair, where the answer is exact and the check
+//     cannot pass by being approximately right.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 300, y: 0, w: 100, h: 100 }
+  const s = V.linkAnchors(a, b)
+  ok('83 linkAnchors lands on both borders, not the centres',
+    s !== null && near(s.x1, 100) && near(s.y1, 50) && near(s.x2, 300) && near(s.y2, 50))
+}
+
+// 84. THE ONE WORTH KNOWING BY NUMBER, and the only check that separates a ray
+//     CLIP from a per-axis CLAMP. This is edgeIndicator's documented mistake
+//     one file over (see "edgeIndicator clips a ray" in CLAUDE.md), and it
+//     fails the same silent way: clamping dx to the half-width and dy to the
+//     half-height independently sends every diagonal to a corner, so every
+//     link leaves and enters a panel at the same four points regardless of the
+//     true bearing — and still renders, and still looks like a working feature.
+//
+//     The fixture is deliberately a SHALLOW diagonal (dx 400, dy 100) on a
+//     SQUARE rect: the x crossing binds, so the correct answer is on the right
+//     EDGE at a y strictly between the centre and the corner, while the clamp
+//     shorthand puts it exactly on the corner. A 45-degree fixture — the one
+//     you would naturally reach for — could not tell them apart, because both
+//     answers ARE the corner there. That is why the two deltas are unequal.
+{
+  const a = { id: 'a', x: -50, y: -50, w: 100, h: 100 }
+  const b = { id: 'b', x: 350, y: 50, w: 100, h: 100 }
+  const s = V.linkAnchors(a, b)
+  // centre a = (0,0), centre b = (400,100). t binds on x at 50/400, so the
+  // exit is (50, 12.5) — not the corner (50, 50) the clamp shorthand answers.
+  const expectedY = 100 * (50 / 400)
+  ok('84 linkAnchors CLIPS the ray rather than clamping the two axes',
+    s !== null && near(s.x1, 50) && near(s.y1, expectedY) &&
+    Math.abs(s.y1 - 50) > 1,
+    s === null ? 'null' : `exit ${s.x1},${s.y1} (clamp would say 50,50)`)
+}
+
+// 85. Coincident centres answer null. There is no direction to draw, and
+//     normalising a zero-length vector is how a NaN gets into a transform and
+//     takes the WHOLE layer's paint with it — every link gone, not just this
+//     one, with nothing thrown anywhere.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 20, y: 20, w: 60, h: 60 }
+  ok('85 coincident centres answer null rather than a NaN segment',
+    V.linkAnchors(a, b) === null && V.linkAnchors(a, a) === null)
+}
+
+// 86. buildLinkSegments flattens the adjacency into drawables, carrying the
+//     label through. The key must be stable and must distinguish DIRECTION, or
+//     a->b and b->a collide as one React key and one of the two silently stops
+//     rendering — which is exactly the pair addLink deliberately allows.
+{
+  const mk = (id, x, links) => ({ kind: 'terminal', rect: { id, x, y: 0, w: 100, h: 100 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', 0, [{ to: 'b', label: 'feeds' }]), mk('b', 300, [{ to: 'a' }])]
+  const segs = V.buildLinkSegments(panels)
+  ok('86 buildLinkSegments carries the label and keys both directions apart',
+    segs.length === 2 &&
+    segs.find((s) => s.from === 'a').label === 'feeds' &&
+    segs.find((s) => s.from === 'b').label === undefined &&
+    new Set(segs.map((s) => s.key)).size === 2)
+}
+
+// 87. A link whose target is not in the panel array is DROPPED, and its
+//     neighbour still renders. This is the second, deliberately redundant
+//     prune — removePanel is the first — and it covers a state removePanel
+//     cannot see: PanelId is global across workspaces (CLAUDE.md, "Panel ids
+//     are global, not per-workspace"), so a link naming a panel that lives in
+//     a DIFFERENT workspace resolves to nothing on this canvas and must render
+//     nothing rather than throw. A hand-edited file reaches the same state.
+//
+//     The surviving-neighbour clause is what stops a fix from dropping the
+//     whole source panel's links on one bad target.
+{
+  const mk = (id, x, links) => ({ kind: 'terminal', rect: { id, x, y: 0, w: 100, h: 100 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', 0, [{ to: 'gone' }, { to: 'b' }]), mk('b', 300)]
+  const segs = V.buildLinkSegments(panels)
+  ok('87 a link to an absent panel is dropped and its neighbour survives',
+    segs.length === 1 && segs[0].from === 'a' && segs[0].to === 'b')
+}
+
+// 88. A review node is an ordinary endpoint, in BOTH directions. `links` sits
+//     on PanelBase rather than on the terminal arm, so nothing in the geometry
+//     needed a kind check — which is the property being pinned. A later
+//     "optimisation" that filtered the panel list by kind before flattening
+//     would silently delete every link touching a review node, on a canvas
+//     where linking a node to a second agent's panel is what the feature is
+//     for. It is the same argument check 78 makes for the cascade lattice.
+{
+  const term = { kind: 'terminal', rect: { id: 'n1', x: 0, y: 0, w: 100, h: 100 }, spec: { panelId: 'n1', cwd: '~', args: [] }, z: 1, links: [{ to: 'r1' }] }
+  const node = { kind: 'review', rect: { id: 'r1', x: 300, y: 0, w: 100, h: 100 }, z: 2, links: [{ to: 'n1' }], subject: { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'claude' } }
+  const segs = V.buildLinkSegments([term, node])
+  ok('88 a review node is an ordinary link endpoint in both directions',
+    segs.length === 2 && segs.some((s) => s.to === 'r1') && segs.some((s) => s.from === 'r1'))
 }
 
 console.log('\n' + '='.repeat(60))

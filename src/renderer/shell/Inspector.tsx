@@ -14,6 +14,9 @@ export interface InspectorProps {
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
   onOpenReview: (id: string) => void
+  onLink: (id: string) => void
+  onRemoveLink: (from: string, to: string) => void
+  onRelabelLink: (from: string, to: string, current: string) => void
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -45,7 +48,8 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview, review
+  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  onLink, onRemoveLink, onRelabelLink, review
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -69,6 +73,9 @@ function InspectorImpl({
             onSavePreset={onSavePreset}
             onRestart={onRestart}
             onOpenReview={onOpenReview}
+            onLink={onLink}
+            onRemoveLink={onRemoveLink}
+            onRelabelLink={onRelabelLink}
           />}
     </aside>
   )
@@ -114,7 +121,8 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  model, review, onRename, onClose, onSavePreset, onRestart, onOpenReview
+  model, review, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  onLink, onRemoveLink, onRelabelLink
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
@@ -123,6 +131,9 @@ function InspectorPanel({
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
   onOpenReview: (id: string) => void
+  onLink: (id: string) => void
+  onRemoveLink: (from: string, to: string) => void
+  onRelabelLink: (from: string, to: string, current: string) => void
 }): JSX.Element {
   const state = useAgentState(model.id)
   return (
@@ -155,6 +166,54 @@ function InspectorPanel({
           </div>
         ))}
       </dl>
+      {model.links.length > 0 && (
+        <div className="inspector__links" data-inspector-links>
+          <div className="inspector__links-label">links</div>
+          {model.links.map((link) => {
+            // A link is stored on its SOURCE, so an INCOMING row has to
+            // address the OTHER panel as `from`. Getting this inversion
+            // backwards makes the controls on an incoming row silently do
+            // nothing — the mutator would look for a link on a panel that
+            // does not hold it, find none, and return the array unchanged.
+            const from = link.direction === 'out' ? model.id : link.to
+            const to = link.direction === 'out' ? link.to : model.id
+            return (
+              <div
+                className="inspector__link"
+                key={`${link.direction}-${link.to}`}
+                data-inspector-link={`${from} ${to}`}
+              >
+                <span className="inspector__link-dir" aria-hidden="true">
+                  {link.direction === 'out' ? '\u2192' : '\u2190'}
+                </span>
+                <span className="inspector__link-title">{link.title}</span>
+                {link.label !== undefined && (
+                  <span className="inspector__link-label">{link.label}</span>
+                )}
+                {/* Both controls go through shellControl, so neither takes DOM
+                    focus off xterm — see CLAUDE.md's "A shell control never
+                    takes DOM focus". */}
+                <button
+                  type="button"
+                  className="inspector__link-action"
+                  title="Label this link"
+                  {...shellControl(() => onRelabelLink(from, to, link.label ?? ''))}
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
+                  className="inspector__link-action"
+                  title="Remove this link"
+                  {...shellControl(() => onRemoveLink(from, to))}
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
       <div className="inspector__actions">
         {/*
           FIRST, and DISABLED rather than absent when the panel never started:
@@ -201,6 +260,22 @@ function InspectorPanel({
           {...shellControl(() => onSavePreset(model.id))}
         >
           Save as preset
+        </button>
+        {/*
+          M13. Arms the one-shot link mode with THIS panel as the source; the
+          next click on the canvas completes or cancels it. Present for both
+          kinds — a review node is an ordinary link endpoint, since `links`
+          lives on PanelBase — so unlike Save-as-preset it carries no
+          kind-based disable.
+        */}
+        <button
+          type="button"
+          className="inspector__action"
+          data-inspector-action="link"
+          title={`Link ${model.heading} to another panel`}
+          {...shellControl(() => onLink(model.id))}
+        >
+          Link to…
         </button>
         <button
           type="button"

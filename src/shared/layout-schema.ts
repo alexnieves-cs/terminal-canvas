@@ -50,6 +50,18 @@ export interface PersistedPanelBase {
    * Readers must still tolerate its absence: most panels remain untitled.
    */
   title?: string
+  /**
+   * Outgoing links, M13 — see PanelLink in renderer/panels/panels.ts, and note
+   * the name: backlog #24 calls these edges, the code does not, because
+   * EdgeIndicators already means the off-screen attention pip.
+   *
+   * OPTIONAL, and absent means none — which is every layout.json ever written,
+   * so a reader that treated absence as corruption would warn once per panel
+   * on every existing file. A PRESENT but malformed value warns and is
+   * replaced, the line parsePresets and parseBaselines already draw: a
+   * silently vanished field is a user's work gone with nothing said.
+   */
+  links?: { to: string; label?: string }[]
 }
 
 export interface PersistedTerminalPanel extends PersistedPanelBase {
@@ -265,6 +277,55 @@ function parseReviewSubject(raw: unknown, id: string, warnings: string[]): Revie
   return { subjectId, repoRoot, baselineSha, label }
 }
 
+/**
+ * Entries are dropped INDIVIDUALLY — the per-entry tolerance parseLayout gives
+ * a malformed panel. One bad link costs that link, not the panel's whole set.
+ *
+ * A self-link and a duplicate are both refused at creation by addLink; a
+ * hand-edited file is the other door onto them, and each fails visibly badly
+ * (a self-link renders nothing at all, since linkAnchors answers null for
+ * coincident centres; a duplicate paints two identical overlapping paths, so
+ * the canvas looks like it holds one link while holding two). Both are
+ * therefore dropped here as well as refused there.
+ *
+ * This does NOT check that `to` names a real panel — it cannot, because it
+ * runs per panel and the surviving set is not known until every panel has
+ * parsed. parseWorkspace does that second pass. verify:layout 110, 111.
+ */
+function parseLinks(
+  raw: unknown,
+  id: string,
+  warnings: string[]
+): { to: string; label?: string }[] | undefined {
+  if (raw === undefined) return undefined
+  if (!Array.isArray(raw)) {
+    warnings.push(`dropped panel ${id}'s links: not an array`)
+    return undefined
+  }
+  const out: { to: string; label?: string }[] = []
+  const seen = new Set<string>()
+  for (const entry of raw) {
+    if (!isRecord(entry) || !isStr(entry.to) || !ID_PATTERN.test(entry.to)) {
+      warnings.push(`dropped a link on panel ${id}: target was unusable`)
+      continue
+    }
+    if (entry.to === id) {
+      warnings.push(`dropped a link on panel ${id}: a panel cannot link to itself`)
+      continue
+    }
+    if (seen.has(entry.to)) {
+      warnings.push(`dropped a duplicate link on panel ${id}: ${entry.to}`)
+      continue
+    }
+    seen.add(entry.to)
+    out.push({ to: entry.to, ...(isStr(entry.label) ? { label: entry.label } : {}) })
+  }
+  // Undefined rather than [], so a panel whose links were all dropped
+  // serialises identically to one that never had any — the same
+  // absence-is-not-emptiness rule pruneLinksTo obeys on the renderer side.
+  return out.length === 0 ? undefined : out
+}
+
 function parsePanel(
   raw: unknown,
   seen: Set<string>,
@@ -301,7 +362,13 @@ function parsePanel(
     w: Math.max(MIN_PANEL_W, w),
     h: Math.max(MIN_PANEL_H, h),
     z,
-    ...(isStr(title) ? { title } : {})
+    ...(isStr(title) ? { title } : {}),
+    ...(() => {
+      const links = parseLinks(raw.links, id, warnings)
+      // Absence is PRESERVED, not normalised to an empty array — the same rule
+      // the `kind` and `command` reads below obey, and for the same reason.
+      return links === undefined ? {} : { links }
+    })()
   }
 
   // ABSENT is terminal — the whole file's compatibility rule. A PRESENT but
@@ -556,6 +623,42 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
   const panels = (Array.isArray(raw.panels) ? raw.panels : [])
     .map((p) => parsePanel(p, seen, warnings))
     .filter((p): p is PersistedPanel => p !== null)
+
+  // M13's second pass, and the only place it can happen: a link naming a panel
+  // that did not SURVIVE validation has to be dropped, and only this scope
+  // knows the whole surviving set.
+  //
+  // It is derived from `panels` and NOT from `seen`, which is the trap here
+  // and cost a red check to find. `seen` looks like the surviving set and is
+  // not one: parsePanel calls seen.add(id) immediately after the COORDINATE
+  // check and before the cwd and args checks, because its job is rejecting a
+  // duplicate id rather than recording a success — so a panel dropped for a
+  // missing cwd is still in `seen`, and a link naming it would have resolved
+  // to a panel that is not on the canvas. That is precisely the dangling link
+  // this pass exists to remove, so reusing `seen` would have made the pass
+  // agree with itself and do nothing.
+  //
+  // (The same subtlety applies to `pick` below, which does filter through
+  // `seen`: a selectedId naming a panel dropped for a bad cwd survives as a
+  // selection of a panel that is not there. It is harmless — assignTiers
+  // simply finds no such panel — and predates this milestone, so it is left
+  // alone rather than changed underneath the checks that cover it.)
+  //
+  // This is the ON-DISK half of the dangling-link stance. removePanel is the
+  // in-memory half, and a canvas needs both, because a file can be hand-edited
+  // between two launches. Dropping only the unresolvable links, rather than a
+  // panel's whole set, is the over-correction guard. verify:layout 111.
+  const surviving = new Set(panels.map((p) => p.id))
+  for (const p of panels) {
+    if (p.links === undefined) continue
+    const kept = p.links.filter((l) => surviving.has(l.to))
+    if (kept.length === p.links.length) continue
+    warnings.push(
+      `dropped ${p.links.length - kept.length} link(s) on panel ${p.id}: no such panel`
+    )
+    if (kept.length === 0) delete p.links
+    else p.links = kept
+  }
 
   // A selection naming a panel that did not survive validation would leave
   // focus pointing at nothing — and assignTiers pins the focused id live.

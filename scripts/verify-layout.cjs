@@ -1651,6 +1651,144 @@ const reviewPanelOnDisk = (id, over = {}) => ({
       back[0].rect.x === 10)
 }
 
+// ---------------------------------------------------------------------------
+// M13. Links between panels, on disk. `link`, never `edge` — see panels.ts.
+
+// 109. ABSENT is none, and that is the compatibility clause: every layout.json
+//      ever written has no links key, so a reader that warned about the
+//      absence would warn once per panel on every existing file. A PRESENT but
+//      malformed links WARNS rather than vanishing silently — the line
+//      parsePresets (41) and parseBaselines (99) already draw, and a silently
+//      dropped field is a user's work gone with nothing said.
+{
+  const bare = L.parseLayout(file())
+  const bad = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas', panels: [panel({ links: 'nope' })],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const only = (r) => active(r.snapshot).panels[0]
+  ok('109 an absent links key warns nothing; a malformed one warns',
+    only(bare).links === undefined && bare.warnings.length === 0 &&
+    only(bad).links === undefined && bad.warnings.some((w) => /link/i.test(w)),
+    `bare=${bare.warnings.length} bad=${JSON.stringify(bad.warnings)}`)
+}
+
+// 110. A malformed ENTRY is dropped individually and its neighbours survive —
+//      the per-entry tolerance parseLayout already gives a malformed panel
+//      (check 100 states it for baselines). One bad link costs that link, not
+//      the panel's whole set.
+//
+//      A self-link and a duplicate are both refused at creation by addLink; a
+//      hand-edited file is the OTHER door onto them, and each renders nothing
+//      or renders twice, so both are dropped here too.
+{
+  const r = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [
+        panel({ id: 'a', links: [
+          { to: 'b' }, { to: 42 }, 'nope', { to: 'a' }, { to: 'b' },
+          { to: 'c', label: 'feeds' }
+        ] }),
+        panel({ id: 'b' }),
+        panel({ id: 'c' })
+      ],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const links = active(r.snapshot).panels[0].links
+  ok('110 a malformed, self and duplicate link entry are each dropped alone',
+    links.length === 2 && links[0].to === 'b' &&
+    links[1].to === 'c' && links[1].label === 'feeds',
+    JSON.stringify(links))
+}
+
+// 111. THE ONE WORTH KNOWING BY NUMBER. A link naming a panel that did not
+//      SURVIVE validation is dropped, and parseWorkspace is the only place
+//      that can do it — the only scope that knows the whole surviving set. It
+//      already builds `seen` for exactly this shape of question (selectedId
+//      and focusedId are filtered through it), so this is a second pass over a
+//      set that already exists rather than new bookkeeping.
+//
+//      This is the ON-DISK half of the dangling-link stance; removePanel is
+//      the in-memory half, and a canvas needs BOTH, because a file can be
+//      hand-edited between two launches.
+//
+//      The surviving-link clause is the over-correction guard: dropping every
+//      link because one target was bad empties the canvas silently, which is
+//      the failure this whole stance exists to prevent wearing the other sign.
+{
+  const r = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [
+        panel({ id: 'a', links: [{ to: 'b' }, { to: 'ghost' }] }),
+        panel({ id: 'b' }),
+        // Dropped by parsePanel: no cwd. So `ghost` never reaches `seen`.
+        { id: 'ghost', x: 0, y: 0, w: 720, h: 460, z: 3, args: [] }
+      ],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const w = active(r.snapshot)
+  ok('111 a link to a panel that did not survive validation is dropped',
+    w.panels.length === 2 &&
+    w.panels[0].links.length === 1 && w.panels[0].links[0].to === 'b',
+    JSON.stringify(w.panels[0].links))
+}
+
+// 112. Links survive a write and a reopen through the real coalesced store,
+//      label intact — check 101's round trip, for this field.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.save({
+    panels: [
+      panel({ id: 'a', links: [{ to: 'b', label: 'feeds' }] }),
+      panel({ id: 'b' })
+    ],
+    camera: { x: 0, y: 0, scale: 1 },
+    selectedId: null,
+    focusedId: null
+  })
+  store.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  const back = reopened.initial().panels.find((p) => p.id === 'a')
+  ok('112 a link survives a write and a reopen',
+    back !== undefined && back.links !== undefined && back.links.length === 1 &&
+    back.links[0].to === 'b' && back.links[0].label === 'feeds',
+    JSON.stringify(back && back.links))
+}
+
+// 113. The field survives layout-adapt's fromPanels/toPanels round trip, which
+//      is the OTHER door onto this format and the one a schema-only check
+//      cannot see — check 108b's argument, for links.
+//
+//      The absent-stays-ABSENT clause is the half that carries weight:
+//      `links: undefined` is a different fact from the key being missing, and
+//      an adapter that spread its input would write an explicit undefined onto
+//      every panel that has no links. That is the rule `command` already obeys
+//      here, and the reason it obeys it is that the difference SURVIVES an IPC
+//      structured clone.
+{
+  const withLinks = [
+    { kind: 'terminal', rect: { id: 'a', x: 1, y: 2, w: 720, h: 460 }, z: 1,
+      spec: { panelId: 'a', cwd: '~', args: [] }, links: [{ to: 'b', label: 'feeds' }] },
+    { kind: 'terminal', rect: { id: 'b', x: 3, y: 4, w: 720, h: 460 }, z: 2,
+      spec: { panelId: 'b', cwd: '~', args: [] } }
+  ]
+  const persisted = L.fromPanels(withLinks)
+  const back = L.toPanels(persisted)
+  ok('113 links round-trip through layout-adapt, and absence stays absent',
+    back[0].links.length === 1 && back[0].links[0].label === 'feeds' &&
+    !('links' in back[1]) && !('links' in persisted[1]),
+    JSON.stringify(persisted))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
