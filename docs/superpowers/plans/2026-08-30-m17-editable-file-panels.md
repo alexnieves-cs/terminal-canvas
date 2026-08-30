@@ -12,7 +12,9 @@
 
 ## Global Constraints
 
-- **`npm run verify` must be green before any task is called done.** It is this repo's whole verification story — no unit runner, no linter, no per-test filter. Run it as `npm run verify > /tmp/out.txt 2>&1; echo "EXIT=$?"` — piping to `tail` reports *tail's* exit status and silently hides a red chain.
+- **Run only the suites a task actually touches — NOT the full chain.** Each task names its own suites; run those and nothing else. The full `npm run verify` runs ONCE, at the end of Task 7, as the release gate. This is a deliberate speed decision by the repo owner and overrides this repo's usual "verify green before claiming done" habit for intermediate tasks.
+- **Whatever you run, capture its real exit code.** `npm run verify:file > /tmp/out.txt 2>&1; echo "EXIT=$?"`. Piping to `tail` reports *tail's* exit status, not npm's, and silently hides a red run — this cost a false "baseline green" report on this very branch.
+- **The Electron-tier suites need the Electron binary.** In a fresh worktree run `node node_modules/electron/install.js` once, or `verify:panels` dies with `No such file or directory` and every check in it silently never runs.
 - **Never introduce a second runtime dependency.** `dependencies` is `{"node-pty": "1.1.0"}` and stays that way.
 - **Every failure is an arm, never a throw.** `readFile`'s header states this: a throw crosses IPC as a rejected invoke and lands in the component's `.catch` as a stringified `Error` — the right arm reached by the wrong road, losing the errno.
 - **Fixture directories must contain a SPACE.** This repo's most expensive silent bug (the `pane-died` redirect) shipped through eight reviews because every fixture used a space-free path. `verify:file` already uses `mkdtempSync(join(tmpdir(), 'tc file '))`; keep it.
@@ -965,10 +967,10 @@ Expected against a tree WITHOUT Task 5: check 158's first `waitUntil` times out 
 
 Tasks 1–5 are the implementation. A red here is a wiring defect in one of them; fix it there rather than loosening the check.
 
-- [ ] **Step 4: Run the full chain**
+- [ ] **Step 4: Run this suite only**
 
-Run: `npm run verify > /tmp/verify.txt 2>&1; echo "EXIT=$?"; grep -c "^FAIL" /tmp/verify.txt; tail -3 /tmp/verify.txt`
-Expected: `EXIT=0`, zero FAIL lines, and the panels summary at 159/159 (or whatever the file's own numbering produces — report the printed line, do not assume).
+Run: `npm run build && npm run verify:panels > /tmp/p.txt 2>&1; echo "EXIT=$?"; grep -c "^FAIL" /tmp/p.txt; tail -3 /tmp/p.txt`
+Expected: zero FAIL lines and the panels summary at 159/159 (or whatever the file's own numbering produces — report the printed line, do not assume). The full chain runs once, in Task 7.
 
 - [ ] **Step 5: Commit**
 
@@ -1101,10 +1103,15 @@ explicit overwrite the user reaches only after being shown the conflict. Tiers
 how any of them would work.
 ```
 
-- [ ] **Step 4: Verify the docs**
+- [ ] **Step 4: Verify the docs, then run the full chain ONCE**
 
 Run: `npm run verify:meta`
 Expected: 21/21. Check 14 reads the README's IPC diagram against the real contract; Task 3 already moved it, and this step confirms nothing in the prose edits disturbed a required heading.
+
+Then, and only here, the release gate:
+
+Run: `npm run verify > /tmp/verify.txt 2>&1; echo "EXIT=$?"; grep -c "^FAIL" /tmp/verify.txt; grep -c "^> terminal-canvas@0.1.0 verify" /tmp/verify.txt; tail -3 /tmp/verify.txt`
+Expected: `EXIT=0`, zero FAIL lines, 22 suites run, and the chain ending on the panels summary. This is the ONLY full-chain run in the plan — every earlier task ran only its own suites, deliberately.
 
 - [ ] **Step 5: Commit**
 
