@@ -1,10 +1,12 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import {
   IPC,
   IPC_EVENTS,
   type CanvasBridge,
   type PresetTemplate,
-  type CapturedPanel
+  type CapturedPanel,
+  type FileReadRequest,
+  type FileChangedEvent
 } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
 import type {
@@ -124,6 +126,13 @@ const bridge: CanvasBridge = {
     set: (req: { service: string; token: string }) => ipcRenderer.invoke(IPC.CREDENTIAL_SET, req),
     remove: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_DELETE, service),
     verify: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_VERIFY, service)
+  },
+  file: {
+    open: () => ipcRenderer.invoke(IPC.FILE_OPEN),
+    read: (req: FileReadRequest) => ipcRenderer.invoke(IPC.FILE_READ, req),
+    close: (panelId: PanelId) => ipcRenderer.invoke(IPC.FILE_CLOSE, panelId),
+    onChanged: (listener) => subscribe<FileChangedEvent>(IPC_EVENTS.FILE_CHANGED, listener),
+    pathForFile: (file: File) => webUtils.getPathForFile(file)
   },
   platform: process.platform
 }

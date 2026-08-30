@@ -1789,6 +1789,73 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify(persisted))
 }
 
+const filePanelOnDisk = (id, over = {}) => ({
+  id, x: 1, y: 2, w: 640, h: 520, z: 3, kind: 'file', source: { path: '/tmp/a b/c.txt' }, ...over
+})
+
+// M16 (originally numbered 109-112 under this branch's own M13, which
+// collided with main's own DIFFERENT M13 — "links between panels", which
+// independently claimed 109-113 in this file. See the milestone-wide
+// renumbering commit for the full story.)
+// 114 — a file panel round-trips with its whole source.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [filePanelOnDisk('f1')], camera: L.DEFAULT_CAMERA }],
+    activeWorkspaceId: 'w1'
+  }))
+  const p = out.snapshot.workspaces[0].panels[0]
+  ok('114 a file panel parses with its whole source',
+    p !== undefined && p.kind === 'file' && p.source.path === '/tmp/a b/c.txt' && out.warnings.length === 0,
+    JSON.stringify(p))
+}
+// 115 — a malformed source drops that panel ALONE, with a warning. The
+// individual-drop rule parseLayout obeys everywhere else; its neighbour
+// surviving is the half that says "alone".
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      filePanelOnDisk('f1', { source: { path: 42 } }),
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 2, cwd: '~', args: [] }
+    ], camera: L.DEFAULT_CAMERA }],
+    activeWorkspaceId: 'w1'
+  }))
+  const ids = out.snapshot.workspaces[0].panels.map((p) => p.id)
+  ok('115 a malformed source drops that panel alone',
+    ids.length === 1 && ids[0] === 'n1' && out.warnings.length === 1,
+    `kept=${ids.join(',')} warnings=${out.warnings.length}`)
+}
+// 116 — the two rules that must NOT have moved. Absent kind is still terminal
+// (every pre-M9b file), and a present unknown kind is still dropped. Adding an
+// arm above the unknown-kind drop is exactly the edit that could break either.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] },
+      { id: 'w2', kind: 'whiteboard', x: 0, y: 0, w: 720, h: 460, z: 2 }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  ok('116 absent kind is still terminal and an unknown kind is still dropped',
+    panels.length === 1 && panels[0].kind === undefined
+      && out.warnings.some((w) => w.includes('whiteboard')))
+}
+// 117 — the SAME union survives layout-adapt's round trip, the other door onto
+// this format and the one a schema-only check cannot see. The fromPanels arm
+// must write no cwd key AT ALL — `cwd: undefined` fails its own parse next
+// launch, losing the panel on every relaunch, silently.
+{
+  const panels = L.toPanels([
+    { id: 'f1', kind: 'file', x: 1, y: 2, w: 640, h: 520, z: 3, source: { path: '/tmp/x.txt' }, title: 'notes' }
+  ])
+  const back = L.fromPanels(panels)
+  ok('117 a file panel survives toPanels/fromPanels with no cwd key',
+    panels[0].kind === 'file' && panels[0].source.path === '/tmp/x.txt'
+      && back[0].kind === 'file' && back[0].source.path === '/tmp/x.txt'
+      && back[0].title === 'notes' && !('cwd' in back[0]) && !('args' in back[0]),
+    JSON.stringify(back[0]))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

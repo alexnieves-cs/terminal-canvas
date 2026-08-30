@@ -1,5 +1,5 @@
 import type { PersistedPanel } from '@shared/layout-schema'
-import { isReviewPanel, type Panel } from './panels'
+import { isFilePanel, isReviewPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -30,6 +30,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // is tested positively, so an absent kind — every pre-M9b file — becomes
     // a terminal panel here rather than anywhere further downstream.
     if (p.kind === 'review') return { ...base, kind: 'review' as const, subject: { ...p.subject } }
+    if (p.kind === 'file') return { ...base, kind: 'file' as const, source: { path: p.source.path } }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -65,6 +66,10 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // on the next launch (the terminal branch's cwd check), which is a canvas
     // that loses every review node on every relaunch, silently.
     if (isReviewPanel(panel)) return { ...base, kind: 'review' as const, subject: { ...panel.subject } }
+    // No cwd and no args keys AT ALL, for the reason the review branch above
+    // states: an explicit `cwd: undefined` fails the terminal branch's cwd
+    // check on the next launch, losing the panel on every relaunch, silently.
+    if (isFilePanel(panel)) return { ...base, kind: 'file' as const, source: { path: panel.source.path } }
     return {
       ...base,
       kind: 'terminal' as const,

@@ -232,7 +232,11 @@ const spyActions = () => {
     // directly, but buildCommands also reaches these through ctx.actions).
     beginSetCredential: record('beginSetCredential'),
     verifyCredential: record('verifyCredential'),
-    beginDeleteCredential: record('beginDeleteCredential')
+    beginDeleteCredential: record('beginDeleteCredential'),
+    // panel.open-file's row calls this (check 73, renumbered from this
+    // milestone's own original 70 — main's credential checks claimed 70-72
+    // first) — same reason as restartPanel and openReview above.
+    openFile: record('openFile')
   }
 }
 
@@ -1157,6 +1161,36 @@ const WS = [
       actions.calls[0][0] === 'verifyCredential' && actions.calls[0][1] === 'github' &&
       actions.calls[1][0] === 'beginDeleteCredential' && actions.calls[1][1] === 'github',
     JSON.stringify({ add, del, verify, calls: actions.calls }))
+}
+
+// 73. panel.open-file — Task 7's row, uncovered anywhere in this suite until
+//     now (verify:panels 134 mints a file panel through the __m13Open test
+//     hook directly, bypassing this row, actions.openFile and file:open
+//     entirely). It has to read as a create verb, the same as a preset spawn
+//     row: present, enabled and visible at rest — there is no captured panel
+//     to gate it on and no state in which it should be disabled or hidden —
+//     and it has to actually be wired to actions.openFile, or the row is a
+//     facade that does nothing when pressed. All four asserted in one read:
+//     a regression to any single one of them (dropped row, wrong section
+//     leaving it hiddenAtRest, an accidental disabledReason, a run() wired to
+//     the wrong action or nothing) would otherwise pass a check that only
+//     looked at the others. Renumbered from this milestone's own original 70
+//     (built and reviewed as "M13") to 73 on merge, since main's credential
+//     checks had already claimed 70-72 by then — see the milestone-wide
+//     renumbering commit.
+{
+  const c = ctx({})
+  const rows = P.buildCommands(c)
+  const row = byId(rows, 'panel.open-file')
+  const resting = P.filterCommands(rows, '', null)
+  row?.run()
+  ok('73 Open file… is present, enabled, visible at rest, and wired to actions.openFile',
+    row !== undefined &&
+      row.disabledReason === undefined &&
+      row.hiddenAtRest !== true &&
+      resting.some((r) => r.id === 'panel.open-file') &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'openFile')
 }
 
 // ---------------------------------------------------------------------------

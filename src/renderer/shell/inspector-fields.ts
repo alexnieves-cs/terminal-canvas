@@ -1,6 +1,6 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
-import { isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isReviewPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -245,6 +245,29 @@ export function buildInspectorModel(
         // characters — but PRESENT, because it is the one field that says
         // which moment this node is measuring from.
         { key: 'baseline', label: 'since', value: panel.subject.baselineSha.slice(0, 8) }
+      ]
+    }
+  }
+  if (isFilePanel(panel)) {
+    const path = panel.source.path
+    const cut = path.lastIndexOf('/')
+    return {
+      kind: 'file',
+      id: panel.rect.id,
+      heading: railLabel(panel, undefined),
+      ...(panel.title !== undefined ? { title: panel.title } : {}),
+      // FALSE rather than absent, the reason the review arm gives: an optional
+      // flag lets a half-finished wiring compile with the control silently
+      // always-enabled, and tsc says nothing about it.
+      restartable: false,
+      reattached: false,
+      fields: [
+        { key: 'file', label: 'file', value: cut < 0 ? path : path.slice(cut + 1) },
+        // The directory is its OWN field rather than folded into the one
+        // above, which is the pane's whole stated job: show the links, not a
+        // merged answer. The rail row shows the basename and nothing else, so
+        // this is the one surface where the full path is legible.
+        { key: 'directory', label: 'in', value: cut <= 0 ? '/' : path.slice(0, cut) }
       ]
     }
   }

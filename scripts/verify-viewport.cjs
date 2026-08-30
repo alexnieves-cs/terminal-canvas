@@ -1253,6 +1253,48 @@ ok('74 a panel with no kind is not a review panel',
     segs.length === 2 && segs.some((s) => s.to === 'r1') && segs.some((s) => s.from === 'r1'))
 }
 
+// M16 (originally numbered 79-80b under this branch's own M13, which
+// collided with main's own DIFFERENT M13 — "links between panels", which
+// independently claimed 79-88 in this file. See the milestone-wide
+// renumbering commit for the full story.)
+// 89 — makeFilePanel centres exactly, the contract makePanel has (check 48).
+{
+  const f = V.makeFilePanel('f1', { x: 100, y: 200 }, 3, { path: '/tmp/a.txt' })
+  ok('89 makeFilePanel centres exactly',
+    f.kind === 'file'
+      && f.rect.x === 100 - V.FILE_W / 2 && f.rect.y === 200 - V.FILE_H / 2
+      && f.rect.w === V.FILE_W && f.rect.h === V.FILE_H && f.z === 3,
+    `x=${f.rect.x} y=${f.rect.y}`)
+}
+// 90 — the source is carried VERBATIM and the object is not the same reference.
+// makeReviewPanel's own comment warns about the copy-paste that rewrites a
+// payload field with the minted id; this is that rule inherited. The
+// not-same-reference clause matters because the caller's object may be reused.
+{
+  const src = { path: '/tmp/b.txt' }
+  const f = V.makeFilePanel('f2', { x: 0, y: 0 }, 1, src)
+  ok('90 makeFilePanel carries source verbatim without rewriting it',
+    f.source.path === '/tmp/b.txt' && f.source !== src
+      && !('panelId' in f.source) && Object.keys(f.source).length === 1,
+    JSON.stringify(f.source))
+}
+// 90b — isTerminalPanel is the POSITIVE partition test, and its whole job is
+// the two clauses that are not about terminals: a file panel and a review
+// panel must BOTH answer false. A helper written as !isReviewPanel passes
+// every terminal clause and lands a file panel in assignTiers with no spec.
+{
+  const t = V.makePanel('n1', { x: 0, y: 0 }, 1)
+  const f = V.makeFilePanel('f3', { x: 0, y: 0 }, 1, { path: '/tmp/c' })
+  const r = V.makeReviewPanel('r1', { x: 0, y: 0 }, 1,
+    { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'x' })
+  // A pre-M9b panel: no `kind` key at all. It must still read as terminal.
+  const legacy = { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } }
+  ok('90b isTerminalPanel excludes BOTH non-terminal kinds and still admits a kind-less panel',
+    V.isTerminalPanel(t) === true && V.isTerminalPanel(f) === false
+      && V.isTerminalPanel(r) === false && V.isTerminalPanel(legacy) === true
+      && V.isFilePanel(f) === true && V.isFilePanel(t) === false)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

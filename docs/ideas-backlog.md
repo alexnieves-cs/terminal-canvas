@@ -320,6 +320,14 @@ is a terminal running an agent CLI or a native chat box (#8).
 
 ## 14. Panels that *are* other apps — a live document beside a live agent
 
+**Tier 1 landed in M16** — a read-only, live-watched local-file panel: `main/file-read.ts`'s
+five-arm read (`text`/`missing`/`too-large`/`binary`/`unreadable`), `main/file-watch.ts`'s
+directory watch, `FileNode.tsx` on the canvas, and a Finder drop. Tiers 2–4 below are
+explicitly still open and unstarted; nothing about M16's design commits to how any of them
+would work. The "who wins when both edit" question in the last bullet was **deferred, not
+answered** — M16 built a read-only viewer specifically to avoid needing an answer yet, and
+the question returns the day an editor (tier 1 continued, or any later tier) lands.
+
 Not a link to another app, and not a preview of one: the app itself, running in a panel
 on the canvas. `claude` in a terminal panel, and immediately beside it a **live Excel
 sheet from the local machine** — open, editable, updating. Same for a Word document, an

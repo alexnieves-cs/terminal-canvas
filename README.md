@@ -181,8 +181,10 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:diff / review:commit
                        credential:list / credential:set / credential:delete
                        credential:verify
+                       file:open / file:read / file:close
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
+                       file:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -538,14 +540,19 @@ contains, not only the ones that fit on screen.
 | M13 | Links between panels: a directed, labelled line that means something | ✅ done |
 | M14 | The credential boundary: a store main owns, and no secret reaches an agent | ✅ done |
 | M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
+| M16 | File panels: a local file on the canvas, watched | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11, M12,
-M14 and M15 each landed on their own branch and merged in sequence. M15 was
-built as M13 and renumbered when it merged, because both M13 and M14 were
-claimed while it was in flight — the same resolution M14 itself made for the
-same reason. A gap in the numbers here is a milestone someone else is holding,
-not one that was skipped.
+claimed by a separate concurrent track and is not yet in this table; M11,
+M12, M13, M14, M15 and M16 each landed on their own branch and merged in
+sequence. A gap in the numbers here is a milestone someone else is holding,
+not one that was skipped. M15 and M16 were each built and reviewed entirely
+as "M13" — main had already claimed that number, and then claimed it again
+via each earlier renumbering, by the time each of them tried to merge — so
+each moved to the next free number on merge rather than at any point during
+its own development. M15 became M15 because both the real M13 and M14 were
+already claimed while it was in flight; M16 became M16 because by the time
+it tried to merge, M13, M14 AND M15 were all already claimed.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

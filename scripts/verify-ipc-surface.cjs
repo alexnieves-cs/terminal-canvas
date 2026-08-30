@@ -104,6 +104,15 @@ app.whenReady().then(() => {
     read: () => undefined,
     setLabel: () => {}
   }
+  // Never invoked here either — this suite only asserts REGISTRATION, never
+  // drives file:read/file:close — but registerIpcHandlers' body reaches into
+  // it to build the handler closures.
+  const fileWatchersStub = {
+    watch: () => ({ kind: 'missing' }),
+    close: () => {},
+    closeAll: () => {},
+    count: () => 0
+  }
   registerIpcHandlers(
     stub,
     layoutStoreStub,
@@ -112,14 +121,22 @@ app.whenReady().then(() => {
     () => {},
     reviewEngineStub,
     reviewCommitStub,
-    credentialStoreStub
+    credentialStoreStub,
+    fileWatchersStub,
+    () => null
   )
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M14 Task 5 takes the surface to 35: four credential:* channels, none of
-  // which returns a secret.
-  const EXPECTED_CHANNELS = 35
+  // 38, not 39. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // handled by nobody — and this suite asserts over Object.values(IPC), the
+  // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
+  // records both. M14 Task 5 took the surface to 35 (four credential:*
+  // channels, none of which returns a secret) — the base this milestone's
+  // three new invokes (file:open/file:read/file:close) build on. This
+  // milestone was built and reviewed as "M13" and renumbered to M16 when it
+  // merged, since main had already claimed M13 three times over by then.
+  const EXPECTED_CHANNELS = 38
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
