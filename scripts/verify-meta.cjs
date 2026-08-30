@@ -21,6 +21,22 @@ const read = (rel) => {
   return existsSync(p) ? readFileSync(p, 'utf8') : null
 }
 
+// Strips `/* ... */` block comments (including doc comments, multiline) and
+// `//` line comments out of TypeScript source, so a check can search CODE
+// without matching a comment that mentions the same string. Checks 20 and 21
+// below exist precisely because the real tree carries the string
+// `credential:get`, the identifier fragment `.read(`, and the word `cipher`
+// each exactly once — and all three occurrences are prose explaining why the
+// thing they name must NOT appear in code. A bare substring search over the
+// raw file would fail against the correct, current tree; stripping comments
+// first is what lets the check match CODE syntax instead of English sentences
+// that happen to contain the same characters. Order matters: block comments
+// are removed first, because `/* // not a line comment */` would otherwise
+// leave a dangling `*/` behind if line-comment stripping ran first and ate
+// past the block's own closing delimiter.
+const stripComments = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
 const results = []
 const ok = (n, pass, detail) => {
   results.push({ n, pass, detail })
@@ -269,6 +285,47 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   ok('19 every verify suite is wired into the chain',
     suites.length > 10 && unwired.length === 0,
     unwired.length ? `unwired: ${unwired.join(', ')}` : `${suites.length} suites`)
+}
+
+// 20. RULE 1, AS SOURCE TEXT: there is no credential:get channel and no
+// handler returns a cipher. Neither half has a runtime symptom when broken —
+// the app keeps working exactly as before, just with a plaintext-returning
+// channel nobody exercises yet, which is why this can only be pinned as
+// prose-shaped code rather than as behaviour. Both `contract` and `ipc` are
+// COMMENT-STRIPPED before matching (see `stripComments` above): the raw
+// tree contains `credential:get` once, in the doc comment on line ~183 of
+// ipc-contract.ts explaining that it deliberately does not exist, and
+// contains `cipher` once, in a doc comment on `CredentialSetResult`
+// describing what the result type must NEVER carry — a bare substring test
+// over the raw files would report both as violations of the very rule they
+// document.
+{
+  const contract = stripComments(read('src/shared/ipc-contract.ts') ?? '')
+  const ipc = stripComments(read('src/main/ipc.ts') ?? '')
+  const noGet = !/credential:get/.test(contract) && !/CREDENTIAL_GET/.test(contract)
+  const noCipher = !/cipher/i.test(ipc)
+  ok('20 no credential:get channel exists and no handler names a cipher',
+    noGet && noCipher, `noGet=${noGet} noCipher=${noCipher}`)
+}
+
+// 21. RULE 2, AS SOURCE TEXT: a stored credential must never reach a PTY, so
+// the three modules that build a process environment must not import the
+// credential store, and no IPC handler may call the store's read() — the one
+// function that returns plaintext, main-internal, and callable only from
+// credential-verify.ts. Prose alone has already lost this kind of invariant
+// in this repo once: CLAUDE.md's `dispose` call-site count went stale inside
+// the very commit that recorded it. Both reads are COMMENT-STRIPPED: the raw
+// ipc.ts contains the substring `.read(` inside a comment explaining that no
+// handler here may call it, which a bare substring test would misreport as
+// the violation itself.
+{
+  const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/session-backend.ts']
+    .filter((f) => /credential-store/.test(stripComments(read(f) ?? '')))
+  const ipc = stripComments(read('src/main/ipc.ts') ?? '')
+  const readsPlaintext = /credentialStore\.read\(/.test(ipc)
+  ok('21 no env-building module imports the credential store, and no handler calls read()',
+    offenders.length === 0 && !readsPlaintext,
+    offenders.length ? offenders.join(',') : `readsPlaintext=${readsPlaintext}`)
 }
 
 console.log('\n' + '='.repeat(60))
