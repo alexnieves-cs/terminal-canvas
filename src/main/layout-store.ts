@@ -511,49 +511,83 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
      * registry, and this function never reaches pty.kill, backend.destroy,
      * or dropBaseline.
      *
-     * Resolving (or minting) the target BEFORE removing anything from any
-     * source is the ordering that matters: a half-applied move — panels
-     * removed, never delivered anywhere — would lose them with no UI able
-     * to reach them again, the same orphan outcome deleteWorkspace's own
-     * design rejects.
+     * Resolving a workspaceId target BEFORE removing anything from any
+     * source is still the rule below — an unknown id has to answer null
+     * before a single panel moves, or a half-applied move loses panels
+     * whose tmux sessions keep running with no UI able to reach them, the
+     * same orphan outcome deleteWorkspace's own design rejects. A newName
+     * target is different: it is NOT minted at that point. This function
+     * first PLANS the move — which panels leave which of the workspaces
+     * that already exist — and mints the new workspace only once that plan
+     * is known to be non-empty. Minting up front (the first draft's
+     * mistake, found in review) let an empty, named, PERSISTED workspace
+     * survive a `moving.length === 0` return: "Move to new workspace..."
+     * offered for a panel closed between the palette listing it and the
+     * user confirming would return null, correctly report that nothing
+     * moved, and leave a workspace called "Spike" on disk and in the rail
+     * at the next launch anyway — with nothing naming what created it. With
+     * the mint deferred, a null return here means exactly what it says:
+     * nothing changed, and nothing was created either.
      */
     movePanels(panelIds, target) {
       const wanted = new Set(panelIds)
       if (wanted.size === 0) return null
 
-      let targetId: string
-      if ('newName' in target) {
-        targetId = doCreateWorkspace(target.newName)
-      } else {
+      // Resolve WHO the target is without creating anything yet. A
+      // discriminated union rather than two loose variables, so TypeScript
+      // — not a comment — guarantees the mint below only ever reads `name`
+      // on the branch that actually has one.
+      type Resolution = { kind: 'known'; id: string } | { kind: 'mint'; name: string }
+      let resolution: Resolution
+      if ('workspaceId' in target) {
         // An id naming nothing is a stale palette row or a second window —
         // the same "changed nothing" answer activateWorkspace already gives
         // an unknown id, rather than a half-applied transaction.
         if (!snapshot.workspaces.some((w) => w.id === target.workspaceId)) return null
-        targetId = target.workspaceId
+        resolution = { kind: 'known', id: target.workspaceId }
+      } else {
+        resolution = { kind: 'mint', name: target.newName }
       }
+      const knownTargetId = resolution.kind === 'known' ? resolution.id : null
 
-      // Pull the wanted panels out of every OTHER workspace's record. A
-      // panel already sitting in the target is left alone: matching `wanted`
-      // against the target's own list too would duplicate it there.
+      // Plan the move WITHOUT mutating anything yet: which panels leave
+      // which workspace, and what each workspace's panels look like
+      // afterward. A newName target does not exist yet, so nothing here
+      // needs its id — every existing workspace is a candidate source
+      // either way. A panel already sitting in a KNOWN target is left
+      // alone: matching `wanted` against the target's own list too would
+      // duplicate it there.
       const moving: PersistedPanel[] = []
+      const removals: { workspace: Workspace; keep: PersistedPanel[] }[] = []
       for (const w of snapshot.workspaces) {
-        if (w.id === targetId) continue
+        if (w.id === knownTargetId) continue
         const keep = w.panels.filter((p) => !wanted.has(p.id))
         if (keep.length !== w.panels.length) {
           moving.push(...w.panels.filter((p) => wanted.has(p.id)))
-          w.panels = keep
+          removals.push({ workspace: w, keep })
         }
       }
       // None of the requested ids existed anywhere outside the target —
-      // asking to move nothing real. Nothing was removed above (the length
-      // check skipped every workspace), so there is nothing to deliver.
+      // asking to move nothing real. This is the function's ONE failure
+      // mode, and it is genuinely "nothing changed" now: nothing has been
+      // mutated above, and — the whole point of planning before minting —
+      // nothing has been created either.
       if (moving.length === 0) return null
 
+      // Only now, with a real move guaranteed, does a newName target get
+      // minted — see this function's own doc comment for why the ordering
+      // is load-bearing rather than incidental.
+      const targetId = resolution.kind === 'known' ? resolution.id : doCreateWorkspace(resolution.name)
+
+      for (const { workspace, keep } of removals) workspace.panels = keep
+
       const dest = snapshot.workspaces.find((w) => w.id === targetId)
-      // Unreachable in practice — targetId was just resolved or minted two
-      // steps up — but returning null here rather than asserting keeps this
-      // function's one failure mode "nothing changed" rather than a crash
-      // mid-move with panels already pulled out of their source.
+      // Unreachable: a 'known' id was already validated above, and a
+      // 'mint' id is always present in snapshot.workspaces the instant
+      // doCreateWorkspace returns it. Kept as a guard rather than an
+      // assertion so a future change that breaks the invariant fails as
+      // "nothing changed" rather than a crash mid-move with panels already
+      // pulled out of their source.
       if (!dest) return null
       // The rect travels unchanged. A moved panel lands where it was, which
       // may collide with something already in the target — visible the next

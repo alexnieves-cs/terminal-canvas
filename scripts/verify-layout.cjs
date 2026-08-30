@@ -1786,6 +1786,26 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify(store.workspaces().map((w) => w.name)))
 }
 
+// 115. An unknown panel id with a newName target creates NOTHING. This is
+//      the fault a first draft of movePanels shipped: it minted the new
+//      workspace before it knew whether anything was actually movable, so
+//      a caller offering "Move to new workspace..." for a panel that was
+//      closed between listing and confirming got told (correctly) that
+//      nothing moved — while an empty workspace it never asked for sat on
+//      disk and in the rail at the next launch, with nothing naming what
+//      created it. workspaces().length is the whole check: a null result
+//      alone would pass against exactly that regression.
+{
+  const store = L.createLayoutStore({ filePath: tmp() })
+  store.load()
+  store.save({ panels: [panel({ id: 'n1' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+  const before = store.workspaces().length
+  const result = store.movePanels(['nope'], { newName: 'Spike' })
+  ok('115 an unknown id with a newName target creates no workspace',
+    result === null && store.workspaces().length === before,
+    `result=${JSON.stringify(result)} before=${before} after=${store.workspaces().length}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
