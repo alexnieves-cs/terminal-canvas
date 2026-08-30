@@ -18,6 +18,7 @@ import type {
 import type { CanvasState } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
+import type { FileResult } from './file-panel'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -178,7 +179,29 @@ export const IPC = {
    * legitimately thirty seconds — so the renderer must render an in-flight
    * state rather than assuming a prompt reply.
    */
-  REVIEW_COMMIT: 'review:commit'
+  REVIEW_COMMIT: 'review:commit',
+  /**
+   * Ask main to show a native open dialog. Resolves to the chosen absolute
+   * path, or null if the user cancelled.
+   *
+   * Main owns the dialog because main owns every other dialog in this app
+   * (the reset confirm, and canvas:request-reset's whole reason for existing).
+   * A renderer-side reconstruction would drift from the menu path silently.
+   */
+  FILE_OPEN: 'file:open',
+  /**
+   * Read a file AND arm the watch for that panel id.
+   *
+   * One channel rather than two, deliberately: it makes "the renderer is
+   * showing this file" and "main is watching this file" one statement rather
+   * than two that can disagree. The component reads on mount and closes on
+   * unmount, so a workspace switch — which unmounts without disposing —
+   * correctly stops watching a canvas nobody is looking at, and re-arms on the
+   * way back.
+   */
+  FILE_READ: 'file:read',
+  /** Disarm the watch. Called from the component's unmount. */
+  FILE_CLOSE: 'file:close'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -250,8 +273,45 @@ export const IPC_EVENTS = {
    * unconditional send would be thirty messages a minute per panel describing a
    * fact that changes when a human types `cd`.
    */
-  SESSION_LIVE: 'session:live'
+  SESSION_LIVE: 'session:live',
+  /**
+   * A watched file changed on disk. Main -> renderer, fire-and-forget.
+   *
+   * An IPC_EVENTS member and not an IPC one, which decides a number:
+   * verify:ipc asserts over Object.values(IPC) and is unmoved by this, so the
+   * count goes 31 -> 34 and not 35. M6d and M12 each hit this same boundary
+   * and recorded it; this is the third.
+   *
+   * A push, where review:* is deliberately pull-only, and the difference is
+   * what the signal MEANS rather than a change of posture. Review's signal is
+   * "an agent finished a turn", which the renderer already observes as an idle
+   * transition — main would be a second author of a timing decision. A file's
+   * signal is "the bytes on disk changed", which ONLY main can see; there is
+   * no renderer-side event that means it.
+   *
+   * Deduped in main against a hash of the whole result, for the reason
+   * AGENT_STATE and SESSION_LIVE are deduped: undeduped this is a message per
+   * filesystem event describing a fact that did not change, and its failure is
+   * invisible — no pixel is wrong, it shows up as heat.
+   *
+   * Carries the whole FileResult rather than a bare notification. The
+   * alternative — push {panelId} and have the renderer re-invoke file:read —
+   * doubles the latency and reintroduces a race between the notification and
+   * the read, for the sole benefit of a smaller message the byte cap already
+   * bounds.
+   */
+  FILE_CHANGED: 'file:changed'
 } as const
+
+export interface FileReadRequest {
+  panelId: PanelId
+  path: string
+}
+
+export interface FileChangedEvent {
+  panelId: PanelId
+  result: FileResult
+}
 
 export interface SessionBackendInfo {
   kind: 'tmux' | 'direct'
@@ -461,6 +521,27 @@ export interface CanvasBridge {
     at(subject: ReviewSubject): Promise<ReviewResult>
     diff(req: ReviewDiffRequest): Promise<ReviewDiff>
     commit(req: ReviewCommitRequest): Promise<ReviewCommitResult>
+  }
+  file: {
+    /** A native open dialog. `null` when the user cancelled. */
+    open(): Promise<string | null>
+    /** Read and arm the watch. */
+    read(req: FileReadRequest): Promise<FileResult>
+    /** Disarm. */
+    close(panelId: PanelId): Promise<void>
+    /** Returns its own unsubscribe, like every other on* in this bridge. */
+    onChanged(listener: (event: FileChangedEvent) => void): () => void
+    /**
+     * The absolute path of a dropped File.
+     *
+     * SYNCHRONOUS and not an invoke, because it is a pure main-world helper
+     * rather than a main-process call. Electron 43 REMOVED File.path from the
+     * renderer: reading `file.path` yields undefined, the mint is skipped, and
+     * the drop looks like it did nothing at all — with no error, because
+     * undefined is a perfectly ordinary value for a property that does not
+     * exist.
+     */
+    pathForFile(file: File): string
   }
   platform: NodeJS.Platform
 }

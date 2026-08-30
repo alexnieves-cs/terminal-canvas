@@ -6,6 +6,10 @@
 module.exports = {
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
+  // registerIpcHandlers' two trailing M13 parameters need a real watcher
+  // manager and a window getter, the same shape ptyManager/mainWindow already
+  // take in main/index.ts.
+  FileWatchers: require('../src/main/file-watch').FileWatchers,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
   // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
   // reloads the renderer: reload survival is a tmux property, so a direct

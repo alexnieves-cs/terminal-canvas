@@ -53,7 +53,8 @@ const {
   createReviewEngine,
   createGitRunner,
   createBaselineCapture,
-  createReviewCommitter
+  createReviewCommitter,
+  FileWatchers
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -729,7 +730,7 @@ app.whenReady().then(async () => {
     // still has to reach a callable fifth argument or a real settings-palette
     // exercise here would throw "rebuildMenu is not a function" instead of
     // testing what it means to.
-  }, reviewEngine, reviewCommit)
+  }, reviewEngine, reviewCommit, new FileWatchers(), () => win)
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends

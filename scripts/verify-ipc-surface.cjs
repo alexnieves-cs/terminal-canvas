@@ -94,6 +94,15 @@ app.whenReady().then(() => {
   // Never invoked here either, for the identical reason reviewEngineStub is
   // not: this suite only asserts REGISTRATION, never drives review:commit.
   const reviewCommitStub = async () => ({ kind: 'nothing-to-commit' })
+  // Never invoked here either — this suite only asserts REGISTRATION, never
+  // drives file:read/file:close — but registerIpcHandlers' body reaches into
+  // it to build the handler closures.
+  const fileWatchersStub = {
+    watch: () => ({ kind: 'missing' }),
+    close: () => {},
+    closeAll: () => {},
+    count: () => 0
+  }
   registerIpcHandlers(
     stub,
     layoutStoreStub,
@@ -101,14 +110,18 @@ app.whenReady().then(() => {
     presetsStub,
     () => {},
     reviewEngineStub,
-    reviewCommitStub
+    reviewCommitStub,
+    fileWatchersStub,
+    () => null
   )
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // M9c takes the surface to 31: review:commit turns the work a review node
-  // reports into a commit.
-  const EXPECTED_CHANNELS = 31
+  // 34, not 35. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // handled by nobody — and this suite asserts over Object.values(IPC), the
+  // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
+  // records both.
+  const EXPECTED_CHANNELS = 34
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
