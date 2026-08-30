@@ -1,4 +1,4 @@
-/* Verifies the pure half of M13's subagent detection.
+/* Verifies the pure half of M15's subagent detection.
    Run with: npm run verify:subagent
 
    Plain node: subagent-scan.ts imports nothing at all, so the milestone's
@@ -41,8 +41,8 @@ ok('1 a plain path slugs to its dashed form',
 // `/.claude`. This is the case a naive `split('/').join('-')` gets wrong, and
 // it is the common one in this repo: every worktree lives under `.claude`.
 ok('2 a dot becomes a dash, so /.claude yields a double dash',
-  S.slugFor('/Users/me/tc/.claude/worktrees/m13') === '-Users-me-tc--claude-worktrees-m13',
-  S.slugFor('/Users/me/tc/.claude/worktrees/m13'))
+  S.slugFor('/Users/me/tc/.claude/worktrees/m15') === '-Users-me-tc--claude-worktrees-m15',
+  S.slugFor('/Users/me/tc/.claude/worktrees/m15'))
 
 ok('3 digits survive, so a numbered path is not mangled',
   S.slugFor('/private/tmp/claude-501/x') === '-private-tmp-claude-501-x',

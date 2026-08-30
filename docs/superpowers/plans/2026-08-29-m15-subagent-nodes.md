@@ -1,4 +1,4 @@
-# M13: Subagent nodes on the canvas — Implementation Plan
+# M15: Subagent nodes on the canvas — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Electron (main/preload/renderer), React 18, esbuild for the plain-node verify tier. No new dependencies.
 
-**Spec:** `docs/superpowers/specs/2026-08-29-m13-subagent-nodes-design.md` — read it before Task 1. The plan argues from it and does not restate its reasoning.
+**Spec:** `docs/superpowers/specs/2026-08-29-m15-subagent-nodes-design.md` — read it before Task 1. The plan argues from it and does not restate its reasoning.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@ Copied verbatim from the spec and from `CLAUDE.md`. Every task's requirements im
 - **No `process.env` reads in renderer code.** electron-vite compiles it to `{}`.
 - **Comments explain *why*.** Match the density of the surrounding file; a non-obvious line with no reason attached gets "fixed" later.
 - **Every parse failure is an absent node, never a thrown error.** This is a format the repo does not own.
-- **Commits:** conventional, scoped `feat(m13):` / `fix(m13):` / `docs(m13):`, ending with `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
+- **Commits:** conventional, scoped `feat(m15):` / `fix(m15):` / `docs(m15):`, ending with `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`.
 
 ## File Structure
 
@@ -92,7 +92,7 @@ module.exports = {
 Create `scripts/verify-subagent.cjs`:
 
 ```js
-/* Verifies the pure half of M13's subagent detection.
+/* Verifies the pure half of M15's subagent detection.
    Run with: npm run verify:subagent
 
    Plain node: subagent-scan.ts imports nothing at all, so the milestone's
@@ -135,8 +135,8 @@ ok('1 a plain path slugs to its dashed form',
 // `/.claude`. This is the case a naive `split('/').join('-')` gets wrong, and
 // it is the common one in this repo: every worktree lives under `.claude`.
 ok('2 a dot becomes a dash, so /.claude yields a double dash',
-  S.slugFor('/Users/me/tc/.claude/worktrees/m13') === '-Users-me-tc--claude-worktrees-m13',
-  S.slugFor('/Users/me/tc/.claude/worktrees/m13'))
+  S.slugFor('/Users/me/tc/.claude/worktrees/m15') === '-Users-me-tc--claude-worktrees-m15',
+  S.slugFor('/Users/me/tc/.claude/worktrees/m15'))
 
 ok('3 digits survive, so a numbered path is not mangled',
   S.slugFor('/private/tmp/claude-501/x') === '-private-tmp-claude-501-x',
@@ -439,7 +439,7 @@ Expected: all pass. Check 19 is the one at risk — it goes red if `verify:subag
 ```bash
 git add src/main/subagent-scan.ts scripts/subagent-entry.cjs scripts/verify-subagent.cjs package.json
 git commit -m "$(cat <<'EOF'
-feat(m13): the pure scanner, and a slug that is a hint rather than an oracle
+feat(m15): the pure scanner, and a slug that is a hint rather than an oracle
 
 The mapping from a cwd to a Claude Code project directory is undocumented and
 was inferred from 31 real directory names. cwdOf is what makes being wrong
@@ -657,7 +657,7 @@ Expected: `20/20 passed`
 ```bash
 git add src/main/subagent-watch.ts scripts/subagent-entry.cjs scripts/verify-subagent.cjs
 git commit -m "$(cat <<'EOF'
-feat(m13): the watcher — a claimed session, a byte offset, and a dedupe
+feat(m15): the watcher — a claimed session, a byte offset, and a dedupe
 
 Check 16 is the dedupe and check 19 is the offset, and neither failure is
 visible on screen: both show up as heat. They are the only two things in the
@@ -761,7 +761,7 @@ Expected: typecheck clean; `verify:meta` all pass (check 14 now sees the new cha
 ```bash
 git add src/shared/types.ts src/shared/ipc-contract.ts src/preload/index.ts README.md
 git commit -m "$(cat <<'EOF'
-feat(m13): subagent:state, an event and not an invoke
+feat(m15): subagent:state, an event and not an invoke
 
 verify:ipc stays at 31. It asserts over the INVOKE channels, each of which
 needs an ipcMain.handle; a send is handled by nobody and counted by nothing.
@@ -872,7 +872,7 @@ Expected: all pass, `26/26` (the count rises by one from 25; re-derive it from t
 ```bash
 git add src/main/pty-manager.ts scripts/verify-pty-manager.cjs
 git commit -m "$(cat <<'EOF'
-feat(m13): the poll rides the existing live tick
+feat(m15): the poll rides the existing live tick
 
 Not a third timer. The rule that the idle tick and the live tick stay separate
 is about the 500ms tick's RESOLUTION — merging that one would coarsen
@@ -963,7 +963,7 @@ Expected: clean.
 ```bash
 git add src/renderer/session/subagent-store.ts src/renderer/canvas/Canvas.tsx
 git commit -m "$(cat <<'EOF'
-feat(m13): a fifth store, subscribed per panel id
+feat(m15): a fifth store, subscribed per panel id
 
 Never bumps registry.version(), for the reason three stores already record:
 a fact that changes when a model fans out would re-render every panel on every
@@ -1045,7 +1045,7 @@ Expected: all clean.
 ```bash
 git add src/renderer/canvas/SubagentLayer.tsx src/renderer/canvas/Canvas.tsx src/renderer/styles.css
 git commit -m "$(cat <<'EOF'
-feat(m13): nodes on the canvas, inside .world
+feat(m15): nodes on the canvas, inside .world
 
 Inside .world and not beside it, which is the opposite of EdgeIndicators and
 for the mirror-image reason: a pip must stay pinned to the viewport's edge, a
@@ -1085,7 +1085,7 @@ Append to `scripts/verify-panels.cjs`:
 
 ```js
 // ---------------------------------------------------------------------------
-// M13, checks 118-120. One fixture serves all three: a fake ~/.claude projects
+// M15, checks 118-120. One fixture serves all three: a fake ~/.claude projects
 // root, fenced (see panels-entry.cjs) so this suite can never read the running
 // developer's real transcripts, seeded with one session directory holding two
 // subagents — one still running, one already completed by a tool_result in the
@@ -1210,7 +1210,7 @@ Fix whatever they find. If the implementation is already correct they pass on fi
 ```bash
 git add scripts/verify-panels.cjs scripts/panels-entry.cjs
 git commit -m "$(cat <<'EOF'
-test(m13): the layer end to end, and the harness fenced to its own root
+test(m15): the layer end to end, and the harness fenced to its own root
 
 119 is the one to know by number, and it asserts both halves in one read: no
 PanelSession for the node, AND an unchanged .xterm count. Check 103's shape —
@@ -1249,14 +1249,14 @@ Add the `verify:subagent` row, and update the `verify:pty-manager` and `verify:p
 
 - [ ] **Step 3: Update `README.md`**
 
-Add the milestone row: `| M13 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |`. State plainly that this reads Claude Code's own session files and is therefore **absent for other agent CLIs** — the spec forbids implying generality it does not have.
+Add the milestone row: `| M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |`. State plainly that this reads Claude Code's own session files and is therefore **absent for other agent CLIs** — the spec forbids implying generality it does not have.
 
 - [ ] **Step 4: Delete backlog entry #7**
 
 Delete the `## 7.` section. Add a row to the "numbers that are gone" table:
 
 ```
-| #7 subagent nodes on the canvas | M13 | "Subagent nodes are derived, not a `Panel` kind", "The slug is a hint" |
+| #7 subagent nodes on the canvas | M15 | "Subagent nodes are derived, not a `Panel` kind", "The slug is a hint" |
 ```
 
 The numbers are never reused — #7 is cited elsewhere in the file and from source comments, so the row is what keeps it legible.
@@ -1271,7 +1271,7 @@ Expected: every suite green. **Paste the real output.** Do not claim completion 
 ```bash
 git add CLAUDE.md README.md docs/ideas-backlog.md
 git commit -m "$(cat <<'EOF'
-docs(m13): what the milestone cost, and #7 deleted
+docs(m15): what the milestone cost, and #7 deleted
 
 Counts in the verify table re-derived from a real run rather than carried
 forward, the one habit this file records itself having failed at before.

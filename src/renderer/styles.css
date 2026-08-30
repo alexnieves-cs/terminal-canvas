@@ -1153,7 +1153,7 @@ body {
   border-bottom: 7px solid transparent;
 }
 
-/* M13. Subagent nodes: one per subagent, positioned beside the panel that
+/* M15. Subagent nodes: one per subagent, positioned beside the panel that
    spawned it. Unlike .edge-indicators immediately above — and deliberately
    the mirror image of it — these are INSIDE .world (see SubagentLayer.tsx):
    a pip has to stay pinned to the viewport's physical edge, but a subagent

@@ -8097,7 +8097,7 @@ app.whenReady().then(async () => {
     }
 
     // ---------------------------------------------------------------------
-    // M13, checks 118-120. One fixture serves all three: a fake ~/.claude
+    // M15, checks 118-120. One fixture serves all three: a fake ~/.claude
     // projects root, fenced in panels-entry.cjs (never homedir(), and set
     // BEFORE the PtyManager above was constructed — see that file's own
     // comment) so this suite can never read the running developer's real

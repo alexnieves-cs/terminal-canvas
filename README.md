@@ -526,10 +526,10 @@ contains, not only the ones that fit on screen.
 | M9b | The panel kind: a review node on the canvas | ✅ done |
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
-| M13 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
+| M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) and M11
-(themes) are claimed by a separate concurrent track; M12 and M13 share no source file
+(themes) are claimed by a separate concurrent track; M12 and M15 share no source file
 with either, so they landed first. A gap in the numbers here is a milestone someone
 else is holding, not one that was skipped.
 

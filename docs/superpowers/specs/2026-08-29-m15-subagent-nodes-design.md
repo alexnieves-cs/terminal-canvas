@@ -1,16 +1,16 @@
-# M13: Subagent nodes on the canvas — Design
+# M15: Subagent nodes on the canvas — Design
 
 **Status:** built, verified and documented. Landed across eight tasks plus a
 whole-branch fix wave; `npm run verify` green (19 suites). The load-bearing
-rulings live in `CLAUDE.md`'s M13 entries and the `verify:subagent` /
+rulings live in `CLAUDE.md`'s M15 entries and the `verify:subagent` /
 `verify:pty-manager` / `verify:panels` table rows; the limits this milestone
 deliberately did NOT close are recorded there too, beside the code they
 affect, rather than in this document.
 **Predecessor:** `2026-08-29-m12-live-cwd-design.md`, and by DEPENDENCY as well
-as by number — M13 attributes a session by a panel's **live** cwd, which is the
+as by number — M15 attributes a session by a panel's **live** cwd, which is the
 fact M12 made true. A panel that `cd`s into another repository is an ordinary
 case, and a spawn-time cwd would attribute its subagents to the wrong project
-silently. M13 also touches `pty-manager.ts` (one new call on the existing live
+silently. M15 also touches `pty-manager.ts` (one new call on the existing live
 tick), the IPC contract (one event), a new renderer store and a new layer
 inside `.world`. It shares no file with M10 (the visual system, `styles.css`
 only) or M11 (themes), both claimed by a concurrent track.
