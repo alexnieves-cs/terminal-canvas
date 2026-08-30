@@ -197,14 +197,23 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.REVIEW_COMMIT, (_event, req: ReviewCommitRequest) => reviewCommit(req))
 
   // Metadata only, on every arm. The store's list() already projects field by
-  // field; this handler must not re-widen it, and verify:credentials pins
+  // field; this handler must not re-widen it, and verify:meta 20/21 pin
   // that as source text because no runtime behaviour can observe the
   // difference — everything keeps working, and the renderer simply holds a
   // secret it should never have.
   ipcMain.handle(IPC.CREDENTIAL_LIST, () => credentialStore.list())
 
-  ipcMain.handle(IPC.CREDENTIAL_SET, (_event, req: { service: string; token: string }) =>
-    credentialStore.set(req.service, req.token))
+  ipcMain.handle(IPC.CREDENTIAL_SET, (_event, req: { service: string; token: string }) => {
+    // A malformed payload must refuse like any other rejection, not throw: an
+    // uncaught TypeError from `token.trim()` still crosses back as a rejected
+    // invoke, but the renderer's `.then` never runs and the prompt hangs open
+    // with no feedback. The reason stays generic — it must not echo the
+    // payload back.
+    if (typeof req?.service !== 'string' || typeof req?.token !== 'string') {
+      return { ok: false, reason: 'malformed request' }
+    }
+    return credentialStore.set(req.service, req.token)
+  })
 
   ipcMain.handle(IPC.CREDENTIAL_DELETE, (_event, service: string) =>
     credentialStore.delete(service))

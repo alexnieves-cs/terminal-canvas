@@ -9,6 +9,15 @@ import type { CredentialStore } from './credential-store'
  */
 export const VERIFY_TIMEOUT_MS = 15000
 
+/**
+ * `GET /user` is a small JSON payload; a well-above-it ceiling is the same
+ * "a call with no ceiling is a promise that never resolves" reasoning
+ * VERIFY_TIMEOUT_MS carries, aimed at the BODY rather than the clock — a
+ * response that never stops sending data would otherwise buffer forever in
+ * this process with no timer anywhere to catch it.
+ */
+const MAX_BODY_BYTES = 1024 * 1024
+
 export type Fetcher = (
   url: string,
   token: string,
@@ -85,11 +94,18 @@ export function createHttpsFetcher(): Fetcher {
         },
         (res) => {
           let body = ''
+          let bytes = 0
           res.setEncoding('utf8')
           res.on('data', (c: string) => {
+            bytes += Buffer.byteLength(c, 'utf8')
+            if (bytes > MAX_BODY_BYTES) {
+              res.destroy(new Error('response too large'))
+              return
+            }
             body += c
           })
           res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
+          res.on('error', reject)
         }
       )
       req.on('timeout', () => {

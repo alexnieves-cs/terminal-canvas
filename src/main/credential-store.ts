@@ -98,12 +98,22 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
   // store: a credential write is rare and user-caused, and coalescing it would
   // mean a token's arrival on disk depended on a timer.
   const flush = (): void => {
+    const tmp = `${filePath}.tmp`
     if (Object.keys(entries).length === 0) {
       if (existsSync(filePath)) unlinkSync(filePath)
+      // A crash between the write below and the rename can leave ciphertext
+      // sitting in the `.tmp` sibling; a `delete` that only unlinks
+      // `filePath` never removes it. Guarded so a missing tmp file (the
+      // ordinary case) never throws.
+      if (existsSync(tmp)) unlinkSync(tmp)
       return
     }
-    const tmp = `${filePath}.tmp`
-    writeFileSync(tmp, JSON.stringify({ version: FILE_VERSION, credentials: entries }, null, 2), 'utf8')
+    // 0o600: this file's whole content is a service label beside ciphertext,
+    // and restrictive permissions cost nothing beyond the default umask.
+    writeFileSync(tmp, JSON.stringify({ version: FILE_VERSION, credentials: entries }, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600
+    })
     renameSync(tmp, filePath)
   }
 
