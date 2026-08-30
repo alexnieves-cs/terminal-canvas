@@ -219,7 +219,10 @@ const spyActions = () => {
     // this single-script suite aborts every check written after it.
     restartPanel: record('restartPanel'),
     // Review IS reached from a row too (checks 67/68), same reason.
-    openReview: record('openReview')
+    openReview: record('openReview'),
+    // panel.open-file's row calls this (check 70) — same reason as restartPanel
+    // and openReview above.
+    openFile: record('openFile')
   }
 }
 
@@ -1068,6 +1071,33 @@ const WS = [
   ok('69 a review node is navigable and its process verbs are disabled',
     rows.some((r) => r.id === 'panel.goto.r1' && r.disabledReason === undefined) &&
       rows.find((r) => r.id === 'panel.restart')?.disabledReason === P.REASON_NOT_STARTED)
+}
+
+// 70. panel.open-file — Task 7's row, uncovered anywhere in this suite until
+//     now (verify:panels 125 mints a file panel through the __m13Open test
+//     hook directly, bypassing this row, actions.openFile and file:open
+//     entirely). It has to read as a create verb, the same as a preset spawn
+//     row: present, enabled and visible at rest — there is no captured panel
+//     to gate it on and no state in which it should be disabled or hidden —
+//     and it has to actually be wired to actions.openFile, or the row is a
+//     facade that does nothing when pressed. All four asserted in one read:
+//     a regression to any single one of them (dropped row, wrong section
+//     leaving it hiddenAtRest, an accidental disabledReason, a run() wired to
+//     the wrong action or nothing) would otherwise pass a check that only
+//     looked at the others.
+{
+  const c = ctx({})
+  const rows = P.buildCommands(c)
+  const row = byId(rows, 'panel.open-file')
+  const resting = P.filterCommands(rows, '', null)
+  row?.run()
+  ok('70 Open file… is present, enabled, visible at rest, and wired to actions.openFile',
+    row !== undefined &&
+      row.disabledReason === undefined &&
+      row.hiddenAtRest !== true &&
+      resting.some((r) => r.id === 'panel.open-file') &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'openFile')
 }
 
 const failed = results.filter((r) => !r.pass)

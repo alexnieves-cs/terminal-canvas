@@ -326,22 +326,25 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   }
 
+  // --- New panel -----------------------------------------------------------
+
   // NOT hiddenAtRest, unlike every administration row: this is a create verb
-  // like "New panel", not an admin one, and it takes no target — there is no
-  // captured panel to gate it on and therefore no state in which it is
+  // like a preset spawn, not an admin one, and it takes no target — there is
+  // no captured panel to gate it on and therefore no state in which it is
   // disabled. A row that is only reachable by guessing its query is
   // indistinguishable from a feature that was never built (verify:palette 31's
   // rule), and this feature's other gesture is a drop, which the keyboard
-  // cannot reach at all.
+  // cannot reach at all. It lives in THIS section, not Panels, for the same
+  // reason: Panels holds verbs about a panel that already exists (go to,
+  // rename, restart, review); this one mints a new one, exactly what every
+  // row below it does.
   out.push({
     id: 'panel.open-file',
     title: 'Open file…',
     searchText: 'open file read view text document',
-    group: 'panel',
+    group: 'spawn',
     run: () => actions.openFile()
   })
-
-  // --- New panel -----------------------------------------------------------
 
   for (const preset of ctx.presets) {
     out.push(
