@@ -2191,12 +2191,146 @@ const filePanelOnDisk = (id, over = {}) => ({
     z: 1
   }])
   ok('128 an unpinned panel writes no agent key at all', !('agent' in out))
+// M20 checks 136-141: main/fs-tree.ts, joining this suite for the reason
+// main/prompts.ts already did — it reads node:fs against a path passed in as a
+// parameter, and it is `electron` and `node-pty` that move a module out of
+// this tier, not the filesystem.
+//
+// Numbered M13 throughout design and implementation; renumbered to M20 on
+// merge into main. Two collisions, not one: this branch and HEAD each
+// numbered forward from check 108b independently, and HEAD's own history had
+// already claimed the whole 109-135 range across several unrelated
+// milestones (including a DIFFERENT M13, "links between panels") by the time
+// these two branches met. 136 is the first number past HEAD's real maximum
+// (135), re-derived from the merged file rather than assumed.
+//
+// The fixture directory carries a SPACE throughout. That is not decoration:
+// the pane-died quoting bug shipped through eight task reviews because every
+// fixture used a space-free path, and this repo now treats a space-free
+// fixture as a fixture that cannot see a whole class of defect.
+{
+  const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, chmodSync, rmSync } =
+    require('node:fs')
+  const { tmpdir } = require('node:os')
+  const { join } = require('node:path')
+
+  const base = mkdtempSync(join(tmpdir(), 'tc files '))
+
+  // 136. Directories first, then names, case-insensitively. readdir's order is
+  // filesystem-dependent, and a list that reshuffles between launches is a
+  // list you cannot learn — readProjectPrompts' own argument for its sort().
+  {
+    const d = join(base, 'sorted')
+    mkdirSync(d)
+    writeFileSync(join(d, 'Beta.txt'), 'x')
+    writeFileSync(join(d, 'alpha.txt'), 'x')
+    mkdirSync(join(d, 'zeta'))
+    mkdirSync(join(d, 'Alpha'))
+    const r = L.readDir(d, { showHidden: false })
+    const names = r.kind === 'ok' ? r.entries.map((e) => e.name) : []
+    ok('136 entries sort directories-first then name, case-insensitively',
+      r.kind === 'ok' &&
+      names.join(',') === 'Alpha,zeta,alpha.txt,Beta.txt',
+      names.join(','))
+  }
+
+  // 137. BOTH directions. "Dotfiles are excluded" alone passes against a
+  // reader that returns nothing at all, which is why the include half is
+  // asserted in the same check rather than trusted to imply itself.
+  {
+    const d = join(base, 'hidden')
+    mkdirSync(d)
+    writeFileSync(join(d, '.env'), 'x')
+    writeFileSync(join(d, 'visible.txt'), 'x')
+    const off = L.readDir(d, { showHidden: false })
+    const on = L.readDir(d, { showHidden: true })
+    const offNames = off.kind === 'ok' ? off.entries.map((e) => e.name) : []
+    const onNames = on.kind === 'ok' ? on.entries.map((e) => e.name) : []
+    ok('137 dotfiles are hidden by default AND shown when asked for',
+      offNames.join(',') === 'visible.txt' &&
+      onNames.join(',') === '.env,visible.txt',
+      `off=[${offNames}] on=[${onNames}]`)
+  }
+
+  // 138. `unreadable` is its own arm, not an empty `ok`. An empty-looking
+  // directory the user has no permission to read is the case that must NOT
+  // render like an empty one.
+  //
+  // SKIPPED LOUDLY, never silently, when the process can read a mode-000
+  // directory anyway — root can, and CI sometimes runs as root. A skip that
+  // prints nothing is a check that stops existing the day that happens.
+  {
+    const d = join(base, 'denied')
+    mkdirSync(d)
+    writeFileSync(join(d, 'secret.txt'), 'x')
+    chmodSync(d, 0o000)
+    let readable = false
+    try { require('node:fs').readdirSync(d); readable = true } catch { readable = false }
+    if (readable) {
+      console.log('SKIP  138 unreadable — this process can read a mode-000 directory (root?)')
+    } else {
+      const r = L.readDir(d, { showHidden: false })
+      ok('138 a permission-denied directory answers `unreadable` with a detail',
+        r.kind === 'unreadable' && typeof r.detail === 'string' && r.detail.length > 0,
+        r.kind === 'unreadable' ? r.detail : r.kind)
+    }
+    chmodSync(d, 0o700)
+  }
+
+  // 139. Two arms, not one. "That is a file" and "it moved" are two situations
+  // with two different fixes, and collapsing them tells a user whose directory
+  // was deleted that they clicked a file.
+  {
+    const f = join(base, 'a file.txt')
+    writeFileSync(f, 'x')
+    const asFile = L.readDir(f, { showHidden: false })
+    const missing = L.readDir(join(base, 'no such dir'), { showHidden: false })
+    ok('139 not-a-directory and gone are two arms, not one',
+      asFile.kind === 'not-a-directory' && missing.kind === 'gone',
+      `${asFile.kind} / ${missing.kind}`)
+  }
+
+  // 140. The cap REPORTS its remainder rather than the list silently ending.
+  // The fixture is deliberately over the cap so the capped list and the full
+  // one cannot coincide — a fixture at or under it passes against no cap at
+  // all.
+  {
+    const d = join(base, 'many')
+    mkdirSync(d)
+    const n = L.MAX_DIR_ENTRIES + 7
+    for (let i = 0; i < n; i++) writeFileSync(join(d, `f${String(i).padStart(5, '0')}.txt`), 'x')
+    const r = L.readDir(d, { showHidden: false })
+    ok('140 the cap truncates and REPORTS the remainder',
+      r.kind === 'ok' && r.entries.length === L.MAX_DIR_ENTRIES && r.truncated === 7,
+      r.kind === 'ok' ? `${r.entries.length} + ${r.truncated}` : r.kind)
+  }
+
+  // 141. A symlink is its own kind and is NEVER followed. Resolving one would
+  // mean a stat per entry and a cycle to defend against; reporting it costs
+  // neither. The second clause is the one with teeth: the lister returns ONE
+  // level, so the symlink's target's contents must not appear.
+  {
+    const d = join(base, 'links')
+    mkdirSync(d)
+    mkdirSync(join(d, 'real'))
+    writeFileSync(join(d, 'real', 'inside.txt'), 'x')
+    symlinkSync(join(d, 'real'), join(d, 'link'))
+    const r = L.readDir(d, { showHidden: false })
+    const names = r.kind === 'ok' ? r.entries.map((e) => e.name) : []
+    const link = r.kind === 'ok' ? r.entries.find((e) => e.name === 'link') : undefined
+    ok('141 a symlinked directory is its own kind and is not descended',
+      link !== undefined && link.kind === 'symlink' && !names.includes('inside.txt'),
+      `${link ? link.kind : 'absent'} names=[${names}]`)
+  }
+
+  rmSync(base, { recursive: true, force: true })
+}
 }
 
 
 // ======================= M21: the toolbox panel on disk ==================
 
-// 136 — a toolbox panel round-trips with its WHOLE source. The `cwd` is the
+// 142 — a toolbox panel round-trips with its WHOLE source. The `cwd` is the
 // field that carries the milestone: a source that came back without it is a
 // node that can never ask its question again, which is check 105's argument
 // for a review subject's sha reaching a fifth kind.
@@ -2209,7 +2343,7 @@ const filePanelOnDisk = (id, over = {}) => ({
     activeWorkspaceId: 'w1'
   }))
   const p0 = out.snapshot.workspaces[0].panels[0]
-  ok('136 a toolbox panel round-trips with its whole source',
+  ok('142 a toolbox panel round-trips with its whole source',
     // No warning ABOUT THIS PANEL, rather than no warnings at all: this
     // fixture carries no camera, so parseLayout legitimately reports one.
     !out.warnings.some((w) => w.includes('t1')) && p0.kind === 'toolbox'
@@ -2217,7 +2351,7 @@ const filePanelOnDisk = (id, over = {}) => ({
       && p0.title === 'auth toolbox',
     JSON.stringify(p0))
 }
-// 137 — a toolbox panel whose source is malformed is dropped ALONE, the
+// 143 — a toolbox panel whose source is malformed is dropped ALONE, the
 // individual-drop rule parseLayout obeys everywhere else. The neighbour
 // surviving is the half that proves "alone": a parser that threw, or that
 // dropped the workspace, would satisfy "the bad one is gone" perfectly.
@@ -2236,14 +2370,14 @@ const filePanelOnDisk = (id, over = {}) => ({
     activeWorkspaceId: 'w1'
   }))
   const panels = out.snapshot.workspaces[0].panels
-  ok('137 a malformed toolbox source is dropped alone, and an absent label defaults to the cwd',
+  ok('143 a malformed toolbox source is dropped alone, and an absent label defaults to the cwd',
     panels.length === 2
       && panels[0].id === 't2' && panels[0].source.label === '/r'
       && panels[1].id === 'n1'
       && out.warnings.some((w) => w.includes('t1')),
     `${panels.map((p) => p.id).join(',')} warnings=${out.warnings.length}`)
 }
-// 138 is check 117's argument applied to a FIFTH kind: the same union has to
+// 144 is check 117's argument applied to a FIFTH kind: the same union has to
 // survive layout-adapt's round trip, which is the OTHER door onto this format
 // and the one a schema-only check cannot see. The fromPanels arm must write no
 // cwd and no args keys AT ALL — `cwd: undefined` fails the terminal branch's
@@ -2259,7 +2393,7 @@ const filePanelOnDisk = (id, over = {}) => ({
       source: { cwd: '/Users/me/repo', label: 'repo' }, title: 'tools' }
   ])
   const back = L.fromPanels(panels)
-  ok('138 a toolbox panel survives toPanels/fromPanels with no top-level cwd key',
+  ok('144 a toolbox panel survives toPanels/fromPanels with no top-level cwd key',
     panels[0].kind === 'toolbox' && panels[0].source.cwd === '/Users/me/repo'
       && back[0].kind === 'toolbox' && back[0].source.cwd === '/Users/me/repo'
       && back[0].source.label === 'repo' && back[0].title === 'tools'

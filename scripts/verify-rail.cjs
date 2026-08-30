@@ -1058,7 +1058,10 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
 }
 
 // ---------------------------------------------------------------------------
-// M13. The inspector's link rows. `link`, never `edge` — see panels.ts.
+// M13 (link rows). The inspector's link rows. `link`, never `edge` — see
+// panels.ts. Two unrelated feature branches both used the milestone number
+// M13 for different work; this is the link-rows one, renumbered at nothing
+// (it kept 72-75, the checks below were renumbered around it instead).
 
 // 72. Both directions, and they are DISTINGUISHED. A pane that listed only
 //     outgoing links answers "what does this feed" and leaves "what feeds
@@ -1301,6 +1304,169 @@ const src = { path: '/Users/x/notes/todo.md' }
   const moved = R.inspectorSignature(R.buildInspectorModel(
     { ...p, rect: { ...p.rect, x: 999 } }, undefined, undefined, [], u1))
   ok(86, a !== b && a === moved, `usageMoved=${a !== b} rectStable=${a === moved}`)
+// M20 checks 87-93: file-tree-model.ts, joining this suite for the reason
+// inspector-fields.ts, rail-sections.ts, review-node-model.ts and nav-grid.ts
+// all did — pure, type-only imports, and a suite of its own would re-prove
+// this esbuild wiring for one file.
+//
+// Numbered M13 throughout design and implementation; renumbered to M20 on
+// merge into main — a different, unrelated milestone ("links between
+// panels", still M13, above) had already claimed both the M13 label and this
+// suite's own check numbers 72-86 (some of it using bare-number ok(N, ...)
+// calls rather than quoted-string labels, so an earlier survey of this range
+// that only matched ok('N missed them) by the time this branch tried to
+// merge. 87 is the first number past that branch's real maximum.
+{
+  const ROOT = '/tmp/tc root'
+  const okDir = (names) => ({
+    kind: 'ok',
+    truncated: 0,
+    entries: names.map((n) => ({ name: n, kind: n.endsWith('/') ? 'dir' : 'file' }))
+      .map((e) => ({ name: e.name.replace(/\/$/, ''), kind: e.kind }))
+  })
+
+  // 87. Nothing expanded is the root's own children at depth 0, in the order
+  // the DirResult gave them — the model never re-sorts, because main already
+  // did and two sorts is two places to disagree.
+  {
+    const dirs = new Map([[ROOT, okDir(['src/', 'README.md'])]])
+    const rows = R.buildFileRows(ROOT, dirs, new Set())
+    ok('87 nothing expanded yields the root\'s children at depth 0',
+      rows.length === 2 &&
+      rows[0].name === 'src' && rows[0].depth === 0 && rows[0].kind === 'dir' &&
+      rows[1].name === 'README.md' && rows[1].depth === 0,
+      rows.map((r) => `${r.name}@${r.depth}`).join(','))
+  }
+
+  // 88. Children splice BENEATH their parent at depth+1 and the later sibling
+  // is undisturbed. The sibling clause is the half with teeth: an
+  // implementation that appended children rather than splicing them passes any
+  // check that only counts rows, and renders a tree whose contents are in the
+  // right set and the wrong place.
+  {
+    const dirs = new Map([
+      [ROOT, okDir(['src/', 'zz.md'])],
+      [`${ROOT}/src`, okDir(['main.ts'])]
+    ])
+    const rows = R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/src`]))
+    ok('88 children splice beneath their parent without moving a later sibling',
+      rows.length === 3 &&
+      rows[0].name === 'src' && rows[0].state === 'expanded' &&
+      rows[1].name === 'main.ts' && rows[1].depth === 1 &&
+      rows[2].name === 'zz.md' && rows[2].depth === 0,
+      rows.map((r) => `${r.name}@${r.depth}`).join(','))
+  }
+
+  // 89. Collapse removes descendants TRANSITIVELY. A one-level implementation
+  // leaves the grandchildren behind at depth 2 under a parent that is no
+  // longer rendered, and they read as top-level entries with suspicious
+  // indentation rather than as an error.
+  {
+    const dirs = new Map([
+      [ROOT, okDir(['a/'])],
+      [`${ROOT}/a`, okDir(['b/'])],
+      [`${ROOT}/a/b`, okDir(['deep.txt'])]
+    ])
+    const both = new Set([`${ROOT}/a`, `${ROOT}/a/b`])
+    const open = R.buildFileRows(ROOT, dirs, both)
+    both.delete(`${ROOT}/a`)
+    const shut = R.buildFileRows(ROOT, dirs, both)
+    ok('89 collapsing a parent removes its descendants transitively',
+      open.length === 3 &&
+      shut.length === 1 && shut[0].name === 'a' && shut[0].state === 'collapsed',
+      `open=${open.length} shut=${shut.map((r) => r.name).join(',')}`)
+  }
+
+  // 90. An expanded directory with no answer YET renders a loading row, and a
+  // failed one renders a note. Both are first-class states for the reason the
+  // review pane's in-flight arm is: a section that renders nothing while it
+  // waits reads as broken on every selection change, and an unreadable
+  // directory that renders nothing is indistinguishable from an empty one.
+  {
+    const dirs = new Map([
+      [ROOT, okDir(['pending/', 'denied/'])],
+      [`${ROOT}/denied`, { kind: 'unreadable', detail: 'EACCES: permission denied' }]
+    ])
+    const rows = R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/pending`, `${ROOT}/denied`]))
+    const loading = rows.find((r) => r.state === 'loading')
+    const note = rows.find((r) => r.state === 'note')
+    ok('90 an unanswered directory loads and a failed one renders a note',
+      loading !== undefined && loading.depth === 1 &&
+      note !== undefined && note.depth === 1 &&
+      typeof note.note === 'string' && note.note.length > 0,
+      `loading=${loading ? loading.depth : 'absent'} note=${note ? note.note : 'absent'}`)
+  }
+
+  // 91. THE ONE WORTH KNOWING BY NUMBER. treeSignature moves on an expand —
+  // without which Canvas freezes the rows and the tree never opens — and a
+  // FILENAME cannot forge a field boundary.
+  //
+  // railSignature already records this for a user TITLE. A filename is a wider
+  // door: the user does not have to type it, an agent writes it, into a
+  // directory this app does not own, and the tree lists whatever is there. The
+  // fixture therefore builds two DIFFERENT trees whose rows differ only in
+  // where a separator falls, and asserts their signatures differ — which a
+  // JSON.stringify satisfies and any join(sep) does not.
+  {
+    const dirs = new Map([[ROOT, okDir(['a/'])], [`${ROOT}/a`, okDir(['x.txt'])]])
+    const shut = R.treeSignature(R.buildFileRows(ROOT, dirs, new Set()))
+    const open = R.treeSignature(R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/a`])))
+
+    // A genuine MULTI-row collision under the naive scheme
+    // `rows.map(r => `${name}|${depth}|${kind}`).join(';')` — a single-row
+    // fixture cannot exercise this at all, because one row's name differing
+    // from another's produces distinct output under nearly any scheme, safe
+    // or not; there is no second row for a join separator to be mistaken for
+    // a boundary of. Constructed as FileRow arrays directly (bypassing
+    // buildFileRows), since this half is testing treeSignature itself, not
+    // the flattening.
+    //
+    // rowsB is two ordinary rows: naive(B) = "a|0|file" + ";" + "b|0|file"
+    //                                       = "a|0|file;b|0|file"
+    // rowsA is ONE row whose name is itself "a|0|file;b" — a filename an
+    // agent can write with nothing more exotic than a semicolon and a pipe —
+    // so naive(A) = "a|0|file;b" + "|0|file" = "a|0|file;b|0|file", BYTE FOR
+    // BYTE equal to naive(B). Under the naive join these two entirely
+    // different trees (one row vs. two) collide into one string and the tree
+    // would freeze on stale rows. JSON.stringify must still tell them apart.
+    const naiveJoin = (rows) => rows.map((r) => `${r.name}|${r.depth}|${r.kind}`).join(';')
+    const rowsA = [{ path: `${ROOT}/a|0|file;b`, name: 'a|0|file;b', depth: 0, kind: 'file', state: 'collapsed' }]
+    const rowsB = [
+      { path: `${ROOT}/a`, name: 'a', depth: 0, kind: 'file', state: 'collapsed' },
+      { path: `${ROOT}/b`, name: 'b', depth: 0, kind: 'file', state: 'collapsed' }
+    ]
+    const collides = naiveJoin(rowsA) === naiveJoin(rowsB)
+    const a = R.treeSignature(rowsA)
+    const b = R.treeSignature(rowsB)
+
+    ok('91 the signature moves on an expand and a multi-row filename collision cannot forge a field',
+      shut !== open && collides && a !== b,
+      `expand=${shut !== open} naiveCollides=${collides} forge=${a !== b}`)
+  }
+
+  // 92. relativePath strips the root; a path NOT under the root falls back to
+  // absolute. That fallback is not defensive — it is the state a panel that
+  // cd'd away between the read and the click produces, and an absolute answer
+  // there is the correct one.
+  {
+    ok('92 relativePath strips the root and falls back to absolute',
+      R.relativePath(ROOT, `${ROOT}/src/main.ts`) === 'src/main.ts' &&
+      R.relativePath(ROOT, '/elsewhere/x.ts') === '/elsewhere/x.ts' &&
+      R.relativePath(ROOT, ROOT) === '.',
+      `${R.relativePath(ROOT, `${ROOT}/src/main.ts`)} / ${R.relativePath(ROOT, '/elsewhere/x.ts')}`)
+  }
+
+  // 93. Three clauses, separately. A check that only tries the space case
+  // passes against a quoter that quotes EVERYTHING, which is a feature that
+  // works and is noisy on every ordinary path.
+  {
+    ok('93 shellQuote leaves a plain path alone, quotes a space, escapes a quote',
+      R.shellQuote('src/main.ts') === 'src/main.ts' &&
+      R.shellQuote('my docs/a.txt') === "'my docs/a.txt'" &&
+      R.shellQuote("it's.txt") === "'it'\\''s.txt'",
+      `${R.shellQuote('src/main.ts')} | ${R.shellQuote('my docs/a.txt')} | ${R.shellQuote("it's.txt")}`)
+  }
+}
 }
 
 /* ==================== M21: the Toolbox section and the node ============ */
@@ -1327,7 +1493,7 @@ const inventory = (over) => ({
   }
 })
 
-// 87 is the check the section's whole hiding policy rests on, and it is M9a's
+// 94 is the check the section's whole hiding policy rests on, and it is M9a's
 // not-a-repo/never-started split reaching a FOURTH section. THREE states, and
 // collapsing any two is a wrong answer rather than a simplification: a panel
 // with no directory renders NOTHING ("0 skills" beside a review node is the
@@ -1339,14 +1505,14 @@ const inventory = (over) => ({
   const none = R.buildToolboxFields({ kind: 'no-cwd' })
   const pending = R.buildToolboxFields(undefined)
   const real = R.buildToolboxFields(inventory())
-  ok(87,
+  ok(94,
     none.hidden === true
       && pending.hidden === false && pending.rows.length === 0 && pending.summary !== ''
       && real.hidden === false && real.rows.length === 1,
     `three states: no-cwd hidden, in-flight notes ("${pending.summary}"), inventory renders rows`)
 }
 
-// 88 — an UNREADABLE source is named; an ABSENT one says nothing. The same
+// 95 — an UNREADABLE source is named; an ABSENT one says nothing. The same
 // distinction verify:toolbox 28 pins in the reader, carried to the one surface
 // a user reads: "no skills" because the directory was read and was empty is a
 // different sentence from "no skills" because it could not be opened, and only
@@ -1358,11 +1524,11 @@ const inventory = (over) => ({
   const loud = R.buildToolboxFields(inventory({
     sources: [{ path: '/repo/.claude/settings.json', scope: 'project', what: 'settings', status: 'unreadable', detail: 'EACCES' }]
   }))
-  ok(88, quiet.note === undefined && typeof loud.note === 'string' && loud.note !== '',
+  ok(95, quiet.note === undefined && typeof loud.note === 'string' && loud.note !== '',
     `absent is silent, unreadable is named: ${String(loud.note)}`)
 }
 
-// 89 is TOOLBOX_ROW_CAP, asserted on the remainder as a NUMBER rather than on
+// 96 is TOOLBOX_ROW_CAP, asserted on the remainder as a NUMBER rather than on
 // rendered "+N more" text — REVIEW_FILE_CAP's own rule, and the reason is that
 // a list which silently stops is indistinguishable from a directory with
 // nothing in it.
@@ -1372,11 +1538,11 @@ const inventory = (over) => ({
     many.push(invEntry({ id: `s${i}`, name: `skill-${i}` }))
   }
   const m = R.buildToolboxFields(inventory({ entries: many }))
-  ok(89, m.rows.length === R.TOOLBOX_ROW_CAP && m.more === 4,
+  ok(96, m.rows.length === R.TOOLBOX_ROW_CAP && m.more === 4,
     `pane cap ${R.TOOLBOX_ROW_CAP}, remainder counted: ${m.rows.length}+${m.more}`)
 }
 
-// 90 is the check the NODE's own model exists for, and the only one that
+// 97 is the check the NODE's own model exists for, and the only one that
 // separates it from "just call buildToolboxFields" — the identical argument
 // review-node-model.ts earns against buildReviewFields. The pane is a strip in
 // a 260px column that must VANISH when it has nothing to say; a node is a
@@ -1388,13 +1554,13 @@ const inventory = (over) => ({
   const node = R.buildToolboxNodeModel({
     source: { cwd: '/repo', label: 'repo' }, title: undefined, result: { kind: 'no-cwd' }
   })
-  ok(90,
+  ok(97,
     pane.hidden === true
       && node.heading !== '' && node.summary !== '' && typeof node.note === 'string',
     `no-cwd: hidden in the pane, heading AND note in the node ("${String(node.note)}")`)
 }
 
-// 91 is the honest chain's first link reaching a FIFTH kind: a user's own
+// 98 is the honest chain's first link reaching a FIFTH kind: a user's own
 // title outranks the derived label, exactly as it already does for a terminal
 // header, a review node and a file panel. The DIRECTORY stays its own field,
 // never folded into the heading — the split inspector-fields draws for cwd.
@@ -1405,13 +1571,13 @@ const inventory = (over) => ({
   const titled = R.buildToolboxNodeModel({
     source: { cwd: '/repo', label: 'repo' }, title: 'auth toolbox', result: undefined
   })
-  ok(91,
+  ok(98,
     derived.heading.includes('repo') && titled.heading === 'auth toolbox'
       && derived.directory === '/repo' && titled.directory === '/repo',
     `title outranks the label, directory stays its own field`)
 }
 
-// 92 is the projection observed at the last surface before pixels, and that is
+// 99 is the projection observed at the last surface before pixels, and that is
 // why it exists rather than trusting verify:toolbox 11: that check pins
 // projectMcpServer, and this pins that nothing between it and a rendered row
 // puts the secret back. An MCP row shows the arg COUNT and the env KEY NAMES;
@@ -1434,14 +1600,14 @@ const inventory = (over) => ({
   })
   const mcp = node.groups.find((g) => g.kind === 'mcp')
   const hook = node.groups.find((g) => g.kind === 'hook')
-  ok(92,
+  ok(99,
     !!mcp && mcp.rows[0].detail.includes('3 args') && mcp.rows[0].detail.includes('RAILWAY_TOKEN')
       && !!hook && hook.rows[0].detail.includes('node guard.js')
       && hook.rows[0].detail.includes('92 chars') && hook.rows[0].name.includes('PreToolUse'),
     `arg COUNT and env KEY NAME render; hook shows PROGRAM and length`)
 }
 
-// 93 — a hook has no name, so its row renders a COORDINATE. Synthesising one
+// 100 — a hook has no name, so its row renders a COORDINATE. Synthesising one
 // is the fix that breaks the feature: a fabricated name in a list starts
 // matching searches it has no business matching, the rule Command.waiting
 // already states for a count.
@@ -1456,11 +1622,11 @@ const inventory = (over) => ({
     ] })
   })
   const row = node.groups[0].rows[0]
-  ok(93, row.name === 'Stop' && !row.name.includes('#'),
+  ok(100, row.name === 'Stop' && !row.name.includes('#'),
     `a matcherless hook renders its EVENT, never a synthesised name: ${row.name}`)
 }
 
-// 94 — every non-active state is MUTED and NAMED rather than dropped. A
+// 101 — every non-active state is MUTED and NAMED rather than dropped. A
 // disabled skill the user is hunting for must still be in the list saying why:
 // a row that disappears is indistinguishable from one that was never installed
 // (verify:palette 31's rule), and "why can this agent not do X" is the question
@@ -1476,7 +1642,7 @@ const inventory = (over) => ({
     ] })
   })
   const rows = node.groups[0].rows
-  ok(94,
+  ok(101,
     rows.length === 4
       && rows[0].muted === false && rows[0].state === ''
       && rows[1].muted === true && rows[1].state === 'disabled'
@@ -1485,7 +1651,7 @@ const inventory = (over) => ({
     `four active states, four distinct labels, none dropped`)
 }
 
-// 95 is the freshness arm, and its WORDING is what this pins: a fact about
+// 102 is the freshness arm, and its WORDING is what this pins: a fact about
 // FILES, never a claim about the running agent. An mtime bump with no semantic
 // change would otherwise read as "your agent is missing X", the confident
 // wrong answer this milestone's honesty rule forbids. `unknown` is NOT stale —
@@ -1504,7 +1670,7 @@ const inventory = (over) => ({
     source: { cwd: '/repo', label: 'repo' }, title: undefined,
     result: inventory({ freshness: { kind: 'unknown' } })
   })
-  ok(95,
+  ok(102,
     fresh.stale === false && unknown.stale === false
       && stale.stale === true && typeof stale.staleNote === 'string'
       && stale.staleNote.includes('settings.json')
@@ -1512,7 +1678,7 @@ const inventory = (over) => ({
     `fresh and unknown are both not-stale; stale names the FILE: ${String(stale.staleNote)}`)
 }
 
-// 96 is the node's own LARGER cap, per KIND rather than overall — a node has a
+// 103 is the node's own LARGER cap, per KIND rather than overall — a node has a
 // whole panel to fill, unlike the 260px pane, and a hundred skills must not
 // push every MCP server off the bottom of a list whose whole purpose is
 // answering "can this agent do X". The remainder is reported, never dropped.
@@ -1530,14 +1696,14 @@ const inventory = (over) => ({
   })
   const skills = node.groups.find((g) => g.kind === 'skill')
   const mcp = node.groups.find((g) => g.kind === 'mcp')
-  ok(96,
+  ok(103,
     R.TOOLBOX_NODE_ROW_CAP > R.TOOLBOX_ROW_CAP
       && !!skills && skills.rows.length === R.TOOLBOX_NODE_ROW_CAP && skills.more === 3
       && !!mcp && mcp.rows.length === 1,
     `per-KIND cap: skills ${skills && skills.rows.length}+${skills && skills.more}, mcp survives`)
 }
 
-// 97 is the rail and inspector arms together, and it is the FIFTH kind earning
+// 104 is the rail and inspector arms together, and it is the FIFTH kind earning
 // the same refusal the review node and the file panel already do: a toolbox
 // row is NEVER dormant — the honest answer, since a "click to start" arrow on
 // a panel with no process is a promise nothing can keep — its tail says
@@ -1553,7 +1719,7 @@ const inventory = (over) => ({
   }
   const rows = R.buildRailRows([panel], () => undefined, new Set(['t1']))
   const model = R.buildInspectorModel(panel, undefined)
-  ok(97,
+  ok(104,
     rows.length === 1 && rows[0].dormant === false && rows[0].tail === 'toolbox'
       && rows[0].label === 'toolbox: repo'
       && model.kind === 'toolbox' && model.restartable === false && model.reattached === false
@@ -1561,7 +1727,7 @@ const inventory = (over) => ({
     `never dormant, tail '${rows[0].tail}', label '${rows[0].label}', process verbs refused`)
 }
 
-// 98 is this section's own 60Hz defence, the shape checks 26-27, 63 and 86
+// 105 is this section's own 60Hz defence, the shape checks 26-27, 63 and 86
 // already earn — and it asserts toolboxSignature rather than
 // inspectorSignature deliberately: the inventory arrives ASYNCHRONOUSLY on its
 // own clock, so it gets its own signature rather than widening one whose
@@ -1571,7 +1737,7 @@ const inventory = (over) => ({
   const a = R.buildToolboxFields(inventory())
   const b = R.buildToolboxFields(inventory())
   const moved = R.buildToolboxFields(inventory({ entries: [invEntry({ name: 'other' })] }))
-  ok(98,
+  ok(105,
     R.toolboxSignature(a) === R.toolboxSignature(b)
       && R.toolboxSignature(a) !== R.toolboxSignature(moved)
       && R.toolboxSignature(null) !== R.toolboxSignature(a),

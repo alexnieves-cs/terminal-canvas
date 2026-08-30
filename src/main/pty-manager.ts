@@ -89,12 +89,30 @@ const LIVE_TICK_MS = 2000
 const USAGE_TICK_MS = 2000
 
 /**
+ * Only the `~`/`~/` expansion, with no existence check and no fallback. This
+ * is main's half of "`~` expansion is main's job" (the renderer has no
+ * process.env to do it with) — split out of `resolveCwd` so a consumer that
+ * must NOT get the spawn-safety fallback (readDir's `fs:list` handler) can
+ * still get the expansion. See `resolveCwd`'s own comment for why the
+ * fallback exists and why it is wrong for that consumer.
+ */
+export function expandTilde(raw: string): string {
+  return raw === '~' || raw.startsWith('~/') ? resolve(homedir(), raw.slice(2)) : raw
+}
+
+/**
  * node-pty passes cwd straight to the OS, so it never expands `~` and it throws
  * if the directory is gone. Both are easy to hit once panels are persisted with
  * a cwd that has since been deleted (M4), so handle them at the boundary.
+ *
+ * This is a SPAWN-safety fallback and must not be reused for a directory
+ * LISTING: a gone directory here silently substitutes the user's home, which
+ * is correct for "never fail a shell spawn over a missing cwd" and wrong for
+ * "tell the user this directory is gone" — the `fs:list` handler in `ipc.ts`
+ * uses `expandTilde` alone so `readDir`'s own `gone` arm stays reachable.
  */
 export function resolveCwd(raw: string): string {
-  const expanded = raw === '~' || raw.startsWith('~/') ? resolve(homedir(), raw.slice(2)) : raw
+  const expanded = expandTilde(raw)
   if (existsSync(expanded)) return expanded
   console.warn(`[pty] cwd ${expanded} does not exist, falling back to home`)
   return homedir()

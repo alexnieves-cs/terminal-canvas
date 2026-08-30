@@ -5169,13 +5169,19 @@ app.whenReady().then(async () => {
       const geom = await wc.executeJavaScript(`(() => {
         const shell = document.querySelector('.shell')
         const canvas = document.querySelector('.canvas')
+        const tree = document.querySelector('.shell__tree')
         const rail = document.querySelector('.shell__rail')
         const inspector = document.querySelector('.shell__inspector')
-        if (!shell || !canvas || !rail || !inspector) return null
+        if (!shell || !canvas || !tree || !rail || !inspector) return null
         const c = canvas.getBoundingClientRect()
         return {
           canvasWidth: c.width,
           windowWidth: window.innerWidth,
+          // M20: a THIRD inset region. The identity is still the clause that
+          // discriminates — an element pushed out of view reports its width
+          // exactly as a visible one does, so every looser bound survives the
+          // min-width:auto failure this check exists for.
+          treeWidth: tree.getBoundingClientRect().width,
           railWidth: rail.getBoundingClientRect().width,
           inspectorWidth: inspector.getBoundingClientRect().width,
           canvasLeft: c.left
@@ -5184,24 +5190,30 @@ app.whenReady().then(async () => {
       const live = await wc.executeJavaScript(
         `document.querySelectorAll('.panel .xterm').length`)
       ok('73 the shell frame insets the canvas and leaves a panel promoted',
-        geom !== null && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
+        geom !== null && geom.treeWidth > 15 && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
           geom.canvasWidth < geom.windowWidth - 80 &&
-          geom.canvasLeft >= geom.railWidth - 1 &&
+          geom.canvasLeft >= geom.treeWidth + geom.railWidth - 1 &&
           // The EXACT inset, and it is the clause that does the discriminating.
           // Every bound above it is loose enough to survive the one CSS failure
           // the frame's own comment names: drop `min-width: 0` from the canvas
           // cell and the grid item refuses to shrink, so the canvas overflows
           // and shoves the inspector off screen — yet getBoundingClientRect()
           // reports width for an element pushed out of view exactly as it does
-          // for a visible one, so railWidth is still 240, inspectorWidth is
-          // still 260, canvasLeft is still 240, and an overflowing canvasWidth
-          // is still comfortably under windowWidth - 80. All five loose clauses
-          // pass under that regression. Only the identity — the three columns
+          // for a visible one, so treeWidth is still 22 (collapsed by default —
+          // see below), railWidth is still 240, inspectorWidth is still 260,
+          // canvasLeft is still treeWidth + 240, and an overflowing canvasWidth
+          // is still comfortably under windowWidth - 80. All six loose clauses
+          // pass under that regression. Only the identity — the four columns
           // summing to the window — fails, because an overflowing middle cell is
-          // precisely a canvas WIDER than the space the other two leave it.
+          // precisely a canvas WIDER than the space the other three leave it.
           // ±1 for fractional device pixels, not for slack in the claim.
+          //
+          // The tree is COLLAPSED here (files.treeOpen defaults false, and
+          // nothing before this check has touched it), so treeWidth is the
+          // 22px strip rather than the full 220px column — measured, not
+          // assumed, the same rule check 125 states for its own open read.
           Math.abs(geom.canvasWidth -
-            (geom.windowWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
+            (geom.windowWidth - geom.treeWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
           live > 0,
         JSON.stringify(geom) + ` live=${live}`)
       // The state this check LEAVES BEHIND, in the same spirit as 71's own
@@ -7064,8 +7076,17 @@ app.whenReady().then(async () => {
       // 116-117 do not touch git at all, but they are nested inside this
       // block purely to reuse its spawnAt/sessionMap helpers — so a machine
       // with no git binary skips them too, and this message says so rather
-      // than leaving them unexplained.
-      console.log('SKIP  99-101, 113-115 and 116-117 — no git binary found (loudly, not silently)')
+      // than leaving them unexplained. M20's file-tree checks (156-160, and
+      // the final-review fix wave's 161) — numbered 125-129/130 under this
+      // branch's own original M13, renumbered on merge; see the file-tree
+      // block's own comment for the full collision story — are nested here
+      // for the identical reason (reusing spawnAt/sessionMap/settle rather
+      // than a second copy of that plumbing) and would otherwise vanish from
+      // the summary with nothing printed at all on a git-less machine — the
+      // exact silent-skip shape this whole guard exists to avoid. Check 73's
+      // own widened four-column assertion lives OUTSIDE this block (it runs
+      // long before this GIT_OK probe) and does not belong in this message.
+      console.log('SKIP  99-101, 113-115, 116-117, 156-160 and 161 — no git binary found (loudly, not silently)')
     } else {
       const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
       // A directory that is definitely NOT a repository, for check 100.
@@ -9118,6 +9139,483 @@ app.whenReady().then(async () => {
       // up must never turn a green suite red.
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
+
+      // ---- M20: the file tree (156-161) ------------------------------
+      //
+      // Nested inside this same GIT_OK block for the reason 116-117 already
+      // state in their own comment: none of these six checks touch git, but
+      // spawnAt/sessionMap/settle/wc are all in scope here and reusable, and
+      // a second copy of that plumbing to avoid one shared `if` would be the
+      // worse trade.
+      //
+      // Originally numbered 125-130 under this branch's own M13, which
+      // collided with main's own DIFFERENT M13 — "links between panels" —
+      // which independently claimed 125-129 here, and with M14's credential
+      // check (130). 156 is the first number past every milestone's real
+      // maximum in the merged file, re-derived directly rather than assumed.
+      {
+        // A directory holding one real FILE, not only sub-directories — check
+        // 126 needs a leaf row to click, and every other fixture directory in
+        // this suite has already been rmSync'd above by the time this block
+        // runs.
+        const treeDir = mkdtempSync(join(tmpdir(), 'tc panels tree '))
+        writeFileSync(join(treeDir, 'note.txt'), 'hello\n')
+        mkdirSync(join(treeDir, 'sub'))
+        // A second, distinct directory for check 127's re-root, so "the tree
+        // now shows a different root" has an unambiguous expected answer
+        // rather than depending on whatever an earlier check's fixture
+        // happens to still be pointed at.
+        const treeDir2 = mkdtempSync(join(tmpdir(), 'tc panels tree2 '))
+        writeFileSync(join(treeDir2, 'other.txt'), 'hi\n')
+        // Both spellings, the same fence check 43/117's prompt reads and
+        // check 91/107's ids already carry: macOS tmpdir() is
+        // /var/folders/... while a resolved read can answer
+        // /private/var/folders/... for the identical directory.
+        const treeDir2Real = (() => { try { return realpathSync(treeDir2) } catch { return treeDir2 } })()
+
+        const readTreeCollapsed = () => wc.executeJavaScript(
+          `document.querySelector('.shell').classList.contains('shell--tree-collapsed')`)
+
+        // A plain dispatched click, the same shape clickRail (~line 6567)
+        // already uses: shellControl's onClick fires for any 'click' event
+        // regardless of isTrusted, so this is exactly as good as a real one
+        // for every button below that is not itself under test for stealing
+        // focus — only check 126's file row needs the real thing.
+        const dispatchClick = (selector) => wc.executeJavaScript(`(() => {
+          const el = document.querySelector(${JSON.stringify(selector)})
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+
+        // The real-click idiom, copied from check 75c (~line 5247) and
+        // narrowed the same way, for the same stated reason: only a real
+        // OS-level click moves DOM focus, so a dispatched MouseEvent cannot
+        // test a control that must not take it. Copied rather than hoisted —
+        // 75c's own comment argues that widening a helper a dozen checks
+        // depend on is the worse trade. Returns false rather than throwing
+        // when nothing matches, so a missing element is a clean FAIL in
+        // whichever check called it rather than an infrastructure abort that
+        // takes every later check down with it.
+        const realClick = async (selector) => {
+          const box = await wc.executeJavaScript(
+            `(() => { const s = document.querySelector(${JSON.stringify(selector)});
+                      if (!s) return null;
+                      const r = s.getBoundingClientRect();
+                      return { x: Math.round(r.left + r.width / 2),
+                               y: Math.round(r.top + r.height / 2) } })()`)
+          if (!box) return false
+          wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+          await sleep(150)
+          return true
+        }
+
+        // Open the column. It defaults CLOSED (files.treeOpen's schema
+        // default), so every check below needs this, and check 73's own
+        // collapsed measurement ran long before this block and is unaffected.
+        if (await readTreeCollapsed()) { await dispatchClick('.shell__tree-toggle'); await settle() }
+
+        // 156. The exact FOUR-column inset, tree OPEN this time — check 73's
+        //      argument with a third region, complementing its collapsed
+        //      measurement with this one's open measurement. Every looser
+        //      bound survives the min-width:auto failure, because an element
+        //      pushed out of view reports its width exactly as a visible one
+        //      does, and only the IDENTITY fails — an overflowing middle cell
+        //      is precisely a canvas wider than the space the other three
+        //      leave it.
+        {
+          const m = await wc.executeJavaScript(`(() => {
+            const canvas = document.querySelector('.canvas')
+            const tree = document.querySelector('.shell__tree')
+            const rail = document.querySelector('.shell__rail')
+            const inspector = document.querySelector('.shell__inspector')
+            if (!canvas || !tree || !rail || !inspector) return null
+            return {
+              canvasWidth: canvas.getBoundingClientRect().width,
+              windowWidth: window.innerWidth,
+              treeWidth: tree.getBoundingClientRect().width,
+              railWidth: rail.getBoundingClientRect().width,
+              inspectorWidth: inspector.getBoundingClientRect().width
+            }
+          })()`)
+          const expected = m ? m.windowWidth - m.treeWidth - m.railWidth - m.inspectorWidth : NaN
+          // The xterm clause is not tautological the way "the canvas got
+          // narrower" is: a smaller canvas is a smaller cull region, and a
+          // frame that quietly demoted the panel the user was looking at
+          // renders a card with no error anywhere.
+          const live = await wc.executeJavaScript(
+            `document.querySelectorAll('.panel .xterm').length`)
+          ok('156 the four-column frame insets the canvas exactly, panel still promoted',
+            m !== null && Math.abs(m.canvasWidth - expected) <= 1 && m.treeWidth > 100 && live > 0,
+            m ? `canvas=${m.canvasWidth} expected=${expected} tree=${m.treeWidth} xterm=${live}` : 'no frame')
+        }
+
+        // 157. THE ONE THAT MATTERS, and the only one in this milestone that
+        //      cannot be written with a dispatched event.
+        //
+        //      A synthetic MouseEvent is isTrusted:false and Blink runs no
+        //      default action for one, so it moves no DOM focus whether or
+        //      not shellControl called preventDefault — a dispatched version
+        //      of this check passes identically against the very regression
+        //      it exists to catch. That is check 75c's recorded limit,
+        //      inherited here where it matters more: for every other shell
+        //      control losing focus is merely bad, and for this one it is
+        //      fatal, because the click's whole job is to paste into the
+        //      focused panel.
+        //
+        //      BOTH halves in one read. "Focus did not move" alone passes
+        //      against a row wired to nothing at all; "the bytes arrived"
+        //      alone passes against a row that stole focus and happened to
+        //      paste anyway on the way past.
+        {
+          const id = await spawnAt(treeDir)
+          if (id) await waitUntil(async () => (await sessionMap(wc)).has(id), 8000)
+          // Retried, not dispatched once — check 40's own reason: the panel
+          // is spawned by a setPanels update this tick, and .panel__slot only
+          // exists once tiering has promoted it to LIVE, which is a render or
+          // two later. A bare realClick here can fire before there is
+          // anything to click, land on nothing, and leave focus wherever the
+          // previous check left it.
+          //
+          // Waited on .xterm specifically, not .panel__slot: the slot div
+          // itself mounts a render before attachSlot has actually appended
+          // xterm's own host (and its focusable helper textarea) inside it,
+          // and a real click on an empty slot moves no DOM focus at all —
+          // the app-level focusedId still flips (onFocus fires regardless of
+          // children), but this check reads BROWSER focus, so that race
+          // reads as "focus did not move" for a reason that has nothing to
+          // do with the control under test.
+          const slotUp = id ? await waitUntil(() => wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id="${id}"] .xterm') !== null`),
+            5000) : false
+          // By this point in the suite the camera can be anywhere — a
+          // hundred-odd earlier checks have panned, framed and switched
+          // workspaces repeatedly — and cascadeCentre's placement is relative
+          // to whatever that camera's world centre was AT SPAWN, which is not
+          // necessarily where the camera is now, so a fresh spawn is not
+          // reliably on screen.
+          //
+          // A large pan is not merely inconvenient here, it is actively
+          // destructive: assignTiers re-runs on every viewport change and
+          // fills LIVE_BUDGET (8) by priority, so panning far enough to bring
+          // this never-focused, just-spawned panel into view can just as
+          // easily walk every OTHER live panel out of the cull region and
+          // this one never makes the cut — watched directly: a wheel pan
+          // computed to centre this panel exactly left `.panel__slot` GONE
+          // (demoted to a card) once DEMOTE_DELAY_MS's hold expired, because
+          // dormancy/tiering does not know this is the panel under test.
+          //
+          // The fix is to PIN it live first, the same way `assignTiers`
+          // itself is pinned — "assignTiers pins the focused panel live
+          // unconditionally" — by dispatching a mousedown on the slot before
+          // panning. TerminalPanel's own onMouseDown calls onFocus(id)
+          // directly and does not care whether the event is trusted, so this
+          // sets focusedId (and therefore wins the tiering budget) without
+          // yet claiming to have moved DOM focus — that claim is reserved for
+          // the REAL click below, which is what the check actually tests.
+          if (slotUp) {
+            await wc.executeJavaScript(`(() => {
+              const slot = document.querySelector('.panel[data-panel-id="${id}"] .panel__slot')
+              if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            })()`)
+            await settle()
+            // Now safe to pan: the panel is pinned live regardless of where
+            // the camera lands. A wheel pan by the EXACT screen-pixel delta
+            // between the panel's own rect and the canvas host's centre is
+            // the same mechanism panBy108 already uses two thousand lines up,
+            // computed rather than guessed — panBy applies its dx/dy to the
+            // viewport translation directly (canvas-input.ts's
+            // normalizeWheel, scale-independent since a CSS translate sits
+            // outside the scale in `.world`'s transform).
+            await wc.executeJavaScript(`(() => {
+              const canvas = document.querySelector('.canvas')
+              const slot = document.querySelector('.panel[data-panel-id="${id}"] .panel__slot')
+              if (!canvas || !slot) return false
+              const c = canvas.getBoundingClientRect()
+              const s = slot.getBoundingClientRect()
+              const dx = (c.left + c.width / 2) - (s.left + s.width / 2)
+              const dy = (c.top + c.height / 2) - (s.top + s.height / 2)
+              canvas.dispatchEvent(new WheelEvent('wheel', {
+                bubbles: true, cancelable: true,
+                clientX: c.left + c.width / 2, clientY: c.top + c.height / 2,
+                deltaX: -dx, deltaY: -dy, deltaMode: 0
+              }))
+              return true
+            })()`)
+            await settle()
+          }
+          // The REAL click check 75c's own idiom exists for: only a real
+          // OS-level click moves DOM focus into xterm's hidden textarea,
+          // which is what makes `before` below a genuine baseline rather
+          // than an assumption. This is what the file-row click's own
+          // real-vs-synthetic distinction is measured against.
+          if (slotUp) await realClick(`.panel[data-panel-id="${id}"] .panel__slot`)
+
+          const probe = () => wc.executeJavaScript(`(() => {
+            const host = document.activeElement && document.activeElement.closest('.panel')
+            return { id: host ? host.getAttribute('data-panel-id') : null }
+          })()`)
+          // Waited, not read once: this is the SAME focus round trip check
+          // 75c already needs a settle for, and reading before that lands
+          // would capture whatever panel focus was left on by the check that
+          // ran before this one.
+          const focused = slotUp
+            ? await waitUntil(async () => (await probe()).id === id ? true : false, 3000)
+            : false
+          const before = await probe()
+
+          // The tree re-roots and re-reads its directory over an async IPC
+          // round trip (files.list), so wait for actual file rows rather
+          // than just the heading updating. Scoped to .shell__tree so a
+          // false positive can only come from the tree itself, never from
+          // some other part of the page that happens to reuse the class name.
+          if (focused) {
+            await waitUntil(() => wc.executeJavaScript(
+              `document.querySelectorAll('.shell__tree .file-row [data-file-path]').length > 0`), 5000)
+          }
+
+          // The first FILE row — a directory row toggles instead of
+          // inserting, and its twist glyph (▸/▾) is what tells the two apart.
+          const filePath = focused ? await wc.executeJavaScript(`(() => {
+            const rows = [...document.querySelectorAll('.shell__tree .file-row [data-file-path]')]
+            const file = rows.find((r) => {
+              const twist = r.querySelector('.file-row__twist')
+              return twist !== null && twist.textContent === ''
+            })
+            return file ? file.getAttribute('data-file-path') : null
+          })()`) : null
+          const clicked = filePath
+            ? await realClick(`.shell__tree [data-file-path="${filePath}"]`)
+            : false
+          await settle()
+
+          const after = await probe()
+          const base = filePath ? filePath.split('/').pop() : ''
+          // __m4aCellToScreen reads the FOCUSED session's xterm buffer for a
+          // substring — the same hook check 40 already uses to prove a paste
+          // landed, rather than a made-up read into a handle shape this
+          // renderer does not expose (__m4aSessions() answers only
+          // {id, dormant, spawned} — see its own comment in Canvas.tsx).
+          const echoed = base
+            ? await waitUntil(() => wc.executeJavaScript(
+                `window.__m4aCellToScreen(${JSON.stringify(base)}) !== null`), 3000)
+            : false
+
+          ok('157 a file click pastes into the focused panel and never takes focus',
+            id !== undefined && focused === true && filePath !== null && clicked === true &&
+              before.id === id && after.id === id && echoed === true,
+            `panel=${id} slotUp=${slotUp} focused=${focused} before=${before.id} ` +
+            `after=${after.id} file=${base} echoed=${echoed}`)
+        }
+
+        // 158. Re-rooting, asserted POSITIVELY in ONE DOM read pairing "which
+        //      panel is selected" with "which root the heading shows" — check
+        //      100b's rule, because "the old root is absent" is satisfied
+        //      before React has even processed the click. It selects through
+        //      the RAIL ROW rather than a coordinate click, for 100b's other
+        //      reason: cascaded spawns overlap, so a click aimed at a panel's
+        //      body can land on whichever panel is top of the z-order there.
+        //
+        //      A dedicated second fixture directory rather than "any other
+        //      panel already on the canvas": this suite is 8000+ lines deep
+        //      by the time this check runs, and an arbitrary survivor could
+        //      be a review node (no cwd to root on) or a dormant panel (no
+        //      live session) — a fresh, known second directory is the only
+        //      way the expected root is unambiguous.
+        {
+          const id2 = await spawnAt(treeDir2)
+          if (id2) await waitUntil(async () => (await sessionMap(wc)).has(id2), 8000)
+          const switched = id2 ? await dispatchClick(`[data-rail-row="${id2}"] .rail-row__main`) : false
+          await settle()
+          const read = await wc.executeJavaScript(`(() => {
+            const sel = document.querySelector('.panel--selected')
+            const root = document.querySelector('.shell__tree-root')
+            return {
+              selected: sel ? sel.getAttribute('data-panel-id') : null,
+              root: root ? root.getAttribute('title') : null
+            }
+          })()`)
+          ok('158 the tree re-roots on the selected panel',
+            switched === true && id2 !== undefined && read.selected === id2 &&
+              (read.root === treeDir2 || read.root === treeDir2Real),
+            `selected=${read.selected} root=${read.root} expected=${treeDir2}`)
+        }
+
+        // 159. The palette -> SCREEN direction, and the only check that
+        //      covers it. files.treeOpen is an ordinary boolean SettingDef,
+        //      so main's settings:list AUTO-GENERATES a row nobody wrote;
+        //      running it must MOVE THE FRAME rather than only persist. Read
+        //      off .shell's class list, never off main's store: a toggle that
+        //      writes to main and leaves the frame where it was reads "Off"
+        //      beside a visibly open column. Found by a keyword ("explorer")
+        //      the row's own label never displays — check 52's rule.
+        {
+          const openPalette = async () => {
+            await wc.executeJavaScript(`
+              if (document.querySelector('.palette') === null) {
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+              }
+            `)
+            return waitUntil(
+              () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+          }
+          // Runs the row with a dispatched mousedown, the same idiom check
+          // 79 uses for the rail setting: runRow fires on mousedown, not on
+          // click or Enter, so this is the row's real execution path rather
+          // than a shortcut around it.
+          const runByKeyword = async (keyword, textMatch) => wc.executeJavaScript(`(async () => {
+            const setter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value').set
+            const input = document.querySelector('.palette__input')
+            setter.call(input, ${JSON.stringify(keyword)})
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            await new Promise((r) => setTimeout(r, 120))
+            const row = [...document.querySelectorAll('.palette__row')]
+              .find((r) => r.textContent.includes(${JSON.stringify(textMatch)}))
+            if (!row) return 'not found'
+            row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            return 'ok'
+          })()`)
+
+          const before = await readTreeCollapsed()
+          await openPalette()
+          const picked = await runByKeyword('explorer', 'file tree')
+          await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+          // The auto-generated row's run() is `settings:set` over IPC, not a
+          // call into useShellChrome's local toggleTree — main's store write
+          // and the round trip back through settingsSignal's reload is what
+          // actually flips treeOpen, so a bare read right after the palette
+          // closes can catch the class before that lands. Polled for CHANGE
+          // (a boolean, always truthy once satisfied — waitUntil treats a
+          // falsy return as "not yet", so returning the raw class value
+          // would hang the whole 3s out whenever the true answer is `false`,
+          // i.e. whenever this toggle opens the tree rather than closes it),
+          // the same shape check 79 already needs for the rail's own palette
+          // toggle.
+          const changed = await waitUntil(async () => (await readTreeCollapsed()) !== before, 3000)
+          const after = await readTreeCollapsed()
+          ok('159 the auto-generated palette row moves the frame, not just the store',
+            picked === 'ok' && changed === true && before !== after,
+            `picked=${picked} ${before} -> ${after}`)
+          // Put it back for check 129's baseline, in the spirit of 73's own
+          // closing note: leave the tree exactly as this block found it.
+          if (after !== before) {
+            await openPalette()
+            await runByKeyword('explorer', 'file tree')
+            await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+            await waitUntil(async () => (await readTreeCollapsed()) === before ? true : false, 3000)
+          }
+        }
+
+        // 160. Cmd+B toggles, and a held chord does not re-toggle. Like 7b,
+        //      33b and 75b this supplies repeat:true BY HAND, so it proves
+        //      the guard READS the flag and says nothing about who SETS it —
+        //      that link was checked once, separately, with sendInputEvent's
+        //      'isAutoRepeat' modifier, and is recorded in CLAUDE.md.
+        {
+          const before = await readTreeCollapsed()
+          await wc.executeJavaScript(
+            `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, bubbles: true }))`)
+          await settle()
+          const once = await readTreeCollapsed()
+          for (let i = 0; i < 5; i++) {
+            await wc.executeJavaScript(
+              `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', metaKey: true, repeat: true, bubbles: true }))`)
+          }
+          await settle()
+          const held = await readTreeCollapsed()
+          ok('160 Cmd+B toggles the tree once, and auto-repeat does not re-toggle',
+            before !== once && held === once, `${before} -> ${once} -> ${held}`)
+        }
+
+        // 161. The final-review fix: resolveCwd's spawn-safety fallback
+        //      (substitute $HOME for a gone directory — correct for never
+        //      failing a shell spawn) must never leak into a directory
+        //      LISTING. A panel's whole root cwd vanishing (an agent
+        //      `rm -rf`'d it) has to reach readDir's own `gone` arm; the
+        //      pre-fix handler called resolveCwd itself, which silently
+        //      substituted homedir() and rendered $HOME's own contents under
+        //      a heading that still named the deleted directory — a click on
+        //      one of those rows then pastes a path that resolves to
+        //      nowhere. The ROOT is deliberately what this check deletes,
+        //      not a child under it: buildFileRows' depth-0 suppression
+        //      (the "loading" gap Finding 2 fixes) applies only to the `loading`
+        //      arm, never to `note` — a non-ok root answer still pushes a
+        //      real note row at depth 0 — so deleting a CHILD directory
+        //      would instead just drop its row from the parent's own
+        //      re-listing and never reach readDir's `gone` arm at all: the
+        //      parent's readdir simply would not name it anymore. No git
+        //      needed; nested here purely to reuse spawnAt/sessionMap/settle,
+        //      the same reason 116-117 and 156-160 are.
+        {
+          const treeDir3 = mkdtempSync(join(tmpdir(), 'tc panels tree3 '))
+          writeFileSync(join(treeDir3, 'stub.txt'), 'x\n')
+          // Both spellings, the same fence checks 43/117/127 already carry:
+          // macOS tmpdir() answers /var/folders/..., a resolved read answers
+          // /private/var/folders/... for the identical directory, and this
+          // fixture's own delay before the delete+refresh (waiting up to
+          // 8000ms for the session, then a settle, then the disk ops) is
+          // comfortably past M12's 2s live-cwd tick — so by the time the row
+          // renders, treeRoot may already have moved onto the RESOLVED
+          // spelling tmux reports, and a single-spelling selector goes red on
+          // a real machine even though the fix under test is correct. This
+          // was found failing on an uncontended, clean full-suite run.
+          const treeDir3Real = (() => { try { return realpathSync(treeDir3) } catch { return treeDir3 } })()
+
+          const id3 = await spawnAt(treeDir3)
+          if (id3) await waitUntil(async () => (await sessionMap(wc)).has(id3), 8000)
+          const switched3 = id3
+            ? await dispatchClick(`[data-rail-row="${id3}"] .rail-row__main`)
+            : false
+          await settle()
+          if (switched3) {
+            await waitUntil(() => wc.executeJavaScript(
+              `document.querySelectorAll('.shell__tree .file-row [data-file-path]').length > 0`), 5000)
+          }
+          // Delete the whole root from disk — the fixture setup for the
+          // failure this check exists to catch, not a teardown.
+          try { rmSync(treeDir3, { recursive: true, force: true }) } catch { /* setup, not teardown */ }
+          // The refresh control, scoped to .shell__tree so this cannot
+          // accidentally hit SideRail's own shell__region-add.
+          const refreshed = switched3
+            ? await dispatchClick('.shell__tree .shell__region-add')
+            : false
+          // Both spellings tried, in order — the same OR check 127 already
+          // makes on `read.root`: treeRoot may have moved to the RESOLVED
+          // spelling by the time this row rendered, so a query keyed on only
+          // the raw fixture path finds nothing (querySelector on an
+          // attribute value that no longer matches returns null, exactly the
+          // false-red this produced), and this is a query-selector match, not
+          // a Set membership test, so both spellings have to be tried as
+          // actual selectors rather than compared afterward.
+          const noteText = refreshed
+            ? await waitUntil(() => wc.executeJavaScript(`(() => {
+                const byRaw = document.querySelector('.shell__tree [data-file-note="${treeDir3}"]')
+                const byReal = document.querySelector('.shell__tree [data-file-note="${treeDir3Real}"]')
+                const el = byRaw || byReal
+                return el ? el.textContent : null
+              })()`), 5000)
+            : null
+          // noteText itself is the whole assertion, both directions at once:
+          // a fallback that substituted $HOME would answer 'ok' with real
+          // entries instead of the 'note' state, so the root's own note
+          // element would either be absent (noteText stays null, because the
+          // query above finds nothing to read a note off) or carry different
+          // text — either way this equality fails, which is what would catch
+          // $HOME's contents rendering under a heading that still names the
+          // deleted directory.
+          ok('161 a panel whose root cwd is deleted reads gone, never $HOME\'s contents',
+            id3 !== undefined && switched3 === true && refreshed === true &&
+              noteText === 'this directory is gone',
+            `panel=${id3} switched=${switched3} refreshed=${refreshed} note=${noteText}`)
+
+          // Already gone; nothing left to clean up.
+        }
+
+        try { rmSync(treeDir, { recursive: true, force: true }) } catch { /* best effort */ }
+        try { rmSync(treeDir2, { recursive: true, force: true }) } catch { /* best effort */ }
+      }
     }
 
     // ---------------------------------------------------------------------
@@ -10913,7 +11411,7 @@ app.whenReady().then(async () => {
       await wc.executeJavaScript(
         `window.__m20Toolbox(${JSON.stringify(TB_DIR)}, ${JSON.stringify('fixture')})`)
 
-      // 156 is the check the whole milestone exists for, and it is the FIRST
+      // 162 is the check the whole milestone exists for, and it is the FIRST
       //     thing to exercise the reader, the invoke, the store, the model and
       //     the component together — verify:toolbox proves the reader and
       //     verify:rail proves the models, and nothing between either of them
@@ -10926,11 +11424,11 @@ app.whenReady().then(async () => {
         const t = await body()
         return t && t.includes('fixture-skill') ? t : null
       }, 8000)
-      ok('156 a toolbox node renders the real skills of the directory it names',
+      ok('162 a toolbox node renders the real skills of the directory it names',
         rendered !== null,
         `body=${JSON.stringify(String(rendered).slice(0, 80))}`)
 
-      // 157 is the projection observed at the LAST possible surface — the
+      // 163 is the projection observed at the LAST possible surface — the
       //     rendered DOM of a real node, in a real renderer, reading a real
       //     file. verify:toolbox 15 pins hookProgram and verify:rail 92 pins
       //     the row, and neither can see whether something between them and
@@ -10938,12 +11436,12 @@ app.whenReady().then(async () => {
       //     it being vacuous: the hook's PROGRAM must be on screen, so a node
       //     that rendered no hooks at all cannot pass by rendering nothing.
       const shown = String(rendered ?? '')
-      ok('157 the hook PROGRAM reaches the node and its command string does not',
+      ok('163 the hook PROGRAM reaches the node and its command string does not',
         shown.includes('guard.js') && !shown.includes('SHOULD-NOT-CROSS')
           && !shown.includes('--token'),
         `program=${shown.includes('guard.js')} token=${shown.includes('SHOULD-NOT-CROSS')}`)
 
-      // 158 is verify:panels 103's argument applied to a FIFTH kind: the node
+      // 164 is verify:panels 103's argument applied to a FIFTH kind: the node
       //     holds no PanelSession AND the xterm count is unchanged from before
       //     it existed. The second clause is what rejects an implementation
       //     that quietly demoted some other panel to pay for this one — "no
@@ -10953,11 +11451,11 @@ app.whenReady().then(async () => {
       const hasSession = await wc.executeJavaScript(
         `Object.prototype.hasOwnProperty.call(window.__m4aSessions(), ${JSON.stringify(tbId)})`)
       const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
-      ok('158 a toolbox node holds no PanelSession and costs no WebGL context',
+      ok('164 a toolbox node holds no PanelSession and costs no WebGL context',
         hasSession === false && xtermsAfter === xtermsBefore,
         `session=${hasSession} xterms ${xtermsBefore}->${xtermsAfter}`)
 
-      // 159 — closing it sends NO pty.kill for its id, and the same window
+      // 165 — closing it sends NO pty.kill for its id, and the same window
       //     closes a real terminal panel and asserts THAT id IS recorded. A
       //     negative against a recording mechanism is vacuous if the recorder
       //     has stopped recording, which is the trap checks 111/111b and 137
@@ -10994,7 +11492,7 @@ app.whenReady().then(async () => {
       if (termId2 !== null) await clickPanelClose(wc, termId2)
       await settle()
       const killsSince = killedPanelIds.slice(killsBefore)
-      ok('159 closing a toolbox node sends no pty.kill, while a terminal close still does',
+      ok('165 closing a toolbox node sends no pty.kill, while a terminal close still does',
         termId2 !== null && !killsSince.includes(tbId) && killsSince.includes(termId2),
         `toolbox=${tbId} terminal=${String(termId2)} kills=${JSON.stringify(killsSince)}`)
 

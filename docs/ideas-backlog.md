@@ -41,6 +41,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #49 two copies of the app eating each other | M5c fix | "...and two copies of ONE build must not either" |
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
+| #3 file tree / codebase browser | M20 | "Every file row mounts `shellControl`, and here that is not a convention" |
 
 Ten more entries were rewritten rather than removed, because a milestone shipped most of
 each and stopped somewhere deliberate: **#14** (M16 left tiers 2–4, and the
@@ -69,23 +70,6 @@ ships, not after.
 
 ---
 
-
-## 3. File tree / codebase browser (IDE-style left rail)
-
-A collapsible left sidebar showing files and structure for the project a panel is
-working in.
-
-- **Constraint:** the sidebar lives *outside* the transformed `.world` layer. That is
-  the whole point of "one transform, not N layouts" — a chrome element inside the world
-  would scale with zoom. It needs to be a sibling of the canvas host, and its width
-  changes the canvas viewport size, which feeds `viewport.ts`'s math and every panel's
-  culling decision.
-- **Constraint:** file reads must happen in **main**, not the renderer. The renderer has
-  no `process.env` and no fs; the contract in `shared/ipc-contract.ts` would need new
-  channels (`fs:list`, `fs:read`, a watcher for `fs:changed`), and `verify:ipc` will fail
-  until every one has a handler.
-- **Open question:** which directory? Each panel is a shell that can `cd` anywhere. Either
-  a workspace-level root, or track each session's cwd (obtainable from the PTY's pid).
 
 ## 4. Multiplayer / shared team canvas
 
@@ -2249,7 +2233,10 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 29. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
    the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
    is most of this idea's value for a fraction of its cost.
-30. **#3 file tree** — real work (new IPC surface, viewport interaction), well understood.
+30. ~~**#3 file tree**~~ — **done, M20**, rooted on the selected panel rather than a
+   workspace-level root, which the open question here left unsettled: each panel is a
+   shell that can `cd` anywhere, so the tree follows the panel the user has selected
+   instead of picking one root for the whole canvas.
 31. ~~**#26 agent toolbox, read-only inventory**~~ — **done, M21**, at exactly the point
    this item names and for exactly its stated reason: it landed after M16's file panel and
    reused that milestone's shape rather than inventing a second copy. The prediction that
@@ -2302,9 +2289,11 @@ to remember. See `CLAUDE.md`'s "`kind` is optional on disk" and "A review node n
 
 The review node (#51) paid for it, which is not who this section predicted. The rest of this
 section is left as written, because the entries below still inherit the decision and the
-reasoning still says what a second kind costs:
+reasoning still says what a second kind costs. #3 (file tree) is no longer among them: it
+shipped in M20 as a rail column reading a panel's cwd over `fs:list`, never as a canvas node,
+so it needed no `Panel` variant and touched neither `assignTiers` nor `registry.ensure`.
 
-Ten separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
+Nine separate entries (#7 subagent nodes, #8 chat box, #9 integrations,
 #12 Jira boards, #14 live document panels, #15 annotations, #24 edges, #26 the agent
 toolbox, #35 groups) all need the same thing:
 **a canvas node that is not a terminal.** Today `Panel` means

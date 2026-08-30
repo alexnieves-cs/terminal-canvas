@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from 'react'
 export interface ShellChrome {
   railOpen: boolean
   inspectorOpen: boolean
+  treeOpen: boolean
   toggleRail: () => void
   toggleInspector: () => void
+  toggleTree: () => void
 }
 
 /**
@@ -37,13 +39,18 @@ export function useShellChrome(deps: {
   const { paletteIsOpen, settingsSignal } = deps
   const [railOpen, setRailOpen] = useState(true)
   const [inspectorOpen, setInspectorOpen] = useState(true)
+  // Matches the schema default, so the first paint is right before the
+  // settings read below resolves.
+  const [treeOpen, setTreeOpen] = useState(false)
 
   useEffect(() => {
     void window.canvas.settings.list().then((rows) => {
       const rail = rows.find((r) => r.id === 'shell.railOpen')
       const inspector = rows.find((r) => r.id === 'shell.inspectorOpen')
+      const tree = rows.find((r) => r.id === 'files.treeOpen')
       if (rail) setRailOpen(rail.value === true)
       if (inspector) setInspectorOpen(inspector.value === true)
+      if (tree) setTreeOpen(tree.value === true)
     })
   }, [settingsSignal])
 
@@ -68,11 +75,37 @@ export function useShellChrome(deps: {
     void window.canvas.settings.set('shell.inspectorOpen', next)
   }, [inspectorOpen])
 
+  const toggleTree = useCallback(() => {
+    const next = !treeOpen
+    setTreeOpen(next)
+    void window.canvas.settings.set('files.treeOpen', next)
+  }, [treeOpen])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Cmd, and only Cmd — the same gate every canvas shortcut obeys so that
       // a bare keystroke always reaches the PTY.
       if (!event.metaKey || event.ctrlKey || event.altKey) return
+      // Cmd+B. Free — Cmd+0/1/=/+/-/n/j are useViewport's, Cmd+K is the
+      // palette's, Cmd+G is the nav grid's, Cmd+\ and Cmd+Shift+\ are the two
+      // above, and Cmd+Z/C/V are menu accelerators — and it is the chord a
+      // user already has muscle memory for as "toggle the file sidebar".
+      if (event.code === 'KeyB') {
+        if (paletteIsOpen()) return
+        // preventDefault BEFORE the repeat bail, like the branch below: this
+        // rejects a chord that IS ours and we are declining to act on, so the
+        // tail of a held Cmd+B must still be swallowed rather than leaking to
+        // the focused agent's PTY.
+        event.preventDefault()
+        // For a toggle the repeat stream is NEVER the feature: held, it would
+        // flicker the column at the OS repeat rate and leave it open or closed
+        // depending on whether the user released on an odd or an even repeat —
+        // the Cmd+K defect exactly. Not in REPEATABLE_KEYS and not a candidate
+        // for it.
+        if (event.repeat) return
+        toggleTree()
+        return
+      }
       // event.code, not event.key: with Shift held macOS reports key '|', so
       // a key check would silently miss the inspector's chord.
       if (event.code !== 'Backslash') return
@@ -97,7 +130,7 @@ export function useShellChrome(deps: {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [paletteIsOpen, toggleRail, toggleInspector])
+  }, [paletteIsOpen, toggleRail, toggleInspector, toggleTree])
 
-  return { railOpen, inspectorOpen, toggleRail, toggleInspector }
+  return { railOpen, inspectorOpen, treeOpen, toggleRail, toggleInspector, toggleTree }
 }

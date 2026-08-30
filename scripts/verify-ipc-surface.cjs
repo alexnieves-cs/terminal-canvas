@@ -131,21 +131,26 @@ app.whenReady().then(() => {
 
   const channels = Object.values(IPC)
   const missing = channels.filter((c) => !isHandled(c))
-  // 41, not 42. file:changed is an IPC_EVENTS member — a main-to-renderer send,
+  // 42, not 43. file:changed is an IPC_EVENTS member — a main-to-renderer send,
   // handled by nobody — and this suite asserts over Object.values(IPC), the
   // invoke channels. M6d and M12 each reached this same off-by-one; CLAUDE.md
   // records both. M14 Task 5 took the surface to 35 (four credential:* channels,
-  // none of which returns a secret). Two milestones then built on that 35 from
-  // branches that never saw each other: the file panel's three invokes
-  // (file:open/file:read/file:close) and the workspace extras' two
-  // (workspace:merged, workspace:move-panels), plus M19's jira:list.
-  // 35 + 3 + 2 + 1 = 41.
-  // 43 = 41 after M19, plus M21's two toolbox invokes. Deliberately NOT a
+  // none of which returns a secret). Four milestones then built on that 35
+  // from branches that never saw each other: the file panel's three invokes
+  // (file:open/file:read/file:close), the workspace extras' two
+  // (workspace:merged, workspace:move-panels), M19's jira:list, and M20's
+  // fs:list — one directory's entries for the file tree (numbered M13
+  // throughout its own design and implementation; renumbered to M20 on
+  // merge, since a different, unrelated milestone had already claimed M13).
+  // 35 + 3 + 2 + 1 + 1 = 42.
+  // 44 = 42 after M20, plus M21's two toolbox invokes. Deliberately NOT a
   // third: there is no `toolbox:changed` event at all — this feature is PULL,
   // because half its sources are shared by every panel on the canvas and a
   // panel-keyed watcher would arm twelve of them on the same four paths. See
-  // IPC.TOOLBOX_READ's own comment.
-  const EXPECTED_CHANNELS = 43
+  // IPC.TOOLBOX_READ's own comment. This number was 43 on the M21 branch,
+  // computed against a base that predated fs:list; the merge is what makes
+  // it 44, which is the arithmetic both copies of this count must agree on.
+  const EXPECTED_CHANNELS = 44
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
