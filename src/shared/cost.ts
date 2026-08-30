@@ -76,7 +76,7 @@ export const AGENT_KINDS: readonly AgentKind[] = ['claude-code']
  * be got right once instead of nine times.
  *
  * Absent means "the CLI's own defaults", which is every login shell and every
- * preset written before M18.
+ * preset written before M20.
  */
 export interface AgentOptions {
   permissionMode?: PermissionMode

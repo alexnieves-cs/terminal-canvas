@@ -104,42 +104,54 @@ changes have reached GitHub or are still local.
   ahead/behind/dirty, polled from the panel's cwd. Worth doing on its own regardless of
   multiplayer.
 
-## 8. Chat-box mode, model choice, and effort/permission modes
+## 8. Chat-box mode and model choice — M20 shipped part (1); parts (2) and (3) are what is left
 
-Let a panel be either a **CLI terminal** or a **chat box**, against whichever model the
-user picks (Claude, Grok, Codex, …), with first-class controls for the knobs each model
-exposes: effort tier (low / medium / high / …) and operating mode (plan, auto,
-dangerously-skip-permissions, and so on).
+This entry called itself **"three features wearing one coat"** and recommended doing (1)
+alone first. M20 did exactly that, so what follows is the entry rewritten down to the two
+parts that are still open — the file's own rule for a milestone that ships most of an entry
+and stops somewhere deliberate.
 
-- **This is three features wearing one coat.** Worth separating before any of it is
-  scheduled, because they have wildly different costs:
-  1. **Mode/effort controls for the CLI you already run** — cheapest by far. These are
-     just flags and slash-commands on a process the panel already owns. A dropdown that
-     spawns `claude --permission-mode plan` instead of `claude`, or types `/model` into
-     the running session, needs no new architecture at all. `PanelSpec.command` is
-     already optional and already resolved in main; this is one more field beside it.
-  2. **Model choice across vendors** — still mostly (1), as long as each vendor ships a
-     CLI. It becomes a *presets* problem, which is already M5's scope: a preset is a
-     command, its args, its env, and a label.
-  3. **A native chat box that is not a terminal** — the expensive one. See below.
-- **Why the chat box is a different animal.** Every invariant in this codebase assumes a
-  panel is a PTY behind an xterm: the two-lifetimes registry, `fit()`-before-spawn,
-  cols/rows, the pointer correction, `LIVE_BUDGET`'s WebGL accounting, the capture-phase
-  wheel ownership. A chat panel has none of that — it is plain DOM, cheap to render,
-  needs no WebGL context, and does not belong in the live budget at all. That is not an
-  obstacle so much as a signal: **`Panel` needs to become a discriminated union of panel
-  *kinds* before this lands**, with `TerminalPanel` as one variant. The same refactor
-  that #7's subagent nodes need.
-- **Constraint:** a chat panel talks to an API, which means an **API key**, which means
-  secrets storage and a main-process HTTP path. The renderer's CSP is `default-src
-  'self'` (`src/renderer/index.html`) and it must stay that way — the request goes
-  through main over a new IPC channel, never `fetch` from the renderer.
-- **Worth doing first, cheaply:** (1) alone. Effort and permission mode selectable at
-  spawn, per panel, surfaced in the panel header. Small, useful immediately, and it makes
-  the header-name feature (#6) earn its keep.
-- **Open question:** does the chat box share history with the CLI session, or are they
-  separate conversations? "Same agent, two front-ends" is a much stronger product claim
-  than "two unrelated panel types" — and much harder.
+**What shipped (part 1).** Per-panel permission mode, effort and model for the agent CLI a
+panel already spawns, carried as one `agentOptions` record on `PanelSpec`/`Preset`/the
+persisted panel, emitted as argv by a pure `agentArgs`, shown as an inspector row set and a
+header chip, chosen either by a preset (there is a built-in "Claude (plan mode)") or by the
+compound **"Restart in \<mode\>"** palette gesture. `CLAUDE.md` records the mechanisms; the
+one worth knowing before extending this is that the compound gesture is what makes the
+display honest, because tmux `new-session -A` ignores the argv on a reattach.
+
+**Still open — (2) model choice ACROSS VENDORS.** M20 ships `--model`, but only as a flag on
+`claude`. The cross-vendor version is still a presets problem: a preset is a command, its
+args, its env and a label, and a second vendor needs a second `AgentKind` before its flags
+can be validated or emitted at all. That is the concrete trigger recorded in
+`shared/cost.ts`'s `AGENT_FLAGS` comment: **the per-agent capability table gets built when
+the second `AgentKind` lands, and not before** — with one member it would have one row, one
+consumer, and would still leave exactly the one `spec.agent` branch it claims to remove.
+
+**Still open — (3) a native chat box that is not a terminal.** Unchanged, and still the
+expensive one. Every invariant in this codebase assumes a panel is a PTY behind an xterm:
+the two-lifetimes registry, `fit()`-before-spawn, cols/rows, the pointer correction,
+`LIVE_BUDGET`'s WebGL accounting, the capture-phase wheel ownership. A chat panel has none
+of that — plain DOM, cheap to render, no WebGL context, and it does not belong in the live
+budget at all.
+
+- **The `Panel` union it wanted already exists.** This entry used to say the discriminated
+  union "needs to happen before this lands". It has: M9b added `kind`, and M16 and the Jira
+  work added a third and fourth arm. A chat panel is a fifth, and the partition in
+  `Canvas.tsx` is what keeps it away from `assignTiers` and `registry.ensure` structurally
+  rather than by a guard someone has to remember.
+- **Constraint, unchanged:** a chat panel talks to an API, which means a key, which means
+  the credential boundary. M14 built that too — `credential-store.ts`, encrypted at rest,
+  with no `credential:get` — so the storage half is answered. What is NOT answered is the
+  request path: the renderer's CSP is `default-src 'self'` and must stay that way, so the
+  call goes through main over a new IPC channel, never `fetch` from the renderer. Note that
+  M14's rule is stricter than it first looks: a credential this app obtained must never
+  reach a PTY, so a chat panel's key is main's alone.
+- **Open question, unchanged and still the interesting one:** does the chat box share
+  history with the CLI session, or are they separate conversations? "Same agent, two
+  front-ends" is a much stronger product claim than "two unrelated panel types" — and much
+  harder. M17's transcript reading is the first thing that makes it even conceivable, since
+  a Claude Code session's history is a file this app can already find and parse.
+
 
 ## 9. App and service integrations — the Agentic Super App
 

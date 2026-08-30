@@ -40,7 +40,7 @@ export const BUILT_IN_PRESETS: Preset[] = [
     command: 'claude',
     args: [],
     agent: 'claude-code',
-    // M18. The knobs ride in agentOptions rather than in `args` so they are
+    // M20. The knobs ride in agentOptions rather than in `args` so they are
     // VALIDATED on the way in and READABLE on the way out — a hand-written
     // args entry spawns identically but shows nothing in the chrome, because
     // nothing can tell a permission mode from any other argument.

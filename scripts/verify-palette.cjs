@@ -213,7 +213,7 @@ const spyActions = () => {
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
-    // M18. The compound restart-with-a-mode verb the panel.mode rows call.
+    // M20. The compound restart-with-a-mode verb the panel.mode rows call.
     restartPanelWithMode: record('restartPanelWithMode'),
     // M13. beginLink is reached from panel.link; the other two are the
     // inspector's own, reached from no Command row — kept here anyway so the
@@ -1327,7 +1327,7 @@ const WS = [
 }
 
 // ---------------------------------------------------------------------------
-// M18 — the permission-mode rows (ideas-backlog #8 part 1).
+// M20 — the permission-mode rows (ideas-backlog #8 part 1).
 // ---------------------------------------------------------------------------
 
 // 81. One runnable row per mode, inside its own scope, hidden at rest, and

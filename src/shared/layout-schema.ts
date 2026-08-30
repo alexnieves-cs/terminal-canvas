@@ -107,7 +107,7 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
   agent?: AgentKind
   /**
    * The spawn-time knobs for that agent CLI. Absent means the CLI's own
-   * defaults, which is every panel and preset written before M18.
+   * defaults, which is every panel and preset written before M20.
    */
   agentOptions?: AgentOptions
 }
@@ -169,7 +169,7 @@ export interface Preset {
   agent?: AgentKind
   /**
    * The spawn-time knobs for that agent CLI. Absent means the CLI's own
-   * defaults, which is every panel and preset written before M18.
+   * defaults, which is every panel and preset written before M20.
    */
   agentOptions?: AgentOptions
 }

@@ -2194,7 +2194,7 @@ const filePanelOnDisk = (id, over = {}) => ({
 }
 
 // ---------------------------------------------------------------------------
-// M18 — the agent options a panel and a preset carry (ideas-backlog #8 part 1).
+// M20 — the agent options a panel and a preset carry (ideas-backlog #8 part 1).
 //
 // These mirror the `agent` quartet at 125-128 exactly, because the failure
 // shape is identical: an optional key rebuilt field-by-field at nine separate

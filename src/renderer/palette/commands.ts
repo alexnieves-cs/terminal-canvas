@@ -69,7 +69,7 @@ export interface PanelRow {
    */
   restartable: boolean
   /**
-   * M18. Whether this panel runs an agent CLI whose flags this app knows —
+   * M20. Whether this panel runs an agent CLI whose flags this app knows —
    * `spec.agent !== undefined`, computed in Canvas like `restartable` beside
    * it and passed in as plain data.
    *
@@ -346,7 +346,7 @@ export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 export const REASON_NOT_STARTED = 'that panel has not started'
 /**
- * M18. A THIRD distinct blocked situation for the mode rows, beside
+ * M20. A THIRD distinct blocked situation for the mode rows, beside
  * REASON_NO_FOCUS and REASON_NOT_STARTED. Its fix is different from both:
  * not "click a panel" and not "start this one", but "this panel is not
  * running an agent CLI this app knows the flags for". agentArgs is gated on
@@ -532,7 +532,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
       )
     )
-    // M18. The door, and one row per permission mode inside it.
+    // M20. The door, and one row per permission mode inside it.
     //
     // ONE ROW PER VALUE rather than a SettingDef: `SettingDef['type']` has no
     // 'enum' member, and CLAUDE.md records that removal as deliberate — a

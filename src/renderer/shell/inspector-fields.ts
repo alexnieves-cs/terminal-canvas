@@ -342,7 +342,7 @@ export function buildInspectorModel(
    * not in, which is a confident wrong answer about a permission boundary.
    *
    * OPTIONAL and defaulted, the trade `live`, `panels` and `usage` each made
-   * before it, so no pre-M18 caller or check changes meaning.
+   * before it, so no pre-M20 caller or check changes meaning.
    */
   sessionOptions?: AgentOptions | undefined
 ): InspectorModel {

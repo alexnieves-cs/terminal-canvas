@@ -395,7 +395,7 @@ export interface PresetTemplate {
   h?: number
   /** Which agent CLI this launches, when this app can account for it. */
   agent?: AgentKind
-  /** The spawn-time knobs for that agent CLI (M18). */
+  /** The spawn-time knobs for that agent CLI (M20). */
   agentOptions?: AgentOptions
 }
 
@@ -408,7 +408,7 @@ export interface CapturedPanel {
   h: number
   /** Which agent CLI this launches, when this app can account for it. */
   agent?: AgentKind
-  /** The spawn-time knobs for that agent CLI (M18). */
+  /** The spawn-time knobs for that agent CLI (M20). */
   agentOptions?: AgentOptions
 }
 

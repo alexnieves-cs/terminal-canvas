@@ -28,7 +28,15 @@ export function agentArgs(
   sessionId: string
 ): string[] {
   // Rule 1. Not `if (spec.agentOptions)` — see the comment above.
-  if (spec.agent !== 'claude-code') return [...spec.args]
+  //
+  // Returned AS IS, never copied. This is a faithful extraction of create()'s
+  // own `let args = spec.args`, and the fidelity is load-bearing: a caller may
+  // omit `args` entirely (verify-panels.cjs does, deliberately), where the old
+  // line bound undefined harmlessly and a spread throws
+  // "spec.args is not iterable" from inside an async create() — an unhandled
+  // rejection that takes the whole suite down before its first check prints.
+  // Caught exactly that way; the copy was a real regression, not a tidy-up.
+  if (spec.agent !== 'claude-code') return spec.args
 
   let args = [...spec.args]
   const append = (flag: string, value: string): void => {

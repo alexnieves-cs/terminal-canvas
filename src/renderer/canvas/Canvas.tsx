@@ -432,6 +432,13 @@ export function Canvas({
                   args: [...chosen.args],
                   ...(chosen.command !== undefined ? { command: chosen.command } : {}),
                   ...(chosen.agent !== undefined ? { agent: chosen.agent } : {})
+                  ,
+                  // M20. The knobs, same absent-stays-absent rule as the two
+                  // fields above it — this is the copy verify:panels 156
+                  // exists to catch, because a key dropped here is legal
+                  // TypeScript and produces a panel with no knobs, which
+                  // looks exactly like a user who never asked for any.
+                  ...(chosen.agentOptions !== undefined ? { agentOptions: chosen.agentOptions } : {})
                 }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
@@ -1063,6 +1070,12 @@ export function Canvas({
       // login-shell preset, not as whatever this machine's shell happens to be.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
       if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
+      // M20. Both capture surfaces carry it, never one — presetFromCapture is
+      // the shared mint precisely so the menu's path and the inspector's
+      // cannot disagree about what a saved preset is, and a knob added to one
+      // only would give a user two different presets for one panel depending
+      // on which surface saved it.
+      if (panel.spec.agentOptions !== undefined) captured.agentOptions = panel.spec.agentOptions
       return captured
     })
     return () => {
@@ -3601,6 +3614,12 @@ export function Canvas({
       // be. Built field by field for the same reason onCapture is.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
       if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
+      // M20. Both capture surfaces carry it, never one — presetFromCapture is
+      // the shared mint precisely so the menu's path and the inspector's
+      // cannot disagree about what a saved preset is, and a knob added to one
+      // only would give a user two different presets for one panel depending
+      // on which surface saved it.
+      if (panel.spec.agentOptions !== undefined) captured.agentOptions = panel.spec.agentOptions
       void window.canvas.preset.savePanel(captured).then(reloadPresets)
     },
     /**
@@ -3660,7 +3679,7 @@ export function Canvas({
       restartWithSpec(id, panel.spec)
     },
     /**
-     * M18. Set a panel's permission mode AND restart it, as ONE gesture.
+     * M20. Set a panel's permission mode AND restart it, as ONE gesture.
      *
      * Compound rather than two verbs, and the compounding is the design. A
      * bare "change this panel's mode" is unsound twice: `registry.ensure`
@@ -3963,7 +3982,7 @@ export function Canvas({
                 label: panelLabel(p),
                 title: p.title,
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
-                // M18. From the SESSION's spec, like everything else that
+                // M20. From the SESSION's spec, like everything else that
                 // reports what a panel is actually running.
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined
               }
@@ -4099,7 +4118,7 @@ export function Canvas({
         // M15. The Cost section's data. Optional and this is its only
         // production caller, the same trade `live` and `panels` made.
         selectedUsage,
-        // M18. The SESSION's knobs, never selectedPanel.spec.agentOptions.
+        // M20. The SESSION's knobs, never selectedPanel.spec.agentOptions.
         // registry.ensure returns an existing session unchanged, so the
         // session's spec is what actually reached pty.create while the panel's
         // is merely what this canvas currently holds — and a pane that read the

@@ -596,6 +596,7 @@ price of not killing something.
 | M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 | M18 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 | M19 | Jira context: assigned tickets and ticket-to-session handoff | ✅ done |
+| M20 | Agent modes: permission mode, effort and model, per panel | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11, M12,

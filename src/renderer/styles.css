@@ -1352,7 +1352,7 @@ body {
   white-space: nowrap;
 }
 
-/* M18. The permission mode a panel was STARTED in.
+/* M20. The permission mode a panel was STARTED in.
 
    Every colour here is a token: verify:styles 1 forbids a literal in any
    notation outside a theme block, and the two exempt values are translucent

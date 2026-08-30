@@ -201,7 +201,7 @@ function TerminalPanelImpl({
             'login shell'}
         </span>
         {/*
-          M18. The permission mode the panel was STARTED in, and only ever
+          M20. The permission mode the panel was STARTED in, and only ever
           that: read off the session's own spec, which is the spec that
           reached pty.create, never off the panel the canvas holds.
 

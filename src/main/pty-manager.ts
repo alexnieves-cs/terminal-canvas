@@ -452,7 +452,7 @@ export class PtyManager {
     // Gated on spec.agent, never on the resolved command: appending a flag to
     // a command the user typed is the move resolveCommand deliberately refuses.
     //
-    // M18: the assembly itself now lives in the pure `agentArgs`, so the argv
+    // M20: the assembly itself now lives in the pure `agentArgs`, so the argv
     // — including the spawn-time knobs from spec.agentOptions — is checkable
     // without a real `claude` on PATH. The read-then-mint of the session id
     // stays HERE, because it writes to the store and is therefore not pure.

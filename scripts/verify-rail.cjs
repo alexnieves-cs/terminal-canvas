@@ -1304,7 +1304,7 @@ const src = { path: '/Users/x/notes/todo.md' }
 }
 
 // ---------------------------------------------------------------------------
-// M18 — the agent knobs in the inspector (ideas-backlog #8 part 1).
+// M20 — the agent knobs in the inspector (ideas-backlog #8 part 1).
 // ---------------------------------------------------------------------------
 
 // 87. The knobs render from the SESSION's spec, not from the panel's.

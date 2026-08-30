@@ -27,7 +27,7 @@ export interface PanelSpec {
    */
   agent?: AgentKind
   /**
-   * The spawn-time knobs for that agent CLI (M18). Read ONLY at genuine
+   * The spawn-time knobs for that agent CLI (M20). Read ONLY at genuine
    * creation: tmux `new-session -A` reattaches without re-running the command,
    * so a changed value here does nothing until the panel is restarted.
    */
