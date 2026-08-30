@@ -1054,6 +1054,99 @@ ok('74 a panel with no kind is not a review panel',
     next.x === c.x + V.CASCADE_STEP && next.y === c.y + V.CASCADE_STEP)
 }
 
+// ---------------------------------------------------------------------------
+// M13. Links between panels. `link`, never `edge`: EdgeIndicators.tsx and
+// viewport.ts's edgeIndicator already mean the off-screen attention pip, and a
+// second unrelated `edge` in renderer/canvas/ would make every future grep
+// ambiguous between two features with nothing to do with each other.
+
+// 79. addLink refuses a self-link and refuses a duplicate, and BOTH clauses
+//     are required. A self-link is a segment with no direction — linkAnchors
+//     answers null for it (check 85) — so it would persist forever as a link
+//     that renders nothing, which is indistinguishable from a broken feature.
+//     A duplicate A->B paints two identical overlapping paths, which is
+//     cascadeCentre's indistinguishability argument reached through a
+//     different door: the canvas looks like it holds one link while holding
+//     two, and removing "the" link leaves one behind.
+//
+//     B->A alongside A->B is explicitly still allowed — they are different
+//     claims — and that clause is what stops a fix for the duplicate case
+//     over-correcting into "one link per pair".
+{
+  const mk = (id) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1 })
+  const base = [mk('a'), mk('b')]
+  const self = V.addLink(base, 'a', 'a')
+  const once = V.addLink(base, 'a', 'b')
+  const twice = V.addLink(once, 'a', 'b')
+  const both = V.addLink(once, 'b', 'a')
+  ok('79 addLink refuses a self-link and a duplicate, but allows the reverse',
+    V.linksOf(self[0]).length === 0 &&
+    V.linksOf(once[0]).length === 1 && V.linksOf(once[0])[0].to === 'b' &&
+    V.linksOf(twice[0]).length === 1 &&
+    V.linksOf(both[1]).length === 1 && V.linksOf(both[1])[0].to === 'a')
+}
+
+// 80. THE ONE WORTH KNOWING BY NUMBER. removePanel strips INCOMING links, not
+//     only the outgoing ones that leave with the panel holding them. This is
+//     backlog #24's named failure — "dangling edges are the standard failure
+//     of every graph UI that stored ids without deciding this" — and putting
+//     the prune inside removePanel rather than at its two call sites is what
+//     makes the close and the prune land in ONE history entry, so one Cmd+Z
+//     restores both (verify:panels 128).
+//
+//     Its second clause is the over-correction guard and is not redundant: an
+//     implementation that stripped every link from every survivor satisfies
+//     the first clause perfectly and silently empties the canvas of links on
+//     any close at all.
+{
+  const mk = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', [{ to: 'b' }, { to: 'c' }]), mk('b', [{ to: 'c' }]), mk('c')]
+  const next = V.removePanel(panels, 'c')
+  const a = next.find((p) => p.rect.id === 'a')
+  const b = next.find((p) => p.rect.id === 'b')
+  ok('80 removePanel strips links POINTING AT the removed panel, and only those',
+    next.length === 2 &&
+    V.linksOf(a).length === 1 && V.linksOf(a)[0].to === 'b' &&
+    V.linksOf(b).length === 0)
+}
+
+// 81. removeLink and setLinkLabel act on the ONE named link and leave its
+//     neighbours alone. Asserted together because each alone passes against an
+//     implementation that clears the whole array: removeLink's own success is
+//     indistinguishable from "removed everything" when the fixture has one
+//     link, so the fixture carries two.
+{
+  const mk = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const panels = [mk('a', [{ to: 'b' }, { to: 'c' }])]
+  const removed = V.removeLink(panels, 'a', 'b')
+  const labelled = V.setLinkLabel(panels, 'a', 'c', 'feeds')
+  const rows = V.linksOf(labelled[0])
+  ok('81 removeLink and setLinkLabel touch one link each, never the array',
+    V.linksOf(removed[0]).length === 1 && V.linksOf(removed[0])[0].to === 'c' &&
+    rows.length === 2 &&
+    rows.find((l) => l.to === 'c').label === 'feeds' &&
+    rows.find((l) => l.to === 'b').label === undefined)
+}
+
+// 82. A panel with NO links key at all reads as no links, and that is the
+//     ordinary case rather than an exotic one: it is every panel in every
+//     layout.json ever written, and every panel this app mints. linksOf is the
+//     one place that absence is normalised, so nothing downstream has to
+//     remember `?? []` — a missed one is a TypeError inside a render, which
+//     takes the whole canvas down rather than one link.
+//
+//     Its second clause pins that pruning a panel that pointed nowhere leaves
+//     no `links: []` residue behind: otherwise every close rewrites an empty
+//     array onto every survivor in layout.json, which is noise in a file
+//     people read and diff.
+{
+  const bare = { kind: 'terminal', rect: { id: 'a', x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: 'a', cwd: '~', args: [] }, z: 1 }
+  const pruned = V.removePanel([bare], 'zz')[0]
+  ok('82 a panel with no links key reads as no links, and stays that way',
+    Array.isArray(V.linksOf(bare)) && V.linksOf(bare).length === 0 &&
+    V.linksOf(pruned).length === 0 && !('links' in pruned))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
