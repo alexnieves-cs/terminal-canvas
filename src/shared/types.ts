@@ -98,3 +98,33 @@ export interface LiveSessionUpdate {
   cwd: string
   currentCommand: string
 }
+
+/**
+ * A subagent as the renderer needs it. No `toolUseId`: that field is main's
+ * own completion key (which `tool_result` closes which `tool_use`) and means
+ * nothing on this side of the wire — Task 4 maps `SubagentRecordInternal` to
+ * this on the way out.
+ */
+export interface SubagentRecord {
+  id: string
+  agentType: string
+  description: string
+  model: string
+  spawnDepth: number
+  state: 'running' | 'done'
+  startedAt: number
+}
+
+/**
+ * What IPC_EVENTS.SUBAGENT_STATE carries: main's WHOLE current answer for a
+ * panel, not a delta. A delta protocol would need ordering/ack guarantees a
+ * 2s poll with no backpressure does not have — a dropped or reordered delta
+ * would leave the renderer's picture of "what's running" wrong indefinitely,
+ * with nothing to resync it. A full replace is self-healing: the next tick
+ * always repairs the last one, whatever was lost in between.
+ */
+export interface SubagentUpdate {
+  panelId: PanelId
+  records: SubagentRecord[]
+  ambiguous: boolean
+}
