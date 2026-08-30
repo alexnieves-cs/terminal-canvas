@@ -10,6 +10,11 @@ const { app, BrowserWindow } = require('electron')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'window-lifecycle.cjs')
 buildSync({
+  // M18: pty-manager now transitively imports a real VALUE from @shared
+  // (agent-args.ts's AGENT_FLAGS), where every main/* import from there used
+  // to be an `import type` esbuild erased before resolving anything. See
+  // CLAUDE.md's "The plain-node verify bundles now configure a @shared alias".
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared') },
   entryPoints: [join(__dirname, '..', 'src', 'main', 'window-lifecycle.ts')],
   outfile: OUT,
   bundle: true,
