@@ -2215,9 +2215,11 @@ to remember. See `CLAUDE.md`'s "`kind` is optional on disk" and "A review node n
 
 The review node (#51) paid for it, which is not who this section predicted. The rest of this
 section is left as written, because the entries below still inherit the decision and the
-reasoning still says what a second kind costs:
+reasoning still says what a second kind costs. #3 (file tree) is no longer among them: it
+shipped in M13 as a rail column reading a panel's cwd over `fs:list`, never as a canvas node,
+so it needed no `Panel` variant and touched neither `assignTiers` nor `registry.ensure`.
 
-Ten separate entries (#3 file tree, #7 subagent nodes, #8 chat box, #9 integrations,
+Nine separate entries (#7 subagent nodes, #8 chat box, #9 integrations,
 #12 Jira boards, #14 live document panels, #15 annotations, #24 edges, #26 the agent
 toolbox, #35 groups) all need the same thing:
 **a canvas node that is not a terminal.** Today `Panel` means
