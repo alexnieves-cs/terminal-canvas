@@ -17,7 +17,13 @@
 - **No secret crosses IPC.** The Jira credential bundle stays behind `jira-client.ts` exactly as it does on the read path. No new return type carries `site`, `email`, or `token`.
 - **`method` on `JiraRequest` is REQUIRED, never optional-with-a-GET-default.** An optional field means a write function that forgot to set it silently performs a GET against a POST endpoint — a wrong answer shaped like a working one. Required makes `tsc` list every call site.
 - **Every failure lands in a named arm.** A blank panel is never an error signal.
-- **`npm run verify` must be green before this branch is claimed done.** Individual suites while iterating.
+- **Run only the suite your task touches. `npm run verify` runs ONCE, in Task 6.** It chains a typecheck, a build and 25 suites; running it per task would cost minutes each time to re-prove work nothing has touched. Measured facts to spend that budget well:
+  - `verify:jira`, `verify:meta`, `verify:styles` are **plain node and need no build** — seconds each. Run them freely.
+  - **`verify:ipc` needs NO `npm run build`** — it bundles `main/ipc.ts` through its own `buildSync`. Verified in this worktree against an empty `out/`: `1/1 passed, count=45`. Do not prefix it with a build.
+  - **`verify:panels` DOES need `npm run build`** — it loads `out/renderer/index.html`, so run it against a stale `out/` and you are testing the previous commit. It is also the slow one: ~3–4 minutes, with a 300s watchdog.
+  - **Run `npm run typecheck` once per task that changed `.ts`/`.tsx`, at the end** — not after every edit, and never in the same task twice.
+- **Baseline at branch point, measured:** `verify:jira` 5/5, `verify:meta` 21/21, `verify:ipc` 1/1 (45 channels). Any suite red beyond your own new checks is yours to report, not to absorb.
+- **Electron's binary needs `node node_modules/electron/install.js`** in a fresh worktree — `npm install` alone leaves it missing and every Electron-tier suite dies with "No such file or directory". Already done in this worktree.
 - Commit format: `feat(m24): ...` / `test(m24): ...` / `docs(m24): ...`, ending with the `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` trailer.
 
 ---
@@ -168,12 +174,9 @@ export function createJiraRequester(): JiraRequester {
 Run: `npm run verify:jira`
 Expected: `7/7 passed`.
 
-- [ ] **Step 5: Typecheck**
+- [ ] **Step 5: Commit**
 
-Run: `npm run typecheck`
-Expected: clean. A failure here naming a `deps.requester` call is the required-`method` change doing its job — add `method: 'GET'` and re-run.
-
-- [ ] **Step 6: Commit**
+No typecheck here: Task 2 edits the same file and runs one at its end. A `tsc` failure naming a `deps.requester` call is the required-`method` change doing its job — add `method: 'GET'`.
 
 ```bash
 git add src/main/jira-client.ts scripts/verify-jira.cjs
@@ -486,8 +489,10 @@ In `scripts/verify-ipc-surface.cjs`, change `const EXPECTED_CHANNELS = 45` to `4
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `npm run build && npm run verify:ipc`
+Run: `npm run verify:ipc`
 Expected: FAIL — 45 channels found, 48 expected.
+
+**No `npm run build` here or anywhere in this task.** This suite bundles `main/ipc.ts` through its own `buildSync`; it was measured passing in this worktree against an empty `out/`.
 
 - [ ] **Step 3: Declare the channels and the result types**
 
@@ -584,8 +589,10 @@ This is required, not cosmetic: `verify:meta` 14 asserts the diagram's own fence
 
 - [ ] **Step 7: Run to verify both pass**
 
-Run: `npm run typecheck && npm run build && npm run verify:ipc && npm run verify:meta`
-Expected: `verify:ipc` `1/1`, `verify:meta` all PASS (21 checks — 22 and 23 arrive in Task 4).
+Run: `npm run typecheck && npm run verify:ipc && npm run verify:meta`
+Expected: `verify:ipc` `1/1` with `count=48`, `verify:meta` `21/21` (22 and 23 arrive in Task 4).
+
+`verify:meta` matters here specifically because of its check 14, which asserts the README diagram's own fenced block against the real contract — it is the check that catches the Step 6 edit being skipped.
 
 - [ ] **Step 8: Commit**
 
