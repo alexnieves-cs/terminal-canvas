@@ -253,10 +253,19 @@ const p = (name) => join(DIR, name)
   ok(16, mode16 === 0o755, `16 — the file mode survives a save: mode=${mode16.toString(8)}`)
 
   // 17 — a symlink's TARGET is written and the link is still a link. Without
-  // realpathSync the rename replaces the link with a regular file: the user's
-  // symlink silently gone, the real file untouched, and an agent reading the
-  // old target forever. Both clauses are needed — asserting only the target's
-  // content passes against an implementation that also clobbered the link.
+  // realpathSync, renameSync(tmp, real) renames onto the LINK's own path
+  // rather than the target's: the user's symlink is silently replaced by a
+  // regular file, and target.txt is never touched at all. For that
+  // regression both clauses fail TOGETHER — the target's content clause
+  // alone is the discriminator, since the write never reaches target.txt
+  // either way. Confirmed by injection (real = path instead of
+  // realpathSync(path)): both the content read and isSymbolicLink() failed
+  // in the same run. The isSymbolicLink() clause is defence-in-depth for a
+  // narrower case it alone would catch — an implementation that resolves the
+  // path correctly for the WRITE but still renames over the original
+  // (unresolved) path, which would leave the content clause green while
+  // silently destroying the link. Not the primary discriminator here, but
+  // not redundant either.
   writeFileSync(p('target.txt'), 'original\n')
   symlinkSync(p('target.txt'), p('link.txt'))
   const base17 = F.readFile(p('link.txt')).mtimeMs
