@@ -11,7 +11,7 @@
    reviews because every fixture used a space-free path. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'file.cjs')
@@ -154,6 +154,61 @@ const p = (name) => join(DIR, name)
   const c10 = await nextChange(calls10, 1500)
   ok(10, c10 === null && watchers.count() === 0,
     `10 — closeAll disarms: events=${calls10.length} count=${watchers.count()}`)
+
+  // ── M17: the write verb ────────────────────────────────────────────────
+
+  // 11 — the ordinary case. The returned mtimeMs is asserted against a fresh
+  // stat because that value BECOMES the next save's CAS token: a write that
+  // reported a stale or invented timestamp would make the very next save
+  // refuse itself, which reads as "saving is broken" and points nowhere near
+  // the return value that caused it.
+  writeFileSync(p('edit.txt'), 'before\n')
+  const base11 = F.readFile(p('edit.txt')).mtimeMs
+  const w11 = F.writeFile(p('edit.txt'), 'after\n', base11)
+  const disk11 = readFileSync(p('edit.txt'), 'utf8')
+  ok(11, w11.kind === 'written' && disk11 === 'after\n' && w11.bytes === 6
+      && w11.mtimeMs === statSync(p('edit.txt')).mtimeMs,
+    `11 — a write with a current token lands: kind=${w11.kind} disk=${JSON.stringify(disk11)}`)
+
+  // 12 — THE CHECK THIS MILESTONE EXISTS FOR. A stale token is refused AND
+  // NOTHING IS WRITTEN. The second clause is the whole check: asserting only
+  // the refusal passes against an implementation that refused the caller and
+  // wrote the file anyway, which is the exact silent destruction the CAS is
+  // for. verify:credentials 6 states the identical rule for the credential
+  // store's refusal.
+  writeFileSync(p('cas.txt'), 'v1\n')
+  const stale12 = F.readFile(p('cas.txt')).mtimeMs
+  // A real second write by "the agent". The sleep is what makes the mtime
+  // actually move: HFS+/APFS report mtime in ms and two writes in the same
+  // millisecond would collide, making this check pass for the wrong reason.
+  await new Promise((r) => setTimeout(r, 20))
+  writeFileSync(p('cas.txt'), 'agent wrote this\n')
+  const w12 = F.writeFile(p('cas.txt'), 'my edit\n', stale12)
+  const disk12 = readFileSync(p('cas.txt'), 'utf8')
+  ok(12, w12.kind === 'stale' && disk12 === 'agent wrote this\n',
+    `12 — a stale token refuses and writes NOTHING: kind=${w12.kind} disk=${JSON.stringify(disk12)}`)
+
+  // 13 — deleted underneath the draft. Its own detail, and still `stale`
+  // rather than a silent re-creation: a file panel is opened on a file that
+  // exists, so recreating one the user (or an agent) deliberately removed is
+  // resurrecting content nobody asked for.
+  writeFileSync(p('gone.txt'), 'here\n')
+  const base13 = F.readFile(p('gone.txt')).mtimeMs
+  rmSync(p('gone.txt'))
+  const w13 = F.writeFile(p('gone.txt'), 'back?\n', base13)
+  ok(13, w13.kind === 'stale' && typeof w13.detail === 'string' && w13.detail.length > 0
+      && F.readFile(p('gone.txt')).kind === 'missing',
+    `13 — a deleted file refuses as stale and is not recreated: kind=${w13.kind}`)
+
+  // 14 — the byte cap on the way OUT. The read refuses a file over the cap,
+  // so the write must too, or a panel can grow a file past the limit it can
+  // then never display again. The file on disk is asserted unchanged, which
+  // is check 12's clause applied to the other refusal.
+  writeFileSync(p('cap.txt'), 'small\n')
+  const base14 = F.readFile(p('cap.txt')).mtimeMs
+  const w14 = F.writeFile(p('cap.txt'), 'x'.repeat(F.FILE_MAX_BYTES + 1), base14)
+  ok(14, w14.kind === 'failed' && readFileSync(p('cap.txt'), 'utf8') === 'small\n',
+    `14 — over the byte cap fails and writes nothing: kind=${w14.kind}`)
 
   console.log('')
   const failed = results.filter((r) => !r.pass)

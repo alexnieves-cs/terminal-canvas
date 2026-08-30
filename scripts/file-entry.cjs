@@ -8,5 +8,8 @@
 module.exports = {
   ...require('../src/shared/file-panel'),
   ...require('../src/main/file-read.ts'),
-  ...require('../src/main/file-watch.ts')
+  ...require('../src/main/file-watch.ts'),
+  /* M17: the write verb, in this same plain-node tier for file-read.ts's own
+     reason — node:fs is not what moves a module out of it. */
+  ...require('../src/main/file-write.ts')
 }
