@@ -8973,6 +8973,35 @@ app.whenReady().then(async () => {
       ok('132 an unpinned panel renders no Cost section at all',
         state.selected === plainId && state.section === false, JSON.stringify(state))
 
+      // 133. Final-review fix. PersistedTerminalPanel carried no `agent`
+      //      field at all, and fromPanels/toPanels never mentioned one, so a
+      //      restart silently dropped a restored panel's pin — pinned went
+      //      false, and the Cost section vanished PERMANENTLY, even though
+      //      main's PtyManager kept accumulating and sending usage:panel for
+      //      a session layout.json's own record no longer named at all. This
+      //      is the check that could not have passed against the unfixed
+      //      schema: it proves the pin on the REAL persisted panel record,
+      //      through a real save and a real reload, not merely in main's
+      //      separate session-id map (checks 117-118 already cover that map
+      //      and would stay green regardless of this defect).
+      {
+        flushLayoutStore()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () =>
+          (await wc.executeJavaScript(
+            `!!document.querySelector('[data-rail-row="${agentId}"]')`)) || false,
+          8000)
+        await settle()
+        const clicked = await selectPanelViaRailRow(agentId)
+        const section = await wc.executeJavaScript(
+          `!!document.querySelector('[data-usage-section]')`)
+        ok('133 a panel\'s agent pin survives a real reload, and the Cost section still renders',
+          agentId !== undefined && clicked === true && section === true,
+          `id=${agentId} clicked=${clicked} section=${section}`)
+      }
+
       try { rmSync(usageFixtureDir, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
