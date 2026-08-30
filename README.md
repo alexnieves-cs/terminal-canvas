@@ -577,7 +577,7 @@ price of not killing something.
 | M6b | Settings: a declarative schema, searchable in the palette | ✅ done |
 | M6c | Agent state: a border that says what each panel is doing | ✅ done |
 | M6d | Attention routing: edge pips for off-screen panels, Cmd+J to jump | ✅ done |
-| M7 | Workspaces: named canvases, switching without disposing | ✅ done |
+| M7 | Workspaces: named canvases, switching without disposing; M11 later supplied Cmd+G navigation | ✅ done |
 | M8a | The app shell: a frame, collapsible rail and inspector, a visible toolbar | ✅ done |
 | M8b | The panel outline: a rail row per panel, navigate without waking | ✅ done |
 | M8c | The inspector: what a panel is, and restart in place | ✅ done |
