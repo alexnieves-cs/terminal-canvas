@@ -1651,6 +1651,133 @@ const reviewPanelOnDisk = (id, over = {}) => ({
       back[0].rect.x === 10)
 }
 
+// M13 checks 109-114: main/fs-tree.ts, joining this suite for the reason
+// main/prompts.ts already did — it reads node:fs against a path passed in as a
+// parameter, and it is `electron` and `node-pty` that move a module out of
+// this tier, not the filesystem.
+//
+// The fixture directory carries a SPACE throughout. That is not decoration:
+// the pane-died quoting bug shipped through eight task reviews because every
+// fixture used a space-free path, and this repo now treats a space-free
+// fixture as a fixture that cannot see a whole class of defect.
+{
+  const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, chmodSync, rmSync } =
+    require('node:fs')
+  const { tmpdir } = require('node:os')
+  const { join } = require('node:path')
+
+  const base = mkdtempSync(join(tmpdir(), 'tc files '))
+
+  // 109. Directories first, then names, case-insensitively. readdir's order is
+  // filesystem-dependent, and a list that reshuffles between launches is a
+  // list you cannot learn — readProjectPrompts' own argument for its sort().
+  {
+    const d = join(base, 'sorted')
+    mkdirSync(d)
+    writeFileSync(join(d, 'Beta.txt'), 'x')
+    writeFileSync(join(d, 'alpha.txt'), 'x')
+    mkdirSync(join(d, 'zeta'))
+    mkdirSync(join(d, 'Alpha'))
+    const r = L.readDir(d, { showHidden: false })
+    const names = r.kind === 'ok' ? r.entries.map((e) => e.name) : []
+    ok('109 entries sort directories-first then name, case-insensitively',
+      r.kind === 'ok' &&
+      names.join(',') === 'Alpha,zeta,alpha.txt,Beta.txt',
+      names.join(','))
+  }
+
+  // 110. BOTH directions. "Dotfiles are excluded" alone passes against a
+  // reader that returns nothing at all, which is why the include half is
+  // asserted in the same check rather than trusted to imply itself.
+  {
+    const d = join(base, 'hidden')
+    mkdirSync(d)
+    writeFileSync(join(d, '.env'), 'x')
+    writeFileSync(join(d, 'visible.txt'), 'x')
+    const off = L.readDir(d, { showHidden: false })
+    const on = L.readDir(d, { showHidden: true })
+    const offNames = off.kind === 'ok' ? off.entries.map((e) => e.name) : []
+    const onNames = on.kind === 'ok' ? on.entries.map((e) => e.name) : []
+    ok('110 dotfiles are hidden by default AND shown when asked for',
+      offNames.join(',') === 'visible.txt' &&
+      onNames.join(',') === '.env,visible.txt',
+      `off=[${offNames}] on=[${onNames}]`)
+  }
+
+  // 111. `unreadable` is its own arm, not an empty `ok`. An empty-looking
+  // directory the user has no permission to read is the case that must NOT
+  // render like an empty one.
+  //
+  // SKIPPED LOUDLY, never silently, when the process can read a mode-000
+  // directory anyway — root can, and CI sometimes runs as root. A skip that
+  // prints nothing is a check that stops existing the day that happens.
+  {
+    const d = join(base, 'denied')
+    mkdirSync(d)
+    writeFileSync(join(d, 'secret.txt'), 'x')
+    chmodSync(d, 0o000)
+    let readable = false
+    try { require('node:fs').readdirSync(d); readable = true } catch { readable = false }
+    if (readable) {
+      console.log('SKIP  111 unreadable — this process can read a mode-000 directory (root?)')
+    } else {
+      const r = L.readDir(d, { showHidden: false })
+      ok('111 a permission-denied directory answers `unreadable` with a detail',
+        r.kind === 'unreadable' && typeof r.detail === 'string' && r.detail.length > 0,
+        r.kind === 'unreadable' ? r.detail : r.kind)
+    }
+    chmodSync(d, 0o700)
+  }
+
+  // 112. Two arms, not one. "That is a file" and "it moved" are two situations
+  // with two different fixes, and collapsing them tells a user whose directory
+  // was deleted that they clicked a file.
+  {
+    const f = join(base, 'a file.txt')
+    writeFileSync(f, 'x')
+    const asFile = L.readDir(f, { showHidden: false })
+    const missing = L.readDir(join(base, 'no such dir'), { showHidden: false })
+    ok('112 not-a-directory and gone are two arms, not one',
+      asFile.kind === 'not-a-directory' && missing.kind === 'gone',
+      `${asFile.kind} / ${missing.kind}`)
+  }
+
+  // 113. The cap REPORTS its remainder rather than the list silently ending.
+  // The fixture is deliberately over the cap so the capped list and the full
+  // one cannot coincide — a fixture at or under it passes against no cap at
+  // all.
+  {
+    const d = join(base, 'many')
+    mkdirSync(d)
+    const n = L.MAX_DIR_ENTRIES + 7
+    for (let i = 0; i < n; i++) writeFileSync(join(d, `f${String(i).padStart(5, '0')}.txt`), 'x')
+    const r = L.readDir(d, { showHidden: false })
+    ok('113 the cap truncates and REPORTS the remainder',
+      r.kind === 'ok' && r.entries.length === L.MAX_DIR_ENTRIES && r.truncated === 7,
+      r.kind === 'ok' ? `${r.entries.length} + ${r.truncated}` : r.kind)
+  }
+
+  // 114. A symlink is its own kind and is NEVER followed. Resolving one would
+  // mean a stat per entry and a cycle to defend against; reporting it costs
+  // neither. The second clause is the one with teeth: the lister returns ONE
+  // level, so the symlink's target's contents must not appear.
+  {
+    const d = join(base, 'links')
+    mkdirSync(d)
+    mkdirSync(join(d, 'real'))
+    writeFileSync(join(d, 'real', 'inside.txt'), 'x')
+    symlinkSync(join(d, 'real'), join(d, 'link'))
+    const r = L.readDir(d, { showHidden: false })
+    const names = r.kind === 'ok' ? r.entries.map((e) => e.name) : []
+    const link = r.kind === 'ok' ? r.entries.find((e) => e.name === 'link') : undefined
+    ok('114 a symlinked directory is its own kind and is not descended',
+      link !== undefined && link.kind === 'symlink' && !names.includes('inside.txt'),
+      `${link ? link.kind : 'absent'} names=[${names}]`)
+  }
+
+  rmSync(base, { recursive: true, force: true })
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
