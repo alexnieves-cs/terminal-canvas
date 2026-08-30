@@ -16,5 +16,9 @@ module.exports = {
   /* M11: the nav grid's cell arithmetic. A canvas module joining this bundle
      for the same reason review-node-model.ts did — pure, type-only imports,
      and a suite of its own would re-prove this esbuild wiring for one file. */
-  ...require('../src/renderer/navgrid/nav-grid')
+  ...require('../src/renderer/navgrid/nav-grid'),
+  /* M13: the file tree's row model. A shell module joining this bundle for the
+     reason the four above it did — pure, type-only imports, and a suite of its
+     own would re-prove this esbuild wiring for one file. */
+  ...require('../src/renderer/shell/file-tree-model')
 }

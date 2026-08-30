@@ -1050,6 +1050,142 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
   ok(71, R.stepCell(cells, 2, 0, 0) === 2, `stepCell(2,0,0)=${R.stepCell(cells, 2, 0, 0)}`)
 }
 
+// M13 checks 72-78: file-tree-model.ts, joining this suite for the reason
+// inspector-fields.ts, rail-sections.ts, review-node-model.ts and nav-grid.ts
+// all did — pure, type-only imports, and a suite of its own would re-prove
+// this esbuild wiring for one file.
+{
+  const ROOT = '/tmp/tc root'
+  const okDir = (names) => ({
+    kind: 'ok',
+    truncated: 0,
+    entries: names.map((n) => ({ name: n, kind: n.endsWith('/') ? 'dir' : 'file' }))
+      .map((e) => ({ name: e.name.replace(/\/$/, ''), kind: e.kind }))
+  })
+
+  // 72. Nothing expanded is the root's own children at depth 0, in the order
+  // the DirResult gave them — the model never re-sorts, because main already
+  // did and two sorts is two places to disagree.
+  {
+    const dirs = new Map([[ROOT, okDir(['src/', 'README.md'])]])
+    const rows = R.buildFileRows(ROOT, dirs, new Set())
+    ok('72 nothing expanded yields the root\'s children at depth 0',
+      rows.length === 2 &&
+      rows[0].name === 'src' && rows[0].depth === 0 && rows[0].kind === 'dir' &&
+      rows[1].name === 'README.md' && rows[1].depth === 0,
+      rows.map((r) => `${r.name}@${r.depth}`).join(','))
+  }
+
+  // 73. Children splice BENEATH their parent at depth+1 and the later sibling
+  // is undisturbed. The sibling clause is the half with teeth: an
+  // implementation that appended children rather than splicing them passes any
+  // check that only counts rows, and renders a tree whose contents are in the
+  // right set and the wrong place.
+  {
+    const dirs = new Map([
+      [ROOT, okDir(['src/', 'zz.md'])],
+      [`${ROOT}/src`, okDir(['main.ts'])]
+    ])
+    const rows = R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/src`]))
+    ok('73 children splice beneath their parent without moving a later sibling',
+      rows.length === 3 &&
+      rows[0].name === 'src' && rows[0].state === 'expanded' &&
+      rows[1].name === 'main.ts' && rows[1].depth === 1 &&
+      rows[2].name === 'zz.md' && rows[2].depth === 0,
+      rows.map((r) => `${r.name}@${r.depth}`).join(','))
+  }
+
+  // 74. Collapse removes descendants TRANSITIVELY. A one-level implementation
+  // leaves the grandchildren behind at depth 2 under a parent that is no
+  // longer rendered, and they read as top-level entries with suspicious
+  // indentation rather than as an error.
+  {
+    const dirs = new Map([
+      [ROOT, okDir(['a/'])],
+      [`${ROOT}/a`, okDir(['b/'])],
+      [`${ROOT}/a/b`, okDir(['deep.txt'])]
+    ])
+    const both = new Set([`${ROOT}/a`, `${ROOT}/a/b`])
+    const open = R.buildFileRows(ROOT, dirs, both)
+    both.delete(`${ROOT}/a`)
+    const shut = R.buildFileRows(ROOT, dirs, both)
+    ok('74 collapsing a parent removes its descendants transitively',
+      open.length === 3 &&
+      shut.length === 1 && shut[0].name === 'a' && shut[0].state === 'collapsed',
+      `open=${open.length} shut=${shut.map((r) => r.name).join(',')}`)
+  }
+
+  // 75. An expanded directory with no answer YET renders a loading row, and a
+  // failed one renders a note. Both are first-class states for the reason the
+  // review pane's in-flight arm is: a section that renders nothing while it
+  // waits reads as broken on every selection change, and an unreadable
+  // directory that renders nothing is indistinguishable from an empty one.
+  {
+    const dirs = new Map([
+      [ROOT, okDir(['pending/', 'denied/'])],
+      [`${ROOT}/denied`, { kind: 'unreadable', detail: 'EACCES: permission denied' }]
+    ])
+    const rows = R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/pending`, `${ROOT}/denied`]))
+    const loading = rows.find((r) => r.state === 'loading')
+    const note = rows.find((r) => r.state === 'note')
+    ok('75 an unanswered directory loads and a failed one renders a note',
+      loading !== undefined && loading.depth === 1 &&
+      note !== undefined && note.depth === 1 &&
+      typeof note.note === 'string' && note.note.length > 0,
+      `loading=${loading ? loading.depth : 'absent'} note=${note ? note.note : 'absent'}`)
+  }
+
+  // 76. THE ONE WORTH KNOWING BY NUMBER. treeSignature moves on an expand —
+  // without which Canvas freezes the rows and the tree never opens — and a
+  // FILENAME cannot forge a field boundary.
+  //
+  // railSignature already records this for a user TITLE. A filename is a wider
+  // door: the user does not have to type it, an agent writes it, into a
+  // directory this app does not own, and the tree lists whatever is there. The
+  // fixture therefore builds two DIFFERENT trees whose rows differ only in
+  // where a separator falls, and asserts their signatures differ — which a
+  // JSON.stringify satisfies and any join(sep) does not.
+  {
+    const dirs = new Map([[ROOT, okDir(['a/'])], [`${ROOT}/a`, okDir(['x.txt'])]])
+    const shut = R.treeSignature(R.buildFileRows(ROOT, dirs, new Set()))
+    const open = R.treeSignature(R.buildFileRows(ROOT, dirs, new Set([`${ROOT}/a`])))
+
+    // Two one-row trees whose single filename differs only by where the
+    // separator sits. Under a `${name}|${depth}|${kind}` join both serialise
+    // to the same string and the tree freezes on stale rows.
+    const forge = (n) => R.treeSignature(R.buildFileRows(ROOT, new Map([[ROOT, okDir([n])]]), new Set()))
+    const a = forge('a|0|file')
+    const b = forge('a')
+
+    ok('76 the signature moves on an expand and a filename cannot forge a field',
+      shut !== open && a !== b,
+      `expand=${shut !== open} forge=${a !== b}`)
+  }
+
+  // 77. relativePath strips the root; a path NOT under the root falls back to
+  // absolute. That fallback is not defensive — it is the state a panel that
+  // cd'd away between the read and the click produces, and an absolute answer
+  // there is the correct one.
+  {
+    ok('77 relativePath strips the root and falls back to absolute',
+      R.relativePath(ROOT, `${ROOT}/src/main.ts`) === 'src/main.ts' &&
+      R.relativePath(ROOT, '/elsewhere/x.ts') === '/elsewhere/x.ts' &&
+      R.relativePath(ROOT, ROOT) === '.',
+      `${R.relativePath(ROOT, `${ROOT}/src/main.ts`)} / ${R.relativePath(ROOT, '/elsewhere/x.ts')}`)
+  }
+
+  // 78. Three clauses, separately. A check that only tries the space case
+  // passes against a quoter that quotes EVERYTHING, which is a feature that
+  // works and is noisy on every ordinary path.
+  {
+    ok('78 shellQuote leaves a plain path alone, quotes a space, escapes a quote',
+      R.shellQuote('src/main.ts') === 'src/main.ts' &&
+      R.shellQuote('my docs/a.txt') === "'my docs/a.txt'" &&
+      R.shellQuote("it's.txt") === "'it'\\''s.txt'",
+      `${R.shellQuote('src/main.ts')} | ${R.shellQuote('my docs/a.txt')} | ${R.shellQuote("it's.txt")}`)
+  }
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
