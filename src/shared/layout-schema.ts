@@ -212,6 +212,11 @@ export interface LayoutSnapshot {
    * install.
    */
   baselines: Record<string, ReviewBaseline>
+  /**
+   * Per-panel agent session ids, keyed by PanelId. See parseSessions for why
+   * this is persisted rather than re-minted at each spawn.
+   */
+  sessions: Record<string, string>
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -247,7 +252,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
     preferences: {},
-    baselines: {}
+    baselines: {},
+    sessions: {}
   }
 }
 
@@ -564,6 +570,47 @@ export function parseBaselines(
   return out
 }
 
+/**
+ * Which agent session id each panel is pinned to, keyed by PanelId.
+ *
+ * A sibling of `workspaces` rather than a member of one, and keyed GLOBALLY,
+ * for the reason baselines is: PanelId is global (it doubles as a tmux session
+ * name), and a hidden workspace's panel holds a pin exactly as the active
+ * workspace's does.
+ *
+ * This map exists because create() runs again for EVERY panel on a Cmd+R
+ * reload, and tmux's `new-session -A` reattaches without re-running the
+ * command — so a re-minted uuid there would name a transcript that does not
+ * exist while the real one went on growing, and the panel's cost would freeze
+ * with nothing in any log. See "`reattached` costs a probe".
+ */
+export function parseSessions(
+  raw: unknown,
+  warnings: string[]
+): Record<string, string> {
+  // Every file written before M15 has no sessions key. Warning about those
+  // would make the first launch after an upgrade shout about a file that is
+  // perfectly fine — the same line parseBaselines draws one function up.
+  if (raw === undefined) return {}
+  if (!isRecord(raw)) {
+    warnings.push('sessions was not an object; ignoring it')
+    return {}
+  }
+  const out: Record<string, string> = {}
+  for (const [id, value] of Object.entries(raw)) {
+    if (!ID_PATTERN.test(id)) {
+      warnings.push(`session for ${id} has an unusable panel id; dropped`)
+      continue
+    }
+    if (!isStr(value)) {
+      warnings.push(`session for ${id} was malformed; dropped`)
+      continue
+    }
+    out[id] = value
+  }
+  return out
+}
+
 function parsePrompt(raw: unknown, seen: Set<string>, warnings: string[]): Prompt | null {
   if (!isRecord(raw)) {
     warnings.push('dropped a prompt that was not an object')
@@ -772,7 +819,8 @@ export function parseLayout(raw: string): {
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
       preferences,
-      baselines: parseBaselines(parsed.baselines, warnings)
+      baselines: parseBaselines(parsed.baselines, warnings),
+      sessions: parseSessions(parsed.sessions, warnings)
     },
     warnings,
     futureVersion: false

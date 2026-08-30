@@ -1789,6 +1789,78 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify(persisted))
 }
 
+// ---------------------------------------------------------------------------
+// M15. A panel's pinned agent session id, on disk. A sibling of `baselines`,
+// same shape and same reasoning: PanelId is global (it doubles as a tmux
+// session name), so this map is keyed globally too rather than nested inside
+// a workspace.
+
+// 114. Absent warns NOTHING. Every layout.json written before M15 has no
+//      sessions key, and shouting about those would make the first launch
+//      after an upgrade complain about a file that is perfectly fine — the
+//      line parsePresets, parsePreferences and parseBaselines all already draw.
+{
+  const warnings = []
+  const out = L.parseSessions(undefined, warnings)
+  ok('114 an absent sessions map warns nothing',
+    Object.keys(out).length === 0 && warnings.length === 0,
+    `warnings=${warnings.length}`)
+}
+
+// 115. Present but MALFORMED warns rather than vanishing silently. The rule
+//      check 41 states for presets and 99 for baselines: a map dropped without
+//      a word is every pinned panel's accounting gone with nothing said.
+{
+  const warnings = []
+  L.parseSessions([], warnings)
+  ok('115 a malformed sessions map warns', warnings.length === 1, warnings.join('; '))
+}
+
+// 116. A malformed ENTRY drops alone while its neighbour survives — the
+//      individual-drop rule parseLayout obeys everywhere else. A non-string
+//      session id is the reachable case: a hand-edited file, or a future
+//      version writing an object here.
+{
+  const warnings = []
+  const out = L.parseSessions({ n1: 'abc-123', n2: 42 }, warnings)
+  ok('116 a malformed session entry drops alone',
+    out.n1 === 'abc-123' && out.n2 === undefined && warnings.length === 1,
+    JSON.stringify(out))
+}
+
+// 117. A session id survives a write and a reopen through the real coalesced
+//      store. This is success criterion 2's storage half: without it a Cmd+R
+//      reload re-mints, the new uuid names a transcript that does not exist,
+//      and the panel's cost freezes with nothing in any log.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setSession('n1', 'abc-123')
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('117 a session id survives a write and a reopen',
+    b.session('n1') === 'abc-123', String(b.session('n1')))
+}
+
+// 118. dropSession removes it. The same recycled-id hazard dropBaseline
+//      closes: a panel reusing a dead one's id must not inherit its session,
+//      because --session-id naming an EXISTING session is a resume — that
+//      panel would come back holding a stranger's conversation.
+{
+  const path = tmp()
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  s.setSession('n1', 'abc-123')
+  s.dropSession('n1')
+  s.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  ok('118 dropSession removes the pin', reopened.session('n1') === undefined,
+    String(reopened.session('n1')))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
