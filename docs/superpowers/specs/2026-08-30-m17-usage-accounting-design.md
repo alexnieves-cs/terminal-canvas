@@ -1,7 +1,7 @@
-# M15: Token and dollar accounting per panel — Design
+# M17: Token and dollar accounting per panel — Design
 
 **Status:** designed, not yet implemented.
-**Number:** M15, not M14. M14 is claimed by an in-flight branch
+**Number:** M17, not M14. M14 is claimed by an in-flight branch
 (`worktree-m14-workspace-extras`, backlog #2). The number records claim order,
 not a build order.
 **Predecessor by DEPENDENCY:** M12 (live cwd). Not because this milestone reads

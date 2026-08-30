@@ -1137,7 +1137,7 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     `noArg=${JSON.stringify(noArg.links)} distinct=${new Set([none, one, labelled]).size}`)
 }
 
-// 76. THREE states, not two, and the pane must not collapse them. No pin
+// 81. THREE states, not two, and the pane must not collapse them. No pin
 //     renders NOTHING (a login shell can never have a cost, and "$0.00"
 //     beside it is a confident wrong answer); pinned-but-nothing-yet renders
 //     a NOTE (true for the first seconds of every panel, and an empty section
@@ -1150,13 +1150,13 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     { totals: { input: 2, output: 1095, cacheWrite: 1491, cacheRead: 120118 },
       byModel: { 'claude-opus-5': { input: 2, output: 1095, cacheWrite: 1491, cacheRead: 120118 } },
       turns: 3, subagentTurns: 1 }, true)
-  ok(76, none.hidden === true
+  ok(81, none.hidden === true
       && waiting.hidden === false && waiting.note !== undefined && waiting.rows.length === 0
       && totals.hidden === false && totals.note === undefined && totals.rows.length > 0,
     `none=${none.hidden} waiting=${waiting.note} totals=${totals.rows.length}`)
 }
 
-// 77. The four classes render as FOUR figures, not one sum. The pane's whole
+// 82. The four classes render as FOUR figures, not one sum. The pane's whole
 //     job here is to let the user see what the number is made of — "the
 //     inspector shows the links, not the answer" applied to a third pair —
 //     and a single "121,613 tokens" row is unanswerable when the user asks
@@ -1167,11 +1167,11 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
       byModel: { 'claude-opus-5': { input: 2, output: 1095, cacheWrite: 1491, cacheRead: 120118 } },
       turns: 1, subagentTurns: 0 }, true)
   const labels = m.rows.map((r) => r.label).join('|')
-  ok(77, ['input', 'output', 'cache write', 'cache read'].every((l) => labels.includes(l)),
+  ok(82, ['input', 'output', 'cache write', 'cache read'].every((l) => labels.includes(l)),
     labels)
 }
 
-// 78. The dollar figure is LABELLED and never bare. A Max or Pro subscriber
+// 83. The dollar figure is LABELLED and never bare. A Max or Pro subscriber
 //     is charged nothing per token, so an unlabelled figure states as fact a
 //     number that is wrong for a large share of the people reading it.
 {
@@ -1179,11 +1179,11 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     { totals: { input: 1000, output: 1000, cacheWrite: 0, cacheRead: 0 },
       byModel: { 'claude-opus-5': { input: 1000, output: 1000, cacheWrite: 0, cacheRead: 0 } },
       turns: 1, subagentTurns: 0 }, true)
-  ok(78, typeof m.cost === 'number' && /list price/i.test(m.costLabel ?? ''),
+  ok(83, typeof m.cost === 'number' && /list price/i.test(m.costLabel ?? ''),
     `${m.cost} / ${m.costLabel}`)
 }
 
-// 79. An UNPRICED model yields tokens and NO dollar figure — check 11's rule
+// 84. An UNPRICED model yields tokens and NO dollar figure — check 11's rule
 //     reaching the pane. A zero here renders "$0.00" beside a visibly working
 //     agent, which is the one thing this section must never say.
 {
@@ -1191,10 +1191,10 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     { totals: { input: 1000, output: 1000, cacheWrite: 0, cacheRead: 0 },
       byModel: { 'model-from-next-year': { input: 1000, output: 1000, cacheWrite: 0, cacheRead: 0 } },
       turns: 1, subagentTurns: 0 }, true)
-  ok(79, m.cost === undefined && m.rows.length > 0, `cost=${m.cost} rows=${m.rows.length}`)
+  ok(84, m.cost === undefined && m.rows.length > 0, `cost=${m.cost} rows=${m.rows.length}`)
 }
 
-// 80. Subagent turns are reported SEPARATELY. They are in the same transcript
+// 85. Subagent turns are reported SEPARATELY. They are in the same transcript
 //     and they spend real money, so they count — but a panel that is large
 //     because it dispatched twelve subagents is a different situation from
 //     one the user talked to for an hour, and the pane has to say which.
@@ -1203,10 +1203,10 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     { totals: { input: 1, output: 1, cacheWrite: 0, cacheRead: 0 },
       byModel: { 'claude-opus-5': { input: 1, output: 1, cacheWrite: 0, cacheRead: 0 } },
       turns: 5, subagentTurns: 2 }, true)
-  ok(80, m.turns === 5 && m.subagentTurns === 2, `${m.turns}/${m.subagentTurns}`)
+  ok(85, m.turns === 5 && m.subagentTurns === 2, `${m.turns}/${m.subagentTurns}`)
 }
 
-// 81. inspectorSignature MOVES on a usage change and stays byte-identical on
+// 86. inspectorSignature MOVES on a usage change and stays byte-identical on
 //     a rect change. THE check for this milestone's 60Hz defence: Canvas
 //     freezes the model on that signature, so a live value it does not cover
 //     renders once and never updates again — stuck at whatever it was when
@@ -1226,7 +1226,7 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
   const b = R.inspectorSignature(R.buildInspectorModel(p, undefined, undefined, [], u2))
   const moved = R.inspectorSignature(R.buildInspectorModel(
     { ...p, rect: { ...p.rect, x: 999 } }, undefined, undefined, [], u1))
-  ok(81, a !== b && a === moved, `usageMoved=${a !== b} rectStable=${a === moved}`)
+  ok(86, a !== b && a === moved, `usageMoved=${a !== b} rectStable=${a === moved}`)
 }
 
 console.log('\n' + '='.repeat(60))

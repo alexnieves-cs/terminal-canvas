@@ -8838,7 +8838,7 @@ app.whenReady().then(async () => {
     }
 
     // -----------------------------------------------------------------------
-    // M15: the cost readout end to end (130-132). Reuses spawnAt/sessionMap
+    // M17: the cost readout end to end (138-140). Reuses spawnAt/sessionMap
     // from checks 99-101/116-117 above — this is where they live, and usage
     // accounting has no git dependency of its own; it is nested here purely
     // for the helper reuse, the same trade 116-117's own comment states.
@@ -8918,7 +8918,7 @@ app.whenReady().then(async () => {
         return el ? el.textContent : null
       })()`)
 
-      // 130. The number reaches the pane, end to end. The FIRST thing to
+      // 138. The number reaches the pane, end to end. The FIRST thing to
       //      exercise the pin, the tick, the reader, the store and the
       //      section together: verify:rail's own buildUsageFields checks
       //      prove the MODEL and nothing between that builder and a painted
@@ -8944,36 +8944,36 @@ app.whenReady().then(async () => {
         const text = await usageOutputText()
         return text !== null && /1,?095/.test(text) ? text : false
       }, 10000)
-      ok('130 the panel\'s token total reaches the inspector',
+      ok('138 the panel\'s token total reaches the inspector',
         agentId !== undefined && shown !== false, `id=${agentId} shown=${JSON.stringify(shown)}`)
 
-      // 131. The total GROWS as the agent works, which is what makes this a
+      // 139. The total GROWS as the agent works, which is what makes this a
       //      live readout rather than a one-shot read. The discriminating
       //      half: an implementation that read the file once at spawn and
-      //      cached it satisfies 130 completely and is not the feature.
+      //      cached it satisfies 138 completely and is not the feature.
       appendFileSync(usageFixtureFile, assistantRecord({ output: 5 }) + '\n')
       const grown = await waitUntil(async () => {
         const text = await usageOutputText()
         return text !== null && /1,?100/.test(text) ? text : false
       }, 10000)
-      ok('131 the total grows as the transcript grows', grown !== false, String(grown))
+      ok('139 the total grows as the transcript grows', grown !== false, String(grown))
 
-      // 132. A panel with NO pin renders NO Cost section — not an empty one,
+      // 140. A panel with NO pin renders NO Cost section — not an empty one,
       //      and not "$0.00". Asserted as the element being ABSENT rather
       //      than as empty text, because an empty-but-present section is a
       //      visible blank gap in a 260px pane. Deliberately weak on its
       //      own: it passes vacuously before the section exists at all, so
-      //      it is only evidence once 130 has been watched red first.
+      //      it is only evidence once 138 has been watched red first.
       const plainId = await spawnAt(usageFixtureDir)
       await selectPanelViaRailRow(plainId)
       const state = await wc.executeJavaScript(`(() => ({
         selected: (document.querySelector('.panel--selected') || {}).dataset?.panelId,
         section: !!document.querySelector('[data-usage-section]')
       }))()`)
-      ok('132 an unpinned panel renders no Cost section at all',
+      ok('140 an unpinned panel renders no Cost section at all',
         state.selected === plainId && state.section === false, JSON.stringify(state))
 
-      // 133. Final-review fix. PersistedTerminalPanel carried no `agent`
+      // 141. Final-review fix. PersistedTerminalPanel carried no `agent`
       //      field at all, and fromPanels/toPanels never mentioned one, so a
       //      restart silently dropped a restored panel's pin — pinned went
       //      false, and the Cost section vanished PERMANENTLY, even though
@@ -8997,7 +8997,7 @@ app.whenReady().then(async () => {
         const clicked = await selectPanelViaRailRow(agentId)
         const section = await wc.executeJavaScript(
           `!!document.querySelector('[data-usage-section]')`)
-        ok('133 a panel\'s agent pin survives a real reload, and the Cost section still renders',
+        ok('141 a panel\'s agent pin survives a real reload, and the Cost section still renders',
           agentId !== undefined && clicked === true && section === true,
           `id=${agentId} clicked=${clicked} section=${section}`)
       }

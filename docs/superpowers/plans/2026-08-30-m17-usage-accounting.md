@@ -1,4 +1,4 @@
-# M15: Token and dollar accounting per panel — Implementation Plan
+# M17: Token and dollar accounting per panel — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Electron (main + preload + renderer), React 18, esbuild-bundled plain-node verify suites. No new runtime dependencies — the parser is `JSON.parse` over lines and the file reads are `node:fs`.
 
-**Spec:** [`docs/superpowers/specs/2026-08-30-m15-usage-accounting-design.md`](../specs/2026-08-30-m15-usage-accounting-design.md) — read it before Task 1. Every task below argues from it.
+**Spec:** [`docs/superpowers/specs/2026-08-30-m17-usage-accounting-design.md`](../specs/2026-08-30-m17-usage-accounting-design.md) — read it before Task 1. Every task below argues from it.
 
 ## Global Constraints
 
@@ -21,10 +21,10 @@ Copied verbatim from the spec and from `CLAUDE.md`. Every task's requirements im
 - **An unknown model yields no dollar figure at all**, never `0`.
 - **Every object hop rebuilds field by field, never by spreading.** Spreading carries `command: undefined` across an IPC structured clone, where `'command' in template` then reads `true`. This is why `agent` must be added at four sites by hand.
 - **New verify suites must be wired into the `verify` chain** (`verify:meta` 19 fails otherwise) **and new IPC channels must appear in the README's architecture diagram** — specifically inside the fenced block containing `--invoke-->` (`verify:meta` 14 fails otherwise).
-- **Commit style:** conventional, scoped `feat(m15):` / `fix(m15):` / `docs(m15):`. End every commit message with:
+- **Commit style:** conventional, scoped `feat(m17):` / `fix(m17):` / `docs(m17):`. End every commit message with:
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - **A check that THROWS aborts the run**, so every check after it never executes and its RED is not evidence. Guard calls that may not exist yet (`if (row) row.run()`), and when watching checks fail test-first, note which checks a throw prevented from running.
-- **Milestone number is M15.** M14 is claimed by `worktree-m14-workspace-extras`.
+- **Milestone number is M17.** M14 is claimed by `worktree-m14-workspace-extras`.
 
 ## File Structure
 
@@ -82,7 +82,7 @@ Copied verbatim from the spec and from `CLAUDE.md`. Every task's requirements im
 Create `scripts/usage-entry.cjs`:
 
 ```js
-/* Bundle entry for M15's pure accounting modules. No React, no DOM, no
+/* Bundle entry for M17's pure accounting modules. No React, no DOM, no
    electron, no node-pty and — deliberately — no `fs`: the three modules
    bundled here are pure functions over strings and numbers, so they sit in
    the cheapest verify tier this repo has. transcript-reader.ts is the thin
@@ -99,7 +99,7 @@ module.exports = {
 Create `scripts/verify-usage.cjs`:
 
 ```js
-/* Verifies M15's pure accounting: the JSONL parser, the price table, and the
+/* Verifies M17's pure accounting: the JSONL parser, the price table, and the
    accumulator.
    Run with: npm run verify:usage
 
@@ -445,7 +445,7 @@ git add src/shared/cost.ts src/main/usage-parse.ts src/main/pricing.ts \
         src/main/usage-accumulator.ts scripts/usage-entry.cjs \
         scripts/verify-usage.cjs package.json
 git commit -m "$(cat <<'EOF'
-feat(m15): the accounting types and the transcript parser
+feat(m17): the accounting types and the transcript parser
 
 Four token classes, never two: a real assistant turn reported input_tokens 2
 against cache_read_input_tokens 120118, so input+output is wrong by more than
@@ -614,7 +614,7 @@ Expected: `13/13 passed`. Read every line: checks 10–13 could not run in Step 
 ```bash
 git add src/main/pricing.ts scripts/verify-usage.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): the price table, dated, with an unknown model priced at nothing
+feat(m17): the price table, dated, with an unknown model priced at nothing
 
 Four rates per model, not one scaled three ways: a cache write costs MORE than
 fresh input and a cache read far less, so a derived table would be inventing
@@ -898,7 +898,7 @@ Expected: clean. `noUnusedLocals` and `noUnusedParameters` are on; prefix any in
 ```bash
 git add src/main/usage-accumulator.ts scripts/verify-usage.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): the accumulator — offsets, carries, and the change test
+feat(m17): the accumulator — offsets, carries, and the change test
 
 The dedupe is the design, not an optimisation, and it is the rule applyEvent
 and pollLive already follow: this rides a slow tick and an unconditional send
@@ -935,7 +935,7 @@ EOF
 Find the last check in `scripts/verify-layout.cjs` (currently 117 assertions; the last numbered one is 108 with lettered sub-checks). Append these before the summary block, using the file's existing `ok(...)` helper and its existing store-construction helper — read the neighbouring checks 98–103b (the `baselines` block) and mirror their construction exactly, since `sessions` is deliberately the same shape:
 
 ```js
-// 109. Absent warns NOTHING. Every layout.json written before M15 has no
+// 109. Absent warns NOTHING. Every layout.json written before M17 has no
 //      sessions key, and shouting about those would make the first launch
 //      after an upgrade complain about a file that is perfectly fine — the
 //      line parsePresets, parsePreferences and parseBaselines all already draw.
@@ -1027,7 +1027,7 @@ export function parseSessions(
   raw: unknown,
   warnings: string[]
 ): Record<string, string> {
-  // Every file written before M15 has no sessions key. Warning about those
+  // Every file written before M17 has no sessions key. Warning about those
   // would make the first launch after an upgrade shout about a file that is
   // perfectly fine — the same line parseBaselines draws one function up.
   if (raw === undefined) return {}
@@ -1116,7 +1116,7 @@ Expected: `122/122 passed` (117 + 5). Read 110–113 individually — none ran i
 npm run typecheck
 git add src/shared/layout-schema.ts src/main/layout-store.ts scripts/verify-layout.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): persist a panel's agent session id, keyed globally
+feat(m17): persist a panel's agent session id, keyed globally
 
 A sibling of workspaces rather than a member of one, for the reason baselines
 is: PanelId is global and a hidden workspace's panel holds a pin exactly as
@@ -1291,7 +1291,7 @@ git add src/shared/cost.ts src/shared/layout-schema.ts src/shared/ipc-contract.t
         src/shared/types.ts src/main/presets.ts src/renderer/panels/panels.ts \
         scripts/verify-layout.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): a preset declares its agent, and the field survives four hops
+feat(m17): a preset declares its agent, and the field survives four hops
 
 Declared rather than sniffed. Appending --session-id whenever argv[0] is
 `claude` needs no configuration and was rejected because it silently rewrites
@@ -1499,7 +1499,7 @@ Expected: `33/33 passed` (30 + 3). Confirm 27 specifically — it is the only ch
 npm run verify
 git add src/main/pty-manager.ts src/main/index.ts scripts/verify-pty-manager.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): pin an agent session id at spawn, read-then-mint
+feat(m17): pin an agent session id at spawn, read-then-mint
 
 Read-then-mint, never mint. create() runs again for every panel on a Cmd+R
 reload and tmux's -A reattaches without re-running the command, so a fresh
@@ -1779,7 +1779,7 @@ git add src/main/transcript-reader.ts src/main/pty-manager.ts \
         src/shared/ipc-contract.ts src/preload/index.ts README.md \
         scripts/verify-pty-manager.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): read pinned transcripts on a third tick, deduped
+feat(m17): read pinned transcripts on a third tick, deduped
 
 The path is GLOBBED by session id rather than rebuilt from a cwd. The filename
 is the session id and a session id is unique, so this needs no knowledge of
@@ -1944,7 +1944,7 @@ Expected: clean, and `149/149 passed` — nothing renders usage yet, so this tas
 ```bash
 git add src/renderer/session/usage-store.ts src/renderer/canvas/Canvas.tsx
 git commit -m "$(cat <<'EOF'
-feat(m15): the renderer usage store, one canvas-wide subscription
+feat(m17): the renderer usage store, one canvas-wide subscription
 
 A fourth module-level store subscribed per panel id, and the fourth to record
 the same rule: it must never bump registry.version(). That counter moves only
@@ -2186,7 +2186,7 @@ Add a fifth optional parameter to `buildInspectorModel`, following the exact con
    * What this panel's agent has spent, when it is pinned and anything is
    * known.
    *
-   * OPTIONAL and defaulted, so every pre-M15 caller and every pre-M15 check
+   * OPTIONAL and defaulted, so every pre-M17 caller and every pre-M17 check
    * keeps its exact meaning — the trade `live` made in M12, `panels` made in
    * M13 and review-engine.ts's `notARepo` made in M9a.
    */
@@ -2221,7 +2221,7 @@ git add src/shared/pricing.ts src/main/pricing.ts src/renderer/shell/inspector-f
         src/renderer/shell/Inspector.tsx src/renderer/canvas/Canvas.tsx \
         src/renderer/styles.css scripts/verify-rail.cjs
 git commit -m "$(cat <<'EOF'
-feat(m15): the inspector Cost section — three states, four figures
+feat(m17): the inspector Cost section — three states, four figures
 
 Three states and collapsing any two is a wrong answer. No pin renders nothing,
 because "$0.00" beside a working agent is the confident wrong answer M9a's
@@ -2363,7 +2363,7 @@ Expected: `152/152 passed`. Confirm 126 specifically — it is the only check se
 ```bash
 git add scripts/verify-panels.cjs scripts/panels-entry.cjs src/renderer/shell/Inspector.tsx
 git commit -m "$(cat <<'EOF'
-test(m15): the cost readout end to end in a real renderer
+test(m17): the cost readout end to end in a real renderer
 
 Check 126 is the discriminating one: an implementation that read the
 transcript once at spawn and cached it satisfies 125 completely and is not a
@@ -2402,7 +2402,7 @@ In `README.md` and in `CLAUDE.md`'s suite table, add a row in the same dense sty
 - [ ] **Step 2: Add the milestone row to `README.md`**
 
 ```
-| M15 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
+| M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 ```
 
 - [ ] **Step 3: Add the load-bearing details to `CLAUDE.md`**
@@ -2414,7 +2414,7 @@ Add these entries under `## Load-bearing details`, each written in the file's ow
 3. **"Four token classes, never two"** — with the measured numbers.
 4. **"The carry buffer is the parser's whole correctness"** — a dropped fragment is lost permanently because the offset advanced past it.
 5. **"Zero and unmeasured are different facts"** — the three-state rule, and `verify:rail` 76.
-6. **"`usage:panel` is an `IPC_EVENTS` send, so `verify:ipc` stays at 31"** — the **third** time this boundary has been recorded (M6d, M12, M15). Say so.
+6. **"`usage:panel` is an `IPC_EVENTS` send, so `verify:ipc` stays at 31"** — the **third** time this boundary has been recorded (M6d, M12, M17). Say so.
 7. **"The transcript path is globbed, not rebuilt"** — needs no knowledge of another program's slug rule; immune to #41's live-cwd problem.
 8. **"A third tick, not a merge"** — `IDLE_TICK_MS` is the *resolution* of M6c's threshold.
 
@@ -2425,12 +2425,12 @@ Also update the `verify:ipc` row's prose: the channel count is **unchanged**, an
 The backlog's own preamble: *"Where a milestone shipped most of an entry and deliberately left part of it, the entry stays but is rewritten down to the part that is still open, keeping the recorded constraint attached to the half that still has to survive it."*
 
 Rewrite `## 19` to cover only what is still open, and nothing that shipped:
-- **History and retention** — the entry's own open question, answered "live readout" by M15. State that the storage question is unowned and cross-reference #46.
+- **History and retention** — the entry's own open question, answered "live readout" by M17. State that the storage question is unowned and cross-reference #46.
 - **A second CLI adapter** — the neutral model exists; no `codex` adapter does. Keep the original constraint attached: *do not build the abstraction until a second CLI actually wants it.*
 - **The un-pinned panel** — a `claude` typed by hand into a login shell reports nothing, and the cwd-matching fallback that would cover it is a guess whenever two panels share a directory.
 - **Per-workspace and canvas-wide totals** — the store makes both cheap; neither shipped.
 
-Add a line to the "numbers that are gone" table's neighbourhood **only if** you delete the entry — you are not deleting it, so leave that table alone. Add a note at the top of #19 naming M15 and the `CLAUDE.md` headings, so a reader knows which half is already in the app.
+Add a line to the "numbers that are gone" table's neighbourhood **only if** you delete the entry — you are not deleting it, so leave that table alone. Add a note at the top of #19 naming M17 and the `CLAUDE.md` headings, so a reader knows which half is already in the app.
 
 - [ ] **Step 5: State the unverified link, in `CLAUDE.md`, in the suite table's own voice**
 
@@ -2448,7 +2448,7 @@ Expected: every suite green, exit 0. `verify:meta` 14 fails if the channel is mi
 ```bash
 git add CLAUDE.md README.md docs/ideas-backlog.md
 git commit -m "$(cat <<'EOF'
-docs(m15): record the accounting layer and rewrite backlog #19 down
+docs(m17): record the accounting layer and rewrite backlog #19 down
 
 Eight load-bearing details, each with the silent failure that follows from
 undoing it. The two most easily reversed are the persisted session id (a

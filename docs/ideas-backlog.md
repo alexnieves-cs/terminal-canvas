@@ -536,9 +536,9 @@ process trees, each of which may be running a compiler.
   a user to break the app. A cost readout is the honest companion to any such knob: it is
   what makes a number the user is turning mean something.
 
-## 19. Token and dollar accounting — landed in M15; the open half is history, a second adapter, the un-pinned panel and aggregate totals
+## 19. Token and dollar accounting — landed in M17; the open half is history, a second adapter, the un-pinned panel and aggregate totals
 
-M15 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
+M17 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
 transcript on its own tick, deduped, and an inspector Cost section rendering three states
 — nothing, a note, or four token figures and a labelled dollar total. See `CLAUDE.md`'s
 "The session id is persisted, never re-minted", "`detachAll()` clears the cached

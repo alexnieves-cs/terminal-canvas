@@ -1,4 +1,4 @@
-/* Bundle entry for M15's pure accounting modules. No React, no DOM, no
+/* Bundle entry for M17's pure accounting modules. No React, no DOM, no
    electron, no node-pty and — deliberately — no `fs`: the three modules
    bundled here are pure functions over strings and numbers, so they sit in
    the cheapest verify tier this repo has. transcript-reader.ts is the thin

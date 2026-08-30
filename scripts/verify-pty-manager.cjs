@@ -59,7 +59,7 @@ buildSync({
 const { createDirectBackend, createTmuxBackend } = require(OUT_BACKEND)
 const DIRECT = createDirectBackend('verify: direct by default')
 
-// M15 fix-round checks 29/30 need the REAL readFrom — the function that
+// M17 fix-round checks 32/33 need the REAL readFrom — the function that
 // actually carries the shrink-detection bug this fix round closes — against
 // a transcript file this harness controls, rather than a real
 // ~/.claude/projects this suite must not touch (the same rule the git and
@@ -164,7 +164,7 @@ function makeHarness(backend, options = {}) {
     (panelId) => { if (options.onDropPinnedSession) options.onDropPinnedSession(panelId) },
     // Undefined falls through to the constructor's own default (the real
     // implementations), exactly as every other optional dep above does —
-    // only checks 29/30 substitute these, to drive pollUsage against a
+    // only checks 32/33 substitute these, to drive pollUsage against a
     // transcript this harness controls rather than a real ~/.claude/projects.
     options.resolveTranscript,
     options.readFrom
@@ -846,7 +846,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       try { rmSync(detachLiveDir, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
-    // 25. The pin is minted ONCE and REUSED on a second create at the same
+    // 28. The pin is minted ONCE and REUSED on a second create at the same
     //     panel id. That second create is exactly what a Cmd+R reload does
     //     for every restored panel, and under tmux it REATTACHES to a
     //     session that may have been working for an hour — so a re-mint
@@ -865,13 +865,13 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       const first = pins.get('p9')
       h.manager.detachAll()
       await h.manager.create(spec('p9', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
-      ok('25 the pin is minted once and reused on a second create at the same id',
+      ok('28 the pin is minted once and reused on a second create at the same id',
         typeof first === 'string' && first.length > 0 && pins.get('p9') === first,
         `first=${first} second=${pins.get('p9')}`)
       h.manager.killAll()
     }
 
-    // 26. A panel whose preset declares NO agent is never pinned. The whole
+    // 29. A panel whose preset declares NO agent is never pinned. The whole
     //     honesty rule rests on this: a login shell must reach the PTY
     //     exactly as the user wrote it, and a pin for it would also make the
     //     inspector render a Cost section for a panel that can never have
@@ -883,12 +883,12 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         setPinnedSession: (id, sid) => pins.set(id, sid)
       })
       await h.manager.create(spec('p10'))
-      ok('26 a panel with no declared agent is never pinned', pins.get('p10') === undefined,
+      ok('29 a panel with no declared agent is never pinned', pins.get('p10') === undefined,
         String(pins.get('p10')))
       h.manager.killAll()
     }
 
-    // 27. The flag actually reaches the spawn's ARGV, carrying the pinned
+    // 30. The flag actually reaches the spawn's ARGV, carrying the pinned
     //     id. 25 proves the id is stable and says nothing about whether it
     //     is ever passed to anything — a manager that minted, stored and
     //     never spawned with it satisfies 25 completely and accounts for
@@ -904,13 +904,13 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       await h.manager.create(spec('p11', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
       const args = seen[0] ?? []
       const i = args.indexOf('--session-id')
-      ok('27 the flag reaches the spawn argv carrying the pinned id',
+      ok('30 the flag reaches the spawn argv carrying the pinned id',
         i >= 0 && args[i + 1] === pins.get('p11'),
         `args=${JSON.stringify(args)} pin=${pins.get('p11')}`)
       h.manager.killAll()
     }
 
-    // 28. The usage tick DEDUPES. Its failure changes no pixel — it is heat —
+    // 31. The usage tick DEDUPES. Its failure changes no pixel — it is heat —
     //     so this counts MESSAGES rather than reading a value, exactly as
     //     check 23 does for session:live. The WINDOW is what makes the count
     //     mean anything and a future editor must not shrink it: an
@@ -935,7 +935,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       await h.manager.create(spec('p12', '/bin/sh', ['-c', 'sleep 30'], 'claude-code'))
       await sleep(7000)
       const sent = h.events.filter((e) => e.channel === 'usage:panel' && e.payload.panelId === 'p12')
-      ok('28 the usage tick sends no traffic for a panel with no real transcript',
+      ok('31 the usage tick sends no traffic for a panel with no real transcript',
         sent.length === 0, `messages=${sent.length}`)
       h.manager.killAll()
     }
@@ -943,7 +943,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     // An assistant record as Claude Code actually writes one — copied
     // verbatim from verify-usage.cjs's and verify-panels.cjs's own rec()
     // helpers, since it is another program's format and not ours. `over`
-    // sets the output token count directly, since checks 29/30 below only
+    // sets the output token count directly, since checks 32/33 below only
     // ever vary that one figure.
     const usageRec = (over = {}) => JSON.stringify({
       type: 'assistant',
@@ -964,7 +964,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     const usageEvents = (h, panelId) =>
       h.events.filter((e) => e.channel === 'usage:panel' && e.payload.panelId === panelId)
 
-    // 29. Fix round: pollUsage's shrink handling was sequenced backwards. A
+    // 32. Fix round: pollUsage's shrink handling was sequenced backwards. A
     //     shrunk/replaced transcript was read at the STALE offset first —
     //     which readFrom short-circuits to an EMPTY read — and only THEN
     //     reset, so applyChunk ran on that empty text, silently set
@@ -997,20 +997,20 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         return evs.length > 0 && evs[evs.length - 1].payload.usage.totals.output === 7
       }, 6000)
       const lastTotal = usageEvents(h, 'p13').pop()?.payload.usage.totals.output
-      ok('29 a shrunk transcript is re-read from zero, and the correction actually sends',
+      ok('32 a shrunk transcript is re-read from zero, and the correction actually sends',
         gotFirst && firstTotal === 100 && gotSecond && lastTotal === 7,
         `first=${firstTotal} last=${lastTotal}`)
       h.manager.killAll()
     }
 
-    // 30. Fix round: a reload never resent usage totals until the agent's
+    // 33. Fix round: a reload never resent usage totals until the agent's
     //     next turn. detachAll() correctly KEEPS usageState (re-reading from
     //     zero would double-count), but a Cmd+R reload wipes the renderer's
     //     own usage-store, and pollUsage's only send trigger was genuinely
     //     NEW bytes — so a reattached, currently-idle panel showed "no
     //     answer yet" indefinitely despite this manager already holding its
     //     full totals. Simulates a reload with detachAll() + a second
-    //     create() at the same id (check 25's own shape), runs a poll tick
+    //     create() at the same id (check 28's own shape), runs a poll tick
     //     with NO new transcript bytes, and asserts a usage:panel message IS
     //     sent carrying the panel's EXISTING totals.
     {
@@ -1034,12 +1034,12 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       // changed" and would otherwise hold back forever.
       const resent = await waitFor(() => usageEvents(h, 'p14').length > 0, 6000)
       const resentTotal = resent ? usageEvents(h, 'p14').pop().payload.usage.totals.output : undefined
-      ok('30 a reload forces one resend of existing totals with no new bytes',
+      ok('33 a reload forces one resend of existing totals with no new bytes',
         gotFirst && resent && resentTotal === 42, `gotFirst=${gotFirst} resent=${resent} total=${resentTotal}`)
       h.manager.killAll()
     }
 
-    // 31. Fix round: a read landing mid-write can split a multibyte UTF-8
+    // 34. Fix round: a read landing mid-write can split a multibyte UTF-8
     //     codepoint across the boundary, and readFrom used to decode each
     //     independent byte range with .toString('utf8') directly — turning
     //     the split character into a replacement character on BOTH sides of
@@ -1101,7 +1101,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       const got = await waitFor(() => usageEvents(h, 'p15').length > 0, 6000)
       const last = got ? usageEvents(h, 'p15').pop().payload.usage : undefined
       const models = last ? Object.keys(last.byModel) : []
-      ok('31 a multibyte character split across a read boundary reassembles correctly',
+      ok('34 a multibyte character split across a read boundary reassembles correctly',
         midway === 0 && got === true && models.length === 1 && models[0] === model &&
           last.byModel[model].output === 55 && last.turns === 1,
         `midway=${midway} models=${JSON.stringify(models)} turns=${last?.turns}`)

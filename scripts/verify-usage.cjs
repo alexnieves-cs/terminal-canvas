@@ -1,4 +1,4 @@
-/* Verifies M15's pure accounting: the JSONL parser, the price table, and the
+/* Verifies M17's pure accounting: the JSONL parser, the price table, and the
    accumulator.
    Run with: npm run verify:usage
 
