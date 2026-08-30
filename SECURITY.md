@@ -55,6 +55,14 @@ network call** — before this feature, `grep -rn "https\|node:http\|fetch("
 src/main/` returned nothing, and every other request this app makes is to a
 process running on your own machine.
 
+That request is not exercised by the automated suites, which drive it against
+an injected fake fetcher so that `npm run verify` stays offline. It was
+confirmed against the live API by hand once, on 2026-08-30, on an unsigned dev
+build: a scopeless token entered through the app's own UI, verified, and the
+account name GitHub returned rendered back in the palette. The failure path — a
+revoked or under-scoped token — has been exercised only against the fake, and
+that hand-check says nothing about the `safeStorage` question below.
+
 ## What is in scope
 
 Genuinely interesting reports would include: escaping the renderer's context
