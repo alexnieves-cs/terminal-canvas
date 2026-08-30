@@ -443,13 +443,13 @@ Expected: FAIL — `written[0].kind` is `'jira'` and `provider` is undefined.
 
 - [ ] **Step 3: Update both arms**
 
-Line 35 (`fromPanels`, disk → live):
+Line 35 (inside `toPanels`, disk → live):
 
 ```ts
     if (p.kind === 'work') return { ...base, kind: 'work' as const, provider: p.provider }
 ```
 
-Line 90 (`toPanels`, live → disk):
+Line 90 (inside `fromPanels`, live → disk):
 
 ```ts
     // No cwd and no args keys AT ALL, the rule the two branches above state.

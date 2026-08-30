@@ -1,5 +1,5 @@
 import type { PersistedPanel } from '@shared/layout-schema'
-import { isFilePanel, isJiraPanel,
+import { isFilePanel, isWorkPanel,
   isToolboxPanel, isReviewPanel, type Panel } from './panels'
 
 /**
@@ -32,7 +32,10 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // a terminal panel here rather than anywhere further downstream.
     if (p.kind === 'review') return { ...base, kind: 'review' as const, subject: { ...p.subject } }
     if (p.kind === 'file') return { ...base, kind: 'file' as const, source: { path: p.source.path } }
-    if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
+    // parsePanel has already migrated a legacy 'jira' record and validated the
+    // provider against the closed union, so by here it is always one this
+    // version can render.
+    if (p.kind === 'work') return { ...base, kind: 'work' as const, provider: p.provider }
     if (p.kind === 'toolbox') {
       return {
         ...base,
@@ -87,7 +90,10 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // states: an explicit `cwd: undefined` fails the terminal branch's cwd
     // check on the next launch, losing the panel on every relaunch, silently.
     if (isFilePanel(panel)) return { ...base, kind: 'file' as const, source: { path: panel.source.path } }
-    if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
+    // Same no-cwd/no-args rule as the branches above, for the same reason: an
+    // explicit `cwd: undefined` fails the terminal branch's cwd check on the
+    // next launch, losing the panel on every relaunch, silently.
+    if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, provider: panel.provider }
     // Same no-cwd/no-args rule as the two branches above, for the same reason.
     if (isToolboxPanel(panel)) {
       return {

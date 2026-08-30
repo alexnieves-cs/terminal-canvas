@@ -2635,6 +2635,27 @@ const filePanelOnDisk = (id, over = {}) => ({
     `panels=${active(parsed.snapshot).panels.length} warnings=${JSON.stringify(parsed.warnings)}`)
 }
 
+// 154. Check 108b's argument applied to the renamed kind. `layout-adapt` is the
+// OTHER door onto this format — fromPanels/toPanels, called on every save and
+// every boot — and a schema-only round trip (151-153) cannot see it. The no-cwd
+// clause is the one with teeth: a work panel HAS no cwd, and writing one would
+// parse back as a TERMINAL panel on the next launch and spawn a process out of
+// a record whose author never asked for one.
+{
+  const live = [{
+    kind: 'work', provider: 'github',
+    rect: { id: 'w1', x: 5, y: 6, w: 640, h: 520 }, z: 2, title: 'GitHub'
+  }]
+  const persisted = L.fromPanels(live)
+  const back = L.toPanels(persisted)
+  ok('154 a work panel survives fromPanels -> toPanels with no cwd key at all',
+    persisted[0].kind === 'work' && persisted[0].provider === 'github' &&
+      !('cwd' in persisted[0]) && !('args' in persisted[0]) &&
+      back[0].kind === 'work' && back[0].provider === 'github' &&
+      back[0].title === 'GitHub' && back[0].rect.x === 5,
+    JSON.stringify(persisted[0]))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
