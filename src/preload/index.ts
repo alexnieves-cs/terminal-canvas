@@ -22,6 +22,7 @@ import type {
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
 import type { SettingValue } from '../shared/settings-schema'
+import type { PanelUsage } from '../shared/cost'
 
 /**
  * Every subscribe helper returns its own unsubscribe function. Without this,
@@ -95,7 +96,9 @@ const bridge: CanvasBridge = {
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
     onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener),
-    onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener)
+    onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener),
+    onUsage: (listener) =>
+      subscribe<{ panelId: PanelId; usage: PanelUsage }>(IPC_EVENTS.USAGE_PANEL, listener)
   },
   settings: {
     list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),

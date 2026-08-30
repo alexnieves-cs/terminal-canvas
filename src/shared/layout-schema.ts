@@ -2,6 +2,7 @@ import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
+import { AGENT_KINDS, type AgentKind } from './cost'
 
 /**
  * The on-disk layout format, and the one function that reads it.
@@ -84,6 +85,17 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
   // (per-panel environment overrides, say) would have those values vanish on
   // every restore with no warning anywhere in this file.
   args: string[]
+  /**
+   * Which agent CLI this panel is pinned to, mirroring Preset.agent. OPTIONAL,
+   * and absent means "not accounted for" — every layout.json before M17 has no
+   * such field, and a required one would drop every existing panel. Without
+   * this field surviving a write-then-reopen, main's PtyManager goes on
+   * accumulating and sending usage:panel for a panel whose restored
+   * spec.agent is undefined, and buildInspectorModel's `pinned` test silently
+   * fails — the Cost section vanishes on every restart even though main is
+   * still measuring it.
+   */
+  agent?: AgentKind
 }
 
 export interface PersistedReviewPanel extends PersistedPanelBase {
@@ -138,6 +150,8 @@ export interface Preset {
   args: string[]
   w?: number
   h?: number
+  /** Which agent CLI this launches, when this app can account for it. */
+  agent?: AgentKind
 }
 
 /**
@@ -223,6 +237,11 @@ export interface LayoutSnapshot {
    * install.
    */
   baselines: Record<string, ReviewBaseline>
+  /**
+   * Per-panel agent session ids, keyed by PanelId. See parseSessions for why
+   * this is persisted rather than re-minted at each spawn.
+   */
+  sessions: Record<string, string>
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -258,7 +277,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
     preferences: {},
-    baselines: {}
+    baselines: {},
+    sessions: {}
   }
 }
 
@@ -362,7 +382,7 @@ function parsePanel(
     warnings.push('dropped a panel that was not an object')
     return null
   }
-  const { id, x, y, w, h, z, cwd, command, args, title } = raw
+  const { id, x, y, w, h, z, cwd, command, args, title, agent } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a panel with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -440,6 +460,16 @@ function parsePanel(
     args: [...args]
   }
   if (isStr(command)) panel.command = command
+  // Present but unknown is the same asymmetry parsePreset draws for its own
+  // agent field: a later version wrote a value this one has never heard of,
+  // and the field is dropped with a warning rather than carried into the map
+  // or silently coerced away.
+  if (agent !== undefined && !(AGENT_KINDS as readonly string[]).includes(agent as string)) {
+    warnings.push(`panel ${id} named an unknown agent; dropped that field`)
+  }
+  if (isStr(agent) && (AGENT_KINDS as readonly string[]).includes(agent)) {
+    panel.agent = agent as AgentKind
+  }
   return panel
 }
 
@@ -448,7 +478,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
     warnings.push('dropped a preset that was not an object')
     return null
   }
-  const { id, name, cwd, command, args, w, h } = raw
+  const { id, name, cwd, command, args, w, h, agent } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -476,6 +506,16 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
   // is recoverable and losing the preset is the worse answer.
   if (isNum(w)) preset.w = Math.max(MIN_PANEL_W, w)
   if (isNum(h)) preset.h = Math.max(MIN_PANEL_H, h)
+  // Present but unknown is check 107's asymmetry: it was written by a
+  // version that knew an adapter this one does not, and honouring it means
+  // passing a flag to a CLI that has never heard of it — which fails the
+  // spawn outright rather than merely failing to account.
+  if (agent !== undefined && !(AGENT_KINDS as readonly string[]).includes(agent as string)) {
+    warnings.push(`preset ${id} named an unknown agent; dropped that field`)
+  }
+  if (isStr(agent) && (AGENT_KINDS as readonly string[]).includes(agent)) {
+    preset.agent = agent as AgentKind
+  }
   return preset
 }
 
@@ -592,6 +632,47 @@ export function parseBaselines(
       continue
     }
     out[id] = { root: value.root, sha: value.sha }
+  }
+  return out
+}
+
+/**
+ * Which agent session id each panel is pinned to, keyed by PanelId.
+ *
+ * A sibling of `workspaces` rather than a member of one, and keyed GLOBALLY,
+ * for the reason baselines is: PanelId is global (it doubles as a tmux session
+ * name), and a hidden workspace's panel holds a pin exactly as the active
+ * workspace's does.
+ *
+ * This map exists because create() runs again for EVERY panel on a Cmd+R
+ * reload, and tmux's `new-session -A` reattaches without re-running the
+ * command — so a re-minted uuid there would name a transcript that does not
+ * exist while the real one went on growing, and the panel's cost would freeze
+ * with nothing in any log. See "`reattached` costs a probe".
+ */
+export function parseSessions(
+  raw: unknown,
+  warnings: string[]
+): Record<string, string> {
+  // Every file written before M15 has no sessions key. Warning about those
+  // would make the first launch after an upgrade shout about a file that is
+  // perfectly fine — the same line parseBaselines draws one function up.
+  if (raw === undefined) return {}
+  if (!isRecord(raw)) {
+    warnings.push('sessions was not an object; ignoring it')
+    return {}
+  }
+  const out: Record<string, string> = {}
+  for (const [id, value] of Object.entries(raw)) {
+    if (!ID_PATTERN.test(id)) {
+      warnings.push(`session for ${id} has an unusable panel id; dropped`)
+      continue
+    }
+    if (!isStr(value)) {
+      warnings.push(`session for ${id} was malformed; dropped`)
+      continue
+    }
+    out[id] = value
   }
   return out
 }
@@ -804,7 +885,8 @@ export function parseLayout(raw: string): {
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
       preferences,
-      baselines: parseBaselines(parsed.baselines, warnings)
+      baselines: parseBaselines(parsed.baselines, warnings),
+      sessions: parseSessions(parsed.sessions, warnings)
     },
     warnings,
     futureVersion: false

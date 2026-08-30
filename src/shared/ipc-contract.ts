@@ -21,6 +21,7 @@ import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { FileResult } from './file-panel'
+import type { AgentKind, PanelUsage } from './cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -320,7 +321,23 @@ export const IPC_EVENTS = {
    * the read, for the sole benefit of a smaller message the byte cap already
    * bounds.
    */
-  FILE_CHANGED: 'file:changed'
+  FILE_CHANGED: 'file:changed',
+  /**
+   * What a panel's agent has spent, pushed when it CHANGES.
+   *
+   * An IPC_EVENTS member and not an IPC one, which decides a number:
+   * verify:ipc asserts over Object.values(IPC) — invoke channels, each needing
+   * an ipcMain.handle — and is unmoved by this. It stays at 38, the count
+   * FILE_CHANGED already left it at. M6d, M12, M15's SUBAGENT_STATE and now
+   * this are the fourth instance of the same boundary; an earlier draft of
+   * one of those specs said otherwise and would have failed the suite by
+   * "fixing" a correct number.
+   *
+   * Deduped in main for the reason AGENT_STATE and SESSION_LIVE are: this
+   * rides a slow tick and an unconditional send would be a message per tick
+   * per panel describing a fact that changes once per agent turn.
+   */
+  USAGE_PANEL: 'usage:panel'
 } as const
 
 export interface FileReadRequest {
@@ -353,6 +370,8 @@ export interface PresetTemplate {
   args: string[]
   w?: number
   h?: number
+  /** Which agent CLI this launches, when this app can account for it. */
+  agent?: AgentKind
 }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
@@ -362,6 +381,8 @@ export interface CapturedPanel {
   args: string[]
   w: number
   h: number
+  /** Which agent CLI this launches, when this app can account for it. */
+  agent?: AgentKind
 }
 
 /** One row of the palette's prompt list. Mirrors PromptListRow in main. */
@@ -522,6 +543,8 @@ export interface CanvasBridge {
      * unsubscribe, so a React effect can clean up without stacking listeners.
      */
     onSubagents(listener: (update: SubagentUpdate) => void): () => void
+    /** What this panel's agent has spent. Fires only on a change. */
+    onUsage(listener: (payload: { panelId: PanelId; usage: PanelUsage }) => void): () => void
   }
   settings: {
     list(): Promise<SettingRow[]>

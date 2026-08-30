@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, realpathSync, renameSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, rmSync, realpathSync, renameSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow } = require('electron')
@@ -72,7 +72,8 @@ const {
   createGitRunner,
   createBaselineCapture,
   createReviewCommitter,
-  FileWatchers
+  FileWatchers,
+  readFrom
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -381,6 +382,19 @@ app.whenReady().then(async () => {
   // received a baseline for any panel — every result reads never-started,
   // on an engine that is otherwise wired correctly, which looks exactly like
   // a broken engine and points nowhere near the real cause.
+  // Task 10's session-pinning fence, the same shape as PROMPT_DIRS and the
+  // git fence: a suite must never read or write state this repo does not
+  // own, and on a developer's machine ~/.claude/projects holds their actual
+  // work. Every session id THIS manager's own setPinnedSession hook has ever
+  // minted lands here, and it is what lets the fenced resolveTranscript below
+  // answer undefined for anything else — including a real session id sitting
+  // in the running developer's own transcripts directory, which this
+  // substitution never touches at all. Declared here, ahead of the
+  // constructor call below, so its closures can capture it; used by checks
+  // 130-132 near the end of this file.
+  const knownUsageSessionIds = new Set()
+  const usageFixtureDir = mkdtempSync(join(tmpdir(), 'tc panels usage '))
+  const usageFixtureFile = join(usageFixtureDir, 'sess.jsonl')
   const ptyManager = new PtyManager(
     () => win.webContents,
     () => backend,
@@ -399,7 +413,26 @@ app.whenReady().then(async () => {
     (panelId) => {
       baselineCapture.drop(panelId)
       layoutStore.dropBaseline(panelId)
-    }
+    },
+    // Task 10's three session-pinning hooks, wired to the SAME layoutStore
+    // instance the two baseline hooks above already close over — not a
+    // second store, the rule "One map, and a typed view over it" already
+    // states for settings, applied here to a panel's persisted session id.
+    (panelId) => layoutStore.session(panelId),
+    (panelId, sessionId) => {
+      layoutStore.setSession(panelId, sessionId)
+      knownUsageSessionIds.add(sessionId)
+    },
+    (panelId) => layoutStore.dropSession(panelId),
+    // Fenced: answers the one fixture transcript for a session id THIS
+    // harness minted (via setPinnedSession immediately above), undefined for
+    // every other session id. Never the real resolveTranscript, which globs
+    // ~/.claude/projects — a directory this suite must not touch at all.
+    (sessionId) => (knownUsageSessionIds.has(sessionId) ? usageFixtureFile : undefined),
+    // The real delta-reader. Safe to reuse verbatim: it takes a path, not a
+    // directory to search, and the only path it is ever called with here is
+    // the fenced fixture file immediately above.
+    readFrom
   )
 
   /**
@@ -8851,6 +8884,174 @@ app.whenReady().then(async () => {
           stored.length > 0 && paths.length > 0,
           `stored=${JSON.stringify(stored)} rendered=${JSON.stringify(paths)}`)
       }
+    }
+
+    // -----------------------------------------------------------------------
+    // M17: the cost readout end to end (138-140). Reuses spawnAt/sessionMap
+    // from checks 99-101/116-117 above — this is where they live, and usage
+    // accounting has no git dependency of its own; it is nested here purely
+    // for the helper reuse, the same trade 116-117's own comment states.
+    {
+      // An assistant record as Claude Code actually writes one. The field
+      // names are copied verbatim from verify-usage.cjs's own rec() helper —
+      // "another program's format, not ours" — with one difference: `over`
+      // sets the OUTPUT token count directly, since every check below only
+      // ever varies that one figure.
+      const assistantRecord = (over = {}) => JSON.stringify({
+        type: 'assistant',
+        cwd: '/tmp/x',
+        sessionId: 's1',
+        timestamp: '2026-08-30T00:00:00.000Z',
+        isSidechain: false,
+        message: {
+          model: 'claude-opus-5',
+          usage: {
+            input_tokens: 2,
+            output_tokens: over.output ?? 1095,
+            cache_creation_input_tokens: 1491,
+            cache_read_input_tokens: 120118
+          }
+        }
+      })
+
+      // The same PRESET_SPAWN spawnAt (above) already uses, with one field
+      // added: a panel whose preset declares agent: 'claude-code' is what
+      // makes PtyManager.create() mint and pin a session id at all
+      // (pty-manager.ts's "Pin an agent session id" comment) — spawnAt's own
+      // fixture never sets this, and every other check in this file relies on
+      // it staying a plain shell, so a second, near-identical helper is the
+      // smaller change.
+      const spawnAgentPanel = async (cwd) => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        // `-c 'sleep N'`, never bare '/bin/sh' with empty args: pty-manager.ts
+        // appends `--session-id <uuid>` to spec.args whenever agent is
+        // 'claude-code', unconditionally — it is written for the real
+        // `claude` CLI, which accepts that flag, not for a plain shell.
+        // `sh --session-id <uuid>` with no `-c` treats `--session-id` as an
+        // invalid OPTION and exits 2 immediately (confirmed by hand), and
+        // pty-manager's own onExit handler deletes the session the instant
+        // that happens — which silently kills the very pin this check exists
+        // to observe, with nothing pointing at the cause. `-c 'sleep N'`
+        // sidesteps this: everything appended after the `-c` command string
+        // becomes ordinary POSITIONAL PARAMETERS ($0, $1, ...) that the
+        // script never references, so the shell runs exactly as asked and
+        // outlives the whole check.
+        wc.send(IPC_EVENTS.PRESET_SPAWN,
+          { cwd, command: '/bin/sh', args: ['-c', 'sleep 120'], w: 400, h: 300, agent: 'claude-code' })
+        const ids = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > before.size ? now : false
+        }, 3000)
+        return ids ? ids.find((id) => !before.has(id)) : undefined
+      }
+
+      // A real rail-row click — goToPanel: frame + select, no wake — the
+      // same gesture check 100's selectFromRail and M13's railGoTo already
+      // use, immune to z-order the way a coordinate click aimed at a
+      // cascaded spawn is not (check 100b's own recorded lesson).
+      const selectPanelViaRailRow = async (id) => {
+        const clicked = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('[data-rail-row="${id}"] .rail-row__main')
+          if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await settle()
+        return clicked
+      }
+
+      const usageOutputText = () => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-usage-output]')
+        return el ? el.textContent : null
+      })()`)
+
+      // 138. The number reaches the pane, end to end. The FIRST thing to
+      //      exercise the pin, the tick, the reader, the store and the
+      //      section together: verify:rail's own buildUsageFields checks
+      //      prove the MODEL and nothing between that builder and a painted
+      //      pane is covered by them — the hook could read the wrong id, the
+      //      subscription could be missing, the store could be empty.
+      //
+      //      The transcript is SYNTHESISED by the harness and reached
+      //      through the substituted deps above, never through the real
+      //      ~/.claude/projects: the rule the git fence and the prompt fence
+      //      both obey, since a suite must not read state this repo does not
+      //      own, and on a developer's machine that directory holds their
+      //      actual work.
+      //
+      //      It WAITS on the value rather than sleeping: a fixed sleep
+      //      against a 2s poll is a flake, not a bound.
+      writeFileSync(usageFixtureFile, assistantRecord({ output: 1095 }) + '\n')
+      const agentId = await spawnAgentPanel(usageFixtureDir)
+      // The PTY must exist before the poll can find it in this manager's own
+      // session map — check 99's trap, reached through a new door.
+      if (agentId) await waitUntil(async () => (await sessionMap(wc)).has(agentId), 8000)
+      await selectPanelViaRailRow(agentId)
+      const shown = await waitUntil(async () => {
+        const text = await usageOutputText()
+        return text !== null && /1,?095/.test(text) ? text : false
+      }, 10000)
+      ok('138 the panel\'s token total reaches the inspector',
+        agentId !== undefined && shown !== false, `id=${agentId} shown=${JSON.stringify(shown)}`)
+
+      // 139. The total GROWS as the agent works, which is what makes this a
+      //      live readout rather than a one-shot read. The discriminating
+      //      half: an implementation that read the file once at spawn and
+      //      cached it satisfies 138 completely and is not the feature.
+      appendFileSync(usageFixtureFile, assistantRecord({ output: 5 }) + '\n')
+      const grown = await waitUntil(async () => {
+        const text = await usageOutputText()
+        return text !== null && /1,?100/.test(text) ? text : false
+      }, 10000)
+      ok('139 the total grows as the transcript grows', grown !== false, String(grown))
+
+      // 140. A panel with NO pin renders NO Cost section — not an empty one,
+      //      and not "$0.00". Asserted as the element being ABSENT rather
+      //      than as empty text, because an empty-but-present section is a
+      //      visible blank gap in a 260px pane. Deliberately weak on its
+      //      own: it passes vacuously before the section exists at all, so
+      //      it is only evidence once 138 has been watched red first.
+      const plainId = await spawnAt(usageFixtureDir)
+      await selectPanelViaRailRow(plainId)
+      const state = await wc.executeJavaScript(`(() => ({
+        selected: (document.querySelector('.panel--selected') || {}).dataset?.panelId,
+        section: !!document.querySelector('[data-usage-section]')
+      }))()`)
+      ok('140 an unpinned panel renders no Cost section at all',
+        state.selected === plainId && state.section === false, JSON.stringify(state))
+
+      // 141. Final-review fix. PersistedTerminalPanel carried no `agent`
+      //      field at all, and fromPanels/toPanels never mentioned one, so a
+      //      restart silently dropped a restored panel's pin — pinned went
+      //      false, and the Cost section vanished PERMANENTLY, even though
+      //      main's PtyManager kept accumulating and sending usage:panel for
+      //      a session layout.json's own record no longer named at all. This
+      //      is the check that could not have passed against the unfixed
+      //      schema: it proves the pin on the REAL persisted panel record,
+      //      through a real save and a real reload, not merely in main's
+      //      separate session-id map (checks 117-118 already cover that map
+      //      and would stay green regardless of this defect).
+      {
+        flushLayoutStore()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () =>
+          (await wc.executeJavaScript(
+            `!!document.querySelector('[data-rail-row="${agentId}"]')`)) || false,
+          8000)
+        await settle()
+        const clicked = await selectPanelViaRailRow(agentId)
+        const section = await wc.executeJavaScript(
+          `!!document.querySelector('[data-usage-section]')`)
+        ok('141 a panel\'s agent pin survives a real reload, and the Cost section still renders',
+          agentId !== undefined && clicked === true && section === true,
+          `id=${agentId} clicked=${clicked} section=${section}`)
+      }
+
+      try { rmSync(usageFixtureDir, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
       // Best-effort, like the two below it and for the same reason: a throw

@@ -6,6 +6,7 @@ import {
   type PresetTemplate,
   type PresetListRow
 } from '../shared/ipc-contract'
+import type { AgentKind } from '../shared/cost'
 
 /**
  * The preset helpers, and deliberately NOTHING that touches the disk, the
@@ -31,7 +32,7 @@ import {
  */
 export const BUILT_IN_PRESETS: Preset[] = [
   { id: DEFAULT_PRESET_ID, name: 'Login shell', cwd: '~', args: ['-l'] },
-  { id: 'claude', name: 'Claude', cwd: '~', command: 'claude', args: [] },
+  { id: 'claude', name: 'Claude', cwd: '~', command: 'claude', args: [], agent: 'claude-code' },
   { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [] }
 ]
 
@@ -64,11 +65,13 @@ export function templateOf(preset: {
   args: string[]
   w?: number
   h?: number
+  agent?: AgentKind
 }): PresetTemplate {
   const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
   if (preset.command !== undefined) template.command = preset.command
   if (preset.w !== undefined) template.w = preset.w
   if (preset.h !== undefined) template.h = preset.h
+  if (preset.agent !== undefined) template.agent = preset.agent
   return template
 }
 
@@ -154,7 +157,8 @@ export function presetFromCapture(user: Preset[], captured: CapturedPanel): Pres
     ...(captured.command !== undefined ? { command: captured.command } : {}),
     args: [...captured.args],
     w: captured.w,
-    h: captured.h
+    h: captured.h,
+    ...(captured.agent !== undefined ? { agent: captured.agent } : {})
   }
 }
 

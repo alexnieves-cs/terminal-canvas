@@ -28,6 +28,7 @@ import {
 } from '@renderer/session/live-session-store'
 import { applySubagents, clearSubagents } from '@renderer/session/subagent-store'
 import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
+import { applyUsage, clearUsage, useUsage } from '@renderer/session/usage-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
@@ -351,7 +352,13 @@ export function Canvas({
             placed,
             nextZ(current),
             chosen
-              ? { panelId: id, cwd: chosen.cwd, args: [...chosen.args], ...(chosen.command !== undefined ? { command: chosen.command } : {}) }
+              ? {
+                  panelId: id,
+                  cwd: chosen.cwd,
+                  args: [...chosen.args],
+                  ...(chosen.command !== undefined ? { command: chosen.command } : {}),
+                  ...(chosen.agent !== undefined ? { agent: chosen.agent } : {})
+                }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
           )
@@ -476,6 +483,7 @@ export function Canvas({
         clearAgentState(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
+        clearUsage(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -763,6 +771,13 @@ export function Canvas({
     applyFileResult(event.panelId, event.result)
   }), [])
 
+  // The fifth canvas-wide subscription, for the same reason as the ones
+  // above: the store fans out per panel id, so a per-panel subscription here
+  // would deliver every panel's usage update to every panel.
+  useEffect(() => window.canvas.session.onUsage(({ panelId, usage }) => {
+    applyUsage(panelId, usage)
+  }), [])
+
   // The three preset events main pushes (see main/index.ts's menu handlers).
   // Routed through onSpawn/commitHistory rather than a second spawn path so a
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
@@ -797,6 +812,7 @@ export function Canvas({
       // Absent stays absent: a captured login-shell panel must save as a
       // login-shell preset, not as whatever this machine's shell happens to be.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
+      if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
       return captured
     })
     return () => {
@@ -879,6 +895,7 @@ export function Canvas({
       clearAgentState(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
+      clearUsage(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1345,6 +1362,7 @@ export function Canvas({
     clearAgentState(id)
     clearLiveSession(id)
     clearSubagents(id)
+    clearUsage(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -2583,6 +2601,7 @@ export function Canvas({
                     clearAgentState(panelId)
                     clearLiveSession(panelId)
                     clearSubagents(panelId)
+                    clearUsage(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -2634,6 +2653,7 @@ export function Canvas({
       // login-shell preset, not as whatever this machine's shell happens to
       // be. Built field by field for the same reason onCapture is.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
+      if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
       void window.canvas.preset.savePanel(captured).then(reloadPresets)
     },
     /**
@@ -2699,6 +2719,7 @@ export function Canvas({
       clearAgentState(id)
       clearLiveSession(id)
       clearSubagents(id)
+      clearUsage(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it (the × and the rail's close control are
@@ -3076,6 +3097,11 @@ export function Canvas({
   // conditional, and `selectedId ?? ''` is a panel id that matches nothing,
   // which the store answers undefined for.
   const selectedLive = useLiveSession(selectedId ?? '')
+  // M15. Unconditional and above the ternary for the same reason
+  // useLiveSession is: a hook cannot live inside a conditional, and
+  // `selectedId ?? ''` is a panel id that matches nothing, which the store
+  // answers undefined for.
+  const selectedUsage = useUsage(selectedId ?? '')
   const inspectorBuilt = selectedPanel === undefined
     ? null
     : buildInspectorModel(
@@ -3087,7 +3113,10 @@ export function Canvas({
         // The parameter is optional and this is its only production caller;
         // omitting it renders an always-empty section that looks like a
         // feature nobody built.
-        panels
+        panels,
+        // M15. The Cost section's data. Optional and this is its only
+        // production caller, the same trade `live` and `panels` made.
+        selectedUsage
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

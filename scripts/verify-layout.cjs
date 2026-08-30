@@ -1856,6 +1856,188 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify(back[0]))
 }
 
+// ---------------------------------------------------------------------------
+// M17. A panel's pinned agent session id, on disk. A sibling of `baselines`,
+// same shape and same reasoning: PanelId is global (it doubles as a tmux
+// session name), so this map is keyed globally too rather than nested inside
+// a workspace.
+
+// 118. Absent warns NOTHING. Every layout.json written before M17 has no
+//      sessions key, and shouting about those would make the first launch
+//      after an upgrade complain about a file that is perfectly fine — the
+//      line parsePresets, parsePreferences and parseBaselines all already draw.
+{
+  const warnings = []
+  const out = L.parseSessions(undefined, warnings)
+  ok('118 an absent sessions map warns nothing',
+    Object.keys(out).length === 0 && warnings.length === 0,
+    `warnings=${warnings.length}`)
+}
+
+// 119. Present but MALFORMED warns rather than vanishing silently. The rule
+//      check 41 states for presets and 99 for baselines: a map dropped without
+//      a word is every pinned panel's accounting gone with nothing said.
+{
+  const warnings = []
+  L.parseSessions([], warnings)
+  ok('119 a malformed sessions map warns', warnings.length === 1, warnings.join('; '))
+}
+
+// 120. A malformed ENTRY drops alone while its neighbour survives — the
+//      individual-drop rule parseLayout obeys everywhere else. A non-string
+//      session id is the reachable case: a hand-edited file, or a future
+//      version writing an object here.
+{
+  const warnings = []
+  const out = L.parseSessions({ n1: 'abc-123', n2: 42 }, warnings)
+  ok('120 a malformed session entry drops alone',
+    out.n1 === 'abc-123' && out.n2 === undefined && warnings.length === 1,
+    JSON.stringify(out))
+}
+
+// 121. A session id survives a write and a reopen through the real coalesced
+//      store. This is success criterion 2's storage half: without it a Cmd+R
+//      reload re-mints, the new uuid names a transcript that does not exist,
+//      and the panel's cost freezes with nothing in any log.
+{
+  const path = tmp()
+  const a = L.createLayoutStore({ filePath: path })
+  a.load()
+  a.setSession('n1', 'abc-123')
+  a.flushSync()
+  const b = L.createLayoutStore({ filePath: path })
+  b.load()
+  ok('121 a session id survives a write and a reopen',
+    b.session('n1') === 'abc-123', String(b.session('n1')))
+}
+
+// 122. dropSession removes it. The same recycled-id hazard dropBaseline
+//      closes: a panel reusing a dead one's id must not inherit its session,
+//      because --session-id naming an EXISTING session is a resume — that
+//      panel would come back holding a stranger's conversation.
+{
+  const path = tmp()
+  const s = L.createLayoutStore({ filePath: path })
+  s.load()
+  s.setSession('n1', 'abc-123')
+  s.dropSession('n1')
+  s.flushSync()
+  const reopened = L.createLayoutStore({ filePath: path })
+  reopened.load()
+  ok('122 dropSession removes the pin', reopened.session('n1') === undefined,
+    String(reopened.session('n1')))
+}
+
+// 123. `agent` round-trips through a preset, and an ABSENT agent writes no
+//      key at all rather than a saved absent-marker. Absent is the ordinary
+//      case — a login-shell preset is not a Claude Code preset — and the
+//      `in` test is deliberate: `agent: undefined` is a DIFFERENT fact from
+//      the key being missing, and it is the one that survives an IPC
+//      structured clone. This is check 97's rule and the absent-command
+//      rule, applied to a second optional field.
+{
+  const warnings = []
+  const out = L.parsePresets(
+    [{ id: 'p1', name: 'Claude', cwd: '~', args: [], agent: 'claude-code' },
+     { id: 'p2', name: 'Shell', cwd: '~', args: [] }],
+    warnings)
+  ok('123 agent round-trips, and absent stays absent',
+    out[0].agent === 'claude-code' && !('agent' in out[1]) && warnings.length === 0,
+    `${out[0].agent} / ${'agent' in out[1]}`)
+}
+
+// 124. An UNKNOWN agent value is dropped with a warning rather than carried
+//      forward. Check 107's asymmetry: a value written by a version that
+//      knew an adapter this one does not must not be honoured, because
+//      honouring it means passing a flag to a CLI that has never heard of
+//      it — which fails the spawn outright rather than merely failing to
+//      account.
+{
+  const warnings = []
+  const out = L.parsePresets([{ id: 'p1', name: 'x', cwd: '~', args: [], agent: 'codex' }], warnings)
+  ok('124 an unknown agent is dropped with a warning',
+    !('agent' in out[0]) && warnings.length === 1, warnings.join('; '))
+}
+
+// ---------------------------------------------------------------------------
+// Final review fix. PersistedTerminalPanel had no `agent` field at all: a
+// preset's own agent round-tripped (123/124) while a PANEL's did not, so
+// every restart dropped spec.agent off a restored panel, buildInspectorModel's
+// `pinned` test went false, and the Cost section vanished — silently, and
+// permanently, even though main's PtyManager kept accumulating and sending
+// usage:panel for a session layout.json's own record no longer named.
+
+// 125. A panel's `agent` round-trips through the schema parser with no
+//      warning — the same absent-vs-malformed line 123 draws for a preset,
+//      drawn here for the SECOND record type that carries the field.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({ agent: 'claude-code' }), panel({ id: 'p2' })],
+      camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null
+    }],
+    settings: { layout: true, camera: true, focus: true }
+  }))
+  const w = active(snapshot)
+  const [p1, p2] = w.panels
+  ok('125 a panel agent round-trips, and absent stays absent',
+    p1.agent === 'claude-code' && !('agent' in p2) && warnings.length === 0,
+    `${p1.agent} / ${'agent' in p2}`)
+}
+
+// 126. An unknown agent value on a PANEL is dropped with a warning rather
+//      than carried into the map — 124's rule, on the record type that
+//      actually reaches buildInspectorModel's `pinned` test.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [panel({ agent: 'codex-cli-but-misspelled' })],
+      camera: { x: 10, y: 20, scale: 2 }, selectedId: null, focusedId: null
+    }],
+    settings: { layout: true, camera: true, focus: true }
+  }))
+  const w = active(snapshot)
+  ok('126 an unknown panel agent is dropped with a warning',
+    !('agent' in w.panels[0]) && warnings.length === 1, warnings.join('; '))
+}
+
+// 127. `spec.agent` survives a real write and a real reopen through
+//      layout-adapt's fromPanels/toPanels round trip, which is the OTHER
+//      door onto this field and the one a schema-only check (125) cannot
+//      see — the exact gap this fix round found, since 123/124 only ever
+//      exercised Preset.agent, never PanelSpec.agent.
+{
+  const [persisted] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'], agent: 'claude-code' },
+    z: 1
+  }])
+  ok('127 fromPanels carries spec.agent out', persisted.agent === 'claude-code')
+  const [back] = L.toPanels([persisted])
+  ok('127b toPanels carries agent back into spec', back.spec.agent === 'claude-code')
+}
+
+// 128. An untitled — unpinned — panel writes no `agent` key at all, the same
+//      rule check 60 states for `title`: a spread would put `agent: undefined`
+//      in layout.json, where `'agent' in panel` reads true for a panel that
+//      was never pinned to anything.
+{
+  const [out] = L.fromPanels([{
+    kind: 'terminal',
+    rect: { id: 'p1', x: 0, y: 0, w: 720, h: 460 },
+    spec: { panelId: 'p1', cwd: '~', args: ['-l'] },
+    z: 1
+  }])
+  ok('128 an unpinned panel writes no agent key at all', !('agent' in out))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

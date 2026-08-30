@@ -134,6 +134,7 @@ npm run verify:layout        # on-disk layout format + the store that owns it, p
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
 npm run verify:rail          # the rail's three sections and the inspector's read model, plain node
 npm run verify:review        # git argv, the review engine's result arms, plain node
+npm run verify:usage         # transcript JSONL parsing, the price table, the per-panel accumulator, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
@@ -184,7 +185,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        file:open / file:read / file:close
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
-                       file:changed
+                       file:changed / usage:panel
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -541,10 +542,11 @@ contains, not only the ones that fit on screen.
 | M14 | The credential boundary: a store main owns, and no secret reaches an agent | ✅ done |
 | M15 | Subagent nodes: an agent's fan-out, on the canvas | ✅ done |
 | M16 | File panels: a local file on the canvas, watched | ✅ done |
+| M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11,
-M12, M13, M14, M15 and M16 each landed on their own branch and merged in
+M12, M13, M14, M15, M16 and M17 each landed on their own branch and merged in
 sequence. A gap in the numbers here is a milestone someone else is holding,
 not one that was skipped. M15 and M16 were each built and reviewed entirely
 as "M13" — main had already claimed that number, and then claimed it again
@@ -552,7 +554,11 @@ via each earlier renumbering, by the time each of them tried to merge — so
 each moved to the next free number on merge rather than at any point during
 its own development. M15 became M15 because both the real M13 and M14 were
 already claimed while it was in flight; M16 became M16 because by the time
-it tried to merge, M13, M14 AND M15 were all already claimed.
+it tried to merge, M13, M14 AND M15 were all already claimed. M17 (token and
+dollar accounting) was built and reviewed as "M15" — a different M15
+(subagent nodes) had already claimed that number, and M16 (file panels)
+claimed the next one, both while it was in flight — so it moved to the next
+free number on merge, the identical story one level further down the chain.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

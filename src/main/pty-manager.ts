@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   closeSync,
   existsSync,
@@ -10,6 +11,7 @@ import {
 } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
 import type { WebContents } from 'electron'
 import type * as pty from 'node-pty'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -25,6 +27,15 @@ import { initialDetector, nextState, scanForBell, type AgentEvent, type Detector
 import type { SessionBackend } from './session-backend'
 import { SubagentWatch, type WatchDeps } from './subagent-watch'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
+import { resolveTranscript as realResolveTranscript, readFrom as realReadFrom } from './transcript-reader'
+import {
+  applyChunk,
+  createUsageState,
+  dropUsage,
+  offsetFor,
+  resetIfShrunk,
+  usageFor
+} from './usage-accumulator'
 
 /**
  * Owns every PTY in the app. The renderer never spawns a process; it only ever
@@ -61,6 +72,20 @@ const IDLE_TICK_MS = 500
  * subprocess per tick whether the canvas holds two panels or forty.
  */
 const LIVE_TICK_MS = 2000
+
+/**
+ * How often to re-read pinned transcripts.
+ *
+ * A THIRD timer, not a merge into either existing one, and the reason is
+ * asymmetric. IDLE_TICK_MS is 500 and is the RESOLUTION of M6c's idleness
+ * threshold — folding a file read onto it would put disk IO on the 500ms path
+ * for a number that changes once per agent turn, and folding this onto the
+ * idle tick's period would make idleness detection four times coarser
+ * silently, while agent.idleAfterMs went on reading whatever the user set.
+ * LIVE_TICK_MS is 2000 and is a tmux subprocess; this is a file read; they are
+ * unrelated cadences that would be coupled by a merge for no benefit.
+ */
+const USAGE_TICK_MS = 2000
 
 /**
  * node-pty passes cwd straight to the OS, so it never expands `~` and it throws
@@ -275,6 +300,52 @@ export class PtyManager {
    * deliberately leaves open.
    */
   private readonly firstSpawnedAt = new Map<PanelId, number>()
+  /** One per manager, like idleTimer and liveTimer. See USAGE_TICK_MS. */
+  private usageTimer: NodeJS.Timeout | null = null
+  private usageState = createUsageState()
+  /** Resolved transcript paths, cached: the glob runs once per session. */
+  private transcriptPaths = new Map<PanelId, string>()
+  /**
+   * Panels owed ONE forced usage:panel resend, regardless of whether the
+   * transcript grew. detachAll() marks every panel that already had usage
+   * state here: a Cmd+R reload wipes the renderer's usage-store, but
+   * pollUsage's only send trigger is applyChunk seeing genuinely NEW bytes —
+   * so a reattached panel whose agent is currently idle would otherwise show
+   * "no answer yet" indefinitely, even though this manager already holds its
+   * full totals. Consumed and cleared the first time pollUsage forces a send
+   * for that panel.
+   */
+  private forceResend = new Set<PanelId>()
+  /**
+   * One StringDecoder per pinned panel, carrying whatever incomplete trailing
+   * UTF-8 bytes the last read ended on. readFrom hands back RAW bytes rather
+   * than a decoded string precisely because a read can land mid-write, at any
+   * byte offset — routinely inside a multibyte codepoint, since transcripts
+   * carry non-ASCII constantly (em dashes, emoji, international source).
+   * Decoding an arbitrary byte range directly turns a split codepoint into a
+   * replacement character on BOTH sides of the split, corrupting the line
+   * that straddles it — JSON.parse then throws and the whole turn is dropped,
+   * permanently, since the byte offset has already moved past it.
+   * StringDecoder.write() buffers exactly that trailing partial sequence
+   * across calls and emits only complete characters, which is why it has to
+   * live here rather than in transcript-reader.ts: this manager already
+   * carries per-panel state for the offset and the totals, and the decoder's
+   * lifetime must track theirs — surviving a detach/reattach (the bytes it is
+   * holding are still unconsumed, exactly like the offset that already counts
+   * them), reset alongside a shrink (those buffered bytes belonged to a file
+   * that is gone), and dropped alongside dropUsage (the recycled-id hazard
+   * dropBaseline and dropPinnedSession each close on their own doors).
+   */
+  private transcriptDecoders = new Map<PanelId, StringDecoder>()
+
+  private decoderFor(panelId: PanelId): StringDecoder {
+    let d = this.transcriptDecoders.get(panelId)
+    if (!d) {
+      d = new StringDecoder('utf8')
+      this.transcriptDecoders.set(panelId, d)
+    }
+    return d
+  }
 
   constructor(
     private readonly getTarget: () => WebContents | null,
@@ -302,7 +373,37 @@ export class PtyManager {
      * and must keep compiling. In production they reach the layout store.
      */
     private readonly captureBaseline: (panelId: PanelId, cwd: string) => void = () => {},
-    private readonly dropBaseline: (panelId: PanelId) => void = () => {}
+    private readonly dropBaseline: (panelId: PanelId) => void = () => {},
+    /**
+     * The stored agent session id for this panel, if it has one.
+     *
+     * OPTIONAL and defaulted, the trade captureBaseline/dropBaseline already
+     * make: every fixture in the verify suites constructs a manager without
+     * these, and a required dep would change what a dozen existing checks
+     * assert while looking like a widening.
+     */
+    private readonly pinnedSession: (panelId: PanelId) => string | undefined = () => undefined,
+    private readonly setPinnedSession: (panelId: PanelId, sessionId: string) => void = () => {},
+    /**
+     * Drop the pin, beside dropBaseline and for its reason: the map must not
+     * grow for the life of the install, and a recycled panel id must not
+     * inherit a dead panel's session — `--session-id` naming an EXISTING
+     * session is a RESUME, so that panel would come back holding a
+     * stranger's conversation.
+     */
+    private readonly dropPinnedSession: (panelId: PanelId) => void = () => {},
+    /**
+     * The real-fs half, injected exactly as captureBaseline/dropBaseline are
+     * and for the same reason review-engine.ts takes a GitRunner: a harness
+     * can substitute a fake without a real ~/.claude/projects directory
+     * anywhere in earshot. Defaulted to the real implementations so every
+     * existing construction site — every verify harness — keeps compiling.
+     */
+    private readonly resolveTranscript: (sessionId: string) => string | undefined = realResolveTranscript,
+    private readonly readFrom: (
+      path: string,
+      offset: number
+    ) => { bytes: Buffer; size: number } | undefined = realReadFrom
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -335,12 +436,41 @@ export class PtyManager {
 
     const command = resolveCommand(spec, loginEnv)
 
+    // Pin an agent session id, and pass it as a flag so the transcript this
+    // panel writes is one we can find later.
+    //
+    // Read-then-mint, never mint: this function runs again for EVERY panel on
+    // a Cmd+R reload, and under tmux `new-session -A` reattaches rather than
+    // creating — the command is not re-run and the agent keeps the id it was
+    // given. A fresh uuid on that second call would name a transcript that
+    // does not exist while the real one went on growing, and the panel's cost
+    // would freeze at whatever it was before the reload with nothing in any
+    // log. Same shape as captureBaseline's guard twenty lines up, and the same
+    // shape as `reattached` needing its probe BEFORE the spawn.
+    //
+    // Gated on spec.agent, never on the resolved command: appending a flag to
+    // a command the user typed is the move resolveCommand deliberately refuses.
+    let args = spec.args
+    if (spec.agent === 'claude-code') {
+      let sessionId = this.pinnedSession(spec.panelId)
+      if (sessionId === undefined) {
+        sessionId = randomUUID()
+        this.setPinnedSession(spec.panelId, sessionId)
+      }
+      // Only when the user has not already said otherwise. A preset whose args
+      // carry their own --session-id is the user being explicit, and a second
+      // one would make the CLI reject the invocation outright.
+      if (!args.includes('--session-id')) {
+        args = [...args, '--session-id', sessionId]
+      }
+    }
+
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
     // is missing, so a probe taken afterwards answers true unconditionally and
     // every panel — including one on a cold start — claims to have reattached.
     const reattached = this.getBackend().hasSession(spec.panelId)
 
-    const proc = this.getBackend().spawn(spec, command, cwd, env)
+    const proc = this.getBackend().spawn({ ...spec, args }, command, cwd, env)
 
     // A genuinely NEW session's spawnedAt is now, recorded in firstSpawnedAt
     // for the life of this manager (or until kill()). A REATTACHED one
@@ -386,6 +516,7 @@ export class PtyManager {
     // Only ever ticks while something is in the map; see startIdleTick.
     this.startIdleTick()
     this.startLiveTick()
+    this.startUsageTick()
 
     // The one DIRECT send in this class, and applyEvent structurally cannot
     // do it: applyEvent sends only on a CHANGE, and the detector is born in
@@ -461,7 +592,7 @@ export class PtyManager {
       // state for a panel nobody can see. 'exited' is terminal, so once it is
       // recorded no later event can produce a send at all.
       this.applyEvent(session, { kind: 'exit' }, session.killed)
-      if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
+      if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
       // An exit we asked for is not news the panel needs to paint.
       if (session.killed) return
       // The tmux CLIENT's exit code carries no information — an inner command
@@ -540,9 +671,14 @@ export class PtyManager {
       this.getBackend().destroy(panelId)
       this.dropBaseline(panelId)
       this.capturedBaselineIds.delete(panelId)
+      this.dropPinnedSession(panelId)
       this.lastLive.delete(panelId)
       this.subagentWatch.drop(panelId)
       this.firstSpawnedAt.delete(panelId)
+      dropUsage(this.usageState, panelId)
+      this.transcriptPaths.delete(panelId)
+      this.forceResend.delete(panelId)
+      this.transcriptDecoders.delete(panelId)
       return
     }
     session.killed = true
@@ -557,11 +693,16 @@ export class PtyManager {
     this.getBackend().destroy(panelId)
     this.dropBaseline(panelId)
     this.capturedBaselineIds.delete(panelId)
+    this.dropPinnedSession(panelId)
     this.lastLive.delete(panelId)
     this.subagentWatch.drop(panelId)
     this.firstSpawnedAt.delete(panelId)
+    dropUsage(this.usageState, panelId)
+    this.transcriptPaths.delete(panelId)
+    this.forceResend.delete(panelId)
+    this.transcriptDecoders.delete(panelId)
     this.sessions.delete(panelId)
-    if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
+    if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
   }
 
   /** Called on before-quit so no PTY outlives the app. */
@@ -577,6 +718,15 @@ export class PtyManager {
    */
   detachAll(): void {
     for (const session of [...this.sessions.values()]) {
+      // A panel with existing usage state is exactly a panel whose renderer
+      // is about to lose its usage-store entirely — the reload wipes it —
+      // while THIS manager goes on holding full totals for it. Marking it
+      // here is what lets pollUsage force one resend the next time it sees
+      // this panel, instead of waiting on a byte that may not arrive for a
+      // while if the agent is currently idle.
+      if (usageFor(this.usageState, session.panelId) !== undefined) {
+        this.forceResend.add(session.panelId)
+      }
       session.killed = true
       if (session.flushTimer) clearTimeout(session.flushTimer)
       try {
@@ -609,7 +759,27 @@ export class PtyManager {
     // SubagentWatch.clearDedupe()'s own comment for the same story from the
     // other side.
     this.subagentWatch.clearDedupe()
-    if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick() }
+    // The pin is the exact MIRROR of lastLive, for the opposite reason: this
+    // is a reload, the tmux session survives it, and the agent keeps the id
+    // it was given — dropping the pin here would re-mint a fresh uuid on the
+    // next create() and name a transcript that does not exist while the real
+    // one goes on growing, freezing the panel's cost forever with nothing in
+    // any log (check 28). lastLive must be cleared here because the tmux
+    // session survives and the LOCAL cached value goes stale; the pin must
+    // survive here because the tmux session survives and the pin is still
+    // correct.
+    //
+    // transcriptPaths is cleared, usageState is deliberately NOT. The agent
+    // kept running across the reload and its transcript kept growing, so the
+    // accumulated totals and the byte offset are still correct — re-reading
+    // from zero would double-count every turn already folded in before the
+    // reload. The cached PATH is dropped only because it is cheap to
+    // re-resolve on the next poll and a stale one (from a transcript that
+    // has since rotated, however unlikely) is the one thing here that could
+    // actually be wrong; the totals and offset cannot be, because nothing
+    // about a reload changes what the agent already wrote.
+    this.transcriptPaths.clear()
+    if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
   }
 
   /**
@@ -750,6 +920,92 @@ export class PtyManager {
         )
       }
       this.send(IPC_EVENTS.SUBAGENT_STATE, payload)
+    }
+  }
+
+  private startUsageTick(): void {
+    if (this.usageTimer) return
+    this.usageTimer = setInterval(() => this.pollUsage(), USAGE_TICK_MS)
+    // Same reason idleTimer and liveTimer are unref'd: do not hold a
+    // plain-node verify process open for a timer nothing is waiting on.
+    this.usageTimer.unref?.()
+  }
+
+  private stopUsageTick(): void {
+    if (!this.usageTimer) return
+    clearInterval(this.usageTimer)
+    this.usageTimer = null
+  }
+
+  /**
+   * Re-read each pinned panel's transcript from where we left off.
+   *
+   * Only panels this manager is holding AND that carry a pin, the same
+   * narrowing pollLive makes: a panel with no pin has no transcript, and a
+   * panel not in the map belongs to nothing subscribed.
+   */
+  private pollUsage(): void {
+    for (const panelId of this.sessions.keys()) {
+      const sessionId = this.pinnedSession(panelId)
+      if (sessionId === undefined) continue
+      let path = this.transcriptPaths.get(panelId)
+      if (path === undefined) {
+        // Undefined here is the ORDINARY state for the first seconds of every
+        // pinned panel — the agent has started and not yet answered — so this
+        // is a retry, not a failure.
+        path = this.resolveTranscript(sessionId)
+        if (path === undefined) continue
+        this.transcriptPaths.set(panelId, path)
+      }
+      const offset = offsetFor(this.usageState, panelId)
+      let read = this.readFrom(path, offset)
+      if (read === undefined) continue
+      // A shrink means the file was truncated or replaced: the stored offset
+      // now points PAST the file's end, so `readFrom` short-circuits at that
+      // stale offset and hands back an EMPTY read — a size, but no bytes.
+      // Resetting the state AFTER consuming that empty read (the ordering
+      // this replaces) fixes the OFFSET for next tick while `applyChunk` still
+      // runs on this tick's empty text, silently sets offset = fileSize
+      // having parsed nothing, and the whole replacement file is skipped —
+      // forever, since the offset it leaves behind already covers it. The
+      // reset has to run BEFORE the read that is actually consumed, and a
+      // second read from 0 has to follow it, so the replacement file's
+      // content is what applyChunk actually sees this tick.
+      if (read.size < offset) {
+        resetIfShrunk(this.usageState, panelId, read.size)
+        // The decoder's buffered partial bytes belonged to the file that is
+        // gone — carrying them into a full re-read from 0 would prepend a
+        // stray tail from a stream this panel no longer has any relationship
+        // to. A fresh decoder is exactly what a fresh offset already implies.
+        this.transcriptDecoders.delete(panelId)
+        read = this.readFrom(path, 0)
+        if (read === undefined) continue
+      }
+      // write(), never toString(): a read can land mid-write, at any byte
+      // offset, and routinely splits a multibyte UTF-8 codepoint — decoding
+      // that byte range directly would corrupt the line straddling the split
+      // on BOTH sides of it. The decoder buffers exactly the incomplete
+      // trailing bytes and folds them into the NEXT call, which is why it has
+      // to persist per panel across ticks rather than being constructed here.
+      const text = this.decoderFor(panelId).write(read.bytes)
+      const usage = applyChunk(this.usageState, panelId, text, read.size)
+      // undefined means nothing changed. That dedupe IS the throttle; see
+      // applyChunk's own comment and verify:usage 18. But a panel marked in
+      // forceResend just lost its renderer-side usage-store to a reload, so
+      // "nothing changed" is exactly the case that must still send: the
+      // agent may be idle for a while, and the reattached panel would
+      // otherwise show "no answer yet" indefinitely despite this manager
+      // already holding its full totals.
+      if (usage === undefined) {
+        if (this.forceResend.has(panelId)) {
+          this.forceResend.delete(panelId)
+          const forced = usageFor(this.usageState, panelId)
+          if (forced !== undefined) this.send(IPC_EVENTS.USAGE_PANEL, { panelId, usage: forced })
+        }
+        continue
+      }
+      this.forceResend.delete(panelId)
+      this.send(IPC_EVENTS.USAGE_PANEL, { panelId, usage })
     }
   }
 

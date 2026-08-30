@@ -353,6 +353,60 @@ function InspectorPanel({
           {review.more > 0 && <p className="inspector__review-more">+{review.more} more</p>}
         </section>
       )}
+      {!model.usage.hidden && (
+        /*
+          `hidden` is a panel whose preset declared no agent — a login shell,
+          most panels — and it renders NOTHING, the same "$0.00 beside a
+          working agent is a confident wrong answer" rule the Changes section
+          above states for not-a-repo. Everything else (pinned) always
+          renders the section, even with nothing to show yet, the same
+          `clean` rule: a heading with an empty body would read as broken for
+          the first seconds of every pinned panel's life.
+        */
+        <section className="inspector__section" data-usage-section>
+          <h3 className="inspector__section-heading">Cost</h3>
+          {model.usage.note !== undefined && (
+            <p className="inspector__usage-note" data-usage-note>{model.usage.note}</p>
+          )}
+          {model.usage.rows.length > 0 && (
+            <>
+              {/*
+                FOUR figures, never one sum: "the inspector shows the links,
+                not the answer" applied to a third pair. A single total is
+                unanswerable when the user asks why it is large, and cache
+                reads are usually most of it.
+              */}
+              <ul className="inspector__usage-rows">
+                {model.usage.rows.map((row) => (
+                  <li key={row.label} className="inspector__usage-row" data-usage-row={row.label}>
+                    <span className="inspector__usage-label">{row.label}</span>
+                    <span
+                      className="inspector__usage-tokens"
+                      {...(row.label === 'output' ? { 'data-usage-output': true } : {})}
+                    >
+                      {row.tokens.toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="inspector__usage-turns" data-usage-turns>
+                {model.usage.turns} turns
+                {model.usage.subagentTurns > 0 ? `, ${model.usage.subagentTurns} by subagents` : ''}
+              </p>
+              {model.usage.cost !== undefined && (
+                // `title` carries the disclaimer (never a bare figure — a Max
+                // or Pro subscriber is charged nothing per token) AND a
+                // visible suffix repeats it, so the caveat survives without a
+                // hover.
+                <p className="inspector__usage-cost" data-usage-cost title={model.usage.costLabel}>
+                  ${model.usage.cost.toFixed(2)}{' '}
+                  <span className="inspector__usage-cost-suffix">list price</span>
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
     </div>
   )
 }

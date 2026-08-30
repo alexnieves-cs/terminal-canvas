@@ -175,5 +175,13 @@ module.exports = {
      state, and the same trade: only the constructor is exported, and the
      harness builds the committer itself so its tempIndexPath/removeTempIndex
      deps can close over that file's own scratch directory. */
-  createReviewCommitter: require('../src/main/review-commit').createReviewCommitter
+  createReviewCommitter: require('../src/main/review-commit').createReviewCommitter,
+  /* Task 10's checks 130-132 need PtyManager's usage-tick machinery reading
+     a real path off real disk — the readFrom half is generic delta-file
+     reading with no ~/.claude/projects anywhere in it (only resolveTranscript
+     touches that directory, by globbing it), so it is safe to reuse verbatim
+     rather than reimplement: the harness supplies its OWN fenced
+     resolveTranscript (never this module's), and the only path readFrom is
+     ever called with is the harness's own fixture file. */
+  readFrom: require('../src/main/transcript-reader').readFrom
 }

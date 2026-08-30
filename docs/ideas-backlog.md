@@ -41,13 +41,14 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 
-Nine more entries were rewritten rather than removed, because a milestone shipped most of
+Ten more entries were rewritten rather than removed, because a milestone shipped most of
 each and stopped somewhere deliberate: **#2** (M7 left the merged view), **#14** (M16 left
 tiers 2–4, and the who-wins-on-conflict question tier 1 was built specifically to avoid
-needing), **#17** (M6d left the OS notification), **#24** (M13 left the functional flavour),
-**#25** (M6 left snapping and tidy), **#27** (M5b left placeholders), **#34** (M5a left
-per-preset environment), **#41** (M12 left review's cwd resolution), and **#51** (M9a–c left
-discard).
+needing), **#17** (M6d left the OS notification), **#19** (M17 left history/retention, a
+second CLI adapter, the un-pinned panel and aggregate totals), **#24** (M13 left the
+functional flavour), **#25** (M6 left snapping and tidy), **#27** (M5b left placeholders),
+**#34** (M5a left per-preset environment), **#41** (M12 left review's cwd resolution), and
+**#51** (M9a–c left discard).
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -547,105 +548,41 @@ process trees, each of which may be running a compiler.
   a user to break the app. A cost readout is the honest companion to any such knob: it is
   what makes a number the user is turning mean something.
 
-## 19. Token and dollar accounting per panel — the correlation problem is solved, and the trap is cache reads
+## 19. Token and dollar accounting — landed in M17; the open half is history, a second adapter, the un-pinned panel and aggregate totals
 
-What each agent has spent — tokens, and the money they represent — per panel, per
-workspace, and in total.
+M17 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
+transcript on its own tick, deduped, and an inspector Cost section rendering three states
+— nothing, a note, or four token figures and a labelled dollar total. See `CLAUDE.md`'s
+"The session id is persisted, never re-minted", "`detachAll()` clears the cached
+transcript path and NOT the totals", "Four token classes, never two", "The carry buffer
+is the parser's whole correctness", "Zero and unmeasured are different facts", and "The
+transcript path is globbed, not rebuilt" for the mechanism, plus the honesty note on the
+one unverified link (`--session-id` actually causing Claude Code to write that filename).
 
-- **Why it fits:** this is the cost of the canvas in the currency the user actually cares
-  about, and it is the one number that scales linearly with the thing the product
-  encourages (more agents at once). "Twelve agents running" is a very different sentence
-  depending on whether it is two dollars or two hundred. It is also a number *only this
-  app can produce*: `claude` will report `/cost` for one session, and nothing on the
-  machine knows that eight of them are running at once — which is the premise of the
-  canvas, and the reason several of them are off screen behind an edge pip.
-- **The mechanism is a file watcher, not output parsing, and that is the whole point.**
-  Agent CLIs write structured session transcripts to disk — Claude Code writes JSONL.
-  Totalling usage from those files needs no scraping of rendered TUI output, survives a
-  CLI's cosmetic redesign, and works for a panel at card tier that is not rendering
-  anything. **This is the same side-channel #7 identifies for subagent detection**, and it
-  is a strong argument for building that watcher once, deliberately, as shared machinery
-  rather than twice for two features.
-- **Measured 2026-08-30, against the installed CLI, so the shape is no longer a guess.**
-  The file is `~/.claude/projects/<cwd-slug>/<sessionId>.jsonl`, one JSON object per line,
-  and every `type: "assistant"` line carries a full `message.usage` — `input_tokens`,
-  `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`,
-  `output_tokens_details.thinking_tokens` — beside `message.model`, `timestamp`, `cwd`,
-  `gitBranch` and `sessionId`. Everything the accounting model below needs is already
-  there; none of it has to be inferred.
-- **The correlation constraint is RESOLVED, and the answer is `--session-id`.** This entry
-  previously called correlating a transcript to a panel "the unsolved part" and offered
-  two routes. The second one exists: `claude --session-id <uuid>` is a real flag on the
-  installed CLI, so a panel can mint a UUID at spawn and *own* its transcript path
-  outright — a bijection, not a heuristic. Take it. The cwd-plus-start-time route is
-  ambiguous in exactly the way `review-engine.ts`'s `shared` arm is ambiguous, and for the
-  identical reason: two panels in one repository, and no attribution that is honest. Note
-  where the cost lands, though — injecting a per-vendor flag is a change to the *argv*
-  path, which is `CLAUDE.md`'s "An absent `command` must stay absent through four layers"
-  minefield, and a per-vendor spawn flag belongs beside #8's per-model configuration and
-  #34's per-preset environment rather than hardcoded into `BUILT_IN_PRESETS`.
-- **The trap is cache reads, and it is an order of magnitude.** Measured on one real line:
-  `input_tokens: 2`, `cache_read_input_tokens: 20,935`, `cache_creation_input_tokens:
-  176,977`. A single summed "total tokens" priced at input rates overstates the cost of a
-  cached session by roughly ten times — and it overstates it *confidently*, in the
-  direction that makes the feature look like it is working. Fresh, cache-write and
-  cache-read are three numbers with three prices and must stay three numbers. This is the
-  rule "the inspector shows the links, not the answer" already states for the resolved
-  command and the spec's own: a merged field renders something entirely plausible while
-  deleting the fact the pane exists to show.
-- **Tokens are a fact; dollars are an estimate, and the two must not be rendered as one
-  kind of thing.** The transcript carries tokens and a model name, never a price. Any
-  dollar figure needs a price table this repo maintains, which goes stale *silently* the
-  next time a model is repriced — and a confidently wrong dollar amount is worse than no
-  dollar amount, because it is the number the user will repeat to somebody else. One
-  table, in one file, carrying the date it was last checked; tokens rendered as the
-  primary; cost rendered beside them and explicitly marked an estimate.
-- **Constraint: most panels are not tracked at all, and that arm IS the design.** A
-  `codex` panel, a login shell, or a `claude` panel spawned before this shipped has no
-  transcript and never will. "Not tracked" has to be its own rendered arm and must never
-  render as `$0.00` — this is M9a's `baselineOf` lesson with money attached, where
-  "this panel never started" and "this panel is not in a repository" wore one signal and
-  the pane confidently misdiagnosed a panel that had been running an agent for an hour.
-  The same mistake here reports zero spend for an agent that is spending, which is the one
-  failure direction a cost readout cannot afford.
-- **Constraint: main-side, like every other filesystem access in this app (#3, #14).** The
-  renderer has no `fs` and should keep not having it.
-- **Constraint: it must not bump `registry.version()`** — the same rule #5, #17 and #18
-  obey, and it bites harder here because a usage total moves on every turn of every panel.
-  It wants a module-level store subscribed **per panel id**, the shape
-  `agent-state-store.ts` and M12's `live-session-store.ts` already share, with a dedupe on
-  the way out of main. A number that changes per turn must not re-render every panel on
-  the canvas.
-- **Constraint: vendor-specific by nature.** Keep the accounting model neutral (panel id,
-  tokens in, cache-write, cache-read, tokens out, model, cost) with a thin adapter per
-  CLI, exactly as #12 argues for tickets — and do not build the abstraction until a second
-  CLI actually wants it.
-- **Constraint: reading a transcript is not #31's disclosure surface, but rendering one
-  is.** #31's standing rule is about moving terminal *bytes* somewhere new; totals are
-  metadata, and stay outside it for the same reason #46's ledger does. The line is crossed
-  the moment a usage readout shows transcript *content* — a last-prompt preview, a turn
-  summary — and any such addition owes #31 an answer before it ships.
-- **Where it lands, smallest honest slice first.** An **Inspector section** beside Changes
-  is the first one: per-panel, panel-scoped, and the pane is already the surface built to
-  show a fact and its provenance side by side. A **rail section** is the second — canvas
-  total and the top few panels by spend — dropping in beside `waitingCount` and
-  `buildAttentionRows` in `rail-sections.ts`, pure and plain-node testable in the
-  `verify:rail` tier, frozen on a signature the way `railSignature` already freezes rows
-  against a 60Hz drag. A **`kind: 'usage'` canvas panel** is the version that looks like a
-  dashboard, and it is deliberately last: M9b's panel union is built for exactly this (and
-  `isReviewPanel` is a positive test so a third kind is a compile error at every `switch`
-  rather than a silent terminal spawn), but designing five panes before knowing which one
-  number you actually glance at is the customer-free abstraction #11 warns against.
-- **Open question: is this a live readout, a history, or both?** A number on a card is
-  cheap; "what did this canvas cost me last week" is a data-retention feature with its own
-  storage question. Note that #46's run ledger reaches the identical question one file
-  over and wants the identical writer — an append-only stream beside `layout.json`, which
-  is explicitly *not* `layout-store.ts`'s write-temp-then-rename pattern. Whichever of the
-  two ships first should build that writer for both.
-- **Nearest existing entries: #18 (what the canvas costs the machine)** — the honest
-  companion, and the two readouts want the same rail real estate and the same slow-timer
-  discipline — **and #46 (the run ledger)**, which is the same append-stream question for
-  a different fact.
+What's still open:
+
+- **History and retention.** This shipped as a LIVE readout only — a number on a card,
+  read from the transcript's current tail, with no record kept once a panel closes and its
+  usage state is dropped. "What did this canvas cost me last week" is a data-retention
+  feature with its own storage question, and it is still unowned: it should share whatever
+  #46's run ledger settles on rather than inventing a third store for a second piece of
+  per-panel history.
+- **A second CLI adapter.** The neutral model shipped — `AgentKind` is a union with one
+  member, `'claude-code'`, and `costOf`/the parser/the accumulator all take a model string
+  and totals with nothing Claude-specific baked into their shapes — but no `codex` adapter
+  exists, because none was asked for. Keep the original constraint attached: **do not build
+  the abstraction beyond one member until a second CLI actually wants it.**
+- **The un-pinned panel.** Accounting is gated on `spec.agent`, set only by a preset that
+  declares one — a `claude` typed by hand into a login shell panel is invisible to this
+  feature and reports nothing, by design (`verify:panels` 140 pins exactly this: no pin, no
+  Cost section, not an empty one). The honest fallback this entry once proposed — the
+  panel's cwd plus start time — is a GUESS whenever two panels share a directory, which two
+  panels spawned from the same preset routinely do, and a wrong attribution here is worse
+  than no attribution at all: it tells the user the wrong agent is expensive.
+- **Per-workspace and canvas-wide totals.** The accumulator is keyed per panel id in one
+  `Map`, so summing across a workspace or across every workspace is a fold over that map's
+  existing values — the store makes both cheap. Neither reads anywhere on screen; nothing
+  in the rail or a workspace row aggregates them yet.
 
 ## 20. Two windows, one canvas
 
