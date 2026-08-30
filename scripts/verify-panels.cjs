@@ -28,6 +28,7 @@ buildSync({
 const {
   registerIpcHandlers,
   credentialStore,
+  credentialDir,
   PtyManager,
   createDirectBackend,
   createTmuxBackend,
@@ -8535,6 +8536,68 @@ app.whenReady().then(async () => {
         }
       }
 
+      // 125. The whole boundary in one window: a token entered through the
+      //      REAL palette input mode is stored and listed back, and is NOT
+      //      readable through any member of the bridge. Both halves are
+      //      required — the negative alone passes before the feature exists,
+      //      which is the vacuity trap this suite already records for checks
+      //      111/111b.
+      {
+        await zoomTo(wc, 'k')
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+
+        // React's controlled <input> ignores a plain input.value = x — the
+        // native setter plus a dispatched 'input' is what makes the change
+        // reach React's state, the same nativeSet dance checks 38/45/60 use.
+        const entry = await wc.executeJavaScript(`(async () => {
+          const nativeSet = (input, v) => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+            setter.call(input, v)
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+          }
+          // The row is hiddenAtRest (commands.ts's buildCredentialRows), so
+          // it only appears once a query surfaces it.
+          nativeSet(document.querySelector('.palette__input'), 'add github token')
+          await new Promise((r) => setTimeout(r, 50))
+          const row = [...document.querySelectorAll('.palette__row')]
+            .find((el) => el.textContent.includes('Add GitHub token'))
+          if (!row) return { error: 'no add-github-token row' }
+          if (row.className.includes('palette__row--disabled')) return { error: 'row was disabled' }
+          row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 50))
+          // Still an input, and now in secret input mode: beginSetCredential
+          // reopens the palette into inputMode rather than leaving it shut.
+          const input2 = document.querySelector('.palette__input')
+          if (!input2) return { error: 'palette closed instead of entering secret mode' }
+          // The masking claim, captured here because it is cheap here and
+          // checkable nowhere else — Palette.tsx renders type="password"
+          // ONLY for InputMode.kind === 'secret'.
+          const masked = input2.type
+          nativeSet(input2, 'ghp_e2e_token_value')
+          input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          return { masked }
+        })()`)
+        await settle()
+
+        const probe = await wc.executeJavaScript(`(async () => {
+          const list = await window.canvas.credential.list()
+          const keys = list.length ? Object.keys(list[0]) : []
+          // Every bridge member, walked: none may hand back the token.
+          const serialised = JSON.stringify(list)
+          return {
+            stored: list.some((m) => m.service === 'github'),
+            leaked: serialised.includes('ghp_e2e_token_value') ||
+                    keys.includes('cipher') || keys.includes('token'),
+            hasGet: typeof window.canvas.credential.get === 'function'
+          }
+        })()`)
+
+        ok(125, entry.masked === 'password' && probe.stored === true &&
+            probe.leaked === false && probe.hasGet === false,
+          `entry=${JSON.stringify(entry)} stored=${probe.stored} leaked=${probe.leaked} hasGet=${probe.hasGet}`)
+      }
+
       // Best-effort, like the two below it and for the same reason: a throw
       // here is caught by the outer try, reports as an `infrastructure`
       // failure, and takes the other two cleanups with it on the way out.
@@ -8545,6 +8608,13 @@ app.whenReady().then(async () => {
       // up must never turn a green suite red.
       try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
       try { rmSync(notRepo, { recursive: true, force: true }) } catch { /* best effort */ }
+
+      // Check 125 is the first thing that ever writes through
+      // panels-entry.cjs's credential store, so this is the first run where
+      // this directory holds anything worth removing — a trivially
+      // reversible 'enc:' + token fixture otherwise left in $TMPDIR forever.
+      // Same best-effort shape as the three cleanups just above.
+      try { rmSync(credentialDir, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
   } catch (error) {

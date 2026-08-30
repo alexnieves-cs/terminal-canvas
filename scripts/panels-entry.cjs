@@ -26,6 +26,16 @@ const credentialStore = require('../src/main/credential-store').createCredential
 
 module.exports = {
   credentialStore,
+  // Task 8's check is the first thing that ever writes through this store, so
+  // this directory is empty on every run before it. Once it isn't,
+  // 'enc:' + token is a trivially reversible fixture token left behind in the
+  // OS temp directory forever unless something rmSyncs it — the same
+  // obligation verify-credentials.cjs discharges for its own scratch dir.
+  // Exported rather than removed here, because this module has no run-end
+  // hook of its own; verify-panels.cjs already owns exactly this cleanup
+  // shape for its other fixture directories (crepo/repo/notRepo) and is
+  // where the credential check itself runs.
+  credentialDir,
   registerIpcHandlers: require('../src/main/ipc').registerIpcHandlers,
   PtyManager: require('../src/main/pty-manager').PtyManager,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
