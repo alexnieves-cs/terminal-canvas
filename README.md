@@ -130,6 +130,7 @@ npm run verify:review        # git argv, the review engine's result arms, plain 
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
+npm run verify:credentials   # the credential store, its schema and its refusal path, plain node
 npm run verify:canvas        # real input into the built renderer
 npm run verify:xterm         # an xterm Terminal survives its host being detached
 npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wheel, close, z-order
@@ -171,6 +172,8 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:delete / workspace:activate
                        review:panel / review:baseline / review:at
                        review:diff / review:commit
+                       credential:list / credential:set / credential:delete
+                       credential:verify
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
@@ -182,7 +185,12 @@ The invoke direction is the load-bearing part. Preset and prompt mutations, the
 workspace verbs and the review reads are all renderer→main because main is the
 only process that can answer them: only main can resolve an absent `command`
 into the user's real login shell, only main owns the reset confirmation dialog,
-and only main can reach a git binary. A renderer-side reconstruction of any of
+and only main can reach a git binary. The four `credential:*` channels are that
+argument at its strongest and are the only ones on this list defined as much by
+what they do **not** carry: main holds the encrypted store, and none of the four
+ever returns a stored secret — there is deliberately no `credential:get`, and
+`credential:verify` sends the token to the service and hands back only what the
+service said. A renderer-side reconstruction of any of
 them would drift from main's answer silently, and the two would then disagree
 only in the cases nobody tests.
 
@@ -520,10 +528,11 @@ contains, not only the ones that fit on screen.
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
 | M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
+| M13 | The credential boundary: a store main owns, and no secret reaches an agent | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11 and
-M12 each landed on their own branch and merged in sequence. A gap in the
+claimed by a separate concurrent track and is not yet in this table; M11, M12
+and M13 each landed on their own branch and merged in sequence. A gap in the
 numbers here is a milestone someone else is holding, not one that was skipped.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
