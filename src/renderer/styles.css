@@ -80,8 +80,8 @@
      deliberately not quoted here; delta-L* is. Ratio is quoted for text. */
   --s-0: #080910;   /* app ground, canvas                          */
   --s-1: #0f111a;   /* panel body, palette list                    */
-  --s-2: #161926;   /* chrome: rail, top bar, panel header         */
-  --s-3: #1d2130;   /* raised: palette surface, HUD                */
+  --s-2: #161926;   /* chrome: rail, inspector, panel header       */
+  --s-3: #1d2130;   /* raised: top bar, palette surface, HUD       */
   --s-4: #282d40;   /* hover fill, AND the selected fill           */
   --s-5: #343a52;   /* pressed only — transient, never a text ground */
 
@@ -103,9 +103,9 @@
   --fg-3: #959db8;
   --fg-4: #6e7691;
 
-  /* Accents. Two tones each: saturated for borders, dots and icons; the tint
-     for fills, which is what lets a destructive hover read as destructive
-     without introducing a second red.
+  /* Agent-state accents. Two tones each: saturated for borders, dots and
+     icons; the tint for fills, which is what lets a destructive hover read as
+     destructive without introducing a second red.
 
      --amber MUST stay a literal colour declared here, and
      .panel--agent-wants-you MUST keep `border-color: var(--amber)`
@@ -115,12 +115,17 @@
      --blue-dim is the one accent tint with no user today. It is kept so the
      four pairs stay a pair each — an accent with a saturated tone and no
      tint is a gap the next person fills by hand-mixing one, which is the
-     duplication this block exists to remove. --sp-7 and --e-1 are unused for
-     the same reason: they complete a scale. Nothing else here is unused. */
+     duplication this block exists to remove. --sp-7 is unused for the same
+     reason: it completes a scale. Nothing else here is unused. */
   --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .14);
   --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .12);
   --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .14);
   --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .12);
+
+  /* App identity, never agent state. Iris answers an interaction with the
+     interface itself — focus, navigation, palette context and HUD readouts —
+     so a user can distinguish their own action from an agent's activity. */
+  --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .12);
 
   /* Back-compat aliases. These are what let the migration land task by task
      instead of as one unreviewable diff, and they mean the file temporarily
@@ -195,17 +200,19 @@ body {
 .shell__top,
 .shell__rail,
 .shell__inspector {
-  background: var(--chrome-bg);
   color: var(--text);
   overflow: hidden;
 }
 
 .shell__top {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--sp-4);
   padding: 0 var(--sp-4);
-  border-bottom: 1px solid var(--border);
+  background: var(--s-3);
+  box-shadow: var(--e-1);
 }
 
 /* The top bar's controls. Small, quiet chrome: the canvas is the subject and
@@ -237,12 +244,20 @@ body {
    Workspaces and Attention are short by construction and are capped so a long
    workspace list cannot push the panel outline off screen. */
 .shell__rail {
-  border-right: 1px solid var(--border);
+  background: var(--s-2);
+  /* The rail and inspector are continuous physical surfaces, not boxes
+     outlined against the canvas. This literal is deliberate surface light,
+     allowlisted in verify:styles check 1 for the same reason as the palette
+     highlight: it has to composite over whichever ground a theme supplies. */
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .04);
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.shell__inspector { border-left: 1px solid var(--border); }
+.shell__inspector {
+  background: var(--s-2);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .04);
+}
 
 /* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
    to stay clickable or the region is unreachable without the chord. */
@@ -333,7 +348,14 @@ body {
 /* --s-4 is the ramp's one hover/selected fill (see the token block). It was a
    hand-mixed white overlay, which is a fourth idiom for a state three other
    surfaces already spelled a different way each — the duplication M10 exists
-   to remove — and it is invisible to any audit that reads declared colours. */
+   to remove — and it is invisible to any audit that reads declared colours.
+   The one-pixel lift and --e-1 make a hovered row read as an available action,
+   rather than merely another filled item in the list. */
+.rail-row:hover {
+  background: var(--s-4);
+  transform: translateY(-1px);
+  box-shadow: var(--e-1);
+}
 .rail-row--selected { background: var(--s-4); }
 
 /* The row body is a button, not the <li>: three sibling controls rather than
@@ -361,6 +383,7 @@ body {
   height: 7px;
   border-radius: 50%;
   background: var(--border);
+  transition: background var(--dur-1) var(--ease);
 }
 
 /* The same colours the panel border and the card stripe already use, so a
@@ -510,8 +533,13 @@ body {
   text-align: left;
 }
 
-/* --s-4, the one hover fill — not a second hand-mixed white overlay. */
-.inspector__action:hover { background: var(--s-4); }
+/* --s-4, the one hover fill — not a second hand-mixed white overlay. The
+   lift gives these actions the same small elevation cue as a rail row. */
+.inspector__action:hover {
+  background: var(--s-4);
+  transform: translateY(-1px);
+  box-shadow: var(--e-1);
+}
 
 /* Disabled is the restart control's resting state on a panel that never
    started (Task 6). Kept visible rather than hidden, per the rule
@@ -645,12 +673,12 @@ body {
      rather than a hand-picked literal that would belong to no ramp.
 
      The dot's rgba() is a DELIBERATE literal and is allowlisted by name in
-     verify-styles check 1. It is not a theme colour: it is a translucent
-     white tick whose whole job is to take whatever ground is behind it, so
-     tokenising it would produce an opaque value that stops tracking the
-     vignette it sits on. A future theme overrides the ground, not the tick. */
+     verify-styles check 1. It is a translucent iris tick whose whole job is
+     to take whatever ground is behind it, so tokenising it would produce an
+     opaque value that stops tracking the vignette it sits on. A future theme
+     overrides the ground, not the tick. */
   background:
-    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .05) 1px, transparent 0)
+    radial-gradient(circle at 1px 1px, rgba(103, 232, 249, .05) 1px, transparent 0)
       0 0 / 28px 28px,
     radial-gradient(120% 80% at 50% 0%, var(--s-2) 0%, var(--s-0) 60%);
   cursor: default;
@@ -850,6 +878,24 @@ body {
      every pan (Global Constraint 3). */
   box-shadow: var(--e-2);
   transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+
+/* A panel enters once, at its spawn point. This wrapper is intentionally the
+   animated layer: .panel remains the stable world-space box whose placement
+   and parent transform verify:panels inspect through DOMMatrixReadOnly. */
+.panel__motion {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.panel__motion--entering {
+  animation: panel-enter var(--dur-2) var(--ease) both;
 }
 
 .panel--selected {
@@ -1114,15 +1160,15 @@ body {
   display: flex;
   gap: var(--sp-5);
   padding: var(--sp-3) var(--sp-5);
-  border: 1px solid var(--border);
+  border: 1px solid var(--iris-dim);
   border-radius: var(--r-full);
   /* The one place a backdrop cost is earned: the HUD sits over a moving
      world layer, and a solid fill there reads as a sticker pasted on top of
      it rather than chrome floating above it. */
   background: color-mix(in srgb, var(--s-3) 78%, transparent);
-  backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: var(--e-2);
-  color: var(--muted);
+  backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: 0 0 16px var(--iris-dim), var(--e-2);
+  color: var(--iris);
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -1347,11 +1393,9 @@ body {
      edge, so it must composite over whatever --s-3 the active theme sets
      rather than being a colour of its own that a theme has to restate. */
   box-shadow: var(--e-3);
-  background-image:
-    linear-gradient(var(--s-3), var(--s-3)),
-    linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 40%);
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
+  background: color-mix(in srgb, var(--s-3) 78%, transparent);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .07), transparent 40%);
+  backdrop-filter: blur(20px) saturate(160%);
   overflow: hidden;
   font-size: var(--t-md);
 }
@@ -1370,8 +1414,8 @@ body {
   flex: none;
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-md);
-  background: var(--s-5);
-  color: var(--fg-2);
+  background: var(--iris-dim);
+  color: var(--iris);
   font-size: var(--t-sm);
   white-space: nowrap;
 }
@@ -1476,7 +1520,7 @@ body {
    while scanning, which matters more here than usual because Enter acts on it. */
 .palette__row--selected {
   background: var(--s-4);
-  box-shadow: inset 2px 0 0 var(--blue);
+  box-shadow: inset 2px 0 0 var(--iris);
 }
 
 .palette__row--disabled {
@@ -1595,6 +1639,15 @@ body {
     border-color     var(--dur-1) var(--ease);
 }
 
+/* Only raised controls transition transforms. .world remains deliberately
+   absent: its transform is the live camera state, not visual ornament. */
+.rail-row,
+.inspector__action {
+  transition:
+    transform var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
+}
+
 /* Not optional the moment any animation exists, and the app had none until
    this task — which is why there was nothing here before. */
 @media (prefers-reduced-motion: reduce) {
@@ -1603,6 +1656,8 @@ body {
   *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    animation-fill-mode: none !important;
     transition-duration: .01ms !important;
   }
 }
@@ -1625,7 +1680,7 @@ body {
    excluded here rather than given a higher-specificity `outline: none` of its
    own, so there is one place that decides which elements get the ring. */
 :where(button, [href], input, [tabindex]):not(.palette__input):focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--iris);
   outline-offset: 2px;
   /* No border-radius here. An outline already follows the element's OWN
      radius, so setting one made every focused control adopt --r-sm — visibly
@@ -1640,7 +1695,7 @@ body {
    existing outline:none defensible rather than an oversight. The generic rule
    above excludes the input by name, which is what makes that true in the
    cascade and not only in prose. */
-.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--blue); }
+.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--iris); }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M11. The nav grid: a sibling of .world, pinned to the viewport rather than
@@ -1651,10 +1706,12 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  /* --s-0 at full opacity, never a fractional `opacity` on the element:
-     verify:styles 3 forbids that, because it compounds against an already
-     muted token and is invisible to any audit that reads declared colours. */
-  background: var(--s-0);
+  /* The canvas remains perceptible through this transient surface, so the
+     grid reads as summoned above the workspace rather than replacing it.
+     This uses a translucent fill rather than element opacity: opacity would
+     also dim the grid's text and controls. */
+  background: color-mix(in srgb, var(--s-3) 78%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
   z-index: 1000; /* the palette's layer; only one of the two is ever up */
 }
 .navgrid__grid {
@@ -1674,14 +1731,29 @@ body {
   background: var(--s-1);
   color: var(--fg-2);
   font-size: var(--t-md);
+  animation: navgrid-cell-enter var(--dur-1) var(--ease) both;
 }
+/* A held-modifier overlay must appear faster than a page load: the small
+   scale gives its grid a coherent reveal without competing with the canvas. */
+@keyframes navgrid-cell-enter {
+  from { opacity: 0; transform: scale(.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.navgrid__cell:nth-child(2) { animation-delay: 30ms; }
+.navgrid__cell:nth-child(3) { animation-delay: 60ms; }
+.navgrid__cell:nth-child(4) { animation-delay: 90ms; }
+.navgrid__cell:nth-child(5) { animation-delay: 120ms; }
+.navgrid__cell:nth-child(6) { animation-delay: 150ms; }
+.navgrid__cell:nth-child(7) { animation-delay: 180ms; }
+.navgrid__cell:nth-child(8) { animation-delay: 210ms; }
+.navgrid__cell:nth-child(9) { animation-delay: 240ms; }
 .navgrid__cell--empty { background: var(--s-0); border-style: dashed; }
 /* --s-4 is the selected fill, and the cursor IS a selection. --s-5 is
    deliberately not used: it is the pressed state — transient, never a text
    ground — and verify:styles 11 excludes it as a ground when it measures
    contrast. */
 .navgrid__cell--cursor {
-  border-color: var(--blue);
+  border-color: var(--iris);
   background: var(--s-4);
   color: var(--fg);
 }
