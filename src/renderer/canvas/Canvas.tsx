@@ -2667,6 +2667,20 @@ export function Canvas({
   const [treeDirs, setTreeDirs] = useState<Map<string, DirResult>>(new Map())
   const [treeExpanded, setTreeExpanded] = useState<Set<string>>(new Set())
 
+  // Read the same way glowEnabled/pipsEnabled are, and for the same reason:
+  // settingRows is loaded only when the palette OPENS, so the tree must know
+  // this whether or not the palette has ever been opened. Main's fs:list
+  // handler already reads this setting on EVERY call — it is the renderer
+  // side that was missing, so toggling it from the palette flipped the row's
+  // own display and left the tree showing whatever it last read.
+  const [showHidden, setShowHidden] = useState(false)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'files.showHidden')
+      if (row) setShowHidden(row.value === true)
+    })
+  }, [settingRows])
+
   // A pull, never a push. Three signals and nothing else: the root changed, a
   // directory was expanded, and the refresh control. M9b's standing ruling on
   // review nodes, unchanged — a watcher over a repository this app does not
@@ -2682,12 +2696,28 @@ export function Canvas({
   // The root changing DISCARDS the previous root's reads and expansions. Both
   // are keyed by absolute path, so carrying them would be harmless and wrong:
   // the user would switch panels and find another project's directories still
-  // open, which reads as the tree having failed to re-root.
+  // open, which reads as the tree having failed to re-root. `showHidden` is a
+  // dependency for the identical reason: main answers `fs:list` differently
+  // once the setting flips, so a toggle gets the same "clear and re-read"
+  // treatment a root change already gets — extending this effect rather than
+  // adding a second read path, so there is still exactly one place the tree
+  // decides to re-read itself.
   useEffect(() => {
     setTreeDirs(new Map())
     setTreeExpanded(new Set())
     if (treeRoot !== null) readDirInto(treeRoot)
-  }, [treeRoot, readDirInto])
+  }, [treeRoot, showHidden, readDirInto])
+
+  // True while the ROOT's own read is in flight: every selection change, and
+  // every press of refresh (which clears treeDirs first). buildFileRows
+  // deliberately suppresses the depth-0 `loading` row — that row is reserved
+  // for a CHILD of an expanded directory — so nothing else closes this gap on
+  // its own; FileTree renders "reading…" instead of "empty directory" while
+  // this is true. False once treeDirs has ANY entry for this root path,
+  // including a failure-arm entry (`gone`/`not-a-directory`/`unreadable`), not
+  // only an `ok` one — the pending state is about whether an answer has
+  // landed, not about what it says.
+  const treeRootPending = treeRoot !== null && !treeDirs.has(treeRoot)
 
   const toggleDir = useCallback((path: string) => {
     setTreeExpanded((prev) => {
@@ -2857,6 +2887,7 @@ export function Canvas({
         rootPath={treeRoot}
         rootLabel={treeRootLabel}
         rows={treeRows}
+        rootPending={treeRootPending}
         onToggleDir={toggleDir}
         onInsertPath={insertPath}
         onRefresh={refreshTree}

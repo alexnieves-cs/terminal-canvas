@@ -6940,15 +6940,15 @@ app.whenReady().then(async () => {
       // 116-117 do not touch git at all, but they are nested inside this
       // block purely to reuse its spawnAt/sessionMap helpers — so a machine
       // with no git binary skips them too, and this message says so rather
-      // than leaving them unexplained. M13's file-tree checks (125-129) are
-      // nested here for the identical reason (reusing spawnAt/sessionMap/
-      // settle rather than a second copy of that plumbing) and would
-      // otherwise vanish from the summary with nothing printed at all on a
-      // git-less machine — the exact silent-skip shape this whole guard
-      // exists to avoid. Check 73's own widened four-column assertion lives
-      // OUTSIDE this block (it runs long before this GIT_OK probe) and does
-      // not belong in this message.
-      console.log('SKIP  99-101, 113-115, 116-117 and 125-129 — no git binary found (loudly, not silently)')
+      // than leaving them unexplained. M13's file-tree checks (125-129, and
+      // the final-review fix wave's 130) are nested here for the identical
+      // reason (reusing spawnAt/sessionMap/settle rather than a second copy
+      // of that plumbing) and would otherwise vanish from the summary with
+      // nothing printed at all on a git-less machine — the exact silent-skip
+      // shape this whole guard exists to avoid. Check 73's own widened
+      // four-column assertion lives OUTSIDE this block (it runs long before
+      // this GIT_OK probe) and does not belong in this message.
+      console.log('SKIP  99-101, 113-115, 116-117, 125-129 and 130 — no git binary found (loudly, not silently)')
     } else {
       const repo = mkdtempSync(join(tmpdir(), 'tc panels review '))
       // A directory that is definitely NOT a repository, for check 100.
@@ -8945,6 +8945,69 @@ app.whenReady().then(async () => {
           const held = await readTreeCollapsed()
           ok('129 Cmd+B toggles the tree once, and auto-repeat does not re-toggle',
             before !== once && held === once, `${before} -> ${once} -> ${held}`)
+        }
+
+        // 130. The final-review fix: resolveCwd's spawn-safety fallback
+        //      (substitute $HOME for a gone directory — correct for never
+        //      failing a shell spawn) must never leak into a directory
+        //      LISTING. A panel's whole root cwd vanishing (an agent
+        //      `rm -rf`'d it) has to reach readDir's own `gone` arm; the
+        //      pre-fix handler called resolveCwd itself, which silently
+        //      substituted homedir() and rendered $HOME's own contents under
+        //      a heading that still named the deleted directory — a click on
+        //      one of those rows then pastes a path that resolves to
+        //      nowhere. The ROOT is deliberately what this check deletes,
+        //      not a child under it: buildFileRows' depth-0 suppression
+        //      (the "loading" gap Finding 2 fixes) applies only to the `loading`
+        //      arm, never to `note` — a non-ok root answer still pushes a
+        //      real note row at depth 0 — so deleting a CHILD directory
+        //      would instead just drop its row from the parent's own
+        //      re-listing and never reach readDir's `gone` arm at all: the
+        //      parent's readdir simply would not name it anymore. No git
+        //      needed; nested here purely to reuse spawnAt/sessionMap/settle,
+        //      the same reason 116-117 and 125-129 are.
+        {
+          const treeDir3 = mkdtempSync(join(tmpdir(), 'tc panels tree3 '))
+          writeFileSync(join(treeDir3, 'stub.txt'), 'x\n')
+
+          const id3 = await spawnAt(treeDir3)
+          if (id3) await waitUntil(async () => (await sessionMap(wc)).has(id3), 8000)
+          const switched3 = id3
+            ? await dispatchClick(`[data-rail-row="${id3}"] .rail-row__main`)
+            : false
+          await settle()
+          if (switched3) {
+            await waitUntil(() => wc.executeJavaScript(
+              `document.querySelectorAll('.shell__tree .file-row [data-file-path]').length > 0`), 5000)
+          }
+          // Delete the whole root from disk — the fixture setup for the
+          // failure this check exists to catch, not a teardown.
+          try { rmSync(treeDir3, { recursive: true, force: true }) } catch { /* setup, not teardown */ }
+          // The refresh control, scoped to .shell__tree so this cannot
+          // accidentally hit SideRail's own shell__region-add.
+          const refreshed = switched3
+            ? await dispatchClick('.shell__tree .shell__region-add')
+            : false
+          const noteText = refreshed
+            ? await waitUntil(() => wc.executeJavaScript(`(() => {
+                const el = document.querySelector('.shell__tree [data-file-note="${treeDir3}"]')
+                return el ? el.textContent : null
+              })()`), 5000)
+            : null
+          // noteText itself is the whole assertion, both directions at once:
+          // a fallback that substituted $HOME would answer 'ok' with real
+          // entries instead of the 'note' state, so the root's own note
+          // element would either be absent (noteText stays null, because the
+          // query above finds nothing to read a note off) or carry different
+          // text — either way this equality fails, which is what would catch
+          // $HOME's contents rendering under a heading that still names the
+          // deleted directory.
+          ok('130 a panel whose root cwd is deleted reads gone, never $HOME\'s contents',
+            id3 !== undefined && switched3 === true && refreshed === true &&
+              noteText === 'this directory is gone',
+            `panel=${id3} switched=${switched3} refreshed=${refreshed} note=${noteText}`)
+
+          // Already gone; nothing left to clean up.
         }
 
         try { rmSync(treeDir, { recursive: true, force: true }) } catch { /* best effort */ }

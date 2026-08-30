@@ -314,6 +314,24 @@ body {
 }
 .shell__region-add:hover { color: var(--text); }
 
+/* .shell__tree-root has no overflow rule of its own and sits in a flex row
+   (.shell__region-title--action) beside the refresh control. A flex item's
+   default min-width is auto, not 0, so a long unbreakable directory name
+   cannot shrink — it pushes the refresh button (shell__region-add, shared
+   with SideRail's own controls) out past the column's overflow: hidden clip,
+   making a documented re-read control disappear for some users. Scoped to
+   .shell__tree so SideRail's + and rename buttons keep their existing
+   behaviour — this is a tree-heading-specific fix, not a shared one. */
+.shell__tree-root {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell__tree .shell__region-add {
+  flex-shrink: 0;
+}
+
 /* The panel outline. Scrolls on its own rather than growing the rail: the
    canvas can hold far more panels than the rail is tall, and a rail that grew
    would push its own toggle off screen — the one control that is the way back

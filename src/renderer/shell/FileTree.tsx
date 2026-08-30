@@ -13,6 +13,14 @@ export interface FileTreeProps {
    *  path. */
   rootLabel: string | null
   rows: FileRow[]
+  /** True while the ROOT's own read is in flight — a selection change, or the
+   *  refresh control, which clears every cached read including the root's.
+   *  buildFileRows deliberately never emits a `loading` row at depth 0 (that
+   *  is reserved for a CHILD of an expanded directory), so nothing else fills
+   *  this gap: without it, `rows` is `[]` during the wait and the empty-list
+   *  branch below renders "empty directory" — a confident wrong answer,
+   *  indistinguishable from a directory that genuinely has nothing in it. */
+  rootPending: boolean
   onToggleDir: (path: string) => void
   onInsertPath: (path: string) => void
   onRefresh: () => void
@@ -35,7 +43,7 @@ export interface FileTreeProps {
  * see them, so there is no closed state to key on.
  */
 function FileTreeImpl({
-  onToggle, rootPath, rootLabel, rows, onToggleDir, onInsertPath, onRefresh
+  onToggle, rootPath, rootLabel, rows, rootPending, onToggleDir, onInsertPath, onRefresh
 }: FileTreeProps): JSX.Element {
   return (
     <aside className="shell__tree" aria-label="File tree">
@@ -77,6 +85,13 @@ function FileTreeImpl({
           // rule all three of SideRail's sections already obey. This state is
           // ordinary: it is every launch before the first click.
           <li className="rail-empty">select a panel</li>
+        ) : rootPending ? (
+          // The root's own read is in flight — every selection change, and
+          // every press of refresh, which clears treeDirs first. Without this
+          // branch `rows` is `[]` here too, and falls into the empty-directory
+          // branch below: a confident wrong answer indistinguishable from a
+          // directory that genuinely has nothing in it.
+          <li className="rail-empty">reading…</li>
         ) : rows.length === 0 ? (
           <li className="rail-empty">empty directory</li>
         ) : (

@@ -10,7 +10,7 @@ import type { CanvasState } from '../shared/layout-schema'
 import type { SessionBackendInfo, PresetListRow, CapturedPanel } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
-import { resolveCwd } from './pty-manager'
+import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
@@ -119,14 +119,15 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
 
-  // resolveCwd, not the raw path: `~` expansion is main's job and the renderer
-  // has no process.env to do it with — the same boundary readProjectPrompts
-  // sits on. It also answers the home directory for a path that is gone, which
-  // is why readDir's own `gone` arm is still reachable only for a path BELOW a
-  // root that exists (an expanded child that was deleted) rather than for the
-  // root itself.
+  // expandTilde, deliberately NOT resolveCwd: `~` expansion is main's job and
+  // the renderer has no process.env to do it with — the same boundary
+  // readProjectPrompts sits on — but resolveCwd's existence-fallback is a
+  // SPAWN-safety behaviour (never fail a shell over a missing cwd) that is
+  // wrong here. A directory that vanished under an expanded tree node must
+  // reach readDir's own `gone` arm, not silently render $HOME's contents
+  // under a heading that still names the deleted directory.
   ipcMain.handle(IPC.FS_LIST, (_event, path: string) =>
-    readDir(resolveCwd(path), { showHidden: layoutStore.getSetting('files.showHidden') === true })
+    readDir(expandTilde(path), { showHidden: layoutStore.getSetting('files.showHidden') === true })
   )
 
   ipcMain.handle(IPC.SETTINGS_LIST, () =>
