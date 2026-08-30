@@ -7,6 +7,7 @@ import type { Command } from './palette-model'
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
+import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
@@ -67,6 +68,16 @@ export interface PanelRow {
    * enabled, and tsc says nothing at all about it.
    */
   restartable: boolean
+  /**
+   * M18. Whether this panel runs an agent CLI whose flags this app knows —
+   * `spec.agent !== undefined`, computed in Canvas like `restartable` beside
+   * it and passed in as plain data.
+   *
+   * REQUIRED for exactly the reason `restartable` states one field up: an
+   * optional flag lets a half-finished wiring compile with every mode row
+   * permanently disabled (undefined !== true), and tsc says nothing.
+   */
+  agent: boolean
 }
 
 export interface PaletteActions {
@@ -155,6 +166,23 @@ export interface PaletteActions {
    * row is the only way to reach it without the inspector open.
    */
   restartPanel(id: string): void
+  /**
+   * Set this panel's permission mode AND restart it, as ONE gesture.
+   *
+   * Compound rather than two verbs, and that is the whole design. A bare
+   * "change this panel's mode" is unsound twice over: `registry.ensure`
+   * returns an existing session unchanged, so the spec would move while the
+   * process kept the old flags and every surface reading the session would
+   * disagree with every surface reading the panel — and undo would then lie in
+   * the other direction, restoring a spec the running process never had.
+   * Restarting closes both, because a restart is the one thing that re-reads
+   * the argv (tmux `new-session -A` ignores it on a reattach).
+   *
+   * It is also what lets the inspector label its rows plainly instead of
+   * hedging every one with "requested": with this as the only mutation path,
+   * the session's spec and the running process cannot disagree.
+   */
+  restartPanelWithMode(id: string, mode: PermissionMode): void
   /**
    * Open a review node for this panel: ask main for its stored baseline,
    * then place a node beside it. Takes an id rather than reading the focused
@@ -317,6 +345,15 @@ export const REASON_ALREADY_DEFAULT = 'already the default'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 export const REASON_NOT_STARTED = 'that panel has not started'
+/**
+ * M18. A THIRD distinct blocked situation for the mode rows, beside
+ * REASON_NO_FOCUS and REASON_NOT_STARTED. Its fix is different from both:
+ * not "click a panel" and not "start this one", but "this panel is not
+ * running an agent CLI this app knows the flags for". agentArgs is gated on
+ * spec.agent, so offering the verb here would promise a flag that is never
+ * emitted — a row that appears to work and silently does nothing.
+ */
+export const REASON_NOT_AN_AGENT = 'that panel is not running a known agent'
 // Deliberately NOT REASON_NO_SELECTION, which is about a TEXT selection inside
 // a panel (the save-prompt row). Two different selections with two different
 // gestures: collapsing them would tell a user who has selected text that they
@@ -495,6 +532,62 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
       )
     )
+    // M18. The door, and one row per permission mode inside it.
+    //
+    // ONE ROW PER VALUE rather than a SettingDef: `SettingDef['type']` has no
+    // 'enum' member, and CLAUDE.md records that removal as deliberate — a
+    // customer-free abstraction per ideas-backlog #11. A multi-valued choice
+    // expressed as N command rows inside a scope needs no such type at all, so
+    // that decision stays closed. These are per-PANEL anyway, not global, so a
+    // setting would have been the wrong shape even if the type existed.
+    out.push(
+      withReason(
+        {
+          id: 'panel.mode',
+          title: 'Restart in permission mode…',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          group: 'panel',
+          searchText: 'permission mode plan accept edits bypass agent claude',
+          hiddenAtRest: true,
+          entersScope: 'agent-mode',
+          run: () => {}
+        },
+        // The same two distinct reasons panel.restart carries, plus a third of
+        // this verb's own: a panel with no agent has no mode to be in, and
+        // offering the verb there would promise something the flag cannot do —
+        // agentArgs is gated on spec.agent, so it would emit nothing at all.
+        ctx.capturedId === null
+          ? REASON_NO_FOCUS
+          : target?.restartable !== true
+            ? REASON_NOT_STARTED
+            : target?.agent !== true
+              ? REASON_NOT_AN_AGENT
+              : undefined
+      )
+    )
+    for (const mode of PERMISSION_MODES) {
+      out.push(
+        withReason(
+          {
+            id: `panel.mode.${mode}`,
+            title: mode,
+            subtitle: target ? (target.title ?? target.label) : 'no panel',
+            group: 'panel',
+            scope: 'agent-mode',
+            hiddenAtRest: true,
+            searchText: `permission mode ${mode}`,
+            run: () => actions.restartPanelWithMode(ctx.capturedId!, mode)
+          },
+          ctx.capturedId === null
+            ? REASON_NO_FOCUS
+            : target?.restartable !== true
+              ? REASON_NOT_STARTED
+              : target?.agent !== true
+                ? REASON_NOT_AN_AGENT
+                : undefined
+        )
+      )
+    }
     out.push(
       withReason(
         {

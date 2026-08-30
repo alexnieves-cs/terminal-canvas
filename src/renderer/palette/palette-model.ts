@@ -50,7 +50,13 @@ export const SECTIONS: readonly SectionDef[] = [
  * view holds rather than a value a Command carries — a Command names the ONE
  * scope it appears in, or names none and appears only at the top level.
  */
-export type PaletteScope = 'presets' | 'prompts' | 'settings' | 'workspaces' | 'credentials'
+export type PaletteScope =
+  | 'presets'
+  | 'prompts'
+  | 'settings'
+  | 'workspaces'
+  | 'credentials'
+  | 'agent-mode'
 
 /** Unknown ids sink to the bottom rather than throwing: a row in a section
  *  that no longer exists is a display bug, not a reason to blank the palette. */

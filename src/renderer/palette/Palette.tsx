@@ -113,7 +113,8 @@ const SCOPE_LABEL: Record<PaletteScope, string> = {
   prompts: 'Prompts',
   settings: 'Settings',
   workspaces: 'Workspaces',
-  credentials: 'Credentials'
+  credentials: 'Credentials',
+  'agent-mode': 'Permission mode'
 }
 
 const sectionLabel = (id: SectionId): string =>

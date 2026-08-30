@@ -213,6 +213,8 @@ const spyActions = () => {
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
+    // M18. The compound restart-with-a-mode verb the panel.mode rows call.
+    restartPanelWithMode: record('restartPanelWithMode'),
     // M13. beginLink is reached from panel.link; the other two are the
     // inspector's own, reached from no Command row — kept here anyway so the
     // fixture stays honest about the full PaletteActions shape, the reason
@@ -1322,6 +1324,84 @@ const WS = [
       none !== undefined && none.disabledReason === P.REASON_NO_FOCUS &&
       P.REASON_NOTHING_TO_LINK !== P.REASON_NO_FOCUS,
     JSON.stringify([alone && alone.disabledReason, none && none.disabledReason]))
+}
+
+// ---------------------------------------------------------------------------
+// M18 — the permission-mode rows (ideas-backlog #8 part 1).
+// ---------------------------------------------------------------------------
+
+// 81. One runnable row per mode, inside its own scope, hidden at rest, and
+//     wired to the COMPOUND verb.
+//
+//     One row per VALUE rather than a SettingDef, and that is what keeps
+//     CLAUDE.md's deliberate deletion of `SettingDef['type'] = 'enum'` deleted:
+//     a multi-valued choice expressed as N command rows needs no such type at
+//     all. These are per-PANEL anyway, so a global setting would have been the
+//     wrong shape even if the type existed.
+//
+//     The hiddenAtRest clause is not decoration: M6p sized the resting list to
+//     roughly eight rows on purpose, and six permission modes un-hidden there
+//     is precisely the drift hiddenAtRest exists to refuse.
+{
+  const c = ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'claude', restartable: true, agent: true }]
+  })
+  const rows = P.buildCommands(c)
+  const plan = byId(rows, 'panel.mode.plan')
+  const bypass = byId(rows, 'panel.mode.bypassPermissions')
+  const door = byId(rows, 'panel.mode')
+  if (plan) plan.run()
+  ok('81 one runnable row per permission mode, scoped and hidden at rest',
+    plan !== undefined && bypass !== undefined && door !== undefined &&
+      plan.disabledReason === undefined &&
+      plan.scope === 'agent-mode' && plan.hiddenAtRest === true &&
+      door.entersScope === 'agent-mode' &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'restartPanelWithMode' &&
+      c.actions.calls[0][1] === 'n1' &&
+      c.actions.calls[0][2] === 'plan',
+    JSON.stringify({ call: c.actions.calls[0], scope: plan && plan.scope }))
+}
+
+// 82. THREE distinct blocked reasons, not two collapsed.
+//
+//     Restart's own rule, plus one this verb adds: a panel that is not running
+//     an agent this app knows the flags for has no mode to be in, and
+//     `agentArgs` is gated on spec.agent — so offering the verb there would
+//     promise a flag that is emitted nowhere, a row that appears to work and
+//     silently does nothing. "Click a panel", "start this one" and "this is
+//     not an agent" are three situations with three different fixes, and
+//     collapsing any two sends a user to do a thing they have already done.
+//
+//     Compared against the EXPORTED constants, never string literals, so a
+//     reworded reason cannot leave this green while the text a user reads says
+//     something else.
+{
+  const noFocus = byId(P.buildCommands(ctx({
+    capturedId: null,
+    panels: [{ id: 'n1', label: 'claude', restartable: true, agent: true }]
+  })), 'panel.mode.plan')
+  const notStarted = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'claude', restartable: false, agent: true }]
+  })), 'panel.mode.plan')
+  const notAgent = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: '/bin/zsh', restartable: true, agent: false }]
+  })), 'panel.mode.plan')
+  ok('82 the mode rows carry three distinct blocked reasons, never collapsed',
+    noFocus !== undefined && noFocus.disabledReason === P.REASON_NO_FOCUS &&
+      notStarted !== undefined && notStarted.disabledReason === P.REASON_NOT_STARTED &&
+      notAgent !== undefined && notAgent.disabledReason === P.REASON_NOT_AN_AGENT &&
+      P.REASON_NO_FOCUS !== P.REASON_NOT_STARTED &&
+      P.REASON_NOT_STARTED !== P.REASON_NOT_AN_AGENT &&
+      P.REASON_NO_FOCUS !== P.REASON_NOT_AN_AGENT,
+    JSON.stringify([
+      noFocus && noFocus.disabledReason,
+      notStarted && notStarted.disabledReason,
+      notAgent && notAgent.disabledReason
+    ]))
 }
 
 const failed = results.filter((r) => !r.pass)
