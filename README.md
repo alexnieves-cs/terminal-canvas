@@ -127,6 +127,7 @@ npm run verify:layout        # on-disk layout format + the store that owns it, p
 npm run verify:palette       # fuzzy match, palette filtering, command list, plain node
 npm run verify:rail          # the rail's three sections and the inspector's read model, plain node
 npm run verify:review        # git argv, the review engine's result arms, plain node
+npm run verify:usage         # transcript JSONL parsing, the price table, the per-panel accumulator, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
@@ -521,6 +522,7 @@ contains, not only the ones that fit on screen.
 | M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
 | M13 | Links between panels: a directed, labelled line that means something | ✅ done |
+| M15 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11 and

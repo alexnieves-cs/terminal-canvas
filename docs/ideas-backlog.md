@@ -536,36 +536,41 @@ process trees, each of which may be running a compiler.
   a user to break the app. A cost readout is the honest companion to any such knob: it is
   what makes a number the user is turning mean something.
 
-## 19. Token and dollar accounting per panel
+## 19. Token and dollar accounting — landed in M15; the open half is history, a second adapter, the un-pinned panel and aggregate totals
 
-What each agent has spent — tokens, and the money they represent — per panel, per
-workspace, and in total.
+M15 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
+transcript on its own tick, deduped, and an inspector Cost section rendering three states
+— nothing, a note, or four token figures and a labelled dollar total. See `CLAUDE.md`'s
+"The session id is persisted, never re-minted", "`detachAll()` clears the cached
+transcript path and NOT the totals", "Four token classes, never two", "The carry buffer
+is the parser's whole correctness", "Zero and unmeasured are different facts", and "The
+transcript path is globbed, not rebuilt" for the mechanism, plus the honesty note on the
+one unverified link (`--session-id` actually causing Claude Code to write that filename).
 
-- **Why it fits:** this is the cost of the canvas in the currency the user actually cares
-  about, and it is the one number that scales linearly with the thing the product
-  encourages (more agents at once). "Twelve agents running" is a very different sentence
-  depending on whether it is two dollars or two hundred.
-- **The mechanism is a file watcher, not output parsing, and that is the whole point.**
-  Agent CLIs write structured session transcripts to disk — Claude Code writes JSONL.
-  Totalling usage from those files needs no scraping of rendered TUI output, survives a
-  CLI's cosmetic redesign, and works for a panel at card tier that is not rendering
-  anything. **This is the same side-channel #7 identifies for subagent detection**, and it
-  is a strong argument for building that watcher once, deliberately, as shared machinery
-  rather than twice for two features.
-- **Constraint:** main-side, like every other filesystem access in this app (#3, #14). The
-  renderer has no `fs` and should keep not having it.
-- **Constraint:** correlating a transcript file to a *panel* is the unsolved part. The
-  session file is keyed by the CLI's own session id, which the panel does not know. The
-  honest routes are the panel's cwd plus start time, or launching the CLI with a flag that
-  pins its session id where the panel can see it — the second is much more robust and is
-  a per-vendor detail, so it belongs beside #8's per-model configuration.
-- **Constraint:** vendor-specific by nature. Keep the accounting model neutral (panel id,
-  tokens in, tokens out, model, cost) with a thin adapter per CLI, exactly as #12 argues
-  for tickets — and do not build the abstraction until a second CLI actually wants it.
-- **Open question:** is this a live readout, a history, or both? A number on a card is
-  cheap; "what did this canvas cost me last week" is a data-retention feature with its own
-  storage question, and it should share whatever #11 and M4b settle on rather than
-  inventing a third store.
+What's still open:
+
+- **History and retention.** This shipped as a LIVE readout only — a number on a card,
+  read from the transcript's current tail, with no record kept once a panel closes and its
+  usage state is dropped. "What did this canvas cost me last week" is a data-retention
+  feature with its own storage question, and it is still unowned: it should share whatever
+  #46's run ledger settles on rather than inventing a third store for a second piece of
+  per-panel history.
+- **A second CLI adapter.** The neutral model shipped — `AgentKind` is a union with one
+  member, `'claude-code'`, and `costOf`/the parser/the accumulator all take a model string
+  and totals with nothing Claude-specific baked into their shapes — but no `codex` adapter
+  exists, because none was asked for. Keep the original constraint attached: **do not build
+  the abstraction beyond one member until a second CLI actually wants it.**
+- **The un-pinned panel.** Accounting is gated on `spec.agent`, set only by a preset that
+  declares one — a `claude` typed by hand into a login shell panel is invisible to this
+  feature and reports nothing, by design (`verify:panels` 132 pins exactly this: no pin, no
+  Cost section, not an empty one). The honest fallback this entry once proposed — the
+  panel's cwd plus start time — is a GUESS whenever two panels share a directory, which two
+  panels spawned from the same preset routinely do, and a wrong attribution here is worse
+  than no attribution at all: it tells the user the wrong agent is expensive.
+- **Per-workspace and canvas-wide totals.** The accumulator is keyed per panel id in one
+  `Map`, so summing across a workspace or across every workspace is a fold over that map's
+  existing values — the store makes both cheap. Neither reads anywhere on screen; nothing
+  in the rail or a workspace row aggregates them yet.
 
 ## 20. Two windows, one canvas
 
