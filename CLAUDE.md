@@ -695,11 +695,12 @@ above is about. That bundle carried NO alias at all, and got away with it the id
 every other plain-node bundle in this section did — every `main/*` import from `@shared` was an
 `import type`, erased before bundling — right up until `main/file-read.ts` imported real VALUES
 from `@shared/file-panel` (`FILE_MAX_BYTES` and its siblings) to build this milestone's channels.
-The failure shape is worse than a red suite: the bundle fails to resolve, the entry throws
-during load, and the harness — which has already opened a hidden `BrowserWindow` and is waiting
-on it to finish booting — simply waits forever on a window that will never come up, because
-nothing downstream of the throw ever runs to report anything. A suite that goes from green to
-HANGING, with no failure printed anywhere, is a worse failure than one that goes red, because
+The failure shape is worse than a red suite: `buildSync` is the FIRST executable statement in
+this harness, so the bundle failing to resolve throws at MODULE SCOPE, before any window — or
+even this harness's own setup code — exists at all; there is nothing to "wait" on. What turns
+that into a silent hang rather than a printed error is Electron's own handling of an uncaught
+main-process exception, not the harness. A suite that goes from green to HANGING, with no
+failure printed anywhere, is a worse failure than one that goes red, because
 CI has to time it out rather than fail it. The fix is the same two aliases every other bundle in
 this section carries, added to `panels-entry.cjs`'s own `buildSync` call.
 
@@ -3574,6 +3575,14 @@ mint through the SAME `openFilePanel` function the drop handler calls, via a
 test hook (`window.__m13Open`), which proves the rest of the pipeline and
 proves nothing about the drop itself; the drop must be verified by hand once
 and not read as checked until somebody has.
+
+**The inspector's file arm ships two fields, not the design spec's original
+six.** The design spec proposed path, directory, size, line count,
+last-modified and current state; the implementation plan and the shipped
+`buildInspectorModel` narrowed that to `file` and `directory`. This was a
+deliberate scope decision made when the plan was written, not an oversight —
+a future reader comparing the spec to the code should not mistake the smaller
+field set for a missed requirement.
 
 ## Gotchas
 

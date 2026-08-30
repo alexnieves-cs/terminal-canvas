@@ -85,7 +85,11 @@ export interface PersistedReviewPanel extends PersistedPanelBase {
 
 export interface PersistedFilePanel extends PersistedPanelBase {
   kind: 'file'
-  /** An absolute path. See FileSource: main expands `~` before this is built. */
+  /**
+   * Always absolute. See FileSource: nothing expands `~` for a file panel's
+   * path, so a `~`-prefixed one (e.g. hand-edited into this file) fails
+   * safely as `missing` rather than resolving.
+   */
   source: FileSource
 }
 

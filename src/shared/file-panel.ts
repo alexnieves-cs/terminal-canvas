@@ -10,10 +10,12 @@
 /**
  * What a file panel points at.
  *
- * An ABSOLUTE path. `~` is expanded by main before this is ever built, the
- * same rule `resolveCwd` already applies to a panel's cwd: the renderer has no
- * `process.env` (electron-vite compiles it to a literal `{}`), so it cannot
- * know the home directory and must never try to guess one.
+ * Always absolute. Nothing expands `~` for a file panel's path — a
+ * `~`-prefixed path (e.g. from a hand-edited layout.json) fails safely as
+ * `missing`, since Node's fs functions do not expand it. In practice both
+ * ways a path gets set (the native file dialog, a Finder drop) already
+ * produce absolute paths, unlike a panel's `cwd`, where `resolveCwd` really
+ * does expand `~` before spawning.
  *
  * A path and not an inode. A file that is renamed or moved reads as `missing`
  * rather than being followed — see the spec's known limitations. Following a

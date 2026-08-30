@@ -30,9 +30,12 @@ buildSync({
   // from @shared was an `import type`, which esbuild erases before bundling,
   // so nothing was ever actually resolved. main/file-read.ts imports real
   // VALUES from @shared/file-panel (FILE_MAX_BYTES and its siblings), and
-  // this build fails outright without them — the app then throws during
-  // load, and the harness waits on a window that will never open rather
-  // than reporting anything, so the failure reads as a hang.
+  // this build fails outright without them — buildSync throws HERE, at
+  // module scope, before any window, or even this harness's own setup code,
+  // exists at all; there is nothing for the harness to "wait" on. The failure
+  // still READS as a hang rather than a printed error, but that is Electron's
+  // own handling of an uncaught main-process exception, not anything this
+  // harness does.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
