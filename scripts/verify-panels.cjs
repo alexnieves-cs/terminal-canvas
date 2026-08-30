@@ -8534,6 +8534,276 @@ app.whenReady().then(async () => {
         }
       }
 
+    // -----------------------------------------------------------------------
+    // M13. Links between panels, end to end. `link`, never `edge` — see
+    // panels.ts. Everything below runs on its OWN panels, seeded here, because
+    // by this point in the run earlier blocks have closed panels, deleted
+    // workspaces and switched canvases several times.
+    {
+      const LINK_A = 'linkA'
+      const LINK_B = 'linkB'
+      const LINK_DORMANT = 'link-dormant'
+
+      // Seeded through the layout file and a reload — the route checks 39 and
+      // 84 already use — rather than through spawns, because check 126 needs a
+      // panel that has GENUINELY never been promoted, and the only way to get
+      // one is a panel restored from disk that no camera has ever framed.
+      //
+      // A and B are placed 260 world units apart, which is what lets a rail
+      // click on one leave the OTHER on screen: .canvas is ~700px wide here,
+      // so framing A puts B's centre ~260px right of centre, comfortably
+      // inside. An earlier draft parked them 600 apart and check 125 failed
+      // with B's rect at x=1209 — off the window entirely, so the completing
+      // click could never land. LINK_DORMANT is parked at (70000,70000):
+      // distinct from check 39's (50000,50000) and check 84's (60000,60000),
+      // so a stale fixture cannot be mistaken for this one.
+      flushLayoutStore()
+      {
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+        const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+        ws.panels.push(
+          { id: LINK_A, x: -1330, y: -1200, w: 200, h: 160, z: maxZ + 1, cwd: '~', args: ['-l'] },
+          { id: LINK_B, x: -1070, y: -1200, w: 200, h: 160, z: maxZ + 2, cwd: '~', args: ['-l'] },
+          { id: LINK_DORMANT, x: 70000, y: 70000, w: 200, h: 160, z: maxZ + 3, cwd: '~', args: ['-l'] }
+        )
+        writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+        layoutStore.load()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () =>
+          (await wc.executeJavaScript(
+            `!!document.querySelector('[data-rail-row="${LINK_A}"]')`)) || false,
+          6000)
+        await settle()
+      }
+
+      // The inspector may be COLLAPSED: check 80 drives ⇧⌘\ and never puts it
+      // back. A collapsed region still renders its controls, so the Link
+      // button is FOUND but its rect is zero-sized, and a click computed from
+      // that rect lands at (0,0) — which is how the first draft of this block
+      // failed, with `armed=false` and no indication why.
+      const ensureInspectorOpen = async () => {
+        const collapsed = await wc.executeJavaScript(
+          `document.querySelector('.shell').className.includes('inspector-collapsed')`)
+        if (collapsed) {
+          await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('.shell__inspector-toggle')
+            if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            return true })()`)
+          await settle()
+        }
+        return await wc.executeJavaScript(
+          `!document.querySelector('.shell').className.includes('inspector-collapsed')`)
+      }
+
+      const panelBox = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id="${id}"]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.x, y: r.y, w: r.width, h: r.height,
+                 cx: r.x + r.width / 2, cy: r.y + r.height / 2 }
+      })()`)
+
+      const clickAt = async (x, y) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        await settle()
+      }
+
+      // Clicking a rail row is goToPanel: it FRAMES the panel and selects it
+      // without waking it (check 84). That is what puts a panel under a
+      // clickable coordinate, and it is also a navigation a user could
+      // perform — the rail is outside .canvas, so it never resolves an armed
+      // link mode itself.
+      const railGoTo = async (id) => {
+        const clicked = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('[data-rail-row="${id}"] .rail-row__main')
+          if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await settle()
+        return clicked
+      }
+
+      const linkPaths = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.link-layer [data-link]')].map((e) => e.getAttribute('data-link'))`)
+
+      // Arms the mode through the INSPECTOR's own control, with a real
+      // sendInputEvent rather than a dispatched MouseEvent — check 75c's
+      // reason. Returns a DIAGNOSTIC rather than a bare boolean, so a failure
+      // says which step broke instead of only `armed=false`.
+      const armLinkFrom = async (id) => {
+        const opened = await ensureInspectorOpen()
+        const selected = await railGoTo(id)
+        const box = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('[data-inspector-action="link"]')
+          if (!b) return null
+          const r = b.getBoundingClientRect()
+          if (r.width === 0 || r.height === 0) return { zero: true }
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+        })()`)
+        if (box && !box.zero) await clickAt(box.x, box.y)
+        const armed = await wc.executeJavaScript(`!!document.querySelector('.link-banner')`)
+        return { opened, selected, box, armed }
+      }
+
+      // 125. The link is created by the REAL gesture and rendered. Asserted by
+      //      the data-link key carrying BOTH ids rather than by "an svg
+      //      exists", which an empty layer satisfies.
+      {
+        const arm = await armLinkFrom(LINK_A)
+        await railGoTo(LINK_B)                       // frame B so a click can land
+        const box = await panelBox(LINK_B)
+        if (arm.armed && box) await clickAt(box.cx, box.cy)
+        const paths = await linkPaths()
+        ok('125 a link is created by the real gesture and rendered in the layer',
+          arm.armed === true && box !== null &&
+            paths.includes(LINK_A + ' ' + LINK_B),
+          `arm=${JSON.stringify(arm)} box=${JSON.stringify(box)} paths=${JSON.stringify(paths)}`)
+      }
+
+      // 126. THE ONE WORTH KNOWING BY NUMBER. The completing click must NOT
+      //      WAKE the target. A check that only asserts "a link appeared"
+      //      passes against an implementation that also spawned an agent —
+      //      the completing click reaching onSelectPanel is exactly the defect
+      //      the capture-phase interception exists to prevent, and on a
+      //      restored canvas that is one agent CLI per link the user draws.
+      //
+      //      It needs a GENUINELY dormant target, which is why LINK_DORMANT is
+      //      restored from disk far away and reached only by a rail click —
+      //      goToPanel frames without waking (check 84), so the panel is under
+      //      the cursor and still dormant when the completing click lands.
+      //
+      //      Both clauses are required. The no-session clause alone passes
+      //      against a wake that failed to spawn for an unrelated reason (over
+      //      budget, off screen); the link clause alone is check 125 again.
+      {
+        const arm = await armLinkFrom(LINK_A)
+        await railGoTo(LINK_DORMANT)
+        const box = await panelBox(LINK_DORMANT)
+        if (arm.armed && box) await clickAt(box.cx, box.cy)
+        // SPAWNED, not "has a session". The registry mints a PanelSession for
+        // every rendered panel including a dormant one — that is the whole of
+        // "two lifetimes, not one" — so a check asserting the id is ABSENT
+        // from __m4aSessions() fails against correct code, which is how the
+        // first draft of this check failed. What a wake would produce is a
+        // PROCESS, and `spawned` is the flag that says so.
+        const target = (await wc.executeJavaScript(
+          `(window.__m4aSessions ? window.__m4aSessions() : [])`))
+          .find((x) => x.id === LINK_DORMANT)
+        const paths = await linkPaths()
+        ok('126 the completing click links WITHOUT waking the target',
+          arm.armed === true && box !== null &&
+            paths.includes(LINK_A + ' ' + LINK_DORMANT) &&
+            target !== undefined && target.spawned === false && target.dormant === true,
+          `arm=${JSON.stringify(arm)} target=${JSON.stringify(target)} ` +
+          `paths=${JSON.stringify(paths)}`)
+      }
+
+      // 127. A click over a link still reaches what is beneath it. Success
+      //      criterion 5, and the only check that can see pointer-events:
+      //      none — the property is invisible to every DOM read that does not
+      //      dispatch a click through the layer. Driven with a REAL
+      //      sendInputEvent for check 75c's reason.
+      //
+      //      elementFromPoint is the discriminating read: with the layer deaf
+      //      to the pointer the topmost element at a point on a link is the
+      //      CANVAS, and with it live the topmost element is the line itself.
+      //      The click that follows is the behavioural half — the background
+      //      handler must still run and clear the selection.
+      {
+        await railGoTo(LINK_A)
+        const mid = await wc.executeJavaScript(`(() => {
+          const line = document.querySelector('.link-layer [data-link]')
+          if (!line) return null
+          const r = line.getBoundingClientRect()
+          const x = r.x + r.width / 2, y = r.y + r.height / 2
+          const top = document.elementFromPoint(x, y)
+          const cls = top ? (typeof top.className === 'string' ? top.className : 'svg:' + top.className.baseVal) : null
+          return { x, y, cls, onCanvas: !!(top && top.closest && top.closest('.canvas')) }
+        })()`)
+        // The SELECTED PANEL, read from production markup. NOT __m4aSelection,
+        // which is the focused terminal's TEXT selection and answers '' here
+        // whatever the click did — the wrong hook, and the first draft's bug.
+        const selectedId = () => wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.panel--selected')
+          return el ? el.getAttribute('data-panel-id') : null
+        })()`)
+        let before = 'not-run'
+        let after = 'not-run'
+        if (mid && mid.onCanvas) {
+          before = await selectedId()
+          await clickAt(mid.x, mid.y)
+          after = await selectedId()
+        }
+        ok('127 a link takes no pointer events, so a click reaches what is beneath',
+          mid !== null && typeof mid.cls === 'string' && !mid.cls.includes('link-layer') &&
+            mid.onCanvas === true && before !== null && after === null,
+          `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+      }
+
+      // 128. THE SECOND ONE WORTH KNOWING BY NUMBER. Closing the target
+      //      removes the link, and ONE Cmd+Z restores the panel AND the link
+      //      together.
+      //
+      //      The one-press clause is the whole check. An implementation that
+      //      pruned the links in a SEPARATE commit satisfies "the link came
+      //      back" after TWO presses and looks entirely correct in every other
+      //      read — and the user's second press then undoes something else.
+      {
+        const key = LINK_A + ' ' + LINK_B
+        const before = await linkPaths()
+        const closed = await wc.executeJavaScript(`(() => {
+          const btn = document.querySelector('[data-rail-row="${LINK_B}"] .rail-row__close')
+          if (!btn) return false
+          btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true })()`)
+        await settle()
+        const afterClose = await linkPaths()
+        // __m4bUndo, not a dispatched Cmd+Z. Undo is a MAIN-PROCESS menu
+        // accelerator delivered as an edit:undo IPC event, so it passes
+        // through no renderer keydown at all and a dispatched KeyboardEvent
+        // reaches nothing — which is why this hook exists. ONE call.
+        await wc.executeJavaScript(`window.__m4bUndo(), true`)
+        await settle()
+        const afterUndo = await linkPaths()
+        const panelBack = await wc.executeJavaScript(
+          `!!document.querySelector('[data-rail-row="${LINK_B}"]')`)
+        ok('128 closing a panel drops its links, and ONE Cmd+Z restores both',
+          closed === true && before.includes(key) && !afterClose.includes(key) &&
+            panelBack === true && afterUndo.includes(key),
+          `closed=${closed} before=${JSON.stringify(before)} ` +
+          `afterClose=${JSON.stringify(afterClose)} panelBack=${panelBack} ` +
+          `afterUndo=${JSON.stringify(afterUndo)}`)
+      }
+
+      // 129. Links survive a real renderer reload, and are on disk. This is
+      //      the persistence claim end to end: it needs the field to have been
+      //      written by fromPanels, parsed by parsePanel and survived
+      //      parseWorkspace's second pass, none of which a plain-node check
+      //      can see together.
+      {
+        flushLayoutStore()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await settle()
+        await settle()
+        const paths = await linkPaths()
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const stored = onDisk.workspaces
+          .flatMap((w) => w.panels)
+          .filter((p) => Array.isArray(p.links) && p.links.length > 0)
+          .map((p) => p.id + '->' + p.links.map((l) => l.to).join(','))
+        ok('129 links survive a real renderer reload, and are on disk',
+          stored.length > 0 && paths.length > 0,
+          `stored=${JSON.stringify(stored)} rendered=${JSON.stringify(paths)}`)
+      }
+    }
+
       // Best-effort, like the two below it and for the same reason: a throw
       // here is caught by the outer try, reports as an `infrastructure`
       // failure, and takes the other two cleanups with it on the way out.

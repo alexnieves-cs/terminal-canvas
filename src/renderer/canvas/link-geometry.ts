@@ -21,9 +21,13 @@ export interface LinkSegment {
    * React key. It carries BOTH ids AND their order: a -> b and b -> a are
    * different claims and addLink deliberately allows both, so a key built from
    * an unordered pair would collide and one of the two would silently stop
-   * rendering. NUL-joined rather than space- or dash-joined for the reason
-   * railSignature uses JSON.stringify — an id cannot contain it (ID_PATTERN is
-   * [A-Za-z0-9_-]+), so no pair of distinct links can forge one key.
+   * rendering. Space-joined, which is unambiguous for the same reason
+   * railSignature uses JSON.stringify rather than a concatenation: an id
+   * cannot contain a space (ID_PATTERN is [A-Za-z0-9_-]+), so no pair of
+   * distinct links can forge one key. An earlier draft used a NUL for extra
+   * safety it did not need, and the cost was real — it made this file report
+   * as binary to `file`, and written into a check it terminated the enclosing
+   * string literal.
    */
   key: string
   from: string
@@ -112,7 +116,7 @@ export function buildLinkSegments(panels: Panel[]): LinkSegment[] {
       const anchors = linkAnchors(from, to)
       if (!anchors) continue
       out.push({
-        key: `${from.id}\u0000${link.to}`,
+        key: `${from.id} ${link.to}`,
         from: from.id,
         to: link.to,
         // Absent stays absent, the rule `title` and `command` already obey:
