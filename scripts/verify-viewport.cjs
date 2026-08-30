@@ -1331,7 +1331,7 @@ ok('74 a panel with no kind is not a review panel',
   const f = V.makeFilePanel('f3', { x: 0, y: 0 }, 1, { path: '/tmp/c' })
   const r = V.makeReviewPanel('r1', { x: 0, y: 0 }, 1,
     { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'x' })
-  const j = V.makeJiraPanel('j1', { x: 0, y: 0 }, 1)
+  const j = V.makeWorkPanel('w1', { x: 0, y: 0 }, 1, 'github')
   const tb = V.makeToolboxPanel('t2', { x: 0, y: 0 }, 1, { cwd: '/r', label: 'r' })
   const legacy = { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } }
   ok('92 isTerminalPanel excludes ALL FOUR non-terminal kinds and still admits a kind-less panel',
@@ -1341,6 +1341,24 @@ ok('74 a panel with no kind is not a review panel',
       && V.isToolboxPanel(tb) === true && V.isToolboxPanel(t) === false
       && V.isToolboxPanel(f) === false,
     `terminal=${V.isTerminalPanel(t)} legacy=${V.isTerminalPanel(legacy)} toolbox=${V.isTerminalPanel(tb)}`)
+}
+
+// 93. makeWorkPanel centres exactly and carries its provider, and its title is
+// the SHARED label rather than a string typed here — three copies of a
+// provider's name drift the first time one is edited. makePanel's own contract
+// (check 48) inherited by a sixth constructor.
+//
+// The provider is fixed at mint and no control changes it: the panel IS the
+// answer to "what does this service say I owe", so a switcher would make its
+// own title a claim about a query it is no longer running.
+{
+  const p = V.makeWorkPanel('w4', { x: 1000, y: 500 }, 3, 'github')
+  const jira = V.makeWorkPanel('w5', { x: 0, y: 0 }, 1, 'jira')
+  ok('93 makeWorkPanel centres exactly, carries its provider and takes its title from the shared label',
+    p.kind === 'work' && p.provider === 'github' && p.z === 3 &&
+      p.rect.x === 1000 - V.WORK_W / 2 && p.rect.y === 500 - V.WORK_H / 2 &&
+      p.title === 'GitHub' && jira.title === 'Jira' && V.isWorkPanel(p) === true,
+    `x=${p.rect.x} y=${p.rect.y} title=${p.title} jira=${jira.title}`)
 }
 
 console.log('\n' + '='.repeat(60))

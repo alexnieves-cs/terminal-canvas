@@ -305,7 +305,7 @@ git commit -m "feat(m24): persist work panels, migrating the legacy jira kind"
 
 **Interfaces:**
 - Consumes: `WorkProvider`, `WORK_PROVIDER_LABEL` from Task 1.
-- Produces: `WorkPanel`, `isWorkPanel(panel): panel is WorkPanel`, `makeWorkPanel(id, provider, centre, z): WorkPanel`, `WORK_W`, `WORK_H`. `JiraPanel`, `isJiraPanel`, `makeJiraPanel`, `JIRA_W`, `JIRA_H` are all deleted.
+- Produces: `WorkPanel`, `isWorkPanel(panel): panel is WorkPanel`, `makeWorkPanel(id, centre, z, provider): WorkPanel`, `WORK_W`, `WORK_H`. `JiraPanel`, `isJiraPanel`, `makeJiraPanel`, `JIRA_W`, `JIRA_H` are all deleted.
 
 - [ ] **Step 1: Write the two failing checks**
 
@@ -379,7 +379,7 @@ export const WORK_H = 520
  * panel IS the answer to "what does this service say I owe", so a switcher
  * would make its own title a claim about a query it is no longer running.
  */
-export function makeWorkPanel(id: string, provider: WorkProvider, centre: Point, z: number): WorkPanel {
+export function makeWorkPanel(id: string, centre: Point, z: number, provider: WorkProvider): WorkPanel {
   return {
     kind: 'work',
     provider,
@@ -503,7 +503,7 @@ Run `grep -rn "isJiraPanel\|makeJiraPanel\|JiraPanel\|openJira\|JIRA_W\|JIRA_H" 
     const id = `w${nextIdRef.current++}`
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const next = [...current, makeWorkPanel(id, provider, cascadeCentre(centre, current), nextZ(current))]
+      const next = [...current, makeWorkPanel(id, cascadeCentre(centre, current), nextZ(current), provider)]
       commitHistory(next)
       return next
     })

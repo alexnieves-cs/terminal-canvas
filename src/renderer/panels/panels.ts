@@ -3,6 +3,7 @@ import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
 import type { ToolboxSource } from '@shared/toolbox'
+import { WORK_PROVIDER_LABEL, type WorkProvider } from '@shared/work-item'
 
 export type { ReviewSubject }
 
@@ -102,9 +103,10 @@ export interface FilePanel extends PanelBase {
   source: FileSource
 }
 
-/** Jira's first concrete panel. It deliberately carries no provider machinery:
- * the next provider decides what, if anything, generalises. */
-export interface JiraPanel extends PanelBase { kind: 'jira' }
+/** Work a service says you owe. M17 shipped this as `kind: 'jira'` and said the
+ * next provider would decide what generalises; M24 is that provider, and the
+ * answer was the KIND — one panel, a provider field, one query per provider. */
+export interface WorkPanel extends PanelBase { kind: 'work'; provider: WorkProvider }
 
 /**
  * A toolbox node: what the agent in one DIRECTORY can actually do — skills,
@@ -124,7 +126,7 @@ export interface ToolboxPanel extends PanelBase {
   source: ToolboxSource
 }
 
-export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel
+export type Panel = TerminalPanel | ReviewPanel | FilePanel | WorkPanel | ToolboxPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -150,7 +152,7 @@ export function isReviewPanel(panel: Panel): panel is ReviewPanel {
 export function isFilePanel(panel: Panel): panel is FilePanel {
   return panel.kind === 'file'
 }
-export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kind === 'jira' }
+export function isWorkPanel(panel: Panel): panel is WorkPanel { return panel.kind === 'work' }
 
 export function isToolboxPanel(panel: Panel): panel is ToolboxPanel {
   return panel.kind === 'toolbox'
@@ -175,7 +177,7 @@ export function isToolboxPanel(panel: Panel): panel is ToolboxPanel {
  */
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
-    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel)
+    !isReviewPanel(panel) && !isFilePanel(panel) && !isWorkPanel(panel) && !isToolboxPanel(panel)
   )
 }
 
@@ -597,8 +599,25 @@ export function makeFilePanel(
   }
 }
 
-export const JIRA_W = 640
-export const JIRA_H = 520
-export function makeJiraPanel(id: string, centre: Point, z: number): JiraPanel {
-  return { kind: 'jira', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'Jira tickets' }
+export const WORK_W = 640
+export const WORK_H = 520
+/**
+ * The provider is fixed at mint and nothing changes it afterwards: the panel IS
+ * the answer to "what does this service say I owe", so a switcher in the chrome
+ * would make its own title a claim about a query it is no longer running. Two
+ * providers is two panels, which is also what makes them independently
+ * placeable on a canvas whose whole premise is spatial arrangement.
+ *
+ * The title comes from the SHARED label rather than a string typed here — the
+ * palette row and the node heading read the same map, and three copies would
+ * drift the first time one was edited.
+ */
+export function makeWorkPanel(id: string, centre: Point, z: number, provider: WorkProvider): WorkPanel {
+  return {
+    kind: 'work',
+    provider,
+    rect: { id, x: centre.x - WORK_W / 2, y: centre.y - WORK_H / 2, w: WORK_W, h: WORK_H },
+    z,
+    title: WORK_PROVIDER_LABEL[provider]
+  }
 }
