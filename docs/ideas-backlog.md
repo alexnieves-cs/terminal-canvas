@@ -89,7 +89,15 @@ changes have reached GitHub or are still local.
   far shorter road than building a sync protocol.
 - **The git-status half is separable and much cheaper:** per-panel badge for
   ahead/behind/dirty, polled from the panel's cwd. Worth doing on its own regardless of
-  multiplayer.
+  multiplayer — and **the "dirty" third of it effectively landed in M9a**, from a different
+  direction: the inspector's Changes section names the files a panel's agent has touched
+  since its session started, diffed against a baseline captured at spawn. That is a
+  strictly better answer than a dirty flag for the local question, and it says nothing at
+  all about **ahead/behind**, which is the half this bullet still owns and which needs a
+  remote read rather than a working-tree one. Whoever builds it should reuse
+  `main/git-runner.ts` and `main/git-args.ts` rather than starting a second git surface —
+  they already carry the resolved-by-absolute-path rule, the per-call timeout, and the
+  `not-a-repo` / `repo-unreadable` split this feature would otherwise rediscover.
 
 ## 8. Chat-box mode and model choice — M20 shipped part (1); parts (2) and (3) are what is left
 
@@ -362,9 +370,13 @@ Obsidian note, an Xcode file, a browser tab.
   integration at all — only the local file and a watch.
 - **Which is why the first one to build is a local-file panel kind, not an app embed.**
   Ranked by honest cost:
-  1. **Text-ish local files** — markdown, CSV, JSON, source files. A watcher plus a
-     viewer/editor. Genuinely achievable, and it already covers Obsidian notes and a CSV
-     export of a spreadsheet. **Start here.**
+  1. ~~**Text-ish local files**~~ — **done, M16 and M22**, and the "start here" advice was
+     right for the stated reason: it shares almost nothing with the terminal path, so it
+     could not be faked as a special case of one. A five-arm read
+     (`text`/`missing`/`too-large`/`binary`/`unreadable`), a **directory** watch rather
+     than a file one (an atomic `rename()` replaces the inode and a file-scoped watch dies
+     with it — the single most important line in that milestone), and M22's
+     compare-and-swap write keyed on the mtime the draft was seeded from.
   2. **Real spreadsheets (`.xlsx`)** — a rendering library (SheetJS to parse, a grid
      component to display) over a watched file. Read-only rendering is very doable;
      round-tripping edits back into `.xlsx` without destroying formatting is where the
@@ -391,10 +403,12 @@ Obsidian note, an Xcode file, a browser tab.
 - **Constraint:** file access is main-side. Same rule as #3 — new IPC channels for read,
   write, and a watch subscription; nothing in the renderer touches `fs`, and every new
   channel needs a handler or `verify:ipc` fails.
-- **Open question worth deciding early:** when the agent and the user edit the same file
-  at the same moment, who wins? A watcher that blindly reloads will discard whatever the
-  user was typing. Even the simplest version needs a stance — "reload unless the panel is
-  dirty, then warn" is a fine one, but it has to be chosen rather than defaulted into.
+- ~~**Open question worth deciding early:** when the agent and the user edit the same file
+  at the same moment, who wins?~~ **Answered in M22**, and close to the stance this bullet
+  proposed: a save carries the mtime its draft was seeded from, main refuses the write
+  outright if the disk has moved since, and an explicit overwrite is reachable only after
+  the user has been shown the conflict. Tiers 2–4 inherit that answer rather than needing
+  their own.
 
 ## 15. An annotation layer — ink, highlights, sticky notes on the canvas
 
@@ -1338,14 +1352,16 @@ M4b made the canvas restore what was there last time. The corollary nobody has d
 yet: on a first launch there is nothing there, and an empty infinite canvas is
 indistinguishable from a broken one.
 
-- **Why this is worth an entry rather than a to-do:** `SEED_PANELS` is twelve hand-authored
-  panels, and it is scaffolding — it exists so there is something to render, and every
-  argument in this file about placement (#25), templates (#34), and dormancy assumes it goes
-  away. The moment it does, the first thing a new user sees is a grey field with a zoom
-  percentage in the corner and no affordance whatsoever, because **every canvas shortcut is
-  `Cmd`-gated by design and therefore undiscoverable by design.** That trade was made for a
-  good reason (bare keys belong to the TUI) and it hands the entire discovery burden to the
-  first-run experience.
+- **This entry's premise has already come true, which moves it from "later" to "now".** It
+  was written when `SEED_PANELS`' twelve hand-authored panels were the boot data and the
+  question was what happens when that scaffolding goes away. **It went away in M4b**: a fresh
+  install now boots `firstRunPanels()` — *one* centred placeholder — and `SEED_PANELS`
+  survives only as `verify:panels` fixture data, which is what it was always really
+  exercising. So the thing this entry predicted is what a new user sees today: one panel on a
+  grey field with a zoom percentage in the corner and no affordance whatsoever, because
+  **every canvas shortcut is `Cmd`-gated by design and therefore undiscoverable by design.**
+  That trade was made for a good reason (bare keys belong to the TUI) and it hands the entire
+  discovery burden to a first-run experience that does not exist.
 - **The right shape is almost certainly not a tour.** A modal walkthrough of an app whose
   whole pitch is "it is a canvas, put things on it" is a contradiction. The candidates worth
   weighing are: a canvas that starts with *one* panel and a nearby annotation (#15) saying
@@ -2032,11 +2048,17 @@ plain-node/Electron split exactly as it is but gives every check a stable **id a
 name**, supports `--only <id>`, and emits a manifest that a `verify:manifest` script diffs
 against the suite table.
 
-- **The suite table has already drifted, which is the argument for this.** `package.json`
-  declares `verify:palette` and `npm run verify` runs it, and it appears in **neither**
-  `README.md`'s script list nor `CLAUDE.md`'s suite table. That is exactly the failure
-  `CLAUDE.md` warns about for the `dispose(id)` call-site count — a number asserted in prose
-  that the code moved out from under — now happening to the table that documents the checks.
+- **The specific drift this entry opened with has since been closed, and the argument
+  survives it.** It read: `package.json` declares `verify:palette`, `npm run verify` runs
+  it, and it appears in **neither** `README.md`'s script list nor `CLAUDE.md`'s suite
+  table. Both now list it, so that sentence is no longer true — but it was closed by
+  someone noticing, which is the entry's point rather than a refutation of it. The
+  mechanism that *would* have caught it, `verify:meta` 19 (every declared `verify:*`
+  script is wired into the chain), is the one below. Note what that check still cannot
+  see: it asserts the chain, not the two documents, so a suite added to `package.json` and
+  to the chain but never written up drifts exactly as `verify:palette` did. **Eleven
+  hand-rolled suites is now twenty-six**, which is the same argument at more than double
+  the size.
 - **What this changes: the numbering becomes generated rather than asserted.** "41 checks",
   "checks 27–34", "`verify:panels` 26" are load-bearing references scattered through
   `CLAUDE.md` and through this file, and today adding a check silently invalidates four
@@ -2059,14 +2081,21 @@ against the suite table.
 
 ## 72. One versioned automation surface, replacing the `__m4a*` / `__m5a*` hooks
 
-`Canvas.tsx` now carries **ten** global test hooks across two naming generations — eight
-`__m4a*` plus `__m5aSpecOf` and `__m5aDefaultSpec` — and every milestone adds more with a
-fresh prefix. `CLAUDE.md` still says eight. Consolidate them into one `window.__tc` namespace
-with a version field and a deliberately narrow, documented question-per-method contract,
-stripped from production builds by a vite define.
+`Canvas.tsx` now carries **fourteen** global test hooks across **six** naming generations —
+eight `__m4a*`, plus `__m4bUndo`/`__m4bReset`, `__m5aSpecOf`/`__m5aDefaultSpec`,
+`__m7aWorkspace`, `__m13Open` and `__m20Toolbox` — and every milestone adds more with a fresh
+prefix. `CLAUDE.md` still says eight and names only the `__m4a*` set. Consolidate them into
+one `window.__tc` namespace with a version field and a deliberately narrow, documented
+question-per-method contract, stripped from production builds by a vite define.
 
-- **The count in `CLAUDE.md` is the second confirmed drift, alongside #70's.** Both were found
-  by reading rather than by a check failing, which is the argument for #70 restated.
+- **The count in `CLAUDE.md` is the second confirmed drift, alongside #70's — and unlike
+  #70's it is still open, and it has since drifted further.** Both were found by reading
+  rather than by a check failing, which is the argument for #70 restated. The prefixes are
+  also now actively misleading rather than merely dated: two of the six name milestones the
+  work was **renumbered away from** on merge (`__m13Open` mints a *file* panel, which
+  shipped as M16; `__m20Toolbox` belongs to M21), so the prefix records the branch's own
+  working title rather than the milestone that shipped it. A prefix scheme that encodes a
+  number the repo reassigns is one this file's own numbering rule already rejects.
 - **What it unlocks: headless driving of everything after M5** — palette, multi-select,
   annotations — without each milestone minting a prefix that permanently pins its era into a
   component.
@@ -2173,10 +2202,14 @@ these. Three observations that would change it if it were:
 
 ## Rough sequencing, if these were ever scheduled
 
-**Written before M5b and never re-ordered since.** Ten of its items have shipped and are
-struck below; the surviving order was computed against a codebase that had no palette, no
-settings schema, no workspaces, no shell and no review layer, so treat it as a record of
-how these were once weighed rather than as advice about what to do next.
+**Written before M5b and never re-ordered since.** **Sixteen** of its items have shipped and
+are struck below; the surviving order was computed against a codebase that had no palette, no
+settings schema, no workspaces, no shell, no review layer, no panel-kind union and no
+integrations at all, so treat it as a record of how these were once weighed rather than as
+advice about what to do next. Two of the four most recent strikes landed **out of this
+order** — #24's decorative half (item 19) and #12's Jira read (item 36) both shipped well
+ahead of prerequisites this list gave them — which is the clearest evidence that the ordering
+has stopped being predictive.
 
 Ordered by (value × confidence) ÷ effort, not by preference:
 
@@ -2239,8 +2272,11 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
    API, or token is involved. Ink and panel-anchored annotations follow once the mode
    arbitration is settled.
-19. **#24 edges, decorative flavour only** — same SVG-in-`.world` machinery as #15 and
-   arguably a feature of it. The functional flavour is much later and much more dangerous.
+19. ~~**#24 edges, decorative flavour only**~~ — **done, M13**, as *links*, and it did not
+   wait for #15 as this item assumed: the SVG-in-`.world` machinery was built here first
+   rather than inherited from an annotation layer that still does not exist. The functional
+   flavour is what #24 has been rewritten down to, and it remains much later and much more
+   dangerous.
 20. **#35 groups** — world-space rects plus membership, and the second-cleanest candidate
    for the panel-kind union after #14. Its two real constraints (recompute drags from the
    origin rects; never touch array order) are both already written down.
@@ -2261,12 +2297,17 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    the terminal path is "write a file path into the PTY", which needs no new channel.
 27. **#23, the actually-maximise half** — a layout mutation with a restore rect, a
    SIGWINCH on entry and exit, and a decision about whether focus mode pins the budget.
-28. **#19 token and dollar accounting** — gated on the transcript watcher, which is the
-   same machinery #7 needs. Build the watcher once, deliberately, for whichever of the
-   two is scheduled first.
-29. **#14 tier 1 — a watched local-file panel kind.** The first non-terminal panel, and
-   the one that forces the union below to exist. Markdown/CSV/JSON beside a live agent
-   is most of this idea's value for a fraction of its cost.
+28. ~~**#19 token and dollar accounting**~~ — **done, M17**, and the "build the watcher
+   once" advice was half-followed: #7's subagent nodes (M15) and this both read a vendor
+   transcript, but they read *different* files for different facts and each built its own
+   reader. What M17 actually needed was a pinned `--session-id`, which nothing here
+   predicted. History, a second CLI adapter, the un-pinned panel and aggregate totals are
+   what #19 has been rewritten down to.
+29. ~~**#14 tier 1 — a watched local-file panel kind.**~~ — **done, M16**, and later made
+   editable in M22. The one prediction here that did *not* hold is the important one: it
+   was **not** the first non-terminal panel and did **not** force the union, because M9b's
+   review node had already paid for it (see the section below, which records the same
+   correction). Tiers 2–4 are what #14 has been rewritten down to.
 30. ~~**#3 file tree**~~ — **done, M20**, rooted on the selected panel rather than a
    workspace-level root, which the open question here left unsettled: each panel is a
    shell that can `cd` anywhere, so the tree follows the panel the user has selected
@@ -2293,7 +2334,12 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    blank of any renderer-side DOM capture. Bounded by #30 for the text half.
 35. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two
    reference implementations, after the trust-boundary design pass.
-36. **#12 Jira, read-only** — after #9 establishes the auth-and-token surface it shares.
+36. ~~**#12 Jira, read-only**~~ — **done, M19**, and deliberately **not** in this order:
+   it did not wait for #9's two reference implementations to establish a shared
+   auth-and-token surface, because M14's credential boundary had already supplied the part
+   that actually mattered. Jira is therefore the *first* tier-2 implementation and
+   explicitly declines to claim the surface; GitHub remains the preferred second one, at
+   which point the common boundary can be derived rather than guessed.
 37. **#8, part 3 (native chat panels)** — after the panel-kind refactor exists.
 38. **#20 two windows** — tier 1 (separate workspaces) is nearly free after #2; tier 3
    (one live panel in two windows) waits for M4c for the same reason #4 does.
@@ -2321,18 +2367,33 @@ or a `LIVE_BUDGET` slot — a structural answer rather than a guard every future
 to remember. See `CLAUDE.md`'s "`kind` is optional on disk" and "A review node never reaches
 `assignTiers` or `registry.ensure`".
 
-The review node (#51) paid for it, which is not who this section predicted. The rest of this
-section is left as written, because the entries below still inherit the decision and the
-reasoning still says what a second kind costs. #3 (file tree) is no longer among them: it
-shipped in M20 as a rail column reading a panel's cwd over `fs:list`, never as a canvas node,
-so it needed no `Panel` variant and touched neither `assignTiers` nor `registry.ensure`.
+The review node (#51) paid for it, which is not who this section predicted. **Four more kinds
+have arrived since, and the union has held every time** — `review` (M9b), `file` (M16, made
+editable in M22), `jira` (M19) and `toolbox` (M21) — so `isTerminalPanel` is now a positive
+partition test (`!isReviewPanel && !isFilePanel && !isJiraPanel && !isToolboxPanel`) rather
+than the single negation it could safely be while there was exactly one alternative. That
+change is the union's one recurring maintenance cost and it fails in the **dangerous**
+direction if forgotten: a new kind that satisfies a stale negation lands in `assignTiers` and
+`registry.ensure` with no spec, burning a `LIVE_BUDGET` slot and a WebGL context on a panel
+that owns no process. `verify:viewport` `90b` is the check, and whoever adds a sixth kind
+inherits that one-line obligation.
 
-Nine separate entries (#7 subagent nodes, #8 chat box, #9 integrations,
-#12 Jira boards, #14 live document panels, #15 annotations, #24 edges, #26 the agent
-toolbox, #35 groups) all need the same thing:
-**a canvas node that is not a terminal.** Today `Panel` means
-"a PTY behind an xterm", and `LIVE_BUDGET`, `fit()`-before-spawn, the pointer
-correction, and the WebGL accounting all assume it.
+Two entries have left this list by being built rather than by being reasoned about. **#3**
+(file tree) shipped in M20 as a rail column reading a panel's cwd over `fs:list`, never as a
+canvas node — so it needed no `Panel` variant at all. **#12** (Jira) and **#26** (the agent
+toolbox) went the other way and each took a kind, which is the outcome this section wanted:
+neither was faked as a special case bolted onto the terminal path.
+
+**Five separate entries** (#7 subagent nodes, #8 chat box, #9 integrations, #14 tiers 2–4,
+#15 annotations, #35 groups) still want one — though #7 is worth reading as a caution rather
+than a queue entry, because M15 answered it **without** a kind at all: subagent nodes are
+*derived*, rebuilt every launch from a watcher, never in the `panels` array, and therefore
+never near `parseLayout`, `nextIdRef` or the four panel-removing surfaces. "It needs a canvas
+node that is not a terminal" and "it needs a `Panel` variant" turned out to be different
+claims, and the cheaper answer is available whenever the thing has no identity worth
+persisting.
+
+The reasoning below is left as written, because it still says what a kind costs:
 
 Turning `Panel` into a discriminated union of kinds — with the terminal as one variant
 and cheap DOM nodes as another that never touch the live budget — is the unlock for the
@@ -2341,16 +2402,15 @@ is the thing to build deliberately the first time a second panel kind is genuine
 needed, rather than bolting a special case onto the terminal path and discovering the
 union three features later.
 
-**#35 is the entry most likely to force it first, and #14 is the cleanest place to make
-it.** A group is a canvas node with no session, no PTY, and no claim on `LIVE_BUDGET` —
-so if groups are built before the union exists, they will be built as a special case
-bolted onto the terminal path, which is precisely the outcome this section exists to
-avoid. Whichever of the two is scheduled first is the one that should pay for the union.
-
-**#14 is the entry most likely to force the decision, and the cleanest place to make it.**
-A watched local-file panel is small, obviously useful, and shares almost nothing with the
-terminal path — so it is a good first variant precisely because it cannot be faked as a
-special case of one. If the union gets built for anything, build it for that.
+Both of the "who pays for the union" paragraphs that stood here are spent — the union
+exists, and neither #35 nor #14 is what bought it. They are worth one line of what they got
+right, because the criterion transfers to whatever kind comes sixth. Each argued from the
+same property: a node that **shares almost nothing with the terminal path** is a good first
+variant *precisely because it cannot be faked as a special case of one*. That is what M9b's
+review node turned out to have, and it is the test to apply to #35's groups (a canvas node
+with no session, no PTY and no claim on `LIVE_BUDGET`) whenever they are scheduled — not
+"does this force the union", which is settled, but "does this fit the partition, or is it
+about to be bolted onto the terminal path".
 
 ## The second one, newer: a panel's lifetime now has more than two states
 
