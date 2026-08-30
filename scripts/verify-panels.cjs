@@ -168,6 +168,56 @@ const zoomTo = (wc, key) =>
   )
 
 /**
+ * Cmd+G, the nav grid's reveal chord. `repeat` is supplied BY HAND by the
+ * caller — like checks 7b/33b/75b this proves the guard READS the flag and
+ * says nothing at all about who sets it.
+ */
+const pressChord = (wc, key, opts = {}) =>
+  wc.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify({ key, metaKey: true, ...opts })})), true`
+  )
+
+/**
+ * An arrow inside the nav grid: Cmd is still held through the whole gesture,
+ * so the event is byte-identical to zoomTo's. It is a separate name rather
+ * than a reuse because `zoomTo(wc, 'ArrowRight')` at a nav-grid call site
+ * reads as a camera command, which is the one thing these presses must not be.
+ */
+const pressArrow = (wc, key) =>
+  wc.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keydown', { key: '${key}', metaKey: true })), true`
+  )
+
+/**
+ * Releasing Cmd. The commit test is `key === 'Meta'` and NOT `!metaKey`:
+ * sendInputEvent echoes back exactly the modifiers array it is handed, so a
+ * check written against the bitfield would be circular — it would prove only
+ * that the harness repeats its own input. See the M11 spec.
+ */
+const releaseMeta = (wc) =>
+  wc.executeJavaScript(
+    `window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Meta' })), true`
+  )
+
+/**
+ * The nav grid as the screen actually shows it. Answers `{ open: false }`
+ * rather than throwing when `.navgrid` is absent, so a missing overlay is a
+ * clean individual FAIL in every check that reads it — CLAUDE.md's rule that
+ * a throw aborts the whole run and takes every later check's RED with it.
+ */
+const gridState = (wc) => wc.executeJavaScript(`(() => {
+  const el = document.querySelector('.navgrid')
+  if (!el) return { open: false }
+  const cur = el.querySelector('.navgrid__cell--cursor')
+  return { open: true, cursor: cur ? Number(cur.dataset.cellIndex) : -1,
+           label: cur ? (cur.dataset.cellLabel || '') : '' }
+})()`)
+
+/** The id of whichever workspace main currently says is active. */
+const activeWorkspaceId = (wc) => wc.executeJavaScript(
+  `window.canvas.workspace.list().then((r) => (r.find((w) => w.active) || {}).id)`)
+
+/**
  * An unmodified keydown — Enter/Escape at the workspace confirm gate (checks
  * 69-70), which must NOT carry metaKey the way every other synthetic key
  * this suite dispatches does. zoomTo's name and shape are both wrong for
@@ -7827,6 +7877,21 @@ app.whenReady().then(async () => {
       })()`)
       if (cnode) { await clickRailRow('rcommit'); await settle() }
 
+      // Both captured for check 124, which comes back to this node from
+      // inside the M11 block, hundreds of lines below.
+      //
+      // The workspace id, because a review node exists in the DOM only while
+      // the workspace holding it is the active one, and the M11 block creates
+      // and switches workspaces before 124 runs — so 124 has to switch back
+      // by id rather than hope.
+      //
+      // The peer id, because check 115 spawns a panel into this same
+      // repository to reach the `shared` arm, and `shared` DISABLES the
+      // commit control: no draft can be opened at all while that peer holds a
+      // baseline, so 124 closes it first.
+      const commitWorkspaceId = await activeWorkspaceId(wc)
+      let commitPeer = null
+
       /* Drives the node's OWN control and OWN input, never window.canvas.
          review.commit from executeJavaScript: the disabled gate, the Enter
          handler and the baseline advance are the three things this milestone
@@ -7930,6 +7995,7 @@ app.whenReady().then(async () => {
       //      one that would happily commit another agent's work.
       {
         const peer = await spawnAt(crepo)
+        commitPeer = peer // check 124 closes it again; see its declaration
         if (peer) {
           await waitUntil(async () => (await sessionMap(wc)).has(peer), 8000)
           await waitUntil(async () => {
@@ -8092,6 +8158,660 @@ app.whenReady().then(async () => {
         }
       }
 
+      // ---- M11: the Cmd-held navigation grid (118-122) ----
+      {
+        await zoomTo(wc, '0')
+        await settle()
+
+        // Two workspaces at minimum, or a release has nowhere to go and check
+        // 122 would pass vacuously against a commit that did nothing. The
+        // ACTIVE one is then pinned to cell 0 — buildGrid lays the list out in
+        // stored order and initialCursor seeds on the active cell, so from
+        // cell 0 a single ArrowRight always lands on cell 1, which is a
+        // workspace whenever two exist. Every other seat depends on how many
+        // workspaces the run happens to have left behind, and from the last
+        // one ArrowRight walks off the edge and stepCell correctly refuses to
+        // move — a check that then reads as a broken cursor.
+        await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('navgrid-b')`)
+        await settle()
+        const wsRows = await wc.executeJavaScript(`window.canvas.workspace.list()`)
+        const firstId = wsRows[0] && wsRows[0].id
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().switchTo(${JSON.stringify(firstId)})`)
+        await settle()
+        const activeBeforeGrid = await activeWorkspaceId(wc)
+        // The fixture premise rides as CLAUSES of check 118 rather than as a
+        // check of its own: if it did not land where it meant to, 118's cursor
+        // move is measuring the wrong grid, and a green 118 beside a red
+        // fixture check would be the more confusing of the two reports.
+        const fixtureOk = wsRows.length >= 2 && activeBeforeGrid === firstId
+
+        // 118. Cmd+G reveals, an arrow moves the cursor, and the TAIL of a
+        //      held chord does not re-reveal a grid the user has dismissed.
+        //      The repeat clause is asserted AFTER an Escape deliberately:
+        //      while the overlay is up every key is swallowed by the open
+        //      branch, so a repeat pressed there leaves it open under an
+        //      implementation with no `event.repeat` guard at all — the
+        //      obvious placement is the one that cannot fail. Closed, the
+        //      repeat stream is exactly the flicker the guard exists for.
+        await pressChord(wc, 'g')
+        const revealed = await gridState(wc)
+        const before = revealed.cursor
+        await pressArrow(wc, 'ArrowRight')
+        const moved = await gridState(wc)
+        await pressPlain(wc, 'Escape')
+        for (let i = 0; i < 4; i++) await pressChord(wc, 'g', { repeat: true })
+        const afterRepeat = await gridState(wc)
+        ok(118, fixtureOk && revealed.open === true && moved.open === true
+            && moved.cursor !== before && moved.cursor >= 0
+            && afterRepeat.open === false,
+          `fixture=${fixtureOk} (${wsRows.length} workspaces, active=${activeBeforeGrid}) ` +
+          `open=${revealed.open} ${before} -> ${moved.cursor}, repeatOpen=${afterRepeat.open}`)
+
+        // 119. Cmd+N while the grid is open spawns NOTHING. Success criterion
+        //      5, and the reason navGrid.isOpen has to compose into
+        //      useViewport's shouldIgnoreKeys rather than the overlay merely
+        //      being painted on top. Note WHICH fact makes this check able to
+        //      fail, because it is narrower than it looks: useViewport's
+        //      keydown listener is on `window` too, and the press below is a
+        //      window.dispatchEvent — a SAME-TARGET dispatch, which invokes
+        //      every listener on that target regardless of phase, so the
+        //      grid's own stopPropagation cannot help there and only the
+        //      shared predicate can. A REAL keypress takes a different path
+        //      (the capture-phase stopPropagation at `window` does suppress
+        //      bubble-phase listeners on `window`), so this check covers the
+        //      predicate rather than the whole production story.
+        // This suite has no shared panel-count helper — line ~1039 defines a
+        // local `panelCount` inside another block. Define one here rather than
+        // reaching into that scope.
+        const countPanels = () => wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        await pressChord(wc, 'g')
+        const panelsBefore = await countPanels()
+        await zoomTo(wc, 'n')
+        await settle()
+        const panelsAfter = await countPanels()
+        ok(119, panelsAfter === panelsBefore, `${panelsBefore} -> ${panelsAfter}`)
+
+        // 120. Escape commits NOTHING, read back out of workspace.list()
+        //      rather than off the overlay — check 50's rule for the palette's
+        //      confirm, that a cancel which cancels unconditionally is
+        //      invisible and so is one that does not. The arrow first is what
+        //      makes it a cancel rather than a no-op: the cursor is on a
+        //      DIFFERENT workspace when Escape lands.
+        await pressArrow(wc, 'ArrowRight')
+        const escapeTarget = await gridState(wc)
+        await pressPlain(wc, 'Escape')
+        await settle()
+        const afterEscape = await gridState(wc)
+        const activeAfterEscape = await activeWorkspaceId(wc)
+        ok(120, afterEscape.open === false && escapeTarget.cursor > 0
+            && activeAfterEscape === activeBeforeGrid,
+          `cursor=${escapeTarget.cursor} open=${afterEscape.open} active=${activeAfterEscape} (was ${activeBeforeGrid})`)
+
+        // 121. A window blur DISMISSES and commits nothing. This is success
+        //      criterion 4 and it is not a formality: Cmd+Tab delivers the
+        //      keyup for Cmd to the OTHER application, so a keyup-only design
+        //      leaves the overlay up over a canvas whose shortcuts have stood
+        //      down, with no key left that dismisses it and no recovery short
+        //      of Cmd+R. The cursor is moved off the active cell first, so the
+        //      "commits nothing" half is a claim about the handler rather than
+        //      about the already-active guard one layer down.
+        await pressChord(wc, 'g')
+        await pressArrow(wc, 'ArrowRight')
+        const beforeBlur = await gridState(wc)
+        await wc.executeJavaScript(`window.dispatchEvent(new Event('blur')), true`)
+        await settle()
+        const afterBlur = await gridState(wc)
+        const activeAfterBlur = await activeWorkspaceId(wc)
+        ok(121, beforeBlur.open === true && beforeBlur.cursor > 0
+            && afterBlur.open === false && activeAfterBlur === activeBeforeGrid,
+          `open ${beforeBlur.open} -> ${afterBlur.open}, active=${activeAfterBlur}`)
+
+        // 122. Release SWITCHES, and every pid is PRESERVED. The pid clause is
+        //      the whole check, on check 64's argument: a dispose-and-respawn
+        //      satisfies every count, every layout read and the file on disk,
+        //      and only the pid separates it from the demote this milestone
+        //      requires. pty:list is main's GLOBAL session list, so it spans
+        //      the workspace being left as well as the one being entered.
+        //      Success criterion 3.
+        const pidsBefore = await settledSessionMap(wc)
+        await pressChord(wc, 'g')
+        await pressArrow(wc, 'ArrowRight')
+        const target = await gridState(wc)
+        await releaseMeta(wc)
+        await settle()
+        const activeAfterRelease = await activeWorkspaceId(wc)
+        const closed = await gridState(wc)
+        const pidsAfter = await settledSessionMap(wc)
+        const pids = pidsPreserved(pidsBefore, pidsAfter)
+        ok(122, closed.open === false && activeAfterRelease !== activeBeforeGrid
+            && activeAfterRelease !== undefined && target.cursor > 0 && pids.ok,
+          `active ${activeBeforeGrid} -> ${activeAfterRelease}; pids ${pids.changed.join(', ') || 'preserved'}`)
+
+        // 122b. Hover MOVES the cursor and does NOT commit, and hovering an
+        //       EMPTY cell moves nothing. Both clauses in one read: asserting
+        //       only the move passes against a cell that also switches on
+        //       mouseover, and asserting only the no-commit passes against a
+        //       dead handler. The active-workspace clause is what proves
+        //       nothing was committed — read back out of workspace.list(), not
+        //       off the overlay.
+        //
+        //       It also carries the MOUSEDOWN guard, which needs panels on
+        //       screen to be able to fail at all — check 122 has just landed
+        //       on a freshly created and therefore empty workspace, so this
+        //       switches back to the one the block started in first. That
+        //       switch also re-aims the no-commit clause at activeBeforeGrid,
+        //       which is the same claim read from the same place.
+        await wc.executeJavaScript(
+          `window.__m7aWorkspace().switchTo(${JSON.stringify(firstId)})`)
+        await settle()
+        await pressChord(wc, 'g')
+        const hoverStart = await gridState(wc)
+        const hoverable = await wc.executeJavaScript(`(() => {
+          const cells = [...document.querySelectorAll('.navgrid__cell')]
+          const target = cells.find((c) => !c.classList.contains('navgrid__cell--empty')
+            && !c.classList.contains('navgrid__cell--cursor'))
+          if (target) target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))
+          return !!target
+        })()`)
+        const hovered = await gridState(wc)
+        await wc.executeJavaScript(`(() => {
+          const empty = [...document.querySelectorAll('.navgrid__cell--empty')][0]
+          if (empty) empty.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))
+          return true
+        })()`)
+        const afterEmptyHover = await gridState(wc)
+        // A CLICK on the overlay must reach nothing underneath it. .navgrid is
+        // a child of .canvas, whose onMouseDown hit-tests the click's WORLD
+        // point and hands it to onSelectPanel — select, raise, clear-dormant,
+        // registry.wake — so an unguarded mousedown on a cell spawns an agent
+        // behind an opaque overlay. The rule "The palette swallows its own
+        // mousedowns" already states, and verify:panels 41 already pins, for
+        // the same overlay in the same parent.
+        //
+        // The coordinates are what make this able to fail: they are a real
+        // panel's own screen centre, so an unguarded click has something to
+        // hit. A bare `new MouseEvent('mousedown', { bubbles: true })` is at
+        // client 0,0 — a world point with no panel under it — where the
+        // background path only re-clears an already-null selection and the
+        // clause is green against a missing guard. The aim is an UNSELECTED
+        // panel for the same reason: clicking the one already selected changes
+        // nothing observable either.
+        //
+        // What is asserted is that the selection did not MOVE, not that it did
+        // not move to the panel aimed at. Those are different claims and the
+        // second one does not discriminate: panels overlap, hitTest answers
+        // with the top of the z-order at that point, so the first draft of
+        // this clause aimed at n22 and watched the unguarded build select n97
+        // — a wrong panel woken, and a green check.
+        const selectedBeforeClick = await wc.executeJavaScript(
+          `(document.querySelector('.panel--selected') || {}).dataset?.panelId ?? null`)
+        const clickProbe = await wc.executeJavaScript(`(() => {
+          const cell = document.querySelector('.navgrid__cell')
+          const panel = [...document.querySelectorAll('.panel')]
+            .find((p) => !p.classList.contains('panel--selected'))
+          if (!cell || !panel) return null
+          const box = panel.getBoundingClientRect()
+          cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true,
+            clientX: Math.round(box.left + box.width / 2),
+            clientY: Math.round(box.top + box.height / 2) }))
+          return { target: panel.dataset.panelId }
+        })()`)
+        const afterClick = await gridState(wc)
+        const selectedAfterClick = await wc.executeJavaScript(
+          `(document.querySelector('.panel--selected') || {}).dataset?.panelId ?? null`)
+        const activeAfterHover = await activeWorkspaceId(wc)
+        ok('122b', hoverable === true && hovered.cursor !== hoverStart.cursor
+            && afterEmptyHover.cursor === hovered.cursor
+            && clickProbe !== null && afterClick.open === true
+            && selectedAfterClick === selectedBeforeClick
+            && activeAfterHover === activeBeforeGrid,
+          `${hoverStart.cursor} -> ${hovered.cursor}, empty left it ${afterEmptyHover.cursor}, ` +
+          `click aimed at ${clickProbe && clickProbe.target} left open=${afterClick.open} ` +
+          `selected ${selectedBeforeClick} -> ${selectedAfterClick}, active=${activeAfterHover}`)
+
+        // 122c. A wheel over the open grid moves NO camera. shouldYieldWheel's
+        //       rule 0. Asserted as the camera being unmoved rather than as
+        //       cancellation, because unlike the palette (check 47) and the
+        //       review node (105) there is nothing here that scrolls — the
+        //       grid yields the gesture by standing the camera down, not by
+        //       handing it to a scroll host. A ctrlKey wheel is deliberately
+        //       the fixture: it is the one gesture rule 2 would otherwise
+        //       claim outright for the camera.
+        const scaleBefore = await wc.executeJavaScript(`window.__m4aScale()`)
+        await wc.executeJavaScript(`(() => {
+          const host = document.querySelector('.canvas')
+          host.dispatchEvent(new WheelEvent('wheel',
+            { deltaY: 240, ctrlKey: true, bubbles: true, cancelable: true }))
+          return true
+        })()`)
+        await settle()
+        const scaleAfter = await wc.executeJavaScript(`window.__m4aScale()`)
+        ok('122c', scaleAfter === scaleBefore, `${scaleBefore} -> ${scaleAfter}`)
+
+        await pressPlain(wc, 'Escape')
+        await settle()
+
+        // 123. Cmd+Z is INERT while the grid is up, and still undoes once it
+        //      is dismissed. Check 37's shape aimed at the second overlay,
+        //      and it covers the one keyboard path the grid CANNOT reach on
+        //      its own: edit:undo is a main-process MENU accelerator
+        //      delivered as an IPC event, so it passes through no renderer
+        //      keydown at all — neither the grid's capture-phase
+        //      stopPropagation nor useViewport's shouldIgnoreKeys is anywhere
+        //      near it, and until M11's fix wave all four edit:* guards read
+        //      palette.isOpen() alone. Unguarded, Cmd+Z runs applyHistory,
+        //      which removes a panel and calls registry.dispose — killing a
+        //      running agent behind an OPAQUE overlay revealed by a chord the
+        //      user is still holding Cmd for, with nothing on screen changing
+        //      to say so, and the switch on release then carries the evidence
+        //      away. Strictly worse than the paste check 35 covers, for the
+        //      same reason check 37 says so about the palette.
+        {
+          const ids = () => wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          // A KNOWN entry on the history stack rather than whatever the
+          // preceding checks happened to leave there — check 37's rule: an
+          // undo with nothing to undo passes without testing anything. The
+          // spawn is before the reveal on purpose, since check 119 has just
+          // pinned that a Cmd+N inside the grid spawns nothing at all.
+          const before = new Set(await ids())
+          await zoomTo(wc, 'n')
+          const spawned = await waitUntil(async () => {
+            const now = await ids()
+            return now.length > before.size ? now : false
+          }, 5000)
+          const newId = spawned ? spawned.find((id) => !before.has(id)) : undefined
+
+          await pressChord(wc, 'g')
+          const gridUp = await gridState(wc)
+          wc.send('edit:undo')
+          await sleep(400) // nothing to wait FOR: the assertion is that nothing happens
+          const survived = newId !== undefined && (await ids()).includes(newId)
+
+          // The half that stops this passing vacuously, check 37's own: with
+          // the grid CLOSED the very same event must still undo the spawn. If
+          // it does not, the guard above is not standing down — it is broken,
+          // or edit:undo never reached this renderer in the first place.
+          await pressPlain(wc, 'Escape')
+          await waitUntil(async () => (await gridState(wc)).open === false, 3000)
+          wc.send('edit:undo')
+          const undone = newId !== undefined &&
+            Boolean(await waitUntil(async () => !(await ids()).includes(newId), 5000))
+
+          ok(123, gridUp.open === true && survived && undone,
+            `gridOpen=${gridUp.open} newId=${newId} survived=${survived} undoneAfterClose=${undone}`)
+        }
+
+        // 124. Cmd+G typed into a review node's OPEN COMMIT DRAFT reveals
+        //      nothing, and the SAME chord aimed one element away still does.
+        //      That commit input is the second surface in this app that takes
+        //      DOM focus off xterm, and it defends itself by
+        //      stopPropagation-ing every key in the BUBBLE phase — enough for
+        //      usePalette and useViewport, both bubble-phase on `window`, and
+        //      useless against useNavGrid, which is capture-phase on `window`
+        //      and has already run. Unguarded, the grid reveals over the
+        //      node, every further keystroke is swallowed by the open
+        //      branch's `default:` arm so the field goes dead, and releasing
+        //      Cmd switches workspace and unmounts the node with the typed
+        //      message unsaved.
+        //
+        //      The second clause is what makes this a claim about SCOPE
+        //      rather than about elements: the same chord dispatched on the
+        //      node's own summary, with the draft still open, must reveal the
+        //      grid — so a guard that bailed for any element target, or for
+        //      the whole review node, fails here while the first clause alone
+        //      would report it as correct.
+        {
+          await wc.executeJavaScript(
+            `window.__m7aWorkspace().switchTo(${JSON.stringify(commitWorkspaceId)})`)
+          await settle()
+          const sel = '.review-node[data-panel-id="rcommit"]'
+          // Un-share first. Check 115 left a peer panel in this node's
+          // repository, and the `shared` arm renders the commit control
+          // DISABLED — so there is no draft to open until that peer's
+          // baseline is gone. Closed through the rail's own close control
+          // (shellControl runs on click, not mousedown), which is a real
+          // gesture rather than a reach into the registry.
+          const closedPeer = commitPeer === null ? false : await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('[data-rail-row=${JSON.stringify(commitPeer)}] .rail-row__close')
+            if (!el) return false
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            return true })()`)
+          await settle()
+          // The node re-reads on its own only when its subject goes idle,
+          // which may already have happened — so its refresh control is
+          // driven on every poll, the same determinism check 115 buys the
+          // same way. Polled rather than pressed once because the peer's
+          // dropBaseline and this re-read are two independent round trips.
+          const armed = closedPeer !== true ? false : await waitUntil(async () => {
+            await wc.executeJavaScript(`(() => {
+              const b = document.querySelector('${sel} .review-node__refresh')
+              if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+              return true })()`)
+            return wc.executeJavaScript(`(() => {
+              const b = document.querySelector('${sel} [data-review-node-commit]')
+              return b !== null && b.disabled === false })()`)
+          }, 20000, 1000)
+
+          const pressed = armed === true && await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('${sel} [data-review-node-commit]')
+            if (!b || b.disabled) return false
+            b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            return true })()`) === true
+          const draftOpen = pressed && await waitUntil(() => wc.executeJavaScript(
+            `document.querySelector('${sel} [data-review-node-commit-input]') !== null`), 3000) === true
+
+          // Dispatched ON the input, with bubbles, so the capture phase runs
+          // window -> ... -> input and useNavGrid sees the input as
+          // event.target — which is the only fact its guard reads. DOM focus
+          // is deliberately irrelevant to it: xterm's own helper is a
+          // <textarea>, so an activeElement test would disable Cmd+G over
+          // every ordinary terminal panel, i.e. over the whole app.
+          const chordAt = (selector) => wc.executeJavaScript(`(() => {
+            const el = document.querySelector(${JSON.stringify(selector)})
+            if (!el) return false
+            el.dispatchEvent(new KeyboardEvent('keydown',
+              { key: 'g', metaKey: true, bubbles: true }))
+            return true })()`)
+
+          const aimedAtInput = draftOpen
+            ? await chordAt(`${sel} [data-review-node-commit-input]`) : false
+          await settle()
+          const duringDraft = await gridState(wc)
+
+          const aimedAtSummary = draftOpen
+            ? await chordAt(`${sel} [data-review-node-summary]`) : false
+          await settle()
+          const elsewhere = await gridState(wc)
+
+          await pressPlain(wc, 'Escape')          // dismiss the grid
+          await settle()
+          await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('${sel} [data-review-node-commit-input]')
+            if (el) el.dispatchEvent(new KeyboardEvent('keydown',
+              { key: 'Escape', bubbles: true }))
+            return true })()`)                    // and then the draft
+          await settle()
+
+          ok(124, draftOpen === true && aimedAtInput === true
+              && duringDraft.open === false
+              && aimedAtSummary === true && elsewhere.open === true,
+            `closedPeer=${closedPeer} armed=${armed} draftOpen=${draftOpen} ` +
+            `inDraft=${duringDraft.open} elsewhere=${elsewhere.open}`)
+        }
+      }
+
+    // -----------------------------------------------------------------------
+    // M13. Links between panels, end to end. `link`, never `edge` — see
+    // panels.ts. Everything below runs on its OWN panels, seeded here, because
+    // by this point in the run earlier blocks have closed panels, deleted
+    // workspaces and switched canvases several times.
+    {
+      const LINK_A = 'linkA'
+      const LINK_B = 'linkB'
+      const LINK_DORMANT = 'link-dormant'
+
+      // Seeded through the layout file and a reload — the route checks 39 and
+      // 84 already use — rather than through spawns, because check 126 needs a
+      // panel that has GENUINELY never been promoted, and the only way to get
+      // one is a panel restored from disk that no camera has ever framed.
+      //
+      // A and B are placed 260 world units apart, which is what lets a rail
+      // click on one leave the OTHER on screen: .canvas is ~700px wide here,
+      // so framing A puts B's centre ~260px right of centre, comfortably
+      // inside. An earlier draft parked them 600 apart and check 125 failed
+      // with B's rect at x=1209 — off the window entirely, so the completing
+      // click could never land. LINK_DORMANT is parked at (70000,70000):
+      // distinct from check 39's (50000,50000) and check 84's (60000,60000),
+      // so a stale fixture cannot be mistaken for this one.
+      flushLayoutStore()
+      {
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+        const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+        ws.panels.push(
+          { id: LINK_A, x: -1330, y: -1200, w: 200, h: 160, z: maxZ + 1, cwd: '~', args: ['-l'] },
+          { id: LINK_B, x: -1070, y: -1200, w: 200, h: 160, z: maxZ + 2, cwd: '~', args: ['-l'] },
+          { id: LINK_DORMANT, x: 70000, y: 70000, w: 200, h: 160, z: maxZ + 3, cwd: '~', args: ['-l'] }
+        )
+        writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+        layoutStore.load()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () =>
+          (await wc.executeJavaScript(
+            `!!document.querySelector('[data-rail-row="${LINK_A}"]')`)) || false,
+          6000)
+        await settle()
+      }
+
+      // The inspector may be COLLAPSED: check 80 drives ⇧⌘\ and never puts it
+      // back. A collapsed region still renders its controls, so the Link
+      // button is FOUND but its rect is zero-sized, and a click computed from
+      // that rect lands at (0,0) — which is how the first draft of this block
+      // failed, with `armed=false` and no indication why.
+      const ensureInspectorOpen = async () => {
+        const collapsed = await wc.executeJavaScript(
+          `document.querySelector('.shell').className.includes('inspector-collapsed')`)
+        if (collapsed) {
+          await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('.shell__inspector-toggle')
+            if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            return true })()`)
+          await settle()
+        }
+        return await wc.executeJavaScript(
+          `!document.querySelector('.shell').className.includes('inspector-collapsed')`)
+      }
+
+      const panelBox = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id="${id}"]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.x, y: r.y, w: r.width, h: r.height,
+                 cx: r.x + r.width / 2, cy: r.y + r.height / 2 }
+      })()`)
+
+      const clickAt = async (x, y) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        await settle()
+      }
+
+      // Clicking a rail row is goToPanel: it FRAMES the panel and selects it
+      // without waking it (check 84). That is what puts a panel under a
+      // clickable coordinate, and it is also a navigation a user could
+      // perform — the rail is outside .canvas, so it never resolves an armed
+      // link mode itself.
+      const railGoTo = async (id) => {
+        const clicked = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('[data-rail-row="${id}"] .rail-row__main')
+          if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await settle()
+        return clicked
+      }
+
+      const linkPaths = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.link-layer [data-link]')].map((e) => e.getAttribute('data-link'))`)
+
+      // Arms the mode through the INSPECTOR's own control, with a real
+      // sendInputEvent rather than a dispatched MouseEvent — check 75c's
+      // reason. Returns a DIAGNOSTIC rather than a bare boolean, so a failure
+      // says which step broke instead of only `armed=false`.
+      const armLinkFrom = async (id) => {
+        const opened = await ensureInspectorOpen()
+        const selected = await railGoTo(id)
+        const box = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('[data-inspector-action="link"]')
+          if (!b) return null
+          const r = b.getBoundingClientRect()
+          if (r.width === 0 || r.height === 0) return { zero: true }
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+        })()`)
+        if (box && !box.zero) await clickAt(box.x, box.y)
+        const armed = await wc.executeJavaScript(`!!document.querySelector('.link-banner')`)
+        return { opened, selected, box, armed }
+      }
+
+      // 125. The link is created by the REAL gesture and rendered. Asserted by
+      //      the data-link key carrying BOTH ids rather than by "an svg
+      //      exists", which an empty layer satisfies.
+      {
+        const arm = await armLinkFrom(LINK_A)
+        await railGoTo(LINK_B)                       // frame B so a click can land
+        const box = await panelBox(LINK_B)
+        if (arm.armed && box) await clickAt(box.cx, box.cy)
+        const paths = await linkPaths()
+        ok('125 a link is created by the real gesture and rendered in the layer',
+          arm.armed === true && box !== null &&
+            paths.includes(LINK_A + ' ' + LINK_B),
+          `arm=${JSON.stringify(arm)} box=${JSON.stringify(box)} paths=${JSON.stringify(paths)}`)
+      }
+
+      // 126. THE ONE WORTH KNOWING BY NUMBER. The completing click must NOT
+      //      WAKE the target. A check that only asserts "a link appeared"
+      //      passes against an implementation that also spawned an agent —
+      //      the completing click reaching onSelectPanel is exactly the defect
+      //      the capture-phase interception exists to prevent, and on a
+      //      restored canvas that is one agent CLI per link the user draws.
+      //
+      //      It needs a GENUINELY dormant target, which is why LINK_DORMANT is
+      //      restored from disk far away and reached only by a rail click —
+      //      goToPanel frames without waking (check 84), so the panel is under
+      //      the cursor and still dormant when the completing click lands.
+      //
+      //      Both clauses are required. The no-session clause alone passes
+      //      against a wake that failed to spawn for an unrelated reason (over
+      //      budget, off screen); the link clause alone is check 125 again.
+      {
+        const arm = await armLinkFrom(LINK_A)
+        await railGoTo(LINK_DORMANT)
+        const box = await panelBox(LINK_DORMANT)
+        if (arm.armed && box) await clickAt(box.cx, box.cy)
+        // SPAWNED, not "has a session". The registry mints a PanelSession for
+        // every rendered panel including a dormant one — that is the whole of
+        // "two lifetimes, not one" — so a check asserting the id is ABSENT
+        // from __m4aSessions() fails against correct code, which is how the
+        // first draft of this check failed. What a wake would produce is a
+        // PROCESS, and `spawned` is the flag that says so.
+        const target = (await wc.executeJavaScript(
+          `(window.__m4aSessions ? window.__m4aSessions() : [])`))
+          .find((x) => x.id === LINK_DORMANT)
+        const paths = await linkPaths()
+        ok('126 the completing click links WITHOUT waking the target',
+          arm.armed === true && box !== null &&
+            paths.includes(LINK_A + ' ' + LINK_DORMANT) &&
+            target !== undefined && target.spawned === false && target.dormant === true,
+          `arm=${JSON.stringify(arm)} target=${JSON.stringify(target)} ` +
+          `paths=${JSON.stringify(paths)}`)
+      }
+
+      // 127. A click over a link still reaches what is beneath it. Success
+      //      criterion 5, and the only check that can see pointer-events:
+      //      none — the property is invisible to every DOM read that does not
+      //      dispatch a click through the layer. Driven with a REAL
+      //      sendInputEvent for check 75c's reason.
+      //
+      //      elementFromPoint is the discriminating read: with the layer deaf
+      //      to the pointer the topmost element at a point on a link is the
+      //      CANVAS, and with it live the topmost element is the line itself.
+      //      The click that follows is the behavioural half — the background
+      //      handler must still run and clear the selection.
+      {
+        await railGoTo(LINK_A)
+        const mid = await wc.executeJavaScript(`(() => {
+          const line = document.querySelector('.link-layer [data-link]')
+          if (!line) return null
+          const r = line.getBoundingClientRect()
+          const x = r.x + r.width / 2, y = r.y + r.height / 2
+          const top = document.elementFromPoint(x, y)
+          const cls = top ? (typeof top.className === 'string' ? top.className : 'svg:' + top.className.baseVal) : null
+          return { x, y, cls, onCanvas: !!(top && top.closest && top.closest('.canvas')) }
+        })()`)
+        // The SELECTED PANEL, read from production markup. NOT __m4aSelection,
+        // which is the focused terminal's TEXT selection and answers '' here
+        // whatever the click did — the wrong hook, and the first draft's bug.
+        const selectedId = () => wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.panel--selected')
+          return el ? el.getAttribute('data-panel-id') : null
+        })()`)
+        let before = 'not-run'
+        let after = 'not-run'
+        if (mid && mid.onCanvas) {
+          before = await selectedId()
+          await clickAt(mid.x, mid.y)
+          after = await selectedId()
+        }
+        ok('127 a link takes no pointer events, so a click reaches what is beneath',
+          mid !== null && typeof mid.cls === 'string' && !mid.cls.includes('link-layer') &&
+            mid.onCanvas === true && before !== null && after === null,
+          `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+      }
+
+      // 128. THE SECOND ONE WORTH KNOWING BY NUMBER. Closing the target
+      //      removes the link, and ONE Cmd+Z restores the panel AND the link
+      //      together.
+      //
+      //      The one-press clause is the whole check. An implementation that
+      //      pruned the links in a SEPARATE commit satisfies "the link came
+      //      back" after TWO presses and looks entirely correct in every other
+      //      read — and the user's second press then undoes something else.
+      {
+        const key = LINK_A + ' ' + LINK_B
+        const before = await linkPaths()
+        const closed = await wc.executeJavaScript(`(() => {
+          const btn = document.querySelector('[data-rail-row="${LINK_B}"] .rail-row__close')
+          if (!btn) return false
+          btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true })()`)
+        await settle()
+        const afterClose = await linkPaths()
+        // __m4bUndo, not a dispatched Cmd+Z. Undo is a MAIN-PROCESS menu
+        // accelerator delivered as an edit:undo IPC event, so it passes
+        // through no renderer keydown at all and a dispatched KeyboardEvent
+        // reaches nothing — which is why this hook exists. ONE call.
+        await wc.executeJavaScript(`window.__m4bUndo(), true`)
+        await settle()
+        const afterUndo = await linkPaths()
+        const panelBack = await wc.executeJavaScript(
+          `!!document.querySelector('[data-rail-row="${LINK_B}"]')`)
+        ok('128 closing a panel drops its links, and ONE Cmd+Z restores both',
+          closed === true && before.includes(key) && !afterClose.includes(key) &&
+            panelBack === true && afterUndo.includes(key),
+          `closed=${closed} before=${JSON.stringify(before)} ` +
+          `afterClose=${JSON.stringify(afterClose)} panelBack=${panelBack} ` +
+          `afterUndo=${JSON.stringify(afterUndo)}`)
+      }
+
+      // 129. Links survive a real renderer reload, and are on disk. This is
+      //      the persistence claim end to end: it needs the field to have been
+      //      written by fromPanels, parsed by parsePanel and survived
+      //      parseWorkspace's second pass, none of which a plain-node check
+      //      can see together.
+      {
+        flushLayoutStore()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await settle()
+        await settle()
+        const paths = await linkPaths()
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const stored = onDisk.workspaces
+          .flatMap((w) => w.panels)
+          .filter((p) => Array.isArray(p.links) && p.links.length > 0)
+          .map((p) => p.id + '->' + p.links.map((l) => l.to).join(','))
+        ok('129 links survive a real renderer reload, and are on disk',
+          stored.length > 0 && paths.length > 0,
+          `stored=${JSON.stringify(stored)} rendered=${JSON.stringify(paths)}`)
+      }
+    }
+
       // Best-effort, like the two below it and for the same reason: a throw
       // here is caught by the outer try, reports as an `infrastructure`
       // failure, and takes the other two cleanups with it on the way out.
@@ -8175,7 +8895,7 @@ app.whenReady().then(async () => {
         return during
       }
 
-      // 118. A marquee selects SEVERAL panels in one gesture. Asserted as a
+      // 130. A marquee selects SEVERAL panels in one gesture. Asserted as a
       //      COUNT, because a marquee that kept only the last panel it
       //      touched still leaves one selected and looks almost right on
       //      screen — and so does one that selected nothing but left the
@@ -8222,13 +8942,13 @@ app.whenReady().then(async () => {
 
       const during118 = await dragFromTo(plan.from, plan.to)
       const after118 = await marqueeState()
-      ok('118 a marquee selects every panel it sweeps, in one gesture',
+      ok('130 a marquee selects every panel it sweeps, in one gesture',
         plan.expected >= 2 && during118.marquees === 1 &&
           after118.selected === plan.expected && after118.marquees === 0,
         `expected ${plan.expected} panels, selected ${after118.selected}; ` +
           `marquees during=${during118.marquees} after=${after118.marquees}`)
 
-      // 119. A drag starting ON A CARDED PANEL selects that panel and draws
+      // 131. A drag starting ON A CARDED PANEL selects that panel and draws
       //      NO marquee. This is the rule most likely to catch a real
       //      regression: the background onMouseDown is not "empty space" — a
       //      carded panel has no chrome handler of its own, so its click
@@ -8268,13 +8988,13 @@ app.whenReady().then(async () => {
         marquees: document.querySelectorAll('.canvas-marquee').length,
         selected: [...document.querySelectorAll('.panel--selected')].map((el) => el.dataset.panelId)
       }))()`)
-      ok('119 a drag from a carded panel selects it and starts no marquee',
+      ok('131 a drag from a carded panel selects it and starts no marquee',
         during119.marquees === 0 && after119.selected.length === 1 &&
           after119.selected[0] === card.id,
         `marquees during=${during119.marquees}, selected ${JSON.stringify(after119.selected)} ` +
           `(card ${card.id})`)
 
-      // 120. A marquee still RELEASES FOCUS — the job the background handler
+      // 132. A marquee still RELEASES FOCUS — the job the background handler
       //      already had before the marquee joined it. assignTiers pins the
       //      focused panel live UNCONDITIONALLY, so a gesture that forgot
       //      this holds a WebGL context and a LIVE_BUDGET slot for the rest
@@ -8314,7 +9034,7 @@ app.whenReady().then(async () => {
         inPanel: !!(document.activeElement && document.activeElement.closest('.panel')),
         grid: typeof window.__m4aGrid === 'function' ? window.__m4aGrid() : 'missing'
       }))()`)
-      ok('120 a marquee releases focus, the job the background click already had',
+      ok('132 a marquee releases focus, the job the background click already had',
         insideBefore === true && released.inPanel === false && released.grid === null,
         `focused before=${insideBefore} (${focusedBefore.active}), after inPanel=${released.inPanel} ` +
           `grid=${JSON.stringify(released.grid)}`)
@@ -8348,8 +9068,8 @@ app.whenReady().then(async () => {
          typeof window.__m7aWorkspace().movePanels === 'function'`)
 
       if (!hasMoveHook) {
-        ok('121 a moved panel keeps its pid', false, 'no __m7aWorkspace().movePanels hook')
-        ok('122 Cmd+Z right after a move changes nothing', false,
+        ok('133 a moved panel keeps its pid', false, 'no __m7aWorkspace().movePanels hook')
+        ok('134 Cmd+Z right after a move changes nothing', false,
           'no __m7aWorkspace().movePanels hook')
       } else {
         // createAndSwitch, not create: the panel about to be spawned has to
@@ -8395,7 +9115,7 @@ app.whenReady().then(async () => {
           `document.querySelectorAll('.panel[data-panel-id=${JSON.stringify(movedId)}]').length === 0`)
         const after = await sessionMap(wc)
 
-        // 121. THE CHECK THIS TASK EXISTS FOR: the moved panel's pid is
+        // 133. THE CHECK THIS TASK EXISTS FOR: the moved panel's pid is
         //      UNCHANGED. Every other observable in this milestone stays
         //      correct against a move that quietly disposed and respawned —
         //      the panel leaves this canvas either way, main's record is
@@ -8412,14 +9132,14 @@ app.whenReady().then(async () => {
         //      — which the spawned wait above already rules out, but the
         //      clause states it rather than relying on a wait staying put.
         const listed = after.has(movedId)
-        ok('121 a moved panel keeps the SAME pid, and is still running',
+        ok('133 a moved panel keeps the SAME pid, and is still running',
           gone === true && listed &&
             before.get(movedId) !== undefined &&
             after.get(movedId) === before.get(movedId),
           `home=${homeId} target=${targetId} ${movedId}: ` +
             `${before.get(movedId)} -> ${after.get(movedId) ?? 'MISSING'} gone=${gone}`)
 
-        // 122. Cmd+Z immediately after a move is INERT. history is ONE stack
+        // 134. Cmd+Z immediately after a move is INERT. history is ONE stack
         //      over ONE Panel[], and applyHistory disposes any panel the
         //      undone state no longer contains — which reaches pty.kill. An
         //      undo here would either resurrect a panel main's record no
@@ -8440,14 +9160,14 @@ app.whenReady().then(async () => {
           `document.querySelectorAll('.panel[data-panel-id]').length`)
         const afterUndo = await sessionMap(wc)
         const { ok: undoPreserved, changed: undoChanged } = pidsPreserved(after, afterUndo)
-        ok('122 Cmd+Z right after a move changes nothing, and kills nothing',
+        ok('134 Cmd+Z right after a move changes nothing, and kills nothing',
           panelsBeforeUndo === panelsAfterUndo && undoPreserved,
           `panels ${panelsBeforeUndo} -> ${panelsAfterUndo} changed=[${undoChanged.join(', ')}]`)
       }
     }
 
     // ---------------------------------------------------------------------
-    // 123 — M14. The OTHER half of the verb: into a workspace that does not
+    // 135. The OTHER half of the verb: into a workspace that does not
     //     exist yet.
     //
     //     Check 121 covers `{ workspaceId }` and verify:palette 72 covers the
@@ -8481,7 +9201,7 @@ app.whenReady().then(async () => {
       const CANCELLED = 'never minted'
       const MINTED = 'filed by hand'
 
-      // Its own fixture, for check 121's reason: by this point 121 has moved
+      // Its own fixture, for check 133's reason: by this point 133 has moved
       // its own panel away and this workspace is empty.
       await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('handmovers')`)
       await settle()
@@ -8499,7 +9219,7 @@ app.whenReady().then(async () => {
 
       // SELECTED explicitly, by a real click on its header. onSpawn
       // deliberately does not select what it spawns (its own comment says so),
-      // and check 122 cleared the selection on its way out — so without this
+      // and check 134 cleared the selection on its way out — so without this
       // the palette renders "Move 0 panels…" and the row this check is about
       // is disabled. A real sendInputEvent rather than a dispatched
       // MouseEvent, the rule check 75c records: an untrusted event runs no
@@ -8611,7 +9331,7 @@ app.whenReady().then(async () => {
       const gone = await wc.executeJavaScript(
         `document.querySelectorAll('.panel[data-panel-id=${JSON.stringify(subject)}]').length === 0`)
 
-      ok('123 a move into a NEW workspace mints it, files the panel, and keeps the pid',
+      ok('135 a move into a NEW workspace mints it, files the panel, and keeps the pid',
         // (a) the workspace exists NOW and did not before — trimmed, which is
         //     what fails if the submit passes `value` through untouched.
         !namesBefore.includes(MINTED) && minted !== undefined &&
@@ -8622,7 +9342,7 @@ app.whenReady().then(async () => {
           // that changed only main's record satisfies (b) while the renderer
           // goes on rendering a panel no workspace here owns.
           gone === true &&
-          // (c) check 121's clause on the second branch, and the one that
+          // (c) check 133's clause on the second branch, and the one that
           //     makes this more than a plumbing test: minting a workspace is
           //     no excuse to restart what gets filed into it.
           before.get(subject) !== undefined && after.get(subject) === before.get(subject) &&
@@ -8642,7 +9362,7 @@ app.whenReady().then(async () => {
     //     read-only.
     //
     //     ONE fixture serves all four, and it is built rather than inherited
-    //     for the reason check 118's block states: by this point the suite
+    //     for the reason check 130's block states: by this point the suite
     //     has created, filled and deleted several workspaces, and a check
     //     that depended on whatever 123 left active would assert about a
     //     canvas nobody chose.
@@ -8653,11 +9373,11 @@ app.whenReady().then(async () => {
     //     plus LANE_GUTTER (400), so the foreign lane's leftmost panel always
     //     lands at world x = 1200 whatever the active workspace holds. An
     //     empty active lane is what makes the FOREIGN panels the only thing
-    //     on the merged canvas, which is what lets check 124 position the
+    //     on the merged canvas, which is what lets check 136 position the
     //     camera over them precisely (see its own comment) instead of
     //     depending on a fit whose scale would be decided by check 39's
     //     never-woken panel parked at world 50000,50000 — a fit there lands
-    //     far below LIVE_MIN_SCALE, where NOTHING is promoted and check 124
+    //     far below LIVE_MIN_SCALE, where NOTHING is promoted and check 136
     //     would be green against every implementation including a broken one.
     // ---------------------------------------------------------------------
     {
@@ -8670,7 +9390,7 @@ app.whenReady().then(async () => {
       await settle()
       // THE CAMERA IS THE FIXTURE, and it is set BEFORE the view is entered.
       //
-      // The defect check 124 exists to catch only spawns while dormantIds is
+      // The defect check 136 exists to catch only spawns while dormantIds is
       // stale — a few milliseconds — so the foreign panels have to be inside
       // the cull region at the moment the merged array commits, or a broken
       // build promotes nothing and the check is green against it. An earlier
@@ -8725,7 +9445,7 @@ app.whenReady().then(async () => {
       // workspaces that precede this one, which put an appended fixture lane
       // at world x ≈ 70000 — far outside any camera this check can reach, and
       // therefore outside the cull region, where a BROKEN build promotes
-      // nothing and check 124 is green against it. First among the non-active
+      // nothing and check 136 is green against it. First among the non-active
       // workspaces puts it at LANE_MIN_WIDTH + LANE_GUTTER = 1200, which is
       // the number the camera fixture above is built against.
       onDisk124.workspaces.unshift({
@@ -8828,7 +9548,7 @@ app.whenReady().then(async () => {
       const entered = await mergedDom()
 
       // The forcing guard, and it is a CLAUSE rather than a diagnostic on
-      // purpose: everything check 124 asserts is a NEGATIVE (nothing spawned),
+      // purpose: everything check 136 asserts is a NEGATIVE (nothing spawned),
       // and a negative is satisfied perfectly by a fixture that put the panels
       // somewhere nothing would ever be promoted from. This reproduces
       // assignTiers' own question in screen space — does the panel intersect
@@ -8866,7 +9586,7 @@ app.whenReady().then(async () => {
       const regA = registry124.find((s) => s.id === FOREIGN_A)
       const regB = registry124.find((s) => s.id === FOREIGN_B)
 
-      // 124. ENTERING THE MERGED VIEW SPAWNS NOTHING. The milestone's most
+      // 136. ENTERING THE MERGED VIEW SPAWNS NOTHING. The milestone's most
       //      dangerous line: registry.ensure early-returns for a session that
       //      already exists, so a dormantIds correction arriving one render
       //      after the merged array can never repair a session created
@@ -8878,7 +9598,7 @@ app.whenReady().then(async () => {
       //      The mass-spawn power is entirely in the ID-SCOPED clauses: the
       //      `spawned` waitUntil over FOREIGN_A/B, and regA/regB reading
       //      dormant:true spawned:false. Those are exactly what the ordering
-      //      injection flips (dormant:false spawned:true), and check 125 is
+      //      injection flips (dormant:false spawned:true), and check 137 is
       //      what stops all of it passing against a view that renders nothing.
       //
       //      The session count is scoped to THOSE TWO IDS and no longer to
@@ -8895,7 +9615,7 @@ app.whenReady().then(async () => {
       //      check's own camera fixture deliberately puts every other lane
       //      far outside the cull region, where nothing is promoted under a
       //      broken build either.
-      ok('124 entering the merged view spawns nothing',
+      ok('136 entering the merged view spawns nothing',
         opened === true && spawned !== true &&
           // The forcing guard: without it every clause below is a negative a
           // badly-placed camera satisfies for free.
@@ -8908,17 +9628,17 @@ app.whenReady().then(async () => {
           `foreign sessions ${foreignBefore} -> ${foreignAfter} ` +
           `A=${JSON.stringify(regA)} B=${JSON.stringify(regB)}`)
 
-      // 125. Foreign panels are RENDERED and addressable, and their lane says
+      // 137. Foreign panels are RENDERED and addressable, and their lane says
       //      whose they are. Without this, 124 is green against a merged view
       //      that renders nothing at all — which is exactly what a toggle
       //      wired to nothing produces.
-      ok('125 the merged view renders foreign panels under a named lane',
+      ok('137 the merged view renders foreign panels under a named lane',
         entered.on === true &&
           entered.ids.includes(FOREIGN_A) && entered.ids.includes(FOREIGN_B) &&
           entered.lanes.some((l) => l.id === MERGED_WS_ID && l.name.includes(MERGED_WS_NAME)),
         `on=${entered.on} ids=${entered.ids.join(',')} lanes=${JSON.stringify(entered.lanes)}`)
 
-      // 126. NOTHING IS DRAGGABLE. A real sendInputEvent drag on the foreign
+      // 138. NOTHING IS DRAGGABLE. A real sendInputEvent drag on the foreign
       //      panel's chrome — the gesture that moves a panel everywhere else
       //      in this app — must leave it exactly where it was, and no close
       //      button may be rendered on any merged panel. A dispatched
@@ -8952,7 +9672,7 @@ app.whenReady().then(async () => {
         await settle()
         dragged126 = await mergedDom()
       }
-      ok('126 a merged panel cannot be dragged, resized or closed',
+      ok('138 a merged panel cannot be dragged, resized or closed',
         chrome126 !== null && dragged126 !== null &&
           dragged126.rects[FOREIGN_A] !== undefined &&
           entered.rects[FOREIGN_A] !== undefined &&
@@ -8964,7 +9684,7 @@ app.whenReady().then(async () => {
           `after=${dragged126 ? JSON.stringify(dragged126.rects[FOREIGN_A]) : 'null'} ` +
           `closes=${dragged126 && dragged126.closes} resizes=${dragged126 && dragged126.resizes}`)
 
-      // 127. EVERY workspace's STORED rects are byte-identical after a merged
+      // 139. EVERY workspace's STORED rects are byte-identical after a merged
       //      session — enter, pan, select, leave. This is the check for the
       //      failure the read-only design exists to prevent: `panels` stays
       //      the active workspace's real array and remains the only thing the
@@ -9004,7 +9724,7 @@ app.whenReady().then(async () => {
         ...rectDrift(storedBefore, storedAfter, 'after')
       ]
       const leftMerged = await mergedDom()
-      ok('127 a merged session writes no rect into any workspace',
+      ok('139 a merged session writes no rect into any workspace',
         drifted.length === 0 && leftMerged.on === false && leftMerged.lanes.length === 0,
         `zoomed=${zoomedOut} selected=${selected127} on=${leftMerged.on} ` +
           `lanes=${leftMerged.lanes.length} drifted=[${drifted.join('; ')}]`)
@@ -9030,7 +9750,7 @@ app.whenReady().then(async () => {
     // ---------------------------------------------------------------------
     {
       /**
-       * One chord press. `repeat` is supplied BY HAND — see check 129 for
+       * One chord press. `repeat` is supplied BY HAND — see check 141 for
        * what that does and does not prove.
        */
       const chord = (code, key, repeat = false) => wc.executeJavaScript(
@@ -9067,7 +9787,7 @@ app.whenReady().then(async () => {
       const first128 = ids128[0]
       const last128 = ids128[ids128.length - 1]
 
-      // 128. Cmd+Shift+] switches to the NEXT workspace and Cmd+Shift+[ comes
+      // 140. Cmd+Shift+] switches to the NEXT workspace and Cmd+Shift+[ comes
       //      back, WRAPPING. The wrap is not left to whatever this run
       //      happens to have made active: the canvas is parked on the LAST
       //      row first, so the forward press wraps by construction and the
@@ -9118,13 +9838,13 @@ app.whenReady().then(async () => {
         // plain step wearing a wrap's name.
         if (parked !== last128) stepped128 = `PARKED ${parked}`
       }
-      ok('128 the workspace chords step forward and back, wrapping',
+      ok('140 the workspace chords step forward and back, wrapping',
         ids128.length >= 2 && stepped128 === first128 && back128 === last128 &&
           foreign128 === first128,
         `n=${ids128.length} ids=${ids128.join(',')} last=${last128} ` +
           `next=${stepped128} prev=${back128} foreignLayout=${foreign128}`)
 
-      // 129. HELD, they move exactly ONE step. Neither chord joins
+      // 141. HELD, they move exactly ONE step. Neither chord joins
       //      REPEATABLE_KEYS: a held switch steps through every canvas at the
       //      OS repeat rate and lands wherever the stream happened to stop
       //      rather than where the user meant to look — the argument Cmd+J
@@ -9169,14 +9889,14 @@ app.whenReady().then(async () => {
           `window.__m7aWorkspace().switchTo(${JSON.stringify(from)})`)
         await settle()
       }
-      ok('129 a held workspace chord moves exactly one step',
+      ok('141 a held workspace chord moves exactly one step',
         held129 !== null && held129.now === held129.expected,
         `presses=${presses129} ` +
           (held129
             ? `${held129.at} -> ${held129.now} (expected ${held129.expected})`
             : 'SKIPPED'))
 
-      // 130. Cmd+Shift+A toggles the merged view, and pressing it twice
+      // 142. Cmd+Shift+A toggles the merged view, and pressing it twice
       //      returns to the active workspace's own canvas WITH ITS CAMERA
       //      RESTORED. The camera clause is not decoration: a merged camera
       //      is in LANE SPACE, so leaving without the restore drops the user
@@ -9198,14 +9918,14 @@ app.whenReady().then(async () => {
       await settle()
       const off130 = await mergedOn()
       const restored130 = await wc.executeJavaScript(`window.__m4aViewport()`)
-      ok('130 the merged chord enters the merged view and leaves it, camera restored',
+      ok('142 the merged chord enters the merged view and leaves it, camera restored',
         on130 === true && off130 === false &&
           !sameCamera(laneCamera130, camera130) &&
           sameCamera(restored130, camera130),
         `on=${on130} off=${off130} before=${JSON.stringify(camera130)} ` +
           `lane=${JSON.stringify(laneCamera130)} after=${JSON.stringify(restored130)}`)
 
-      // 131. A SWITCH WHILE MERGED LEAVES THE MERGED VIEW FIRST. This is the
+      // 143. A SWITCH WHILE MERGED LEAVES THE MERGED VIEW FIRST. This is the
       //      chords' own hazard: before them, switching from inside the
       //      merged view needed a rail click or a palette row; now it is one
       //      keystroke.
@@ -9251,10 +9971,10 @@ app.whenReady().then(async () => {
       const stillMerged131 = await mergedOn()
       const camera131 = await wc.executeJavaScript(`window.__m4aViewport()`)
       const outgoingStored131 = cameraOf(outgoing131)
-      ok('131 a switch while merged leaves the merged view and writes no lane camera',
+      ok('143 a switch while merged leaves the merged view and writes no lane camera',
         merged131 === true && stillMerged131 === false &&
           landed131 === expected131 &&
-          // Non-vacuity, twice, and check 130 already carries the second of
+          // Non-vacuity, twice, and check 142 already carries the second of
           // them. The two cameras the last clause separates must actually
           // differ, or it separates nothing. And the LANE camera must differ
           // from the pre-merge one, or `sameCamera(outgoingStored, preMerge)`

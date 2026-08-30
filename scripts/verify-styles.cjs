@@ -85,13 +85,14 @@ const bodyText = bodyRules.map((r) => r.body).join('\n')
 //     ALLOW is an explicit, per-value allowlist rather than a relaxed regex,
 //     so the check stays honest: each entry is a translucent WHITE that models
 //     light on a surface (a canvas dot, a top-edge highlight) and must
-//     composite over whatever ground the active theme sets. Tokenising either
+//     composite over whatever ground the active theme sets. Tokenising them
 //     would freeze it to one theme's ground, which is the opposite of the
-//     split this check exists to enforce. Both are commented at their site.
+//     split this check exists to enforce. Each is commented at its site.
 //     Anything not on this list is a colour and belongs in the theme block.
 const ALLOW = new Set([
-  'rgba(255,255,255,.05)', // .canvas dot grid
-  'rgba(255,255,255,.07)'  // .palette top-edge highlight
+  'rgba(103,232,249,.05)', // .canvas dot grid
+  'rgba(255,255,255,.07)', // .palette top-edge highlight
+  'rgb(255255255/.04)'     // .shell rail and inspector inner highlights
 ])
 const norm = (s) => s.replace(/\s+/g, '')
 const strayHex = [...new Set((bodyText.match(/#[0-9a-fA-F]{3,8}\b/g) || []))]

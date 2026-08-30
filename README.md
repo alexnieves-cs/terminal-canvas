@@ -565,13 +565,15 @@ price of not killing something.
 | M9a | The review engine: what each agent changed, in the inspector | ✅ done |
 | M9b | The panel kind: a review node on the canvas | ✅ done |
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
+| M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
+| M13 | Links between panels: a directed, labelled line that means something | ✅ done |
 | M14 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
 
-The table's order is CLAIM order, not build order. M10 (the visual system) and M11
-(themes) are claimed by a separate concurrent track; M12 shares no source file with
-either, so it landed first. A gap in the numbers here is a milestone someone else is
-holding, not one that was skipped.
+The table's order is CLAIM order, not build order. M10 (the visual system) is
+claimed by a separate concurrent track and is not yet in this table; M11 and
+M12 each landed on their own branch and merged in sequence. A gap in the
+numbers here is a milestone someone else is holding, not one that was skipped.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

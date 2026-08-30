@@ -39,14 +39,16 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #44 honest chrome | M6a | "`reattached` costs a probe because `-A` erased the question" |
 | #49 two copies of the app eating each other | M5c fix | "...and two copies of ONE build must not either" |
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
+| #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 
-Six more entries were rewritten rather than removed, because a milestone shipped most of
+Seven more entries were rewritten rather than removed, because a milestone shipped most of
 each and stopped somewhere deliberate: **#17** (M6d left the OS notification), **#27**
-(M5b left placeholders), **#34** (M5a left per-preset environment), **#51** (M9a–c left
-discard), **#25** (M6 left snapping and tidy) and **#52** (M14 left shift-click and group
-drag). The membership changed at M14 without the count moving, and the churn is the shape
-to expect: **#2** left this list for the gone table above, and **#52** took its place. An
-entry rewritten down to its open half is one milestone from leaving the file entirely.
+(M5b left placeholders), **#34** (M5a left per-preset environment), **#41** (M12 left
+review's cwd resolution), **#51** (M9a-c left discard), **#25** (M6 left snapping and
+tidy) and **#52** (M14 left shift-click and group drag). The membership changed at M14
+without the count moving, and the churn is the shape to expect: **#2** left this list for
+the gone table above, and **#52** took its place. An entry rewritten down to its open half
+is one milestone from leaving the file entirely.
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -63,21 +65,6 @@ ships, not after.
 
 ---
 
-## 1. Cmd-held navigation grid
-
-Hold `Cmd` to summon a 3×3 grid at the centre of the screen; arrow keys or the mouse
-pick a cell, release to jump. Cells address either canvas regions or whole projects.
-
-- **Why it fits:** `Cmd` is *already* the required modifier for every canvas shortcut
-  (`useViewport.ts`), precisely because agent TUIs claim every bare key. A hold-to-reveal
-  overlay is the natural extension of a rule the codebase already enforces.
-- **Constraint:** a *held* `Cmd` is not the same input as a `Cmd`+key chord. Watch for
-  the overlay swallowing `Cmd+C`/`Cmd+V` (one Canvas-level subscription today) and
-  `Cmd+wheel` zoom. The reveal probably needs a dwell threshold so a fast `Cmd+N` never
-  flashes it.
-- **Open question:** what does a cell *mean*? Nine viewport quadrants, nine saved
-  bookmarks, and nine workspaces are three different features wearing the same UI.
-- **Depends on:** nothing hard. Could land any time after M4b.
 
 ## 3. File tree / codebase browser (IDE-style left rail)
 
@@ -661,8 +648,9 @@ title and status, then a coloured block.
   which has never been attached and has no buffer to `tail()`. That points the far tier at
   facts the `Panel` itself holds — title (#6), agent state (#5), cost (#19) — rather than
   terminal output, which is probably the right answer anyway.
-- **Related:** this is what makes #1's navigation grid and #17's attention arrows legible.
-  All three are about the same view: the one where you can see everything and read nothing.
+- **Related:** this is what makes the nav grid (shipped in M11) and #17's attention arrows
+  legible. All three are about the same view: the one where you can see everything and
+  read nothing.
 - **Open question:** where are the thresholds, and do they hysteresis? A card flipping
   between two renderings at a boundary while the user pinches is the same class of thrash
   `DEMOTE_DELAY_MS` and `CULL_MARGIN_PX` exist to prevent — cheaper here, since nothing is
@@ -702,42 +690,54 @@ The universal "maximise this" gesture.
   because the user zoomed in on one is exactly the kind of decision-on-their-behalf that
   dormancy exists to avoid. Probably not — but it should be a decision, not a default.
 
-## 24. Edges between panels
+## 24. Edges between panels — the FUNCTIONAL half is what is left
 
-Draw a line from one panel to another and have it mean something: this agent's output is
-input to that one; these three are the same ticket; this shell is the server the panel
-beside it is testing against.
+**The decorative half shipped in M13**, as *links*. A user draws a directed,
+optionally labelled line from one panel to another; it persists, it survives a
+reload, and closing either endpoint removes it in the same undoable step. See
+`CLAUDE.md`'s "The code says `link`, and `edge` already means something else"
+and the eleven entries after it, and
+[`docs/superpowers/specs/2026-08-30-m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md).
 
-- **Why it fits, and why it belongs on a canvas specifically.** Relationships between
-  concurrent work are invisible in every tabbed terminal, because a tab list has one
-  dimension and relationships need two. This is the second thing (after #7) that an
-  infinite canvas can show which a multiplexer structurally cannot.
-- **#7 already needs edges, for one specific case** — parent agent to its subagents. That
-  is a good reason to build the edge *primitive* generally rather than as a private detail
-  of subagent visualisation: same renderer, same z-order question, same persistence.
-- **The rendering is nearly free and the reason is the same as #15's.** An edge is a world-
-  space object; `.world` carries one transform, so an SVG path between two panel rects
-  pans, zooms, and clips correctly with no additional math. Anchor points are a function of
-  two rects, which is `panel-interaction.ts`-shaped arithmetic — pure, and testable under
-  plain node.
-- **Two flavours, and they should not be built at once:**
-  1. **Decorative** — the edge means whatever the user says it means, like a line on a
-     whiteboard. Costs a data model, a drag gesture, and persistence. Composes naturally
-     with #15's annotation layer and is arguably a feature *of* it.
-  2. **Functional** — the edge does something: pipe this panel's output into that one's
-     input, or "restart this one when that one exits". Genuinely powerful and genuinely
-     dangerous, because it means the canvas is now writing to PTYs on its own initiative.
-     Everything #21 says about a mode you can forget you are in applies double to a rule
-     that fires without you present.
-- **Constraint:** edges join `Panel.z`'s ordering rather than inventing a second scheme —
-  same rule #15 records — and they must not participate in `LIVE_BUDGET`. They are SVG.
-- **Constraint:** an edge references two panel ids, so it needs a stance on a panel being
-  closed. Dangling edges are the standard failure of every graph UI that stored ids without
-  deciding this.
-- **Open question:** if the functional flavour ever happens, is the edge the *only* place
-  that behaviour is expressed? A rule you can only see by finding the line on the canvas is
-  hard to audit. This may be the point at which the canvas needs a plain list view of its
-  own automations.
+The entry stays because #24 named **two flavours and said they should not be
+built at once**. One was built. This is the other.
+
+- **Functional edges — the open half.** An edge that *does* something: pipe
+  this panel's output into that one's input, or "restart this one when that one
+  exits". Genuinely powerful and genuinely dangerous, because it means the
+  canvas is writing to PTYs on its own initiative. Everything #21 says about a
+  mode you can forget you are in applies double to a rule that fires while you
+  are not present.
+- **Open question, unchanged and now the blocking one:** if the functional
+  flavour happens, is the edge the *only* place that behaviour is expressed? A
+  rule you can only see by finding a line on the canvas is hard to audit. This
+  may be the point at which the canvas needs a plain list view of its own
+  automations — and that list, not the edge, is probably the real feature.
+- **What M13 leaves ready.** The primitive is built generally rather than as a
+  private detail of #7's subagent visualisation, which is what #24 asked for:
+  same renderer, same z-order answer, same persistence. #7's parent-to-subagent
+  edges can render on `LinkLayer` without inventing a second scheme.
+- **Constraint, now discharged:** edges join `Panel.z`'s ordering rather than
+  inventing a second scheme — the layer sits at `z-index: 0`, beneath every
+  panel, since `nextZ` mints `z >= 1` — and they take no `LIVE_BUDGET` slot and
+  no WebGL context.
+- **Constraint, now discharged:** the dangling-edge question has an answer in
+  two places, and it needs both. `removePanel` prunes incoming links in memory,
+  in the same committed gesture as the close, so one `Cmd+Z` restores the panel
+  and its links together; `parseWorkspace` drops a link naming a panel that did
+  not survive validation, because a file can be hand-edited between launches.
+- **Constraint the functional half inherits:** a functional edge would have to
+  survive the same rule the decorative one does — the completing gesture must
+  never wake a dormant panel (`verify:panels` 126). A rule that *fires* on a
+  dormant panel is a harder version of the same question, and M13 does not
+  answer it.
+- **Deliberately still absent, and each is a decision rather than an
+  oversight:** link selection on the canvas (the inspector is the only surface
+  that acts on a link, because a hairline at `MIN_SCALE` is a sub-pixel target
+  and hit-testing one would cost `pointer-events: none`); routing (a link is a
+  straight segment and passes under intervening panels); culling and any bound
+  on link count; and cross-workspace links, which are representable — `PanelId`
+  is global — and render as nothing.
 
 ## 25. Where a new panel goes — placement, snapping, and tidy
 
@@ -1051,11 +1051,11 @@ Move between panels, place them, and drive the camera without the mouse — and 
 result usable by someone who cannot use a trackpad, cannot see the glow in #5, or needs the
 motion in #23 to stop.
 
-- **Why this is not the same idea as #1's nav grid.** #1 is a hold-to-reveal jump to a
-  *region*. This is the ordinary case: the focused panel is here, the next one is to its
-  right, `Cmd`+arrow should go there. The math is pure `viewport.ts` work over rects the
-  app already holds — pick the nearest panel in a direction cone — and belongs in the
-  plain-node verify bundle beside the rest of it.
+- **Why this is not the same idea as the nav grid (shipped in M11).** The nav grid is a
+  hold-to-reveal jump to a *workspace*. This is the ordinary case: the focused panel is
+  here, the next one is to its right, `Cmd`+arrow should go there. The math is pure
+  `viewport.ts` work over rects the app already holds — pick the nearest panel in a
+  direction cone — and belongs in the plain-node verify bundle beside the rest of it.
 - **The trap, and it is a good one: keyboard traversal must move *selection*, not focus.**
   `assignTiers` pins the focused panel live unconditionally. So arrowing across a
   twelve-panel canvas with focus attached to the cursor promotes twelve panels, spawns
@@ -1385,42 +1385,21 @@ Three of these entries are corrections rather than features, and they are marked
 **#41** repairs a false assumption that four earlier entries rest on, and **#49** and **#43**
 are live defects that happen to be shaped like features.
 
-## 41. Live cwd and live command — a correction, not a feature — **landed in M12**
+## 41. Live cwd and live command — landed in M12; review's cwd resolution is what's left
 
-**Still not solved:** review resolves a panel's repository against its SPAWN cwd, so a
-panel that `cd`'d into a second repository is still reviewed against the first. The
-stored baseline sha lives in that first repository, so correcting it needs a
+M12 shipped the correction: `parseListOutput`'s `#{pane_current_path}`/
+`#{pane_current_command}` are polled on a slow timer, deduped, and fanned out through a
+third per-panel-id store (`live-session-store.ts`) that deliberately never rides
+`registry.version()`. The inspector shows the live cwd and command **beside** the
+spawn-time ones rather than over them, both preset-save surfaces read the live cwd when one
+exists, and project-prompt reading does too — falling back to the spawn cwd exactly where no
+live answer exists (no tmux, or a session's first tick has not landed). See `CLAUDE.md`'s
+"Live cwd is a poll, a dedupe, and a third store" for the mechanism and its accepted costs.
+
+What's still open: review resolves a panel's repository against its SPAWN cwd, not its live
+one, so a panel that `cd`'d into a second repository is still reviewed against the first.
+The stored baseline sha lives in that first repository, so correcting it needs a
 recapture-or-refuse policy — a design of its own, and the natural successor to M12.
-
-> **In flight.** A design spec and a plan exist (`docs/superpowers/specs/2026-08-29-m12-live-cwd-design.md`),
-> and the work is on the `m12-live-cwd` branch. This entry stays until it merges.
-
-`parseListOutput` already pulls `#{pane_current_path}` and `#{pane_start_command}` out of
-tmux, and the result is consumed exactly once, at boot reconciliation, and thrown away.
-Adding `#{pane_current_command}` to the format string and polling on a slow timer gives
-every panel its **current** directory and **currently running program**.
-
-- **This exists because four entries above are wrong.** #3's open question, #4's git badge,
-  #19's transcript correlation and #26's per-project config each assert that "each panel
-  already knows its cwd". It does not. It knows its *spawn* cwd, which is stale the moment
-  the user types `cd`, and every one of those four features is silently wrong for a panel
-  that moved. This is the entry that makes the assertion true.
-- **Constraint: the `#{pane_dead}` filter is not optional here either.** `parseListOutput`
-  drops dead panes because `remain-on-exit on` leaves a finished process listed as existing.
-  A poller inherits that requirement exactly — an unfiltered poll reports a corpse's last
-  known directory as a live fact.
-- **Constraint: it must degrade honestly with no tmux.** `SessionBackend.list()` returns
-  `null` by contract on the direct backend, so none of this data exists there. Falling back
-  to the spawn cwd would be worse than reporting nothing, because it is indistinguishable
-  from a correct answer.
-- **Constraint: this must not ride `registry.version()`.** A fact that changes every two
-  seconds is precisely the re-render source that counter exists to exclude — "`version`
-  bumps only on tier/status/focus/exit, never on 16ms-batched PTY data". Same rule #5, #17
-  and #18 each record independently; this is the fourth.
-- **Nearest existing entry: #6 (user-set panel names).** #6 is a string the user types and
-  the layout stores. This is a fact only main can observe, that changes without anyone
-  touching the panel, and its real value is as the missing input to #3, #4, #19 and #26
-  rather than as a label of its own.
 
 ## 42. Camera bookmarks — named viewports, saved and jumped to
 
@@ -1438,11 +1417,14 @@ numbers, which makes this the best value-per-byte item in the canvas layer.
   row on every mousemove.
 - **Constraint: `Cmd+1` is taken.** It is `fitTo` today. The keymap needs deciding rather
   than assuming, and that is the whole design cost of this entry.
-- **Nearest existing entry: #1 (Cmd-held navigation grid),** which explicitly leaves open
-  "what does a cell *mean*? Nine viewport quadrants, nine saved bookmarks, and nine
-  workspaces are three different features wearing the same UI." This is the saved-bookmark
-  answer built as a data model and a palette group, with no hold-to-reveal overlay at all.
-  #1's hard part is the gesture; this one has none.
+- **Nearest existing entry: the nav grid (shipped in M11).** Its own design spec resolved
+  the open question this entry once left — "what does a cell *mean*? Nine viewport
+  quadrants, nine saved bookmarks, and nine workspaces are three different features
+  wearing the same UI" — by landing on workspaces: the only one of the three with a stable
+  identity across launches, which a hold-to-reveal gesture needs in order to be worth
+  learning at all. This entry is the saved-bookmark answer built as a data model and a
+  palette group, with no hold-to-reveal overlay at all. The nav grid's hard part was the
+  gesture; this one has none.
 
 ## 43. Unicode 11 widths — a silent misalignment nobody has attributed yet
 
@@ -2118,7 +2100,7 @@ these. Three observations that would change it if it were:
 
 ## Rough sequencing, if these were ever scheduled
 
-**Written before M5b and never re-ordered since.** Nine of its items have shipped and are
+**Written before M5b and never re-ordered since.** Ten of its items have shipped and are
 struck below; the surviving order was computed against a codebase that had no palette, no
 settings schema, no workspaces, no shell and no review layer, so treat it as a record of
 how these were once weighed rather than as advice about what to do next.
@@ -2147,7 +2129,8 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    through `dispose(id)` is what kept the count at two, and what made `dispose` return its
    kill so the respawn could be ordered behind it.
 7. **#22 semantic zoom** — a rendering change below tiering, no new IPC, no lifecycle.
-   It is what makes the zoomed-out view worth having, which #1 and #17 both assume.
+   It is what makes the zoomed-out view worth having, which the nav grid (M11) and #17
+   both assume.
 8. **#33 minimap** — pure `viewport.ts` at a second scale over rects the app already holds,
    in a top corner (the bottom-right is the HUD's), on a settings toggle that defaults off.
    Schedule it *after* #22, because #22 is what decides whether a persistent locator is
@@ -2172,8 +2155,11 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 15. **#38 first run** — schedule it whenever `SEED_PANELS` goes away, and not a day later:
    an empty infinite canvas with only `Cmd`-gated shortcuts has no discoverable
    affordances at all.
-16. **#1 Cmd nav grid** — self-contained once #2 gives it destinations.
-17. **#21 broadcast input** — the loop is trivial, and M14's marquee has since supplied
+16. ~~**#1 Cmd nav grid**~~ - **done, M11**, and the prediction held exactly: cells are
+   workspaces, self-contained once #2 (M7) gave it destinations. The other two candidates
+   the original entry left open - viewport quadrants and saved bookmarks - were rejected
+   in the design spec; see #42 for the bookmark half.
+17. **#21 broadcast input** - the loop is trivial, and M14's marquee has since supplied
    the multi-selection this line called the work; what is left is entirely the safety
    story around a mode you can forget you are in.
 18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high

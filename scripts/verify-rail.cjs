@@ -21,12 +21,17 @@ buildSync({
   // VALUE, not a type — from @renderer/panels/panels, so building this entry
   // with no alias block fails with two "Could not resolve" errors, with
   // @renderer alone it builds, and with @shared alone it fails identically.
+  // M11's nav-grid.ts is now a THIRD such import — waitingCount, also a
+  // value, from @renderer/shell/rail-sections — so the alias is required by
+  // two independent tracks rather than one.
   // A required alias that is present looks exactly like a pre-emptive one,
   // which is why the honest way to answer the question is to DELETE the alias
   // and build rather than to read the imports. See CLAUDE.md's "The plain-node
   // verify bundles now configure a @shared alias" for the corrected table.
-  // @shared stays for the original reason: needing no alias YET is exactly the
-  // state verify-viewport.cjs was in right up until the day it broke.
+  // @shared stays for the original reason: every @shared import reachable
+  // from here is an `import type`, which esbuild erases before bundling —
+  // and needing no alias YET is exactly the state verify-viewport.cjs was in
+  // right up until the day it broke.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
@@ -948,6 +953,195 @@ ok('55 a review row is never dormant', R.buildRailRows(
     !keys.includes('live-cwd') && !keys.includes('live-command') &&
       keys.includes('cwd') && keys.includes('exit'),
     JSON.stringify(keys))
+}
+
+// ---- M11: the nav grid's pure cell arithmetic (65-70) ----
+// nav-grid.ts joins THIS suite rather than getting one of its own, the
+// precedent inspector-fields.ts, rail-sections.ts and review-node-model.ts
+// all set: a suite for one pure file re-proves the same esbuild wiring.
+const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelIds, active })
+
+// 65. Position is STABLE as the list grows. This is success criterion 2, and
+//     it is the whole argument for a hold-to-reveal gesture over Cmd+K: if a
+//     workspace moves cell when a neighbour is added, there is no muscle
+//     memory to build and the feature is a worse palette.
+{
+  const two = R.buildGrid([gridWs('w1', 'Main'), gridWs('w2', 'auth')], [])
+  const five = R.buildGrid(
+    [gridWs('w1', 'Main'), gridWs('w2', 'auth'), gridWs('w3', 'c'), gridWs('w4', 'd'), gridWs('w5', 'e')], [])
+  ok(65, two[1].kind === 'workspace' && two[1].workspaceId === 'w2'
+      && five[1].kind === 'workspace' && five[1].workspaceId === 'w2',
+    `w2 at cell 1 in both: ${two[1].workspaceId} / ${five[1].workspaceId}`)
+}
+
+// 66. Cell 8 is ALWAYS `more`, even when there is nothing to overflow into.
+//     A cell that appears only sometimes has no stable position, and this is
+//     the one escape hatch to a 9th+ workspace: verify:palette 31's rule, that
+//     a row which disappears is indistinguishable from a missing feature.
+{
+  const small = R.buildGrid([gridWs('w1', 'Main')], [])
+  const many = R.buildGrid(Array.from({ length: 12 }, (_, i) => gridWs('w' + i, 'n' + i)), [])
+  ok(66, small.length === 9 && many.length === 9
+      && small[8].kind === 'more' && many[8].kind === 'more',
+    `${small[8].kind} / ${many[8].kind}`)
+}
+
+// 67. Unused cells are `empty`, and a 9th workspace does NOT take cell 8.
+{
+  const nine = R.buildGrid(Array.from({ length: 9 }, (_, i) => gridWs('w' + i, 'n' + i)), [])
+  const one = R.buildGrid([gridWs('w1', 'Main')], [])
+  ok(67, nine[7].kind === 'workspace' && nine[8].kind === 'more'
+      && one[1].kind === 'empty' && one[7].kind === 'empty',
+    `cell7=${nine[7].kind} cell8=${nine[8].kind} empty=${one[1].kind}`)
+}
+
+// 68. stepCell SKIPS empty cells and REFUSES TO WRAP at each of the four
+//     edges. Both halves in one check because each alone passes against a
+//     different wrong implementation: a wrapping stepper still skips empties,
+//     and a non-wrapping one that lands on an empty cell is a dead key —
+//     stepRunnable's rule for the palette's disabled rows.
+{
+  const cells = R.buildGrid([gridWs('a', 'A'), gridWs('b', 'B')], []) // 0,1 filled; 2-7 empty; 8 more
+  const rightOffEdge = R.stepCell(cells, 2, 1, 0)   // index 2 is top-right
+  const leftOffEdge = R.stepCell(cells, 0, -1, 0)
+  const upOffEdge = R.stepCell(cells, 1, 0, -1)
+  const downOffEdge = R.stepCell(cells, 8, 0, 1)
+  const skipped = R.stepCell(cells, 1, 1, 0)        // cell 2 is empty
+  ok(68, rightOffEdge === 2 && leftOffEdge === 0 && upOffEdge === 1 && downOffEdge === 8
+      && skipped === 1,
+    `edges ${rightOffEdge}/${leftOffEdge}/${upOffEdge}/${downOffEdge} skip=${skipped}`)
+}
+
+// 69. The cursor seeds on the ACTIVE workspace's own cell, so a release with
+//     no arrow pressed is a no-op. The gesture has to be abandonable by doing
+//     nothing, which is how Cmd+Tab behaves and what makes it safe to summon
+//     speculatively.
+{
+  const cells = R.buildGrid([gridWs('w1', 'A'), gridWs('w2', 'B', [], true), gridWs('w3', 'C')], [])
+  ok(69, R.initialCursor(cells) === 1, `seeded ${R.initialCursor(cells)}`)
+}
+
+// 70. ...and seeds on cell 8 (`more`) when the ACTIVE workspace is past cell 7
+//     and therefore has no cell of its own. This is the case no fixture
+//     reaches by accident — it needs nine workspaces to exist at all — and
+//     seeding cell 0 there makes a no-arrow release jump to a DIFFERENT
+//     workspace, which is exactly the accident check 65 exists to prevent.
+{
+  const rows = Array.from({ length: 10 }, (_, i) => gridWs('w' + i, 'n' + i, [], i === 9))
+  ok(70, R.initialCursor(R.buildGrid(rows, [])) === 8,
+    `seeded ${R.initialCursor(R.buildGrid(rows, []))}`)
+}
+
+// 70b. A cell's waiting number comes from rail-sections' waitingCount, and is
+//      a NUMBER on the cell rather than composed text — the rule Command.waiting
+//      and RailRow.waiting already obey. Intersection, never a global count.
+{
+  const cells = R.buildGrid(
+    [gridWs('w1', 'Main', ['n1', 'n2']), gridWs('w2', 'auth', ['n3'])], ['n1', 'n9'])
+  ok('70b', cells[0].kind === 'workspace' && cells[0].waiting === 1
+      && cells[1].kind === 'workspace' && cells[1].waiting === 0,
+    `${cells[0].waiting} / ${cells[1].waiting}`)
+}
+
+// 71. A ZERO VECTOR on an empty cell returns the index unchanged rather than
+//     hanging. Asserted directly as a return value, on purpose, rather than
+//     by letting the suite time out: `dx===0 && dy===0` never changes
+//     col/row, so an unguarded loop re-checks the SAME empty cell forever —
+//     the idiomatic no-op default for an unrecognised key in Task 2's
+//     keyboard wiring reaches this immediately. A hang here is a frozen
+//     renderer, not a thrown error, so this suite would never print a
+//     failure for it on its own; the check exists so a regression shows up
+//     as a red assertion instead of a suite that never finishes.
+{
+  const cells = R.buildGrid([gridWs('a', 'A'), gridWs('b', 'B')], []) // cell 2 is empty
+  ok(71, R.stepCell(cells, 2, 0, 0) === 2, `stepCell(2,0,0)=${R.stepCell(cells, 2, 0, 0)}`)
+}
+
+// ---------------------------------------------------------------------------
+// M13. The inspector's link rows. `link`, never `edge` — see panels.ts.
+
+// 72. Both directions, and they are DISTINGUISHED. A pane that listed only
+//     outgoing links answers "what does this feed" and leaves "what feeds
+//     this" unanswerable from the panel that is selected — the user would have
+//     to select every other panel in turn to find out. The direction is a
+//     FIELD rather than baked into the row's text, so the view composes the
+//     arrow: the rule Command.waiting and RailRow.waiting already keep.
+{
+  const panels = [
+    panel('a', { links: [{ to: 'b' }] }),
+    panel('b'),
+    panel('c', { links: [{ to: 'a', label: 'feeds' }] })
+  ]
+  const rows = R.buildLinkRows(panels[0], panels)
+  ok('72 buildLinkRows reports both directions and keeps them apart',
+    rows.length === 2 &&
+    rows.filter((r) => r.direction === 'out').length === 1 &&
+    rows.filter((r) => r.direction === 'in').length === 1 &&
+    rows.find((r) => r.direction === 'out').to === 'b' &&
+    rows.find((r) => r.direction === 'in').to === 'c' &&
+    rows.find((r) => r.direction === 'in').label === 'feeds',
+    JSON.stringify(rows))
+}
+
+// 73. A row NAMES the other panel by the honest chain, never by its bare id:
+//     `n7` tells the user nothing. This is a fourth READER of that chain (the
+//     panel header, railLabel and the attention section are the others), so
+//     the fixture is a TITLED panel — the only fixture that can tell a
+//     re-derivation from spec.command apart from a real read, because the
+//     wrong implementation says `/bin/zsh` here while the Panels row three
+//     lines up says `auth refactor`. rail-sections.ts 35's argument, at a
+//     second surface.
+{
+  const panels = [
+    panel('a', { links: [{ to: 'b' }], spec: { cwd: '~', command: '/bin/zsh', args: [] } }),
+    panel('b', { title: 'auth refactor', spec: { cwd: '~', command: '/bin/zsh', args: [] } })
+  ]
+  const rows = R.buildLinkRows(panels[0], panels)
+  ok('73 a link row names the other panel by its title, not its id',
+    rows.length === 1 && rows[0].title === 'auth refactor',
+    JSON.stringify(rows))
+}
+
+// 74. A link whose other end is not on this canvas contributes NO row —
+//     buildLinkSegments' prune, at the pane. It is reachable the same two
+//     ways: a hand-edited file, and a link naming a panel in ANOTHER
+//     workspace, since PanelId is global. A row for a panel the user cannot
+//     select is a dead entry whose remove control is the only part that works,
+//     and it reads as a bug in the pane rather than in the file.
+{
+  const panels = [panel('a', { links: [{ to: 'ghost' }, { to: 'b' }] }), panel('b')]
+  const rows = R.buildLinkRows(panels[0], panels)
+  ok('74 a link whose other end is not on this canvas renders no row',
+    rows.length === 1 && rows[0].to === 'b',
+    JSON.stringify(rows))
+}
+
+// 75. THE ONE WORTH KNOWING BY NUMBER, and the check that stops the pane
+//     freezing. Canvas freezes the inspector model on inspectorSignature, so a
+//     value the signature does not cover renders once and then never updates
+//     again — stuck at whatever it was when the panel was selected, with
+//     nothing throwing. Adding, removing AND relabelling are asserted as three
+//     separate movers, because an implementation that hashed only the link
+//     COUNT passes the first two and freezes on the third.
+//
+//     The first clause is the non-vacuity guard, and it is not decoration: the
+//     fourth parameter is OPTIONAL (every pre-M13 caller and every pre-M13
+//     check must keep its exact meaning — the trade `live` already made in M12
+//     and review-engine.ts's `notARepo` made in M9a), so a model built without
+//     it must carry an EMPTY array rather than undefined. Without that clause
+//     every comparison below could be undefined-vs-undefined and would pass
+//     against a model that has no links field at all.
+{
+  const sig = (panels) =>
+    R.inspectorSignature(R.buildInspectorModel(panels[0], undefined, undefined, panels))
+  const noArg = R.buildInspectorModel(panel('a'), undefined)
+  const none = sig([panel('a'), panel('b')])
+  const one = sig([panel('a', { links: [{ to: 'b' }] }), panel('b')])
+  const labelled = sig([panel('a', { links: [{ to: 'b', label: 'feeds' }] }), panel('b')])
+  ok('75 inspectorSignature moves on a link added, removed and relabelled',
+    Array.isArray(noArg.links) && noArg.links.length === 0 &&
+    none !== one && one !== labelled && none !== labelled,
+    `noArg=${JSON.stringify(noArg.links)} distinct=${new Set([none, one, labelled]).size}`)
 }
 
 console.log('\n' + '='.repeat(60))

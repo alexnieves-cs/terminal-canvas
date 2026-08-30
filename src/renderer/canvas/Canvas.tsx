@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
+import { LinkLayer } from './LinkLayer'
+import { useLinkMode } from './useLinkMode'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
@@ -15,6 +17,8 @@ import type { DragMode, DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ReviewNode } from '@renderer/review/ReviewNode'
+import { NavGrid } from '@renderer/navgrid/NavGrid'
+import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
@@ -39,7 +43,8 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
   cascadeCentre, firstRunPanels, isReviewPanel, makePanel, makeReviewPanel, nextZ, raisePanel,
-  removePanel, reviewCentre, setPanelRect, type Panel, type TerminalPanel as TerminalPanelModel
+  removePanel, reviewCentre, setPanelRect, addLink, removeLink, setLinkLabel,
+  type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
@@ -226,6 +231,12 @@ export function Canvas({
    * it, found launches later with nothing naming the drag that caused it.
    */
   const displayPanels = merged && mergedView ? mergedView.panels : panels
+  // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
+  // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
+  // after a pan would turn ordinary navigation into motion. The id is removed
+  // when the wrapper animation ends, so its one-time render cost cannot join
+  // the canvas's 60Hz path either.
+  const [enteringPanelIds, setEnteringPanelIds] = useState<ReadonlySet<string>>(() => new Set())
   // Hit testing and the pip layer keep the WHOLE array: a review node is a
   // real, clickable panel and an off-screen one is a real thing to point at.
   const rects = useMemo(() => displayPanels.map((p) => p.rect), [displayPanels])
@@ -250,6 +261,12 @@ export function Canvas({
     () => [...displayPanels].sort((a, b) => a.z - b.z).map((p) => p.rect),
     [displayPanels]
   )
+
+  // M13. Armed by the palette's `panel.link` row and the inspector's Link
+  // button; resolved by the next mousedown on the canvas (see
+  // onLinkModeMouseDownCapture). Declared up here because the mousedown
+  // handler and the render both read it.
+  const linkMode = useLinkMode()
   // Declared before useViewport (which takes it as an argument) rather than
   // grouped with the other callbacks below: a const used before its
   // declaration is a TDZ error, not just a style preference.
@@ -344,6 +361,7 @@ export function Canvas({
     (centre: Point, template?: PresetTemplate) => {
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
+      setEnteringPanelIds((current) => new Set(current).add(id))
       setPanels((current) => {
         // Where the panel ACTUALLY goes. Without this, N presses at an
         // unmoved camera produce N byte-identical rects and the canvas looks
@@ -420,6 +438,17 @@ export function Canvas({
 
   const selectOnly = useCallback((id: string | null): void => {
     setSelectedIds(id === null ? EMPTY_SELECTION : new Set([id]))
+  }, [])
+  // M13/motion: an entry animation ends and the id leaves the set. Kept
+  // beside the selection helpers rather than folded into them — it is a
+  // render-cost concern, not a selection one.
+  const onPanelEntryEnd = useCallback((id: string) => {
+    setEnteringPanelIds((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
   }, [])
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
@@ -658,11 +687,31 @@ export function Canvas({
    */
   const transitionRef = useRef(false)
 
-  // The one place that decides who owns a wheel gesture. Three rules, and the
-  // ORDER is the load-bearing part: the palette outranks zoom, and zoom
-  // outranks the focused panel.
+  // Same ordering problem, same fix as reloadWorkspacesRef below: the nav grid
+  // (M11) needs `switchWorkspace` for its commit, and that is declared several
+  // hundred lines further down — so useNavGrid cannot exist here, while both
+  // consumers of "is the grid open" DO: shouldYieldWheel's rule 0 immediately
+  // below, and the shouldIgnoreKeys passed into useViewport. It holds the
+  // PREDICATE rather than a mirrored boolean so both read the hook's own ref
+  // with no one-render lag, and both stay referentially stable — each sits in
+  // an effect dep array that must never be torn down and reinstalled.
+  // Populated by an effect right after useNavGrid is declared; read only from
+  // event handlers, long after mount.
+  const navGridIsOpenRef = useRef<() => boolean>(() => false)
+
+  // The one place that decides who owns a wheel gesture. Four rules, and the
+  // ORDER is the load-bearing part: the nav grid outranks everything, the
+  // palette outranks zoom, and zoom outranks the focused panel.
   const shouldYieldWheel = useCallback((event: WheelEvent): boolean => {
     const target = event.target as HTMLElement | null
+
+    // 0. While the nav grid is open every canvas gesture stands down. It has
+    // already swallowed the keyboard; it would be strange for a pinch to zoom
+    // the world behind it. Unlike rule 1 this is NOT a containment test: the
+    // grid covers the whole canvas and yields the gesture by standing the
+    // camera down rather than by handing it to a scroll host, so there is
+    // nothing under the cursor for a target test to find.
+    if (navGridIsOpenRef.current()) return true
 
     // 1. The palette owns EVERY wheel over itself, zoom gestures included. It
     // is a screen-space overlay mounted INSIDE .canvas, so useViewport's
@@ -762,14 +811,51 @@ export function Canvas({
   const onToggleMerged = useCallback(() => {
     toggleMergedImplRef.current()
   }, [])
+  // Every canvas keyboard shortcut stands down while EITHER overlay owns the
+  // keyboard, and so do the four menu accelerators below (see the edit:*
+  // subscriptions). ONE predicate rather than three copies of "who owns the
+  // keyboard", which is what this file already does for the wheel.
+  //
+  // Composed here rather than passing palette.isOpen straight through,
+  // because the nav grid's own capture listener cannot be relied on to stop
+  // useViewport's. Both are bound on `window`, and a SAME-TARGET dispatch —
+  // which is exactly what verify:panels' window.dispatchEvent produces, and
+  // never what a real keypress produces — invokes every listener on that
+  // target regardless of phase, so the shared predicate is the only thing
+  // that covers it. (For a real keypress the grid's capture-phase
+  // stopPropagation at `window` DOES suppress bubble-phase listeners on
+  // `window`, so it is belt-and-braces there — but it is not useless and
+  // must not be removed: it is what stops a bare arrow reaching xterm's own
+  // target-phase handler further down the tree.)
+  //
+  // Stable identity, reading a stable callback and a ref, because it sits in
+  // useViewport's keydown effect dep array — a fresh arrow per render would
+  // tear that listener down and reinstall it on every mousemove over the
+  // canvas (Canvas re-renders on setCursor).
+  const shouldIgnoreKeys = useCallback(
+    () => palette.isOpen() || navGridIsOpenRef.current(),
+    [palette.isOpen]
+  )
 
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll
   } = useViewport(
-    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, palette.isOpen, onJumpAttention,
+    hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
   )
   const version = useRegistryVersion(registry)
+
+  // What the banner calls the source panel. railLabel is the honest chain's
+  // one reader — the panel header, the rail row, the attention section and
+  // the inspector's link rows all go through it — so the banner reads it too
+  // rather than becoming a fifth re-derivation that says `/bin/zsh` where
+  // every other surface says `auth refactor`. Falls back to the bare id only
+  // if the panel is gone, which a disarm makes very short-lived.
+  const linkSourceName = useMemo(() => {
+    if (linkMode.from === null) return ''
+    const panel = panels.find((p) => p.rect.id === linkMode.from)
+    return panel ? railLabel(panel, registry.get(panel.rect.id)?.status) : linkMode.from
+  }, [linkMode.from, panels, version])
 
   // Sessions exist for every panel; only their tier changes. In a memo rather
   // than an effect: ensure() runs synchronously during render (so a session
@@ -799,8 +885,12 @@ export function Canvas({
       // With the palette open the user is looking at a text field, not a
       // terminal, and focusedId still names that terminal (rule 2 keeps it).
       // Copying its selection here would put text the user cannot see on the
-      // clipboard; Palette.tsx serves its own input instead.
-      if (palette.isOpen()) return
+      // clipboard; Palette.tsx serves its own input instead. shouldIgnoreKeys
+      // rather than palette.isOpen because the nav grid is the SAME
+      // situation and a worse one: revealing it means the user is already
+      // holding Cmd, which makes a stray Cmd+C the most plausible chord in
+      // the app, aimed at a selection an opaque overlay is covering.
+      if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       const selection = session?.handle.getSelection()
@@ -808,8 +898,10 @@ export function Canvas({
     })
     const offPaste = window.canvas.edit.onPaste((text) => {
       // Rule 3. Without this the text lands in a running agent, invisibly,
-      // while the user watches an empty text field. verify:panels 35.
-      if (palette.isOpen()) return
+      // while the user watches an empty text field (palette, verify:panels
+      // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
+      // switch that follows on release takes the evidence off screen.
+      if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
       if (text) session?.handle.paste(text)
@@ -818,9 +910,9 @@ export function Canvas({
       offCopy()
       offPaste()
     }
-    // palette.isOpen is referentially stable, so this stays a once-only
+    // shouldIgnoreKeys is referentially stable, so this stays a once-only
     // install; listing it makes the dependency visible rather than implied.
-  }, [palette.isOpen])
+  }, [shouldIgnoreKeys])
 
   // ONE subscription for the whole canvas, not one per panel: the payload
   // names its own panel, and the store fans it out to exactly the panel that
@@ -889,19 +981,26 @@ export function Canvas({
     // open and a name half-typed it does not undo the TYPING — it runs
     // applyHistory, which removes a panel and disposes its session, behind the
     // overlay, with no visible cause. verify:panels 37.
+    //
+    // Sharper still under the nav grid, which is why the guard is
+    // shouldIgnoreKeys and not palette.isOpen: the grid is revealed by a
+    // HELD Cmd, so Cmd+Z is one keypress away for the whole time it is up —
+    // it kills a running agent behind an opaque overlay, and the workspace
+    // switch on release then carries the evidence off screen entirely.
+    // verify:panels 123.
     const offUndo = window.canvas.edit.onUndo(() => {
-      if (palette.isOpen()) return
+      if (shouldIgnoreKeys()) return
       setHistory((h) => { const next = undoHistory(h); applyHistory(h.present, next); return next })
     })
     const offRedo = window.canvas.edit.onRedo(() => {
-      if (palette.isOpen()) return
+      if (shouldIgnoreKeys()) return
       setHistory((h) => { const next = redoHistory(h); applyHistory(h.present, next); return next })
     })
     return () => {
       offUndo()
       offRedo()
     }
-  }, [applyHistory, palette.isOpen])
+  }, [applyHistory, shouldIgnoreKeys])
 
   // Pulled out of the onReset listener below so verify:panels' __m4bReset
   // hook (see the test-hook effect further down) can drive the exact same
@@ -2080,6 +2179,49 @@ export function Canvas({
   useEffect(() => {
     if (merged) marqueeEndRef.current?.()
   }, [merged])
+  /**
+   * Resolves an armed link mode, and it MUST be capture phase.
+   *
+   * Every panel's own chrome handler stopPropagations its mousedown, so a
+   * listener on the background onMouseDown below never sees a click on a
+   * PANEL — which is every click that can complete a link. Worse, letting the
+   * click reach a panel's own handler reaches onSelectPanel, which clears the
+   * dormant id and calls registry.wake: completing a link onto a dormant panel
+   * would SPAWN AN AGENT. That is success criterion 2 failing, and on a
+   * restored canvas it is one agent CLI per link the user draws — exactly the
+   * accident the dormancy rule exists to prevent. Stopping the event here is
+   * what makes the completing click do one thing and only one.
+   *
+   * It hit-tests the WORLD point rather than reading event.target, so a click
+   * on a panel's chrome, its card and its terminal body all mean the same
+   * thing — and it reuses hitOrder, arithmetic that is already pinned.
+   *
+   * Returns true when it consumed the event, so the caller can stand down.
+   */
+  const onLinkModeMouseDownCapture = (event: MouseEvent<HTMLDivElement>): boolean => {
+    const source = linkMode.from
+    if (source === null) return false
+    event.preventDefault()
+    event.stopPropagation()
+    // Disarmed on ANY resolving click, including a cancel: one shot.
+    linkMode.disarm()
+    const world = toWorld(event)
+    const hit = world ? hitTest(hitOrder, world) : null
+    // A click on the background, or back on the source, cancels. addLink
+    // refuses a self-link anyway; returning here is what keeps the cancel
+    // silent rather than a no-op that reads as a link which failed.
+    if (!hit || hit === source) return true
+    setPanels((current) => {
+      const next = addLink(current, source, hit)
+      // addLink returns the SAME array when it refuses (a duplicate), and
+      // committing unconditionally would push a history entry for a gesture
+      // that changed nothing — one wasted Cmd+Z. The rule is one entry per
+      // COMMITTED gesture, not one per attempt.
+      if (next !== current) commitHistory(next)
+      return next
+    })
+    return true
+  }
 
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
@@ -2450,6 +2592,37 @@ export function Canvas({
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
+
+  // Cell 8's door. The palette's own workspaces drill-in, never a second list:
+  // the grid holds eight cells and the ninth is how you reach a ninth
+  // workspace, which is a surface that already exists.
+  const openWorkspaceScope = useCallback(
+    () => palette.openPalette('workspaces'), [palette.openPalette])
+
+  /**
+   * M11's Cmd+G grid. Declared HERE rather than beside shouldYieldWheel
+   * because it needs `workspaceRows` and `waitingIds`, neither of which exists
+   * that far up; the two consumers that DO live up there read it back through
+   * navGridIsOpenRef (see that ref's own comment).
+   *
+   * onCommit is switchWorkspace itself, not a second switching path: the grid
+   * is a GESTURE onto M7's existing transaction, the same way the rail's
+   * workspace row is.
+   */
+  const navGrid = useNavGrid({
+    workspaces: workspaceRows,
+    attentionIds: waitingIds,
+    onCommit: switchWorkspace,
+    onMore: openWorkspaceScope,
+    // The palette owns the keyboard while it is open; two surfaces both
+    // claiming Cmd is the one arrangement rule 3 of "who owns the keyboard"
+    // exists to prevent.
+    enabled: !palette.open
+  })
+  // Publishes the predicate to the two consumers declared above it — see
+  // navGridIsOpenRef's own comment. In an effect rather than a render-time
+  // assignment because navGrid.isOpen is a stable useCallback: this runs once.
+  useEffect(() => { navGridIsOpenRef.current = navGrid.isOpen }, [navGrid.isOpen])
 
   /**
    * A review node is minted from the SUBJECT's stored baseline, asked for
@@ -3272,11 +3445,52 @@ export function Canvas({
       // gone and the clear-on-close effect would wipe it — the same pairing
       // beginCreateWorkspace and beginRenamePreset both make.
       palette.openPalette()
+    },
+    beginLink: (id) => {
+      linkMode.arm(id)
+      // The overlay must be GONE: the completing gesture is a click on the
+      // canvas, and a palette sitting over it would swallow that click as its
+      // own outside-click dismissal. runRow already closes before running a
+      // command, so this is belt and braces for the inspector's button, which
+      // does not go through runRow at all.
+      palette.closePalette()
+    },
+    removeLink: (from, to) => {
+      setPanels((current) => {
+        const next = removeLink(current, from, to)
+        commitHistory(next)
+        return next
+      })
+    },
+    beginRelabelLink: (from, to, current) => {
+      setInputMode({
+        kind: 'text',
+        label: 'Label this link',
+        initial: current,
+        submit: (value) => {
+          setPanels((panelsNow) => {
+            // Trimmed, and an empty result CLEARS the label rather than
+            // storing '' — see setLinkLabel. Otherwise a user who wants a
+            // label gone has no verb for it, and a blank label round-trips to
+            // disk as a row they can neither see nor explain.
+            const next = setLinkLabel(panelsNow, from, to, value.trim())
+            commitHistory(next)
+            return next
+          })
+          setInputMode(null)
+        }
+      })
+      // The same reopen beginRenamePreset makes, for the same reason: the
+      // overlay is closed BEFORE a row's command runs, so without this the
+      // mode would be set on a palette that is already gone and the
+      // clear-on-close effect would wipe it again.
+      palette.openPalette()
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows, reloadPresets,
-       palette.openPalette, palette.capturedId, reloadPrompts, commitHistory,
-       reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
-       onClosePanel, onSelectPanel, openReview, movePanelsToWorkspace, toggleMerged])
+       palette.openPalette, palette.closePalette, palette.capturedId, reloadPrompts,
+       commitHistory, reloadSettings, settingRows, switchWorkspace, reloadWorkspaces,
+       onClosePanel, onSelectPanel, openReview, linkMode,
+       movePanelsToWorkspace, toggleMerged])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -3462,7 +3676,13 @@ export function Canvas({
     : buildInspectorModel(
         selectedPanel,
         registry.get(selectedPanel.rect.id)?.status,
-        selectedLive
+        selectedLive,
+        // M13. The whole panel list, so the Links section can name the other
+        // end of each link and drop one whose other end is not on this canvas.
+        // The parameter is optional and this is its only production caller;
+        // omitting it renders an always-empty section that looks like a
+        // feature nobody built.
+        panels
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
@@ -3591,6 +3811,7 @@ export function Canvas({
       <div
         className="canvas"
         ref={hostRef}
+        onMouseDownCapture={onLinkModeMouseDownCapture}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
       >
@@ -3598,6 +3819,19 @@ export function Canvas({
           className="world"
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
+          {/* First child, and z-index 0 in the stylesheet, so it paints
+              beneath every panel — nextZ mints z >= 1. It is inside .world so
+              it pans and zooms with the panels, and it takes no pointer
+              events at all, so it can never swallow a click. See LinkLayer.
+
+              Fed displayPanels rather than panels, for the same reason the
+              panel map below is: while merged the only rects on screen are
+              lane-offset ones, and a layer drawn from `panels` would paint
+              every link at its un-offset position — lines detached from the
+              panels they join. buildLinkSegments skips a link whose target is
+              not in the array it was handed, so a link that crosses a lane
+              boundary simply does not draw rather than drawing wrong. */}
+          <LinkLayer panels={displayPanels} />
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -3644,6 +3878,8 @@ export function Canvas({
                 onClose={onClosePanel}
                 glow={glowEnabled}
                 readOnly={merged}
+                entering={enteringPanelIds.has(panel.rect.id)}
+                onEntryEnd={onPanelEntryEnd}
               />
             )
           })}
@@ -3663,6 +3899,19 @@ export function Canvas({
             Marquee.tsx. It renders null at rest, so there is no "no marquee"
             element for anything to find. */}
         <Marquee rect={marquee} />
+        {/* A SIBLING of .world, like EdgeIndicators above: .world carries the
+            one translate()/scale() transform, and an overlay inside it would
+            pan and zoom away with the canvas it is pinned to. */}
+        {/* M13. Success criterion 6: an armed mode must never be invisible.
+            A SIBLING of .world like NavGrid above, so it is viewport-pinned
+            chrome rather than something that pans away from the user while
+            the mode it describes is still armed. */}
+        {linkMode.from !== null && (
+          <div className="link-banner" role="status">
+            Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
+          </div>
+        )}
+        <NavGrid controller={navGrid} />
         <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
         {palette.open && (
           <Palette
@@ -3695,6 +3944,9 @@ export function Canvas({
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
         onOpenReview={paletteActions.openReview}
+        onLink={paletteActions.beginLink}
+        onRemoveLink={paletteActions.removeLink}
+        onRelabelLink={paletteActions.beginRelabelLink}
         review={reviewModel}
       />
     </div>

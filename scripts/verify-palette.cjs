@@ -215,6 +215,13 @@ const spyActions = () => {
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
+    // M13. beginLink is reached from panel.link; the other two are the
+    // inspector's own, reached from no Command row — kept here anyway so the
+    // fixture stays honest about the full PaletteActions shape, the reason
+    // the inspector's existing actions below are here.
+    beginLink: record('beginLink'),
+    removeLink: record('removeLink'),
+    beginRelabelLink: record('beginRelabelLink'),
     // The inspector's own action, reached from no Command row: closing and
     // saving already have gestures elsewhere. Kept here anyway so the fixture
     // stays honest about the full PaletteActions shape.
@@ -1145,6 +1152,62 @@ const WS = [
       c.actions.calls[0][0] === 'beginMovePanelsToNewWorkspace' &&
       JSON.stringify(c.actions.calls[0][1]) === '["n1","n2"]',
     JSON.stringify(c.actions.calls))
+}
+
+// ---------------------------------------------------------------------------
+// M13. The link row. `link`, never `edge` — see panels.ts — though the row's
+// searchText carries "edge" deliberately, because that is backlog #24's own
+// noun and a user who thinks "edge" must still find the row.
+
+// 76. The Link row is present, enabled, and aimed at the CAPTURED panel
+//     rather than the focused one — the rule panel.rename, panel.restart and
+//     panel.review already obey, because opening the palette moves DOM focus
+//     to its input and deliberately leaves focusedId alone.
+{
+  const c = ctx({
+    capturedId: 'n2',
+    panels: [
+      { id: 'n1', label: 'claude', restartable: true },
+      { id: 'n2', label: 'zsh', restartable: true }
+    ]
+  })
+  const row = byId(P.buildCommands(c), 'panel.link')
+  if (row) row.run()
+  ok('76 the link row is enabled and aimed at the captured panel',
+    row !== undefined && row.disabledReason === undefined &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'beginLink' &&
+      c.actions.calls[0][1] === 'n2',
+    JSON.stringify(c.actions.calls))
+}
+
+// 77. Disabled — not absent — with two DISTINCT reasons, the shape checks 66b
+//     and 68 already establish. "Click a panel first" and "there is nothing on
+//     this canvas to link to" are two situations with two different fixes, and
+//     collapsing them tells a user who HAS selected a panel to select a panel.
+//     Compared against the EXPORTED constants, never string literals, which
+//     would keep passing while the text the user reads said something else.
+//
+//     The single-panel case is the one that only this feature has: a link
+//     needs a second endpoint, so a canvas of one panel can offer the verb
+//     and never complete it.
+{
+  const alone = byId(P.buildCommands(ctx({
+    capturedId: 'n1',
+    panels: [{ id: 'n1', label: 'zsh', restartable: true }]
+  })), 'panel.link')
+  const none = byId(P.buildCommands(ctx({
+    capturedId: null,
+    panels: [
+      { id: 'n1', label: 'zsh', restartable: true },
+      { id: 'n2', label: 'claude', restartable: true }
+    ]
+  })), 'panel.link')
+  ok('77 link is disabled with two distinct reasons',
+    alone !== undefined && alone.disabledReason === P.REASON_NOTHING_TO_LINK &&
+      none !== undefined && none.disabledReason === P.REASON_NO_FOCUS &&
+      P.REASON_NOTHING_TO_LINK !== P.REASON_NO_FOCUS,
+    JSON.stringify([alone && alone.disabledReason, none && none.disabledReason]))
 }
 
 const failed = results.filter((r) => !r.pass)

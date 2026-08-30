@@ -4,6 +4,31 @@ import type { ReviewSubject } from '@shared/review'
 
 export type { ReviewSubject }
 
+/**
+ * A directed link from the panel HOLDING it to the panel it names.
+ *
+ * Adjacency on the SOURCE rather than a top-level array, and that choice is
+ * what keeps History<Panel[]> — and therefore Canvas.tsx's commitHistory and
+ * applyHistory, the two functions in this app carrying the loudest caveat
+ * there is — completely untouched: a link rides Panel, so undo and redo work
+ * with no changes to either. The usual objection to storing a relation on one
+ * endpoint is that the endpoint is arbitrary; it is not arbitrary here,
+ * because the link is DIRECTED (the arrowhead is at `to`), which makes the
+ * source a real owner rather than a coin toss.
+ *
+ * Called `link`, never `edge`: EdgeIndicators.tsx and viewport.ts's
+ * edgeIndicator already mean the off-screen attention pip, and a second
+ * unrelated `edge` in renderer/canvas/ would make every future grep ambiguous
+ * between two features with nothing to do with each other. Backlog #24 calls
+ * these edges; this is the same feature under a name that is still free.
+ */
+export interface PanelLink {
+  /** The panel this points AT. The panel holding it is the source. */
+  to: string
+  /** What the user says it means. Absent until they say — links start bare. */
+  label?: string
+}
+
 export interface PanelBase {
   rect: WorldRect
   /**
@@ -27,6 +52,15 @@ export interface PanelBase {
    * the process, and a panel that has never spawned can still have one.
    */
   title?: string
+  /**
+   * Outgoing links. OPTIONAL, and absent means none — which is every panel in
+   * every layout.json ever written and every panel this app mints, so a reader
+   * that treated absence as anything but "no links" would be wrong about the
+   * common case. Read it through linksOf, never directly, so the absence is
+   * normalised in exactly one place: a missed `?? []` is a TypeError inside a
+   * render, which takes the whole canvas down rather than one link.
+   */
+  links?: PanelLink[]
 }
 
 /**
@@ -261,8 +295,116 @@ export function setPanelRect(panels: Panel[], id: string, rect: WorldRect): Pane
   return panels.map((p) => (p.rect.id === id ? { ...p, rect } : p))
 }
 
+/**
+ * Drop the panel AND every link pointing at it.
+ *
+ * The incoming prune lives HERE rather than at the call sites, and that
+ * placement is the whole of the dangling-link stance. Both callers are the two
+ * branches of Canvas.tsx's onClosePanel, and both are already inside a
+ * setPanels updater whose result goes straight to commitHistory — so the panel
+ * and its links leave in ONE committed gesture, land in ONE history entry, and
+ * one Cmd+Z brings back both (verify:panels 128). A prune written at the call
+ * sites instead would be two places to get right, and the one that got missed
+ * would leave a link pointing at nothing with no error anywhere — backlog
+ * #24's named failure, "the standard failure of every graph UI that stored ids
+ * without deciding this".
+ *
+ * Outgoing links need nothing: they leave with the panel that held them.
+ *
+ * verify:viewport 80, whose second clause is the over-correction guard —
+ * stripping every link from every survivor satisfies "the dangling one is
+ * gone" perfectly and silently empties the canvas on any close at all.
+ */
 export function removePanel(panels: Panel[], id: string): Panel[] {
-  return panels.filter((p) => p.rect.id !== id)
+  return panels.filter((p) => p.rect.id !== id).map((p) => pruneLinksTo(p, id))
+}
+
+/** The one place `links` being absent is normalised. See PanelBase.links. */
+export function linksOf(panel: Panel): PanelLink[] {
+  return panel.links ?? []
+}
+
+/**
+ * Drop every link on this panel that points at `id`.
+ *
+ * Returns the panel UNCHANGED (same reference) when nothing pointed there, so
+ * removePanel's map does not churn an identity for every survivor on every
+ * close. That is economy rather than correctness — TerminalPanel is memo'd on
+ * its rect and z rather than on the panel object — but a fresh object for
+ * every panel on every close is a pointless allocation on a path already doing
+ * real work.
+ *
+ * The key is DELETED rather than left as an empty array when nothing survives,
+ * so a panel that never had links and a panel whose last link was pruned
+ * serialise identically. Otherwise closing one panel rewrites `links: []` onto
+ * every survivor in layout.json — noise in a file people read and diff.
+ */
+export function pruneLinksTo(panel: Panel, id: string): Panel {
+  const links = linksOf(panel)
+  if (!links.some((l) => l.to === id)) return panel
+  const kept = links.filter((l) => l.to !== id)
+  const next: Panel = { ...panel }
+  if (kept.length === 0) delete next.links
+  else next.links = kept
+  return next
+}
+
+/** Replace one panel, by id, with the result of `f`. */
+function mapPanel(panels: Panel[], id: string, f: (p: Panel) => Panel): Panel[] {
+  return panels.map((p) => (p.rect.id === id ? f(p) : p))
+}
+
+/**
+ * Add `from -> to`, refusing a self-link and refusing a duplicate.
+ *
+ * A self-link is a segment with no direction: linkAnchors answers null for
+ * coincident centres, so it would persist forever as a link that renders
+ * nothing — indistinguishable from a broken feature. A duplicate paints two
+ * identical overlapping paths, which is cascadeCentre's indistinguishability
+ * argument through a different door: the canvas looks like it holds one link
+ * while holding two, and removing "the" link leaves one behind.
+ *
+ * `to -> from` alongside `from -> to` IS allowed. They are different claims,
+ * and a fix for the duplicate case that collapsed them would be
+ * over-correcting into "one link per pair". verify:viewport 79.
+ *
+ * Returns the SAME array when it refuses, which the call site depends on: a
+ * commit pushed for a refused gesture is a history entry for a gesture that
+ * changed nothing, and the rule is one entry per COMMITTED gesture.
+ */
+export function addLink(panels: Panel[], from: string, to: string): Panel[] {
+  if (from === to) return panels
+  const source = panels.find((p) => p.rect.id === from)
+  if (!source || !panels.some((p) => p.rect.id === to)) return panels
+  if (linksOf(source).some((l) => l.to === to)) return panels
+  return mapPanel(panels, from, (p) => ({ ...p, links: [...linksOf(p), { to }] }))
+}
+
+/** Remove one link. Addressed by BOTH ends, since a->b and b->a both exist. */
+export function removeLink(panels: Panel[], from: string, to: string): Panel[] {
+  return mapPanel(panels, from, (p) => pruneLinksTo(p, to))
+}
+
+/**
+ * Set one link's label.
+ *
+ * An empty string CLEARS the label rather than storing '', so the palette's
+ * input mode has a way to undo a label without a second verb — and so an empty
+ * label cannot round-trip to disk as a field that renders as a blank row the
+ * user can neither see nor explain.
+ */
+export function setLinkLabel(
+  panels: Panel[],
+  from: string,
+  to: string,
+  label: string
+): Panel[] {
+  return mapPanel(panels, from, (p) => ({
+    ...p,
+    links: linksOf(p).map((l) =>
+      l.to === to ? (label === '' ? { to: l.to } : { to: l.to, label }) : l
+    )
+  }))
 }
 
 /** Raise by z, never by array position — see the note on Panel.z. */

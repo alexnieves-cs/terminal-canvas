@@ -187,6 +187,31 @@ export interface PaletteActions {
    * not exist yet.
    */
   toggleMerged(): void
+  /**
+   * Arm the one-shot link mode with this panel as the source. The NEXT click
+   * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's
+   * onLinkModeMouseDownCapture.
+   *
+   * Takes an id rather than reading the focused panel, the rule every other
+   * panel verb here obeys: the inspector acts on the SELECTED panel and the
+   * palette on the CAPTURED one, and neither of those is `focusedId`.
+   *
+   * It EARNS a Command row, like openReview and restartPanel: its only other
+   * gesture is the inspector's button, and the inspector can be collapsed.
+   */
+  beginLink(id: string): void
+  /**
+   * Remove one link. Addressed by BOTH ends, because a -> b and b -> a are
+   * different links and both are allowed to exist.
+   *
+   * NO Command row, the trade closePanel and startPanel already make: the
+   * inspector's Links section is the surface, a row per existing link would
+   * scale with the canvas rather than being a fixed verb, and M6p sized the
+   * resting list on purpose.
+   */
+  removeLink(from: string, to: string): void
+  /** Label one link, through the palette's existing text input mode. */
+  beginRelabelLink(from: string, to: string, current: string): void
 }
 
 export interface PaletteContext {
@@ -260,6 +285,7 @@ export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag 
  * one-line import rather than a temptation to paste the sentence.
  */
 export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
+export const REASON_NOTHING_TO_LINK = 'this canvas has only one panel'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -359,6 +385,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ctx.capturedId === null
           ? REASON_NO_FOCUS
           : (target?.restartable === true ? undefined : REASON_NOT_STARTED)
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: 'panel.link',
+          title: 'Link this panel to\u2026',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          group: 'panel',
+          run: () => actions.beginLink(ctx.capturedId!)
+        },
+        // TWO different blocked situations with two different fixes, the shape
+        // panel.restart and panel.review both state: "click a panel first" and
+        // "there is nothing on this canvas to link to". Collapsing them tells
+        // a user who HAS selected a panel to select a panel.
+        //
+        // The second is this verb's own case rather than a copy: a link needs
+        // a SECOND endpoint, so a canvas holding one panel can offer the verb
+        // and never complete it.
+        ctx.capturedId === null
+          ? REASON_NO_FOCUS
+          : (ctx.panels.length < 2 ? REASON_NOTHING_TO_LINK : undefined)
       )
     )
     out.push(

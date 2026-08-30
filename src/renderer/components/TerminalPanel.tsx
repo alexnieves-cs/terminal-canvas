@@ -47,6 +47,10 @@ export interface TerminalPanelProps {
   onSlotUnmount: (id: string) => void
   /** Close this panel for good: the canvas disposes its session and drops it. */
   onClose: (id: string) => void
+  /** True only for a newly created panel, never for an LOD remount. */
+  entering: boolean
+  /** Clears the one-shot entry marker once its wrapper animation finishes. */
+  onEntryEnd: (id: string) => void
   /**
    * M14's merged view: this panel is being shown inside another workspace's
    * lane, so its geometry belongs to a record this canvas does not own.
@@ -76,7 +80,7 @@ const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
-  onClose, glow, readOnly = false
+  onClose, glow, entering, onEntryEnd, readOnly = false
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -146,6 +150,14 @@ function TerminalPanelImpl({
       data-agent-state={glow ? agentState : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
+      {/* Motion lives on this wrapper, never .panel: .panel's geometry rides
+          .world and the viewport checks read that transform as a matrix. */}
+      <div
+        className={`panel__motion${entering ? ' panel__motion--entering' : ''}`}
+        onAnimationEnd={(event) => {
+          if (event.animationName === 'panel-enter') onEntryEnd(session.id)
+        }}
+      >
       <header
         className="panel__chrome"
         onMouseDown={(event) => {
@@ -235,6 +247,7 @@ function TerminalPanelImpl({
           }}
         />
       ))}
+      </div>
     </div>
   )
 }
