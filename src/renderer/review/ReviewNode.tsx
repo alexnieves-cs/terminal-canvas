@@ -8,7 +8,7 @@ import { buildReviewNodeModel } from './review-node-model'
 export interface ReviewNodeProps {
   panel: ReviewPanel
   selected: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, additive?: boolean) => void
   /**
    * The same onFocus a terminal panel's body calls. Focus here buys one
    * thing and costs nothing: shouldYieldWheel's rule 3 gives the wheel to
@@ -292,7 +292,7 @@ function ReviewNodeImpl({
         onMouseDown={(event: ReactMouseEvent) => {
           event.stopPropagation()
           event.preventDefault()
-          onSelect(rect.id)
+          onSelect(rect.id, event.shiftKey)
           onBeginDrag({
             panelId: rect.id,
             mode: { kind: 'move' },

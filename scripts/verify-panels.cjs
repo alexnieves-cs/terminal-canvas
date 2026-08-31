@@ -9990,6 +9990,119 @@ app.whenReady().then(async () => {
           `grid=${JSON.stringify(released.grid)}`)
     }
 
+    // 144b. Shift-click adds a second panel, then an ordinary chrome drag of
+    // either selected member moves BOTH. The final undo is deliberately one
+    // step: it catches an implementation that commits once per member even if
+    // its geometry happens to look correct on screen.
+    {
+      await zoomTo(wc, '0')
+      const empty144b = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        if (!host) return null
+        const b = host.getBoundingClientRect()
+        for (let y = b.top + 6; y < b.bottom - 6; y += 8) {
+          for (let x = b.left + 6; x < b.right - 6; x += 8) {
+            const el = document.elementFromPoint(x, y)
+            if (el && host.contains(el) && !el.closest('.panel') && !el.closest('.canvas-hud')) return { x, y }
+          }
+        }
+        return null
+      })()`)
+      // A background click first makes this fixture independent of the
+      // marquee check immediately above it.
+      if (empty144b) {
+        wc.sendInputEvent({ type: 'mouseDown', x: empty144b.x, y: empty144b.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: empty144b.x, y: empty144b.y, button: 'left', clickCount: 1 })
+      }
+      await sleep(150)
+
+      const exposedChrome = async (except = null) => wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        if (!host) return null
+        const b = host.getBoundingClientRect()
+        for (const chrome of document.querySelectorAll('.panel__chrome')) {
+          const panel = chrome.closest('.panel')
+          if (!panel || panel.dataset.panelId === ${JSON.stringify(except)}) continue
+          const r = chrome.getBoundingClientRect()
+          for (const fx of [0.15, 0.35, 0.65]) {
+            const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height / 2)
+            if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
+            const hit = document.elementFromPoint(x, y)
+            if (hit && hit.closest('.panel__chrome') === chrome && !hit.closest('button')) {
+              return { id: panel.dataset.panelId, x, y }
+            }
+          }
+        }
+        return null
+      })()`)
+      const first144b = await exposedChrome()
+      const clickChrome = async (point, shift = false) => {
+        const modifiers = shift ? ['shift'] : []
+        wc.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1, modifiers })
+        wc.sendInputEvent({ type: 'mouseUp', x: point.x, y: point.y, button: 'left', clickCount: 1, modifiers })
+        await sleep(150)
+      }
+      if (first144b) await clickChrome(first144b)
+      const second144b = first144b ? await exposedChrome(first144b.id) : null
+      if (second144b) await clickChrome(second144b, true)
+      const selected144b = await wc.executeJavaScript(
+        `Array.from(document.querySelectorAll('.panel--selected')).map((p) => p.dataset.panelId)`)
+      const selectionReady144b = first144b !== null && second144b !== null &&
+        selected144b.includes(first144b.id) && selected144b.includes(second144b.id) && selected144b.length === 2
+
+      const before144b = selectionReady144b ? await wc.executeJavaScript(`(() => {
+        const ids = ${JSON.stringify([first144b && first144b.id, second144b && second144b.id])}
+        return Object.fromEntries(ids.map((id) => {
+          const panel = document.querySelector('.panel[data-panel-id=' + JSON.stringify(id) + ']')
+          return [id, { x: Number(panel.style.left.replace('px', '')), y: Number(panel.style.top.replace('px', '')) }]
+        }))
+      })()`) : null
+      // The second press is non-shifted on purpose. Selection must survive it
+      // long enough for onBeginDrag to snapshot BOTH origin rects.
+      if (selectionReady144b) {
+        const dragPoint = await exposedChrome(first144b.id)
+        if (dragPoint && dragPoint.id === second144b.id) {
+          const to = { x: dragPoint.x + 96, y: dragPoint.y - 64 }
+          wc.sendInputEvent({ type: 'mouseDown', x: dragPoint.x, y: dragPoint.y, button: 'left', clickCount: 1 })
+          for (let i = 1; i <= 4; i++) {
+            wc.sendInputEvent({ type: 'mouseMove', x: Math.round(dragPoint.x + (to.x - dragPoint.x) * i / 4), y: Math.round(dragPoint.y + (to.y - dragPoint.y) * i / 4), button: 'left', modifiers: ['leftButtonDown'] })
+          }
+          wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+        }
+      }
+      await sleep(250)
+      const after144b = before144b ? await wc.executeJavaScript(`(() => {
+        const ids = Object.keys(${JSON.stringify(before144b)})
+        return Object.fromEntries(ids.map((id) => {
+          const panel = document.querySelector('.panel[data-panel-id=' + JSON.stringify(id) + ']')
+          return [id, { x: Number(panel.style.left.replace('px', '')), y: Number(panel.style.top.replace('px', '')) }]
+        }))
+      })()`) : null
+      const movedTogether144b = before144b !== null && after144b !== null &&
+        Object.keys(before144b).every((id) => {
+          const dx = after144b[id].x - before144b[id].x
+          const dy = after144b[id].y - before144b[id].y
+          const first = first144b.id
+          return Math.abs(dx - (after144b[first].x - before144b[first].x)) < 1 &&
+            Math.abs(dy - (after144b[first].y - before144b[first].y)) < 1 && (Math.abs(dx) > 1 || Math.abs(dy) > 1)
+        })
+      if (movedTogether144b) await wc.executeJavaScript(`window.__m4bUndo()`)
+      const undone144b = movedTogether144b && await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`(() => {
+          const before = ${JSON.stringify(before144b)}
+          return Object.entries(before).every(([id, rect]) => {
+            const panel = document.querySelector('.panel[data-panel-id=' + JSON.stringify(id) + ']')
+            return panel && Math.abs(Number(panel.style.left.replace('px', '')) - rect.x) < 1 &&
+              Math.abs(Number(panel.style.top.replace('px', '')) - rect.y) < 1
+          })
+        })()`)
+        return now ? true : false
+      }, 3000)
+      ok('144b shift-click adds selection; one group drag moves and one undo restores both',
+        selectionReady144b && movedTogether144b && undone144b === true,
+        `selected=${JSON.stringify(selected144b)} moved=${movedTogether144b} undone=${undone144b}`)
+    }
+
     // ---------------------------------------------------------------------
     // 145-147 — M18. Filing a selection into another workspace.
     //

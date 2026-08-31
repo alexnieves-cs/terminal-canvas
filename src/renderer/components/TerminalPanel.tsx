@@ -35,7 +35,7 @@ export interface TerminalPanelProps {
    */
   title?: string
   selected: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, additive?: boolean) => void
   onFocus: (id: string) => void
   /**
    * Starts a move or resize gesture. `originWorld` is handed up in CLIENT
@@ -183,7 +183,7 @@ function TerminalPanelImpl({
           // canvas from reading this as a background click and deselecting.
           event.stopPropagation()
           event.preventDefault() // suppress the native text-drag of the title
-          onSelect(session.id)
+          onSelect(session.id, event.shiftKey)
           onBeginDrag({
             panelId: session.id,
             mode: { kind: 'move' },
