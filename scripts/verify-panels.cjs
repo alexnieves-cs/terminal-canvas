@@ -12415,6 +12415,12 @@ app.whenReady().then(async () => {
         const mergedTerminal = await portBox(M24_A, 'e')
         await MERGE_M24()
         await settle()
+        // WHOEVER APPENDS CHECK 180 INHERITS THIS: the drag above is released
+        // over the file panel and COMMITS, so this block leaves a real link on
+        // the canvas and a history entry behind it — the same standing
+        // obligation check 20 hands down in verify-pty-manager.cjs. A later
+        // check that counts links, or presses Cmd+Z expecting to undo its own
+        // gesture, has to account for both.
         ok('179 ports render on a file panel and vanish in the merged view, and the target ring lands on the file panel by id',
           Boolean(fileId) && onFile !== null && onFile.zero !== true &&
             onTerminal !== null && onTerminal.zero !== true &&

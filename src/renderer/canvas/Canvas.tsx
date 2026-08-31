@@ -1245,6 +1245,29 @@ export function Canvas({
     viewportRef,
     rectsRef: hitOrderRef,
     onCommit: (from, to) => {
+      // The VERB refuses, not only the affordance. This repo's standing rule,
+      // stated for the move verb: it "refuses on `mergedRef` too rather than
+      // only its palette rows going disabled — a disabled row is an
+      // affordance, and the verb has to be the authority."
+      //
+      // Here the affordance is `readOnly`, which suppresses the ports — and
+      // `readOnly` is OPTIONAL WITH A DEFAULT on all four non-terminal kinds,
+      // so a missed or dropped `readOnly={merged}` at any of the five call
+      // sites compiles clean and renders ports in the merged view with
+      // nothing red anywhere. A drag there writes addLink into the ACTIVE
+      // workspace's record naming a FOREIGN panel id: persisted, and then
+      // invisible, because buildLinkSegments prunes a link naming a panel this
+      // canvas does not hold. The user sees a gesture that appeared to work
+      // and produced nothing, and layout.json carries a link nothing renders.
+      // linkDraw.end() at toggleMerged stands down an in-flight draw; this
+      // stands down a commit that reaches here by any other route.
+      //
+      // NO CHECK EXERCISES THIS. It is structural defence: ports do not render
+      // while merged, so the gesture cannot be driven through the UI there,
+      // and a check that reached past the UI to call onCommit directly would
+      // be asserting against a fixture rather than against the feature. See
+      // the M24 task-8 report for the declined check 180.
+      if (mergedRef.current) return
       setPanels((current) => {
         const next = addLink(current, from, to)
         // addLink returns the SAME array when it refuses (a self-link, a
