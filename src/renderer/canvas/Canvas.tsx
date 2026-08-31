@@ -4632,7 +4632,7 @@ export function Canvas({
                 />
               )
             }
-            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnWorkItem} />
+            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnWorkItem} onConnect={paletteActions.beginSetCredential} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

@@ -2100,6 +2100,9 @@ body {
 .work-node__item { border-bottom: 1px solid var(--s-3); padding: var(--sp-3) 0; }
 .work-node__item small { display: block; color: var(--fg-3); margin-top: var(--sp-1); }
 .work-node__item p { white-space: pre-wrap; margin: var(--sp-2) 0; }
+.work-node__group { margin-bottom: var(--sp-4); }
+.work-node__group-label { font-size: var(--t-xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: var(--track-caps); margin: 0 0 var(--sp-2); }
+.work-node__connect { margin-bottom: var(--sp-3); }
 
 .file-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
