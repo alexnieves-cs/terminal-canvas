@@ -287,6 +287,24 @@ so a transition into such a screen is refused with Jira's own sentence rather th
 
 What's still open:
 
+- **One declaration for the three Jira result types.** `JiraListResult`,
+  `JiraTransitionsResult` and `JiraWriteResult` are each declared TWICE — in
+  `main/jira-client.ts` and again in `shared/ipc-contract.ts` — because that is how M19
+  left `JiraListResult` and M24 followed the established pattern rather than making the
+  new pair the odd ones out. `ipcMain.handle` is not typed by the contract, so the two
+  copies can drift with `tsc` silent, and the failure is one-directional and quiet:
+  rename a field in `jira-client.ts` alone and the renderer reads `undefined`, rendering
+  an empty transition list — indistinguishable from a ticket with no legal moves, which
+  is a routine state. The fix is small (`import type` is erased by esbuild, so the
+  plain-node verify tier is untouched) and the evidence for it is a measurement rather
+  than a principle: M24's own final fix round had to edit the same three-line type in two
+  files and confirm the match by reading a diff, which nothing enforces. Unify all three
+  at once — fixing only the new pair recreates the asymmetry that produced this.
+  **`listAssignedWorkItems` is where the same drift recurs next**: it still maps HTTP
+  statuses inline rather than through `statusFailure`, correctly for now (a different
+  union answering a different question), and the day it grows a `refused` arm is the day
+  that inline copy has to agree with a mapping it does not share.
+
 - **Server / Data Center.** A different auth story entirely, and still unaddressed. Cloud was
   assumed and said so, which is what this entry asked for.
 - **OAuth 3LO**, per the deferral above.
