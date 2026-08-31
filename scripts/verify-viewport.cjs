@@ -1396,7 +1396,7 @@ ok('74 a panel with no kind is not a review panel',
 {
   const p = V.makeWorkPanel('w4', { x: 1000, y: 500 }, 3, 'github')
   const jira = V.makeWorkPanel('w5', { x: 0, y: 0 }, 1, 'jira')
-  ok('93 makeWorkPanel centres exactly, carries its provider and takes its title from the shared label',
+  ok('work-panel.1 makeWorkPanel centres exactly, carries its provider and takes its title from the shared label',
     p.kind === 'work' && p.provider === 'github' && p.z === 3 &&
       p.rect.x === 1000 - V.WORK_W / 2 && p.rect.y === 500 - V.WORK_H / 2 &&
       p.title === 'GitHub' && jira.title === 'Jira' && V.isWorkPanel(p) === true,

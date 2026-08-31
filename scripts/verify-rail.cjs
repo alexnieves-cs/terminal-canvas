@@ -1879,9 +1879,14 @@ const inventory = (over) => ({
 }
 
 
-// M24 — the work node's own model, and the rail arm M17's jira panel never had.
+// M24 — the work node's own model, and the rail arm M17's jira panel never
+// had. SCOPED ids rather than integers: these were 110-113 until the merge,
+// where main's diagnostics block had already claimed all four and
+// verify:meta 22 reported the collision. A scoped id cannot collide with a
+// concurrent branch's next integer, which is the whole reason M27's audit
+// introduced them.
 //
-// 110. Every non-groups arm renders a heading AND a note, never nothing. A work
+// work-node.1. Every non-groups arm renders a heading AND a note, never nothing. A work
 // panel is one the user deliberately opened and dragged, and a panel that
 // renders nothing at all is indistinguishable from a broken one — the rule
 // buildFileNodeModel's own arms already obey (check 78). The non-vacuity clause
@@ -1892,13 +1897,13 @@ const inventory = (over) => ({
   const arms = ['no-credential', 'invalid-credential', 'rejected', 'rate-limited', 'unavailable', 'malformed']
   const models = arms.map((kind) => R.buildWorkNodeModel('github', { kind, reason: `reason ${kind}` }, undefined))
   const notes = models.map((m) => m.note)
-  ok(110, models.every((m) => typeof m.heading === 'string' && m.heading !== '' &&
+  ok('work-node.1', models.every((m) => typeof m.heading === 'string' && m.heading !== '' &&
       typeof m.note === 'string' && m.note !== '') &&
     new Set(notes).size === arms.length,
     JSON.stringify(notes))
 }
 
-// 111. `connectable` is true for no-credential ALONE. It is what the node's
+// work-node.2. `connectable` is true for no-credential ALONE. It is what the node's
 // "Connect GitHub" verb is gated on, and a flag that is always true offers to
 // re-enter a credential to a user whose token was merely rate-limited — while a
 // flag that is always false deletes the one affordance a user with nothing
@@ -1910,12 +1915,12 @@ const inventory = (over) => ({
   const others = ['invalid-credential', 'rejected', 'rate-limited', 'unavailable', 'malformed']
     .map((kind) => R.buildWorkNodeModel('github', { kind, reason: 'x' }, undefined))
   const listed = R.buildWorkNodeModel('github', { kind: 'groups', groups: [] }, undefined)
-  ok(111, connect.connectable === true && others.every((m) => m.connectable === false) &&
+  ok('work-node.2', connect.connectable === true && others.every((m) => m.connectable === false) &&
     listed.connectable === false,
     `connect=${connect.connectable} others=${others.map((m) => m.connectable).join(',')}`)
 }
 
-// 112. An EMPTY group RENDERS with its own note rather than vanishing, and a
+// work-node.3. An EMPTY group RENDERS with its own note rather than vanishing, and a
 // group holding fewer items than the service's total SAYS so. verify:rail 43's
 // rule for the review pane's `clean` arm reaching a second section: a user with
 // no review requests and a user whose query silently failed must not see the
@@ -1930,7 +1935,7 @@ const inventory = (over) => ({
     ]
   }
   const m = R.buildWorkNodeModel('github', result, 'My queue')
-  ok(112, m.heading === 'My queue' && m.note === null && m.groups.length === 2 &&
+  ok('work-node.3', m.heading === 'My queue' && m.note === null && m.groups.length === 2 &&
     m.groups[0].rows.length === 1 &&
     typeof m.groups[0].note === 'string' && m.groups[0].note.includes('231') &&
     m.groups[1].rows.length === 0 &&
@@ -1939,7 +1944,7 @@ const inventory = (over) => ({
     JSON.stringify(m.groups.map((g) => [g.label, g.rows.length, g.note])))
 }
 
-// 113. The rail and inspector arms together, and this check closes a
+// work-node.4. The rail and inspector arms together, and this check closes a
 // PRE-EXISTING gap the rename surfaced rather than caused: `rail-rows.ts` has
 // arms for `file` and `toolbox` — both placed BEFORE the dormant test, both
 // commented with the same reason — and has never had one for `jira`. So a work
@@ -1955,7 +1960,7 @@ const inventory = (over) => ({
   const tail = R.railTail(undefined, true, 'work')
   const rows = R.buildRailRows([wp], () => undefined, new Set(['w1']))
   const inspector = R.buildInspectorModel(wp, undefined)
-  ok(113, tail === 'work' && rows[0]?.tail === 'work' && rows[0]?.dormant === false &&
+  ok('work-node.4', tail === 'work' && rows[0]?.tail === 'work' && rows[0]?.dormant === false &&
     inspector.restartable === false && inspector.reattached === false,
     `tail=${tail} rowTail=${rows[0]?.tail} dormant=${rows[0]?.dormant} restartable=${inspector.restartable}`)
 }

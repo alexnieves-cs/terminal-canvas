@@ -102,7 +102,7 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
   // owns no process. M27 spelled the kind `jira`; M24 renamed that kind to
   // `work`, so the value is M24's and the reasoning is both. verify:rail
   // kind-tail.1 covers every kind at once, which is what stops a seventh kind
-  // repeating it quietly, and verify:rail 113 pins this one arm end to end.
+  // repeating it quietly, and verify:rail `work-node.4` pins this one arm end to end.
   if (kind === 'work') return 'work'
   if (dormant) return 'dormant'
   if (status === undefined) return 'not started'

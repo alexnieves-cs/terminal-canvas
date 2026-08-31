@@ -1484,9 +1484,10 @@ const WS = [
 }
 
 
-// M24 — one palette row per work provider.
+// M24 — one palette row per work provider. SCOPED ids: these were 85-86
+// until the merge, where main's broadcast-input row had claimed 85.
 //
-// 85. One row per provider, ALWAYS VISIBLE, each aimed at its OWN provider.
+// work-row.1. One row per provider, ALWAYS VISIBLE, each aimed at its OWN provider.
 // The always-visible half is the fix: M17's jira row rendered only when a Jira
 // credential existed, which is exactly the failure check 70's own comment
 // names for the credential Add row — the row a user WITHOUT the integration
@@ -1500,7 +1501,7 @@ const WS = [
   const connected = ctx({ credentials: [{ service: 'github', label: 'octocat', addedAt: 'now', verifiedAt: 'now' }] })
   const github = byId(P.buildCommands(connected), 'work.open.github')
   if (github) github.run()
-  ok(85, work.length === 2 &&
+  ok('work-row.1', work.length === 2 &&
     work.every((r) => typeof r.disabledReason === 'string') &&
     github !== undefined && github.disabledReason === undefined &&
     connected.actions.calls.length === 1 &&
@@ -1509,7 +1510,7 @@ const WS = [
     `rows=${work.length} ids=${work.map((r) => r.id).join(',')} calls=${JSON.stringify(connected.actions.calls)}`)
 }
 
-// 86. An unconnected provider's row is DISABLED WITH A REASON naming that
+// work-row.2. An unconnected provider's row is DISABLED WITH A REASON naming that
 // provider, never absent — and the two reasons DIFFER, because "connect Jira"
 // and "connect GitHub" send the user to two different places. Compared against
 // the EXPORTED constant rather than a string literal, which would keep passing
@@ -1519,7 +1520,7 @@ const WS = [
   const rows = P.buildCommands(ctx({ credentials: [] }))
   const jira = byId(rows, 'work.open.jira')
   const github = byId(rows, 'work.open.github')
-  ok(86, typeof P.REASON_NO_CONNECTION === 'function' &&
+  ok('work-row.2', typeof P.REASON_NO_CONNECTION === 'function' &&
     jira?.disabledReason === P.REASON_NO_CONNECTION('Jira') &&
     github?.disabledReason === P.REASON_NO_CONNECTION('GitHub') &&
     jira.disabledReason !== github.disabledReason,
