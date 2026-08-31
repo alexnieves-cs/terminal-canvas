@@ -1257,35 +1257,38 @@ two that were never about naming a spawn:
   proved the spec half is free, because it is already on the session. The env is not free,
   because capturing a running panel's env captures its secrets — #31.
 
-## 35. Groups — a labelled region that owns what is inside it
+## 35. Groups — a labelled region that owns what is inside it — **done, M25**
 
-Draw a box around several panels, name it, and have it behave as one thing: drag the group
-and its panels come with it, collapse it and they card, colour it and the canvas gets
-regions that mean something.
+M25 makes a marquee selection into a named, coloured region from the command palette. The
+region persists as group membership plus presentation state, rather than nesting panels or
+inventing a second process owner: its box is derived from the member rects, so a resize or
+ordinary panel drag keeps the label honest. Its header moves the region and
+its members together; the `card` control is the deliberate collapsed state, and `×` removes
+only the grouping.
 
 - **Why it fits:** this is the middle scale the app is missing. A panel is one process; a
   workspace (#2) is a whole canvas. "These four panels are the auth refactor" is neither,
   and it is the unit people actually think in. It is also the cheapest way to make a
   twelve-panel canvas legible, because the labelling is spatial rather than a list.
-- **Constraint: dragging a group is `applyDrag` N times, and the caller-side rule applies N
-  times.** The gotcha is already written down — recompute every frame from the gesture's
-  **origin** rects, never from the previous frame's result, or the group shears apart at
-  low zoom and breaks outright if the user zooms mid-drag. One panel makes that mistake
-  survivable; four make it visible.
-- **Constraint: a group must not touch array order.** Stacking is `Panel.z`, never array
-  order, because React reconciles a reordered keyed list by moving DOM nodes and a move
-  detaches a live terminal's host. "Bring group to front" is therefore a `z` rewrite across
-  its members, exactly like `raisePanel`, and the temptation to model a group as a nested
-  array of panels is the temptation to reintroduce that bug structurally.
-- **Constraint: collapsing is a tier hint, never a kill.** A collapsed group should card its
-  members — which is what tiering already does, and is free — and must not reach `dispose`.
-  This is "two lifetimes" again, arriving through a new door. The interesting variant is
-  whether a collapsed group should be allowed to *hold* panels below the live budget
-  deliberately, as a user-facing way to say "these are running but I am not watching them".
-- **This is the second-cleanest candidate for the panel-kind union**, after #14: a group is
-  a canvas node that is not a terminal, costs nothing against `LIVE_BUDGET`, and has no
-  session at all. If #14 is not scheduled first, this is the entry that will otherwise get
-  faked as a special case.
+- **Dragging is `applyDrag` N times, from N immutable origin rects.** `groups.ts` carries one
+  `DragState` per member and applies the current cursor point to each, rather than accumulating
+  a delta from the previous frame. The group therefore cannot shear at low zoom or when the
+  camera zooms during the drag; `verify:groups` check 2 pins the shared origin delta.
+- **It never touches panel array order.** Bringing a group forward rewrites the members'
+  `Panel.z` values and preserves their array positions, so React never detaches a live terminal
+  host. `verify:groups` check 3 asserts both halves.
+- **Collapsing is a tier hint, never a kill.** `assignTiers` now accepts forced card ids; group
+  membership supplies them and no path reaches `dispose`. It even outranks focus, so collapse
+  means card consistently while the PTY and `PanelSession` remain alive. `verify:groups` check
+  4 pins that specific non-kill boundary.
+- **Persistence repairs, rather than discards, a partly stale group.** A closed or moved-away
+  member is pruned; a group with no surviving members disappears. The parser rejects malformed
+  labels/colours and validates membership against the surviving panel set, while pre-M25 files
+  simply read as `groups: []`.
+- **Merged view deliberately omits group regions for now.** Lanes translate panel rects into a
+  synthetic coordinate system, so rendering the active workspace's un-translated groups there
+  would lie. The mode remains read-only and group creation is disabled until a merged group
+  placement design exists.
 - **Open question: is a group a workspace you can see?** If groups exist, #2's "move
   selection to a new workspace" becomes "promote this group", and the two features start
   looking like one feature at two zoom levels. Worth deciding rather than discovering.

@@ -226,6 +226,8 @@ export interface PaletteActions {
    * what makes Escape a real cancel.
    */
   beginMovePanelsToNewWorkspace(panelIds: string[]): void
+  /** Name the current multi-selection as one movable canvas region. */
+  beginCreateGroup(panelIds: string[]): void
   /**
    * Enter M14's merged view — every workspace's panels at once, in lanes —
    * or leave it. ONE verb rather than an enter/leave pair: the row and the
@@ -367,6 +369,7 @@ export const REASON_NOT_AN_AGENT = 'that panel is not running a known agent'
 // gestures: collapsing them would tell a user who has selected text that they
 // need to select text, which sends them to do the thing they already did.
 export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag first'
+export const REASON_GROUP_NEEDS_TWO = 'select at least two panels to make a group'
 /**
  * The merged view is read-only, so the move rows refuse there.
  *
@@ -1010,6 +1013,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // open, and a row reading only "Move to school" is a verb with an invisible
   // object.
   const count = `${ctx.selectedIds.length} panel${ctx.selectedIds.length === 1 ? '' : 's'}`
+
+  out.push(
+    withReason(
+      {
+        id: 'canvas.group-selection',
+        title: `Group ${count}…`,
+        searchText: 'group selected panels region label',
+        group: 'canvas',
+        run: () => actions.beginCreateGroup(ctx.selectedIds)
+      },
+      ctx.merged
+        ? REASON_MERGED_READ_ONLY
+        : (ctx.selectedIds.length < 2 ? REASON_GROUP_NEEDS_TWO : undefined)
+    )
+  )
 
   for (const w of ctx.workspaces) {
     out.push({

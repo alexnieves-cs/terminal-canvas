@@ -250,6 +250,7 @@ const fakeClock = () => {
 }
 const CANVAS = {
   panels: [{ id: 'p1', x: 5, y: 6, w: 720, h: 460, z: 2, cwd: '~', args: ['-l'] }],
+  groups: [],
   camera: { x: 1, y: 2, scale: 1.5 },
   selectedId: 'p1',
   focusedId: null

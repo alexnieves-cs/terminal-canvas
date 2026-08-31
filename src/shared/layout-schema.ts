@@ -3,6 +3,7 @@ import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
+import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import {
   AGENT_KINDS,
   EFFORTS,
@@ -223,6 +224,8 @@ export interface PersistedCamera {
  */
 export interface CanvasState {
   panels: PersistedPanel[]
+  /** Optional on disk for every layout written before groups existed. */
+  groups: PersistedGroup[]
   camera: PersistedCamera
   selectedId: string | null
   focusedId: string | null
@@ -294,6 +297,7 @@ export function defaultWorkspace(): Workspace {
     id: DEFAULT_WORKSPACE_ID,
     name: 'Canvas',
     panels: [],
+    groups: [],
     camera: { ...DEFAULT_CAMERA },
     selectedId: null,
     focusedId: null
@@ -872,6 +876,57 @@ function parseCamera(raw: unknown, warnings: string[]): PersistedCamera {
   return { x: raw.x, y: raw.y, scale: raw.scale }
 }
 
+/**
+ * A group with a missing panel is repaired, not dropped: closing a panel is a
+ * normal action and a group containing three surviving members still says
+ * something useful. The all-missing case is dropped because an empty region
+ * has no spatial anchor and would become an uncloseable floating label.
+ */
+function parseGroups(raw: unknown, panelIds: ReadonlySet<string>, warnings: string[]): PersistedGroup[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a groups field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const groups: PersistedGroup[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry) || !isStr(entry.id) || !ID_PATTERN.test(entry.id) || seen.has(entry.id)) {
+      warnings.push('dropped a group with an unusable or duplicate id')
+      continue
+    }
+    if (!isStr(entry.label) || entry.label.trim() === '') {
+      warnings.push(`dropped group ${entry.id}: label was unusable`)
+      continue
+    }
+    if (!(GROUP_COLOURS as readonly string[]).includes(entry.colour as string)) {
+      warnings.push(`dropped group ${entry.id}: colour was unusable`)
+      continue
+    }
+    if (!Array.isArray(entry.panelIds) || !entry.panelIds.every(isStr)) {
+      warnings.push(`dropped group ${entry.id}: panel ids were unusable`)
+      continue
+    }
+    const members = [...new Set(entry.panelIds)].filter((id) => panelIds.has(id))
+    if (members.length === 0) {
+      warnings.push(`dropped group ${entry.id}: it had no surviving panels`)
+      continue
+    }
+    if (members.length !== entry.panelIds.length) {
+      warnings.push(`dropped missing or duplicate members from group ${entry.id}`)
+    }
+    seen.add(entry.id)
+    groups.push({
+      id: entry.id,
+      label: entry.label,
+      colour: entry.colour as PersistedGroup['colour'],
+      panelIds: members,
+      ...(typeof entry.collapsed === 'boolean' && entry.collapsed ? { collapsed: true } : {})
+    })
+  }
+  return groups
+}
+
 function parseWorkspace(raw: unknown, index: number, warnings: string[]): Workspace | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped workspace ${index}: not an object`)
@@ -980,6 +1035,7 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     id,
     name,
     panels,
+    groups: parseGroups(raw.groups, surviving, warnings),
     camera: parseCamera(raw.camera, warnings),
     selectedId: pick(raw.selectedId),
     focusedId: pick(raw.focusedId)

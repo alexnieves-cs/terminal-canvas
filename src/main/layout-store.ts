@@ -307,11 +307,13 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // the same shape as PanelSpec.command, where main resolves what only
     // main can know and the renderer consumes the answer.
     const panels = layout ? w.panels.map((p) => ({ ...p })) : []
+    const groups = layout ? (w.groups ?? []).map((g) => ({ ...g, panelIds: [...g.panelIds] })) : []
     // With no panels there is nothing for a selection to name, so it goes
     // regardless of the focus setting.
     const keepSelection = layout && focus
     return {
       panels,
+      groups,
       camera: camera ? { ...w.camera } : { ...defaultWorkspace().camera },
       selectedId: keepSelection ? w.selectedId : null,
       focusedId: keepSelection ? w.focusedId : null
@@ -333,7 +335,10 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // setting was last on; re-checking the box gives it back. Preserving is
     // strictly better than destroying, and it is the only reading under
     // which "restore on launch" is not secretly "discard on launch".
-    if (layout) w.panels = incoming.panels.map((p) => ({ ...p }))
+    if (layout) {
+      w.panels = incoming.panels.map((p) => ({ ...p }))
+      w.groups = (incoming.groups ?? []).map((g) => ({ ...g, panelIds: [...g.panelIds] }))
+    }
     // selectedId/focusedId name panels, so they ride with `layout` (whether
     // there is anything to select) as well as `focus` (whether selection
     // itself restores) — either OFF is a reason to leave them alone.
