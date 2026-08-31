@@ -753,12 +753,22 @@ The universal "maximise this" gesture.
 
 ## 24. Edges between panels — the FUNCTIONAL half is what is left
 
-**The decorative half shipped in M13**, as *links*. A user draws a directed,
-optionally labelled line from one panel to another; it persists, it survives a
-reload, and closing either endpoint removes it in the same undoable step. See
+**The decorative half is now complete, in two milestones.** M13 built the
+MODEL: a directed, optionally labelled line from one panel to another, which
+persists, survives a reload, and leaves in the same undoable step as either
+endpoint. M24 built the ERGONOMICS, which is what made the model findable —
+four port handles revealed on hover, a drag with a live ghost curve and a ring
+on the prospective target, snapping to a panel within a screen-space radius,
+edges rendered as bezier curves that leave each border perpendicular, and an
+`×` badge on hover that removes one. M13 shipped links that worked and that
+almost nobody would find (arm a mode from the palette, then click); M24 is the
+milestone that made linking a thing you do by pointing at the two panels. See
 `CLAUDE.md`'s "The code says `link`, and `edge` already means something else"
-and the eleven entries after it, and
-[`docs/superpowers/specs/2026-08-30-m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md).
+and the entries after it — including M24's own, beginning at "The link layer's
+guarantee moved from STRUCTURAL to CONVENTIONAL" — and both specs:
+[`m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md)
+and
+[`m24-link-drawing-design.md`](superpowers/specs/2026-08-30-m24-link-drawing-design.md).
 
 The entry stays because #24 named **two flavours and said they should not be
 built at once**. One was built. This is the other.
@@ -777,7 +787,12 @@ built at once**. One was built. This is the other.
 - **What M13 leaves ready.** The primitive is built generally rather than as a
   private detail of #7's subagent visualisation, which is what #24 asked for:
   same renderer, same z-order answer, same persistence. #7's parent-to-subagent
-  edges can render on `LinkLayer` without inventing a second scheme.
+  edges can render on `LinkLayer` without inventing a second scheme. **M24 adds
+  to that inventory**: `linkPath`/`linkControls` (a bezier from two anchors,
+  pure and plain-node checkable), `nearestLinkTarget` (a drop resolver that
+  prefers containment and excludes its own source), and `PanelPorts` (one
+  component, five call sites) — so a functional edge would be a new MEANING on
+  an existing gesture rather than a second gesture.
 - **Constraint, now discharged:** edges join `Panel.z`'s ordering rather than
   inventing a second scheme — the layer sits at `z-index: 0`, beneath every
   panel, since `nextZ` mints `z >= 1` — and they take no `LIVE_BUDGET` slot and
@@ -789,16 +804,35 @@ built at once**. One was built. This is the other.
   not survive validation, because a file can be hand-edited between launches.
 - **Constraint the functional half inherits:** a functional edge would have to
   survive the same rule the decorative one does — the completing gesture must
-  never wake a dormant panel (`verify:panels` 126). A rule that *fires* on a
-  dormant panel is a harder version of the same question, and M13 does not
-  answer it.
+  never wake a dormant panel — `verify:panels` 126 for M13's armed click, and
+  175 for M24's port drag, which holds it by CONSTRUCTION (waking hangs off
+  `onSelectPanel`, which fires from mousedown, and the port consumed ours) and
+  is checked anyway, because "holds by construction" is exactly the claim a
+  later refactor breaks silently. A rule that *fires* on a dormant panel is a
+  harder version of the same question, and neither milestone answers it.
+- **Constraint the functional half inherits, added by M24:** the layer's
+  pointer guarantee is no longer structural. It was one CSS declaration
+  (`pointer-events: none` on `.link-layer` and everything in it) and is now a
+  convention — two descendants opt back in, and hold the invariant only because
+  neither consumes the event. Anything the functional half adds to that layer
+  inherits the same obligation and the same silent failure; `CLAUDE.md`'s entry
+  and `verify:panels` 127 are the authority.
 - **Deliberately still absent, and each is a decision rather than an
-  oversight:** link selection on the canvas (the inspector is the only surface
-  that acts on a link, because a hairline at `MIN_SCALE` is a sub-pixel target
-  and hit-testing one would cost `pointer-events: none`); routing (a link is a
-  straight segment and passes under intervening panels); culling and any bound
-  on link count; and cross-workspace links, which are representable — `PanelId`
-  is global — and render as nothing.
+  oversight:** link SELECTION on the canvas — M24 gave a link a hover hit
+  target and a remove badge, so removing one is no longer a trip to the
+  inspector, but there is still no selected-edge state, no `Delete` key owner
+  and no relabel-by-keyboard, because a hairline at `MIN_SCALE` (0.1) is a
+  sub-pixel target and edge selection would have to coexist with panel
+  selection and the marquee; ROUTING, in the sense of avoidance — M24 replaced
+  the straight segment with a bezier that leaves each border perpendicular, and
+  a curve still passes under intervening panels because nothing routes around
+  them; PERSISTED PORT SIDES, so an edge does not remember it left A's right
+  side and re-derives its anchors from the live centre-to-centre bearing every
+  frame (`linkAnchors` reserves an unused third parameter for the milestone
+  that changes that, and taking it grows `PanelLink`, both parsers and
+  `layout-adapt`'s round trip — which is exactly the scope M24 saved by
+  declining it); culling and any bound on link count; and cross-workspace
+  links, which are representable — `PanelId` is global — and render as nothing.
 
 ## 25. Where a new panel goes — placement, snapping, and tidy
 
