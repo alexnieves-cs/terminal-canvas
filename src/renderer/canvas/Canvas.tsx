@@ -8,6 +8,7 @@ import { useDiagnostics } from './useDiagnostics'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
+import { useSpaceHeld } from './useSpaceHeld'
 import { SubagentLayer } from './SubagentLayer'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
@@ -992,11 +993,16 @@ export function Canvas({
   )
 
   const {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
+    beginPanDrag, panning
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
   )
+  // Backlog #68: space-drag and middle-drag pan for the mouse-only user. See
+  // useSpaceHeld.ts for why this is gated on real DOM focus rather than the
+  // app's own focusedId/palette/draft state.
+  const spaceHeld = useSpaceHeld()
   const version = useRegistryVersion(registry)
   const machineCostTotal = useMachineCostTotal()
 
@@ -2583,6 +2589,30 @@ export function Canvas({
     return true
   }
 
+  /**
+   * Backlog #68: middle-drag pan. Composed with `onLinkModeMouseDownCapture`
+   * in the SAME capture-phase slot rather than a second prop (React allows
+   * one `onMouseDownCapture` per element) — this is the "arbitrated in the
+   * same place as the capture-phase wheel listener" constraint the backlog
+   * entry names: middle-button must be claimed BEFORE any panel's own
+   * onMouseDown runs, because no panel chrome handler in this codebase
+   * checks event.button, so an unguarded middle-press over a panel's chrome
+   * would start a PANEL drag via usePanelDrag instead of a camera pan.
+   *
+   * Gated on the palette and the nav grid, mirroring shouldYieldWheel's
+   * rules 0-1 (both already stand every other canvas gesture down while
+   * open). No `merged` gate, matching wheel's own rules — panning the
+   * lane-space camera is harmless read-only navigation.
+   */
+  const onCanvasMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
+    if (onLinkModeMouseDownCapture(event)) return
+    if (event.button !== 1) return
+    if (palette.isOpen() || navGridIsOpenRef.current()) return
+    event.preventDefault()
+    event.stopPropagation()
+    beginPanDrag({ x: event.clientX, y: event.clientY })
+  }
+
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
@@ -2622,7 +2652,13 @@ export function Canvas({
       // a selection spanning workspaces — a move whose source records are not
       // the one this canvas owns. Selection by click stays available; it is
       // the SWEEP that silently crosses a boundary.
-      if (world && !palette.isOpen() && !merged) beginMarquee(world)
+      if (world && !palette.isOpen() && !merged) {
+        // Backlog #68: space-drag substitutes for the marquee in this exact
+        // branch — both are "what does a background press start" — never
+        // both at once. Reuses the marquee's own gates verbatim.
+        if (spaceHeld.isHeld()) beginPanDrag({ x: event.clientX, y: event.clientY })
+        else beginMarquee(world)
+      }
     }
     // Focus is released together with selection. assignTiers pins the focused
     // panel live unconditionally — off screen, below the scale threshold,
@@ -4855,9 +4891,15 @@ export function Canvas({
         attention={railAttention}
       />
       <div
-        className="canvas"
+        // `panning` is real React state (flips only at drag begin/end, so no
+        // 60Hz cost); spaceHeld.isHeld() reads a ref and is therefore
+        // best-effort here — Canvas already re-renders on nearly every
+        // mousemove (setCursor), so the class catches up within a frame or
+        // two of the keypress rather than exactly on it. Cursor feedback
+        // only; the gesture itself never consults this className.
+        className={`canvas${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}`}
         ref={hostRef}
-        onMouseDownCapture={onLinkModeMouseDownCapture}
+        onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onDragOver={onDragOver}

@@ -84,6 +84,24 @@ export interface ViewportControls {
    * the keydown case cannot drift apart.
    */
   fitAll: () => void
+  /**
+   * Arms a camera drag-pan from a mousedown's screen coordinates — backlog
+   * #68's middle-drag and space-drag. The seventh narrow verb, after
+   * resetViewport/worldCentre/centreOn/restoreCamera/zoomBy/fitAll: the
+   * setter stays private, so Canvas.tsx hands over only the originating
+   * screen point and everything else — the document-level mousemove/mouseup,
+   * the origin-recompute-every-frame arithmetic `panBy` already does for the
+   * wheel path — lives here, next to the wheel listener's own pan logic,
+   * rather than as a second, competing gesture layer in Canvas.tsx.
+   */
+  beginPanDrag: (originScreen: Point) => void
+  /**
+   * True for exactly the span of one drag-pan gesture. Cursor feedback only
+   * — flips twice per gesture (begin, end), never per frame, so it costs
+   * nothing like the render storm `version()`'s whole design exists to
+   * avoid.
+   */
+  panning: boolean
 }
 
 /**
@@ -430,5 +448,61 @@ export function useViewport(
     setViewport(restoreCameraExact(camera))
   }, [])
 
-  return { viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll }
+  /**
+   * Backlog #68: middle-drag and space-drag pan. `panDragRef` holds the
+   * ORIGIN — the screen point and the viewport as they were at mousedown —
+   * never the previous frame's result, for `applyDrag`'s own reason (see
+   * CLAUDE.md's note on panel-interaction.ts): recomputing from a fixed
+   * origin every frame avoids per-frame rounding drift and stays correct if
+   * the user's cursor jitters, where accumulating deltas would not.
+   *
+   * The move/up listeners are document-level and mounted ONCE (empty deps),
+   * the identical shape usePanelDrag.ts and the marquee's own beginMarquee
+   * both use: the cursor leaves whatever element the gesture started in
+   * constantly during a drag, and a host-scoped listener would simply stop
+   * tracking there.
+   */
+  const panDragRef = useRef<{ originScreen: Point; originViewport: Viewport } | null>(null)
+  const [panning, setPanning] = useState(false)
+
+  const beginPanDrag = useCallback((originScreen: Point) => {
+    panDragRef.current = { originScreen, originViewport: viewportRef.current }
+    setPanning(true)
+  }, [])
+
+  useEffect(() => {
+    const endPanDrag = (): void => {
+      if (!panDragRef.current) return
+      panDragRef.current = null
+      setPanning(false)
+    }
+
+    const onMove = (event: globalThis.MouseEvent): void => {
+      const state = panDragRef.current
+      if (!state) return
+      // A move with no button held cannot be part of this drag — the same
+      // guard usePanelDrag.ts's onMove and the marquee's onMove both carry,
+      // for the identical reason: Electron does not reliably deliver
+      // mouseup when the button goes up outside the window, and a gesture
+      // that outlives its mouseup would resume on the next bare hover.
+      if (event.buttons === 0) { endPanDrag(); return }
+      setViewport(panBy(
+        state.originViewport,
+        event.clientX - state.originScreen.x,
+        event.clientY - state.originScreen.y
+      ))
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', endPanDrag)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', endPanDrag)
+    }
+  }, [])
+
+  return {
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
+    beginPanDrag, panning
+  }
 }

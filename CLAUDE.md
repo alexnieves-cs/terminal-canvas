@@ -535,6 +535,53 @@ on the element that actually scrolls, or renders no marker at all if it owns non
 correctly renders no marker (a card has no xterm to hand the event to), which is also why the
 old `.panel__slot`-based test was subtly wrong even before other kinds existed.
 
+**Backlog #68's drag-pan lives inside `useViewport.ts`, next to the wheel listener's own pan
+logic, and never inside `Canvas.tsx` — the same "arbitrated in one place" rule the wheel
+predicate above states.** `beginPanDrag(originScreen)` is a sixth narrow verb (the setter
+stays private, as every entry on this camera already says); its document-level
+`mousemove`/`mouseup` effect mirrors `usePanelDrag.ts`'s shape exactly — origin captured once,
+recomputed from that fixed origin every frame, a `buttons === 0` mid-gesture end for a missed
+mouseup — and calls the same `panBy(vp, dx, dy)` the wheel path already uses, screen-pixel
+deltas needing no scale correction because `.world`'s translate sits outside its scale.
+
+**Middle-drag is claimed in the CAPTURE phase, composed with `onLinkModeMouseDownCapture`,
+because no panel chrome handler in this codebase checks `event.button`.** Every panel's own
+mousedown handler (chrome drag, resize, close) fires on ANY button today, so an unguarded
+middle-press over a panel's chrome would start a *panel* drag via `usePanelDrag` rather than a
+camera pan — the identical class of gap `useLinkMode`'s own capture-phase listener exists to
+close for the completing click of a link. `onCanvasMouseDownCapture` therefore checks
+`onLinkModeMouseDownCapture(event)` FIRST — never a second, competing `onMouseDownCapture`
+prop, since React allows exactly one per element — and only then `event.button === 1`, gated on
+the palette and the nav grid (mirroring `shouldYieldWheel`'s rules 0-1, both of which already
+stand every other canvas gesture down while open). No `merged` gate, matching the wheel's own
+rules: panning the lane-space camera is harmless read-only navigation.
+
+**Space-drag is gated on `document.activeElement`, never on reconstructing `focusedId` /
+`palette.isOpen()` / draft-element checks by hand (`useSpaceHeld.ts`).** Space is a bare key
+that belongs to whatever agent is running in a focused panel — "Cmd is required for every
+canvas shortcut" names the identical hazard — so a naive global claim would swallow a literal
+space keystroke meant for `vim`/`claude`. The backlog's own "nothing focused" is most precisely
+the DOM's own answer: when nothing legitimately wants a keystroke, `document.activeElement` is
+`document.body`. That ONE test subsumes four app-level facts a hand-built equivalent would need
+to get right separately — no panel focused (xterm's hidden textarea isn't active), the palette
+closed (its input isn't active), and no open review/file draft (their textareas aren't active)
+— the same DOM-truth-over-app-state instinct `xterm-pointer.ts`'s `.panel__slot` test and
+`useNavGrid`'s `.review-node__commit-form, .file-node__editor` test both already use. When
+something IS focused, the keydown handler does nothing at all — no `preventDefault`, no state
+change — so the keystroke flows exactly as if the hook did not exist.
+
+It arms ONLY inside the marquee's own background-press branch of `onMouseDown` (`hitTest`
+found nothing, `!palette.isOpen() && !merged`) — never a second branch, never capture phase —
+so space-drag and the marquee are two interpretations of the identical "background press"
+moment, never both: `if (spaceHeld.isHeld()) beginPanDrag(...) else beginMarquee(world)`. This
+is deliberately narrower than a Figma-style "space pans anywhere, even over a panel": the
+backlog's own text says "over the background," and a press that lands on a panel already goes
+through `onSelectPanel` in the `if (hit)` branch above, untouched. `verify:panels` 174-177: 174
+and 175 pin the middle-drag delta over background and over a live panel's chrome (the panel's
+own screen rect must shift by EXACTLY the camera's delta, proving it was panned and not
+dragged); 176 pins space-drag panning when nothing is focused; 177 pins that the identical
+gesture over a PANEL does not pan at all.
+
 **Dormancy outranks focus (`lod.ts`).** `assignTiers` pins the focused panel live
 unconditionally, so restoring focus onto a restored panel would spawn a process at boot,
 contradicting "dormant until clicked" before the user ever touches the canvas. `attachSlot`

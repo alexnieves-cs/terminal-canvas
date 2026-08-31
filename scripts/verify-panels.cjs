@@ -11950,6 +11950,154 @@ app.whenReady().then(async () => {
       try { rmSync(M22_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
+    // -----------------------------------------------------------------------
+    // Backlog #68: middle-drag and space-drag pan, end to end. `dragBy`
+    // mirrors dragFromTo's own reason for four intermediate moves — the
+    // gesture's listeners live on `document`, and a single jump would
+    // exercise neither the tracking nor the listener lifetime a real drag
+    // produces — and carries the matching *ButtonDown modifier on every
+    // move, since Chromium derives MouseEvent.buttons from the modifier
+    // bitfield rather than from the button field, the exact trap
+    // `dragFromTo`'s own comment records for isAutoRepeat.
+    {
+      const dragBy = async (from, dx, dy, button, downMod) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button, clickCount: 1 })
+        for (let i = 1; i <= 4; i++) {
+          wc.sendInputEvent({
+            type: 'mouseMove',
+            x: Math.round(from.x + (dx * i) / 4),
+            y: Math.round(from.y + (dy * i) / 4),
+            button,
+            modifiers: [downMod]
+          })
+        }
+        wc.sendInputEvent({
+          type: 'mouseUp', x: from.x + dx, y: from.y + dy, button, clickCount: 1
+        })
+      }
+
+      // 174. Middle-drag over the background pans the camera by the EXACT
+      // delta and spawns/selects/focuses nothing — the "free half" the
+      // backlog names, since no terminal treats a bare middle-click as
+      // meaningful input.
+      {
+        const before = await panelCount(wc)
+        const start = await backgroundPoint(wc)
+        const vpBefore = start ? await wc.executeJavaScript(`window.__m4aViewport()`) : null
+        let vpAfter = null
+        if (start) {
+          await dragBy(start, 130, -70, 'middle', 'middleButtonDown')
+          await settle()
+          vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        }
+        const after = await panelCount(wc)
+        const dx = vpAfter && vpBefore ? Math.round(vpAfter.x - vpBefore.x) : null
+        const dy = vpAfter && vpBefore ? Math.round(vpAfter.y - vpBefore.y) : null
+        ok('174 a middle-button drag over the background pans the camera by the exact delta, spawning nothing',
+          start !== null && dx === 130 && dy === -70 && vpAfter.scale === vpBefore.scale && after === before,
+          `start=${JSON.stringify(start)} before=${JSON.stringify(vpBefore)} after=${JSON.stringify(vpAfter)} panels ${before} -> ${after}`)
+      }
+
+      // 175. Middle-drag STARTING ON A LIVE PANEL's chrome also pans the
+      // camera, and the panel itself is neither selected, focused, dragged
+      // nor resized — the check that proves the capture-phase intercept
+      // wins over panel chrome, since no panel handler in this codebase
+      // checks event.button and would otherwise start a PANEL drag.
+      {
+        const rect = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.panel')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { id: el.getAttribute('data-panel-id'), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 10) }
+        })()`)
+        const before = rect ? await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.panel[data-panel-id="${rect.id}"]')
+          const r = el.getBoundingClientRect()
+          return { x: Math.round(r.left), y: Math.round(r.top), selected: el.classList.contains('panel--selected') }
+        })()`) : null
+        const vpBefore = rect ? await wc.executeJavaScript(`window.__m4aViewport()`) : null
+        let vpAfter = null
+        let afterRect = null
+        if (rect) {
+          await dragBy({ x: rect.x, y: rect.y }, 90, 40, 'middle', 'middleButtonDown')
+          await settle()
+          vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+          afterRect = await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('.panel[data-panel-id="${rect.id}"]')
+            const r = el.getBoundingClientRect()
+            return { x: Math.round(r.left), y: Math.round(r.top), selected: el.classList.contains('panel--selected') }
+          })()`)
+        }
+        const dx = vpAfter && vpBefore ? Math.round(vpAfter.x - vpBefore.x) : null
+        // The panel's own WORLD rect never moved (this is a camera pan, not
+        // a panel drag), so its SCREEN rect must have shifted by exactly the
+        // camera's own delta — screen = world * scale + vp, and scale is
+        // unchanged. A panel that had instead been DRAGGED would show some
+        // other delta (or none, if the drag never started).
+        const panelRectUnchanged = before && afterRect && dx !== null &&
+          Math.abs((afterRect.x - before.x) - dx) <= 1
+        ok('175 a middle-drag starting on a live panel pans the camera and neither selects nor drags the panel',
+          rect !== null && dx === 90 && before.selected === false && afterRect.selected === false && panelRectUnchanged,
+          `panel=${rect && rect.id} before=${JSON.stringify(before)} after=${JSON.stringify(afterRect)} vp ${JSON.stringify(vpBefore)} -> ${JSON.stringify(vpAfter)}`)
+      }
+
+      // 176. Space + left-drag pans the background ONLY while nothing is
+      // focused — the backlog's central constraint, exercised rather than
+      // only argued. A bare key reaches the agent, so the keydown is
+      // dispatched with code 'Space' (the repeat-guard checks' own idiom),
+      // and the guard's real behaviour turns on document.activeElement,
+      // which a background click already puts at <body>.
+      {
+        const bg = await backgroundPoint(wc)
+        wc.sendInputEvent({ type: 'mouseDown', x: bg.x, y: bg.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: bg.x, y: bg.y, button: 'left', clickCount: 1 })
+        await settle()
+
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
+        const start = await backgroundPoint(wc)
+        const vpBefore = start ? await wc.executeJavaScript(`window.__m4aViewport()`) : null
+        let vpAfter = null
+        if (start) {
+          await dragBy(start, -60, 55, 'left', 'leftButtonDown')
+          await settle()
+          vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        }
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }))`)
+        const dx = vpAfter && vpBefore ? Math.round(vpAfter.x - vpBefore.x) : null
+        const dy = vpAfter && vpBefore ? Math.round(vpAfter.y - vpBefore.y) : null
+        ok('176 space-held left-drag over the background pans the camera when nothing is focused',
+          start !== null && dx === -60 && dy === 55,
+          `start=${JSON.stringify(start)} before=${JSON.stringify(vpBefore)} after=${JSON.stringify(vpAfter)}`)
+      }
+
+      // 177. The same space+left-drag over a panel's own chrome (rather than
+      // the background) does NOT pan — "over the background" is
+      // load-bearing, not incidental, per the backlog's own text.
+      {
+        const rect = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.panel')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { id: el.getAttribute('data-panel-id'), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 10) }
+        })()`)
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
+        const vpBefore = rect ? await wc.executeJavaScript(`window.__m4aViewport()`) : null
+        let vpAfter = null
+        if (rect) {
+          await dragBy({ x: rect.x, y: rect.y }, 70, 30, 'left', 'leftButtonDown')
+          await settle()
+          vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        }
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }))`)
+        ok('177 space-held left-drag over a PANEL never pans the camera',
+          rect !== null && vpAfter.x === vpBefore.x && vpAfter.y === vpBefore.y,
+          `panel=${rect && rect.id} before=${JSON.stringify(vpBefore)} after=${JSON.stringify(vpAfter)}`)
+      }
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

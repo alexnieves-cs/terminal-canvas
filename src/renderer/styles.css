@@ -1210,6 +1210,13 @@ body {
   cursor: default;
 }
 
+/* Backlog #68: space-drag and middle-drag pan cursor feedback. --panning
+   wins over --space-armed (space held mid-drag still shows grabbing), and it
+   overrides even a panel's own cursor underneath — a drag started inside a
+   panel's terminal body must still read as a camera pan, not a text caret. */
+.canvas--space-armed { cursor: grab; }
+.canvas--panning, .canvas--panning * { cursor: grabbing !important; }
+
 /* The single transformed layer. transform-origin 0 0 is load-bearing: it is
    what makes world point w land at x + k*w, matching viewport.ts. */
 .world {
