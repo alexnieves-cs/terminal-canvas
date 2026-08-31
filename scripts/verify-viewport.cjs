@@ -409,6 +409,27 @@ const MOVE = { kind: 'move' }
     JSON.stringify(out))
 }
 
+// 29b. A group drag is N independent applyDrag calls, each from that panel's
+// own origin. A bounding-box translation can look right for equal panels, so
+// these origins differ in both position and dimensions; every member must
+// still get the same pointer delta and preserve its own shape.
+{
+  const a = { id: 'a', x: -250, y: 90, w: 720, h: 460 }
+  const b = { id: 'b', x: 480, y: -130, w: 330, h: 610 }
+  const originWorld = { x: 50, y: 75 }
+  const target = { x: 173, y: -44 }
+  const moved = [a, b].map((originRect) => V.applyDrag({
+    panelId: originRect.id, mode: MOVE, originRect, originWorld
+  }, target))
+  const [movedA, movedB] = moved
+  ok('29b a group move recomputes every member from its own origin',
+    movedA.x === a.x + 123 && movedA.y === a.y - 119 &&
+      movedB.x === b.x + 123 && movedB.y === b.y - 119 &&
+      movedA.w === a.w && movedA.h === a.h &&
+      movedB.w === b.w && movedB.h === b.h,
+    JSON.stringify(moved))
+}
+
 // 30. Resizing east changes width only. x/y must never move: a resize that
 //     drifts the origin is the exact bug that dropping the n/w edges avoids.
 {

@@ -7,7 +7,7 @@ import { buildToolboxNodeModel } from './toolbox-node-model'
 export interface ToolboxNodeProps {
   panel: ToolboxPanel
   selected: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, additive?: boolean) => void
   /**
    * The same onFocus a file panel's body calls, and it buys the same thing:
    * `shouldYieldWheel`'s rule 3 gives the wheel to the FOCUSED panel, so an
@@ -94,7 +94,7 @@ function ToolboxNodeImpl({
         onMouseDown={(event: ReactMouseEvent) => {
           event.stopPropagation()
           event.preventDefault()
-          onSelect(id)
+          onSelect(id, event.shiftKey)
           onBeginDrag({
             panelId: id,
             mode: { kind: 'move' },

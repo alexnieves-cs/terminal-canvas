@@ -17,7 +17,7 @@ import { marqueeRect, marqueeSelection } from './marquee'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
 import { usePanelDrag } from './usePanelDrag'
-import type { DragMode, DragState } from './panel-interaction'
+import type { DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ReviewNode } from '@renderer/review/ReviewNode'
@@ -259,6 +259,11 @@ export function Canvas({
    */
   const [merged, setMerged] = useState(false)
   const [mergedData, setMergedData] = useState<MergedWorkspace[] | null>(null)
+  // Selection and drag handlers need the merged boundary before their own
+  // declarations below; the stable ref also keeps memo'd panel callbacks from
+  // changing identity when this transient view toggles.
+  const mergedRef = useRef(merged)
+  mergedRef.current = merged
   const mergedView = useMemo(
     () => (mergedData ? mergedLayout(mergedData) : null),
     [mergedData]
@@ -481,9 +486,8 @@ export function Canvas({
     const id = `j${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
   }, [commitHistory])
-  // The selection is a SET, so a later marquee can build a multi-selection
-  // without renaming forty call sites. Nothing in this milestone creates one
-  // with more than a single member yet.
+  // The selection is a SET: M18's marquee and M26's additive click build a
+  // multi-selection without renaming the older single-selection call sites.
   //
   // focusedId is deliberately NOT widened alongside it. assignTiers pins the
   // focused panel live unconditionally, so focus is a budget-and-WebGL-context
@@ -492,6 +496,11 @@ export function Canvas({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() =>
     initial.selectedId === null ? EMPTY_SELECTION : new Set([initial.selectedId])
   )
+  // A chrome press selects and begins its drag in the same synchronous event.
+  // React has not re-rendered between those two calls, so group drag reads this
+  // mirror rather than a selection closure from the previous render.
+  const selectedIdsRef = useRef<ReadonlySet<string>>(selectedIds)
+  selectedIdsRef.current = selectedIds
   /**
    * The one selected panel, or null when zero OR MANY are selected. Every
    * existing reader of the selection — the inspector, the review query, the
@@ -521,7 +530,20 @@ export function Canvas({
   const selectedPanelIds = useMemo(() => [...selectedIds], [selectedIds])
 
   const selectOnly = useCallback((id: string | null): void => {
-    setSelectedIds(id === null ? EMPTY_SELECTION : new Set([id]))
+    const next = id === null ? EMPTY_SELECTION : new Set([id])
+    selectedIdsRef.current = next
+    setSelectedIds(next)
+  }, [])
+  /** Additive selection is deliberately add-only: background click clears. */
+  const addToSelection = useCallback((id: string): void => {
+    // A merged selection could contain ids owned by several workspaces. The
+    // marquee already refuses to construct one there; shift-click must uphold
+    // the same boundary rather than reopening that path through panel chrome.
+    if (mergedRef.current || selectedIdsRef.current.has(id)) return
+    const next = new Set(selectedIdsRef.current)
+    next.add(id)
+    selectedIdsRef.current = next
+    setSelectedIds(next)
   }, [])
   // M13/motion: an entry animation ends and the id leaves the set. Kept
   // beside the selection helpers rather than folded into them — it is a
@@ -721,8 +743,6 @@ export function Canvas({
    * nowhere. Everything that acts on what is SAVED keeps reading panelsRef —
    * that is the read-only split, restated as two refs.
    */
-  const mergedRef = useRef(merged)
-  mergedRef.current = merged
   /**
    * What the canvas looked like the instant before the merged view opened:
    * the camera, the selection and the focus.
@@ -1923,7 +1943,7 @@ export function Canvas({
       (id: string, rect: WorldRect) => setPanels((current) => setPanelRect(current, id, rect)),
       []
     ),
-    onCommit: useCallback((id: string, mode: DragMode) => {
+    onCommit: useCallback((states: readonly DragState[]) => {
       // One history entry per gesture. onDrag (above) called setPanels ~60
       // times during the drag; pushing there would make a single drag take
       // sixty Cmd+Z presses to undo. This runs exactly once, on mouseup,
@@ -1934,12 +1954,13 @@ export function Canvas({
         return current
       })
       // A move changes no terminal dimension, so it has nothing to commit.
-      if (mode.kind !== 'resize') return
+      const resized = states.filter((state) => state.mode.kind === 'resize')
+      if (resized.length === 0) return
       // One commit per gesture, never one per frame: a full-screen agent TUI
       // repaints its whole frame on every SIGWINCH, and resizing live would
       // mean sixty of those a second at sizes the user never meant to keep.
       // refit sends at most one pty:resize, and none if the grid is unchanged.
-      registry.refit(id)
+      for (const state of resized) registry.refit(state.panelId)
     }, [commitHistory])
   })
 
@@ -1965,13 +1986,25 @@ export function Canvas({
       // delta) is what makes the gesture move by screenDelta / scale:
       // usePanelDrag converts each move the same way, and the two translations
       // cancel in the subtraction applyDrag does.
-      beginDrag({
-        ...state,
+      // A group is N ordinary drags, not one drag of an enclosing rectangle.
+      // Snapshot every origin rect before the first frame rewrites `panels`,
+      // then apply the same pointer delta to each immutable origin in
+      // usePanelDrag. The pressed member is always present; a resize stays a
+      // one-member gesture even when a selection exists.
+      const group = state.mode.kind === 'move' && selectedIdsRef.current.has(state.panelId)
+        ? panelsRef.current.filter((panel) => selectedIdsRef.current.has(panel.rect.id)).map((panel) => ({
+            ...state,
+            panelId: panel.rect.id,
+            originRect: panel.rect
+          }))
+        : [state]
+      beginDrag(group.map((member) => ({
+        ...member,
         originWorld: screenToWorld(
-          { x: state.originWorld.x - bounds.left, y: state.originWorld.y - bounds.top },
+          { x: member.originWorld.x - bounds.left, y: member.originWorld.y - bounds.top },
           viewportRef.current
         )
-      })
+      })))
     },
     [beginDrag]
   )
@@ -2047,7 +2080,15 @@ export function Canvas({
    * Panel.z, never array order"), so it is safe for a navigation that must not
    * start a process, while registry.wake — onSelectPanel's other half — is not.
    */
-  const selectAndRaise = useCallback((id: string) => {
+  const selectAndRaise = useCallback((id: string, additive = false) => {
+    if (additive) {
+      addToSelection(id)
+      return
+    }
+    // Pressing the chrome of a member is how a completed selection begins a
+    // group drag. Do not erase its peers between that press and onBeginDrag;
+    // clicking an unselected panel, or the background, still replaces it.
+    if (selectedIdsRef.current.size > 1 && selectedIdsRef.current.has(id)) return
     selectOnly(id)
     setPanels((current) => {
       // Skip the raise (and the history push it would trigger) when `id` is
@@ -2068,7 +2109,7 @@ export function Canvas({
       commitHistory(next)
       return next
     })
-  }, [commitHistory])
+  }, [addToSelection, commitHistory, selectOnly])
 
   // Which panel the jump key last visited. A ref, not state: it is a cursor
   // for a keydown handler and nothing renders from it, so putting it in state
@@ -2125,7 +2166,11 @@ export function Canvas({
     selectAndRaise(id)
   }
 
-  const onSelectPanel = useCallback((id: string) => {
+  const onSelectPanel = useCallback((id: string, additive = false) => {
+    if (additive) {
+      selectAndRaise(id, true)
+      return
+    }
     selectAndRaise(id)
     // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
     // and so no focus handler of its own — its click falls through to the
@@ -2437,7 +2482,13 @@ export function Canvas({
     // panel's own chrome handler already does that, but a CARDED panel has no
     // handler of its own — its click falls through to the background path, and
     // calling selectOnly here directly would select it without raising it.
-    if (hit) onSelectPanel(hit)
+    if (hit) {
+      // A card reaches this background handler, unlike live panel chrome.
+      // It therefore shares the same shift-add path explicitly rather than
+      // waking a dormant card just because it joined a selection.
+      if (event.shiftKey) selectAndRaise(hit, true)
+      else onSelectPanel(hit)
+    }
     else {
       selectOnly(null)
       // The marquee starts ONLY where hitTest found nothing, which is why it
@@ -4705,7 +4756,7 @@ export function Canvas({
                 <FileNode
                   key={panel.rect.id}
                   panel={panel}
-                  selected={panel.rect.id === selectedId}
+                  selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
@@ -4724,7 +4775,7 @@ export function Canvas({
                 <ToolboxNode
                   key={panel.rect.id}
                   panel={panel}
-                  selected={panel.rect.id === selectedId}
+                  selected={selectedIds.has(panel.rect.id)}
                   // selectAndRaise, never onSelectPanel: the latter's
                   // clear-dormant and registry.wake are the SPAWN gesture, and
                   // a toolbox node can never spawn anything.
@@ -4735,7 +4786,7 @@ export function Canvas({
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

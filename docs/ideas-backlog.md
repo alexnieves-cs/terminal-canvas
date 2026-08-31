@@ -42,8 +42,9 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 | #3 file tree / codebase browser | M20 | "Every file row mounts `shellControl`, and here that is not a convention" |
+| #52 multi-select | M26 | "A group drag is N origin-based drags and one history gesture", "Selection stays inside the active workspace" |
 
-Thirteen more entries were rewritten rather than removed, because a milestone shipped most
+Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
 OAuth 3LO and a second provider), **#13** (the drop guard and Finder path resolution both
 landed; the handoff into the PTY did not), **#14** (M16 left tiers 2–4, and M22 answered
@@ -52,11 +53,10 @@ left history/retention, a second CLI adapter, the un-pinned panel and aggregate 
 **#25** (M6 left snapping and tidy), **#26** (M21
 left the cross-panel query and the editing half), **#27** (M5b left placeholders), **#34**
 (M5a left per-preset environment), **#41** (M12 left review's cwd resolution), **#51**
-(M9a–c left discard) and **#52** (M18 left shift-click and group drag). The membership
-churns rather than only growing, and that is the shape to expect: **#2** left this list for
-the gone table above when M18 finished it, while **#12**, **#13**, **#26** and **#52**
-joined it. An entry rewritten down to its open half is one milestone from leaving the file
-entirely.
+(M9a–c left discard). The membership churns rather than only growing, and that is the shape
+to expect: **#2** left this list for the gone table above when M18 finished it, while
+**#12**, **#13** and **#26** joined it. An entry rewritten down to its open half is one
+milestone from leaving the file entirely.
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -670,8 +670,9 @@ repos; the same prompt to four agents to compare how they answer it.
   already takes a panel id, so broadcast is a loop, not a channel. Multi-selection was the
   missing half and this entry used to say so outright; `Canvas.tsx` now tracks
   `selectedIds: Set<string>`, built by a rubber-band marquee, and the move-to-workspace
-  rows are the first consumer. What is still missing from #52 is shift-click and group
-  drag, neither of which broadcast needs.
+  rows are the first consumer. M26 completed #52's shift-click and group-drag half, so a
+  selection can now be built incrementally as well as swept; broadcast still needs only its
+  safety mode and routing contract.
 - **Constraint, and it is the dangerous one:** input routing today is *unambiguous* —
   keystrokes go to the focused session, and exactly one panel is focused. Broadcast makes
   the destination of a keystroke a mode, and a mode you can forget you are in. Typing
@@ -839,9 +840,9 @@ dragging, snapping, and a "tidy" command.
      function applied to its output, which keeps it plain-node testable.
   3. **Tidy** — a command that arranges the selection (or everything) onto a grid. Pure
      rect math over `Panel[]`. "The selection" is no longer hypothetical: M18 added
-     `selectedIds`, built by a rubber-band marquee, so a tidy has a real set to arrange
-     rather than a single `selectedId` that made "tidy the selection" mean "tidy one
-     panel".
+     `selectedIds`, and M26 completed its shift-click and group-drag gestures, so a tidy has
+     a real set to arrange rather than a single `selectedId` that made "tidy the selection"
+     mean "tidy one panel".
 - **Constraint:** all of it is *world-space* arithmetic, and the snap threshold is the
   place that gets it wrong. A snap distance in world units becomes visually huge when
   zoomed out and invisible when zoomed in; it should be specified in **screen** pixels and
@@ -1684,36 +1685,6 @@ app would have that destroys work.
   inherits `verify:rail` 57's rule: the set of paths comes from the *result*, never from the
   display-capped rows on screen.
 
-## 52. Multi-select — the two halves M18 left: shift-click and group drag
-
-M18 shipped the selection model and the marquee. `Canvas.tsx` now tracks
-`selectedIds: Set<string>`, a background drag rubber-bands (`canvas/marquee.ts`, pure and
-plain-node tested by `verify:merged` 8–12), and the resulting multi-selection is what the
-palette's *Move to workspace* rows act on. What is still open is the other two thirds of
-the original sentence: **shift-click to add to a selection**, and **group drag**, so a
-selection moves as one instead of only being a thing verbs are aimed at.
-
-- **The dangerous constraint of the original entry is discharged**, and it is worth knowing
-  which one. "The background `onMouseDown` currently means clear selection and release
-  focus" — the marquee had to claim that drag without dropping the focus release, because
-  an uncleared `focusedId` holds a WebGL context and a `LIVE_BUDGET` slot for the rest of
-  the run. It does: the release is unconditional and sits outside the hit/miss branch, and
-  `verify:panels` 136 asserts both halves at once, the DOM's idea of focus and `__m4aGrid()`
-  answering null. See `CLAUDE.md`'s "The marquee starts only where `hitTest` finds nothing".
-- **Constraint: group drag is `applyDrag` N times from N origin rects,** never one delta
-  applied to a bounding box. The recompute-from-origin rule is caller-side, and a
-  bounding-box implementation is exactly the accumulate-drift bug wearing a group costume.
-- **Constraint: one history push for the whole group,** per the one-entry-per-committed-
-  gesture rule.
-- **Constraint the marquee added, and shift-click inherits:** a selection must not span
-  workspaces. The marquee is simply gated off in the merged view, which is structural and
-  costs nothing; shift-click in that view would have to make the same call deliberately,
-  since the move verbs act on whatever the set contains and their source records are the
-  active workspace's alone.
-- **Nearest existing entries: #21** (broadcast to a selection) **and #25** (tidy the
-  selection), both of which named this as the missing machinery and both of which now have
-  a selection to build on.
-
 ## 53. Cards that show the last real screen, not a text tail
 
 `PanelCard` renders `handle.tail(6)`, and `tail()` unshifts only non-empty, trimmed lines — so
@@ -2201,10 +2172,9 @@ package" is how a placeholder becomes permanent.
 The section below was written for entries 1–40 and has **not** been re-ordered to include
 these. Three observations that would change it if it were:
 
-- **#41 and #52 are load-bearing for entries that already exist,** in the same way the
-  panel-kind union is. Four entries assume live cwd; three assume multi-selection. Both are
-  cheap, and both are currently assumed-to-exist rather than built. They belong near the front
-  of any real ordering.
+- **#41 was load-bearing for entries that already exist,** in the same way the panel-kind
+  union is. Four entries assume live cwd; #52's multi-selection assumption is now built by
+  M26. Both belonged near the front of any real ordering.
 - **#43 is a defect, not a feature,** and #70's drift finding was a second. #49 was a third
   and is fixed. Defects should be fixed rather than scheduled.
 - **#50 (worktree isolation) is the one entry here that changes what the product is for.**
