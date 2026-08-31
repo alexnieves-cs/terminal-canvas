@@ -170,6 +170,13 @@ module.exports = {
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,
   IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS,
+  // Check 174's own reason: window.canvas.jira is deep-frozen by
+  // contextBridge (Electron's own protection against exactly this kind of
+  // tampering), so the check cannot fake it from the renderer's main world —
+  // a plain assignment there silently no-ops. It fakes the MAIN-side handler
+  // instead, via ipcMain.removeHandler/ipcMain.handle in verify-panels.cjs,
+  // and needs the real channel names to do it rather than restating them.
+  IPC: require('../src/shared/ipc-contract').IPC,
   /* Task 9's end-to-end review:panel check needs registerIpcHandlers wired to
      a REAL engine over a REAL git runner — a stub here would prove nothing
      past the preload, the same reasoning every other real export in this file

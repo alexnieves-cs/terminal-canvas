@@ -98,7 +98,7 @@ export function useNavGrid(deps: {
         // releasing Cmd switches workspace and unmounts the panel with the
         // draft unsaved.
         const target = event.target as HTMLElement | null
-        if (target?.closest?.('.review-node__commit-form, .file-node__editor')) return
+        if (target?.closest?.('.review-node__commit-form, .file-node__editor, .jira-node__comment-form')) return
         // A held chord is ONE gesture and roughly fifteen events a second.
         // The guard's reachable case is the TAIL of a held chord after the
         // grid has already been dismissed: Escape closes, the user has not

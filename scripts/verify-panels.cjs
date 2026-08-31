@@ -9,7 +9,7 @@ const { join } = require('node:path')
 const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, rmSync, realpathSync, renameSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
 
 // This script is its own Electron entry point (not out/main/index.js), so
 // nothing has registered ipcMain handlers for the pty:* channels the built
@@ -68,6 +68,7 @@ const {
   readProjectPrompts,
   resolveCwd,
   IPC_EVENTS,
+  IPC,
   createReviewEngine,
   createGitRunner,
   createBaselineCapture,
@@ -11834,6 +11835,95 @@ app.whenReady().then(async () => {
       try { rmSync(M22_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
+    // 174. The comment draft end to end in a real renderer: the ONLY check that
+    //      exercises the input, the send, and the outcome together. verify:jira
+    //      proves the CLIENT and says nothing about whether a keystroke reaches
+    //      it.
+    //
+    //      window.canvas.jira CANNOT be reassigned from a renderer-side
+    //      script, and that was learned by measurement rather than assumed:
+    //      contextBridge deep-freezes the whole exposed api tree in the
+    //      page's main world (window.canvas and window.canvas.jira both
+    //      report writable:false, configurable:false, Object.isFrozen:true),
+    //      which is the bridge doing exactly the tampering-resistance job it
+    //      exists for. A plain `window.canvas.jira = stub` there is not an
+    //      error — it is a silent no-op (non-strict [[Set]] on a
+    //      non-writable property returns false and nothing throws) — so the
+    //      obvious stub reads as though it worked and never actually swaps
+    //      anything; the real `jira:list` handler still ran and answered
+    //      "Connect Jira before loading tickets."
+    //
+    //      The fake sits one hop further in instead: this Node process IS
+    //      the main process for this harness (registerIpcHandlers ran right
+    //      here, above), so the four JIRA_* ipcMain handlers are swapped for
+    //      fakes that never touch the real credential store or the network —
+    //      the standing "npm run verify stays offline" rule, satisfied from
+    //      the main-process side of the boundary the renderer-side stub
+    //      could never reach.
+    //
+    //      Its non-vacuity clause is load-bearing: asserting only "no error
+    //      appeared" passes before the feature exists at all, so it also
+    //      demands the outcome element carry the SENT text back, and the
+    //      fake JIRA_COMMENT handler's own captured payload is the proof of
+    //      what actually crossed the IPC boundary.
+    {
+      const jiraSent = []
+      ipcMain.removeHandler(IPC.JIRA_LIST)
+      ipcMain.removeHandler(IPC.JIRA_TRANSITIONS)
+      ipcMain.removeHandler(IPC.JIRA_COMMENT)
+      ipcMain.removeHandler(IPC.JIRA_TRANSITION)
+      ipcMain.handle(IPC.JIRA_LIST, async () => ({
+        kind: 'items', items: [{
+          id: 'TC-12', title: 'Ship Jira writes', description: 'body',
+          assignee: 'Ada Lovelace', state: 'In Progress',
+          url: 'https://acme.atlassian.net/browse/TC-12'
+        }]
+      }))
+      ipcMain.handle(IPC.JIRA_TRANSITIONS, async () => ({ kind: 'transitions', transitions: [] }))
+      ipcMain.handle(IPC.JIRA_COMMENT, async (_event, req) => { jiraSent.push(req); return { kind: 'done' } })
+      ipcMain.handle(IPC.JIRA_TRANSITION, async () => ({ kind: 'done' }))
+
+      // Mint the panel through the app's own gesture, never by hand-writing a
+      // panel record: a check that bypasses the mint proves nothing about it.
+      const minted = await wc.executeJavaScript(`(() => typeof window.__m24Jira === 'function' && (window.__m24Jira(), true))()`)
+      const row = await waitUntil(
+        () => wc.executeJavaScript(`document.querySelector('[data-jira-ticket="TC-12"]') !== null`), 8000)
+
+      if (row) {
+        await wc.executeJavaScript(`(() => {
+          const r = document.querySelector('[data-jira-ticket="TC-12"]')
+          r.querySelector('[data-jira-comment-open]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return true
+        })()`)
+        await waitUntil(
+          () => wc.executeJavaScript(`document.querySelector('[data-jira-comment-input]') !== null`), 4000)
+
+        // The native value setter plus an input event: assigning .value alone
+        // leaves React's state untouched, and the send would go out empty. The
+        // same trap verify:panels 113 records for the commit draft.
+        await wc.executeJavaScript(`(() => {
+          const input = document.querySelector('[data-jira-comment-input]')
+          const set = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+          set.call(input, 'agent finished the refactor')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          return true
+        })()`)
+      }
+
+      // Only waited on when the row actually appeared — with no row, the
+      // comment-open button and the input were never reached, and waiting on
+      // an outcome node that can never appear would just burn the timeout.
+      const outcome = row
+        ? await waitUntil(
+            () => wc.executeJavaScript(`(document.querySelector('[data-jira-outcome]') || {}).textContent || ''`), 6000)
+        : ''
+      ok('174 a Jira comment typed into a real draft reaches the adapter',
+        minted === true && row === true && jiraSent.length === 1 &&
+          jiraSent[0].itemId === 'TC-12' && jiraSent[0].body === 'agent finished the refactor' &&
+          /comment/i.test(String(outcome)),
+        `minted=${minted} row=${row} sent=${JSON.stringify(jiraSent)} outcome=${outcome}`)
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
