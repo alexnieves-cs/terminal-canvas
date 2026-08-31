@@ -68,20 +68,22 @@ function LinkLayerImpl({ panels }: { panels: Panel[] }): JSX.Element | null {
       </defs>
       {segments.map((s) => (
         <g key={s.key}>
-          <line
+          <path
             className="link-layer__line"
             data-link={s.key}
-            x1={s.x1}
-            y1={s.y1}
-            x2={s.x2}
-            y2={s.y2}
+            d={s.d}
             markerEnd="url(#link-arrow)"
           />
           {s.label !== undefined && (
             <text
               className="link-layer__label"
-              x={(s.x1 + s.x2) / 2}
-              y={(s.y1 + s.y2) / 2}
+              // The CURVE's midpoint, not the chord's. At t = 0.5 a cubic
+              // reduces to (P0 + 3C1 + 3C2 + P3) / 8, so this needs no path
+              // measurement and no DOM — a getPointAtLength call here would
+              // make the label position depend on a laid-out element and
+              // would not survive the first render.
+              x={(s.x1 + 3 * s.c1x + 3 * s.c2x + s.x2) / 8}
+              y={(s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8}
               textAnchor="middle"
             >
               {s.label}

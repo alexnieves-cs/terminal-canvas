@@ -37,6 +37,32 @@ export interface LinkSegment {
   y1: number
   x2: number
   y2: number
+  fromSide: LinkSide
+  toSide: LinkSide
+  /**
+   * The rendered path. Built HERE rather than in the component, so the whole
+   * shape of a link is decided in the module verify:viewport can drive under
+   * plain node — the same split that put the anchors here rather than in
+   * LinkLayer in M13.
+   */
+  d: string
+  /**
+   * The cubic's control points, carried so a consumer can find the CURVE's own
+   * midpoint without measuring a laid-out path element.
+   *
+   * The label and (from M24's task 6) the remove badge both sit at t = 0.5,
+   * where a cubic reduces to (P0 + 3C1 + 3C2 + P3) / 8 — a closed form needing
+   * no DOM. The alternative, getPointAtLength, makes the position depend on a
+   * laid-out element and so cannot be computed on the first render at all.
+   *
+   * Flattened to four numbers rather than two points because LinkSegment is
+   * serialised into React keys and read by checks; a nested object here buys
+   * nothing and reads worse at every call site.
+   */
+  c1x: number
+  c1y: number
+  c2x: number
+  c2y: number
 }
 
 const centreOfRect = (r: WorldRect): { x: number; y: number } => ({
@@ -161,6 +187,7 @@ export function buildLinkSegments(panels: Panel[]): LinkSegment[] {
       if (!to) continue
       const anchors = linkAnchors(from, to)
       if (!anchors) continue
+      const controls = linkControls(anchors)
       out.push({
         key: `${from.id} ${link.to}`,
         from: from.id,
@@ -169,7 +196,12 @@ export function buildLinkSegments(panels: Panel[]): LinkSegment[] {
         // `label: undefined` is a different fact from the key being missing,
         // and it is the one that survives a structured clone.
         ...(link.label === undefined ? {} : { label: link.label }),
-        ...anchors
+        ...anchors,
+        d: linkPath(anchors),
+        c1x: controls.c1.x,
+        c1y: controls.c1.y,
+        c2x: controls.c2.x,
+        c2y: controls.c2.y
       })
     }
   }

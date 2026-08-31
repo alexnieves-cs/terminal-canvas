@@ -1365,9 +1365,14 @@ body {
   font-weight: 600;
 }
 
+/* M24. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
+   path fills the region its curve encloses by default, so without it every
+   link paints as a solid crescent over the canvas. It was harmless on the
+   <line> this replaced, which has no interior to fill. */
 .link-layer__line {
   stroke: var(--line-strong);
   stroke-width: 2px;
+  stroke-linecap: round;
   fill: none;
 }
 
