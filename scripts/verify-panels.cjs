@@ -772,6 +772,15 @@ app.whenReady().then(async () => {
   // honest rather than blanket-true.
   const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
   const toolboxCache = new ToolboxCache()
+  // Check 174 fakes the four JIRA_* ipcMain handlers for the duration of its
+  // own block and MUST restore the real ones afterward — see that check's
+  // own trailing comment. Restoring means re-installing the SAME closures
+  // registerIpcHandlers bound here, not a re-derived approximation, so
+  // ipcMain.handle is wrapped for exactly the one call below to capture
+  // every channel -> listener pair it registers.
+  const registeredHandlers = new Map()
+  const realIpcMainHandle = ipcMain.handle.bind(ipcMain)
+  ipcMain.handle = (channel, listener) => { registeredHandlers.set(channel, listener); return realIpcMainHandle(channel, listener) }
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
       resolveAvailability(allPresets(layoutStore.presets()), whichHere),
@@ -848,6 +857,7 @@ app.whenReady().then(async () => {
   // developer's real ~/.claude, which is the rule M9a's git fence and M15's
   // projects-root fence each cost a fix round to learn.
   toolboxCache)
+  ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -11868,56 +11878,94 @@ app.whenReady().then(async () => {
     //      what actually crossed the IPC boundary.
     {
       const jiraSent = []
-      ipcMain.removeHandler(IPC.JIRA_LIST)
-      ipcMain.removeHandler(IPC.JIRA_TRANSITIONS)
-      ipcMain.removeHandler(IPC.JIRA_COMMENT)
-      ipcMain.removeHandler(IPC.JIRA_TRANSITION)
-      ipcMain.handle(IPC.JIRA_LIST, async () => ({
-        kind: 'items', items: [{
-          id: 'TC-12', title: 'Ship Jira writes', description: 'body',
-          assignee: 'Ada Lovelace', state: 'In Progress',
-          url: 'https://acme.atlassian.net/browse/TC-12'
-        }]
-      }))
-      ipcMain.handle(IPC.JIRA_TRANSITIONS, async () => ({ kind: 'transitions', transitions: [] }))
-      ipcMain.handle(IPC.JIRA_COMMENT, async (_event, req) => { jiraSent.push(req); return { kind: 'done' } })
-      ipcMain.handle(IPC.JIRA_TRANSITION, async () => ({ kind: 'done' }))
+      // The four real closures, exactly as registerIpcHandlers bound them
+      // above — captured by the ipcMain.handle wrapper around that call,
+      // never re-derived. Restoring an approximation (a second call to
+      // registerIpcHandlers, a hand-written passthrough) would risk drifting
+      // from what check 173 and everything before it actually ran against.
+      const realJiraList = registeredHandlers.get(IPC.JIRA_LIST)
+      const realJiraTransitions = registeredHandlers.get(IPC.JIRA_TRANSITIONS)
+      const realJiraComment = registeredHandlers.get(IPC.JIRA_COMMENT)
+      const realJiraTransition = registeredHandlers.get(IPC.JIRA_TRANSITION)
 
-      // Mint the panel through the app's own gesture, never by hand-writing a
-      // panel record: a check that bypasses the mint proves nothing about it.
-      const minted = await wc.executeJavaScript(`(() => typeof window.__m24Jira === 'function' && (window.__m24Jira(), true))()`)
-      const row = await waitUntil(
-        () => wc.executeJavaScript(`document.querySelector('[data-jira-ticket="TC-12"]') !== null`), 8000)
+      try {
+        ipcMain.removeHandler(IPC.JIRA_LIST)
+        ipcMain.removeHandler(IPC.JIRA_TRANSITIONS)
+        ipcMain.removeHandler(IPC.JIRA_COMMENT)
+        ipcMain.removeHandler(IPC.JIRA_TRANSITION)
+        ipcMain.handle(IPC.JIRA_LIST, async () => ({
+          kind: 'items', items: [{
+            id: 'TC-12', title: 'Ship Jira writes', description: 'body',
+            assignee: 'Ada Lovelace', state: 'In Progress',
+            url: 'https://acme.atlassian.net/browse/TC-12'
+          }]
+        }))
+        ipcMain.handle(IPC.JIRA_TRANSITIONS, async () => ({ kind: 'transitions', transitions: [] }))
+        ipcMain.handle(IPC.JIRA_COMMENT, async (_event, req) => { jiraSent.push(req); return { kind: 'done' } })
+        ipcMain.handle(IPC.JIRA_TRANSITION, async () => ({ kind: 'done' }))
 
-      if (row) {
-        await wc.executeJavaScript(`(() => {
-          const r = document.querySelector('[data-jira-ticket="TC-12"]')
-          r.querySelector('[data-jira-comment-open]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-          return true
-        })()`)
-        await waitUntil(
-          () => wc.executeJavaScript(`document.querySelector('[data-jira-comment-input]') !== null`), 4000)
+        // Mint the panel through the app's own gesture, never by hand-writing a
+        // panel record: a check that bypasses the mint proves nothing about it.
+        var minted = await wc.executeJavaScript(`(() => typeof window.__m24Jira === 'function' && (window.__m24Jira(), true))()`)
+        var row = await waitUntil(
+          () => wc.executeJavaScript(`document.querySelector('[data-jira-ticket="TC-12"]') !== null`), 8000)
 
-        // The native value setter plus an input event: assigning .value alone
-        // leaves React's state untouched, and the send would go out empty. The
-        // same trap verify:panels 113 records for the commit draft.
-        await wc.executeJavaScript(`(() => {
-          const input = document.querySelector('[data-jira-comment-input]')
-          const set = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-          set.call(input, 'agent finished the refactor')
-          input.dispatchEvent(new Event('input', { bubbles: true }))
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-          return true
-        })()`)
+        if (row) {
+          await wc.executeJavaScript(`(() => {
+            const r = document.querySelector('[data-jira-ticket="TC-12"]')
+            r.querySelector('[data-jira-comment-open]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+            return true
+          })()`)
+          await waitUntil(
+            () => wc.executeJavaScript(`document.querySelector('[data-jira-comment-input]') !== null`), 4000)
+
+          // The native value setter plus an input event: assigning .value alone
+          // leaves React's state untouched, and the send would go out empty. The
+          // same trap verify:panels 113 records for the commit draft.
+          await wc.executeJavaScript(`(() => {
+            const input = document.querySelector('[data-jira-comment-input]')
+            const set = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+            set.call(input, 'agent finished the refactor')
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+            return true
+          })()`)
+        }
+
+        // Only waited on when the row actually appeared — with no row, the
+        // comment-open button and the input were never reached, and waiting on
+        // an outcome node that can never appear would just burn the timeout.
+        var outcome = row
+          ? await waitUntil(
+              () => wc.executeJavaScript(`(document.querySelector('[data-jira-outcome]') || {}).textContent || ''`), 6000)
+          : ''
+      } finally {
+        // Restored unconditionally, including on a throw from anything
+        // above: a fake left installed here is exactly the trap
+        // verify:pty-manager check 20's own comment documents for its
+        // kill-server obligation, and CLAUDE.md records this repo already
+        // being burned once by an inherited obligation nobody wrote down
+        // (a later run attaching to a stale server, one check reporting the
+        // wrong number while looking entirely correct). Today check 174 is
+        // the LAST check in this file, so leaving the fakes installed would
+        // have been silently harmless — but that is exactly the condition
+        // under which an obligation gets forgotten, not a reason to skip
+        // writing it down. WHOEVER APPENDS CHECK 175: this block restores
+        // the real JIRA_* handlers before it returns control, so 175 runs
+        // against production Jira behaviour exactly as 173 did — nothing to
+        // check on your end. If a future edit ever needs the fakes to
+        // survive past this block's own return, it must say so in a comment
+        // right here, at the point the restore would otherwise happen.
+        ipcMain.removeHandler(IPC.JIRA_LIST)
+        ipcMain.removeHandler(IPC.JIRA_TRANSITIONS)
+        ipcMain.removeHandler(IPC.JIRA_COMMENT)
+        ipcMain.removeHandler(IPC.JIRA_TRANSITION)
+        ipcMain.handle(IPC.JIRA_LIST, realJiraList)
+        ipcMain.handle(IPC.JIRA_TRANSITIONS, realJiraTransitions)
+        ipcMain.handle(IPC.JIRA_COMMENT, realJiraComment)
+        ipcMain.handle(IPC.JIRA_TRANSITION, realJiraTransition)
       }
 
-      // Only waited on when the row actually appeared — with no row, the
-      // comment-open button and the input were never reached, and waiting on
-      // an outcome node that can never appear would just burn the timeout.
-      const outcome = row
-        ? await waitUntil(
-            () => wc.executeJavaScript(`(document.querySelector('[data-jira-outcome]') || {}).textContent || ''`), 6000)
-        : ''
       ok('174 a Jira comment typed into a real draft reaches the adapter',
         minted === true && row === true && jiraSent.length === 1 &&
           jiraSent[0].itemId === 'TC-12' && jiraSent[0].body === 'agent finished the refactor' &&
