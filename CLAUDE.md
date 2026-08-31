@@ -4566,6 +4566,28 @@ this repo wrote, which proves the app's REACTION and nothing about GitHub's
 ACTION. This has the same standing as M17's `--session-id` filename rule and
 `verify:panels` 32's default-preset push.
 
+**The M24 hand-check is OUTSTANDING as of 2026-08-30, and must not be read as
+done.** M14's own GitHub hand-check (recorded above, 2026-08-30) proved that
+`credential:verify` really reaches GitHub and that the token is encrypted at
+rest; it says nothing about `work:list`, which is a different request to a
+different endpoint. Whoever does it needs a real classic PAT and should record,
+in this file beside M14's entry:
+
+1. **The two groups populated INDEPENDENTLY** — an item under "Assigned to you"
+   and a different item under "Awaiting your review". One group filling while
+   the other stays empty is the shape a single-query implementation would also
+   produce, so it proves nothing on its own.
+2. **An `owner/repo#123` and title that match github.com**, checked against the
+   site rather than against the panel — the panel is exactly what would lie.
+3. **An item assigned to you AND awaiting your review appears ONCE**, under the
+   first group. That is `verify:work` 8's claim against a real fan-out, and it
+   is the only clause a fixture cannot make convincing.
+
+State plainly what it will still NOT prove: rejected-token behaviour, the
+rate-limit split (check 9 is fixture-driven and proves this app's REACTION,
+never GitHub's ACTION), GitHub Enterprise tenants, or that
+`advanced_search=true` is still the search contract in a month.
+
 **`isTerminalPanel` had to become a positive partition test the moment a
 third kind arrived, and the reason is the DANGEROUS direction a negation gets
 wrong (`renderer/panels/panels.ts`).** Until M16 (built and reviewed as "M13"; renumbered on merge — see the
