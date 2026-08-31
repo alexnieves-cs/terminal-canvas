@@ -38,10 +38,12 @@ import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import type { ToolInventoryResult } from '@shared/toolbox'
 import { applyUsage, clearUsage, useUsage } from '@renderer/session/usage-store'
+import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
 import type { DirResult } from '@shared/fs-tree'
+import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   ActivateResult,
   CapturedPanel,
@@ -90,6 +92,8 @@ import { buildFileRows, relativePath, shellQuote, treeSignature, type FileRow } 
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
+/** A process-table walk is intentionally slow; never put it on a render path. */
+const MACHINE_COST_SAMPLE_MS = 2000
 
 // Module-level so the palette's props keep the same identity between renders;
 // a fresh [] each render would rebuild the command list on every frame of a pan.
@@ -654,6 +658,7 @@ export function Canvas({
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
         clearUsage(panel.rect.id)
+        clearMachineCost(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -940,6 +945,45 @@ export function Canvas({
     onStepWorkspace, onToggleMerged
   )
   const version = useRegistryVersion(registry)
+  const machineCostTotal = useMachineCostTotal()
+
+  // Main reads ONE process table for this whole list, then walks each root's
+  // descendants there. The renderer owns this low-frequency schedule because
+  // closing or switching a canvas should stop the work immediately; neither
+  // the registry nor a module-level main timer can know that fact.
+  const machineCostTargets = useMemo<MachineCostTarget[]>(() => panels.flatMap((panel) => {
+    if (!isTerminalPanel(panel)) return []
+    const status = registry.get(panel.rect.id)?.status
+    return status?.kind === 'running' ? [{ panelId: panel.rect.id, pid: status.pid }] : []
+  }), [panels, version])
+
+  useEffect(() => {
+    let current = true
+    let inFlight = false
+    const sample = (): void => {
+      if (inFlight) return
+      if (machineCostTargets.length === 0) {
+        applyMachineCosts({ panels: [], total: { cpuPercent: 0, memoryBytes: 0 } })
+        return
+      }
+      inFlight = true
+      void window.canvas.machine.sample(machineCostTargets).then((snapshot) => {
+        if (current) applyMachineCosts(snapshot)
+      }).catch((error: unknown) => {
+        // A ps failure is normally a transient process-table race. Keep the
+        // prior reading until the next tick rather than turning it into zero.
+        console.warn('[machine-cost] could not sample process trees', error)
+      }).finally(() => {
+        inFlight = false
+      })
+    }
+    sample()
+    const timer = window.setInterval(sample, MACHINE_COST_SAMPLE_MS)
+    return () => {
+      current = false
+      window.clearInterval(timer)
+    }
+  }, [machineCostTargets])
 
   // What the banner calls the source panel. railLabel is the honest chain's
   // one reader — the panel header, the rail row, the attention section and
@@ -1176,6 +1220,7 @@ export function Canvas({
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
       clearUsage(panel.rect.id)
+      clearMachineCost(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1986,6 +2031,7 @@ export function Canvas({
     clearLiveSession(id)
     clearSubagents(id)
     clearUsage(id)
+    clearMachineCost(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -3038,6 +3084,7 @@ export function Canvas({
       clearLiveSession(id)
       clearSubagents(id)
       clearUsage(id)
+      clearMachineCost(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it.
@@ -3602,6 +3649,7 @@ export function Canvas({
                     clearLiveSession(panelId)
                     clearSubagents(panelId)
                     clearUsage(panelId)
+                    clearMachineCost(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -4693,7 +4741,13 @@ export function Canvas({
           </div>
         )}
         <NavGrid controller={navGrid} />
-        <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
+        <CanvasHud
+          viewport={viewport}
+          cursor={cursor}
+          selectedId={selectedId}
+          backend={backendInfo}
+          machineCost={machineCostTotal}
+        />
         {palette.open && (
           <Palette
             controller={palette}

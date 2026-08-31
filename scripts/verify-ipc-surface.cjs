@@ -164,7 +164,10 @@ app.whenReady().then(() => {
   // had already claimed M17 (the Jira canvas context, and a separate
   // M15 -> M17 renumber before that) by the time it landed. That makes it the
   // fourth milestone in this file's own history to be renumbered at a merge.
-  const EXPECTED_CHANNELS = 45
+  // 46 = M23's machine:sample process-tree readout. It is an invoke rather
+  // than an event because the renderer owns the deliberately slow polling
+  // cadence; main returns one ps snapshot for every requested panel PID.
+  const EXPECTED_CHANNELS = 46
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

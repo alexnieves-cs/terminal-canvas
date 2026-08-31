@@ -24,6 +24,7 @@ import type {
 import type { CanvasState } from '../shared/layout-schema'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
+import type { MachineCostTarget } from '../shared/machine-cost'
 
 /**
  * Every subscribe helper returns its own unsubscribe function. Without this,
@@ -45,6 +46,9 @@ const bridge: CanvasBridge = {
     list: () => ipcRenderer.invoke(IPC.PTY_LIST),
     onData: (listener) => subscribe<PtyDataChunk>(IPC_EVENTS.PTY_DATA, listener),
     onExit: (listener) => subscribe<PtyExitInfo>(IPC_EVENTS.PTY_EXIT, listener)
+  },
+  machine: {
+    sample: (targets: MachineCostTarget[]) => ipcRenderer.invoke(IPC.MACHINE_COST_SAMPLE, targets)
   },
   edit: {
     onCopy: (listener) => subscribe<void>(IPC_EVENTS.EDIT_COPY, listener),

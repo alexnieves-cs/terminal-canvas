@@ -1605,6 +1605,17 @@ body {
   color: var(--green);
 }
 
+/* The card remains the readable many-panel surface, but a promoted terminal
+   should not make its resource cost disappear. This compact badge shares the
+   chrome without claiming a new interaction. */
+.panel__machine-cost {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .panel__close {
   /* Never shrunk to make room for a long title — see .panel__title. */
   flex: none;
@@ -1732,6 +1743,8 @@ body {
    turns them red. The headline below is the existing string restyled, not new
    copy. Add a hint element only if you also update those checks. */
 .panel__card {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: var(--sp-6);
@@ -1756,6 +1769,20 @@ body {
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The card tier is the ordinary many-panel view, so this is the primary
+   machine-cost readout. It is quiet metadata under the terminal tail rather
+   than chrome competing with the panel title. */
+.panel__card-cost {
+  display: flex;
+  gap: var(--sp-4);
+  margin-top: auto;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The headline. Same three words, ~4x the size, in the display face — this
@@ -1860,6 +1887,10 @@ body {
   font-variant-numeric: tabular-nums;
   user-select: none;
   pointer-events: none;
+}
+
+.canvas-hud__cost {
+  color: var(--fg);
 }
 
 /* Resize handles. East, south, south-east only — see panel-interaction.ts.

@@ -539,7 +539,7 @@ surface that works when this app is not the thing you are looking at.
   added no IPC channel" for why the obvious snapshot channel was declined twice — and note
   that a badge is the first customer that might genuinely change the answer.
 
-## 18. What the canvas costs the machine
+## 18. What the canvas costs the machine — landed
 
 A per-panel readout of CPU and memory, and a canvas-wide total. Twelve agents is twelve
 process trees, each of which may be running a compiler.
@@ -575,6 +575,13 @@ process trees, each of which may be running a compiler.
   tuning constants a settings pane might expose, and warns that a performance knob invites
   a user to break the app. A cost readout is the honest companion to any such knob: it is
   what makes a number the user is turning mean something.
+
+Landed as `machine:sample`: the renderer requests one `ps` snapshot every two seconds for
+the running terminal PIDs in its active canvas. Main walks every descendant process, returns
+per-panel CPU/RSS and a de-duplicated canvas total, and the renderer keeps it in a separate
+per-panel store so the changing readout never bumps `registry.version()`. The card tier shows
+each process tree's CPU/RAM; the HUD shows the canvas total. This stays a readout — it does
+not change tier assignment or promotion.
 
 ## 19. Token and dollar accounting — landed in M17; the open half is history, a second adapter, the un-pinned panel and aggregate totals
 

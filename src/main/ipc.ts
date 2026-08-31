@@ -24,6 +24,8 @@ import type { ToolboxCache } from './toolbox-cache'
 import { readPermissionRules, resolveToolboxHome } from './toolbox-read'
 import { resolveCwd } from './pty-manager'
 import { writeFile } from './file-write'
+import { sampleMachineCosts } from './machine-cost'
+import type { MachineCostTarget } from '../shared/machine-cost'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -118,6 +120,20 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.PTY_LIST, () => ptyManager.list())
+
+  // One snapshot for every requested root PID. This handler never schedules a
+  // timer itself: rendering is the customer, so rendering chooses the slow
+  // cadence and closing the canvas stops the work with its effect cleanup.
+  ipcMain.handle(IPC.MACHINE_COST_SAMPLE, (_event, targets: MachineCostTarget[]) =>
+    sampleMachineCosts(
+      Array.isArray(targets)
+        ? targets.filter((target): target is MachineCostTarget =>
+          typeof target?.panelId === 'string' &&
+          Number.isSafeInteger(target.pid) && target.pid > 0
+        )
+        : []
+    )
+  )
 
   // The renderer's half of clearing wants-you. Main sees typing (pty:write
   // clears it there) but cannot see FOCUS, which is the other way a user says

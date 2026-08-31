@@ -176,6 +176,7 @@ The main process owns every PTY; the renderer never spawns a process.
 
 ```
 renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list   -->  main
+                       machine:sample
                        layout:load / layout:save
                        session:backend
                        preset:list / preset:rename / preset:delete
