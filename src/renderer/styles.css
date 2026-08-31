@@ -1380,6 +1380,48 @@ body {
   fill: var(--line-strong);
 }
 
+/* M24 Task 6. The hover target. Transparent and wide, and it opts back INTO
+   pointer events where .link-layer opts out — `stroke` rather than `all`, so
+   only the stroked band is hittable and the path's notional interior is not.
+
+   The width is a hit target rather than a visual: 18 world units is a
+   comfortable aim at scale 1 and shrinks with the zoom, which is correct —
+   at low zoom the ports are gone too, so there is no gesture left to serve. */
+.link-layer__hit {
+  stroke: transparent;
+  stroke-width: 18px;
+  fill: none;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* The adjacent-sibling selector is why the hit path renders BEFORE the line.
+   `.link-layer__line:hover` would be dead: the visible line inherits the
+   layer's pointer-events: none and can never be hovered itself. */
+.link-layer__hit:hover + .link-layer__line {
+  stroke: var(--iris);
+}
+
+/* The remove badge. pointer-events: all, because it is the ONE element in
+   this layer that is meant to consume a click. */
+.link-layer__badge {
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.link-layer__badge circle {
+  fill: var(--s-3);
+  stroke: var(--line-strong);
+  stroke-width: 1px;
+}
+
+.link-layer__badge path {
+  stroke: var(--red);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  fill: none;
+}
+
 /* M24 Task 5 fix round 1. The ghost's OWN arrowhead: an SVG marker does not
    inherit the referencing path's stroke, so pointing the ghost at
    `link-arrow`'s head painted a solid `--line-strong` tip on a dashed iris

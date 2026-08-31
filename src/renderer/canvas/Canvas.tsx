@@ -4618,8 +4618,11 @@ export function Canvas({
         >
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
-              it pans and zooms with the panels, and it takes no pointer
-              events at all, so it can never swallow a click. See LinkLayer.
+              it pans and zooms with the panels. The LAYER itself still takes
+              no pointer events; M24 Task 6 opts each link's own hit stroke
+              and remove badge back in individually so a link can be hovered
+              and removed without the layer as a whole ever swallowing a
+              click. See LinkLayer.
 
               Fed displayPanels rather than panels, for the same reason the
               panel map below is: while merged the only rects on screen are
@@ -4627,8 +4630,19 @@ export function Canvas({
               every link at its un-offset position — lines detached from the
               panels they join. buildLinkSegments skips a link whose target is
               not in the array it was handed, so a link that crosses a lane
-              boundary simply does not draw rather than drawing wrong. */}
-          <LinkLayer panels={displayPanels} draw={linkDraw.state} />
+              boundary simply does not draw rather than drawing wrong.
+
+              onRemove is the SAME paletteActions.removeLink the inspector's
+              link rows use — never a second copy — so both surfaces produce
+              exactly one history entry and cannot disagree about what
+              removing a link means. Suppressed while merged, where geometry
+              and links are read-only, the same gate the drag and the move
+              verb already take. */}
+          <LinkLayer
+            panels={displayPanels}
+            draw={linkDraw.state}
+            onRemove={merged ? undefined : paletteActions.removeLink}
+          />
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls

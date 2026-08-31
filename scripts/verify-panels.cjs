@@ -8861,45 +8861,63 @@ app.whenReady().then(async () => {
           `paths=${JSON.stringify(paths)}`)
       }
 
-      // 127. A click over a link still reaches what is beneath it. Success
-      //      criterion 5, and the only check that can see pointer-events:
-      //      none — the property is invisible to every DOM read that does not
-      //      dispatch a click through the layer. Driven with a REAL
-      //      sendInputEvent for check 75c's reason.
+      // 127. A click on a link still behaves exactly as a click on bare
+      //      canvas. REWRITTEN in M24, and the rewrite is a strengthening
+      //      rather than a relaxation.
       //
-      //      elementFromPoint is the discriminating read: with the layer deaf
-      //      to the pointer the topmost element at a point on a link is the
-      //      CANVAS, and with it live the topmost element is the line itself.
-      //      The click that follows is the behavioural half — the background
-      //      handler must still run and clear the selection.
+      //      It used to assert elementFromPoint at a link's midpoint returns
+      //      the CANVAS — a structural read of `.link-layer { pointer-events:
+      //      none }`. M24 gives each link a transparent hit stroke so it can
+      //      be hovered, so that read is now false by design and says nothing
+      //      about whether anything broke.
+      //
+      //      What the check was ALWAYS really making is the behavioural claim,
+      //      and it survives the change intact: Canvas's background
+      //      onMouseDown computes its hit from clientX/clientY through toWorld
+      //      and hitTest, and never reads event.target — so a mousedown on the
+      //      hit stroke bubbles to it and clears the selection exactly as a
+      //      click on empty canvas does.
+      //
+      //      This is the check that fails if a stray stopPropagation ever
+      //      lands on the hit path. That is the whole of what M24 traded away:
+      //      the invariant moved from "nothing in this layer can be hit" (one
+      //      CSS declaration, impossible to violate by accident) to "things
+      //      that can be hit do not consume", which looks entirely reasonable
+      //      to break in review. The failure it produces is a panel pinned
+      //      live for the rest of the run with nothing on screen to explain it.
+      //
+      //      Driven with a REAL sendInputEvent for check 75c's reason: a
+      //      dispatched MouseEvent is isTrusted:false and performs no default
+      //      action, so it would pass identically against the regression.
+      //
+      //      NOT __m4aSelection, which is the focused terminal's TEXT
+      //      selection and answers '' whatever the click did — the trap this
+      //      check's own first draft fell into.
       {
         await railGoTo(LINK_A)
         const mid = await wc.executeJavaScript(`(() => {
-          const line = document.querySelector('.link-layer [data-link]')
-          if (!line) return null
-          const r = line.getBoundingClientRect()
-          const x = r.x + r.width / 2, y = r.y + r.height / 2
-          const top = document.elementFromPoint(x, y)
-          const cls = top ? (typeof top.className === 'string' ? top.className : 'svg:' + top.className.baseVal) : null
-          return { x, y, cls, onCanvas: !!(top && top.closest && top.closest('.canvas')) }
+          const el = document.querySelector('.link-layer [data-link]')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
         })()`)
         // The SELECTED PANEL, read from production markup. NOT __m4aSelection,
         // which is the focused terminal's TEXT selection and answers '' here
         // whatever the click did — the wrong hook, and the first draft's bug.
+        // Re-declared LOCALLY: it is not in scope from a sibling block.
         const selectedId = () => wc.executeJavaScript(`(() => {
           const el = document.querySelector('.panel--selected')
           return el ? el.getAttribute('data-panel-id') : null
         })()`)
-        let before = 'not-run'
-        let after = 'not-run'
-        if (mid && mid.onCanvas) {
+        let before = null
+        let after = null
+        if (mid) {
           before = await selectedId()
           await clickAt(mid.x, mid.y)
           after = await selectedId()
         }
-        ok('127 a link takes no pointer events, so a click reaches what is beneath',
-          mid !== null && typeof mid.cls === 'string' && !mid.cls.includes('link-layer') &&
-            mid.onCanvas === true && before !== null && after === null,
+        ok('127 a click on a link still reaches the background handler beneath it',
+          mid !== null && before !== null && after === null,
           `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
       }
 
@@ -11997,6 +12015,14 @@ app.whenReady().then(async () => {
       const m24Links = () => wc.executeJavaScript(
         `[...document.querySelectorAll('.link-layer [data-link]')].map((e) => e.getAttribute('data-link'))`)
 
+      // Re-declared locally: the M13 block's own clickAt (line ~8767) is
+      // scoped inside THAT block's braces and is out of scope here.
+      const clickAt = async (x, y) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        await settle()
+      }
+
       // 174. A link drawn by the REAL gesture: press a port, drag, release on
       //      a panel. Asserted by the data-link key carrying BOTH IDS IN ORDER
       //      rather than by "a path exists" — an empty layer satisfies a count,
@@ -12148,6 +12174,60 @@ app.whenReady().then(async () => {
         ok('177 the ghost curve paints mid-gesture and clears on release, and the target ring names the destination panel',
           midGhost === true && midTarget === true && afterGhost === false,
           `midGhost=${midGhost} midTarget=${midTarget} afterGhost=${afterGhost}`)
+      }
+
+      // 178. Hovering a link reveals a badge that removes it, and ONE Cmd+Z
+      //      restores it.
+      //
+      //      The one-press clause is check 128's argument inherited: a removal
+      //      committed in more than one history entry satisfies "the link came
+      //      back" after two presses and looks entirely correct in every other
+      //      read, while the user's second press then undoes something else.
+      //
+      //      Driven through __m4bUndo, NEVER a dispatched Cmd+Z: undo is a
+      //      main-process MENU accelerator delivered as IPC, so a synthetic
+      //      KeyboardEvent reaches nothing at all. Check 128's first draft
+      //      fell into exactly this.
+      //
+      //      The hover is a real sendInputEvent mouseMove rather than a
+      //      dispatched mouseover, because the badge's visibility is driven by
+      //      React state set from onMouseEnter and an untrusted event would
+      //      prove the handler works while proving nothing about the pointer.
+      {
+        const key = M24_A + ' ' + M24_B
+        await railGoTo(M24_B)
+        const mid = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.link-layer [data-link="${key}"]')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+        })()`)
+        let badge = null
+        let afterRemove = null
+        let afterUndo = null
+        if (mid) {
+          wc.sendInputEvent({ type: 'mouseMove', x: mid.x, y: mid.y })
+          await settle()
+          badge = await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('[data-link-remove="${key}"]')
+            if (!b) return null
+            const r = b.getBoundingClientRect()
+            return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+          })()`)
+          if (badge) {
+            await clickAt(badge.x, badge.y)
+            afterRemove = await m24Links()
+            await wc.executeJavaScript(`window.__m4bUndo && window.__m4bUndo()`)
+            await settle()
+            afterUndo = await m24Links()
+          }
+        }
+        ok('178 the hover badge removes a link, and ONE undo restores it',
+          mid !== null && badge !== null &&
+            afterRemove !== null && !afterRemove.includes(key) &&
+            afterUndo !== null && afterUndo.includes(key),
+          `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} ` +
+          `afterRemove=${JSON.stringify(afterRemove)} afterUndo=${JSON.stringify(afterUndo)}`)
       }
     }
 

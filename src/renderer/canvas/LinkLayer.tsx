@@ -1,4 +1,4 @@
-import { memo, useMemo, type JSX } from 'react'
+import { memo, useMemo, useState, type JSX } from 'react'
 import { buildLinkSegments, linkAnchors, linkPath } from './link-geometry'
 import type { Panel } from '@renderer/panels/panels'
 import type { LinkDrawState } from './useLinkDraw'
@@ -26,13 +26,25 @@ import type { LinkDrawState } from './useLinkDraw'
  * change the behaviour of existing files for a cosmetic case no gesture in
  * this app can produce, so it is left alone deliberately.)
  *
- * pointer-events: none on the layer and everything in it, which is a property
- * of the LAYER rather than a hit-test anyone has to remember. A link cannot
- * swallow a click aimed at a panel, cannot swallow the background click that
- * clears focusedId (which would pin a panel live and hold a WebGL context for
- * the rest of the run), and cannot interfere with the capture-phase palette
- * dismissal on .shell. It is also why this milestone adds nothing at all to
- * shouldYieldWheel.
+ * pointer-events: none on the LAYER itself, which is still a property of the
+ * layer rather than a hit-test anyone has to remember for the ordinary case.
+ * M24 Task 6 narrows that surgically rather than removing it: a link's own
+ * `.link-layer__hit` opts back in with `pointer-events: stroke` so it can be
+ * hovered and removed, and `.link-layer__badge` opts in with `pointer-events:
+ * all` so it can be clicked — and that is the exhaustive list. Everything
+ * else here (the visible curve, the ghost, the labels, the <defs>) stays
+ * inert. The hit stroke must never call stopPropagation: Canvas's background
+ * onMouseDown reads clientX/clientY through toWorld/hitTest, never
+ * event.target, so a mousedown that bubbles through it clears focusedId and
+ * the selection exactly as a click on bare canvas does — which is what keeps
+ * a link from pinning a panel live and holding a WebGL context for the rest
+ * of the run, and what keeps it from interfering with the capture-phase
+ * palette dismissal on .shell. The badge is the ONE element here that DOES
+ * consume a click, deliberately, so removing a link does not also deselect
+ * the canvas underneath it. See verify:panels 127 (rewritten in M24) and 178.
+ *
+ * NOT culled and no viewport intersection test added for the hit stroke or
+ * badge either: this milestone adds nothing at all to shouldYieldWheel.
  *
  * NOT culled: a link is an SVG path with no process, no WebGL context and no
  * LIVE_BUDGET slot, so the reason panels are culled does not apply to it.
@@ -41,11 +53,14 @@ import type { LinkDrawState } from './useLinkDraw'
  */
 function LinkLayerImpl({
   panels,
-  draw
+  draw,
+  onRemove
 }: {
   panels: Panel[]
   draw?: LinkDrawState | null
+  onRemove?: (from: string, to: string) => void
 }): JSX.Element | null {
+  const [hovered, setHovered] = useState<string | null>(null)
   // Rebuilt whenever the panel array's identity changes — which includes every
   // frame of a drag, correctly, because a link's endpoint is moving. That is
   // the same cost EdgeIndicators already pays. The memo is what stops a Canvas
@@ -111,12 +126,65 @@ function LinkLayerImpl({
       </defs>
       {segments.map((s) => (
         <g key={s.key}>
+          {/* The hit stroke. Wide and transparent, and it takes pointer events
+              where the LAYER does not — .link-layer keeps pointer-events:none
+              and this opts back in individually.
+
+              IT MUST NEVER CALL stopPropagation. Canvas's background
+              onMouseDown computes its hit from clientX/clientY through toWorld
+              and hitTest and never reads event.target, so a mousedown here
+              bubbles to it and behaves identically to a click on bare canvas:
+              selection clears, focusedId clears, a marquee begins. That is the
+              whole mechanism by which M24 keeps M13's guarantee while making
+              a link hoverable, and verify:panels 127 is what fails if it is
+              broken. A stopPropagation added here would look entirely
+              reasonable in review and would pin a panel live for the rest of
+              the run, holding a WebGL context, with nothing on screen to
+              explain it. */}
+          <path
+            className="link-layer__hit"
+            d={s.d}
+            onMouseEnter={() => setHovered(s.key)}
+            onMouseLeave={() => setHovered((h) => (h === s.key ? null : h))}
+          />
+          {/* The visible line MUST immediately follow the hit stroke above —
+              not merely come after it eventually. `.link-layer__hit:hover +
+              .link-layer__line` in styles.css is an adjacent-SIBLING
+              selector, and the badge below is conditionally rendered: were it
+              placed between hit and line (as a first draft of this had it),
+              the adjacency would break at exactly the moment hover is true —
+              the one moment the rule needs to match. The badge renders AFTER
+              the line instead, which also gives it the correct paint order
+              (on top of the line, at its own location) for free. */}
           <path
             className="link-layer__line"
             data-link={s.key}
             d={s.d}
             markerEnd="url(#link-arrow)"
           />
+          {hovered === s.key && onRemove !== undefined && (
+            <g
+              className="link-layer__badge"
+              data-link-remove={s.key}
+              transform={`translate(${(s.x1 + 3 * s.c1x + 3 * s.c2x + s.x2) / 8}, ${
+                (s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8
+              })`}
+              onMouseEnter={() => setHovered(s.key)}
+              onMouseDown={(event) => {
+                // The badge DOES stop the event, unlike the hit stroke above:
+                // removing a link must not ALSO deselect the canvas underneath
+                // and start a marquee. This is the one element in this layer
+                // that consumes, and it is deliberate.
+                event.stopPropagation()
+                event.preventDefault()
+                onRemove(s.from, s.to)
+                setHovered(null)
+              }}
+            >
+              <circle r="9" />
+              <path d="M -3.5 -3.5 L 3.5 3.5 M 3.5 -3.5 L -3.5 3.5" />
+            </g>
+          )}
           {s.label !== undefined && (
             <text
               className="link-layer__label"
