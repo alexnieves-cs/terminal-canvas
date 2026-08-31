@@ -1411,6 +1411,124 @@ ok('74 a panel with no kind is not a review panel',
       && plain.source.path === '/tmp/p.txt' && !('prose' in plain.source),
     `note=${JSON.stringify(note.source)} plain=${JSON.stringify(plain.source)}`)
 }
+// ---------------------------------------------------------------------------
+// M24. Drawing links. The pure half: which side each anchor sits on, and the
+// bezier built from that. See docs/superpowers/specs/2026-08-30-m24-link-drawing-design.md
+// ---------------------------------------------------------------------------
+
+// 93. linkAnchors reports WHICH SIDE each anchor landed on. This is a read of
+//     a decision the function already makes — the side is whichever of tx/ty
+//     bound the crossing, plus the sign of dx/dy — so it is new output rather
+//     than new arithmetic, and checks 83/84 must stay green beside it.
+//
+//     The fixture is the SHALLOW diagonal check 84 already uses, for check
+//     84's own reason: at 45 degrees the x and y crossings tie, so a wrong
+//     implementation answers a plausible side and the check proves nothing.
+//     Here the x crossing binds strictly, so 'e' and 'w' are the only correct
+//     answers and a tie-breaking bug is visible.
+{
+  const a = { id: 'a', x: -50, y: -50, w: 100, h: 100 }
+  const b = { id: 'b', x: 350, y: 50, w: 100, h: 100 }
+  const s = V.linkAnchors(a, b)
+  // And the reverse, which must mirror: b's ray leaves west and enters a east.
+  const r = V.linkAnchors(b, a)
+  ok('link-draw.1 linkAnchors reports the side each anchor sits on',
+    s !== null && s.fromSide === 'e' && s.toSide === 'w' &&
+      r !== null && r.fromSide === 'w' && r.toSide === 'e',
+    s === null ? 'null' : `forward ${s.fromSide}->${s.toSide} reverse ${r && r.fromSide}->${r && r.toSide}`)
+}
+
+// 94. The control points are AXIS-ALIGNED to the sides they leave from, and
+//     point OUTWARD. That perpendicular rule is what makes the curve leave the
+//     border rather than kink at it.
+//
+//     Asserted as a RELATION rather than as literal coordinates. Literals go
+//     stale the moment CURVE_RATIO is tuned, and the repair a later reader
+//     reaches for is to paste in whatever the implementation currently
+//     returns — which is a check that can no longer fail.
+//
+//     The vertical pair is the discriminating fixture: a control point built
+//     from the SEGMENT direction rather than from the SIDE is identical to the
+//     correct one on a horizontal pair, so a horizontal-only check passes
+//     against an implementation that never reads the side at all.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 0, y: 400, w: 100, h: 100 }   // b is DIRECTLY BELOW a
+  const s = V.linkAnchors(a, b)
+  const c = s && V.linkControls(s)
+  // a exits south: c1 is directly below the exit, same x. b enters north: c2
+  // is directly above the entry, same x.
+  const perpendicular = c !== null &&
+    near(c.c1.x, s.x1) && c.c1.y > s.y1 &&
+    near(c.c2.x, s.x2) && c.c2.y < s.y2
+  ok('link-draw.2 linkControls pushes each control point perpendicular to its own side',
+    s !== null && s.fromSide === 's' && s.toSide === 'n' && perpendicular,
+    s === null ? 'null' : `sides ${s.fromSide}->${s.toSide} c1=${JSON.stringify(c.c1)} c2=${JSON.stringify(c.c2)}`)
+}
+
+// 95. The offset is CLAMPED AT BOTH ENDS, and both are asserted: a one-sided
+//     clamp passes a one-sided check. Unclamped, a very short link loops
+//     absurdly and a very long one is indistinguishable from a straight line,
+//     so the clamp is what makes the curve read the same way at every distance.
+//
+//     Also pins purity: the same anchors twice produce a byte-identical string,
+//     since anything consulting a clock or a random seed would make every link
+//     on the canvas twitch on every repaint.
+{
+  const near0 = { id: 'a', x: 0, y: 0, w: 10, h: 10 }
+  const near1 = { id: 'b', x: 30, y: 0, w: 10, h: 10 }     // tiny gap
+  const far0 = { id: 'c', x: 0, y: 0, w: 10, h: 10 }
+  const far1 = { id: 'd', x: 20000, y: 0, w: 10, h: 10 }   // huge gap
+  const sNear = V.linkAnchors(near0, near1)
+  const sFar = V.linkAnchors(far0, far1)
+  const cNear = sNear && V.linkControls(sNear)
+  const cFar = sFar && V.linkControls(sFar)
+  const offNear = cNear && Math.abs(cNear.c1.x - sNear.x1)
+  const offFar = cFar && Math.abs(cFar.c1.x - sFar.x1)
+  const d1 = sFar && V.linkPath(sFar)
+  const d2 = sFar && V.linkPath(sFar)
+  ok('link-draw.3 the control offset clamps at BOTH ends, and linkPath is pure',
+    near(offNear, V.CURVE_MIN) && near(offFar, V.CURVE_MAX) &&
+      typeof d1 === 'string' && d1.startsWith('M') && d1.includes('C') && d1 === d2,
+    `near=${offNear} (min ${V.CURVE_MIN}) far=${offFar} (max ${V.CURVE_MAX}) d=${d1}`)
+}
+
+// 96. nearestLinkTarget resolves a drop. Four clauses, each rejecting a
+//     different wrong implementation, because any one of them alone passes
+//     against something broken:
+//
+//     (a) A panel CONTAINING the point beats a merely-near one. Without it, a
+//         drop squarely inside a panel that happens to sit near a smaller
+//         neighbour links the neighbour — the single most confusing outcome
+//         this gesture can produce, because the user was aiming at a thing
+//         they were pointing directly at.
+//     (b) The SOURCE is excluded. Without it every drag snaps back to itself,
+//         addLink refuses the self-link, and the gesture can never complete —
+//         a feature that is silently 100% broken.
+//     (c) A panel outside the radius answers null, or the drop has no empty
+//         space at all and a mis-aimed release always links SOMETHING.
+//     (d) Of two panels both in range, the NEARER wins.
+//
+//     The rects are given in the z-order the caller uses (hitOrder), and the
+//     containment scan walks it backwards, so the topmost of two overlapping
+//     panels wins — the same convention hitTest already established.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 200, y: 0, w: 100, h: 100 }
+  const c = { id: 'c', x: 260, y: 0, w: 40, h: 40 }
+  const rects = [a, b, c]
+  // (a) a point INSIDE b, which is also within radius of c's rect.
+  const inside = V.nearestLinkTarget(rects, { x: 250, y: 20 }, 200, 'a')
+  // (b) a point inside a, with a as the source.
+  const self = V.nearestLinkTarget(rects, { x: 50, y: 50 }, 200, 'a')
+  // (c) a point far from everything.
+  const far = V.nearestLinkTarget(rects, { x: 5000, y: 5000 }, 90, 'a')
+  // (d) a point in empty space between b and a, closer to b.
+  const nearer = V.nearestLinkTarget(rects, { x: 180, y: 50 }, 200, 'a')
+  ok('link-draw.4 nearestLinkTarget prefers containment, excludes the source, and respects the radius',
+    inside === 'b' && self === null && far === null && nearer === 'b',
+    `inside=${inside} self=${self} far=${far} nearer=${nearer}`)
+}
 
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)

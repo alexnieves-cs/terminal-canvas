@@ -6,6 +6,7 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { AgentState } from '@shared/types'
+import { PanelPorts } from './PanelPorts'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -75,6 +76,34 @@ export interface TerminalPanelProps {
    * the same reason `version` and `title` are props.
    */
   glow: boolean
+  /**
+   * Begins a link drag from one of this panel's four port handles (M24).
+   * PORT_MIN_SCALE visibility is NOT gated here by a `scale` prop — see
+   * PanelPorts.tsx's own comment and the `.canvas--ports-hidden` class in
+   * styles.css. Threading `viewport.scale` through this memoized component
+   * would make it a changed prop on every frame of a zoom (`zoomAt`),
+   * defeating `memo` for every panel on every zoom frame — the same 60Hz
+   * cascade `version`/`title`/`glow` are props specifically to survive.
+   */
+  onBeginLink: (panelId: string, event: ReactMouseEvent) => void
+  /**
+   * Whether an in-flight link draw would land on THIS panel if released now
+   * (M24). A prop, computed once in Canvas from `linkDraw.state?.target`,
+   * for the same reason `glow`/`version`/`title` all are: memo's shallow
+   * compare has to SEE it change, or the ring would stick to whichever panel
+   * happened to be the target when this component last rendered for some
+   * other reason.
+   *
+   * REQUIRED, not optional-with-default, on `onBeginLink`'s own precedent
+   * one field up: that prop was added by this same milestone and is
+   * required, so an optional sibling here is the inconsistency. Task 7
+   * copies this shape onto ReviewNode/FileNode/JiraNode/ToolboxNode, and
+   * optional there means a missed `linkTarget={...}` compiles clean and
+   * yields "the ring never appears for review nodes" — a feature that reads
+   * as unbuilt. Required makes a missed prop four compile errors at the one
+   * place that builds those call sites, `PanelRow.agent`'s own lesson.
+   */
+  linkTarget: boolean
 }
 
 const CARD_LINES = 6
@@ -84,7 +113,8 @@ const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
-  onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted
+  onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
+  onBeginLink, linkTarget
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -166,6 +196,7 @@ function TerminalPanelImpl({
       // a review node would also match).
       data-panel-kind="terminal"
       data-agent-state={glow ? agentState : undefined}
+      data-link-target={linkTarget ? '' : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       {/* Motion lives on this wrapper, never .panel: .panel's geometry rides
@@ -298,6 +329,16 @@ function TerminalPanelImpl({
           }}
         />
       ))}
+      {/* M24. Suppressed under readOnly exactly as the resize handles are —
+          that is the merged view, whose geometry is read-only, and addLink
+          there would write to a workspace record this canvas does not own.
+          Rendered UNCONDITIONALLY otherwise: the PORT_MIN_SCALE cutoff is a
+          canvas-host CLASS (`.canvas--ports-hidden`, in Canvas.tsx/
+          styles.css), not a prop read here — see PanelPorts.tsx's own
+          comment for why. */}
+      {!readOnly && (
+        <PanelPorts panelId={session.id} onBeginLink={onBeginLink} />
+      )}
       </div>
     </div>
   )

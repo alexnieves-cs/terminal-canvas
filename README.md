@@ -608,6 +608,7 @@ price of not killing something.
 | M24 | Jira writes: comment on and transition a ticket, from the panel | ✅ done |
 | M26 | Complete multi-select: additive shift-click and origin-based group drag | ✅ done |
 | M27 | Notes: a place on the canvas to write a sentence, backed by a real `.md` | ✅ done |
+| M24 | Drawing links: port handles, snapping, and bezier edges | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11

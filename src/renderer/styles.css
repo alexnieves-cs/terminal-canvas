@@ -1252,9 +1252,16 @@ body {
    because linkAnchors anchors both ends ON the panel borders, so the whole
    segment is outside both rects.
 
-   pointer-events: none is a property of the LAYER, not a hit test anyone has
-   to remember: a link can never swallow a click meant for a panel, nor the
-   background click that clears focusedId. */
+   pointer-events: none on the LAYER, not a hit test anyone has to remember —
+   but M24 Task 6 narrows that surgically rather than removing it: exactly two
+   descendants opt back in, `.link-layer__hit` (below) with
+   `pointer-events: stroke` and `.link-layer__badge` with `pointer-events:
+   all`. Nothing else in this layer is hit-testable. The invariant this
+   became is "things that can be hit do not consume" rather than "nothing in
+   this layer can be hit": the hit stroke's own handlers must never call
+   stopPropagation, so a mousedown on it still bubbles to Canvas's background
+   handler and clears focusedId exactly as a click on bare canvas does. See
+   verify:panels 127 (rewritten in M24) and 178. */
 .link-layer {
   position: absolute;
   top: 0;
@@ -1372,14 +1379,70 @@ body {
   font-weight: 600;
 }
 
+/* M24. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
+   path fills the region its curve encloses by default, so without it every
+   link paints as a solid crescent over the canvas. It was harmless on the
+   <line> this replaced, which has no interior to fill. */
 .link-layer__line {
   stroke: var(--line-strong);
   stroke-width: 2px;
+  stroke-linecap: round;
   fill: none;
 }
 
 .link-layer__head {
   fill: var(--line-strong);
+}
+
+/* M24 Task 6. The hover target. Transparent and wide, and it opts back INTO
+   pointer events where .link-layer opts out — `stroke` rather than `all`, so
+   only the stroked band is hittable and the path's notional interior is not.
+
+   The width is a hit target rather than a visual: 18 world units is a
+   comfortable aim at scale 1 and shrinks with the zoom, which is correct —
+   at low zoom the ports are gone too, so there is no gesture left to serve. */
+.link-layer__hit {
+  stroke: transparent;
+  stroke-width: 18px;
+  fill: none;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* The adjacent-sibling selector is why the hit path renders BEFORE the line.
+   `.link-layer__line:hover` would be dead: the visible line inherits the
+   layer's pointer-events: none and can never be hovered itself. */
+.link-layer__hit:hover + .link-layer__line {
+  stroke: var(--iris);
+}
+
+/* The remove badge. pointer-events: all, because it is the ONE element in
+   this layer that is meant to consume a click. */
+.link-layer__badge {
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.link-layer__badge circle {
+  fill: var(--s-3);
+  stroke: var(--line-strong);
+  stroke-width: 1px;
+}
+
+.link-layer__badge path {
+  stroke: var(--red);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* M24 Task 5 fix round 1. The ghost's OWN arrowhead: an SVG marker does not
+   inherit the referencing path's stroke, so pointing the ghost at
+   `link-arrow`'s head painted a solid `--line-strong` tip on a dashed iris
+   curve — a committed-link colour on a path whose whole job is to say "not
+   committed yet". */
+.link-layer__ghost-head {
+  fill: var(--iris);
 }
 
 /* paint-order: stroke draws the halo UNDER the glyphs, so a label stays
@@ -1392,6 +1455,18 @@ body {
   paint-order: stroke;
   stroke: var(--bg);
   stroke-width: 4px;
+}
+
+/* M24 Task 5. The in-flight preview. Dashed so it reads as provisional rather
+   than as a link that already exists — the whole point of the preview is
+   that it says what WOULD happen, and a solid ghost is indistinguishable
+   from a committed link that failed to attach. */
+.link-layer__ghost {
+  stroke: var(--iris);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-dasharray: 6 5;
+  fill: none;
 }
 
 /* A panel is positioned once in WORLD pixels. Only .world's transform moves. */
@@ -1484,6 +1559,20 @@ body {
 .panel--selected {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px var(--blue), var(--e-3);
+}
+
+/* M24 Task 5. The panel a release right now would link to. A ring rather
+   than a fill: a fill would hide the agent output this app exists to show,
+   on the one panel the user is currently looking at.
+
+   var(--e-2) belongs here for the identical reason .panel--selected's own
+   comment states for var(--e-3): the attribute selector's specificity (0,2,0)
+   beats the plain .panel rule (0,1,0) that supplies the base elevation, so
+   without it the target ring REPLACED box-shadow wholesale and the
+   highlighted panel visually flattened against the canvas at the exact
+   moment it was being pointed at — fix round 1's finding. */
+.panel[data-link-target] {
+  box-shadow: 0 0 0 2px var(--iris), var(--e-2);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
@@ -3163,3 +3252,77 @@ body {
 
 .inspector__toolbox-scope { flex: none; color: var(--fg-4); }
 .inspector__toolbox-state { flex: none; color: var(--amber); }
+
+/* M24. The four link handles. Children of .panel, so they ride .world's
+   transform with the rest of the panel — the same placement .panel__resize
+   already has, and for the same reason: a handle sized in screen pixels would
+   drift away from its own border on every zoom.
+
+   z-index 4 so a port beats .panel__resize--se (3) and --e/--s (2) where they
+   overlap. --e covers the ENTIRE right border, so the east port sits on top of
+   it by construction, and the cursor change is honest feedback about which of
+   the two a press will reach.
+
+   opacity 0 and 1, never a fraction: verify:styles check 3 forbids fractional
+   opacity, and integers are what this wanted anyway. */
+.panel__port {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 4;
+  border-radius: var(--r-full);
+  border: 2px solid var(--s-2);
+  background: var(--iris);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.panel:hover .panel__port,
+/* Every panel reveals its ports while ANY draw is in flight, so the drop
+   targets are visible rather than hunted for. This is the single largest
+   contributor to the gesture feeling aimed rather than guessed at. */
+.canvas--linking .panel__port {
+  opacity: 1;
+}
+
+/* This rule is the hover half only — below PORT_MIN_SCALE has its own rule,
+   further down, and unlike this one it uses `display: none`. */
+.panel__port:hover {
+  border-color: var(--fg);
+}
+
+/* M24 (Fix round 1). PORT_MIN_SCALE's own comment (PanelPorts.tsx) states why
+   this is a CANVAS-HOST CLASS rather than a `scale` prop threaded through
+   TerminalPanel: `viewport.scale` changes on every zoom frame, and a prop
+   would defeat that component's memo on every one of them. `display: none`
+   rather than `opacity: 0`, because below this scale a port must be
+   genuinely NOT HIT-TESTABLE, not merely invisible — opacity alone would
+   leave a 14px dot clickable at a size nobody can see to aim at. */
+.canvas--ports-hidden .panel__port {
+  display: none;
+}
+
+/* Flush with the edge, never straddling it (a deviation from the brief's
+   -7px offsets, found necessary by a failing check rather than by inspection:
+   .panel carries `overflow: hidden` — needed so a terminal's own content
+   never bleeds past its rounded corners — and a port centred ON the border
+   has HALF its hit area clipped away by that ancestor, landing its own
+   getBoundingClientRect() centre exactly on the clip edge, where a real
+   mousedown resolves to whatever is behind it rather than to the port. Fully
+   inside is what .panel__resize--e/--s already do for the identical reason,
+   and it costs only a few pixels of visual overlap with the border instead of
+   being centred on it.
+
+   The four -7px margins below are this stylesheet's first negative margins,
+   and verify:styles check 6 (`/^\d+px$/`, no leading minus) structurally
+   cannot see them — 7px would fail that check; -7px passes, silently. That
+   is not a gap in the token audit worth closing: -7px is exactly half of
+   .panel__port's own 14px width/height, a CENTRING offset (the idiomatic
+   `top: 50%; margin-top: -half-the-element` pattern), not a spacing literal
+   drawn from the spacing scale check 6 polices. A later auditor re-reading
+   this file should not mistake it for a crack in the tokenised stylesheet. */
+.panel__port--n { top: 0; left: 50%; margin-left: -7px; }
+.panel__port--s { bottom: 0; left: 50%; margin-left: -7px; }
+.panel__port--w { left: 0; top: 50%; margin-top: -7px; }
+.panel__port--e { right: 0; top: 50%; margin-top: -7px; }

@@ -3,6 +3,7 @@ import type { ToolboxPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { applyToolbox, useToolbox } from '@renderer/session/toolbox-store'
 import { buildToolboxNodeModel } from './toolbox-node-model'
+import { PanelPorts } from '@renderer/components/PanelPorts'
 
 export interface ToolboxNodeProps {
   panel: ToolboxPanel
@@ -19,6 +20,32 @@ export interface ToolboxNodeProps {
   onFocus: (id: string) => void
   onBeginDrag: (state: DragState) => void
   onClose: (id: string) => void
+  /**
+   * Shown inside another workspace's lane in M14's merged view, where
+   * geometry is read-only. Named `readOnly` to match ReviewNode's and
+   * FileNode's own prop of the same name — Canvas.tsx passes `merged`
+   * under this name at every one of the five call sites. Suppresses the
+   * port handles: addLink there would write to a workspace record this
+   * canvas does not own.
+   */
+  readOnly?: boolean
+  /**
+   * Begins a link drag from one of this node's four port handles (M24,
+   * Task 7). Required on TerminalPanel's own `onBeginLink`'s precedent: an
+   * optional prop here compiles clean on a missed wiring and produces "the
+   * ring never appears for toolbox nodes" — a feature that reads as
+   * unbuilt, `PanelRow.agent`'s own lesson.
+   */
+  onBeginLink: (panelId: string, event: ReactMouseEvent) => void
+  /**
+   * Whether an in-flight link draw would land on THIS node if released now
+   * (M24, Task 7 fix round 1). Required on TerminalPanel's own `linkTarget`
+   * precedent: an optional prop here compiles clean on a missed wiring and
+   * produces "the ring never appears for toolbox nodes" — the exact gap a
+   * required `onBeginLink` did not itself catch, because a component that
+   * never declares a prop at all has nothing to omit.
+   */
+  linkTarget: boolean
 }
 
 /**
@@ -41,7 +68,8 @@ export interface ToolboxNodeProps {
  * reason: a stale node is honest rather than silently wrong.
  */
 function ToolboxNodeImpl({
-  panel, selected, onSelect, onFocus, onBeginDrag, onClose
+  panel, selected, onSelect, onFocus, onBeginDrag, onClose,
+  readOnly = false, onBeginLink, linkTarget
 }: ToolboxNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -87,6 +115,7 @@ function ToolboxNodeImpl({
       // states: verify:panels reads it to tell a toolbox node apart from a
       // terminal panel in a canvas where both are just `.panel`.
       data-panel-kind="toolbox"
+      data-link-target={linkTarget ? '' : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header
@@ -252,6 +281,16 @@ function ToolboxNodeImpl({
           }}
         />
       ))}
+      {/* M24 (Task 7). The same block TerminalPanel carries, and for the
+          same reasons: `links` lives on PanelBase, so this kind is
+          already a valid endpoint and the gesture should reach it too.
+          Suppressed under readOnly (the merged view). The PORT_MIN_SCALE
+          cutoff is a canvas-host CLASS (`.canvas--ports-hidden`), never a
+          `scale` prop threaded through this memoized component — see
+          PanelPorts.tsx's own comment. */}
+      {!readOnly && (
+        <PanelPorts panelId={id} onBeginLink={onBeginLink} />
+      )}
     </div>
   )
 }

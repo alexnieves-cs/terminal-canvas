@@ -37,12 +37,57 @@ export interface LinkSegment {
   y1: number
   x2: number
   y2: number
+  fromSide: LinkSide
+  toSide: LinkSide
+  /**
+   * The rendered path. Built HERE rather than in the component, so the whole
+   * shape of a link is decided in the module verify:viewport can drive under
+   * plain node — the same split that put the anchors here rather than in
+   * LinkLayer in M13.
+   */
+  d: string
+  /**
+   * The cubic's control points, carried so a consumer can find the CURVE's own
+   * midpoint without measuring a laid-out path element.
+   *
+   * The label and (from M24's task 6) the remove badge both sit at t = 0.5,
+   * where a cubic reduces to (P0 + 3C1 + 3C2 + P3) / 8 — a closed form needing
+   * no DOM. The alternative, getPointAtLength, makes the position depend on a
+   * laid-out element and so cannot be computed on the first render at all.
+   *
+   * Flattened to four numbers rather than two points because LinkSegment is
+   * serialised into React keys and read by checks; a nested object here buys
+   * nothing and reads worse at every call site.
+   */
+  c1x: number
+  c1y: number
+  c2x: number
+  c2y: number
 }
 
 const centreOfRect = (r: WorldRect): { x: number; y: number } => ({
   x: r.x + r.w / 2,
   y: r.y + r.h / 2
 })
+
+/**
+ * Which border an anchor sits on. Reported rather than computed separately:
+ * linkAnchors already decides this when it takes Math.min(tx, ty), and a
+ * second derivation elsewhere would drift from it the first time one of them
+ * was wrong.
+ */
+export type LinkSide = 'n' | 'e' | 's' | 'w'
+
+export interface LinkAnchors {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** The side of `from` the ray leaves through. */
+  fromSide: LinkSide
+  /** The side of `to` the ray enters through. */
+  toSide: LinkSide
+}
 
 /**
  * Where the segment between two panels starts and ends: on each rect's
@@ -70,8 +115,17 @@ const centreOfRect = (r: WorldRect): { x: number; y: number } => ({
  */
 export function linkAnchors(
   from: WorldRect,
-  to: WorldRect
-): { x1: number; y1: number; x2: number; y2: number } | null {
+  to: WorldRect,
+  /**
+   * RESERVED and unused. M24's design decision 2 chose derived anchors, which
+   * is what kept shared/layout-schema.ts out of that milestone entirely. This
+   * parameter exists so the deferred half — an edge that REMEMBERS which side
+   * it left from — can be taken later without rewriting this module. Nothing
+   * passes it today; if you are adding the first caller, that is the milestone
+   * that also grows PanelLink and both parsers.
+   */
+  _sides?: undefined
+): LinkAnchors | null {
   const a = centreOfRect(from)
   const b = centreOfRect(to)
   const dx = b.x - a.x
@@ -81,15 +135,33 @@ export function linkAnchors(
   // Infinity for a zero component is correct and deliberate rather than a
   // guard against division by zero: an axis the ray does not travel along can
   // never be the binding crossing, and Math.min then picks the other one.
-  const exit = (r: WorldRect, ox: number, oy: number): { x: number; y: number } => {
+  const exit = (
+    r: WorldRect,
+    ox: number,
+    oy: number
+  ): { x: number; y: number; side: LinkSide } => {
     const tx = ox === 0 ? Infinity : r.w / 2 / Math.abs(ox)
     const ty = oy === 0 ? Infinity : r.h / 2 / Math.abs(oy)
     const t = Math.min(tx, ty)
-    return { x: ox * t, y: oy * t }
+    // The side falls out of WHICH crossing bound. tx binding means the ray
+    // left through a vertical border (east or west) and the sign of ox says
+    // which; ty binding means a horizontal one. The <= rather than < settles
+    // the exact-45-degree tie toward the vertical border deterministically —
+    // either answer is defensible there, and picking one in code rather than
+    // leaving it to float comparison is what keeps linkPath reproducible.
+    const side: LinkSide = tx <= ty ? (ox > 0 ? 'e' : 'w') : oy > 0 ? 's' : 'n'
+    return { x: ox * t, y: oy * t, side }
   }
   const out = exit(from, dx, dy)
   const back = exit(to, -dx, -dy)
-  return { x1: a.x + out.x, y1: a.y + out.y, x2: b.x + back.x, y2: b.y + back.y }
+  return {
+    x1: a.x + out.x,
+    y1: a.y + out.y,
+    x2: b.x + back.x,
+    y2: b.y + back.y,
+    fromSide: out.side,
+    toSide: back.side
+  }
 }
 
 /**
@@ -115,6 +187,7 @@ export function buildLinkSegments(panels: Panel[]): LinkSegment[] {
       if (!to) continue
       const anchors = linkAnchors(from, to)
       if (!anchors) continue
+      const controls = linkControls(anchors)
       out.push({
         key: `${from.id} ${link.to}`,
         from: from.id,
@@ -123,9 +196,175 @@ export function buildLinkSegments(panels: Panel[]): LinkSegment[] {
         // `label: undefined` is a different fact from the key being missing,
         // and it is the one that survives a structured clone.
         ...(link.label === undefined ? {} : { label: link.label }),
-        ...anchors
+        ...anchors,
+        d: linkPath(anchors),
+        c1x: controls.c1.x,
+        c1y: controls.c1.y,
+        c2x: controls.c2.x,
+        c2y: controls.c2.y
       })
     }
   }
   return out
+}
+
+/**
+ * How far a control point is pushed out of its border, as a fraction of the
+ * distance between the two anchors, clamped at both ends.
+ *
+ * The clamps are not defensive. Unclamped, a link between two adjacent panels
+ * gets an offset of a few units and reads as a straight line with a kink,
+ * while a link across a panned canvas gets an offset of thousands and loops
+ * off screen before coming back. The clamp is what makes the curve read the
+ * same way at every distance, which is the whole of "clean" here.
+ *
+ * All three are TUNING values with no automated coverage of how they LOOK.
+ * verify:viewport 94 and 95 pin the relation (perpendicular, clamped, pure)
+ * and say nothing about whether the result is attractive. There is no visual
+ * regression test in this repo and that is a stated position; these were
+ * checked by hand once and are recorded as such in CLAUDE.md.
+ */
+export const CURVE_RATIO = 0.4
+export const CURVE_MIN = 24
+export const CURVE_MAX = 160
+
+const OUTWARD: Record<LinkSide, { x: number; y: number }> = {
+  n: { x: 0, y: -1 },
+  s: { x: 0, y: 1 },
+  e: { x: 1, y: 0 },
+  w: { x: -1, y: 0 }
+}
+
+/**
+ * The two cubic control points, pushed PERPENDICULAR out of the border each
+ * anchor sits on.
+ *
+ * Perpendicular to the SIDE, never along the segment. Those two are identical
+ * for a horizontal pair and diverge everywhere else, so the shorthand looks
+ * correct on the fixture a first check reaches for and produces a curve that
+ * kinks at the border for every other pair. verify:viewport 94 uses a VERTICAL
+ * fixture precisely because it is one the shorthand gets wrong.
+ *
+ * Exported separately from linkPath so the relation is checkable without
+ * parsing an SVG path string back apart — a check that had to parse `d` would
+ * be testing a regex rather than the geometry.
+ */
+export function linkControls(a: LinkAnchors): {
+  c1: { x: number; y: number }
+  c2: { x: number; y: number }
+} {
+  const dx = a.x2 - a.x1
+  const dy = a.y2 - a.y1
+  const distance = Math.hypot(dx, dy)
+  const offset = Math.min(CURVE_MAX, Math.max(CURVE_MIN, distance * CURVE_RATIO))
+  const o1 = OUTWARD[a.fromSide]
+  const o2 = OUTWARD[a.toSide]
+  return {
+    c1: { x: a.x1 + o1.x * offset, y: a.y1 + o1.y * offset },
+    c2: { x: a.x2 + o2.x * offset, y: a.y2 + o2.y * offset }
+  }
+}
+
+/**
+ * The SVG `d` for one link. Pure: the same anchors always produce a
+ * byte-identical string, because anything consulting a clock or a random seed
+ * here would make every link on the canvas twitch on every repaint.
+ */
+export function linkPath(a: LinkAnchors): string {
+  const { c1, c2 } = linkControls(a)
+  return `M ${a.x1} ${a.y1} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${a.x2} ${a.y2}`
+}
+
+/**
+ * How close to a panel a drop counts as landing on it, in SCREEN pixels.
+ *
+ * Screen pixels, converted to world by dividing by scale at the call site —
+ * deliberately UNLIKE cascadeCentre's CASCADE_STEP, which is world-fixed on
+ * purpose so a cascade stays constant relative to the panels at every zoom.
+ * A snap radius is the opposite problem: the user aims with a cursor in
+ * screen space, so a world-fixed radius would be unhittable at 0.2x and
+ * absurdly grabby at 3x — the same panel would need a 5x more accurate
+ * release depending only on how far the user happened to be zoomed out.
+ */
+export const SNAP_RADIUS_PX = 90
+
+/** Shortest distance from a point to a rect. Zero when the point is inside. */
+function distanceToRect(r: WorldRect, p: { x: number; y: number }): number {
+  const dx = Math.max(r.x - p.x, 0, p.x - (r.x + r.w))
+  const dy = Math.max(r.y - p.y, 0, p.y - (r.y + r.h))
+  return Math.hypot(dx, dy)
+}
+
+/**
+ * Which panel a drop at `world` should link to, or null.
+ *
+ * A panel CONTAINING the point always wins, even when a smaller neighbour's
+ * border is nearer — a user releasing squarely inside a panel meant that
+ * panel, and answering the neighbour is the most confusing outcome this
+ * gesture can produce. Only when nothing contains the point does proximity
+ * decide.
+ *
+ * `rects` is expected in the SAME z-order hitTest takes (bottom first), and
+ * the containment scan walks it backwards for hitTest's own reason: the
+ * topmost of two overlapping panels is the one the user can see and is
+ * pointing at. A caller that hands this an unsorted array gets a defensible
+ * but arbitrary answer on overlap, silently — Canvas passes hitOrder, which
+ * is already sorted by Panel.z.
+ *
+ * `excludeId` is REQUIRED rather than optional. Without it, a point still
+ * inside the SOURCE panel resolves to the source itself — every drag that
+ * has not yet left the panel it started on would name that panel as its own
+ * target, addLink refuses the self-link, and the gesture can never complete
+ * — a feature that is silently and totally broken, with no error anywhere.
+ * verify:viewport 96's (b) clause.
+ *
+ * The containment scan does NOT skip `excludeId` — it is checked AFTER a
+ * match is found, not used to filter which rects are considered. A point
+ * still over the source is a drag that has not left it yet, and there is no
+ * target to name there; falling through to the PROXIMITY half instead (by
+ * skipping the source during containment) would let a release that never
+ * left its own panel resolve to whatever smaller neighbour happens to be
+ * within radius — check 96's (b) fixture puts one exactly there (b sits well
+ * within `radiusWorld` of a point still inside a) specifically to catch that
+ * mistake, which passes every OTHER clause and looks like a working
+ * implementation until a real drag that overshoots its own border by a
+ * pixel snaps onto a neighbour it was never released near.
+ *
+ * This module deliberately does not import hitTest from viewport.ts, even
+ * though the containment half duplicates it: link-geometry.ts's only value
+ * import today is linksOf, and a second one would make the dependency
+ * direction between two pure canvas modules a thing a reader has to check.
+ * The duplicated test is four comparisons.
+ */
+export function nearestLinkTarget(
+  rects: WorldRect[],
+  world: { x: number; y: number },
+  radiusWorld: number,
+  excludeId: string
+): string | null {
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i]
+    if (
+      world.x >= r.x &&
+      world.x < r.x + r.w &&
+      world.y >= r.y &&
+      world.y < r.y + r.h
+    ) {
+      return r.id === excludeId ? null : r.id
+    }
+  }
+  let best: string | null = null
+  let bestDistance = radiusWorld
+  for (const r of rects) {
+    if (r.id === excludeId) continue
+    const d = distanceToRect(r, world)
+    // Strictly less, so a panel exactly AT the radius is out. The boundary has
+    // to fall one way or the other and out is the honest direction: the radius
+    // is the point at which the user has plainly not aimed at anything.
+    if (d < bestDistance) {
+      bestDistance = d
+      best = r.id
+    }
+  }
+  return best
 }

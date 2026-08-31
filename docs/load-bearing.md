@@ -1105,14 +1105,302 @@ panels for free (the opposite of `EdgeIndicators`, a sibling of `.world` because
 viewport-pinned pip must NOT zoom away). Zero-sized because `.world` is a positioning origin with
 no width/height and world coordinates are freely negative — a percentage size would clip every
 link out of existence with correct-looking geometry still in the DOM. `pointer-events: none` on
-the whole layer is what stops a link swallowing a click meant for a panel or the background (which
-clears `focusedId`). That the layer actually PAINTS was verified with a real pixel probe against
+the layer is what stops a link swallowing a click meant for a panel or the background (which
+clears `focusedId`). **As of M24 the clause "and everything in it" is no longer true** — two
+descendants opt back in, and the entry below ("The link layer's guarantee moved from STRUCTURAL
+to CONVENTIONAL") is the authority on what replaced it. That the layer actually PAINTS was verified with a real pixel probe against
 the built renderer, not a DOM assertion — clipping changes neither geometry nor layout, so
 `getBoundingClientRect` reports a correct rect for a layer that draws nothing; if you need to
 re-verify SVG paint under a transformed ancestor, verify the capture INSTRUMENT itself first
 (a plain sized `<div>` alongside the real element) before trusting a "broken" result, since an
 artificial reproduction of this exact scenario once reported the opposite of what the real app
 does.
+
+**The link layer's guarantee moved from STRUCTURAL to CONVENTIONAL, and the new
+one looks entirely reasonable to break (`styles.css`'s `.link-layer`,
+`.link-layer__hit`, `.link-layer__badge`).** Until M24 the rule was one CSS
+declaration — `pointer-events: none` on the layer *and everything in it* — and
+it was impossible to violate by accident, because there was nothing in the
+layer that could be hit at all. M24 needed a link to be hoverable (to reveal
+the `×` badge that removes it) and traded that away. **The layer is still
+`pointer-events: none`; exactly two descendants opt back in** —
+`.link-layer__hit` at `pointer-events: stroke` (the transparent 18px hover
+stroke) and `.link-layer__badge` at `pointer-events: all` — and nothing else in
+the layer may.
+
+What the invariant BECAME is **"things that can be hit do not consume"**, and it
+holds for one specific reason worth stating rather than assuming: **`Canvas`'s
+background `onMouseDown` computes its hit from `clientX`/`clientY` through
+`toWorld` and `hitTest`, and never reads `event.target`.** So a mousedown that
+lands on the hit stroke bubbles to it and behaves *identically* to a mousedown
+on bare canvas — the selection clears, `focusedId` clears, a marquee begins.
+The badge is the one deliberate exception and DOES `stopPropagation`, because
+removing a link must not also deselect the canvas underneath it.
+
+**Any future `stopPropagation` on `.link-layer__hit` silently breaks it**, and
+it is precisely the line that would pass review: "stop the click on the link
+from also hitting the canvas" reads as an obvious tidy-up. The failure it
+produces is the one the old declaration existed to prevent — `assignTiers` pins
+the focused panel live unconditionally, so a `focusedId` that never clears
+holds a WebGL context and a `LIVE_BUDGET` slot for the rest of the run, keeps
+routing `Cmd+C` to a panel the user left, and there is nothing on screen to
+explain any of it.
+
+`verify:panels` **127 is the guard, and it was REWRITTEN in place from a
+structural claim to a behavioural one.** It used to assert that
+`elementFromPoint` at a link's midpoint returned the CANVAS, which M24 makes
+false by design. It now drives a real `sendInputEvent` click at a link's
+midpoint and asserts the SELECTION moved to `null` — read from
+`.panel--selected`'s own `data-panel-id`, never from `__m4aSelection`, which is
+the focused terminal's TEXT selection and answers `''` whatever the click did
+(the trap that check's own first draft fell into). That is strictly stronger
+than what it replaced. It also keeps ONE structural clause — `.link-layer`
+itself still computes `pointer-events: none` — because the behavioural half
+alone cannot see a revert of the LAYER's own declaration: the topmost element
+at the midpoint would become `.link-layer__line`, which carries no handler, so
+the mousedown still bubbles and the click still clears the selection. That
+particular regression is inert today (nothing in `src/` calls
+`elementFromPoint`), and "inert today" is not "inert forever".
+
+**`linkAnchors` clips a ray AND reports the SIDE it left through; `linkPath`
+pulls its control points along those two normals (`link-geometry.ts`).** The
+clip is M13's and is untouched — take the SMALLER of the two per-axis
+parametric crossings and scale the whole ray by that one `t`, never clamp the
+axes independently, which is `edgeIndicator`'s documented mistake and which
+corners every diagonal while still rendering something that looks like a
+working feature (`verify:viewport` 84, with its deliberately shallow diagonal).
+What M24 adds is a READ of a decision that clip already makes: whichever of
+`tx`/`ty` bound the crossing says whether the anchor sits on a vertical or a
+horizontal border, and the sign of `dx`/`dy` says which one. It is new output,
+not new arithmetic, which is why checks 83-88 stay green beside it. The
+`tx <= ty` tie-break settles the exact-45-degree case toward the vertical
+border deterministically — either answer is defensible, and picking one in code
+rather than leaving it to float comparison is what keeps `linkPath`
+reproducible frame to frame. The `sides` third parameter is RESERVED and
+unused: M24's decision 2 chose derived anchors, which is the entire reason
+`shared/layout-schema.ts` did not move in that milestone, and the parameter is
+there so the deferred half — an edge that REMEMBERS which side it left from —
+can be taken later without rewriting the module.
+
+**`linkControls` pushes each control point PERPENDICULAR TO ITS OWN SIDE, never
+along the segment, and a horizontal fixture cannot tell the two apart
+(`link-geometry.ts`).** Perpendicular is what makes the curve *leave* the
+border rather than kink at it. The shorthand — push along the segment direction
+— is IDENTICAL to the correct answer for a horizontal pair, which is exactly
+the fixture a first check reaches for, so a horizontal-only check passes
+against an implementation that never reads the side at all, and every
+non-horizontal pair then renders a curve with a visible kink at both ends.
+`verify:viewport` **94's fixture is a VERTICAL pair** for that reason, and it
+asserts a RELATION (c1 shares x with the exit and lies below it; c2 shares x
+with the entry and lies above it) rather than literal coordinates — literals go
+stale the instant `CURVE_RATIO` is tuned, and the repair a later reader reaches
+for is to paste in whatever the implementation currently returns, which is a
+check that can no longer fail. Check 95 pins the clamp at BOTH ends, because a
+one-sided clamp passes a one-sided check: unclamped, a short link loops
+absurdly and a long one is indistinguishable from a straight line, so the clamp
+is what makes the curve read the same way at every distance.
+
+**`SNAP_RADIUS_PX` is screen-space and `CASCADE_STEP` is world-fixed, and both
+are right (`link-geometry.ts`, `panels.ts`).** They look like the same decision
+made twice in opposite directions, so the reason is recorded at both constants
+and here. `CASCADE_STEP` separates a NEW PANEL from a coincident one, and a
+panel scales with the zoom — so a world-fixed step keeps the cascade constant
+*relative to the panels* at every zoom, always one chrome-height of each card
+showing. `SNAP_RADIUS_PX` is the opposite problem: **the user aims with a
+cursor, which does not scale.** A world-fixed snap radius would be unhittable
+at 0.2x and absurdly grabby at 3x — the same panel would demand a five times
+more accurate release depending only on how far out the user happened to be
+zoomed. It is divided by `viewport.scale` at the call site in `useLinkDraw`, so
+the constant itself stays a screen-pixel number a human can reason about.
+
+**`nearestLinkTarget` checks `excludeId` AFTER a containment match, never
+during the scan (`link-geometry.ts`).** The plan's own code had this backwards,
+and the difference is invisible on every fixture but one. Filtering the source
+OUT of the containment scan means a release still inside the source panel falls
+through to the PROXIMITY half — and then resolves to whatever neighbour happens
+to lie within `SNAP_RADIUS_PX`, so a drag that overshoots its own border by a
+pixel and comes back links a panel it was never released near. Checking the
+match and THEN answering `null` for the source is the behaviour the app already
+has one gesture over: M13's armed-click handler is
+`if (!hit || hit === source) return true` — a click still on the source cancels
+rather than retargeting. `verify:viewport` 96's (b) clause puts a neighbour
+well inside the radius of a point still inside the source specifically to catch
+this; it passes every OTHER clause and looks like a working implementation.
+The containment scan also walks `rects` BACKWARD, because `Canvas` hands it
+`hitOrderRef`, which is already sorted by `Panel.z` — so a drop over a stack
+resolves to the TOPMOST panel, the one the user can see and is pointing at.
+That is worth recording precisely because a mismatch between the geometry's
+order and the z-order is the obvious thing to suspect here and there isn't one:
+`hitTest` and this function agree by construction. A caller that hands it an
+unsorted array gets a defensible but arbitrary answer on overlap, silently.
+
+**Every COMMIT decision in `useLinkDraw` reads `gestureRef`, never `state`, and
+that was a reproduced defect rather than a precaution (`useLinkDraw.ts`).** The
+hook is modelled line for line on `usePanelDrag` — a `depsRef` mirroring the
+callbacks so the document listeners install once and never tear down, move/up
+on `document` because the cursor leaves the port immediately — with ONE
+deviation. An earlier draft had no `gestureRef`: it mirrored `state` into a ref
+DURING RENDER, the pattern `focusedIdRef` and `viewportRef` use elsewhere in
+this codebase, and had `onUp` read that mirror. **React 18 automatic batching
+puts a coalesced `mousemove` and the following `mouseup` in ONE JS task**, so
+the `setState` from `onMove` had not been committed by the time `onUp` ran:
+`onUp` read the state `begin()` had set — `target: null`, cursor at the PRESS
+position — and never called `onCommit` at all. Every link commit was silently
+dropped, and the ghost curve looked perfect the whole time, because the ghost
+is the one thing that legitimately reads `state`.
+
+`usePanelDrag` cannot hit this, and that is the transferable half: **its own
+gesture tracking is already a plain ref with no `useState` anywhere in the
+loop.** The `useState` this hook additionally needs (to repaint the ghost and
+toggle `.canvas--linking`) is precisely the seam. `state` still exists and
+still drives render, one render behind, which is fine for something painted on
+screen and fatal for something a commit is gated on. `verify:panels` 174/175
+are what reproduced it.
+
+**`linkTarget` is REQUIRED on all five kinds, and requiredness protects only
+the components that DECLARE it (`PanelPorts.tsx` and the five call sites).**
+`onBeginLink` survived M24's fix rounds by a stronger mechanism than a required
+prop: `<PanelPorts>` does not compile without it, so a kind that mounted the
+ports had to pass it. `linkTarget` has no such forcing function — it is
+consumed by the panel's own root element as `data-link-target`, and **a
+component that never declares a prop has nothing to omit, so there is no
+compile error to catch the omission.** All four non-terminal kinds shipped
+without it and rendered ports that worked, drew a ghost, committed links, and
+never once showed a target ring; the gesture looked functional and simply never
+told you where it was going to land. Making the prop required on each component
+is what turns the sixth kind's omission into a `tsc` error rather than a
+missing ring. `verify:panels` 179 is what found it, and it asserts the ring by
+the target's OWN `data-panel-id` rather than "does `[data-link-target]` exist
+anywhere" — check 58's rule, since a ring on the wrong panel still renders a
+ring.
+
+**A SIXTH panel kind needs FOUR edits for links, not one (`PanelPorts.tsx`'s
+own doc comment carries the same list, and is the copy that will actually be
+read).** Three of the four are exactly what M24's fix rounds found missing
+after the first cut, so this is a measured list rather than a careful one:
+
+1. **`isTerminalPanel`'s negation** in `panels.ts` — the standing rule since
+   M16, and the one whose omission mints a `PanelSession` for a `<div>`.
+2. **A `<PanelPorts>` mount** in the new component, beside its resize handles,
+   gated on `readOnly` exactly as they are. Without it the kind is a valid link
+   TARGET (the geometry never asks a panel its kind — `verify:viewport` 88) and
+   can never be a link SOURCE, which reads as the ports being broken on that
+   kind rather than as a kind nobody wired.
+3. **A required `linkTarget` prop plus `data-link-target` on the root** — see
+   the entry above for why requiredness alone does not reach a component that
+   never declares it.
+4. **`readOnly={merged}` at the call site in `Canvas.tsx`.** `readOnly` is
+   optional-with-a-default on every non-terminal kind, so omitting it compiles
+   clean and renders ports in the merged view; see the entry below for what a
+   drag there actually writes — corrected in the M24 final review from an
+   earlier draft of this note that overstated the damage.
+
+**The merged view refuses links at the VERB now, not only at the affordance
+(`Canvas.tsx`'s `linkDraw.onCommit`).** Three mechanisms, in the order they
+fire: `readOnly` suppresses the ports so no draw can BEGIN there;
+`linkDraw.end()` runs at `toggleMerged`, so a draw begun on the ordinary canvas
+and still held when the user enters the merged view is stood down rather than
+left painting a ghost across lane space; and `onCommit` early-returns on
+`mergedRef.current`. The third is the one added last, and it is there for the
+reason the move verb already states — it "refuses on `mergedRef` too rather
+than only its palette rows going disabled — a disabled row is an affordance,
+and the verb has to be the authority." The guard stays for exactly that
+reason: it is still correct, even though the failure it was written to
+describe turned out not to be reachable — see below.
+
+**What a dropped `readOnly={merged}` actually reaches, corrected from an
+earlier draft that claimed a foreign-panel write.** The earlier text said a
+drag there calls `addLink` into the active workspace's record naming a
+FOREIGN panel id, persisted and then silently pruned. That path is NOT
+reachable, and the reason is `addLink`'s own guard in the FROZEN
+`panels.ts` (line 445): `displayPanels` is the merged, lane-translated array
+the ports would render against, but `setPanels`'s `current` — the array
+`onCommit`'s `addLink(current, from, to)` actually mutates — is always the
+ACTIVE workspace's own `panels`, merged or not (`Canvas.tsx`'s `displayPanels
+= merged && mergedView ? mergedView.panels : panels`, read only for display).
+`addLink` refuses unless BOTH `from` and `to` are already in that array, so a
+foreign endpoint on either end returns the SAME array — nothing written, no
+history entry, nothing persisted. A dropped `readOnly` cannot smuggle a
+cross-workspace link onto disk.
+
+What IS reachable with a dropped `readOnly={merged}` is a drag between two
+panels that are BOTH in the active workspace, drawn while the merged view
+happens to be showing them in a foreign lane: a REAL write, of a perfectly
+ordinary, valid link between two panels this canvas already owns. That is not
+data corruption — it is a violation of "the merged view is read-only", the
+same category of violation the drag/resize/close/marquee gates on `mergedRef`
+already exist to prevent, reached through the one gesture that had not yet
+been gated when this was written.
+
+**No check exercises the `onCommit` guard**, and that is stated rather than
+implied: ports do not render while merged, so the gesture cannot be driven
+through the UI there at all, and a check that reached past the UI to call
+`onCommit` directly would be asserting against a fixture rather than against
+the feature. `verify:panels` 179 covers the affordance half (ports absent while
+merged) for a file panel and a terminal panel; Review, Jira and Toolbox are
+argued from the identity of one conditional expression, not observed.
+
+**A draw held across an ordinary WORKSPACE SWITCH — not a merge — is safe for
+a reason M24 does not own and did not build (`Canvas.tsx`'s
+`switchWorkspace`, `panels.ts`'s `addLink`, frozen).** `toggleMerged` calls
+`linkDraw.end()` synchronously, before its first await, precisely so an
+in-flight draw cannot survive entering or leaving the merged view (see the
+entries above). `switchWorkspace` calls no such thing — a draw begun on
+workspace A and still held when the user switches to workspace B via the
+rail, the palette, or `Cmd+Shift+]`/`[` is left running with nothing to stand
+it down. If the release lands after the switch, `onCommit`'s `addLink(current,
+from, to)` runs with `current` now B's own panel array and `from` naming a
+panel that belongs to A — a foreign id at the SOURCE end this time, the
+mirror image of the merged-view case above. The whole of what stops that
+becoming a real cross-workspace write is `addLink`'s own both-endpoint guard
+in the FROZEN `panels.ts`, a module M24 deliberately did not touch and does
+not own: refuse unless BOTH `from` and `to` are already in the array handed
+to it. **A future milestone that relaxes that guard — to allow a link across
+workspaces on purpose, say — turns this into a genuine corruption, and
+nothing in M24 would notice**, because M24 built no defence of its own here
+and the safety is entirely borrowed. While the draw is held across the
+switch, `.canvas--linking` stays on (`linkDraw.state !== null` does not care
+which workspace is displayed), so every panel in the ARRIVING workspace
+reveals its ports via `.canvas--linking .panel__port` and a panel there can
+take the target ring exactly as if the draw had started in that workspace.
+All of it is cosmetic and clears on the eventual mouseup (which calls
+`onCommit` once, wherever it lands, and then always calls the drag's own
+`end()`); no data is at risk from the visual half, only from the write
+`addLink`'s guard is what actually refuses.
+
+**The ports sit flush INSIDE the border, never straddling it, because `.panel`
+carries `overflow: hidden` (`styles.css`).** Found by a failing check rather
+than by inspection, and it is not cosmetic. `.panel` clips its own children so
+a terminal's content cannot bleed past the rounded corners — so a port centred
+ON the border has HALF its hit area clipped away by that ancestor, which puts
+its `getBoundingClientRect()` CENTRE exactly on the clip edge, where a real
+mousedown resolves to whatever is behind it rather than to the port. The dot is
+visible, its box measures correctly, and pressing its own reported centre does
+nothing. `.panel__resize--e`/`--s` are already inside for the identical reason.
+The four `-7px` margins that centre them are this stylesheet's first negative
+margins and `verify:styles` 6 structurally cannot see them (its pattern is
+`/^\d+px$/`, so `7px` would fail and `-7px` passes silently) — that is a
+centring offset in the idiomatic `top: 50%; margin-top: -half` form rather than
+a spacing literal drawn from the scale that check polices, and a later auditor
+should not read it as a crack in the tokenised stylesheet.
+
+**The curve's feel and the snap radius are TUNING VALUES with no coverage, and
+the hand pass that would settle them HAS NOT BEEN RUN.** `CURVE_RATIO` (0.4),
+`CURVE_MIN` (24), `CURVE_MAX` (160) and `SNAP_RADIUS_PX` (90) were chosen by
+eye while the module was written. `verify:viewport` 94 and 95 pin that the
+curve is pure, perpendicular and clamped at both ends, and say nothing whatever
+about whether it LOOKS right; there is no visual regression test in this repo
+and that is a stated position rather than an omission. So these four numbers
+have exactly the standing this file already gives the `isAutoRepeat` modifier
+probe, the `--session-id` transcript filename rule and `agent.idleAfterMs`'s
+1500ms default: **provisional stand-ins that let the feature ship and let the
+checks exercise a real number, not evidence that any of them sits where the
+design intends.** Unlike those three, this one has not even been observed once
+— the hand pass is written down as a numbered checklist in M24's task-8 report
+and nobody has run it. A future task replacing any of the four with a value
+chosen after actually watching a drag is expected, not a regression. Tuning
+must not turn 94 or 95 red; if it does, the check was written with literals
+after all and that is the bug.
 
 **The completing click for a link is intercepted in the CAPTURE phase, or it wakes a panel
 (`Canvas.tsx`'s `onLinkModeMouseDownCapture`).** Every panel's chrome `stopPropagation`s its own

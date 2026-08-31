@@ -333,7 +333,7 @@ app.on('window-all-closed', () => {})
 // Raised 60s -> 120s at M8c, and 120s -> 300s at the M18 merge. It bounds the
 // WHOLE SUITE, not any one check: a single setTimeout armed once at whenReady.
 //
-// 120s was set when this file held 114 checks. It now holds 175, from five
+// 120s was set when this file held 114 checks. It now holds 196, from many
 // tracks that landed within days of each other, and the suite MEASURED at
 // 3-4 minutes on a 2026 M-series laptop — so the old bound was no longer
 // reachable at all, and every run ended in `FAIL watchdog` with the real
@@ -348,8 +348,10 @@ app.on('window-all-closed', () => {})
 // come up costs ~20s of nothing rather than failing fast. That converts a
 // fixture flake into "the suite hangs" and it is what tripped the old bound
 // three runs in four. The real fix is bounding those fixtures — or splitting
-// this file, which is 10,000 lines and rising — and a bigger number only buys
-// room for the next milestone to hit the same wall.
+// this file, which is over 12,000 lines and rising (measured at the M24 final
+// review: 12,469 before that review's own fix round, more again after it) —
+// and a bigger number only buys room for the next milestone to hit the same
+// wall.
 //
 // 300s is ~25% headroom over the measured worst case, chosen so a genuine
 // hang still fails in minutes rather than never. Whoever finds themselves
@@ -8875,46 +8877,127 @@ app.whenReady().then(async () => {
           `paths=${JSON.stringify(paths)}`)
       }
 
-      // 127. A click over a link still reaches what is beneath it. Success
-      //      criterion 5, and the only check that can see pointer-events:
-      //      none — the property is invisible to every DOM read that does not
-      //      dispatch a click through the layer. Driven with a REAL
-      //      sendInputEvent for check 75c's reason.
+      // 127. A click on a link still behaves exactly as a click on bare
+      //      canvas. REWRITTEN in M24, and the rewrite is a strengthening
+      //      rather than a relaxation.
       //
-      //      elementFromPoint is the discriminating read: with the layer deaf
-      //      to the pointer the topmost element at a point on a link is the
-      //      CANVAS, and with it live the topmost element is the line itself.
-      //      The click that follows is the behavioural half — the background
-      //      handler must still run and clear the selection.
+      //      It used to assert elementFromPoint at a link's midpoint returns
+      //      the CANVAS — a structural read of `.link-layer { pointer-events:
+      //      none }`. M24 gives each link a transparent hit stroke so it can
+      //      be hovered, so that read is now false by design and says nothing
+      //      about whether anything broke.
+      //
+      //      What the check was ALWAYS really making is the behavioural claim,
+      //      and it survives the change intact: Canvas's background
+      //      onMouseDown computes its hit from clientX/clientY through toWorld
+      //      and hitTest, and never reads event.target — so a mousedown on the
+      //      hit stroke bubbles to it and clears the selection exactly as a
+      //      click on empty canvas does.
+      //
+      //      This is the check that fails if a stray stopPropagation ever
+      //      lands on the hit path. That is the whole of what M24 traded away:
+      //      the invariant moved from "nothing in this layer can be hit" (one
+      //      CSS declaration, impossible to violate by accident) to "things
+      //      that can be hit do not consume", which looks entirely reasonable
+      //      to break in review. The failure it produces is a panel pinned
+      //      live for the rest of the run with nothing on screen to explain it.
+      //
+      //      Driven with a REAL sendInputEvent for check 75c's reason: a
+      //      dispatched MouseEvent is isTrusted:false and performs no default
+      //      action, so it would pass identically against the regression.
+      //
+      //      NOT __m4aSelection, which is the focused terminal's TEXT
+      //      selection and answers '' whatever the click did — the trap this
+      //      check's own first draft fell into.
+      //
+      //      Fix round 1 restores the one structural fact the rewrite
+      //      dropped, cheaply: `.link-layer` ITSELF still computes
+      //      `pointer-events: none`. This is the one class of regression the
+      //      behavioural clause alone cannot see — reverting the LAYER's own
+      //      declaration to `auto` leaves the behavioural half green, because
+      //      the topmost element at `mid` becomes `.link-layer__line`, which
+      //      carries no handler, so the mousedown still bubbles unchanged.
+      //      Every production reader of target identity is a containment
+      //      test a link element already fails identically to the canvas
+      //      element (there is no elementFromPoint anywhere in src/), so that
+      //      specific regression is inert today — but it is still worth
+      //      pinning, since "inert today" is not "inert forever". This
+      //      restores the STRUCTURAL claim without restoring the part M24
+      //      makes false by design (that NOTHING in the layer is hit-testable
+      //      — two descendants now are, on purpose).
+      //
+      //      Fix round 2 (M24 final review) adds the `focusedId` clause
+      //      success criterion 4 always named and this check never asserted:
+      //      "a plain click on a link behaves exactly as a click on bare
+      //      canvas: selection clears, focusedId clears, a marquee begins."
+      //      An uncleared focusedId is the dangerous half — assignTiers pins
+      //      the focused panel live UNCONDITIONALLY, so a stray link click
+      //      that left it standing would hold a WebGL context and a
+      //      LIVE_BUDGET slot for the rest of the run with nothing on screen
+      //      wrong, the identical failure check 144 exists to catch for the
+      //      marquee. `__m4aGrid()` is the app-level read rather than a DOM
+      //      one, for check 144's own reason: it resolves through
+      //      focusedIdRef and answers non-null only for a focusedId naming a
+      //      LIVE session, where `document.activeElement.closest('.panel')`
+      //      is a browser DEFAULT ACTION that stays green under exactly the
+      //      regression this clause exists to catch (`setFocusedId(null)`
+      //      deleted from the background handler).
+      //
+      //      LINK_A is still DORMANT here — check 125/126's port-driven
+      //      gestures never wake it, because a port's own mousedown stops
+      //      propagation before it ever reaches the background hit test that
+      //      calls onSelectPanel (see PanelPorts.tsx) — so establishing a
+      //      GENUINE focus needs two real clicks, not one: the first lands on
+      //      the card and only WAKES it (onSelectPanel, no focus — a carded
+      //      panel has no .panel__slot mousedown handler of its own to call
+      //      onFocusPanel), the second lands on the now-live .panel__slot and
+      //      actually focuses it. Skipping the wait between them, or reading
+      //      __m4aGrid() only once, is exactly how check 144 once reported a
+      //      VACUOUS "focused before=false" in a flaky run — the clause below
+      //      has to observe a genuine true before it can mean anything about
+      //      the false after.
       {
         await railGoTo(LINK_A)
+        const boxWake = await panelBox(LINK_A)
+        if (boxWake) await clickAt(boxWake.cx, boxWake.cy)
+        await waitUntil(async () => !!(await wc.executeJavaScript(
+          `!!document.querySelector('[data-panel-id="${LINK_A}"] .panel__slot')`)), 4000)
+        const boxFocus = await panelBox(LINK_A)
+        if (boxFocus) await clickAt(boxFocus.cx, boxFocus.cy)
+        const focusedBefore127 = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
         const mid = await wc.executeJavaScript(`(() => {
-          const line = document.querySelector('.link-layer [data-link]')
-          if (!line) return null
-          const r = line.getBoundingClientRect()
-          const x = r.x + r.width / 2, y = r.y + r.height / 2
-          const top = document.elementFromPoint(x, y)
-          const cls = top ? (typeof top.className === 'string' ? top.className : 'svg:' + top.className.baseVal) : null
-          return { x, y, cls, onCanvas: !!(top && top.closest && top.closest('.canvas')) }
+          const el = document.querySelector('.link-layer [data-link]')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+        })()`)
+        const layerPointerEvents = await wc.executeJavaScript(`(() => {
+          const layer = document.querySelector('.link-layer')
+          return layer ? getComputedStyle(layer).pointerEvents : null
         })()`)
         // The SELECTED PANEL, read from production markup. NOT __m4aSelection,
         // which is the focused terminal's TEXT selection and answers '' here
         // whatever the click did — the wrong hook, and the first draft's bug.
+        // Re-declared LOCALLY: it is not in scope from a sibling block.
         const selectedId = () => wc.executeJavaScript(`(() => {
           const el = document.querySelector('.panel--selected')
           return el ? el.getAttribute('data-panel-id') : null
         })()`)
-        let before = 'not-run'
-        let after = 'not-run'
-        if (mid && mid.onCanvas) {
+        let before = null
+        let after = null
+        let focusedAfter127 = null
+        if (mid) {
           before = await selectedId()
           await clickAt(mid.x, mid.y)
           after = await selectedId()
+          focusedAfter127 = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
         }
-        ok('127 a link takes no pointer events, so a click reaches what is beneath',
-          mid !== null && typeof mid.cls === 'string' && !mid.cls.includes('link-layer') &&
-            mid.onCanvas === true && before !== null && after === null,
-          `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+        ok('127 a click on a link still reaches the background handler beneath it, releases focusedId, and .link-layer itself still takes no pointer events',
+          mid !== null && before !== null && after === null && layerPointerEvents === 'none' &&
+            focusedBefore127 === true && focusedAfter127 === false,
+          `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)} ` +
+          `layerPointerEvents=${JSON.stringify(layerPointerEvents)} ` +
+          `focused ${focusedBefore127} -> ${focusedAfter127}`)
       }
 
       // 128. THE SECOND ONE WORTH KNOWING BY NUMBER. Closing the target
@@ -12216,14 +12299,17 @@ app.whenReady().then(async () => {
         // kill-server obligation, and CLAUDE.md records this repo already
         // being burned once by an inherited obligation nobody wrote down
         // (a later run attaching to a stale server, one check reporting the
-        // wrong number while looking entirely correct). Today check 174 is
-        // the LAST check in this file, so leaving the fakes installed would
-        // have been silently harmless — but that is exactly the condition
-        // under which an obligation gets forgotten, not a reason to skip
-        // writing it down. WHOEVER APPENDS CHECK 175: this block restores
-        // the real JIRA_* handlers before it returns control, so 175 runs
-        // against production Jira behaviour exactly as 173 did — nothing to
-        // check on your end. If a future edit ever needs the fakes to
+        // wrong number while looking entirely correct). When this was
+        // written check 174 was the LAST check in this file, so leaving the
+        // fakes installed would have been silently harmless — but that is
+        // exactly the condition under which an obligation gets forgotten,
+        // not a reason to skip writing it down. It has since stopped being
+        // harmless: M24's link-drawing merge appended link-draw.1-6 AFTER
+        // this block, and they run against production Jira behaviour
+        // exactly as 173 did precisely because this block restores the real
+        // JIRA_* handlers before it returns control — nothing to check on
+        // your end, which is the promise this comment made in advance and
+        // is the reason the merge needed no edit here beyond this note. If a future edit ever needs the fakes to
         // survive past this block's own return, it must say so in a comment
         // right here, at the point the restore would otherwise happen.
         ipcMain.removeHandler(IPC.JIRA_LIST)
@@ -12247,6 +12333,563 @@ app.whenReady().then(async () => {
           // a loose assertion survives into a future where it is reachable.
           outcome === 'comment added',
         `minted=${minted} row=${row} sent=${JSON.stringify(jiraSent)} outcome=${outcome}`)
+}
+    // M24. Drawing a link by dragging from a port handle. This is the
+    // enclosing block for the WHOLE milestone, not just this task's two
+    // checks: tasks 5, 6 and 7 append further checks INSIDE these braces so
+    // they can see the consts declared here (portBox, dragPortTo, m24Links,
+    // the four fixture ids) — a sibling block would not see them and a
+    // ReferenceError there ends the whole suite run.
+    {
+      const M24_A = 'm24A'
+      const M24_B = 'm24B'
+      const M24_C = 'm24C'
+      const M24_DORMANT = 'm24-dormant'
+
+      // Seeded through the layout file and a reload rather than through
+      // spawns, because check link-draw.2 needs a panel that has GENUINELY never been
+      // promoted, and the only way to get one is a panel restored from disk
+      // that no camera has ever framed.
+      //
+      // A, B and C are 260 world units apart, which is what lets a rail click
+      // on one leave the others on screen: .canvas is ~700px wide here, so
+      // framing B puts A's centre ~260px left of centre, comfortably inside.
+      // Check 125's own first draft parked its pair 600 apart and failed with
+      // the target's rect off the window entirely.
+      //
+      // M24_DORMANT's coordinate is a DEVIATION from the task brief, which
+      // parked it at (80000,80000) by the same pattern check 39's
+      // (50000,50000), check 84's (60000,60000) and check 125's (70000,70000)
+      // already use. That pattern is right for THOSE checks, which reach
+      // their dormant panel only by its own rail row — but check link-draw.2 also
+      // needs to DRAG from M24_A's port, in ONE continuous on-screen gesture,
+      // to wherever `railGoTo(M24_DORMANT)` frames. At (80000,80000) that
+      // framing puts M24_A's port around screen x=-81600 — the port element
+      // exists (portBox reports it non-null, non-zero) but is nowhere near
+      // the visible window, so the drag silently lands nowhere. Reproduced
+      // by running the check with the brief's own coordinate: 174 passes,
+      // 175 fails with `links` unchanged, and a one-off diagnostic (removed
+      // once this was understood) showed the port's actual screen position.
+      // Cmd+1 (fit all) cannot rescue it either — the SAME limit check
+      // 142-144's own comment states for check 84's 60000,60000 fixture:
+      // fitAll clamps at MIN_SCALE (0.1) and still cannot bring a panel this
+      // far from the origin into the same frame as one near it, and
+      // PORT_MIN_SCALE (0.4) is above MIN_SCALE regardless, so the ports
+      // would not even render at a fit-all scale.
+      //
+      // "Genuinely never promoted" only requires that NOTHING before this
+      // block's own railGoTo(M24_DORMANT) has framed it — proximity to
+      // M24_A/B/C carries no risk of that, since nothing else in this suite
+      // addresses a row by this id. So M24_DORMANT completes the 2x2 grid
+      // A/B/C already forms (260 apart on each axis, the same spacing that
+      // lets framing one leave its neighbours on screen), placed at the
+      // fourth corner — distinct from A, B and C's own rects, and distinct
+      // from every other fixture's dormant coordinate (50000/60000/70000).
+      //
+      // Seeded HERE rather than borrowed from the M13 link block. By this
+      // point in the run M18's move and delete checks have left the active
+      // workspace with no terminal panel at all — check 165's own first draft
+      // reported `terminal=null` and failed for a fixture reason rather than a
+      // behavioural one.
+      flushLayoutStore()
+      {
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+        const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+        ws.panels.push(
+          { id: M24_A, x: -2400, y: -2000, w: 200, h: 160, z: maxZ + 1, cwd: '~', args: ['-l'] },
+          { id: M24_B, x: -2140, y: -2000, w: 200, h: 160, z: maxZ + 2, cwd: '~', args: ['-l'] },
+          { id: M24_C, x: -2400, y: -1740, w: 200, h: 160, z: maxZ + 3, cwd: '~', args: ['-l'] },
+          { id: M24_DORMANT, x: -2140, y: -1740, w: 200, h: 160, z: maxZ + 4, cwd: '~', args: ['-l'] }
+        )
+        writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+        layoutStore.load()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () =>
+          (await wc.executeJavaScript(
+            `!!document.querySelector('[data-rail-row="${M24_A}"]')`)) || false,
+          6000)
+        await settle()
+      }
+
+      // These two are re-declared locally rather than reused from the M13
+      // block above: panelBox and railGoTo there are scoped inside that
+      // block's own braces and are out of scope here.
+      const panelBox = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id="${id}"]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.x, y: r.y, w: r.width, h: r.height,
+                 cx: r.x + r.width / 2, cy: r.y + r.height / 2 }
+      })()`)
+
+      const railGoTo = async (id) => {
+        const clicked = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('[data-rail-row="${id}"] .rail-row__main')
+          if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await settle()
+        return clicked
+      }
+
+      const portBox = (id, side) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id="${id}"] [data-port="${side}"]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) return { zero: true }
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+      })()`)
+
+      // A REAL drag: sendInputEvent, four intermediate moves, and the
+      // `leftButtonDown` modifier. All three matter and none is padding.
+      // sendInputEvent because a dispatched MouseEvent is isTrusted:false and
+      // performs no default action (check 75c's limit). Four moves because the
+      // gesture's listeners live on `document` precisely so they survive the
+      // cursor leaving the port, and one synthetic hop exercises neither the
+      // tracking nor the listener lifetime. `leftButtonDown` because Chromium
+      // derives MouseEvent.buttons from the MODIFIER bitfield rather than the
+      // `button` field — the same spelling trap the isAutoRepeat note records
+      // — and the gesture ends itself on a move with no button held, so
+      // without it every drag here would end on its first move.
+      //
+      // Split into three (fix round 1) so a check can read the DOM MID-GESTURE
+      // — after the press and the move, before the release — which
+      // `dragPortTo` alone cannot do: it presses, moves and releases inside
+      // one call with nothing to observe in between. `settle()` sends no
+      // input events, so a read taken here cannot disturb the gesture —
+      // `onMove` (useLinkDraw.ts) only ends a draw on a BUTTONLESS move, and
+      // none is sent by reading the DOM. `dragPortTo` below is recomposed
+      // from these three with IDENTICAL timing to the original single
+      // function (settle() still runs exactly once, after the release), so
+      // checks 174/175/176 are unaffected.
+      const pressPort = (from) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+      }
+
+      const movePortTo = (from, to) => {
+        for (let i = 1; i <= 4; i++) {
+          wc.sendInputEvent({
+            type: 'mouseMove',
+            x: Math.round(from.x + ((to.x - from.x) * i) / 4),
+            y: Math.round(from.y + ((to.y - from.y) * i) / 4),
+            button: 'left',
+            modifiers: ['leftButtonDown']
+          })
+        }
+      }
+
+      const releasePort = async (to) => {
+        wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+        await settle()
+      }
+
+      const dragPortTo = async (from, to) => {
+        pressPort(from)
+        movePortTo(from, to)
+        await releasePort(to)
+      }
+
+      const m24Links = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.link-layer [data-link]')].map((e) => e.getAttribute('data-link'))`)
+
+      // Re-declared locally: the M13 block's own clickAt (line ~8767) is
+      // scoped inside THAT block's braces and is out of scope here.
+      const clickAt = async (x, y) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 })
+        await settle()
+      }
+
+      // 174. A link drawn by the REAL gesture: press a port, drag, release on
+      //      a panel. Asserted by the data-link key carrying BOTH IDS IN ORDER
+      //      rather than by "a path exists" — an empty layer satisfies a count,
+      //      and a key built from an unordered pair satisfies "a link appeared"
+      //      while collapsing a->b and b->a into one.
+      //
+      //      The port must have a NON-ZERO box, which portBox reports
+      //      separately: ports are opacity-0 at rest and a zero-sized element
+      //      would make every coordinate here land on the panel beneath,
+      //      turning this into a check about panel drag with a green result.
+      {
+        const src = M24_A
+        const dst = M24_B
+        await railGoTo(dst)                    // frame the target
+        const port = await portBox(src, 'e')
+        const box = await panelBox(dst)
+        if (port && !port.zero && box) await dragPortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
+        const links = await m24Links()
+        ok('link-draw.1 a port drag draws a link, keyed with both ids in order',
+          port !== null && port.zero !== true && box !== null &&
+            links.includes(src + ' ' + dst),
+          `port=${JSON.stringify(port)} box=${JSON.stringify(box)} links=${JSON.stringify(links)}`)
+      }
+
+      // 175. The drop must NOT WAKE the target. Check 126's argument through a
+      //      new door: 126 covers the completing CLICK of the armed mode, and
+      //      nothing in it can see a drag.
+      //
+      //      Holds by construction here rather than by a guard — waking hangs
+      //      off onSelectPanel, which fires from MOUSEDOWN, and our mousedown
+      //      was consumed by the port while the mouseup lands on a panel that
+      //      has no mouseup handler at all. "Holds by construction" is exactly
+      //      the claim a later refactor breaks silently, which is why it is
+      //      checked rather than argued.
+      //
+      //      SPAWNED, never "absent from __m4aSessions()". The registry mints a
+      //      PanelSession for every rendered panel including a dormant one —
+      //      that is the whole of "two lifetimes, not one" — so the absence
+      //      form fails against CORRECT code, which is how check 126's own
+      //      first draft failed.
+      {
+        const src = M24_A
+        await railGoTo(M24_DORMANT)
+        const port = await portBox(src, 'e')
+        const box = await panelBox(M24_DORMANT)
+        if (port && !port.zero && box) await dragPortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
+        const target = (await wc.executeJavaScript(
+          `(window.__m4aSessions ? window.__m4aSessions() : [])`))
+          .find((x) => x.id === M24_DORMANT)
+        const links = await m24Links()
+        ok('link-draw.2 a port drag links a dormant panel WITHOUT waking it',
+          port !== null && port.zero !== true && box !== null &&
+            links.includes(src + ' ' + M24_DORMANT) &&
+            target !== undefined && target.spawned === false && target.dormant === true,
+          `target=${JSON.stringify(target)} links=${JSON.stringify(links)}`)
+      }
+
+      // 176. A release in genuinely empty space, outside the snap radius,
+      //      creates NOTHING — and the same fixture's in-radius release DOES
+      //      create a link.
+      //
+      //      The second half is the non-vacuity guard and is not optional. The
+      //      "creates nothing" clause alone passes perfectly against a gesture
+      //      that never worked at all, which is the trap check 100 records for
+      //      its own negative and the reason it is described there as evidence
+      //      only once its positive neighbour has been watched red.
+      //
+      //      Distances are in SCREEN pixels because SNAP_RADIUS_PX is: the
+      //      far drop is 6x the radius away, comfortably outside it at any
+      //      scale this fixture runs at.
+      //
+      //      HONESTY NOTE (fix round 1): this check is about SNAPPING, not
+      //      the drop preview Task 5 adds — it names `m24Links()`, never the
+      //      ghost path or the target ring, and it was watched PASS before
+      //      either existed (Tasks 3-4 already deliver the underlying
+      //      resolve-on-release). Its title reads like a drop-feedback check
+      //      and is not one; check link-draw.4, below, is where the ghost and the
+      //      ring actually earn coverage.
+      {
+        const src = M24_C
+        const dst = M24_B
+        await railGoTo(dst)
+        const box = await panelBox(dst)
+        const port = await portBox(src, 'e')
+        let farLinks = null
+        let nearLinks = null
+        if (port && !port.zero && box) {
+          const before = await m24Links()
+          // Far: well outside the radius, in empty canvas.
+          await dragPortTo(port, { x: Math.round(box.cx) + 540, y: Math.round(box.cy) + 540 })
+          farLinks = await m24Links()
+          // Near: just outside the panel's own border, inside the radius.
+          const port2 = await portBox(src, 'e')
+          if (port2 && !port2.zero) {
+            await dragPortTo(port2, { x: Math.round(box.x) - 20, y: Math.round(box.cy) })
+          }
+          nearLinks = await m24Links()
+          farLinks = { before, after: farLinks }
+        }
+        const key = src + ' ' + dst
+        ok('link-draw.3 a drop outside the radius creates nothing; a near-miss still snaps',
+          farLinks !== null && nearLinks !== null &&
+            farLinks.after.length === farLinks.before.length &&
+            !farLinks.after.includes(key) &&
+            nearLinks.includes(key),
+          `far=${JSON.stringify(farLinks)} near=${JSON.stringify(nearLinks)}`)
+      }
+
+      // 177. The ghost curve exists MID-GESTURE and is gone the instant the
+      //      gesture ends — that pairing is its own non-vacuity guard, the
+      //      same shape check 100's own comment states for a negative read
+      //      alone — AND the target ring lands on the DESTINATION panel
+      //      SPECIFICALLY, matched by its own data-panel-id rather than by
+      //      "some element carries data-link-target somewhere". Check 58's
+      //      rule: a ring on the wrong panel still renders a ring, and an
+      //      assertion that only asked "does [data-link-target] exist
+      //      anywhere" would pass against that regression identically.
+      //
+      //      Uses pressPort/movePortTo/releasePort (fix round 1's split of
+      //      dragPortTo) to read the DOM BETWEEN the move and the release —
+      //      settle() sends no input events, so this cannot disturb the
+      //      gesture in progress (onMove only ends a draw on a BUTTONLESS
+      //      move, and none is sent here).
+      {
+        const src = M24_C
+        const dst = M24_B
+        await railGoTo(dst)
+        const box = await panelBox(dst)
+        const port = await portBox(src, 'e')
+        let midGhost = null
+        let midTarget = null
+        let afterGhost = null
+        if (port && !port.zero && box) {
+          pressPort(port)
+          // Onto the destination panel's own centre — containment, the
+          // strongest of nearestLinkTarget's cases — so the target resolves
+          // unambiguously rather than depending on the radius arithmetic
+          // check link-draw.3 already covers.
+          movePortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
+          await settle()
+          midGhost = await wc.executeJavaScript(
+            `document.querySelector('.link-layer__ghost') !== null`)
+          midTarget = await wc.executeJavaScript(
+            `document.querySelector('[data-panel-id="${dst}"][data-link-target]') !== null`)
+          await releasePort({ x: Math.round(box.cx), y: Math.round(box.cy) })
+          afterGhost = await wc.executeJavaScript(
+            `document.querySelector('.link-layer__ghost') !== null`)
+        }
+        ok('link-draw.4 the ghost curve paints mid-gesture and clears on release, and the target ring names the destination panel',
+          midGhost === true && midTarget === true && afterGhost === false,
+          `midGhost=${midGhost} midTarget=${midTarget} afterGhost=${afterGhost}`)
+      }
+
+      // 178. Hovering a link reveals a badge that removes it, and ONE Cmd+Z
+      //      restores it.
+      //
+      //      The one-press clause is check 128's argument inherited: a removal
+      //      committed in more than one history entry satisfies "the link came
+      //      back" after two presses and looks entirely correct in every other
+      //      read, while the user's second press then undoes something else.
+      //
+      //      Driven through __m4bUndo, NEVER a dispatched Cmd+Z: undo is a
+      //      main-process MENU accelerator delivered as IPC, so a synthetic
+      //      KeyboardEvent reaches nothing at all. Check 128's first draft
+      //      fell into exactly this.
+      //
+      //      The hover is a real sendInputEvent mouseMove rather than a
+      //      dispatched mouseover, because the badge's visibility is driven by
+      //      React state set from onMouseEnter and an untrusted event would
+      //      prove the handler works while proving nothing about the pointer.
+      //
+      //      Fix round 1 adds the hover-highlight clause: the hovered link's
+      //      computed stroke must differ from an UN-HOVERED sibling link's
+      //      computed stroke, read inside this SAME hover window (before the
+      //      removal, while `key`'s hit stroke is still genuinely hovered).
+      //      Compared against a real sibling's colour rather than a
+      //      hardcoded rgb() literal, because a hardcoded value would turn
+      //      this check red on a retheme — a copy reason, not a behavioural
+      //      one — the same discipline verify:styles' own theme-token rules
+      //      already enforce for the stylesheet itself. m24A -> m24-dormant
+      //      is the sibling, seeded by check link-draw.2 and never removed by
+      //      anything before this point.
+      {
+        const key = M24_A + ' ' + M24_B
+        const siblingKey = M24_A + ' ' + M24_DORMANT
+        await railGoTo(M24_B)
+        const mid = await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('.link-layer [data-link="${key}"]')
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+        })()`)
+        let badge = null
+        let hoverColors = null
+        let afterRemove = null
+        let afterUndo = null
+        if (mid) {
+          wc.sendInputEvent({ type: 'mouseMove', x: mid.x, y: mid.y })
+          await settle()
+          badge = await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('[data-link-remove="${key}"]')
+            if (!b) return null
+            const r = b.getBoundingClientRect()
+            return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+          })()`)
+          hoverColors = await wc.executeJavaScript(`(() => {
+            const hovered = document.querySelector('.link-layer [data-link="${key}"]')
+            const sibling = document.querySelector('.link-layer [data-link="${siblingKey}"]')
+            if (!hovered || !sibling) return null
+            return { hovered: getComputedStyle(hovered).stroke, sibling: getComputedStyle(sibling).stroke }
+          })()`)
+          if (badge) {
+            await clickAt(badge.x, badge.y)
+            afterRemove = await m24Links()
+            await wc.executeJavaScript(`window.__m4bUndo && window.__m4bUndo()`)
+            await settle()
+            afterUndo = await m24Links()
+          }
+        }
+        ok('link-draw.5 the hover badge removes a link, and ONE undo restores it, and the hover highlight actually changes the line\'s colour',
+          mid !== null && badge !== null &&
+            hoverColors !== null && hoverColors.hovered !== hoverColors.sibling &&
+            afterRemove !== null && !afterRemove.includes(key) &&
+            afterUndo !== null && afterUndo.includes(key),
+          `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
+          `afterRemove=${JSON.stringify(afterRemove)} afterUndo=${JSON.stringify(afterUndo)}`)
+      }
+
+      // 179. Ports render on a NON-TERMINAL kind, and are ABSENT in the merged
+      //      view — asserted in one read, because "no ports anywhere" passes
+      //      the absence half perfectly while deleting the feature. The same
+      //      both-directions rule check 106 states for `editable`.
+      //
+      //      `links` lives on PanelBase and verify:viewport 88 pins that the
+      //      geometry never asks a panel its kind, so every kind is already a
+      //      valid ENDPOINT — this is the half that makes the GESTURE as
+      //      kind-agnostic as the arithmetic.
+      //
+      //      A FILE panel is the fixture, not a review node. Both are equally
+      //      valid non-terminal kinds for this claim, and a file panel is
+      //      minted by one call to the __m13Open test hook with no git binary
+      //      anywhere in earshot — where a review node needs a real repository
+      //      fixture, and checks 99-101 already have to SKIP LOUDLY on a
+      //      machine with no git. Gating this check on git would make the
+      //      milestone's kind-agnostic claim untested on exactly the machines
+      //      least able to notice.
+      //
+      //      Numbered 179 here rather than the task brief's 178: this suite's
+      //      178 was already claimed by the hover-badge/removal check above.
+      //
+      //      This check's brief called for threading a `scale` prop into
+      //      each of the four kinds and gating on `scale >= PORT_MIN_SCALE`
+      //      inline. That is stale against this branch's own fix round
+      //      (c148fbd, "port visibility is a canvas-host class, never a
+      //      scale prop"): TerminalPanel carries NO `scale` prop at all, and
+      //      the PORT_MIN_SCALE cutoff is enforced by the `.canvas--ports-
+      //      hidden` class on the canvas host, in CSS, so a memoized panel
+      //      is never handed a prop that changes on every zoom frame. This
+      //      check therefore drives no zoom — that geometry is already
+      //      covered, kind-agnostically, by the CSS rule and by
+      //      PanelPorts.tsx's own scale threshold, which has no per-kind
+      //      branch to regress. What this check pins is the fact that IS a
+      //      per-call-site wiring decision and could plausibly be gotten
+      //      wrong per kind: presence on a mounted non-terminal kind, and
+      //      absence under `readOnly` (the merged view).
+      //
+      //      A file this suite already owns is not reused here — every
+      //      earlier FIXTURE constant (checks 134-137, 169-171) is declared
+      //      inside its OWN nested block and is out of scope this far down
+      //      the file. Ruling P7: hoisting one out would couple two
+      //      unrelated fixtures, this suite's most common check failure. A
+      //      one-line file is written into its own spaced temp directory.
+      //
+      //      FIX ROUND 1 extends this check with the ring clause below
+      //      (`midFileTarget`) rather than adding a new check, per the
+      //      coordinator's ruling: the original body proved presence and
+      //      merged-view absence only, and said nothing about whether
+      //      `linkTarget`/`data-link-target` — the RING — is ever wired for
+      //      a non-terminal kind. It was not: `onBeginLink` being required
+      //      on all four protected nothing there, because a prop a
+      //      component never declares has nothing to omit.
+      {
+        const m24PortsDir = mkdtempSync(join(tmpdir(), 'tc panels m24 ports '))
+        const m24PortsFixture = join(m24PortsDir, 'ports.md')
+        writeFileSync(m24PortsFixture, '# m24 ports fixture\n', 'utf8')
+
+        // The merged chord, re-declared: M18's own `chord`/`MERGE` helpers
+        // are scoped to that block. `code: 'KeyA'` and not `key`, for check
+        // 152's reason — Shift rewrites the printed character, so a
+        // key-based test is correct on one keyboard layout and silently
+        // dead on every other.
+        const MERGE_M24 = () => wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', {` +
+          ` key: 'A', code: 'KeyA', metaKey: true, shiftKey: true, bubbles: true })), true`)
+
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(m24PortsFixture)})`)
+        const fileId = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          const fresh = now.find((id) => !before.has(id))
+          return fresh || false
+        }, 5000)
+
+        const onFile = fileId ? await portBox(fileId, 'e') : null
+        const onTerminal = await portBox(M24_A, 'e')
+
+        // Fix round 1's finding: onBeginLink being required on all four kinds
+        // says nothing about whether the RING (`linkTarget`) is ever wired,
+        // because a component that never DECLARES a prop has nothing to omit
+        // for requiredness to catch — `onBeginLink` was protected by
+        // `<PanelPorts>` not compiling without it, `linkTarget` had no such
+        // forcing function anywhere in the four. So this drags for REAL from
+        // the terminal panel's own port toward the file panel just minted,
+        // and reads the DOM mid-gesture (pressPort/movePortTo/releasePort,
+        // check link-draw.4's split of dragPortTo) for the target's OWN
+        // data-panel-id — check 58's rule: a ring on the wrong panel still
+        // renders A ring, so "does [data-link-target] exist anywhere" would
+        // pass against exactly the regression this clause exists to catch.
+        // Released cleanly afterward (readOnly is false throughout this
+        // sub-block, so the drop actually resolves and completes rather than
+        // leaving a draw in flight for the merged-view read below).
+        //
+        // A file panel opens at the CURRENT viewport's world centre
+        // (__m13Open -> worldCentre()), which after the M13 block's own
+        // railGoTo(M24_B) is right on top of the whole tight 260-unit M24
+        // A/B/C/dormant cluster — and the file panel's default size (640x520
+        // here) is large enough to cover all four of them entirely. Minted
+        // AFTER them, it also paints ABOVE them, so a raw mousedown at
+        // M24_A's port screen coordinate lands on the FILE PANEL's own body,
+        // not on the port underneath it — confirmed by a debug read during
+        // this fix: pressing there produced no ghost and no `canvas--linking`
+        // class at all, i.e. the gesture never began, before this
+        // railGoTo(M24_A) was added. `railGoTo` selects AND raises (the same
+        // selectAndRaise every rail click already uses), which puts M24_A's
+        // whole DOM subtree — port included — back on top of the file panel
+        // in paint order, so the port genuinely receives the mousedown. Both
+        // boxes are recomputed AFTER this call: the raise does not move
+        // anything, but it is still a fresh read rather than reusing values
+        // captured before the click, on the same discipline check link-draw.3's
+        // `port2` re-read after its own far drag already applies.
+        await railGoTo(M24_A)
+        const onTerminalRaised = await portBox(M24_A, 'e')
+        const fileBox = fileId ? await panelBox(fileId) : null
+        let midGhost = null
+        let midFileTarget = null
+        if (onTerminalRaised && onTerminalRaised.zero !== true && fileBox) {
+          pressPort(onTerminalRaised)
+          movePortTo(onTerminalRaised, { x: Math.round(fileBox.cx), y: Math.round(fileBox.cy) })
+          await settle()
+          // The non-vacuity pairing check link-draw.4 already establishes: a ghost
+          // that genuinely never painted (a gesture that silently failed to
+          // begin) would satisfy "no ring on the file panel" for a reason
+          // that has nothing to do with the ring's own wiring.
+          midGhost = await wc.executeJavaScript(
+            `document.querySelector('.link-layer__ghost') !== null`)
+          midFileTarget = await wc.executeJavaScript(
+            `document.querySelector('[data-panel-id="${fileId}"][data-link-target]') !== null`)
+          await releasePort({ x: Math.round(fileBox.cx), y: Math.round(fileBox.cy) })
+        }
+
+        // Enter the merged view; ports must vanish on BOTH, because geometry
+        // and links are read-only there and addLink would write to a
+        // workspace record this canvas does not own.
+        await MERGE_M24()
+        await settle()
+        const mergedFile = fileId ? await portBox(fileId, 'e') : null
+        const mergedTerminal = await portBox(M24_A, 'e')
+        await MERGE_M24()
+        await settle()
+        // WHOEVER APPENDS CHECK 180 INHERITS THIS: the drag above is released
+        // over the file panel and COMMITS, so this block leaves a real link on
+        // the canvas and a history entry behind it — the same standing
+        // obligation check 20 hands down in verify-pty-manager.cjs. A later
+        // check that counts links, or presses Cmd+Z expecting to undo its own
+        // gesture, has to account for both.
+        ok('link-draw.6 ports render on a file panel and vanish in the merged view, and the target ring lands on the file panel by id',
+          Boolean(fileId) && onFile !== null && onFile.zero !== true &&
+            onTerminal !== null && onTerminal.zero !== true &&
+            midGhost === true && midFileTarget === true &&
+            mergedFile === null && mergedTerminal === null,
+          `fileId=${fileId} onFile=${JSON.stringify(onFile)} onTerminal=${JSON.stringify(onTerminal)} ` +
+          `fileBox=${JSON.stringify(fileBox)} midGhost=${midGhost} midFileTarget=${midFileTarget} ` +
+          `mergedFile=${JSON.stringify(mergedFile)} mergedTerminal=${JSON.stringify(mergedTerminal)}`)
+      }
     }
 
   } catch (error) {

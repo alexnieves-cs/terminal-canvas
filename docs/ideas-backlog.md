@@ -806,12 +806,22 @@ The universal "maximise this" gesture.
 
 ## 24. Edges between panels — functional restart-on-exit shipped in M25
 
-**The decorative half shipped in M13**, as *links*. A user draws a directed,
-optionally labelled line from one panel to another; it persists, it survives a
-reload, and closing either endpoint removes it in the same undoable step. See
+**The decorative half is now complete, in two milestones.** M13 built the
+MODEL: a directed, optionally labelled line from one panel to another, which
+persists, survives a reload, and leaves in the same undoable step as either
+endpoint. M24 built the ERGONOMICS, which is what made the model findable —
+four port handles revealed on hover, a drag with a live ghost curve and a ring
+on the prospective target, snapping to a panel within a screen-space radius,
+edges rendered as bezier curves that leave each border perpendicular, and an
+`×` badge on hover that removes one. M13 shipped links that worked and that
+almost nobody would find (arm a mode from the palette, then click); M24 is the
+milestone that made linking a thing you do by pointing at the two panels. See
 `CLAUDE.md`'s "The code says `link`, and `edge` already means something else"
-and the eleven entries after it, and
-[`docs/superpowers/specs/2026-08-30-m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md).
+and the entries after it — including M24's own, beginning at "The link layer's
+guarantee moved from STRUCTURAL to CONVENTIONAL" — and both specs:
+[`m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md)
+and
+[`m24-link-drawing-design.md`](superpowers/specs/2026-08-30-m24-link-drawing-design.md).
 
 The entry named **two flavours and said they should not be built at once**.
 Both are now built: decorative links shipped in M13; M25 adds the smallest
@@ -836,7 +846,12 @@ PTY writer.
 - **What M13 leaves ready.** The primitive is built generally rather than as a
   private detail of #7's subagent visualisation, which is what #24 asked for:
   same renderer, same z-order answer, same persistence. #7's parent-to-subagent
-  edges can render on `LinkLayer` without inventing a second scheme.
+  edges can render on `LinkLayer` without inventing a second scheme. **M24 adds
+  to that inventory**: `linkPath`/`linkControls` (a bezier from two anchors,
+  pure and plain-node checkable), `nearestLinkTarget` (a drop resolver that
+  prefers containment and excludes its own source), and `PanelPorts` (one
+  component, five call sites) — so a functional edge would be a new MEANING on
+  an existing gesture rather than a second gesture.
 - **Constraint, now discharged:** edges join `Panel.z`'s ordering rather than
   inventing a second scheme — the layer sits at `z-index: 0`, beneath every
   panel, since `nextZ` mints `z >= 1` — and they take no `LIVE_BUDGET` slot and
@@ -848,16 +863,35 @@ PTY writer.
   not survive validation, because a file can be hand-edited between launches.
 - **Constraint the functional half inherits:** a functional edge would have to
   survive the same rule the decorative one does — the completing gesture must
-  never wake a dormant panel (`verify:panels` 126). A rule that *fires* on a
-  dormant panel is a harder version of the same question, and M13 does not
-  answer it.
+  never wake a dormant panel — `verify:panels` 126 for M13's armed click, and
+  175 for M24's port drag, which holds it by CONSTRUCTION (waking hangs off
+  `onSelectPanel`, which fires from mousedown, and the port consumed ours) and
+  is checked anyway, because "holds by construction" is exactly the claim a
+  later refactor breaks silently. A rule that *fires* on a dormant panel is a
+  harder version of the same question, and neither milestone answers it.
+- **Constraint the functional half inherits, added by M24:** the layer's
+  pointer guarantee is no longer structural. It was one CSS declaration
+  (`pointer-events: none` on `.link-layer` and everything in it) and is now a
+  convention — two descendants opt back in, and hold the invariant only because
+  neither consumes the event. Anything the functional half adds to that layer
+  inherits the same obligation and the same silent failure; `CLAUDE.md`'s entry
+  and `verify:panels` 127 are the authority.
 - **Deliberately still absent, and each is a decision rather than an
-  oversight:** link selection on the canvas (the inspector is the only surface
-  that acts on a link, because a hairline at `MIN_SCALE` is a sub-pixel target
-  and hit-testing one would cost `pointer-events: none`); routing (a link is a
-  straight segment and passes under intervening panels); culling and any bound
-  on link count; and cross-workspace links, which are representable — `PanelId`
-  is global — and render as nothing.
+  oversight:** link SELECTION on the canvas — M24 gave a link a hover hit
+  target and a remove badge, so removing one is no longer a trip to the
+  inspector, but there is still no selected-edge state, no `Delete` key owner
+  and no relabel-by-keyboard, because a hairline at `MIN_SCALE` (0.1) is a
+  sub-pixel target and edge selection would have to coexist with panel
+  selection and the marquee; ROUTING, in the sense of avoidance — M24 replaced
+  the straight segment with a bezier that leaves each border perpendicular, and
+  a curve still passes under intervening panels because nothing routes around
+  them; PERSISTED PORT SIDES, so an edge does not remember it left A's right
+  side and re-derives its anchors from the live centre-to-centre bearing every
+  frame (`linkAnchors` reserves an unused third parameter for the milestone
+  that changes that, and taking it grows `PanelLink`, both parsers and
+  `layout-adapt`'s round trip — which is exactly the scope M24 saved by
+  declining it); culling and any bound on link count; and cross-workspace
+  links, which are representable — `PanelId` is global — and render as nothing.
 
 ## 25. Where a new panel goes — placement, snapping, and tidy
 
@@ -2226,6 +2260,64 @@ package" is how a placeholder becomes permanent.
   no place for one — every pixel in the app today is CSS or xterm.
 - **Nearest existing entry: none.** Distribution is absent from the original backlog; #74
   is the only other M5c-adjacent entry and it covers updates, not appearance.
+
+## 77. M24 link drawing — four items Task 8 was assigned and dropped
+
+M24's plan assigned a Task 8 to sweep up loose ends the earlier tasks left
+behind; it did not land, and the final whole-branch review found the four
+items it would have covered. None blocks the milestone. Recorded here rather
+than left to be rediscovered.
+
+- **The badge/label overlap.** A labelled link's `×` remove badge and its
+  `<text>` label both sat at the identical closed-form cubic midpoint in
+  `LinkLayer.tsx`, and the label painted after the badge — SVG paint order —
+  so hovering a labelled link showed a `×` with the label text on top of it.
+  **Fixed** by the M24 final review's own fix round: the label is now offset
+  16 world units above the midpoint, leaving the badge exactly where its
+  click target belongs. **Unverified by any check** — this is a visual
+  property the harness cannot judge (the same limit this repo already states
+  for the link layer's paint order and for every other pixel-only claim in
+  `CLAUDE.md`) and belongs on the by-hand checklist rather than in
+  `npm run verify`.
+- **`paletteActions` re-renders `LinkLayer` on every palette open.**
+  `paletteActions` depends on `palette.capturedId`, so opening the palette
+  changes `onRemove`'s identity, and `LinkLayer`'s own `memo` comment names "a
+  palette open" as a case it is supposed to stop. It does not, today — the
+  comment states an intent the dependency chain does not yet deliver. Purely
+  cosmetic (one extra re-render per gesture, not a 60Hz cascade), and a
+  `useCallback` wrapper around the link-removal callback, keyed on something
+  narrower than the whole captured-id object, would restore the comment's
+  literal truth. Not urgent; recorded so the comment is not read as already
+  true.
+- **A CORRECTION, not a defect: armed link-mode and the removal badge do not
+  double-fire.** It was believed during the milestone that clicking a badge
+  while the older, keyboard-reachable link-mode (M13's click-then-click path)
+  is armed would fire BOTH the completing handler and the removal — one
+  gesture, two effects, one of them presumably wrong. Checked and it does
+  not: `onLinkModeMouseDownCapture` is a React CAPTURE-phase handler on
+  `.canvas` that calls `stopPropagation()`, and React's synthetic event
+  dispatch checks `isPropagationStopped()` between nodes on the way down —
+  so a capture-phase stop at `.canvas` prevents every descendant handler from
+  ever running, `PanelPorts`' and the badge's included. While armed: pressing
+  a port completes the armed link and begins no drag; clicking a badge
+  completes the armed link and removes nothing. One gesture, one outcome,
+  always the armed-mode one. Worth recording precisely because the belief was
+  reasonable and wrong, and a future reader tracing the same two handlers
+  should not re-open this as a bug.
+- **`onContextPasted`'s inline arrow already defeats `TerminalPanel`'s memo,
+  on every Canvas render, pre-existing and out of M24's scope.** `Canvas.tsx`
+  passes an inline arrow function as `onContextPasted` to every terminal
+  panel, which is a new prop identity on every render regardless of what
+  changed — the exact prop-identity cascade `TerminalPanel`'s `memo` and
+  `version()` exist to block, described at length in `CLAUDE.md`'s "`version`
+  exists only so `memo` can see a mutation" and neighbouring entries. That
+  means the careful `onBeginLink`/`linkTarget` memo discipline M24 observes
+  for its own two new props does not yet buy what its own comments claim,
+  because a different, older prop on the same component is already breaking
+  the memo it is trying to protect. Pre-existing, not introduced by M24, and
+  out of scope for this milestone to fix — recorded here so the next reader
+  of M24's memo comments does not credit them with a guarantee the component
+  does not currently have.
 
 ## A note on sequencing for 41–75
 

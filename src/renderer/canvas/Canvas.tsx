@@ -9,6 +9,7 @@ import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
+import { useLinkDraw } from './useLinkDraw'
 import { SubagentLayer } from './SubagentLayer'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
@@ -27,6 +28,7 @@ import { GROUP_COLOURS } from '@shared/groups'
 import type { DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
+import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
 import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
@@ -341,6 +343,15 @@ export function Canvas({
     () => [...displayPanels].sort((a, b) => a.z - b.z).map((p) => p.rect),
     [displayPanels]
   )
+  // M24. Read through a ref because hitOrder is a fresh array on every frame
+  // of a panel drag, and useLinkDraw's document listeners are installed once.
+  // Declared here, immediately after hitOrder itself, rather than beside the
+  // other display-time refs further down (displayPanelsRef's neighbourhood):
+  // useLinkDraw is constructed further below, once viewportRef exists (see
+  // its own comment there for why THAT is deferred), and this ref has to
+  // exist before that construction reads it.
+  const hitOrderRef = useRef(hitOrder)
+  hitOrderRef.current = hitOrder
 
   // M13. Armed by the palette's `panel.link` row and the inspector's Link
   // button; resolved by the next mousedown on the canvas (see
@@ -1356,6 +1367,82 @@ export function Canvas({
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
 
+  // M24. The drag half of link creation. linkMode (declared above, the armed
+  // click-then-click path the palette and inspector use) is UNCHANGED and
+  // stays: it is the keyboard-reachable route, verify:palette 76/77 pin it,
+  // and ports are an additional entry point rather than a replacement.
+  //
+  // Declared HERE — after viewportRef, not beside linkMode further up —
+  // because it reads viewportRef synchronously in the object literal below;
+  // a `const` read before its own declaration is a TDZ error, the identical
+  // constraint linkMode's own comment states for its position relative to
+  // useViewport. hitOrderRef is declared earlier for the same reason and
+  // was already in scope.
+  const linkDraw = useLinkDraw({
+    hostRef,
+    viewportRef,
+    rectsRef: hitOrderRef,
+    onCommit: (from, to) => {
+      // The VERB refuses, not only the affordance. This repo's standing rule,
+      // stated for the move verb: it "refuses on `mergedRef` too rather than
+      // only its palette rows going disabled — a disabled row is an
+      // affordance, and the verb has to be the authority."
+      //
+      // Here the affordance is `readOnly`, which suppresses the ports — and
+      // `readOnly` is OPTIONAL WITH A DEFAULT on all four non-terminal kinds,
+      // so a missed or dropped `readOnly={merged}` at any of the five call
+      // sites compiles clean and renders ports in the merged view with
+      // nothing red anywhere.
+      //
+      // Corrected in the M24 final review: an earlier draft of this comment
+      // claimed that drag would addLink a FOREIGN panel id into the active
+      // workspace's record, persisted and then silently pruned by
+      // buildLinkSegments. That path is not reachable — addLink (panels.ts,
+      // frozen) refuses unless BOTH ids are already in the array it is
+      // handed, and that array is always `current` from this component's own
+      // `panels` state (the active workspace's own array), never
+      // `displayPanels` (the merged, lane-translated one the ports would
+      // actually render against). A foreign endpoint on either side returns
+      // the SAME array: nothing written, no history entry, nothing persisted.
+      //
+      // What a dropped readOnly DOES reach is a drag between two panels both
+      // already in the active workspace, while the merged view happens to be
+      // showing them in a foreign lane — a real write of an ordinary, valid
+      // link, which is a "the merged view is read-only" violation rather than
+      // a corrupted record.
+      //
+      // linkDraw.end() at toggleMerged stands down an in-flight draw; this
+      // stands down a commit that reaches here by any other route.
+      //
+      // NO CHECK EXERCISES THIS. It is structural defence: ports do not render
+      // while merged, so the gesture cannot be driven through the UI there,
+      // and a check that reached past the UI to call onCommit directly would
+      // be asserting against a fixture rather than against the feature. See
+      // the M24 task-8 report for the declined check 180.
+      if (mergedRef.current) return
+      setPanels((current) => {
+        const next = addLink(current, from, to)
+        // addLink returns the SAME array when it refuses (a self-link, a
+        // duplicate), and committing unconditionally would push a history
+        // entry for a gesture that changed nothing — one wasted Cmd+Z. The
+        // rule is one entry per COMMITTED gesture, never one per attempt.
+        if (next !== current) commitHistory(next)
+        return next
+      })
+    }
+  })
+  // Ruling P3: a STABLE identity, never an inline arrow at the TerminalPanel
+  // call site. Canvas re-renders on every mousemove over .canvas (setCursor),
+  // so a fresh arrow per render would be a changed prop on every memoized
+  // panel on every frame — the exact hazard resetViewport's own comment
+  // records for the palette's dependency arrays. `linkDraw.begin` is itself
+  // stable (a useCallback with an empty dep array inside useLinkDraw), so
+  // depending on it alone keeps this callback's identity fixed too.
+  const onBeginLink = useCallback(
+    (id: string, event: MouseEvent) => linkDraw.begin(id, event),
+    [linkDraw.begin]
+  )
+
   /**
    * A workspace switch is a SECOND BOOT — not merely shaped like one.
    *
@@ -1660,6 +1747,14 @@ export function Canvas({
     // not have to prove that to know the window is closed.
     if (transitionRef.current) return
     transitionRef.current = true
+    // T4-7: a draw begun on the ordinary canvas and still held when either
+    // direction of this toggle lands must not survive it — see LinkDraw.end's
+    // own comment for the failure this prevents (a ghost painting across lane
+    // space, and an onUp that would commit a link to a foreign workspace's
+    // panel id). Synchronous, before the first await, for the same reason
+    // transitionRef is set synchronously above: cancel WITHOUT committing,
+    // the same path Escape takes.
+    linkDraw.end()
     void (async (): Promise<void> => {
       try {
         if (mergedRef.current) {
@@ -1720,7 +1815,7 @@ export function Canvas({
         transitionRef.current = false
       }
     })()
-  }, [resolveDormant, restoreCamera, selectedId, focusedId])
+  }, [resolveDormant, restoreCamera, selectedId, focusedId, linkDraw.end])
   // Cmd+Shift+A's implementation, handed to useViewport through the ref
   // declared beside its call — see that ref's own comment for why the
   // indirection exists rather than a direct argument.
@@ -5028,6 +5123,14 @@ export function Canvas({
         onClosePanel={paletteActions.closePanel}
         attention={railAttention}
       />
+      {/* M24 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
+          host, never a `scale` prop threaded into every TerminalPanel. Ports
+          are hidden below PORT_MIN_SCALE — a 14px dot is under two screen
+          pixels at MIN_SCALE (0.1) — but `viewport.scale` changes on every
+          frame of a zoom (`zoomAt`), and a `scale` prop on a memoized panel
+          component would be a changed prop on every one of those frames,
+          defeating `memo` for every panel on every zoom gesture. See
+          PanelPorts.tsx's own comment. */}
       <div
         // `panning` is real React state (flips only at drag begin/end, so no
         // 60Hz cost); spaceHeld.isHeld() reads a ref and is therefore
@@ -5035,7 +5138,7 @@ export function Canvas({
         // mousemove (setCursor), so the class catches up within a frame or
         // two of the keypress rather than exactly on it. Cursor feedback
         // only; the gesture itself never consults this className.
-        className={`canvas${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}`}
+        className={`canvas${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
@@ -5057,8 +5160,11 @@ export function Canvas({
           />
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
-              it pans and zooms with the panels, and it takes no pointer
-              events at all, so it can never swallow a click. See LinkLayer.
+              it pans and zooms with the panels. The LAYER itself still takes
+              no pointer events; M24 Task 6 opts each link's own hit stroke
+              and remove badge back in individually so a link can be hovered
+              and removed without the layer as a whole ever swallowing a
+              click. See LinkLayer.
 
               Fed displayPanels rather than panels, for the same reason the
               panel map below is: while merged the only rects on screen are
@@ -5066,8 +5172,19 @@ export function Canvas({
               every link at its un-offset position — lines detached from the
               panels they join. buildLinkSegments skips a link whose target is
               not in the array it was handed, so a link that crosses a lane
-              boundary simply does not draw rather than drawing wrong. */}
-          <LinkLayer panels={displayPanels} />
+              boundary simply does not draw rather than drawing wrong.
+
+              onRemove is the SAME paletteActions.removeLink the inspector's
+              link rows use — never a second copy — so both surfaces produce
+              exactly one history entry and cannot disagree about what
+              removing a link means. Suppressed while merged, where geometry
+              and links are read-only, the same gate the drag and the move
+              verb already take. */}
+          <LinkLayer
+            panels={displayPanels}
+            draw={linkDraw.state}
+            onRemove={merged ? undefined : paletteActions.removeLink}
+          />
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -5092,6 +5209,8 @@ export function Canvas({
                   restoreFocus={restoreFocus}
                   focusedId={focusedId}
                   readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }
@@ -5115,6 +5234,9 @@ export function Canvas({
                   // ReviewNode's restoreFocus prop for the precedent.
                   restoreFocus={restoreFocus}
                   focusedId={focusedId}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }
@@ -5131,10 +5253,13 @@ export function Canvas({
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
                   onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (
@@ -5158,6 +5283,8 @@ export function Canvas({
                 onContextPasted={(id) => setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })}
                 entering={enteringPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
+                onBeginLink={onBeginLink}
+                linkTarget={linkDraw.state?.target === panel.rect.id}
               />
             )
           })}
