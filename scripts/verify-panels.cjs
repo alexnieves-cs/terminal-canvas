@@ -11834,6 +11834,203 @@ app.whenReady().then(async () => {
       try { rmSync(M22_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
+    // -----------------------------------------------------------------------
+    // M24. Drawing a link by dragging from a port handle. This is the
+    // enclosing block for the WHOLE milestone, not just this task's two
+    // checks: tasks 5, 6 and 7 append further checks INSIDE these braces so
+    // they can see the consts declared here (portBox, dragPortTo, m24Links,
+    // the four fixture ids) — a sibling block would not see them and a
+    // ReferenceError there ends the whole suite run.
+    {
+      const M24_A = 'm24A'
+      const M24_B = 'm24B'
+      const M24_C = 'm24C'
+      const M24_DORMANT = 'm24-dormant'
+
+      // Seeded through the layout file and a reload rather than through
+      // spawns, because check 175 needs a panel that has GENUINELY never been
+      // promoted, and the only way to get one is a panel restored from disk
+      // that no camera has ever framed.
+      //
+      // A, B and C are 260 world units apart, which is what lets a rail click
+      // on one leave the others on screen: .canvas is ~700px wide here, so
+      // framing B puts A's centre ~260px left of centre, comfortably inside.
+      // Check 125's own first draft parked its pair 600 apart and failed with
+      // the target's rect off the window entirely.
+      //
+      // M24_DORMANT's coordinate is a DEVIATION from the task brief, which
+      // parked it at (80000,80000) by the same pattern check 39's
+      // (50000,50000), check 84's (60000,60000) and check 125's (70000,70000)
+      // already use. That pattern is right for THOSE checks, which reach
+      // their dormant panel only by its own rail row — but check 175 also
+      // needs to DRAG from M24_A's port, in ONE continuous on-screen gesture,
+      // to wherever `railGoTo(M24_DORMANT)` frames. At (80000,80000) that
+      // framing puts M24_A's port around screen x=-81600 — the port element
+      // exists (portBox reports it non-null, non-zero) but is nowhere near
+      // the visible window, so the drag silently lands nowhere. Reproduced
+      // by running the check with the brief's own coordinate: 174 passes,
+      // 175 fails with `links` unchanged, and a one-off diagnostic (removed
+      // once this was understood) showed the port's actual screen position.
+      // Cmd+1 (fit all) cannot rescue it either — the SAME limit check
+      // 142-144's own comment states for check 84's 60000,60000 fixture:
+      // fitAll clamps at MIN_SCALE (0.1) and still cannot bring a panel this
+      // far from the origin into the same frame as one near it, and
+      // PORT_MIN_SCALE (0.4) is above MIN_SCALE regardless, so the ports
+      // would not even render at a fit-all scale.
+      //
+      // "Genuinely never promoted" only requires that NOTHING before this
+      // block's own railGoTo(M24_DORMANT) has framed it — proximity to
+      // M24_A/B/C carries no risk of that, since nothing else in this suite
+      // addresses a row by this id. So M24_DORMANT completes the 2x2 grid
+      // A/B/C already forms (260 apart on each axis, the same spacing that
+      // lets framing one leave its neighbours on screen), placed at the
+      // fourth corner — distinct from A, B and C's own rects, and distinct
+      // from every other fixture's dormant coordinate (50000/60000/70000).
+      //
+      // Seeded HERE rather than borrowed from the M13 link block. By this
+      // point in the run M18's move and delete checks have left the active
+      // workspace with no terminal panel at all — check 165's own first draft
+      // reported `terminal=null` and failed for a fixture reason rather than a
+      // behavioural one.
+      flushLayoutStore()
+      {
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const ws = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+        const maxZ = ws.panels.reduce((m, p) => Math.max(m, p.z), 0)
+        ws.panels.push(
+          { id: M24_A, x: -2400, y: -2000, w: 200, h: 160, z: maxZ + 1, cwd: '~', args: ['-l'] },
+          { id: M24_B, x: -2140, y: -2000, w: 200, h: 160, z: maxZ + 2, cwd: '~', args: ['-l'] },
+          { id: M24_C, x: -2400, y: -1740, w: 200, h: 160, z: maxZ + 3, cwd: '~', args: ['-l'] },
+          { id: M24_DORMANT, x: -2140, y: -1740, w: 200, h: 160, z: maxZ + 4, cwd: '~', args: ['-l'] }
+        )
+        writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+        layoutStore.load()
+        const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded
+        await waitUntil(async () =>
+          (await wc.executeJavaScript(
+            `!!document.querySelector('[data-rail-row="${M24_A}"]')`)) || false,
+          6000)
+        await settle()
+      }
+
+      // These two are re-declared locally rather than reused from the M13
+      // block above: panelBox and railGoTo there are scoped inside that
+      // block's own braces and are out of scope here.
+      const panelBox = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id="${id}"]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.x, y: r.y, w: r.width, h: r.height,
+                 cx: r.x + r.width / 2, cy: r.y + r.height / 2 }
+      })()`)
+
+      const railGoTo = async (id) => {
+        const clicked = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('[data-rail-row="${id}"] .rail-row__main')
+          if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await settle()
+        return clicked
+      }
+
+      const portBox = (id, side) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-panel-id="${id}"] [data-port="${side}"]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) return { zero: true }
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+      })()`)
+
+      // A REAL drag: sendInputEvent, four intermediate moves, and the
+      // `leftButtonDown` modifier. All three matter and none is padding.
+      // sendInputEvent because a dispatched MouseEvent is isTrusted:false and
+      // performs no default action (check 75c's limit). Four moves because the
+      // gesture's listeners live on `document` precisely so they survive the
+      // cursor leaving the port, and one synthetic hop exercises neither the
+      // tracking nor the listener lifetime. `leftButtonDown` because Chromium
+      // derives MouseEvent.buttons from the MODIFIER bitfield rather than the
+      // `button` field — the same spelling trap the isAutoRepeat note records
+      // — and the gesture ends itself on a move with no button held, so
+      // without it every drag here would end on its first move.
+      const dragPortTo = async (from, to) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 4; i++) {
+          wc.sendInputEvent({
+            type: 'mouseMove',
+            x: Math.round(from.x + ((to.x - from.x) * i) / 4),
+            y: Math.round(from.y + ((to.y - from.y) * i) / 4),
+            button: 'left',
+            modifiers: ['leftButtonDown']
+          })
+        }
+        wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+        await settle()
+      }
+
+      const m24Links = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.link-layer [data-link]')].map((e) => e.getAttribute('data-link'))`)
+
+      // 174. A link drawn by the REAL gesture: press a port, drag, release on
+      //      a panel. Asserted by the data-link key carrying BOTH IDS IN ORDER
+      //      rather than by "a path exists" — an empty layer satisfies a count,
+      //      and a key built from an unordered pair satisfies "a link appeared"
+      //      while collapsing a->b and b->a into one.
+      //
+      //      The port must have a NON-ZERO box, which portBox reports
+      //      separately: ports are opacity-0 at rest and a zero-sized element
+      //      would make every coordinate here land on the panel beneath,
+      //      turning this into a check about panel drag with a green result.
+      {
+        const src = M24_A
+        const dst = M24_B
+        await railGoTo(dst)                    // frame the target
+        const port = await portBox(src, 'e')
+        const box = await panelBox(dst)
+        if (port && !port.zero && box) await dragPortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
+        const links = await m24Links()
+        ok('174 a port drag draws a link, keyed with both ids in order',
+          port !== null && port.zero !== true && box !== null &&
+            links.includes(src + ' ' + dst),
+          `port=${JSON.stringify(port)} box=${JSON.stringify(box)} links=${JSON.stringify(links)}`)
+      }
+
+      // 175. The drop must NOT WAKE the target. Check 126's argument through a
+      //      new door: 126 covers the completing CLICK of the armed mode, and
+      //      nothing in it can see a drag.
+      //
+      //      Holds by construction here rather than by a guard — waking hangs
+      //      off onSelectPanel, which fires from MOUSEDOWN, and our mousedown
+      //      was consumed by the port while the mouseup lands on a panel that
+      //      has no mouseup handler at all. "Holds by construction" is exactly
+      //      the claim a later refactor breaks silently, which is why it is
+      //      checked rather than argued.
+      //
+      //      SPAWNED, never "absent from __m4aSessions()". The registry mints a
+      //      PanelSession for every rendered panel including a dormant one —
+      //      that is the whole of "two lifetimes, not one" — so the absence
+      //      form fails against CORRECT code, which is how check 126's own
+      //      first draft failed.
+      {
+        const src = M24_A
+        await railGoTo(M24_DORMANT)
+        const port = await portBox(src, 'e')
+        const box = await panelBox(M24_DORMANT)
+        if (port && !port.zero && box) await dragPortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
+        const target = (await wc.executeJavaScript(
+          `(window.__m4aSessions ? window.__m4aSessions() : [])`))
+          .find((x) => x.id === M24_DORMANT)
+        const links = await m24Links()
+        ok('175 a port drag links a dormant panel WITHOUT waking it',
+          port !== null && box !== null &&
+            links.includes(src + ' ' + M24_DORMANT) &&
+            target !== undefined && target.spawned === false && target.dormant === true,
+          `target=${JSON.stringify(target)} links=${JSON.stringify(links)}`)
+      }
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

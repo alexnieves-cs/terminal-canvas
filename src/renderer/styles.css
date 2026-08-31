@@ -2963,3 +2963,57 @@ body {
 
 .inspector__toolbox-scope { flex: none; color: var(--fg-4); }
 .inspector__toolbox-state { flex: none; color: var(--amber); }
+
+/* M24. The four link handles. Children of .panel, so they ride .world's
+   transform with the rest of the panel — the same placement .panel__resize
+   already has, and for the same reason: a handle sized in screen pixels would
+   drift away from its own border on every zoom.
+
+   z-index 4 so a port beats .panel__resize--se (3) and --e/--s (2) where they
+   overlap. --e covers the ENTIRE right border, so the east port sits on top of
+   it by construction, and the cursor change is honest feedback about which of
+   the two a press will reach.
+
+   opacity 0 and 1, never a fraction: verify:styles check 3 forbids fractional
+   opacity, and integers are what this wanted anyway. */
+.panel__port {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 4;
+  border-radius: var(--r-full);
+  border: 2px solid var(--s-2);
+  background: var(--iris);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.panel:hover .panel__port,
+/* Every panel reveals its ports while ANY draw is in flight, so the drop
+   targets are visible rather than hunted for. This is the single largest
+   contributor to the gesture feeling aimed rather than guessed at. */
+.canvas--linking .panel__port {
+  opacity: 1;
+}
+
+/* Below PORT_MIN_SCALE the ports are not rendered at all — see the constant's
+   own comment. This rule is the hover half only. */
+.panel__port:hover {
+  border-color: var(--fg);
+}
+
+/* Flush with the edge, never straddling it (a deviation from the brief's
+   -7px offsets, found necessary by a failing check rather than by inspection:
+   .panel carries `overflow: hidden` — needed so a terminal's own content
+   never bleeds past its rounded corners — and a port centred ON the border
+   has HALF its hit area clipped away by that ancestor, landing its own
+   getBoundingClientRect() centre exactly on the clip edge, where a real
+   mousedown resolves to whatever is behind it rather than to the port. Fully
+   inside is what .panel__resize--e/--s already do for the identical reason,
+   and it costs only a few pixels of visual overlap with the border instead of
+   being centred on it. */
+.panel__port--n { top: 0; left: 50%; margin-left: -7px; }
+.panel__port--s { bottom: 0; left: 50%; margin-left: -7px; }
+.panel__port--w { left: 0; top: 50%; margin-top: -7px; }
+.panel__port--e { right: 0; top: 50%; margin-top: -7px; }

@@ -4,6 +4,7 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { AgentState } from '@shared/types'
+import { PanelPorts, PORT_MIN_SCALE } from './PanelPorts'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -73,6 +74,14 @@ export interface TerminalPanelProps {
    * the same reason `version` and `title` are props.
    */
   glow: boolean
+  /**
+   * The viewport's current scale (M24). A prop rather than a context read,
+   * for the same reason `version`/`title`/`glow` are props — memo's shallow
+   * compare has to SEE it change to gate PanelPorts' PORT_MIN_SCALE check.
+   */
+  scale: number
+  /** Begins a link drag from one of this panel's four port handles (M24). */
+  onBeginLink: (panelId: string, event: ReactMouseEvent) => void
 }
 
 const CARD_LINES = 6
@@ -82,7 +91,8 @@ const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
-  onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted
+  onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
+  scale, onBeginLink
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -283,6 +293,14 @@ function TerminalPanelImpl({
           }}
         />
       ))}
+      {/* M24. Suppressed under readOnly exactly as the resize handles are —
+          that is the merged view, whose geometry is read-only, and addLink
+          there would write to a workspace record this canvas does not own.
+          Suppressed below PORT_MIN_SCALE because a 14px dot is under two
+          screen pixels at 0.1x. */}
+      {!readOnly && scale >= PORT_MIN_SCALE && (
+        <PanelPorts panelId={session.id} onBeginLink={onBeginLink} />
+      )}
       </div>
     </div>
   )

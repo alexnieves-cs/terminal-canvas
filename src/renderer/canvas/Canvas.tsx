@@ -6,6 +6,7 @@ import { CanvasHud } from './CanvasHud'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
+import { useLinkDraw } from './useLinkDraw'
 import { SubagentLayer } from './SubagentLayer'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
@@ -312,6 +313,15 @@ export function Canvas({
     () => [...displayPanels].sort((a, b) => a.z - b.z).map((p) => p.rect),
     [displayPanels]
   )
+  // M24. Read through a ref because hitOrder is a fresh array on every frame
+  // of a panel drag, and useLinkDraw's document listeners are installed once.
+  // Declared here, immediately after hitOrder itself, rather than beside the
+  // other display-time refs further down (displayPanelsRef's neighbourhood):
+  // useLinkDraw is constructed further below, once viewportRef exists (see
+  // its own comment there for why THAT is deferred), and this ref has to
+  // exist before that construction reads it.
+  const hitOrderRef = useRef(hitOrder)
+  hitOrderRef.current = hitOrder
 
   // M13. Armed by the palette's `panel.link` row and the inspector's Link
   // button; resolved by the next mousedown on the canvas (see
@@ -1217,6 +1227,45 @@ export function Canvas({
   // drop the drag state it is holding.
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
+
+  // M24. The drag half of link creation. linkMode (declared above, the armed
+  // click-then-click path the palette and inspector use) is UNCHANGED and
+  // stays: it is the keyboard-reachable route, verify:palette 76/77 pin it,
+  // and ports are an additional entry point rather than a replacement.
+  //
+  // Declared HERE — after viewportRef, not beside linkMode further up —
+  // because it reads viewportRef synchronously in the object literal below;
+  // a `const` read before its own declaration is a TDZ error, the identical
+  // constraint linkMode's own comment states for its position relative to
+  // useViewport. hitOrderRef is declared earlier for the same reason and
+  // was already in scope.
+  const linkDraw = useLinkDraw({
+    hostRef,
+    viewportRef,
+    rectsRef: hitOrderRef,
+    onCommit: (from, to) => {
+      setPanels((current) => {
+        const next = addLink(current, from, to)
+        // addLink returns the SAME array when it refuses (a self-link, a
+        // duplicate), and committing unconditionally would push a history
+        // entry for a gesture that changed nothing — one wasted Cmd+Z. The
+        // rule is one entry per COMMITTED gesture, never one per attempt.
+        if (next !== current) commitHistory(next)
+        return next
+      })
+    }
+  })
+  // Ruling P3: a STABLE identity, never an inline arrow at the TerminalPanel
+  // call site. Canvas re-renders on every mousemove over .canvas (setCursor),
+  // so a fresh arrow per render would be a changed prop on every memoized
+  // panel on every frame — the exact hazard resetViewport's own comment
+  // records for the palette's dependency arrays. `linkDraw.begin` is itself
+  // stable (a useCallback with an empty dep array inside useLinkDraw), so
+  // depending on it alone keeps this callback's identity fixed too.
+  const onBeginLink = useCallback(
+    (id: string, event: MouseEvent) => linkDraw.begin(id, event),
+    [linkDraw.begin]
+  )
 
   /**
    * A workspace switch is a SECOND BOOT — not merely shaped like one.
@@ -4538,7 +4587,7 @@ export function Canvas({
         attention={railAttention}
       />
       <div
-        className="canvas"
+        className={`canvas${linkDraw.state !== null ? ' canvas--linking' : ''}`}
         ref={hostRef}
         onMouseDownCapture={onLinkModeMouseDownCapture}
         onMouseDown={onMouseDown}
@@ -4653,6 +4702,8 @@ export function Canvas({
                 onContextPasted={(id) => setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })}
                 entering={enteringPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
+                scale={viewport.scale}
+                onBeginLink={onBeginLink}
               />
             )
           })}
