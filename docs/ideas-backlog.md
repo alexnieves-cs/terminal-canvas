@@ -2017,11 +2017,23 @@ explicitly cannot take back is reset.
   switches between. This is the same canvas at earlier times, nobody names it, and it exists
   because the machinery is already written.
 
-## 68. Space-drag and middle-drag — the mouse-only user has no pan
+## 68. Space-drag and middle-drag — landed
 
 There is no way to pan with a mouse button at all. A user with no trackpad can only pan by
 wheel: no middle-drag, no space-hold-drag, no right-drag marquee. Add the vocabulary every
 canvas app has.
+
+**Landed.** Middle-drag pans anywhere, claimed in the CAPTURE phase (composed with
+`onLinkModeMouseDownCapture` on `.canvas`) because no panel chrome handler in this codebase
+checks `event.button`, so an unguarded middle-press over a panel's chrome would otherwise start
+a panel drag instead of a camera pan. Space-drag is gated on `document.activeElement` being
+genuinely nothing (`useSpaceHeld.ts`) — the DOM's own answer to "nothing focused," which
+subsumes the four app-state checks (`focusedId`, the palette, a review/file draft) a hand-built
+equivalent would need to get right separately — and is armed only in the marquee's own
+background-press branch of `onMouseDown`, so the two are two interpretations of one press,
+never both. Both gestures share one narrow verb, `useViewport.ts`'s `beginPanDrag`, next to the
+wheel listener's own pan logic rather than a second, competing gesture layer — see CLAUDE.md's
+entries on the pan-drag design for the reasoning in full. `verify:panels` 174-177.
 
 - **Constraint: "Cmd is required for every canvas shortcut", and space is a bare key.** Bare
   keys belong to the agent TUI. So space-drag is legal only while the pointer is over the
