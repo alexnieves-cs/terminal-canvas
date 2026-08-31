@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import type { SessionBackendInfo } from '@shared/ipc-contract'
+import type { MachineCostSnapshot } from '@shared/machine-cost'
 import type { Point, Viewport } from './viewport'
 
 export interface CanvasHudProps {
@@ -8,6 +9,7 @@ export interface CanvasHudProps {
   selectedId: string | null
   /** null until the one-shot probe answers. */
   backend: SessionBackendInfo | null
+  machineCost: MachineCostSnapshot['total']
 }
 
 /**
@@ -19,7 +21,7 @@ export interface CanvasHudProps {
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ viewport, cursor, selectedId, backend }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ viewport, cursor, selectedId, backend, machineCost }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       <span>{Math.round(viewport.scale * 100)}%</span>
@@ -27,6 +29,9 @@ export function CanvasHud({ viewport, cursor, selectedId, backend }: CanvasHudPr
         {Math.round(cursor.x)}, {Math.round(cursor.y)}
       </span>
       <span>{selectedId ?? '—'}</span>
+      <span className="canvas-hud__cost" data-machine-cost-total>
+        CPU {formatCpu(machineCost.cpuPercent)} · RAM {formatMemory(machineCost.memoryBytes)}
+      </span>
       {backend?.kind === 'direct' && (
         <span className="canvas-hud__warn" title={backend.reason}>
           no tmux — sessions end on reload
@@ -34,4 +39,14 @@ export function CanvasHud({ viewport, cursor, selectedId, backend }: CanvasHudPr
       )}
     </div>
   )
+}
+
+function formatCpu(percent: number): string {
+  return `${percent.toLocaleString(undefined, { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`
+}
+
+function formatMemory(bytes: number): string {
+  const mib = bytes / (1024 * 1024)
+  if (mib < 1024) return `${Math.round(mib)} MB`
+  return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
 }

@@ -296,6 +296,19 @@ export class PtyManager {
    */
   private lastLive = new Map<PanelId, string>()
   /**
+   * Timestamps of every IPC_EVENTS send in the last second, for backlog #75's
+   * diagnostics overlay. `send()` is the ONE choke point every push in this
+   * class already goes through — PTY_DATA, PTY_EXIT, AGENT_STATE,
+   * SESSION_LIVE, SUBAGENT_STATE, USAGE_PANEL — so this is the single place
+   * that can see the app's whole send volume without a second copy of
+   * `send()`'s own call sites. Trimmed on every push rather than on read: a
+   * diagnostics poll is rare (every few seconds, only while the overlay is
+   * open), while a send can happen dozens of times a second, so trimming on
+   * the hot path keeps the array itself bounded rather than letting it grow
+   * between reads that may never come.
+   */
+  private ipcSendTimestamps: number[] = []
+  /**
    * One per manager, like idleTimer and liveTimer — a panel's whole claimed
    * session, offset and dedupe state lives here for the life of the process,
    * per SubagentWatch's own comment. Constructed with REAL node:fs deps
@@ -1149,8 +1162,28 @@ export class PtyManager {
   }
 
   private send(channel: string, payload: unknown): void {
+    const now = Date.now()
+    this.ipcSendTimestamps.push(now)
+    // Trim to the last 1000ms in place: this runs on every send, so an array
+    // that only ever grew would be the exact unbounded-map hazard
+    // capturedBaselineIds/lastLive both exist to close on their own doors.
+    const cutoff = now - 1000
+    let start = 0
+    while (start < this.ipcSendTimestamps.length && this.ipcSendTimestamps[start] < cutoff) start += 1
+    if (start > 0) this.ipcSendTimestamps.splice(0, start)
     const target = this.getTarget()
     if (!target || target.isDestroyed()) return
     target.send(channel, payload)
+  }
+
+  /**
+   * Messages actually sent in the last second, counted whether or not a
+   * target exists to receive them — a refused send is still work this
+   * process did, and dropping it here would make the rate lie about renderer
+   * teardown windows rather than reporting nothing sent. Backlog #75.
+   */
+  ipcMessageRate(): number {
+    const cutoff = Date.now() - 1000
+    return this.ipcSendTimestamps.filter((t) => t >= cutoff).length
   }
 }

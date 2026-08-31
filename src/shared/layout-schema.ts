@@ -4,6 +4,7 @@ import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
 import { isWorkProvider, type WorkProvider } from './work-item'
+import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import {
   AGENT_KINDS,
   EFFORTS,
@@ -74,7 +75,12 @@ export interface PersistedPanelBase {
    * replaced, the line parsePresets and parseBaselines already draw: a
    * silently vanished field is a user's work gone with nothing said.
    */
-  links?: { to: string; label?: string }[]
+  links?: {
+    to: string
+    label?: string
+    /** #24: a guarded, auditable action owned by this directed link. */
+    automation?: { kind: 'restart-on-exit'; enabled: boolean }
+  }[]
 }
 
 export interface PersistedTerminalPanel extends PersistedPanelBase {
@@ -229,6 +235,8 @@ export interface PersistedCamera {
  */
 export interface CanvasState {
   panels: PersistedPanel[]
+  /** Optional on disk for every layout written before groups existed. */
+  groups: PersistedGroup[]
   camera: PersistedCamera
   selectedId: string | null
   focusedId: string | null
@@ -300,6 +308,7 @@ export function defaultWorkspace(): Workspace {
     id: DEFAULT_WORKSPACE_ID,
     name: 'Canvas',
     panels: [],
+    groups: [],
     camera: { ...DEFAULT_CAMERA },
     selectedId: null,
     focusedId: null
@@ -374,13 +383,13 @@ function parseLinks(
   raw: unknown,
   id: string,
   warnings: string[]
-): { to: string; label?: string }[] | undefined {
+): PersistedPanelBase['links'] | undefined {
   if (raw === undefined) return undefined
   if (!Array.isArray(raw)) {
     warnings.push(`dropped panel ${id}'s links: not an array`)
     return undefined
   }
-  const out: { to: string; label?: string }[] = []
+  const out: NonNullable<PersistedPanelBase['links']> = []
   const seen = new Set<string>()
   for (const entry of raw) {
     if (!isRecord(entry) || !isStr(entry.to) || !ID_PATTERN.test(entry.to)) {
@@ -396,7 +405,14 @@ function parseLinks(
       continue
     }
     seen.add(entry.to)
-    out.push({ to: entry.to, ...(isStr(entry.label) ? { label: entry.label } : {}) })
+    const automation = entry.automation
+    const parsedAutomation = isRecord(automation) && automation.kind === 'restart-on-exit' &&
+      typeof automation.enabled === 'boolean'
+      ? { automation: { kind: 'restart-on-exit' as const, enabled: automation.enabled } }
+      : automation === undefined
+        ? {}
+        : (warnings.push(`dropped automation on link ${id} -> ${entry.to}: malformed`), {})
+    out.push({ to: entry.to, ...(isStr(entry.label) ? { label: entry.label } : {}), ...parsedAutomation })
   }
   // Undefined rather than [], so a panel whose links were all dropped
   // serialises identically to one that never had any — the same
@@ -887,6 +903,57 @@ function parseCamera(raw: unknown, warnings: string[]): PersistedCamera {
   return { x: raw.x, y: raw.y, scale: raw.scale }
 }
 
+/**
+ * A group with a missing panel is repaired, not dropped: closing a panel is a
+ * normal action and a group containing three surviving members still says
+ * something useful. The all-missing case is dropped because an empty region
+ * has no spatial anchor and would become an uncloseable floating label.
+ */
+function parseGroups(raw: unknown, panelIds: ReadonlySet<string>, warnings: string[]): PersistedGroup[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a groups field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const groups: PersistedGroup[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry) || !isStr(entry.id) || !ID_PATTERN.test(entry.id) || seen.has(entry.id)) {
+      warnings.push('dropped a group with an unusable or duplicate id')
+      continue
+    }
+    if (!isStr(entry.label) || entry.label.trim() === '') {
+      warnings.push(`dropped group ${entry.id}: label was unusable`)
+      continue
+    }
+    if (!(GROUP_COLOURS as readonly string[]).includes(entry.colour as string)) {
+      warnings.push(`dropped group ${entry.id}: colour was unusable`)
+      continue
+    }
+    if (!Array.isArray(entry.panelIds) || !entry.panelIds.every(isStr)) {
+      warnings.push(`dropped group ${entry.id}: panel ids were unusable`)
+      continue
+    }
+    const members = [...new Set(entry.panelIds)].filter((id) => panelIds.has(id))
+    if (members.length === 0) {
+      warnings.push(`dropped group ${entry.id}: it had no surviving panels`)
+      continue
+    }
+    if (members.length !== entry.panelIds.length) {
+      warnings.push(`dropped missing or duplicate members from group ${entry.id}`)
+    }
+    seen.add(entry.id)
+    groups.push({
+      id: entry.id,
+      label: entry.label,
+      colour: entry.colour as PersistedGroup['colour'],
+      panelIds: members,
+      ...(typeof entry.collapsed === 'boolean' && entry.collapsed ? { collapsed: true } : {})
+    })
+  }
+  return groups
+}
+
 function parseWorkspace(raw: unknown, index: number, warnings: string[]): Workspace | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped workspace ${index}: not an object`)
@@ -935,6 +1002,58 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     else p.links = kept
   }
 
+  // #24's functional half is intentionally narrower than decorative links:
+  // only terminal panels can emit an exit or accept a restart. A hand-edited
+  // rule naming a sessionless node must not turn into a future writer of a
+  // PTY when that node is selected, so discard just its action and retain the
+  // visible link. Cycles are removed by the same rule the creation helper
+  // uses; rate-limiting a loop would only make a malformed file surprising
+  // later instead of making it safe at load.
+  const byId = new Map(panels.map((p) => [p.id, p]))
+  const isTerminal = (p: PersistedPanel): p is PersistedTerminalPanel =>
+    p.kind === undefined || p.kind === 'terminal'
+  const clearAutomation = (source: PersistedPanel, to: string): void => {
+    if (source.links === undefined) return
+    source.links = source.links.map((link) => link.to !== to || link.automation === undefined
+      ? link
+      : { to: link.to, ...(link.label === undefined ? {} : { label: link.label }) })
+  }
+  for (const source of panels) {
+    for (const link of source.links ?? []) {
+      if (link.automation === undefined) continue
+      const target = byId.get(link.to)
+      if (!isTerminal(source) || target === undefined || !isTerminal(target)) {
+        clearAutomation(source, link.to)
+        warnings.push(`dropped automation on link ${source.id} -> ${link.to}: endpoints must be terminal panels`)
+      }
+    }
+  }
+  const reaches = (from: string, sought: string, seen = new Set<string>()): boolean => {
+    if (from === sought) return true
+    if (seen.has(from)) return false
+    seen.add(from)
+    const panel = byId.get(from)
+    return (panel?.links ?? []).some((link) =>
+      link.automation?.kind === 'restart-on-exit' && link.automation.enabled && reaches(link.to, sought, seen)
+    )
+  }
+  for (const source of panels) {
+    for (const link of source.links ?? []) {
+      if (link.automation?.kind !== 'restart-on-exit' || !link.automation.enabled) continue
+      // Temporarily remove this link, otherwise every directed edge trivially
+      // reaches its own source through itself.
+      clearAutomation(source, link.to)
+      if (reaches(link.to, source.id)) {
+        warnings.push(`dropped automation on link ${source.id} -> ${link.to}: restart cycle`)
+        continue
+      }
+      // It was safe, so restore the exact durable action.
+      source.links = (source.links ?? []).map((candidate) => candidate.to === link.to
+        ? { ...candidate, automation: { kind: 'restart-on-exit', enabled: true } }
+        : candidate)
+    }
+  }
+
   // A selection naming a panel that did not survive validation would leave
   // focus pointing at nothing — and assignTiers pins the focused id live.
   const pick = (v: unknown): string | null => (isStr(v) && seen.has(v) ? v : null)
@@ -943,6 +1062,7 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     id,
     name,
     panels,
+    groups: parseGroups(raw.groups, surviving, warnings),
     camera: parseCamera(raw.camera, warnings),
     selectedId: pick(raw.selectedId),
     focusedId: pick(raw.focusedId)

@@ -25,6 +25,7 @@ import type { FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
+import type { MachineCostSnapshot, MachineCostTarget } from './machine-cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -34,6 +35,12 @@ export const IPC = {
   PTY_KILL: 'pty:kill',
   /** Live sessions, so a fresh renderer can reconcile instead of guessing. */
   PTY_LIST: 'pty:list',
+  /**
+   * One slow process-table snapshot for the terminal process trees currently
+   * visible to this canvas. Pull-only: main has no reason to poll when no
+   * renderer is asking, and a push timer would live after a canvas closes.
+   */
+  MACHINE_COST_SAMPLE: 'machine:sample',
   /**
    * The resolved starting canvas. Main applies the restore settings before
    * answering, so the renderer never learns those settings exist.
@@ -313,7 +320,23 @@ export const IPC = {
    * would make FileResult carry write outcomes it has no business knowing
    * about.
    */
-  FILE_WRITE: 'file:write'
+  FILE_WRITE: 'file:write',
+  /**
+   * Backlog #75: the one number the renderer cannot compute itself — main's
+   * own IPC send rate. Pull-only, like MACHINE_COST_SAMPLE, for the identical
+   * reason: main has no cause to track this when the diagnostics overlay is
+   * closed and nobody is asking.
+   */
+  DIAGNOSTICS_SAMPLE: 'diagnostics:sample',
+  /**
+   * Write the renderer's already-scrubbed diagnostics bundle to disk. The
+   * renderer assembles the whole payload (see diagnostics-model.ts's own
+   * comment on what it deliberately omits — no command, no cwd, no captured
+   * shell environment); main's only job here is the atomic write, the same
+   * split credential-store.ts and layout-store.ts already draw between "who
+   * decides what's safe" and "who writes the file".
+   */
+  DIAGNOSTICS_EXPORT: 'diagnostics:export'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -499,6 +522,43 @@ export interface SessionBackendInfo {
 }
 
 /**
+ * Backlog #75. `registry.all()` only ever holds TERMINAL sessions — a review,
+ * file, jira or toolbox panel never reaches `assignTiers`/`registry.ensure`
+ * at all — so there is no `kind` field here: every row is a terminal panel's
+ * session by construction. `pid` is present only for a running session, the
+ * same rule PtyCreateResult/PanelStatus already draw.
+ *
+ * What this type deliberately has NO ROOM for is the point of it: no
+ * `command`, `cwd` or `args`, and nothing derived from shell-env.ts's
+ * captured environment. See renderer/canvas/diagnostics-model.ts, the one
+ * place that builds this shape, for the reasoning — structural exclusion
+ * rather than a runtime scrub, so a future field added to PanelSession
+ * cannot leak through here by way of a spread.
+ */
+export interface DiagnosticsSessionRow {
+  id: string
+  tier: 'live' | 'card'
+  dormant: boolean
+  spawned: boolean
+  status: 'idle' | 'starting' | 'running' | 'exited' | 'error'
+  pid?: number
+}
+
+/** The whole bundle the overlay renders and the export writes to disk. */
+export interface DiagnosticsSnapshot {
+  liveCount: number
+  heldCount: number
+  budget: number
+  backend: SessionBackendInfo | null
+  ipcMessagesPerSecond: number | null
+  sessions: DiagnosticsSessionRow[]
+}
+
+export type DiagnosticsExportResult =
+  | { ok: true; path: string }
+  | { ok: false; reason: string }
+
+/**
  * A preset as the renderer needs it. NO panelId: the renderer mints that from
  * nextIdRef, and a main-minted id would collide with the `n` sequence Cmd+N
  * uses — the same duplicate-id defect M4a fixed and M4b nearly resurrected.
@@ -646,6 +706,10 @@ export interface CanvasBridge {
     onData(listener: (chunk: PtyDataChunk) => void): () => void
     onExit(listener: (info: PtyExitInfo) => void): () => void
   }
+  machine: {
+    /** Aggregate each terminal PID and its descendants from ONE ps snapshot. */
+    sample(targets: MachineCostTarget[]): Promise<MachineCostSnapshot>
+  }
   edit: {
     onCopy(listener: () => void): () => void
     onPaste(listener: (text: string) => void): () => void
@@ -697,6 +761,13 @@ export interface CanvasBridge {
   files: {
     /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
     list: (path: string) => Promise<DirResult>
+  }
+  diagnostics: {
+    /** Main's own numbers only — the IPC send rate. Everything else in the
+     * overlay's snapshot is assembled renderer-side from the registry. */
+    sample(): Promise<{ ipcMessagesPerSecond: number }>
+    /** Write the renderer's already-scrubbed bundle to disk. */
+    export(snapshot: DiagnosticsSnapshot): Promise<DiagnosticsExportResult>
   }
   session: {
     info(): Promise<SessionBackendInfo>

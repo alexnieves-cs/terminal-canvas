@@ -59,7 +59,7 @@ const CONFIRM_DISCARD_MS = 3000
 export interface FileNodeProps {
   panel: FilePanel
   selected: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, additive?: boolean) => void
   /**
    * The same onFocus a terminal panel's body calls, and it buys exactly what
    * it buys for a review node: shouldYieldWheel's rule 3 gives the wheel to
@@ -412,7 +412,7 @@ function FileNodeImpl({
         onMouseDown={(event: ReactMouseEvent) => {
           event.stopPropagation()
           event.preventDefault()
-          onSelect(id)
+          onSelect(id, event.shiftKey)
           onBeginDrag({
             panelId: id,
             mode: { kind: 'move' },

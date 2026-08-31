@@ -136,7 +136,8 @@ app.whenReady().then(async () => {
       captureBaseline: async () => null,
       review: async () => ({ kind: 'not-a-repo' })
     },
-    { read: () => ({ kind: 'no-cwd' }), size: () => 0, clear: () => {} }
+    { read: () => ({ kind: 'no-cwd' }), size: () => 0, clear: () => {} },
+    join(tmpdir(), 'tc-verify-canvas-diagnostics')
   )
 
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})

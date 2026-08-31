@@ -575,7 +575,8 @@ app.whenReady().then(async () => {
     credentialStore,
     fileWatchers,
     () => mainWindow,
-    toolboxCache
+    toolboxCache,
+    join(app.getPath('userData'), 'diagnostics')
   )
   createWindow()
 

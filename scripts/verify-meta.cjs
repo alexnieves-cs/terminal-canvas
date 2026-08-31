@@ -413,6 +413,96 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
       : `directCall=${directCall} aliasedRead=${aliasedRead}`)
 }
 
+// 22. NO TWO CHECKS IN ONE SUITE SHARE AN ID. This is the rule that stops the
+//     renumbering tax, and like 20 and 21 it is asserted as SOURCE TEXT because
+//     it has no runtime symptom: the suite still runs, still counts, and prints
+//     two different `133`s twenty lines apart. A report naming "check 133" is
+//     then ambiguous rather than wrong, and nothing anywhere fails — which is
+//     exactly how it shipped once already.
+//
+//     The cause is that check ids were a hand-maintained GLOBAL INTEGER
+//     sequence, so two branches that never saw each other both appended from
+//     their own view of the last number and both were right. There are 7+
+//     `renumber` commits in this repository's history, and "M13" was claimed
+//     four separate times. The convention that removes it is recorded in
+//     CLAUDE.md: a NEW check takes a SCOPED id (`kind-tail.1`), never the next
+//     global integer. Existing numbers stay — hundreds of them are cited in
+//     CLAUDE.md — so this check guards the future rather than rewriting the
+//     past.
+//
+//     THE DISCRIMINATOR IS THE PASS ARGUMENT, and getting it wrong makes this
+//     check useless in one direction or unusable in the other. A guard or skip
+//     branch legitimately REUSES its check's id:
+//
+//         if (!TMUX) ok('26 tmux reload survival (SKIPPED …)', true, …)
+//         else       ok('26 a renderer reload detaches the client …', computed)
+//
+//     Only one of those ever runs, so it is not a collision. A first cut of
+//     this rule flagged all ten such pairs in verify-panels.cjs and would have
+//     had to be silenced with an allowlist — i.e. a second hand-maintained
+//     list, which is the thing being removed. What separates the two cases is
+//     that a guard passes a LITERAL `true`/`false` while a real assertion
+//     passes a computed expression, so only ids carrying more than one COMPUTED
+//     assertion are flagged. Measured against all 29 suites and 1,089 ids:
+//     zero false positives. Fault-injected by adding a second computed `109` to
+//     verify-rail.cjs, which this flags and nothing else in the repo does.
+//
+//     Comment-stripped, for the reason 20 and 21 are: these files are dense
+//     with prose that quotes check ids.
+{
+  const { readdirSync } = require('node:fs')
+  const dir = join(ROOT, 'scripts')
+  // id, then the pass argument — the first 24 chars are plenty to see whether
+  // it opens with a bare `true`/`false`.
+  const re = /\bok\(\s*(?:(\d+[a-z]*)\s*,|(['"`])((?:[^'"`\\]|\\.)*)\2\s*,)\s*([^,]{0,24})/g
+  const collisions = []
+  let scanned = 0
+  for (const f of readdirSync(dir).filter((n) => /^verify-.*\.cjs$/.test(n))) {
+    const src = stripComments(read(join('scripts', f)) ?? '')
+    const byId = new Map()
+    let m
+    while ((m = re.exec(src)) !== null) {
+      const id = m[1] !== undefined ? m[1] : String(m[3]).trim().split(/\s+/)[0]
+      const isLiteral = /^(true|false)\b/.test(m[4].trim())
+      byId.set(id, (byId.get(id) ?? 0) + (isLiteral ? 0 : 1))
+      scanned++
+    }
+    for (const [id, computed] of byId) {
+      if (computed > 1) collisions.push(`${f}:${id}×${computed}`)
+    }
+  }
+  ok('22 no two computed checks in one suite share an id',
+    collisions.length === 0 && scanned > 900,
+    collisions.length ? collisions.join(' ') : `${scanned} ids scanned, none collide`)
+}
+
+// 23. NO MODULE-LEVEL STORE CLAIMS AN ORDINAL. Same class as 22 and the same
+//     reason it is source text: a number restated by hand in N files has no
+//     runtime symptom when it drifts, and this one had drifted badly. As found
+//     by the M27 audit, src/renderer/session/ held SEVEN stores whose own
+//     comments called themselves, in file order: third, FIFTH, FOURTH, FOURTH,
+//     (none), SIXTH — for what should have been second through seventh. Two
+//     different files both claimed FOURTH, and CLAUDE.md repeated two of the
+//     wrong numbers.
+//
+//     The fix was to delete the tally rather than correct it, because a
+//     corrected tally is wrong again the day an eighth store lands and nobody
+//     renumbers six comments. What each file records now is the RULE — never
+//     bump registry.version() — which is the part that was always load-bearing.
+//     This check keeps the ordinals from growing back.
+{
+  const { readdirSync } = require('node:fs')
+  const dir = join(ROOT, 'src', 'renderer', 'session')
+  const ordinal = /\b(a|the)\s+(second|third|fourth|fifth|sixth|seventh|eighth)\s+module-level\s+store/i
+  const offenders = readdirSync(dir)
+    .filter((f) => f.endsWith('-store.ts'))
+    .filter((f) => ordinal.test(read(join('src', 'renderer', 'session', f)) ?? ''))
+  const stores = readdirSync(dir).filter((f) => f.endsWith('-store.ts')).length
+  ok('23 no module-level store comment claims an ordinal',
+    offenders.length === 0 && stores >= 7,
+    offenders.length ? offenders.join(',') : `${stores} stores, none numbered`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

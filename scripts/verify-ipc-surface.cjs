@@ -7,6 +7,7 @@
    symptom is a renderer promise that rejects at runtime. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
+const { tmpdir } = require('node:os')
 const { app, ipcMain } = require('electron')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'ipc-surface.cjs')
@@ -133,7 +134,10 @@ app.whenReady().then(() => {
     () => null,
     // M21's inventory cache. A stub, like every other collaborator here: this
     // check is about the DOOR existing, not about what is behind it.
-    { read: () => ({ kind: 'no-cwd' }), size: () => 0, clear: () => {} }
+    { read: () => ({ kind: 'no-cwd' }), size: () => 0, clear: () => {} },
+    // Backlog #75's export directory. Never invoked here either — this suite
+    // only asserts REGISTRATION, never drives diagnostics:export.
+    join(tmpdir(), 'tc-verify-ipc-diagnostics')
   )
 
   const channels = Object.values(IPC)
@@ -164,12 +168,21 @@ app.whenReady().then(() => {
   // had already claimed M17 (the Jira canvas context, and a separate
   // M15 -> M17 renumber before that) by the time it landed. That makes it the
   // fourth milestone in this file's own history to be renumbered at a merge.
-  // M24 renamed `jira:list` to `work:list` and added NONE — a second work
-  // provider is a parameter, not a channel. It is the sixth milestone to
-  // reach this boundary and decline it, after M6d's attention set, M7's
-  // waiting counts, M12's session:live, M15's subagent:state and M17's
-  // usage:panel. Still 45.
-  const EXPECTED_CHANNELS = 45
+  // 46 = M23's machine:sample process-tree readout. It is an invoke rather
+  // than an event because the renderer owns the deliberately slow polling
+  // cadence; main returns one ps snapshot for every requested panel PID.
+  // 48 = 46 plus backlog #75's two diagnostics channels (diagnostics:sample,
+  // diagnostics:export) — main's own IPC send rate, and the atomic write of
+  // the renderer's already-scrubbed bundle. Both are pull-only invokes, the
+  // same shape machine:sample already established.
+  // M24 added NONE and left the count exactly where it found it: it RENAMED
+  // `jira:list` to `work:list`, because a second work provider is a parameter
+  // rather than a channel — a channel per provider would make this number a
+  // function of how many integrations exist rather than of how many questions
+  // the renderer can ask. That makes M24 the sixth milestone to reach this
+  // boundary and decline it, after M6d's attention set, M7's waiting counts,
+  // M12's session:live, M15's subagent:state and M17's usage:panel.
+  const EXPECTED_CHANNELS = 48
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

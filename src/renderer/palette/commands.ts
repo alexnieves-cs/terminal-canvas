@@ -227,6 +227,10 @@ export interface PaletteActions {
    * what makes Escape a real cancel.
    */
   beginMovePanelsToNewWorkspace(panelIds: string[]): void
+  /** Name the current multi-selection as one movable canvas region. */
+  beginCreateGroup(panelIds: string[]): void
+  /** Turn the selected live terminals' shared keyboard route on or off. */
+  toggleBroadcastInput(): void
   /**
    * Enter M14's merged view — every workspace's panels at once, in lanes —
    * or leave it. ONE verb rather than an enter/leave pair: the row and the
@@ -331,6 +335,10 @@ export interface PaletteContext {
    * module stays in the plain-node verify tier and its fixtures stay literals.
    */
   selectedIds: string[]
+  /** At least two selected terminals can receive keyboard input right now. */
+  broadcastReady: boolean
+  /** The visible broadcast route is currently armed. */
+  broadcastActive: boolean
   /**
    * Whether the merged view is open. REQUIRED, not optional, for the reason
    * `settings` is: an optional flag here is a compile-time hole a surface
@@ -377,6 +385,7 @@ export const REASON_NOT_AN_AGENT = 'that panel is not running a known agent'
 // gestures: collapsing them would tell a user who has selected text that they
 // need to select text, which sends them to do the thing they already did.
 export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag first'
+export const REASON_GROUP_NEEDS_TWO = 'select at least two panels to make a group'
 /**
  * The merged view is read-only, so the move rows refuse there.
  *
@@ -390,6 +399,7 @@ export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag 
  */
 export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
 export const REASON_NOTHING_TO_LINK = 'this canvas has only one panel'
+export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal panels'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -1038,6 +1048,34 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // open, and a row reading only "Move to school" is a verb with an invisible
   // object.
   const count = `${ctx.selectedIds.length} panel${ctx.selectedIds.length === 1 ? '' : 's'}`
+
+  out.push(
+    withReason(
+      {
+        id: 'canvas.group-selection',
+        title: `Group ${count}…`,
+        searchText: 'group selected panels region label',
+        group: 'canvas',
+        run: () => actions.beginCreateGroup(ctx.selectedIds)
+      },
+      ctx.merged
+        ? REASON_MERGED_READ_ONLY
+        : (ctx.selectedIds.length < 2 ? REASON_GROUP_NEEDS_TWO : undefined)
+    )
+  )
+
+  out.push(
+    withReason(
+      {
+        id: 'canvas.broadcast-input',
+        title: ctx.broadcastActive ? 'Stop broadcasting input' : `Broadcast input to ${count}`,
+        searchText: 'broadcast input type selected terminals agents',
+        group: 'canvas',
+        run: () => actions.toggleBroadcastInput()
+      },
+      ctx.broadcastActive || ctx.broadcastReady ? undefined : REASON_BROADCAST_NEEDS_TWO
+    )
+  )
 
   for (const w of ctx.workspaces) {
     out.push({

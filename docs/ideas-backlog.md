@@ -42,21 +42,21 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 | #3 file tree / codebase browser | M20 | "Every file row mounts `shellControl`, and here that is not a convention" |
+| #52 multi-select | M26 | "A group drag is N origin-based drags and one history gesture", "Selection stays inside the active workspace" |
 
-Thirteen more entries were rewritten rather than removed, because a milestone shipped most
+Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
 OAuth 3LO and a second provider), **#13** (the drop guard and Finder path resolution both
 landed; the handoff into the PTY did not), **#14** (M16 left tiers 2–4, and M22 answered
 the who-wins-on-conflict question), **#17** (M6d left the OS notification), **#19** (M17
 left history/retention, a second CLI adapter, the un-pinned panel and aggregate totals),
-**#24** (M13 left the functional flavour), **#25** (M6 left snapping and tidy), **#26** (M21
+**#25** (M6 left snapping and tidy), **#26** (M21
 left the cross-panel query and the editing half), **#27** (M5b left placeholders), **#34**
 (M5a left per-preset environment), **#41** (M12 left review's cwd resolution), **#51**
-(M9a–c left discard) and **#52** (M18 left shift-click and group drag). The membership
-churns rather than only growing, and that is the shape to expect: **#2** left this list for
-the gone table above when M18 finished it, while **#12**, **#13**, **#26** and **#52**
-joined it. An entry rewritten down to its open half is one milestone from leaving the file
-entirely.
+(M9a–c left discard). The membership churns rather than only growing, and that is the shape
+to expect: **#2** left this list for the gone table above when M18 finished it, while
+**#12**, **#13** and **#26** joined it. An entry rewritten down to its open half is one
+milestone from leaving the file entirely.
 
 **A standing rule for everything below (this was #11, and it shipped in M6b): anything a
 user can toggle goes in the one declarative settings schema** — a `SettingDef` in
@@ -567,7 +567,7 @@ surface that works when this app is not the thing you are looking at.
   added no IPC channel" for why the obvious snapshot channel was declined twice — and note
   that a badge is the first customer that might genuinely change the answer.
 
-## 18. What the canvas costs the machine
+## 18. What the canvas costs the machine — landed
 
 A per-panel readout of CPU and memory, and a canvas-wide total. Twelve agents is twelve
 process trees, each of which may be running a compiler.
@@ -603,6 +603,13 @@ process trees, each of which may be running a compiler.
   tuning constants a settings pane might expose, and warns that a performance knob invites
   a user to break the app. A cost readout is the honest companion to any such knob: it is
   what makes a number the user is turning mean something.
+
+Landed as `machine:sample`: the renderer requests one `ps` snapshot every two seconds for
+the running terminal PIDs in its active canvas. Main walks every descendant process, returns
+per-panel CPU/RSS and a de-duplicated canvas total, and the renderer keeps it in a separate
+per-panel store so the changing readout never bumps `registry.version()`. The card tier shows
+each process tree's CPU/RAM; the HUD shows the canvas total. This stays a readout — it does
+not change tier assignment or promotion.
 
 ## 19. Token and dollar accounting — landed in M17; the open half is history, a second adapter, the un-pinned panel and aggregate totals
 
@@ -691,8 +698,9 @@ repos; the same prompt to four agents to compare how they answer it.
   already takes a panel id, so broadcast is a loop, not a channel. Multi-selection was the
   missing half and this entry used to say so outright; `Canvas.tsx` now tracks
   `selectedIds: Set<string>`, built by a rubber-band marquee, and the move-to-workspace
-  rows are the first consumer. What is still missing from #52 is shift-click and group
-  drag, neither of which broadcast needs.
+  rows are the first consumer. M26 completed #52's shift-click and group-drag half, so a
+  selection can now be built incrementally as well as swept; broadcast still needs only its
+  safety mode and routing contract.
 - **Constraint, and it is the dangerous one:** input routing today is *unambiguous* —
   keystrokes go to the focused session, and exactly one panel is focused. Broadcast makes
   the destination of a keystroke a mode, and a mode you can forget you are in. Typing
@@ -779,7 +787,7 @@ The universal "maximise this" gesture.
   because the user zoomed in on one is exactly the kind of decision-on-their-behalf that
   dormancy exists to avoid. Probably not — but it should be a decision, not a default.
 
-## 24. Edges between panels — the FUNCTIONAL half is what is left
+## 24. Edges between panels — functional restart-on-exit shipped in M25
 
 **The decorative half shipped in M13**, as *links*. A user draws a directed,
 optionally labelled line from one panel to another; it persists, it survives a
@@ -788,20 +796,26 @@ reload, and closing either endpoint removes it in the same undoable step. See
 and the eleven entries after it, and
 [`docs/superpowers/specs/2026-08-30-m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md).
 
-The entry stays because #24 named **two flavours and said they should not be
-built at once**. One was built. This is the other.
+The entry named **two flavours and said they should not be built at once**.
+Both are now built: decorative links shipped in M13; M25 adds the smallest
+functional action that is useful without turning the canvas into an invisible
+PTY writer.
 
-- **Functional edges — the open half.** An edge that *does* something: pipe
-  this panel's output into that one's input, or "restart this one when that one
-  exits". Genuinely powerful and genuinely dangerous, because it means the
-  canvas is writing to PTYs on its own initiative. Everything #21 says about a
-  mode you can forget you are in applies double to a rule that fires while you
-  are not present.
-- **Open question, unchanged and now the blocking one:** if the functional
-  flavour happens, is the edge the *only* place that behaviour is expressed? A
-  rule you can only see by finding a line on the canvas is hard to audit. This
-  may be the point at which the canvas needs a plain list view of its own
-  automations — and that list, not the edge, is probably the real feature.
+- **Functional action — shipped.** On an outgoing terminal-to-terminal link,
+  the Inspector's `↻` enables “when this exits, restart that terminal.” The
+  Inspector also has a plain **Automations** list, naming both endpoints,
+  enabled state and the most recent run/skipped outcome; the canvas line is
+  never the only evidence that a process can be restarted.
+- **Safety boundaries.** The action never wakes a dormant or never-started
+  target, so a saved rule cannot launch an agent merely because another panel
+  exited. It only acts after the registry records the source exit, and a
+  directed cycle is refused at creation and stripped on load — a rate limit
+  would only turn a configured loop into a delayed surprise. A restart may
+  cascade down a finite configured chain; that is visible in the list and is
+  the semantics of “on exit,” including an exit caused by an upstream restart.
+- **Deliberately not included.** Piping terminal output remains absent. It
+  would make the canvas write arbitrary bytes to a PTY, needs a payload/audit
+  model beyond this relation-owned action, and must be designed separately.
 - **What M13 leaves ready.** The primitive is built generally rather than as a
   private detail of #7's subagent visualisation, which is what #24 asked for:
   same renderer, same z-order answer, same persistence. #7's parent-to-subagent
@@ -854,9 +868,9 @@ dragging, snapping, and a "tidy" command.
      function applied to its output, which keeps it plain-node testable.
   3. **Tidy** — a command that arranges the selection (or everything) onto a grid. Pure
      rect math over `Panel[]`. "The selection" is no longer hypothetical: M18 added
-     `selectedIds`, built by a rubber-band marquee, so a tidy has a real set to arrange
-     rather than a single `selectedId` that made "tidy the selection" mean "tidy one
-     panel".
+     `selectedIds`, and M26 completed its shift-click and group-drag gestures, so a tidy has
+     a real set to arrange rather than a single `selectedId` that made "tidy the selection"
+     mean "tidy one panel".
 - **Constraint:** all of it is *world-space* arithmetic, and the snap threshold is the
   place that gets it wrong. A snap distance in world units becomes visually huge when
   zoomed out and invisible when zoomed in; it should be specified in **screen** pixels and
@@ -1272,35 +1286,38 @@ two that were never about naming a spawn:
   proved the spec half is free, because it is already on the session. The env is not free,
   because capturing a running panel's env captures its secrets — #31.
 
-## 35. Groups — a labelled region that owns what is inside it
+## 35. Groups — a labelled region that owns what is inside it — **done, M25**
 
-Draw a box around several panels, name it, and have it behave as one thing: drag the group
-and its panels come with it, collapse it and they card, colour it and the canvas gets
-regions that mean something.
+M25 makes a marquee selection into a named, coloured region from the command palette. The
+region persists as group membership plus presentation state, rather than nesting panels or
+inventing a second process owner: its box is derived from the member rects, so a resize or
+ordinary panel drag keeps the label honest. Its header moves the region and
+its members together; the `card` control is the deliberate collapsed state, and `×` removes
+only the grouping.
 
 - **Why it fits:** this is the middle scale the app is missing. A panel is one process; a
   workspace (#2) is a whole canvas. "These four panels are the auth refactor" is neither,
   and it is the unit people actually think in. It is also the cheapest way to make a
   twelve-panel canvas legible, because the labelling is spatial rather than a list.
-- **Constraint: dragging a group is `applyDrag` N times, and the caller-side rule applies N
-  times.** The gotcha is already written down — recompute every frame from the gesture's
-  **origin** rects, never from the previous frame's result, or the group shears apart at
-  low zoom and breaks outright if the user zooms mid-drag. One panel makes that mistake
-  survivable; four make it visible.
-- **Constraint: a group must not touch array order.** Stacking is `Panel.z`, never array
-  order, because React reconciles a reordered keyed list by moving DOM nodes and a move
-  detaches a live terminal's host. "Bring group to front" is therefore a `z` rewrite across
-  its members, exactly like `raisePanel`, and the temptation to model a group as a nested
-  array of panels is the temptation to reintroduce that bug structurally.
-- **Constraint: collapsing is a tier hint, never a kill.** A collapsed group should card its
-  members — which is what tiering already does, and is free — and must not reach `dispose`.
-  This is "two lifetimes" again, arriving through a new door. The interesting variant is
-  whether a collapsed group should be allowed to *hold* panels below the live budget
-  deliberately, as a user-facing way to say "these are running but I am not watching them".
-- **This is the second-cleanest candidate for the panel-kind union**, after #14: a group is
-  a canvas node that is not a terminal, costs nothing against `LIVE_BUDGET`, and has no
-  session at all. If #14 is not scheduled first, this is the entry that will otherwise get
-  faked as a special case.
+- **Dragging is `applyDrag` N times, from N immutable origin rects.** `groups.ts` carries one
+  `DragState` per member and applies the current cursor point to each, rather than accumulating
+  a delta from the previous frame. The group therefore cannot shear at low zoom or when the
+  camera zooms during the drag; `verify:groups` check 2 pins the shared origin delta.
+- **It never touches panel array order.** Bringing a group forward rewrites the members'
+  `Panel.z` values and preserves their array positions, so React never detaches a live terminal
+  host. `verify:groups` check 3 asserts both halves.
+- **Collapsing is a tier hint, never a kill.** `assignTiers` now accepts forced card ids; group
+  membership supplies them and no path reaches `dispose`. It even outranks focus, so collapse
+  means card consistently while the PTY and `PanelSession` remain alive. `verify:groups` check
+  4 pins that specific non-kill boundary.
+- **Persistence repairs, rather than discards, a partly stale group.** A closed or moved-away
+  member is pruned; a group with no surviving members disappears. The parser rejects malformed
+  labels/colours and validates membership against the surviving panel set, while pre-M25 files
+  simply read as `groups: []`.
+- **Merged view deliberately omits group regions for now.** Lanes translate panel rects into a
+  synthetic coordinate system, so rendering the active workspace's un-translated groups there
+  would lie. The mode remains read-only and group creation is disabled until a merged group
+  placement design exists.
 - **Open question: is a group a workspace you can see?** If groups exist, #2's "move
   selection to a new workspace" becomes "promote this group", and the two features start
   looking like one feature at two zoom levels. Worth deciding rather than discovering.
@@ -1698,36 +1715,6 @@ app would have that destroys work.
   one file's hunks, so per-file is the useful version. It is also the harder one, and it
   inherits `verify:rail` 57's rule: the set of paths comes from the *result*, never from the
   display-capped rows on screen.
-
-## 52. Multi-select — the two halves M18 left: shift-click and group drag
-
-M18 shipped the selection model and the marquee. `Canvas.tsx` now tracks
-`selectedIds: Set<string>`, a background drag rubber-bands (`canvas/marquee.ts`, pure and
-plain-node tested by `verify:merged` 8–12), and the resulting multi-selection is what the
-palette's *Move to workspace* rows act on. What is still open is the other two thirds of
-the original sentence: **shift-click to add to a selection**, and **group drag**, so a
-selection moves as one instead of only being a thing verbs are aimed at.
-
-- **The dangerous constraint of the original entry is discharged**, and it is worth knowing
-  which one. "The background `onMouseDown` currently means clear selection and release
-  focus" — the marquee had to claim that drag without dropping the focus release, because
-  an uncleared `focusedId` holds a WebGL context and a `LIVE_BUDGET` slot for the rest of
-  the run. It does: the release is unconditional and sits outside the hit/miss branch, and
-  `verify:panels` 136 asserts both halves at once, the DOM's idea of focus and `__m4aGrid()`
-  answering null. See `CLAUDE.md`'s "The marquee starts only where `hitTest` finds nothing".
-- **Constraint: group drag is `applyDrag` N times from N origin rects,** never one delta
-  applied to a bounding box. The recompute-from-origin rule is caller-side, and a
-  bounding-box implementation is exactly the accumulate-drift bug wearing a group costume.
-- **Constraint: one history push for the whole group,** per the one-entry-per-committed-
-  gesture rule.
-- **Constraint the marquee added, and shift-click inherits:** a selection must not span
-  workspaces. The marquee is simply gated off in the merged view, which is structural and
-  costs nothing; shift-click in that view would have to make the same call deliberately,
-  since the move verbs act on whatever the set contains and their source records are the
-  active workspace's alone.
-- **Nearest existing entries: #21** (broadcast to a selection) **and #25** (tidy the
-  selection), both of which named this as the missing machinery and both of which now have
-  a selection to build on.
 
 ## 53. Cards that show the last real screen, not a text tail
 
@@ -2216,10 +2203,9 @@ package" is how a placeholder becomes permanent.
 The section below was written for entries 1–40 and has **not** been re-ordered to include
 these. Three observations that would change it if it were:
 
-- **#41 and #52 are load-bearing for entries that already exist,** in the same way the
-  panel-kind union is. Four entries assume live cwd; three assume multi-selection. Both are
-  cheap, and both are currently assumed-to-exist rather than built. They belong near the front
-  of any real ordering.
+- **#41 was load-bearing for entries that already exist,** in the same way the panel-kind
+  union is. Four entries assume live cwd; #52's multi-selection assumption is now built by
+  M26. Both belonged near the front of any real ordering.
 - **#43 is a defect, not a feature,** and #70's drift finding was a second. #49 was a third
   and is fixed. Defects should be fixed rather than scheduled.
 - **#50 (worktree isolation) is the one entry here that changes what the product is for.**
@@ -2379,8 +2365,9 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 41. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
    argument for #28's accounts than sync is.
 42. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-43. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
-   Only after there is somewhere to audit automations that is not the canvas itself.
+43. ~~**#24, the functional flavour**~~ — **done, M25.** Restart-on-exit is
+   guarded by the Inspector's automation list; output piping remains a separate
+   future design rather than an un-audited expansion of the rule.
 44. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 

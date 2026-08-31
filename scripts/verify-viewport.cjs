@@ -409,6 +409,27 @@ const MOVE = { kind: 'move' }
     JSON.stringify(out))
 }
 
+// 29b. A group drag is N independent applyDrag calls, each from that panel's
+// own origin. A bounding-box translation can look right for equal panels, so
+// these origins differ in both position and dimensions; every member must
+// still get the same pointer delta and preserve its own shape.
+{
+  const a = { id: 'a', x: -250, y: 90, w: 720, h: 460 }
+  const b = { id: 'b', x: 480, y: -130, w: 330, h: 610 }
+  const originWorld = { x: 50, y: 75 }
+  const target = { x: 173, y: -44 }
+  const moved = [a, b].map((originRect) => V.applyDrag({
+    panelId: originRect.id, mode: MOVE, originRect, originWorld
+  }, target))
+  const [movedA, movedB] = moved
+  ok('29b a group move recomputes every member from its own origin',
+    movedA.x === a.x + 123 && movedA.y === a.y - 119 &&
+      movedB.x === b.x + 123 && movedB.y === b.y - 119 &&
+      movedA.w === a.w && movedA.h === a.h &&
+      movedB.w === b.w && movedB.h === b.h,
+    JSON.stringify(moved))
+}
+
 // 30. Resizing east changes width only. x/y must never move: a resize that
 //     drifts the origin is the exact bug that dropping the n/w edges avoids.
 {
@@ -1251,6 +1272,27 @@ ok('74 a panel with no kind is not a review panel',
   const segs = V.buildLinkSegments([term, node])
   ok('88 a review node is an ordinary link endpoint in both directions',
     segs.length === 2 && segs.some((s) => s.to === 'r1') && segs.some((s) => s.from === 'r1'))
+}
+
+// 93. Functional links are terminal-only, preserve ordinary link metadata,
+// and reject a cycle. The cycle clause matters more than a rate limit: a
+// restart chain that eventually stops is still a configuration that surprised
+// its owner; one that cannot be created is auditable before it fires.
+{
+  const term = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const file = { kind: 'file', rect: { id: 'f', x: 0, y: 0, w: 10, h: 10 }, z: 1, source: { path: '/tmp/f' } }
+  const base = [term('a', [{ to: 'b', label: 'feeds' }]), term('b', [{ to: 'c' }]), term('c'), file]
+  const aToB = V.setRestartOnExit(base, 'a', 'b', true)
+  const bToC = V.setRestartOnExit(aToB, 'b', 'c', true)
+  const refusedCycle = V.setRestartOnExit(bToC, 'c', 'a', true)
+  const refusedKind = V.setRestartOnExit(bToC, 'a', 'f', true)
+  const disabled = V.setRestartOnExit(bToC, 'a', 'b', false)
+  const link = V.linksOf(aToB[0])[0]
+  ok('93 restart-on-exit is terminal-only, preserves labels, disables, and refuses cycles',
+    link.label === 'feeds' && link.automation?.enabled === true &&
+    refusedCycle === bToC && refusedKind === bToC &&
+    V.linksOf(disabled[0])[0].automation?.enabled === false,
+    JSON.stringify(V.linksOf(bToC[0])))
 }
 
 // M16 (originally numbered 79-80b under this branch's own M13, which

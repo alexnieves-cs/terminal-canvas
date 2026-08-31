@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import { applyDrag, type DragMode, type DragState } from './panel-interaction'
+import { applyDrag, type DragState } from './panel-interaction'
 import { screenToWorld, type Viewport, type WorldRect } from './viewport'
 
 export interface PanelDragDeps {
@@ -8,8 +8,12 @@ export interface PanelDragDeps {
   viewportRef: RefObject<Viewport>
   /** Called on every move with the rect this gesture implies. */
   onDrag(panelId: string, rect: WorldRect): void
-  /** Called once on release, so a resize sends at most one pty:resize. */
-  onCommit(panelId: string, mode: DragMode): void
+  /**
+   * Called once on release for the whole gesture. A group move carries one
+   * immutable state per member, so this is the one place its history entry
+   * can be committed exactly once.
+   */
+  onCommit(states: readonly DragState[]): void
 }
 
 /**
@@ -28,8 +32,8 @@ export interface PanelDragDeps {
  * already inert once the panel is gone: setPanelRect maps over the array and
  * matches nothing, and registry.refit(id) returns early on a missing session.
  */
-export function usePanelDrag(deps: PanelDragDeps): (state: DragState) => void {
-  const dragRef = useRef<DragState | null>(null)
+export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]) => void {
+  const dragRef = useRef<readonly DragState[] | null>(null)
   // Mirrored so the document listeners, installed once, always call the
   // current callbacks without being torn down and rebuilt every render.
   const depsRef = useRef(deps)
@@ -51,7 +55,7 @@ export function usePanelDrag(deps: PanelDragDeps): (state: DragState) => void {
       const state = dragRef.current
       if (!state) return
       dragRef.current = null
-      depsRef.current.onCommit(state.panelId, state.mode)
+      depsRef.current.onCommit(state)
     }
 
     const onMove = (event: MouseEvent): void => {
@@ -71,10 +75,12 @@ export function usePanelDrag(deps: PanelDragDeps): (state: DragState) => void {
       }
       const world = toWorld(event)
       if (!world) return
-      // applyDrag is handed the UNCHANGED state every frame, so the rect is
-      // derived from the mousedown origin rather than from the previous
-      // frame's result — see the note on applyDrag.
-      depsRef.current.onDrag(state.panelId, applyDrag(state, world))
+      // Every member is handed its own UNCHANGED state every frame, so each
+      // rect is derived from its mousedown origin rather than the preceding
+      // frame or a group bounding box — see applyDrag's own note.
+      for (const member of state) {
+        depsRef.current.onDrag(member.panelId, applyDrag(member, world))
+      }
     }
 
     document.addEventListener('mousemove', onMove)
@@ -85,7 +91,7 @@ export function usePanelDrag(deps: PanelDragDeps): (state: DragState) => void {
     }
   }, [])
 
-  return useCallback((state: DragState) => {
-    dragRef.current = state
+  return useCallback((states: readonly DragState[]) => {
+    dragRef.current = states
   }, [])
 }

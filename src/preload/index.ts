@@ -8,7 +8,8 @@ import {
   type CapturedPanel,
   type FileReadRequest, type ToolboxReadRequest, type ToolboxPermissionsRequest,
   type FileWriteRequest,
-  type FileChangedEvent
+  type FileChangedEvent,
+  type DiagnosticsSnapshot
 } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
 import type {
@@ -25,6 +26,7 @@ import type {
 import type { CanvasState } from '../shared/layout-schema'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
+import type { MachineCostTarget } from '../shared/machine-cost'
 
 /**
  * Every subscribe helper returns its own unsubscribe function. Without this,
@@ -46,6 +48,9 @@ const bridge: CanvasBridge = {
     list: () => ipcRenderer.invoke(IPC.PTY_LIST),
     onData: (listener) => subscribe<PtyDataChunk>(IPC_EVENTS.PTY_DATA, listener),
     onExit: (listener) => subscribe<PtyExitInfo>(IPC_EVENTS.PTY_EXIT, listener)
+  },
+  machine: {
+    sample: (targets: MachineCostTarget[]) => ipcRenderer.invoke(IPC.MACHINE_COST_SAMPLE, targets)
   },
   edit: {
     onCopy: (listener) => subscribe<void>(IPC_EVENTS.EDIT_COPY, listener),
@@ -97,6 +102,10 @@ const bridge: CanvasBridge = {
   },
   files: {
     list: (path: string) => ipcRenderer.invoke(IPC.FS_LIST, path)
+  },
+  diagnostics: {
+    sample: () => ipcRenderer.invoke(IPC.DIAGNOSTICS_SAMPLE),
+    export: (snapshot: DiagnosticsSnapshot) => ipcRenderer.invoke(IPC.DIAGNOSTICS_EXPORT, snapshot)
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),

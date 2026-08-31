@@ -1,8 +1,16 @@
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import { agentStateLabel } from './inspector-fields'
+import { agentStateLabel, KIND_NOUN } from './inspector-fields'
 import { shellControl } from './shell-control'
+
+export interface AutomationRow {
+  from: string
+  to: string
+  source: string
+  target: string
+  enabled: boolean
+}
 
 export interface InspectorProps {
   onToggle: () => void
@@ -17,6 +25,10 @@ export interface InspectorProps {
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
+  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  /** Ephemeral evidence of what a functional link most recently did. */
+  automationResults: ReadonlyMap<string, string>
+  automations: AutomationRow[]
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -61,7 +73,7 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, review, toolbox, onOpenToolbox
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, automationResults, automations, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -75,6 +87,7 @@ function InspectorImpl({
         ›
       </button>
       <div className="shell__region-title">Panel</div>
+      <AutomationList rows={automations} results={automationResults} onSetRestartOnExit={onSetRestartOnExit} />
       {model === null
         ? <InspectorEmpty summary={summary} />
         : <InspectorPanel
@@ -90,12 +103,47 @@ function InspectorImpl({
             onLink={onLink}
             onRemoveLink={onRemoveLink}
             onRelabelLink={onRelabelLink}
+            onSetRestartOnExit={onSetRestartOnExit}
+            automationResults={automationResults}
           />}
     </aside>
   )
 }
 
 export const Inspector = memo(InspectorImpl)
+
+/** The audit surface #24 requires: rules are readable without tracing lines. */
+function AutomationList({
+  rows, results, onSetRestartOnExit
+}: {
+  rows: AutomationRow[]
+  results: ReadonlyMap<string, string>
+  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="inspector__links" data-automation-list>
+      <div className="inspector__links-label">automations</div>
+      {rows.map((row) => {
+        const key = `${row.from}:${row.to}`
+        return (
+          <div className="inspector__link" key={key} data-automation={key}>
+            <span className="inspector__link-title">{row.source} exits → restart {row.target}</span>
+            <button
+              type="button"
+              className="inspector__link-action"
+              title={row.enabled ? 'Disable this automation' : 'Enable this automation'}
+              {...shellControl(() => onSetRestartOnExit(row.from, row.to, !row.enabled))}
+            >
+              {row.enabled ? 'on' : 'off'}
+            </button>
+            {results.get(key) !== undefined && <span className="inspector__link-label">{results.get(key)}</span>}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
 
 /**
  * Nothing selected. Deliberately a summary rather than a blank pane or a
@@ -136,7 +184,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, automationResults
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
@@ -150,6 +198,8 @@ function InspectorPanel({
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
+  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
   const state = useAgentState(model.id)
   return (
@@ -206,6 +256,27 @@ function InspectorPanel({
                 {link.label !== undefined && (
                   <span className="inspector__link-label">{link.label}</span>
                 )}
+                {link.direction === 'out' && (
+                  <button
+                    type="button"
+                    className="inspector__link-action"
+                    data-link-automation={`${from}:${to}`}
+                    disabled={!link.canRestartOnExit}
+                    title={link.canRestartOnExit
+                      ? (link.restartOnExit
+                          ? 'Disable restart when this panel exits'
+                          : 'Restart this terminal when this panel exits')
+                      : 'Restart-on-exit requires two terminal panels'}
+                    {...shellControl(() => onSetRestartOnExit(from, to, !link.restartOnExit))}
+                  >
+                    {link.restartOnExit ? '↻ on' : '↻'}
+                  </button>
+                )}
+                {link.direction === 'out' && link.restartOnExit && automationResults.get(`${from}:${to}`) !== undefined && (
+                  <span className="inspector__link-label" data-link-automation-result={`${from}:${to}`}>
+                    {automationResults.get(`${from}:${to}`)}
+                  </span>
+                )}
                 {/* Both controls go through shellControl, so neither takes DOM
                     focus off xterm — see CLAUDE.md's "A shell control never
                     takes DOM focus". */}
@@ -247,13 +318,21 @@ function InspectorPanel({
           className="inspector__action"
           data-inspector-action="restart"
           disabled={model.kind !== 'terminal' || !model.restartable}
-          title={model.kind === 'review'
-            ? 'A review node has no process to restart'
-            : model.kind === 'file'
-              ? 'A file panel has no process to restart'
-              : model.restartable
-                ? `Restart ${model.heading} — ends the running process and starts it again`
-                : `${model.heading} has not started yet`}
+          title={
+            // Terminal is the SPECIAL case and every other kind is uniform,
+            // which is the inverse of how this read until the M27 audit. The
+            // old shape named 'review' and 'file' explicitly and let everything
+            // else fall into the terminal branch — so a toolbox node, and then
+            // a Jira panel, advertised "<name> has not started yet" on a
+            // control disabled precisely because there is nothing to start.
+            // KIND_NOUN is a total Record over the sessionless kinds, so a
+            // sixth kind cannot reach this sentence without failing to compile.
+            model.kind === 'terminal'
+            ? model.restartable
+              ? `Restart ${model.heading} — ends the running process and starts it again`
+              : `${model.heading} has not started yet`
+            : `${KIND_NOUN[model.kind]} has no process to restart`
+          }
           {...shellControl(() => onRestart(model.id))}
         >
           Restart
@@ -272,11 +351,9 @@ function InspectorPanel({
           className="inspector__action"
           data-inspector-action="save-preset"
           disabled={model.kind !== 'terminal'}
-          title={model.kind === 'review'
-            ? 'A review node is not a spawnable panel'
-            : model.kind === 'file'
-              ? 'A file panel is not a spawnable panel'
-              : `Save ${model.heading} as a preset`}
+          title={model.kind === 'terminal'
+            ? `Save ${model.heading} as a preset`
+            : `${KIND_NOUN[model.kind]} is not a spawnable panel`}
           {...shellControl(() => onSavePreset(model.id))}
         >
           Save as preset

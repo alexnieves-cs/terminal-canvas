@@ -3,6 +3,8 @@ import {
   type DragEvent, type JSX, type MouseEvent
 } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { DiagnosticsOverlay } from './DiagnosticsOverlay'
+import { useDiagnostics } from './useDiagnostics'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
@@ -17,7 +19,11 @@ import { marqueeRect, marqueeSelection } from './marquee'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
 import { usePanelDrag } from './usePanelDrag'
-import type { DragMode, DragState } from './panel-interaction'
+import { GroupLayer } from '@renderer/groups/GroupLayer'
+import { applyGroupDrag, groupDragState, pruneGroups, raiseGroup, removeGroup, type CanvasGroup } from '@renderer/groups/groups'
+import { useGroupDrag } from '@renderer/groups/useGroupDrag'
+import { GROUP_COLOURS } from '@shared/groups'
+import type { DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { ReviewNode } from '@renderer/review/ReviewNode'
@@ -38,10 +44,12 @@ import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import type { ToolInventoryResult } from '@shared/toolbox'
 import { applyUsage, clearUsage, useUsage } from '@renderer/session/usage-store'
+import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import { installPointerCorrection, isCorrectedEvent } from '@renderer/components/xterm-pointer'
 import type { CanvasState } from '@shared/layout-schema'
 import type { DirResult } from '@shared/fs-tree'
+import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   ActivateResult,
   CapturedPanel,
@@ -57,7 +65,7 @@ import {
   cascadeCentre, firstRunPanels, isFilePanel, isWorkPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeWorkPanel,
   makeToolboxPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
-  addLink, removeLink, setLinkLabel,
+  addLink, removeLink, setLinkLabel, setRestartOnExit, linksOf,
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
@@ -75,6 +83,7 @@ import { WorkNode } from '@renderer/work/WorkNode'
 import { TopBar } from '../shell/TopBar'
 import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
+import type { AutomationRow } from '../shell/Inspector'
 import { FileTree } from '../shell/FileTree'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railLabel, railSignature } from '../shell/rail-rows'
@@ -90,6 +99,8 @@ import { buildFileRows, relativePath, shellQuote, treeSignature, type FileRow } 
 
 /** Promote immediately, demote late: the other half of the anti-thrash story. */
 const DEMOTE_DELAY_MS = 250
+/** A process-table walk is intentionally slow; never put it on a render path. */
+const MACHINE_COST_SAMPLE_MS = 2000
 
 // Module-level so the palette's props keep the same identity between renders;
 // a fresh [] each render would rebuild the command list on every frame of a pan.
@@ -239,6 +250,13 @@ export function Canvas({
   const [panels, setPanels] = useState<Panel[]>(() =>
     initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
   )
+  const [groups, setGroups] = useState<CanvasGroup[]>(() => initial.groups ?? [])
+  const nextGroupIdRef = useRef(
+    (initial.groups ?? []).reduce((next, group) => {
+      const match = /^g(\d+)$/.exec(group.id)
+      return match ? Math.max(next, Number(match[1]) + 1) : next
+    }, 1)
+  )
   /**
    * M14's merged view: every workspace's panels on one canvas, in lanes.
    *
@@ -254,6 +272,11 @@ export function Canvas({
    */
   const [merged, setMerged] = useState(false)
   const [mergedData, setMergedData] = useState<MergedWorkspace[] | null>(null)
+  // Selection and drag handlers need the merged boundary before their own
+  // declarations below; the stable ref also keeps memo'd panel callbacks from
+  // changing identity when this transient view toggles.
+  const mergedRef = useRef(merged)
+  mergedRef.current = merged
   const mergedView = useMemo(
     () => (mergedData ? mergedLayout(mergedData) : null),
     [mergedData]
@@ -305,6 +328,11 @@ export function Canvas({
     [displayPanels]
   )
   const terminalRects = useMemo(() => terminalPanels.map((p) => p.rect), [terminalPanels])
+  // A collapsed group is a presentation request, never a lifecycle command:
+  // its panels remain in the registry and merely receive lod.ts's cheap card.
+  const collapsedPanelIds = useMemo(() => new Set(
+    groups.filter((group) => group.collapsed).flatMap((group) => group.panelIds)
+  ), [groups])
   // hitTest returns the LAST match, so paint order and pick order agree only
   // if the array it receives is in paint order. Paint order is z now, not
   // array position — see the note on Panel.z.
@@ -486,9 +514,8 @@ export function Canvas({
     const id = `w${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeWorkPanel(id, cascadeCentre(centre, current), nextZ(current), provider)]; commitHistory(next); return next })
   }, [commitHistory])
-  // The selection is a SET, so a later marquee can build a multi-selection
-  // without renaming forty call sites. Nothing in this milestone creates one
-  // with more than a single member yet.
+  // The selection is a SET: M18's marquee and M26's additive click build a
+  // multi-selection without renaming the older single-selection call sites.
   //
   // focusedId is deliberately NOT widened alongside it. assignTiers pins the
   // focused panel live unconditionally, so focus is a budget-and-WebGL-context
@@ -497,6 +524,15 @@ export function Canvas({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() =>
     initial.selectedId === null ? EMPTY_SELECTION : new Set([initial.selectedId])
   )
+  // A visible, intentionally temporary keyboard route. It is not persisted:
+  // a relaunch must never resume sending a user's next keystroke to several
+  // agents just because that happened to be useful before the window closed.
+  const [broadcastInput, setBroadcastInput] = useState(false)
+  // A chrome press selects and begins its drag in the same synchronous event.
+  // React has not re-rendered between those two calls, so group drag reads this
+  // mirror rather than a selection closure from the previous render.
+  const selectedIdsRef = useRef<ReadonlySet<string>>(selectedIds)
+  selectedIdsRef.current = selectedIds
   /**
    * The one selected panel, or null when zero OR MANY are selected. Every
    * existing reader of the selection — the inspector, the review query, the
@@ -526,7 +562,20 @@ export function Canvas({
   const selectedPanelIds = useMemo(() => [...selectedIds], [selectedIds])
 
   const selectOnly = useCallback((id: string | null): void => {
-    setSelectedIds(id === null ? EMPTY_SELECTION : new Set([id]))
+    const next = id === null ? EMPTY_SELECTION : new Set([id])
+    selectedIdsRef.current = next
+    setSelectedIds(next)
+  }, [])
+  /** Additive selection is deliberately add-only: background click clears. */
+  const addToSelection = useCallback((id: string): void => {
+    // A merged selection could contain ids owned by several workspaces. The
+    // marquee already refuses to construct one there; shift-click must uphold
+    // the same boundary rather than reopening that path through panel chrome.
+    if (mergedRef.current || selectedIdsRef.current.has(id)) return
+    const next = new Set(selectedIdsRef.current)
+    next.add(id)
+    selectedIdsRef.current = next
+    setSelectedIds(next)
   }, [])
   // M13/motion: an entry animation ends and the id leaves the set. Kept
   // beside the selection helpers rather than folded into them — it is a
@@ -664,9 +713,11 @@ export function Canvas({
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
         clearUsage(panel.rect.id)
+        clearMachineCost(panel.rect.id)
       }
     }
     setPanels(next.present)
+    setGroups((current) => pruneGroups(current, ids))
     setDormantIds((current) => {
       const merged = new Set([...current].filter((id) => ids.has(id)))
       for (const panel of next.present) {
@@ -707,6 +758,15 @@ export function Canvas({
   // install once, but panels changes on every frame of a drag.
   const panelsRef = useRef(panels)
   panelsRef.current = panels
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
+  // Panels can disappear through close, undo, reset, or a workspace move.
+  // Repair membership in one place so none of those paths leave a group
+  // pointing at a vanished rect.
+  useEffect(() => {
+    const ids = new Set(panels.map((panel) => panel.rect.id))
+    setGroups((current) => pruneGroups(current, ids))
+  }, [panels])
 
   /**
    * The same mirror for the merged view's two facts, and the split between
@@ -725,8 +785,6 @@ export function Canvas({
    * nowhere. Everything that acts on what is SAVED keeps reading panelsRef —
    * that is the read-only split, restated as two refs.
    */
-  const mergedRef = useRef(merged)
-  mergedRef.current = merged
   /**
    * What the canvas looked like the instant before the merged view opened:
    * the camera, the selection and the focus.
@@ -950,6 +1008,45 @@ export function Canvas({
     onStepWorkspace, onToggleMerged
   )
   const version = useRegistryVersion(registry)
+  const machineCostTotal = useMachineCostTotal()
+
+  // Main reads ONE process table for this whole list, then walks each root's
+  // descendants there. The renderer owns this low-frequency schedule because
+  // closing or switching a canvas should stop the work immediately; neither
+  // the registry nor a module-level main timer can know that fact.
+  const machineCostTargets = useMemo<MachineCostTarget[]>(() => panels.flatMap((panel) => {
+    if (!isTerminalPanel(panel)) return []
+    const status = registry.get(panel.rect.id)?.status
+    return status?.kind === 'running' ? [{ panelId: panel.rect.id, pid: status.pid }] : []
+  }), [panels, version])
+
+  useEffect(() => {
+    let current = true
+    let inFlight = false
+    const sample = (): void => {
+      if (inFlight) return
+      if (machineCostTargets.length === 0) {
+        applyMachineCosts({ panels: [], total: { cpuPercent: 0, memoryBytes: 0 } })
+        return
+      }
+      inFlight = true
+      void window.canvas.machine.sample(machineCostTargets).then((snapshot) => {
+        if (current) applyMachineCosts(snapshot)
+      }).catch((error: unknown) => {
+        // A ps failure is normally a transient process-table race. Keep the
+        // prior reading until the next tick rather than turning it into zero.
+        console.warn('[machine-cost] could not sample process trees', error)
+      }).finally(() => {
+        inFlight = false
+      })
+    }
+    sample()
+    const timer = window.setInterval(sample, MACHINE_COST_SAMPLE_MS)
+    return () => {
+      current = false
+      window.clearInterval(timer)
+    }
+  }, [machineCostTargets])
 
   // What the banner calls the source panel. railLabel is the honest chain's
   // one reader — the panel header, the rail row, the attention section and
@@ -975,6 +1072,31 @@ export function Canvas({
       registry.ensure(panel.rect.id, panel.spec, { dormant: dormantIds.has(panel.rect.id) })
     }
   }, [terminalPanels, dormantIds])
+
+  // Only sessions that are already running can be broadcast targets. This is
+  // a filter over the existing registry, never a call to ensure/wake, so an
+  // inactive selection remains inactive when the mode is armed.
+  const broadcastTargetIds = useMemo(() => (
+    merged
+      ? []
+      : terminalPanels
+        .filter((panel) => {
+          const session = registry.get(panel.rect.id)
+          return selectedIds.has(panel.rect.id) && session?.status.kind === 'running'
+        })
+        .map((panel) => panel.rect.id)
+  ), [merged, selectedIds, terminalPanels, version])
+  const broadcastReady = broadcastTargetIds.length >= 2
+
+  useEffect(() => {
+    if (!broadcastInput || !broadcastReady) {
+      registry.setInputTargets([])
+      if (broadcastInput && !broadcastReady) setBroadcastInput(false)
+      return
+    }
+    registry.setInputTargets(broadcastTargetIds)
+    return () => registry.setInputTargets([])
+  }, [broadcastInput, broadcastReady, broadcastTargetIds])
 
   // Menu-driven clipboard. The old per-panel TerminalPanel used to own this
   // subscription directly against xterm; now that TerminalPanel is a dumb
@@ -1186,9 +1308,11 @@ export function Canvas({
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
       clearUsage(panel.rect.id)
+      clearMachineCost(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
+    setGroups([])
     setDormantIds(new Set())
     selectOnly(null)
     setFocusedId(null)
@@ -1334,6 +1458,7 @@ export function Canvas({
         }
         const outgoing: CanvasState = {
           panels: fromPanels(panelsRef.current),
+          groups: groupsRef.current,
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -1404,6 +1529,7 @@ export function Canvas({
         // here, so nothing is lost by discarding the outgoing workspace's
         // entries.
         setPanels(next)
+        setGroups(result.state.groups ?? [])
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)
@@ -1887,7 +2013,7 @@ export function Canvas({
       (id: string, rect: WorldRect) => setPanels((current) => setPanelRect(current, id, rect)),
       []
     ),
-    onCommit: useCallback((id: string, mode: DragMode) => {
+    onCommit: useCallback((states: readonly DragState[]) => {
       // One history entry per gesture. onDrag (above) called setPanels ~60
       // times during the drag; pushing there would make a single drag take
       // sixty Cmd+Z presses to undo. This runs exactly once, on mouseup,
@@ -1898,14 +2024,56 @@ export function Canvas({
         return current
       })
       // A move changes no terminal dimension, so it has nothing to commit.
-      if (mode.kind !== 'resize') return
+      const resized = states.filter((state) => state.mode.kind === 'resize')
+      if (resized.length === 0) return
       // One commit per gesture, never one per frame: a full-screen agent TUI
       // repaints its whole frame on every SIGWINCH, and resizing live would
       // mean sixty of those a second at sizes the user never meant to keep.
       // refit sends at most one pty:resize, and none if the grid is unchanged.
-      registry.refit(id)
+      for (const state of resized) registry.refit(state.panelId)
     }, [commitHistory])
   })
+
+  const beginGroupDrag = useGroupDrag({
+    hostRef,
+    viewportRef,
+    onDrag: useCallback((state, world) => {
+      setPanels((current) => applyGroupDrag(current, state, world))
+    }, []),
+    onCommit: useCallback(() => {
+      setPanels((current) => {
+        commitHistory(current)
+        return current
+      })
+    }, [commitHistory])
+  })
+
+  const onBeginGroupDrag = useCallback((group: CanvasGroup, event: MouseEvent<HTMLElement>) => {
+    if (mergedRef.current) return
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const origin = screenToWorld(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewportRef.current
+    )
+    // Raising is part of the one group gesture and only rewrites Panel.z;
+    // member array order remains untouched, so live terminal hosts stay put.
+    setPanels((current) => raiseGroup(current, group))
+    beginGroupDrag(groupDragState(group, panelsRef.current, origin))
+  }, [beginGroupDrag])
+
+  const toggleGroupCollapsed = useCallback((id: string) => {
+    setGroups((current) => current.map((group) => {
+      if (group.id !== id) return group
+      if (!group.collapsed) return { ...group, collapsed: true }
+      const next = { ...group }
+      delete next.collapsed
+      return next
+    }))
+  }, [])
+  const onRemoveGroup = useCallback((id: string) => {
+    setGroups((current) => removeGroup(current, id))
+  }, [])
 
   const onBeginDrag = useCallback(
     (state: DragState) => {
@@ -1929,13 +2097,25 @@ export function Canvas({
       // delta) is what makes the gesture move by screenDelta / scale:
       // usePanelDrag converts each move the same way, and the two translations
       // cancel in the subtraction applyDrag does.
-      beginDrag({
-        ...state,
+      // A group is N ordinary drags, not one drag of an enclosing rectangle.
+      // Snapshot every origin rect before the first frame rewrites `panels`,
+      // then apply the same pointer delta to each immutable origin in
+      // usePanelDrag. The pressed member is always present; a resize stays a
+      // one-member gesture even when a selection exists.
+      const group = state.mode.kind === 'move' && selectedIdsRef.current.has(state.panelId)
+        ? panelsRef.current.filter((panel) => selectedIdsRef.current.has(panel.rect.id)).map((panel) => ({
+            ...state,
+            panelId: panel.rect.id,
+            originRect: panel.rect
+          }))
+        : [state]
+      beginDrag(group.map((member) => ({
+        ...member,
         originWorld: screenToWorld(
-          { x: state.originWorld.x - bounds.left, y: state.originWorld.y - bounds.top },
+          { x: member.originWorld.x - bounds.left, y: member.originWorld.y - bounds.top },
           viewportRef.current
         )
-      })
+      })))
     },
     [beginDrag]
   )
@@ -1996,6 +2176,7 @@ export function Canvas({
     clearLiveSession(id)
     clearSubagents(id)
     clearUsage(id)
+    clearMachineCost(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -2010,7 +2191,15 @@ export function Canvas({
    * Panel.z, never array order"), so it is safe for a navigation that must not
    * start a process, while registry.wake — onSelectPanel's other half — is not.
    */
-  const selectAndRaise = useCallback((id: string) => {
+  const selectAndRaise = useCallback((id: string, additive = false) => {
+    if (additive) {
+      addToSelection(id)
+      return
+    }
+    // Pressing the chrome of a member is how a completed selection begins a
+    // group drag. Do not erase its peers between that press and onBeginDrag;
+    // clicking an unselected panel, or the background, still replaces it.
+    if (selectedIdsRef.current.size > 1 && selectedIdsRef.current.has(id)) return
     selectOnly(id)
     setPanels((current) => {
       // Skip the raise (and the history push it would trigger) when `id` is
@@ -2031,7 +2220,7 @@ export function Canvas({
       commitHistory(next)
       return next
     })
-  }, [commitHistory])
+  }, [addToSelection, commitHistory, selectOnly])
 
   // Which panel the jump key last visited. A ref, not state: it is a cursor
   // for a keydown handler and nothing renders from it, so putting it in state
@@ -2088,7 +2277,11 @@ export function Canvas({
     selectAndRaise(id)
   }
 
-  const onSelectPanel = useCallback((id: string) => {
+  const onSelectPanel = useCallback((id: string, additive = false) => {
+    if (additive) {
+      selectAndRaise(id, true)
+      return
+    }
     selectAndRaise(id)
     // Waking hangs off SELECT, not focus. A carded panel has no .panel__slot
     // and so no focus handler of its own — its click falls through to the
@@ -2127,6 +2320,11 @@ export function Canvas({
   // current when the hold started — so a panel that came back into view during
   // the delay stays live instead of being demoted by a stale decision.
   const tiersRef = useRef<Record<string, Tier>>({})
+  // Backlog #75: live count, held count and the budget, lifted out of this
+  // effect's closure so the diagnostics overlay can read them. A plain ref,
+  // updated once at the end of the effect below — no new render, no new
+  // dependency, and nothing that could bump registry.version().
+  const tieringDiagnosticsRef = useRef({ liveCount: 0, heldCount: 0, budget: LIVE_BUDGET })
 
   // The timer belongs to the component, not to this effect's dependency list:
   // arming it inside an effect whose cleanup clears it meant any change to
@@ -2149,7 +2347,8 @@ export function Canvas({
       size: { width: bounds.width, height: bounds.height },
       focusedId,
       lastFocusedAt: registry.lastFocusedAt(),
-      dormantIds
+      dormantIds,
+      cardIds: collapsedPanelIds
     })
     tiersRef.current = tiers
 
@@ -2192,6 +2391,7 @@ export function Canvas({
     }
 
     registry.applyTiers(applied)
+    tieringDiagnosticsRef.current = { liveCount, heldCount: held.size, budget: LIVE_BUDGET }
 
     // Arm the release timer only when one is not already running. Re-arming on
     // every render is what made the delay unreachable during a gesture.
@@ -2205,7 +2405,7 @@ export function Canvas({
       heldSinceRef.current.clear()
       registry.applyTiers(tiersRef.current)
     }, DEMOTE_DELAY_MS)
-  }, [terminalRects, viewport, focusedId, version, dormantIds])
+  }, [terminalRects, viewport, focusedId, version, dormantIds, collapsedPanelIds])
 
   // Persist on every change. Unthrottled on purpose, including the ~60/sec a
   // drag produces: main coalesces to one write per 500ms and keeps only the
@@ -2240,11 +2440,12 @@ export function Canvas({
     const before = preMergeRef.current
     void window.canvas.layout.save({
       panels: fromPanels(panels),
+      groups,
       camera: merged && before ? before.camera : viewport,
       selectedId: merged && before ? before.selectedId : selectedId,
       focusedId: merged && before ? before.focusedId : focusedId
     })
-  }, [panels, viewport, selectedId, focusedId, merged])
+  }, [panels, groups, viewport, selectedId, focusedId, merged])
 
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
     const host = hostRef.current
@@ -2400,7 +2601,13 @@ export function Canvas({
     // panel's own chrome handler already does that, but a CARDED panel has no
     // handler of its own — its click falls through to the background path, and
     // calling selectOnly here directly would select it without raising it.
-    if (hit) onSelectPanel(hit)
+    if (hit) {
+      // A card reaches this background handler, unlike live panel chrome.
+      // It therefore shares the same shift-add path explicitly rather than
+      // waking a dormant card just because it joined a selection.
+      if (event.shiftKey) selectAndRaise(hit, true)
+      else onSelectPanel(hit)
+    }
     else {
       selectOnly(null)
       // The marquee starts ONLY where hitTest found nothing, which is why it
@@ -2776,6 +2983,25 @@ export function Canvas({
   // verify:panels 78.
   const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows })
 
+  // Backlog #75's diagnostics overlay toggle. Ephemeral, unlike chrome above:
+  // this is a debug view, not a persisted preference.
+  const diagnostics = useDiagnostics({ paletteIsOpen: palette.isOpen })
+  // Stable identity, for the same reason resetViewport/centreOn must stay
+  // useCallbacks: the overlay's own poll effect depends on this, and Canvas
+  // re-renders on every mousemove over .canvas (setCursor) — an unstable
+  // identity would restart that effect's interval on every frame the mouse
+  // moves while the overlay is open.
+  const getDiagnosticsInput = useCallback(
+    () => ({
+      panels: registry.all(),
+      budget: tieringDiagnosticsRef.current.budget,
+      liveCount: tieringDiagnosticsRef.current.liveCount,
+      heldCount: tieringDiagnosticsRef.current.heldCount,
+      backend: backendInfo
+    }),
+    [backendInfo]
+  )
+
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
@@ -3053,6 +3279,7 @@ export function Canvas({
       clearLiveSession(id)
       clearSubagents(id)
       clearUsage(id)
+      clearMachineCost(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it.
@@ -3064,6 +3291,63 @@ export function Canvas({
     },
     [registry]
   )
+
+  // #24: functional links run from the registry's post-status exit hook, not
+  // from a second raw IPC listener. A dormant or absent target is RECORDED as
+  // skipped and never woken: an automation may restart an already-running
+  // terminal, but it must not create an agent the user did not explicitly
+  // start. The rule graph is cycle-free at creation and load, so one exit can
+  // cascade only along a finite directed chain.
+  const [automationResult, setAutomationResult] = useState<Map<string, string>>(() => new Map())
+  const automationRowsBuilt: AutomationRow[] = panels.flatMap((source) => linksOf(source)
+    .filter((link) => link.automation?.kind === 'restart-on-exit')
+    .map((link) => {
+      const target = panels.find((panel) => panel.rect.id === link.to)
+      return target === undefined ? null : {
+        from: source.rect.id,
+        to: target.rect.id,
+        source: railLabel(source, undefined),
+        target: railLabel(target, undefined),
+        enabled: link.automation!.enabled
+      }
+    })
+    .filter((row): row is AutomationRow => row !== null))
+  const automationRowsSignature = JSON.stringify(automationRowsBuilt)
+  const automationRows = useMemo(() => automationRowsBuilt, [automationRowsSignature])
+  useEffect(() => registry.onExit((info) => {
+    const source = panelsRef.current.find((panel) => panel.rect.id === info.panelId)
+    if (!source || !isTerminalPanel(source)) return
+    for (const link of linksOf(source)) {
+      if (link.automation?.kind !== 'restart-on-exit' || !link.automation.enabled) continue
+      const key = `${source.rect.id}:${link.to}`
+      const target = panelsRef.current.find((panel) => panel.rect.id === link.to)
+      const session = target && isTerminalPanel(target) ? registry.get(target.rect.id) : undefined
+      if (!target || !isTerminalPanel(target) || !session || session.dormant) {
+        setAutomationResult((current) => new Map(current).set(key, 'skipped — target is dormant'))
+        continue
+      }
+      if (!isRestartable(session.status)) {
+        setAutomationResult((current) => new Map(current).set(key, 'skipped — target has not started'))
+        continue
+      }
+      setAutomationResult((current) => new Map(current).set(key, `ran after exit ${info.exitCode}`))
+      restartWithSpec(target.rect.id, target.spec)
+    }
+  }), [registry, restartWithSpec])
+
+  const onSetRestartOnExit = useCallback((from: string, to: string, enabled: boolean) => {
+    setPanels((current) => {
+      const next = setRestartOnExit(current, from, to, enabled)
+      if (next === current) return current
+      commitHistory(next)
+      return next
+    })
+    if (!enabled) setAutomationResult((current) => {
+      const next = new Map(current)
+      next.delete(`${from}:${to}`)
+      return next
+    })
+  }, [commitHistory])
 
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
@@ -3093,6 +3377,13 @@ export function Canvas({
      * built.
      */
     toggleMerged: () => toggleMerged(),
+    toggleBroadcastInput: () => {
+      // The command's disabled state is UX, not authority: the selection or a
+      // session can change while the palette is open, so re-check the live
+      // target set at the action boundary before arming the keyboard route.
+      if (!broadcastInput && !broadcastReady) return
+      setBroadcastInput((active) => !active)
+    },
     beginRenamePreset: (id, currentName) => {
       setInputMode({
         kind: 'text',
@@ -3617,6 +3908,7 @@ export function Canvas({
                     clearLiveSession(panelId)
                     clearSubagents(panelId)
                     clearUsage(panelId)
+                    clearMachineCost(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -3805,6 +4097,30 @@ export function Canvas({
           : ''
       if (cwd === '') return
       openToolboxPanel(cwd, railLabel(panel, registry.get(panelId)?.status), worldCentre())
+    },
+    beginCreateGroup: (panelIds) => {
+      if (mergedRef.current) return
+      const present = panelIds.filter((id) => panelsRef.current.some((panel) => panel.rect.id === id))
+      if (present.length < 2) return
+      setInputMode({
+        kind: 'text',
+        label: `Name this ${present.length}-panel group…`,
+        initial: '',
+        submit: (value) => {
+          const label = value.trim()
+          if (label === '') { setInputMode(null); return }
+          const number = nextGroupIdRef.current++
+          setGroups((current) => [...current, {
+            id: `g${number}`,
+            label,
+            colour: GROUP_COLOURS[(number - 1) % GROUP_COLOURS.length],
+            panelIds: present
+          }])
+          selectOnly(null)
+          setInputMode(null)
+        }
+      })
+      palette.openPalette()
     },
     movePanelsToWorkspace,
     beginMovePanelsToNewWorkspace: (panelIds) => {
@@ -3998,7 +4314,8 @@ export function Canvas({
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
-       movePanelsToWorkspace, toggleMerged, openFilePanel, openWorkPanel, worldCentre])
+       movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
+       openFilePanel, openWorkPanel, worldCentre])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -4565,6 +4882,14 @@ export function Canvas({
           className="world"
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
+          <GroupLayer
+            groups={merged ? [] : groups}
+            panels={displayPanels}
+            readOnly={merged}
+            onBeginDrag={onBeginGroupDrag}
+            onToggle={toggleGroupCollapsed}
+            onRemove={onRemoveGroup}
+          />
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels, and it takes no pointer
@@ -4614,7 +4939,7 @@ export function Canvas({
                 <FileNode
                   key={panel.rect.id}
                   panel={panel}
-                  selected={panel.rect.id === selectedId}
+                  selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
@@ -4633,7 +4958,7 @@ export function Canvas({
                 <ToolboxNode
                   key={panel.rect.id}
                   panel={panel}
-                  selected={panel.rect.id === selectedId}
+                  selected={selectedIds.has(panel.rect.id)}
                   // selectAndRaise, never onSelectPanel: the latter's
                   // clear-dormant and registry.wake are the SPAWN gesture, and
                   // a toolbox node can never spawn anything.
@@ -4644,7 +4969,7 @@ export function Canvas({
                 />
               )
             }
-            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={(item) => spawnWorkItem(panel.provider, item)} onConnect={paletteActions.beginSetCredential} />
+            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={(item) => spawnWorkItem(panel.provider, item)} onConnect={paletteActions.beginSetCredential} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (
@@ -4707,8 +5032,24 @@ export function Canvas({
             Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
           </div>
         )}
+        {broadcastInput && (
+          <div className="link-banner" role="status">
+            Broadcasting keyboard input to <strong>{broadcastTargetIds.length} terminals</strong> — open the palette to stop
+          </div>
+        )}
         <NavGrid controller={navGrid} />
-        <CanvasHud viewport={viewport} cursor={cursor} selectedId={selectedId} backend={backendInfo} />
+        <DiagnosticsOverlay
+          open={diagnostics.open}
+          onClose={diagnostics.close}
+          getRendererInput={getDiagnosticsInput}
+        />
+        <CanvasHud
+          viewport={viewport}
+          cursor={cursor}
+          selectedId={selectedId}
+          backend={backendInfo}
+          machineCost={machineCostTotal}
+        />
         {palette.open && (
           <Palette
             controller={palette}
@@ -4728,6 +5069,8 @@ export function Canvas({
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
             merged={merged}
+            broadcastReady={broadcastReady}
+            broadcastActive={broadcastInput}
             inputMode={inputMode}
           />
         )}
@@ -4744,6 +5087,9 @@ export function Canvas({
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}
+        onSetRestartOnExit={onSetRestartOnExit}
+        automationResults={automationResult}
+        automations={automationRows}
         review={reviewModel}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}

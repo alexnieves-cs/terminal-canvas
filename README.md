@@ -176,6 +176,7 @@ The main process owns every PTY; the renderer never spawns a process.
 
 ```
 renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list   -->  main
+                       machine:sample
                        layout:load / layout:save
                        session:backend
                        preset:list / preset:rename / preset:delete
@@ -195,6 +196,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        file:open / file:read / file:close / file:write
                        fs:list
                        toolbox:read / toolbox:permissions
+                       diagnostics:sample / diagnostics:export
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel
@@ -387,9 +389,9 @@ been, so two workspaces' panels overlap by construction, and `cascadeCentre`
 cannot help because it separates panels within one array. M18's answer is
 lanes — a per-workspace translation applied for display only. **Moving a panel
 from one workspace to another** was blocked on rubber-band selection not
-existing; M18 built the marquee first (`docs/ideas-backlog.md` #52 is now down
-to shift-click and group drag) and then the move on top of it, in that order,
-which is what the entry asked for. **A keyboard shortcut for switching
+existing; M18 built the marquee first and then the move on top of it, in that
+order. M26 completed #52 with additive shift-click and origin-based group
+drag. **A keyboard shortcut for switching
 workspaces** was left unassigned on the grounds that picking a chord then would
 be a guess dressed up as a decision. That reason was sound and it expired: a
 milestone of using workspaces is the evidence it was waiting for, and
@@ -601,7 +603,8 @@ price of not killing something.
 | M20 | The file tree: a codebase browser rooted on the selected panel | ✅ done |
 | M21 | The agent's toolbox: what each panel's agent can actually do, read-only | ✅ done |
 | M23 | Agent modes: permission mode, effort and model, per panel | ✅ done |
-| M24 | The work panel: GitHub beside Jira, on one derived surface | ✅ done |
+| M26 | Complete multi-select: additive shift-click and origin-based group drag | ✅ done |
+| M28 | The work panel: GitHub beside Jira, on one derived surface | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11

@@ -1388,6 +1388,54 @@ body {
 }
 
 /* A panel is positioned once in WORLD pixels. Only .world's transform moves. */
+.canvas-group {
+  position: absolute;
+  z-index: 0;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--blue) 62%, transparent);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--blue-dim) 28%, transparent);
+  pointer-events: none;
+}
+.canvas-group--violet { border-color: color-mix(in srgb, var(--blue) 48%, var(--text)); background: color-mix(in srgb, var(--blue-dim) 46%, transparent); }
+.canvas-group--green { border-color: color-mix(in srgb, var(--green) 62%, transparent); background: color-mix(in srgb, var(--green-dim) 28%, transparent); }
+.canvas-group--amber { border-color: color-mix(in srgb, var(--amber) 62%, transparent); background: color-mix(in srgb, var(--amber-dim) 28%, transparent); }
+.canvas-group--rose { border-color: color-mix(in srgb, var(--red) 62%, transparent); background: color-mix(in srgb, var(--red-dim) 28%, transparent); }
+.canvas-group__header {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 7px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+}
+.canvas-group__header:active { cursor: grabbing; }
+.canvas-group__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-group__count { color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.canvas-group__toggle,
+.canvas-group__remove {
+  border: 0;
+  background: transparent;
+  color: var(--fg-3);
+  padding: 0 var(--sp-1);
+  font: inherit;
+  cursor: pointer;
+}
+.canvas-group__toggle { margin-left: auto; }
+.canvas-group__toggle:hover,
+.canvas-group__remove:hover { color: var(--fg); }
+.canvas-group--collapsed { border-style: dashed; }
+
 .panel {
   position: absolute;
   display: flex;
@@ -1605,6 +1653,17 @@ body {
   color: var(--green);
 }
 
+/* The card remains the readable many-panel surface, but a promoted terminal
+   should not make its resource cost disappear. This compact badge shares the
+   chrome without claiming a new interaction. */
+.panel__machine-cost {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .panel__close {
   /* Never shrunk to make room for a long title — see .panel__title. */
   flex: none;
@@ -1732,6 +1791,8 @@ body {
    turns them red. The headline below is the existing string restyled, not new
    copy. Add a hint element only if you also update those checks. */
 .panel__card {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: var(--sp-6);
@@ -1756,6 +1817,20 @@ body {
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The card tier is the ordinary many-panel view, so this is the primary
+   machine-cost readout. It is quiet metadata under the terminal tail rather
+   than chrome competing with the panel title. */
+.panel__card-cost {
+  display: flex;
+  gap: var(--sp-4);
+  margin-top: auto;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The headline. Same three words, ~4x the size, in the display face — this
@@ -1860,6 +1935,93 @@ body {
   font-variant-numeric: tabular-nums;
   user-select: none;
   pointer-events: none;
+}
+
+.canvas-hud__cost {
+  color: var(--fg);
+}
+
+/* Backlog #75. A sibling of .world like the HUD and the palette, so it never
+   pans or zooms with the panels it is reporting on. Cmd-gated, unlike the
+   HUD's own always-on strip — see CanvasHud.tsx's comment on why those are
+   two different designs. */
+.diagnostics-overlay {
+  position: absolute;
+  top: var(--sp-7);
+  right: var(--sp-7);
+  z-index: 1100;
+  width: min(480px, 90%);
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl);
+  background: var(--s-3);
+  box-shadow: var(--e-3);
+  padding: var(--sp-5);
+  font-size: var(--t-sm);
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+
+.diagnostics-overlay__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--t-md);
+  color: var(--fg-2);
+  margin-bottom: var(--sp-4);
+}
+
+.diagnostics-overlay__close {
+  background: none;
+  border: none;
+  color: var(--fg-2);
+  font-size: var(--t-lg);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.diagnostics-overlay__note {
+  color: var(--fg-3);
+}
+
+.diagnostics-overlay__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.diagnostics-overlay__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--sp-4);
+}
+
+.diagnostics-overlay__table th,
+.diagnostics-overlay__table td {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.diagnostics-overlay__table th {
+  color: var(--fg-3);
+  font-weight: normal;
+}
+
+.diagnostics-overlay__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+
+.diagnostics-overlay__export-result {
+  color: var(--fg-3);
+  word-break: break-all;
 }
 
 /* Resize handles. East, south, south-east only — see panel-interaction.ts.
@@ -2033,7 +2195,13 @@ body {
    needs. The body is the ONE element carrying data-scroll-host, which is what
    gives this kind the wheel over itself; shouldYieldWheel needed no edit for
    it, because rule 3 asks the DOM rather than the panel's kind. */
-.file-node__body {
+.file-node__body,
+/* M27 audit: JiraNode rendered the .file-node__* class names literally, so a
+   change to the file panel's chrome silently restyled Jira panels. Sharing the
+   RULE by naming both selectors keeps the two visually identical — which they
+   are meant to be — without either kind reading as the other in the markup. It
+   collapses to one selector when <PanelFrame> lands. */
+.work-node__body {
   flex: 1;
   min-height: 0;          /* or the <pre> refuses to shrink and the box overflows */
   /* BOTH axes, unlike .review-node__body's overflow-y. Lines here do not wrap
@@ -2068,7 +2236,8 @@ body {
 /* Amber, like .review-node__note: every non-text arm (missing, too-large,
    binary, unreadable) lands here, and each is a state the user may want to act
    on rather than an error. */
-.file-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
+.file-node__note,
+.work-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
 
 .file-node__pre {
   margin: 0;
@@ -2104,7 +2273,8 @@ body {
 .work-node__group-label { font-size: var(--t-xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: var(--track-caps); margin: 0 0 var(--sp-2); }
 .work-node__connect { margin-bottom: var(--sp-3); }
 
-.file-node__refresh {
+.file-node__refresh,
+.work-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
      .panel__close obeys, and it shares that button's chrome row. */
   flex: none;
@@ -2116,7 +2286,8 @@ body {
   color: var(--fg-3);
 }
 
-.file-node__refresh:hover { color: var(--fg); }
+.file-node__refresh:hover,
+.work-node__refresh:hover { color: var(--fg); }
 
 /* Present and DISABLED when model.editable is false — see FileNode's own
    comment on the button. The disabled colour matches .review-node__commit's,
@@ -2696,6 +2867,7 @@ body {
 .review-node__refresh,
 .review-node__commit,
 .file-node__refresh,
+.work-node__refresh,
 .file-node__edit,
 .file-node__save,
 .file-node__conflict button {

@@ -4,7 +4,7 @@ import type { PanelId } from '@shared/types'
 /**
  * Where each panel IS and what it is RUNNING, as told by main.
  *
- * A third module-level store beside agent-state-store.ts, and subscribed the
+ * Another module-level store beside agent-state-store.ts, and subscribed the
  * same way: PER PANEL ID. registry.version() deliberately bumps only on
  * tier/status/focus/exit so a chatty agent cannot re-render the canvas at 60Hz;
  * a fact that changes on a 2s tick riding it would put that traffic straight

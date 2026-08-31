@@ -1,5 +1,7 @@
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { PanelSession, PanelStatus } from '@renderer/session/panel-session'
+import { useMachineCost } from '@renderer/session/machine-cost-store'
+import type { PanelMachineCost } from '@shared/machine-cost'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
@@ -33,7 +35,7 @@ export interface TerminalPanelProps {
    */
   title?: string
   selected: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, additive?: boolean) => void
   onFocus: (id: string) => void
   /**
    * Starts a move or resize gesture. `originWorld` is handed up in CLIENT
@@ -86,6 +88,9 @@ function TerminalPanelImpl({
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
+  // Per-panel subscription, not registry.version(): a CPU reading changes
+  // independently and must never redraw the rest of the canvas.
+  const machineCost = useMachineCost(session.id)
 
   // Subscribed per id, so an agent's state change re-renders this panel and
   // no other. Deliberately NOT routed through registry.version(), which
@@ -178,7 +183,7 @@ function TerminalPanelImpl({
           // canvas from reading this as a background click and deselecting.
           event.stopPropagation()
           event.preventDefault() // suppress the native text-drag of the title
-          onSelect(session.id)
+          onSelect(session.id, event.shiftKey)
           onBeginDrag({
             panelId: session.id,
             mode: { kind: 'move' },
@@ -224,6 +229,7 @@ function TerminalPanelImpl({
           </span>
         )}
         <StatusBadge status={session.status} />
+        {live && machineCost !== undefined && <MachineCostBadge cost={machineCost} />}
         {/* onMouseDown rather than onClick, so it runs in the same phase as
             every other panel interaction and beats the chrome's own drag
             start — a mousedown on the chrome begins a move, and a close that
@@ -260,7 +266,7 @@ function TerminalPanelImpl({
           }}
         />
       ) : (
-        <PanelCard session={session} agentState={glow ? agentState : undefined} />
+        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} />
       )}
 
       {/* East, south and south-east only — see ResizeEdge. Each handle is a
@@ -288,9 +294,10 @@ function TerminalPanelImpl({
   )
 }
 
-function PanelCard({ session, agentState }: {
+function PanelCard({ session, agentState, cost }: {
   session: PanelSession
   agentState?: AgentState
+  cost?: PanelMachineCost
 }): JSX.Element {
   const lines = session.spawned ? session.handle.tail(CARD_LINES) : []
   return (
@@ -313,8 +320,32 @@ function PanelCard({ session, agentState }: {
           {session.dormant ? 'click to start' : 'not started'}
         </div>
       )}
+      {cost !== undefined && (
+        <div className="panel__card-cost" data-machine-cost>
+          <span>CPU {formatCpu(cost.cpuPercent)}</span>
+          <span>RAM {formatMemory(cost.memoryBytes)}</span>
+        </div>
+      )}
     </div>
   )
+}
+
+function MachineCostBadge({ cost }: { cost: PanelMachineCost }): JSX.Element {
+  return (
+    <span className="panel__machine-cost" data-machine-cost title="Process tree CPU and resident memory">
+      CPU {formatCpu(cost.cpuPercent)} · RAM {formatMemory(cost.memoryBytes)}
+    </span>
+  )
+}
+
+function formatCpu(percent: number): string {
+  return `${percent.toLocaleString(undefined, { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`
+}
+
+function formatMemory(bytes: number): string {
+  const mib = bytes / (1024 * 1024)
+  if (mib < 1024) return `${Math.round(mib)} MB`
+  return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
 }
 
 function StatusBadge({ status }: { status: PanelStatus }): JSX.Element {

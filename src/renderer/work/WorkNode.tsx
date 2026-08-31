@@ -16,7 +16,7 @@ import { buildWorkNodeModel } from './work-node-model'
 export function WorkNode(props: {
   panel: WorkPanel
   selected: boolean
-  onSelect(id: string): void
+  onSelect(id: string, additive?: boolean): void
   onFocus(id: string): void
   onBeginDrag(state: DragState): void
   onClose(id: string): void
@@ -55,14 +55,14 @@ export function WorkNode(props: {
         onMouseDown={(e) => {
           e.stopPropagation()
           e.preventDefault()
-          props.onSelect(panel.rect.id)
+          props.onSelect(panel.rect.id, e.shiftKey)
           props.onBeginDrag({ panelId: panel.rect.id, mode: { kind: 'move' }, originRect: panel.rect, originWorld: { x: e.clientX, y: e.clientY } })
         }}
       >
         <span className="panel__title">{model.heading}</span>
         <button
           type="button"
-          className="file-node__refresh"
+          className="work-node__refresh"
           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); load() }}
         >⟳</button>
         <button
@@ -75,11 +75,11 @@ export function WorkNode(props: {
           rather than the panel model — each kind renders the marker on the
           element that actually scrolls, or does not render it at all. */}
       <div
-        className="file-node__body"
+        className="work-node__body"
         data-scroll-host
         onMouseDown={(e) => { e.stopPropagation(); props.onFocus(panel.rect.id) }}
       >
-        {model.note !== null ? <p className="file-node__note">{model.note}</p> : null}
+        {model.note !== null ? <p className="work-node__note">{model.note}</p> : null}
         {model.connectable ? (
           <button
             type="button"
@@ -109,7 +109,7 @@ export function WorkNode(props: {
                 >Start session</button>
               </article>
             ))}
-            {group.note !== null ? <p className="file-node__note">{group.note}</p> : null}
+            {group.note !== null ? <p className="work-node__note">{group.note}</p> : null}
           </section>
         ))}
       </div>

@@ -4,7 +4,7 @@ import type { AgentOptions, PanelUsage } from '@shared/cost'
 import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { WORK_PROVIDER_LABEL } from '@shared/work-item'
 import { costOf } from '@shared/pricing'
-import { isFilePanel, isWorkPanel, isReviewPanel, isToolboxPanel, linksOf, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isWorkPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -74,6 +74,9 @@ export interface InspectorLinkRow {
   label?: string
   /** The other panel's name, by the honest chain. Never its bare id. */
   title: string
+  /** #24: only a terminal -> terminal outgoing link can restart on exit. */
+  canRestartOnExit: boolean
+  restartOnExit: boolean
 }
 
 export interface InspectorSummary {
@@ -201,10 +204,23 @@ export function buildLinkRows(panel: Panel, panels: Panel[]): InspectorLinkRow[]
       to,
       direction,
       ...(label === undefined ? {} : { label }),
-      title: railLabel(other, undefined)
+      title: railLabel(other, undefined),
+      canRestartOnExit: false,
+      restartOnExit: false
     })
   }
-  for (const link of linksOf(panel)) push(byId.get(link.to), link.to, 'out', link.label)
+  for (const link of linksOf(panel)) {
+    const other = byId.get(link.to)
+    if (!other) continue
+    rows.push({
+      to: link.to,
+      direction: 'out',
+      ...(link.label === undefined ? {} : { label: link.label }),
+      title: railLabel(other, undefined),
+      canRestartOnExit: isTerminalPanel(panel) && isTerminalPanel(other),
+      restartOnExit: link.automation?.kind === 'restart-on-exit' && link.automation.enabled
+    })
+  }
   for (const source of panels) {
     if (source.rect.id === id) continue
     for (const link of linksOf(source)) {
@@ -302,6 +318,30 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
   turns: 0,
   subagentTurns: 0
 }) as UsageFieldModel
+
+/**
+ * The noun each sessionless kind is called by, in the one place a control has
+ * to explain why it is disabled.
+ *
+ * It is a Record over `Exclude<Panel['kind'], 'terminal'>` rather than a
+ * lookup with a fallback, and that is the entire point: a SIXTH panel kind is
+ * a compile error here rather than a silent fall-through. Inspector.tsx used
+ * to spell this as a nested `kind === 'review' ? … : kind === 'file' ? …`
+ * ternary, so `toolbox` — and then `work`, when it was still spelled `jira` — fell past both arms into the
+ * terminal branch and rendered "<name> has not started yet" on the Restart
+ * control: a sentence about a process, on a panel that owns none, which is the
+ * same defect railTail's own missing arm produced one file over. A default
+ * string would have hidden the next one exactly as well; tsc will not.
+ */
+export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  review: 'A review node',
+  file: 'A file panel',
+  toolbox: 'A toolbox node',
+  // M24 renamed this kind. The noun stays kind-shaped rather than naming a
+  // provider, because this map is keyed by KIND and one work panel's provider
+  // is not a property of the union.
+  work: 'A work panel'
+}
 
 export function buildInspectorModel(
   panel: Panel,
@@ -424,7 +464,7 @@ export function buildInspectorModel(
       ]
     }
   }
-  if (isWorkPanel(panel)) return { kind: 'file', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'work', label: 'source', value: `work assigned to you in ${WORK_PROVIDER_LABEL[panel.provider]}` }] }
+  if (isWorkPanel(panel)) return { kind: 'work', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'work', label: 'source', value: `work assigned to you in ${WORK_PROVIDER_LABEL[panel.provider]}` }] }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
     { key: 'command', label: 'command', value: running?.command ?? 'not started' },

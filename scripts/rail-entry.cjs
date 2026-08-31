@@ -37,5 +37,10 @@ module.exports = {
   // @shared (WORK_PROVIDER_LABEL), which makes the @shared alias LOAD-BEARING
   // here for the first time -- see the header comment, which records the
   // measurement rather than the assumption.
-  ...require('../src/renderer/work/work-node-model')
+  ...require('../src/renderer/work/work-node-model'),
+  // Backlog #75's diagnostics overlay model. Pure, type-only imports (a
+  // PanelSession shape and SessionBackendInfo), no DOM, no native dependency —
+  // the same reason every model above joined this bundle rather than earning
+  // a suite of its own.
+  ...require('../src/renderer/canvas/diagnostics-model')
 }

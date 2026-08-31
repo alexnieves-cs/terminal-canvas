@@ -44,6 +44,15 @@ export interface Registry {
   /** Re-fit after the panel's box changed, and send at most one pty:resize. */
   refit(id: PanelId): void
   focus(id: PanelId): void
+  /**
+   * Route keyboard input from a selected, live terminal to every id in this
+   * set. An empty set restores the ordinary one-focused-panel route.
+   *
+   * This is deliberately ids, not a second PTY API: the registry remains the
+   * only renderer owner of pty:write, and dormant or exited sessions are
+   * skipped rather than created or revived.
+   */
+  setInputTargets(ids: readonly PanelId[]): void
   lastFocusedAt(): Record<PanelId, number>
   /**
    * Clear dormancy and, if the slot is already attached, spawn. Called when
@@ -95,6 +104,13 @@ export interface Registry {
   touch(id: PanelId): void
   subscribe(listener: () => void): () => void
   /**
+   * Observe an actual process exit after the registry has recorded it. #24
+   * uses this for auditable automations rather than a second raw bridge
+   * subscription, so the action and every rendered status agree on the same
+   * event ordering.
+   */
+  onExit(listener: (info: PtyExitInfo) => void): () => void
+  /**
    * Close one panel: free its terminal and kill its process. One of exactly
    * TWO places pty.kill is called in the renderer, the other being disposeAll.
    * Tiering must never reach either.
@@ -136,6 +152,8 @@ export function createRegistry(deps: RegistryDeps): Registry {
 
   const sessions = new Map<PanelId, PanelSession>()
   const listeners = new Set<() => void>()
+  const exitListeners = new Set<(info: PtyExitInfo) => void>()
+  let inputTargets = new Set<PanelId>()
   let version = 0
 
   /**
@@ -158,6 +176,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
       `\r\n\x1b[38;5;244m[process exited with code ${info.exitCode}]\x1b[0m\r\n`
     )
     bump()
+    for (const listener of exitListeners) listener(info)
   })
 
   function bump(): void {
@@ -176,7 +195,18 @@ export function createRegistry(deps: RegistryDeps): Registry {
     bump()
 
     session.handle.onInput((data) => {
-      void bridge.pty.write({ panelId: session.id, data })
+      // Broadcasting is armed only for a member of its target set. Clicking a
+      // different terminal while the mode is visible must return that panel to
+      // ordinary, one-recipient typing instead of silently adding a sender.
+      const targets = inputTargets.has(session.id) ? inputTargets : new Set([session.id])
+      for (const id of targets) {
+        const target = sessions.get(id)
+        // A broadcast is never a wake/restart mechanism. `spawned` alone is
+        // not enough after an exit, and status is the registry's recorded
+        // truth rather than a second renderer-side guess.
+        if (!target?.spawned || (target.status.kind !== 'starting' && target.status.kind !== 'running')) continue
+        void bridge.pty.write({ panelId: id, data })
+      }
     })
 
     bridge.pty
@@ -316,6 +346,9 @@ export function createRegistry(deps: RegistryDeps): Registry {
       if (session.tier === 'live') session.handle.focus()
       bump()
     },
+    setInputTargets(ids) {
+      inputTargets = new Set(ids)
+    },
 
     // Same caveat as all(): a fresh object every call, so it is not a safe
     // useSyncExternalStore getSnapshot on its own — gate a re-read on
@@ -354,6 +387,11 @@ export function createRegistry(deps: RegistryDeps): Registry {
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
+    },
+
+    onExit(listener) {
+      exitListeners.add(listener)
+      return () => exitListeners.delete(listener)
     },
 
     async dispose(id) {
