@@ -1385,6 +1385,33 @@ ok('74 a panel with no kind is not a review panel',
     `terminal=${V.isTerminalPanel(t)} legacy=${V.isTerminalPanel(legacy)} toolbox=${V.isTerminalPanel(tb)}`)
 }
 
+// 93 — makeFilePanel carries `prose` VERBATIM, omits the key entirely when it
+// is absent, and hands back a source that is not the caller's own object.
+// Three clauses, each rejecting a different real mistake: a mint that dropped
+// the flag makes every note reopen as a code view after one relaunch; a mint
+// that spread `{ ...source }` writes `prose: undefined` for an ordinary file,
+// where `'prose' in source` then reads TRUE; and a shared reference lets a
+// caller mutating its own object afterwards silently rewrite a panel already
+// on the canvas — makeReviewPanel's own warning, inherited by a sixth mint.
+//
+// Fault-injected three ways, all red: a shared reference (`source`), a dropped
+// flag (`{ path: source.path }`), and an unconditional copy
+// (`prose: source.prose`, which writes `prose: undefined` for a plain file).
+// What it does NOT catch, stated rather than left to be discovered: a plain
+// `{ ...source }` spread stays GREEN — and correctly so, because a spread
+// both copies the object and omits a key that was absent. It is the wrong
+// shape for this codebase's conventions and it is not a defect this check has
+// any business failing on.
+{
+  const src = { path: '/tmp/n.md', prose: true }
+  const note = V.makeFilePanel('f1', { x: 0, y: 0 }, 1, src)
+  const plain = V.makeFilePanel('f2', { x: 0, y: 0 }, 1, { path: '/tmp/p.txt' })
+  ok('93 makeFilePanel carries prose verbatim, omits it when absent, and copies the source',
+    note.source.prose === true && note.source !== src
+      && plain.source.path === '/tmp/p.txt' && !('prose' in plain.source),
+    `note=${JSON.stringify(note.source)} plain=${JSON.stringify(plain.source)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

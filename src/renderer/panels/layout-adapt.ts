@@ -33,7 +33,17 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // is tested positively, so an absent kind — every pre-M9b file — becomes
     // a terminal panel here rather than anywhere further downstream.
     if (p.kind === 'review') return { ...base, kind: 'review' as const, subject: { ...p.subject } }
-    if (p.kind === 'file') return { ...base, kind: 'file' as const, source: { path: p.source.path } }
+    // `prose` is copied CONDITIONALLY, never spread. A spread writes
+    // `prose: undefined`, and `'prose' in source` then reads TRUE for a file
+    // panel that was never a note — the absent-stays-absent trap `command`,
+    // `title` and `agent` each already record, reaching a fourth field.
+    if (p.kind === 'file') {
+      return {
+        ...base,
+        kind: 'file' as const,
+        source: { path: p.source.path, ...(p.source.prose === true ? { prose: true as const } : {}) }
+      }
+    }
     if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
     if (p.kind === 'toolbox') {
       return {
@@ -90,7 +100,15 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // No cwd and no args keys AT ALL, for the reason the review branch above
     // states: an explicit `cwd: undefined` fails the terminal branch's cwd
     // check on the next launch, losing the panel on every relaunch, silently.
-    if (isFilePanel(panel)) return { ...base, kind: 'file' as const, source: { path: panel.source.path } }
+    if (isFilePanel(panel)) {
+      // Same conditional copy as toPanels above, for the same reason: this is
+      // the side that actually writes layout.json.
+      return {
+        ...base,
+        kind: 'file' as const,
+        source: { path: panel.source.path, ...(panel.source.prose === true ? { prose: true as const } : {}) }
+      }
+    }
     if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
     // Same no-cwd/no-args rule as the two branches above, for the same reason.
     if (isToolboxPanel(panel)) {

@@ -21,7 +21,7 @@ import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem } from './work-item'
-import type { FileResult, FileWriteResult } from './file-panel'
+import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
@@ -310,6 +310,10 @@ export const IPC = {
    */
   FILE_WRITE: 'file:write',
   /**
+   * M27. Create one file and refuse rather than clobber — the note verb.
+   */
+  FILE_CREATE: 'file:create',
+  /**
    * Backlog #75: the one number the renderer cannot compute itself — main's
    * own IPC send rate. Pull-only, like MACHINE_COST_SAMPLE, for the identical
    * reason: main has no cause to track this when the diagnostics overlay is
@@ -487,6 +491,23 @@ export interface ToolboxPermissionsRequest {
  * watch it arms is keyed by it. A write is a plain request/response with
  * nothing to key — the panel that issues it is not this channel's business.
  */
+/**
+ * Create a note. `root` is the directory `name` resolves against — the
+ * selected panel's cwd, so a note lands in the project it is about — and
+ * `name` is what the user typed, which may carry directories.
+ *
+ * MAIN joins the two, because the renderer has no `node:path` at all
+ * (file-node-model.ts hand-rolls `splitPath` for that reason), so a
+ * renderer-side join would be a second, worse implementation of a problem
+ * this process already has a library for.
+ */
+export interface FileCreateRequest {
+  root: string
+  name: string
+  /** Initial contents. Written atomically with the create, never appended after. */
+  seed: string
+}
+
 export interface FileWriteRequest {
   path: string
   content: string
@@ -840,6 +861,12 @@ export interface CanvasBridge {
      * (the write did not run). Never rejects.
      */
     write(req: FileWriteRequest): Promise<FileWriteResult>
+    /**
+     * Create a note. Four arms: `created`, `exists` (that name is taken and
+     * the existing bytes are UNTOUCHED), `refused` (an empty name, or one
+     * resolving outside the root), `failed`. Never rejects.
+     */
+    create(req: FileCreateRequest): Promise<FileCreateResult>
     /** Returns its own unsubscribe, like every other on* in this bridge. */
     onChanged(listener: (event: FileChangedEvent) => void): () => void
     /**

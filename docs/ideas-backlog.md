@@ -370,7 +370,7 @@ Obsidian note, an Xcode file, a browser tab.
   integration at all — only the local file and a watch.
 - **Which is why the first one to build is a local-file panel kind, not an app embed.**
   Ranked by honest cost:
-  1. ~~**Text-ish local files**~~ — **done, M16 and M22**, and the "start here" advice was
+  1. ~~**Text-ish local files**~~ — **done, M16, M22 and M27**, and the "start here" advice was
      right for the stated reason: it shares almost nothing with the terminal path, so it
      could not be faked as a special case of one. A five-arm read
      (`text`/`missing`/`too-large`/`binary`/`unreadable`), a **directory** watch rather
@@ -411,6 +411,21 @@ Obsidian note, an Xcode file, a browser tab.
   their own.
 
 ## 15. An annotation layer — ink, highlights, sticky notes on the canvas
+
+> **M27 shipped the cheapest slice of the intent behind this entry, and it is
+> worth knowing before this is built.** "Somewhere thinking happens alongside
+> the work" is now partly answered by a NOTE — a file panel in prose mode,
+> created from the palette, backed by a real `.md` under the selected panel's
+> cwd. That is deliberately NOT this entry: a note is a panel, so it has a
+> rect, a z, a close button and a place in the rail, where an annotation is a
+> world-space object with none of those. What M27 removes from this entry's
+> scope is only the sticky-note-as-text-container case; ink, highlights,
+> arrows and panel-ANCHORED annotations are all untouched, and the input
+> arbitration problem below — which is this entry's real cost — is unchanged.
+> A note also survives outside the app and version-controls with the project,
+> which an annotation stored in `layout.json` never will; if that turns out to
+> be the property people actually wanted, this entry is smaller than it looks.
+
 
 Let the user write and draw directly on the canvas and on panels: freehand ink,
 highlights, arrows, sticky notes, text labels. The point is to make the canvas feel like

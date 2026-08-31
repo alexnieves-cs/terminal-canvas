@@ -7,6 +7,7 @@ import {
   type CapturedPanel,
   type FileReadRequest, type ToolboxReadRequest, type ToolboxPermissionsRequest,
   type FileWriteRequest,
+  type FileCreateRequest,
   type FileChangedEvent,
   type DiagnosticsSnapshot
 } from '../shared/ipc-contract'
@@ -152,6 +153,7 @@ const bridge: CanvasBridge = {
     read: (req: FileReadRequest) => ipcRenderer.invoke(IPC.FILE_READ, req),
     close: (panelId: PanelId) => ipcRenderer.invoke(IPC.FILE_CLOSE, panelId),
     write: (req: FileWriteRequest) => ipcRenderer.invoke(IPC.FILE_WRITE, req),
+    create: (req: FileCreateRequest) => ipcRenderer.invoke(IPC.FILE_CREATE, req),
     onChanged: (listener) => subscribe<FileChangedEvent>(IPC_EVENTS.FILE_CHANGED, listener),
     pathForFile: (file: File) => webUtils.getPathForFile(file)
   },

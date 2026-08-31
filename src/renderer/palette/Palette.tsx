@@ -100,6 +100,8 @@ export interface PaletteProps {
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
+  /** M27. Where a new note would be saved; null disables the row. */
+  noteRoot: string | null
   /** The rubber-band selection, as ids — what the move rows act on. */
   selectedIds: string[]
   /** Whether the merged view is open; the move rows refuse there. */
@@ -160,6 +162,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         settings: props.settings,
         workspaces: props.workspaces,
         credentials: props.credentials,
+        noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,

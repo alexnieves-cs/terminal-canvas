@@ -1808,6 +1808,146 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   this repo can tell them apart without adding an impure render-counting side effect to
   production code, which was deliberately declined.
 
+**A note is a file panel in PROSE mode, and refusing a sixth `kind` is the
+whole of M27's design (`shared/file-panel.ts`'s `FileSource.prose`).** Every
+panel kind this app had was a read-out of something the machine already knows —
+a diff, a file, a config, a ticket, a process. A note is the first that is a
+place the user puts thought, and the temptation is to make it a kind. It is not
+one, because a note is not a different sort of THING from a file panel: same
+`FileSource`, same `file:read`/`file:write`/`file:close`/`file:changed`, same
+directory watcher, same compare-and-swap M22 hardened. What differs is how it
+is painted and that it opens in edit mode, and both are display facts.
+
+The ceremony that buys is worth listing, because each line of it is a silent
+failure this file already records: `isTerminalPanel` would gain a sixth
+negation (miss it and a note gets a `PanelSession`, a `LIVE_BUDGET` slot and a
+WebGL context for a `<div>`), BOTH `nextIdRef` regexes would need a sixth
+prefix (miss one and duplicate panel ids are dropped silently at the next
+load), five `registry.dispose` guards would need a sixth arm, and three store
+clears a sixth site. All of them are already correct for `kind: 'file'` and
+none of them moves. `verify:panels` 94's two source-text counts — five
+disposes, two `pty.kill` callers — are UNCHANGED by this milestone, which is
+the fact to check before "fixing" that number.
+
+**The rail still says `note`, through a DISPLAY kind rather than the union's**
+(`rail-rows.ts`'s `RailTailKind = Panel['kind'] | 'note'`). The tail is the one
+place the distinction is worth making to a user — the rail is how a panel is
+found again — and deriving it in `buildRailRows`, which holds the panel, rather
+than inside `railTail`, which is handed a bare kind, is what keeps every other
+caller of `railTail` untouched. Build it as a kind the day notes diverge for
+real (markdown rendering, backlinks, an index); not before, which is
+`AgentKind`'s own rule and `ideas-backlog.md` #11's.
+
+**`prose` is `true` or ABSENT, never `false`, at five copy sites.** The
+absent-stays-absent rule `command`, `title` and `agent` each already record,
+reaching a fourth field: `parseFileSource`, `toPanels`, `fromPanels`,
+`makeFilePanel` and `Canvas.tsx`'s `openFilePanel` all copy it CONDITIONALLY.
+A spread writes `prose: undefined` into `layout.json`, where `'prose' in
+source` reads TRUE for a file panel that was never a note. `parseFileSource`
+accepts only an exact `true` and drops anything else — dropping the FIELD and
+keeping the PANEL, which is the toolbox `label` precedent rather than its own
+all-or-drop `path` rule: a path is the fact a file panel is made of, a note
+flag is a display convenience, and losing the panel over one trades a wrong
+view for no view at all. `verify:layout` 150-152, `verify:viewport` 93.
+
+**`createFile` uses `wx`, and that is not a stylistic preference
+(`main/file-create.ts`).** `writeFileSync(target, seed, { flag: 'wx' })` asks
+the kernel to create-or-fail atomically. The obvious `existsSync` check
+followed by a write is a TOCTOU, and in THIS app the racing writer is an
+autonomous agent working in the same directory — so the race is the ordinary
+case rather than an exotic one, the same reasoning `review-commit.ts`'s
+HEAD-moved guard already records. `verify:file` 20 is the check, and its
+second clause is the whole of it: the existing file's BYTES are unchanged.
+Asserting only the refusal passes against an implementation that refused the
+caller and clobbered the file anyway, which is `verify:file` 12's own rule for
+the write path and `verify:credentials` 6's for the credential store.
+
+**An existing name RE-PROMPTS rather than opening the file.** "Create" and
+"open" are different acts, and silently turning one into the other is how a
+user ends up appending to work they did not know was there. `exists` is its
+own arm rather than a `failed` for the same reason `refused` and `failed` are
+split in `review-commit.ts`: the fix is to rename, not to go and look at the
+filesystem. The re-prompt reaches the user through `InputMode.feedback`,
+and `beginNewNote`'s `prompt` MUST call `palette.openPalette()` alongside
+`setInputMode` — Palette.tsx closes the overlay before calling submit, so a
+mode set on a closed palette is wiped by Canvas's own clear-on-close effect.
+That is the pairing `beginRenamePreset`, `deletePreset` and `beginEditSetting`
+all already make, and it was watched failing here: `verify:panels` 176
+reported the palette back in command mode, so a duplicate name silently did
+nothing at all.
+
+**`noteRoot` is deliberately NOT `treeRoot` (`Canvas.tsx`).** The tree roots
+on a terminal panel's cwd or a review node's repo root and answers null for a
+file panel, which is right for browsing a project. It is wrong for notes for a
+reason that only appears in use: creating a note SELECTS it, so the very next
+New note row would be disabled by the note just made, and a second note would
+need the user to go back and re-select a terminal. `noteRoot` therefore falls
+back to a selected FILE panel's own containing directory. The tree is left
+alone rather than widened, because re-rooting it on a file panel is a change
+to M20's behaviour this milestone has no business making on the way past.
+Found by `verify:panels` 176 failing with the row DISABLED, not by reading the
+code — and the same fact is what makes that check re-select the terminal panel
+before its duplicate attempt, since otherwise the same relative name resolves
+under `notes/` and is a perfectly legitimate create.
+
+**A note auto-enters edit mode exactly ONCE (`FileNode.tsx`'s
+`autoEditedRef`).** Not on every render where `draft === null`: re-entering
+there would make Escape appear to do nothing, since the effect would reopen
+the draft the user had just discarded. It is gated on `model.editable` for the
+same reason the save path is — a truncated or non-text note must not open an
+editor whose save the gate will then refuse — so such a note opens as a read
+view, which is the honest answer rather than a degradation. M22's truncation
+gate is inherited UNCHANGED: `prose` is a rendering fact and `editable` is a
+safety one, and treating "notes are for writing" as a reason to bypass the
+gate would let a save delete every line past `FILE_MAX_LINES` while reporting
+success. `verify:rail` 111.
+
+**The editor keeps the `.file-node__editor` class, and that is load-bearing.**
+`useNavGrid`'s target test names that class, so a note inherits the guard with
+no edit. A new `.note-node__editor` would have silently reopened the
+documented failure: `Cmd+G` typed into a draft reveals the grid, the open
+branch's `default:` arm swallows every further keystroke, and releasing `Cmd`
+switches workspace and unmounts the panel with the draft unsaved.
+
+**No markdown rendering, and the refusal is the same one `parseFrontmatter`
+already makes.** A renderer means a new runtime dependency this repo declines,
+or a hand-rolled parser whose failure mode is a PARSER DIFFERENTIAL — this app
+rendering what its own parser says while the user's real markdown tool says
+something else, which is invisible rather than merely wrong. The value here is
+the place to write, not the formatting.
+
+**M27 adds ONE invoke: `file:create`, 46 -> 47.** Deliberately not a flag on
+`file:write`: a write is a compare-and-swap against a file that EXISTS and a
+create is refused precisely BECAUSE one does, so sharing a door would turn
+`baseMtimeMs: null` — the deliberate force-overwrite a user reaches only after
+seeing a conflict — into an accidental create. Note that `EXPECTED_CHANNELS`
+read 46 before this milestone while the `verify:ipc` row of the table above
+said 45: the SCRIPT is the authority, and the prose had already gone stale.
+
+**`verify:file` checks 7 and 9 were flaky before M27 touched them, MEASURED at
+5 failures in 20 runs on unmodified main.** `fs.watch` arms asynchronously on
+macOS, so `watch()` returns before FSEvents is delivering and a rename or an
+`rmSync` issued on the very next synchronous line can land unobserved —
+nothing about `FileWatchers` is wrong. A fixed sleep is what this repo refuses
+everywhere else, so both now RE-DRIVE the real gesture until it is observed;
+each iteration is a genuine atomic write or a genuine delete, so what is
+asserted is unchanged, and the naive `fs.watch(path)` implementation check 7
+exists to reject still fails because no repetition rescues a watch bound to a
+dead inode. 0 failures in 20 runs after. **Checks 8 and 10 carry the same race
+and are NOT fixed**: both are NEGATIVE assertions, so the race makes them pass
+for the wrong reason rather than fail, and closing that means proving the
+watcher is live with a probe write and asserting a delta — a larger edit to
+checks whose subject M27 does not touch. Recorded in both checks' own comments.
+
+**What M27 did NOT solve, kept honest.** No markdown rendering, no note index,
+no backlinks, no search. A workspace switch or a `Cmd+R` reload still takes an
+unsaved draft with it — M22 records that limitation, and a note auto-entering
+edit mode makes it MORE reachable rather than less, so it is restated here
+rather than left as M22's footnote. And a note with no panel selected is
+unreachable: the row is present and disabled with its own reason rather than
+falling back to `$HOME`, because a note dropped in the home directory is not a
+note about anything.
+
 ## Gotchas
 
 - **Jira ticket context is `paste()`, never `write()` (`TerminalPanel.tsx`).** A ticket
