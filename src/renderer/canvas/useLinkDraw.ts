@@ -44,22 +44,28 @@ export interface LinkDraw {
  *
  * ONE DEVIATION FROM usePanelDrag, forced by a real, reproduced defect: the
  * gesture's own decision-making reads `gestureRef`, a plain ref mutated
- * SYNCHRONOUSLY inside begin/onMove/onUp, never the `state`-mirroring ref
- * `stateRef` (which exists only so `isDrawing()` and the previous draft of
- * this file could read the latest value outside React). A real drag driven
- * end to end — mousedown on a port, a real drag, mouseup on a target,
+ * SYNCHRONOUSLY inside begin/onMove/onUp. An earlier draft of this file had
+ * no `gestureRef` at all — it mirrored `state` into a ref DURING RENDER
+ * (`someRef.current = state`, unconditionally, on every render) and had
+ * `onUp` read THAT mirrored ref, the pattern `focusedIdRef` and
+ * `viewportRef` elsewhere in this codebase use for read-only values a
+ * listener needs between renders. It does not work here, because `onUp`'s
+ * read is a DECISION, not a read-only lookup, and React only updates a
+ * render-time mirror once it actually re-renders. A real drag driven end to
+ * end — mousedown on a port, a real drag, mouseup on a target,
  * verify:panels 174/175 — reproduced React 18 automatic batching lagging
- * `stateRef` a render behind: when a `mousemove` and the following `mouseup`
- * land in the same JS task (which a fast synthetic drag, and an OS-coalesced
- * real one, both do), `setState` from `onMove` had not yet been committed by
- * the time `onUp` ran, so `onUp` read the STALE state `begin()` had set —
- * `target: null`, and a cursor from the mousedown position rather than the
- * release position — and never called `onCommit` at all. `usePanelDrag`
- * itself never hits this: its own gesture tracking (`dragRef`) is ALREADY a
- * plain ref with no `useState` in the loop; only the mirror-during-render
- * pattern this hook additionally needed (for the ghost curve's `state`) can
- * introduce the lag. `gestureRef` is now the single source of truth for the
- * DECISION `onUp` makes; `state`/`setState` exist purely to trigger a
+ * that mirrored ref a render behind: when a `mousemove` and the following
+ * `mouseup` land in the same JS task (which a fast synthetic drag, and an
+ * OS-coalesced real one, both do), `setState` from `onMove` had not yet been
+ * committed by the time `onUp` ran, so `onUp` read the STALE state `begin()`
+ * had set — `target: null`, and a cursor from the mousedown position rather
+ * than the release position — and never called `onCommit` at all.
+ * `usePanelDrag` itself never hits this: its own gesture tracking
+ * (`dragRef`) is ALREADY a plain ref with no `useState` in the loop; only
+ * the mirror-during-render pattern this hook additionally needed (for the
+ * ghost curve's `state`) can introduce the lag. `gestureRef` is now the
+ * single source of truth for the DECISION `onUp` makes; `state`/`setState`
+ * still exist, but purely to trigger a
  * re-render so the ghost curve and `.canvas--linking` track the same values,
  * one render later, which is fine for something painted on screen and fatal
  * for something a commit is gated on.

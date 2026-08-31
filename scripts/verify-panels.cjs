@@ -12025,7 +12025,7 @@ app.whenReady().then(async () => {
           .find((x) => x.id === M24_DORMANT)
         const links = await m24Links()
         ok('175 a port drag links a dormant panel WITHOUT waking it',
-          port !== null && box !== null &&
+          port !== null && port.zero !== true && box !== null &&
             links.includes(src + ' ' + M24_DORMANT) &&
             target !== undefined && target.spawned === false && target.dormant === true,
           `target=${JSON.stringify(target)} links=${JSON.stringify(links)}`)

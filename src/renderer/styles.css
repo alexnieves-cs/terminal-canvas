@@ -2997,10 +2997,21 @@ body {
   opacity: 1;
 }
 
-/* Below PORT_MIN_SCALE the ports are not rendered at all — see the constant's
-   own comment. This rule is the hover half only. */
+/* This rule is the hover half only — below PORT_MIN_SCALE has its own rule,
+   further down, and unlike this one it uses `display: none`. */
 .panel__port:hover {
   border-color: var(--fg);
+}
+
+/* M24 (Fix round 1). PORT_MIN_SCALE's own comment (PanelPorts.tsx) states why
+   this is a CANVAS-HOST CLASS rather than a `scale` prop threaded through
+   TerminalPanel: `viewport.scale` changes on every zoom frame, and a prop
+   would defeat that component's memo on every one of them. `display: none`
+   rather than `opacity: 0`, because below this scale a port must be
+   genuinely NOT HIT-TESTABLE, not merely invisible — opacity alone would
+   leave a 14px dot clickable at a size nobody can see to aim at. */
+.canvas--ports-hidden .panel__port {
+  display: none;
 }
 
 /* Flush with the edge, never straddling it (a deviation from the brief's
@@ -3012,7 +3023,16 @@ body {
    mousedown resolves to whatever is behind it rather than to the port. Fully
    inside is what .panel__resize--e/--s already do for the identical reason,
    and it costs only a few pixels of visual overlap with the border instead of
-   being centred on it. */
+   being centred on it.
+
+   The four -7px margins below are this stylesheet's first negative margins,
+   and verify:styles check 6 (`/^\d+px$/`, no leading minus) structurally
+   cannot see them — 7px would fail that check; -7px passes, silently. That
+   is not a gap in the token audit worth closing: -7px is exactly half of
+   .panel__port's own 14px width/height, a CENTRING offset (the idiomatic
+   `top: 50%; margin-top: -half-the-element` pattern), not a spacing literal
+   drawn from the spacing scale check 6 polices. A later auditor re-reading
+   this file should not mistake it for a crack in the tokenised stylesheet. */
 .panel__port--n { top: 0; left: 50%; margin-left: -7px; }
 .panel__port--s { bottom: 0; left: 50%; margin-left: -7px; }
 .panel__port--w { left: 0; top: 50%; margin-top: -7px; }

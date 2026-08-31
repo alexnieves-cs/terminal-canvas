@@ -21,6 +21,7 @@ import { usePanelDrag } from './usePanelDrag'
 import type { DragMode, DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
+import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
 import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
@@ -4586,8 +4587,16 @@ export function Canvas({
         onClosePanel={paletteActions.closePanel}
         attention={railAttention}
       />
+      {/* M24 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
+          host, never a `scale` prop threaded into every TerminalPanel. Ports
+          are hidden below PORT_MIN_SCALE — a 14px dot is under two screen
+          pixels at MIN_SCALE (0.1) — but `viewport.scale` changes on every
+          frame of a zoom (`zoomAt`), and a `scale` prop on a memoized panel
+          component would be a changed prop on every one of those frames,
+          defeating `memo` for every panel on every zoom gesture. See
+          PanelPorts.tsx's own comment. */}
       <div
-        className={`canvas${linkDraw.state !== null ? ' canvas--linking' : ''}`}
+        className={`canvas${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         onMouseDownCapture={onLinkModeMouseDownCapture}
         onMouseDown={onMouseDown}
@@ -4702,7 +4711,6 @@ export function Canvas({
                 onContextPasted={(id) => setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })}
                 entering={enteringPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
-                scale={viewport.scale}
                 onBeginLink={onBeginLink}
               />
             )
