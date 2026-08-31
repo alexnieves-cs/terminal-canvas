@@ -4,6 +4,7 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { buildReviewNodeModel } from './review-node-model'
+import { PanelPorts } from '@renderer/components/PanelPorts'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -53,6 +54,14 @@ export interface ReviewNodeProps {
    * never moved it.
    */
   focusedId: string | null
+  /**
+   * Begins a link drag from one of this node's four port handles (M24,
+   * Task 7). Required on TerminalPanel's own `onBeginLink`'s precedent: an
+   * optional prop here compiles clean on a missed wiring and produces "the
+   * ring never appears for review nodes" — a feature that reads as
+   * unbuilt, `PanelRow.agent`'s own lesson.
+   */
+  onBeginLink: (panelId: string, event: ReactMouseEvent) => void
 }
 
 /**
@@ -72,7 +81,7 @@ export interface ReviewNodeProps {
  */
 function ReviewNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted,
-  restoreFocus, focusedId, readOnly = false
+  restoreFocus, focusedId, readOnly = false, onBeginLink
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
@@ -448,6 +457,16 @@ function ReviewNodeImpl({
           }}
         />
       ))}
+      {/* M24 (Task 7). The same block TerminalPanel carries, and for the
+          same reasons: `links` lives on PanelBase, so this kind is already
+          a valid endpoint and the gesture should reach it too. Suppressed
+          under readOnly (the merged view) exactly as the resize handles
+          are; the PORT_MIN_SCALE cutoff is a canvas-host CLASS
+          (`.canvas--ports-hidden`), never a `scale` prop threaded through
+          this memoized component — see PanelPorts.tsx's own comment. */}
+      {!readOnly && (
+        <PanelPorts panelId={rect.id} onBeginLink={onBeginLink} />
+      )}
     </div>
   )
 }

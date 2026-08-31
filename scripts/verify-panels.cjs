@@ -12271,6 +12271,93 @@ app.whenReady().then(async () => {
           `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
           `afterRemove=${JSON.stringify(afterRemove)} afterUndo=${JSON.stringify(afterUndo)}`)
       }
+
+      // 179. Ports render on a NON-TERMINAL kind, and are ABSENT in the merged
+      //      view — asserted in one read, because "no ports anywhere" passes
+      //      the absence half perfectly while deleting the feature. The same
+      //      both-directions rule check 106 states for `editable`.
+      //
+      //      `links` lives on PanelBase and verify:viewport 88 pins that the
+      //      geometry never asks a panel its kind, so every kind is already a
+      //      valid ENDPOINT — this is the half that makes the GESTURE as
+      //      kind-agnostic as the arithmetic.
+      //
+      //      A FILE panel is the fixture, not a review node. Both are equally
+      //      valid non-terminal kinds for this claim, and a file panel is
+      //      minted by one call to the __m13Open test hook with no git binary
+      //      anywhere in earshot — where a review node needs a real repository
+      //      fixture, and checks 99-101 already have to SKIP LOUDLY on a
+      //      machine with no git. Gating this check on git would make the
+      //      milestone's kind-agnostic claim untested on exactly the machines
+      //      least able to notice.
+      //
+      //      Numbered 179 here rather than the task brief's 178: this suite's
+      //      178 was already claimed by the hover-badge/removal check above.
+      //
+      //      This check's brief called for threading a `scale` prop into
+      //      each of the four kinds and gating on `scale >= PORT_MIN_SCALE`
+      //      inline. That is stale against this branch's own fix round
+      //      (c148fbd, "port visibility is a canvas-host class, never a
+      //      scale prop"): TerminalPanel carries NO `scale` prop at all, and
+      //      the PORT_MIN_SCALE cutoff is enforced by the `.canvas--ports-
+      //      hidden` class on the canvas host, in CSS, so a memoized panel
+      //      is never handed a prop that changes on every zoom frame. This
+      //      check therefore drives no zoom — that geometry is already
+      //      covered, kind-agnostically, by the CSS rule and by
+      //      PanelPorts.tsx's own scale threshold, which has no per-kind
+      //      branch to regress. What this check pins is the fact that IS a
+      //      per-call-site wiring decision and could plausibly be gotten
+      //      wrong per kind: presence on a mounted non-terminal kind, and
+      //      absence under `readOnly` (the merged view).
+      //
+      //      A file this suite already owns is not reused here — every
+      //      earlier FIXTURE constant (checks 134-137, 169-171) is declared
+      //      inside its OWN nested block and is out of scope this far down
+      //      the file. Ruling P7: hoisting one out would couple two
+      //      unrelated fixtures, this suite's most common check failure. A
+      //      one-line file is written into its own spaced temp directory.
+      {
+        const m24PortsDir = mkdtempSync(join(tmpdir(), 'tc panels m24 ports '))
+        const m24PortsFixture = join(m24PortsDir, 'ports.md')
+        writeFileSync(m24PortsFixture, '# m24 ports fixture\n', 'utf8')
+
+        // The merged chord, re-declared: M18's own `chord`/`MERGE` helpers
+        // are scoped to that block. `code: 'KeyA'` and not `key`, for check
+        // 152's reason — Shift rewrites the printed character, so a
+        // key-based test is correct on one keyboard layout and silently
+        // dead on every other.
+        const MERGE_M24 = () => wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', {` +
+          ` key: 'A', code: 'KeyA', metaKey: true, shiftKey: true, bubbles: true })), true`)
+
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(m24PortsFixture)})`)
+        const fileId = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          const fresh = now.find((id) => !before.has(id))
+          return fresh || false
+        }, 5000)
+
+        const onFile = fileId ? await portBox(fileId, 'e') : null
+        const onTerminal = await portBox(M24_A, 'e')
+        // Enter the merged view; ports must vanish on BOTH, because geometry
+        // and links are read-only there and addLink would write to a
+        // workspace record this canvas does not own.
+        await MERGE_M24()
+        await settle()
+        const mergedFile = fileId ? await portBox(fileId, 'e') : null
+        const mergedTerminal = await portBox(M24_A, 'e')
+        await MERGE_M24()
+        await settle()
+        ok('179 ports render on a file panel and vanish in the merged view',
+          Boolean(fileId) && onFile !== null && onFile.zero !== true &&
+            onTerminal !== null && onTerminal.zero !== true &&
+            mergedFile === null && mergedTerminal === null,
+          `fileId=${fileId} onFile=${JSON.stringify(onFile)} onTerminal=${JSON.stringify(onTerminal)} ` +
+          `mergedFile=${JSON.stringify(mergedFile)} mergedTerminal=${JSON.stringify(mergedTerminal)}`)
+      }
     }
 
   } catch (error) {

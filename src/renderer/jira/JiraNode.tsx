@@ -1,9 +1,10 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { JiraPanel } from '@renderer/panels/panels'
 import type { WorkItem } from '@shared/work-item'
 import type { DragState } from '@renderer/canvas/panel-interaction'
+import { PanelPorts } from '@renderer/components/PanelPorts'
 
-export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void }): JSX.Element {
+export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void; readOnly?: boolean; onBeginLink(panelId: string, event: ReactMouseEvent): void }): JSX.Element {
   const { panel } = props
   const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.jira.list>> | null>(null)
   const load = (): void => { void window.canvas.jira.list().then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'Jira could not be reached.' })) }
@@ -15,5 +16,14 @@ export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(
     <div className="file-node__body" data-scroll-host onMouseDown={(e) => { e.stopPropagation(); props.onFocus(panel.rect.id) }}>
       {result === null ? <p>Loading Jira tickets…</p> : result.kind === 'items' ? result.items.length === 0 ? <p>No assigned tickets.</p> : result.items.map((item) => <article className="jira-node__item" key={item.id}><strong>{item.id}: {item.title}</strong><small>{item.state ?? 'No state'}{item.assignee ? ` · ${item.assignee}` : ''}</small><p>{item.description || 'No description.'}</p><button type="button" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); props.onSpawn(item) }}>Start session</button></article>) : <p className="file-node__note">{result.reason}</p>}
     </div>
+    {/* M24 (Task 7). The same block TerminalPanel carries, and for the
+        same reasons: `links` lives on PanelBase, so this kind is already a
+        valid endpoint and the gesture should reach it too. Suppressed
+        under readOnly (the merged view). The PORT_MIN_SCALE cutoff is a
+        canvas-host CLASS (`.canvas--ports-hidden`), not a `scale` prop —
+        see PanelPorts.tsx's own comment. */}
+    {!props.readOnly && (
+      <PanelPorts panelId={panel.rect.id} onBeginLink={props.onBeginLink} />
+    )}
   </div>
 }

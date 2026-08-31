@@ -4667,6 +4667,7 @@ export function Canvas({
                   restoreFocus={restoreFocus}
                   focusedId={focusedId}
                   readOnly={merged}
+                  onBeginLink={onBeginLink}
                 />
               )
             }
@@ -4690,6 +4691,8 @@ export function Canvas({
                   // ReviewNode's restoreFocus prop for the precedent.
                   restoreFocus={restoreFocus}
                   focusedId={focusedId}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
                 />
               )
             }
@@ -4706,10 +4709,12 @@ export function Canvas({
                   onFocus={onFocusPanel}
                   onBeginDrag={onBeginDrag}
                   onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} readOnly={merged} onBeginLink={onBeginLink} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

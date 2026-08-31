@@ -4,6 +4,7 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
+import { PanelPorts } from '@renderer/components/PanelPorts'
 
 /**
  * The conflict banner's wording.
@@ -88,6 +89,24 @@ export interface FileNodeProps {
    * edit button's preventDefault deliberately never moved it.
    */
   focusedId: string | null
+  /**
+   * Shown inside another workspace's lane in M14's merged view, where
+   * geometry is read-only. Named `readOnly` rather than a second spelling,
+   * to match ReviewNode's own prop of the same name — Canvas.tsx passes
+   * `merged` under this name at every one of the five call sites.
+   * Suppresses the port handles for the reason ReviewNode's own comment
+   * gives: addLink there would write to a workspace record this canvas
+   * does not own.
+   */
+  readOnly?: boolean
+  /**
+   * Begins a link drag from one of this node's four port handles (M24,
+   * Task 7). Required on TerminalPanel's own `onBeginLink`'s precedent: an
+   * optional prop here compiles clean on a missed wiring and produces "the
+   * ring never appears for file panels" — a feature that reads as
+   * unbuilt, `PanelRow.agent`'s own lesson.
+   */
+  onBeginLink: (panelId: string, event: ReactMouseEvent) => void
 }
 
 /**
@@ -106,7 +125,8 @@ export interface FileNodeProps {
  * a new door. The store fans main's pushes out per panel id instead.
  */
 function FileNodeImpl({
-  panel, selected, onSelect, onFocus, onBeginDrag, onClose, restoreFocus, focusedId
+  panel, selected, onSelect, onFocus, onBeginDrag, onClose, restoreFocus, focusedId,
+  readOnly = false, onBeginLink
 }: FileNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -658,6 +678,16 @@ function FileNodeImpl({
           }}
         />
       ))}
+      {/* M24 (Task 7). The same block TerminalPanel carries, and for the
+          same reasons: `links` lives on PanelBase, so this kind is
+          already a valid endpoint and the gesture should reach it too.
+          Suppressed under readOnly (the merged view). The PORT_MIN_SCALE
+          cutoff is a canvas-host CLASS (`.canvas--ports-hidden`), never a
+          `scale` prop threaded through this memoized component — see
+          PanelPorts.tsx's own comment. */}
+      {!readOnly && (
+        <PanelPorts panelId={id} onBeginLink={onBeginLink} />
+      )}
     </div>
   )
 }
