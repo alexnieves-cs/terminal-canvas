@@ -19,7 +19,7 @@ export interface Bridge {
       /** Absent means "the login shell"; main resolves it. See PanelSpec. */
       command?: string
       args: string[]
-      /** Which agent CLI this launches, when this app can account for it. */
+      /** Which integrated agent CLI this launches. */
       agent?: AgentKind
       cols: number
       rows: number

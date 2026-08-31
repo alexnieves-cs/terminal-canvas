@@ -21,9 +21,8 @@ export interface PanelSpec {
   cols: number
   rows: number
   /**
-   * Which agent CLI this is, when this app can account for it. Main uses it
-   * to decide whether to pin a session id; it never changes what gets
-   * spawned beyond that one flag.
+   * Which integrated agent CLI this is. Main uses its capability contract to
+   * add only that CLI's supported flags and, where available, pin a session.
    */
   agent?: AgentKind
   /**

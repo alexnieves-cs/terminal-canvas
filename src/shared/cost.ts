@@ -49,18 +49,16 @@ export function addTotals(a: TokenTotals, b: TokenTotals): TokenTotals {
 }
 
 /**
- * Which agent CLI a preset launches, when this app knows how to account for
- * it. Absent means "we do not account for this one", which is every login
- * shell and every preset the user wrote by hand.
+ * Which agent CLI a preset launches, when this app knows its integration
+ * contract. An integration can support launch controls without claiming cost
+ * accounting: see `transcriptAccounting` in AGENT_CAPABILITIES.
  *
- * A UNION with one member rather than a boolean, so a second adapter is a new
- * member rather than a rename of every use site — and deliberately not an
- * abstraction beyond that. ideas-backlog #19's own constraint: do not build
- * the abstraction until a second CLI actually wants it.
+ * Absent means an ordinary terminal/login shell or a user command whose
+ * vendor contract this app does not know.
  */
-export type AgentKind = 'claude-code'
+export type AgentKind = 'claude-code' | 'codex'
 
-export const AGENT_KINDS: readonly AgentKind[] = ['claude-code']
+export const AGENT_KINDS: readonly AgentKind[] = ['claude-code', 'codex']
 
 /**
  * The knobs an agent CLI exposes at spawn, carried as ONE optional record
@@ -79,9 +77,16 @@ export const AGENT_KINDS: readonly AgentKind[] = ['claude-code']
  * preset written before M20.
  */
 export interface AgentOptions {
+  /** Claude Code only. */
   permissionMode?: PermissionMode
+  /** Claude Code only. */
   effort?: Effort
+  /** Supported by Claude Code and Codex. */
   model?: string
+  /** Codex only: `codex --sandbox`. */
+  sandbox?: CodexSandbox
+  /** Codex only: `codex --ask-for-approval`. */
+  approvalPolicy?: CodexApprovalPolicy
 }
 
 /**
@@ -117,6 +122,20 @@ export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
+/** `codex --sandbox`, measured from Codex CLI help on 2026-08-30. */
+export type CodexSandbox = 'read-only' | 'workspace-write' | 'danger-full-access'
+
+export const CODEX_SANDBOXES: readonly CodexSandbox[] = [
+  'read-only',
+  'workspace-write',
+  'danger-full-access'
+]
+
+/** `codex --ask-for-approval`, measured from Codex CLI help on 2026-08-30. */
+export type CodexApprovalPolicy = 'on-request' | 'never'
+
+export const CODEX_APPROVAL_POLICIES: readonly CodexApprovalPolicy[] = ['on-request', 'never']
+
 /**
  * `claude --model` is deliberately NOT a closed union: it takes an alias
  * (`opus`) or a full id (`claude-fable-5`), so a fixed list rots the day a
@@ -135,16 +154,39 @@ export const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'ma
 export const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/
 
 /**
- * How each knob is spelled as a flag. A flat const beside the one AgentKind,
- * NOT a per-agent capability table: AgentKind has exactly one member, so such
- * a table would have one row, one consumer, and would still leave exactly the
- * one `spec.agent === 'claude-code'` branch it claims to remove — the
- * customer-free abstraction AgentKind's own comment declines by name.
+ * The bounded spawn contract for every integrated CLI. This table is the
+ * boundary between a saved generic AgentOptions record and vendor argv: an
+ * option unsupported by an agent is deliberately omitted, never guessed at
+ * and never passed using another CLI's spelling.
  *
- * BUILD THE TABLE WHEN THE SECOND AgentKind LANDS, and not before.
+ * `sessionIdFlag` belongs here too because session pinning is not a generic
+ * promise. Claude creates a transcript at a caller-supplied id; Codex's TUI
+ * has no equivalent create-session flag, so it must not receive a synthetic
+ * id or be represented as transcript-accounted.
  */
-export const AGENT_FLAGS: { readonly [K in keyof AgentOptions]-?: string } = {
-  permissionMode: '--permission-mode',
-  effort: '--effort',
-  model: '--model'
+export interface AgentCapability {
+  readonly flags: Partial<{ readonly [K in keyof AgentOptions]: string }>
+  readonly sessionIdFlag?: string
+  /** Whether this app has a stable, per-panel transcript adapter. */
+  readonly transcriptAccounting: boolean
+}
+
+export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = {
+  'claude-code': {
+    flags: {
+      permissionMode: '--permission-mode',
+      effort: '--effort',
+      model: '--model'
+    },
+    sessionIdFlag: '--session-id',
+    transcriptAccounting: true
+  },
+  codex: {
+    flags: {
+      model: '--model',
+      sandbox: '--sandbox',
+      approvalPolicy: '--ask-for-approval'
+    },
+    transcriptAccounting: false
+  }
 }

@@ -2131,7 +2131,7 @@ const filePanelOnDisk = (id, over = {}) => ({
 //      account.
 {
   const warnings = []
-  const out = L.parsePresets([{ id: 'p1', name: 'x', cwd: '~', args: [], agent: 'codex' }], warnings)
+  const out = L.parsePresets([{ id: 'p1', name: 'x', cwd: '~', args: [], agent: 'unknown-cli' }], warnings)
   ok('124 an unknown agent is dropped with a warning',
     !('agent' in out[0]) && warnings.length === 1, warnings.join('; '))
 }
@@ -2581,6 +2581,22 @@ const filePanelOnDisk = (id, over = {}) => ({
       !('agentOptions' in capBare) &&
       capOpts.agentOptions !== undefined && capOpts.agentOptions.effort === 'max',
     JSON.stringify({ bare, withOpts, capBare, capOpts }))
+}
+
+// 150. Codex controls share the one persisted envelope, but its safety
+// options are independently validated before they can reach its CLI.
+{
+  const warnings = []
+  const out = L.parsePresets([{
+    id: 'codex-safe', name: 'Codex', cwd: '~', args: [], agent: 'codex',
+    agentOptions: { sandbox: 'workspace-write', approvalPolicy: 'on-request', model: 'gpt-5.6' }
+  }], warnings)
+  const options = out[0] && out[0].agentOptions
+  ok('150 Codex sandbox and approval options round-trip with the Codex agent',
+    out[0].agent === 'codex' && options !== undefined &&
+      options.sandbox === 'workspace-write' && options.approvalPolicy === 'on-request' &&
+      options.model === 'gpt-5.6' && warnings.length === 0,
+    JSON.stringify({ agent: out[0].agent, options, warnings }))
 }
 
 console.log('\n' + '='.repeat(60))

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { agentArgs } from './agent-args'
+import { AGENT_CAPABILITIES } from '../shared/cost'
 import {
   closeSync,
   existsSync,
@@ -498,7 +499,11 @@ export class PtyManager {
     // without a real `claude` on PATH. The read-then-mint of the session id
     // stays HERE, because it writes to the store and is therefore not pure.
     let sessionId = this.pinnedSession(spec.panelId)
-    if (spec.agent === 'claude-code' && sessionId === undefined) {
+    if (
+      spec.agent !== undefined &&
+      AGENT_CAPABILITIES[spec.agent].sessionIdFlag !== undefined &&
+      sessionId === undefined
+    ) {
       sessionId = randomUUID()
       this.setPinnedSession(spec.panelId, sessionId)
     }

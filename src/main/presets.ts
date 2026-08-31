@@ -52,7 +52,7 @@ export const BUILT_IN_PRESETS: Preset[] = [
     // permission checks as a default affordance.
     agentOptions: { permissionMode: 'plan' }
   },
-  { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [] }
+  { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [], agent: 'codex' }
 ]
 
 /** Built-ins first, so the menu order is stable as the user adds their own. */
