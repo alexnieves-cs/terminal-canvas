@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, ToolboxReadRequest, ToolboxPermissionsRequest } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
@@ -24,6 +24,7 @@ import type { ToolboxCache } from './toolbox-cache'
 import { readPermissionRules, resolveToolboxHome } from './toolbox-read'
 import { resolveCwd } from './pty-manager'
 import { writeFile } from './file-write'
+import { createFile } from './file-create'
 import { sampleMachineCosts } from './machine-cost'
 import type { MachineCostTarget } from '../shared/machine-cost'
 
@@ -337,6 +338,14 @@ export function registerIpcHandlers(
     // watcher like any other change, which is what makes the panel update
     // itself with no second code path.
     writeFile(req.path, req.content, req.baseMtimeMs))
+
+  // M27. Create a note. Deliberately NOT folded into FILE_WRITE — see
+  // IPC.FILE_CREATE's own comment for why a create and a compare-and-swap
+  // cannot share a door. No sender capture, for FILE_WRITE's reason: the
+  // renderer opens the panel from the returned path, and every change after
+  // that arrives through the existing watch like any other.
+  ipcMain.handle(IPC.FILE_CREATE, (_event, req: FileCreateRequest) =>
+    createFile(req.root, req.name, req.seed))
 }
 
 /**

@@ -194,6 +194,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        credential:verify
                        jira:list
                        file:open / file:read / file:close / file:write
+                       file:create
                        fs:list
                        toolbox:read / toolbox:permissions
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
@@ -603,6 +604,7 @@ price of not killing something.
 | M21 | The agent's toolbox: what each panel's agent can actually do, read-only | ✅ done |
 | M23 | Agent modes: permission mode, effort and model, per panel | ✅ done |
 | M26 | Complete multi-select: additive shift-click and origin-based group drag | ✅ done |
+| M27 | Notes: a place on the canvas to write a sentence, backed by a real `.md` | ✅ done |
 
 The table's order is CLAIM order, not build order. M10 (the visual system) is
 claimed by a separate concurrent track and is not yet in this table; M11

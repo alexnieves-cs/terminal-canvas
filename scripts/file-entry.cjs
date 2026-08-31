@@ -11,5 +11,7 @@ module.exports = {
   ...require('../src/main/file-watch.ts'),
   /* M22: the write verb, in this same plain-node tier for file-read.ts's own
      reason — node:fs is not what moves a module out of it. */
-  ...require('../src/main/file-write.ts')
+  ...require('../src/main/file-write.ts'),
+  /* M27: the note's creation verb, same tier and same reason. */
+  ...require('../src/main/file-create.ts')
 }

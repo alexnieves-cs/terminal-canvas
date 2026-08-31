@@ -742,6 +742,14 @@ export function Canvas({
   // install once, but panels changes on every frame of a drag.
   const panelsRef = useRef(panels)
   panelsRef.current = panels
+
+  // M27. The same pattern again, for a value declared in the OTHER direction:
+  // `noteRoot` depends on the selection and the live-session store and is
+  // computed far below, while `beginNewNote` sits in the palette-actions memo
+  // far above. Assigned where noteRoot is defined; read at CALL time, which is
+  // also what makes the row act on the panel selected NOW rather than the one
+  // selected when the palette opened.
+  const noteRootRef = useRef<string | null>(null)
   const groupsRef = useRef(groups)
   groupsRef.current = groups
   // Panels can disappear through close, undo, reset, or a workspace move.
@@ -3039,7 +3047,7 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true }) => {
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3057,7 +3065,15 @@ export function Canvas({
       // panel while holding two.
       const next = [
         ...existing,
-        makeFilePanel(id, cascadeCentre(centre, existing), nextZ(existing), { path })
+        makeFilePanel(id, cascadeCentre(centre, existing), nextZ(existing), {
+          path,
+          // Conditional, never `...opts`. A spread writes `prose: undefined`,
+          // which `'prose' in source` reads as PRESENT — the absent-stays-
+          // absent trap this field's own doc comment records. ONE mint
+          // function for both, so a note and an opened file cannot drift
+          // apart in id minting, cascading, z-order or selection.
+          ...(opts?.prose === true ? { prose: true as const } : {})
+        })
       ]
       commitHistory(next)
       return next
@@ -3281,6 +3297,90 @@ export function Canvas({
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
+  /**
+   * M27. Create a note and open it, ready to write in.
+   *
+   * Two steps rather than one, and the prompt is the palette's own input mode
+   * rather than a dialog — the machinery M5a's preset editing was deferred
+   * over ("a modal would fight xterm for keyboard focus") and which every
+   * rename, delete and confirm in this app already reuses, so a note prompt
+   * inherits all four of usePalette's focus rules for free.
+   *
+   * The root is read from the ref at CALL time rather than closed over: the
+   * user may select a different panel between opening the palette and running
+   * the row, and a note belongs to the project they are looking at NOW.
+   *
+   * `exists` RE-PROMPTS with feedback rather than opening the existing file.
+   * "Create" and "open" are different acts, and silently turning one into the
+   * other is how a user ends up appending to a file they thought was new —
+   * with the existing bytes untouched either way, since main refuses at the
+   * `wx` flag rather than after a check.
+   */
+  const beginNewNote = useCallback(() => {
+    const root = noteRootRef.current
+    // The row is already disabled without a root; this is the second half of
+    // the same rule, against a selection that changed while the palette was
+    // open — the guard beginSavePrompt already keeps for its own list.
+    if (root === null) return
+
+    const stamp = new Date()
+    const pad = (n: number): string => String(n).padStart(2, '0')
+    // A date-stamped default, because the commonest note has no name the user
+    // has thought of yet, and an empty field makes them invent one before
+    // they can write anything down. Editable, obviously — it is a text field.
+    const suggested = `notes/${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())}.md`
+
+    const prompt = (initial: string, label: string, feedback?: true): void => {
+      setInputMode({
+        kind: 'text',
+        label,
+        initial,
+        ...(feedback === undefined ? {} : { feedback }),
+        submit: (name) => {
+          // A blank submit is the same CANCEL a blank rename already is.
+          if (name.trim() === '') { setInputMode(null); return }
+          const seedTitle = name.trim().replace(/\.[^./]*$/, '').split('/').pop() ?? name.trim()
+          void window.canvas.file
+            .create({ root, name, seed: `# ${seedTitle}\n\n` })
+            .then((res) => {
+              if (res.kind === 'created') {
+                setInputMode(null)
+                openFilePanel(res.path, worldCentre(), { prose: true })
+                return
+              }
+              // Every refusal re-prompts carrying the typed name, so the user
+              // can correct it — InputMode's `feedback` exists precisely
+              // because a placeholder only shows when the field is EMPTY,
+              // which it never is on this path.
+              const why =
+                res.kind === 'exists' ? 'there is already a file with that name'
+                  : res.detail
+              prompt(name, `Couldn\u2019t create that note \u2014 ${why}`, true)
+            })
+            .catch((error: unknown) => {
+              // Mandatory, for FileNode's reason: an unhandled rejection
+              // leaves the input mode open forever with no explanation, which
+              // reads as the app having frozen.
+              prompt(name, `Couldn\u2019t create that note \u2014 ${String(error)}`, true)
+            })
+        }
+      })
+      // Palette.tsx closes the overlay BEFORE it runs a row's command AND
+      // before it calls an input mode's submit, so without this the mode
+      // would be set on a palette that is already gone and Canvas's own
+      // clear-on-close effect would wipe it. The same pairing
+      // beginRenamePreset, deletePreset and beginEditSetting all make — and
+      // the reason every refusal branch below re-enters through `prompt`
+      // rather than calling setInputMode on its own. Watched failing exactly
+      // here: verify:panels 176 reported `stillInInput:false` with the
+      // palette back in command mode, so a duplicate name silently did
+      // nothing rather than saying the name was taken.
+      palette.openPalette()
+    }
+
+    prompt(suggested, 'Name this note\u2026')
+  }, [palette, openFilePanel, worldCentre])
+
   const paletteActions = useMemo<PaletteActions>(() => ({
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
@@ -4230,13 +4330,15 @@ export function Canvas({
         openFilePanel(path, worldCentre())
       })
     },
-    openJira: () => openJiraPanel()
+    openJira: () => openJiraPanel(),
+    newNote: () => beginNewNote()
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
-       movePanelsToWorkspace, toggleMerged, openFilePanel, openJiraPanel, worldCentre])
+       movePanelsToWorkspace, toggleMerged, openFilePanel, openJiraPanel, worldCentre,
+       beginNewNote])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -4544,6 +4646,39 @@ export function Canvas({
   // including a failure-arm entry (`gone`/`not-a-directory`/`unreadable`), not
   // only an `ok` one — the pending state is about whether an answer has
   // landed, not about what it says.
+
+  /**
+   * M27. Where a NEW NOTE would be saved. Usually the tree's own root, and
+   * deliberately not identical to it.
+   *
+   * `treeRoot` answers for a TERMINAL panel's cwd or a review node's repo
+   * root, and null for a file panel — which is right for the tree, whose job
+   * is browsing a project a panel is working in. It is wrong here for a
+   * reason that only shows up in use: creating a note SELECTS it, so the very
+   * next New note row would be disabled by the note the user just made, and
+   * a second note would need them to go and re-select a terminal first. The
+   * ordinary case for notes is one beside another.
+   *
+   * So a selected FILE panel contributes its own containing directory, which
+   * is also the answer a user would expect. The tree is left alone rather
+   * than widened, because re-rooting it on a file panel is a change to M20's
+   * behaviour that this milestone has no business making on the way past.
+   *
+   * Found by verify:panels 176 failing, not by reading the code: the check
+   * reported the row DISABLED on its second run, with the note panel selected.
+   */
+  const noteRoot = useMemo(() => {
+    if (treeRoot !== null) return treeRoot
+    if (selectedPanel === undefined || !isFilePanel(selectedPanel)) return null
+    const path = selectedPanel.source.path
+    const cut = path.lastIndexOf('/')
+    if (cut < 0) return null
+    return cut === 0 ? '/' : path.slice(0, cut)
+  }, [treeRoot, selectedPanel])
+  noteRootRef.current = noteRoot
+
+  // (The comment above `noteRoot` interrupts this one's own subject; the
+  // pending flag below belongs to the paragraph two blocks up.)
   const treeRootPending = treeRoot !== null && !treeDirs.has(treeRoot)
 
   const toggleDir = useCallback((path: string) => {
@@ -4979,6 +5114,7 @@ export function Canvas({
             attentionIds={waitingIds}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
+            noteRoot={noteRoot}
             merged={merged}
             inputMode={inputMode}
           />

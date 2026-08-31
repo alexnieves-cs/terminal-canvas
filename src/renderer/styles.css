@@ -2175,6 +2175,27 @@ body {
    is for. The body scrolls instead. */
 .file-node__text { white-space: pre; }
 
+/* M27. A note's body: prose, so it WRAPS, where .file-node__text deliberately
+   does not. The reasons are opposite and both hold — a wrapped line makes a
+   gutter lie about which line the text belongs to, which is the one thing a
+   gutter is for, and a note has no gutter to lie. `anywhere` rather than
+   `break-word` because the panel is resizable down to a narrow column and an
+   unbreakable token (a URL, a path) would otherwise push a horizontal
+   scrollbar onto a surface that is meant to be read straight down.
+
+   Deliberately NOT --font-mono. A note is sentences, and the display face is
+   what every other piece of sentence-shaped chrome in this app already uses;
+   monospace here would say "this is code" about the one panel kind that is
+   explicitly not. */
+.file-node__prose {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-md);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .file-node__more { margin: var(--sp-4) 0 0; color: var(--fg-3); }
 .jira-node__item { border-bottom: 1px solid var(--s-3); padding: var(--sp-3) 0; }
 .jira-node__item small { display: block; color: var(--fg-3); margin-top: var(--sp-1); }

@@ -215,6 +215,13 @@ const spyActions = () => {
     beginEditSetting: record('beginEditSetting'),
     // M20. The compound restart-with-a-mode verb the panel.mode rows call.
     restartPanelWithMode: record('restartPanelWithMode'),
+    // M27. The New note row's verb. Missing it does not FAIL a check — it
+    // THROWS out of row.run(), which ends the process where it stands and
+    // takes every check below with it, printing no summary at all. That is
+    // the trap CLAUDE.md's "a check that THROWS aborts the run" records, and
+    // it is exactly how this omission surfaced: the suite reported nothing
+    // rather than a red check.
+    newNote: record('newNote'),
     // M13. beginLink is reached from panel.link; the other two are the
     // inspector's own, reached from no Command row — kept here anyway so the
     // fixture stays honest about the full PaletteActions shape, the reason
@@ -1456,6 +1463,59 @@ const WS = [
       notStarted && notStarted.disabledReason,
       notAgent && notAgent.disabledReason
     ]))
+}
+
+// ── M27. The New note row. ──────────────────────────────────────────────
+
+// 85 — present, visible AT REST, enabled when there is a directory to put a
+// note in, and actually wired. Four facts in one read, check 73's shape for
+// the "Open file…" row beside it: a regression to any single one of them — a
+// dropped row, a wrong section leaving it hiddenAtRest, a stray
+// disabledReason, a run() wired to nothing — would otherwise pass a check
+// that only looked at the others. Visible at rest because it is a CREATE
+// verb: M6p sized the resting list to roughly eight rows and every hidden row
+// is one a user has to already know the name of, which is exactly wrong for
+// the one row whose whole purpose is being discovered.
+{
+  const c = ctx({ noteRoot: '/Users/x/proj' })
+  const rows = P.buildCommands(c)
+  const row = byId(rows, 'panel.new-note')
+  const resting = P.filterCommands(rows, '', null)
+  if (row) row.run()
+  ok('85 New note… is present, enabled, visible at rest, and wired to actions.newNote',
+    row !== undefined &&
+      row.disabledReason === undefined &&
+      row.hiddenAtRest !== true &&
+      resting.some((r) => r.id === 'panel.new-note') &&
+      c.actions.calls.length === 1 &&
+      c.actions.calls[0][0] === 'newNote',
+    JSON.stringify(c.actions.calls))
+}
+
+// 86 — with no panel selected the row is PRESENT and DISABLED with its own
+// exported reason, never absent. verify:palette 31's standing rule: a row
+// that disappears is indistinguishable from a feature that was never built,
+// and this is the one row a user on an empty canvas is most likely to go
+// looking for. Compared against the EXPORTED constant rather than a string
+// literal, which would keep passing while the sentence the user actually
+// reads said something else entirely — and asserted as its OWN reason, not
+// REASON_NO_FOCUS, because "click a panel" is the wrong instruction here: a
+// note is rooted on the SELECTED panel, which a rail click sets without ever
+// moving focus.
+{
+  const c = ctx({ noteRoot: null })
+  const row = byId(P.buildCommands(c), 'panel.new-note')
+  // Deliberately NOT calling run() here. A disabled row still HAS a run — it
+  // is Palette.tsx's runRow that refuses one, not the row itself — so a
+  // "calls === 0" clause would be asserting something no layer promises, and
+  // an earlier draft of this check failed for exactly that reason. What the
+  // row owes is a reason a user can act on; the refusal lives one layer up
+  // and is covered where that layer is driven.
+  ok('86 with nowhere to put a note the row is present and disabled with its own reason',
+    row !== undefined &&
+      row.disabledReason === P.REASON_NO_NOTE_ROOT &&
+      P.REASON_NO_NOTE_ROOT !== P.REASON_NO_FOCUS,
+    `reason=${JSON.stringify(row && row.disabledReason)}`)
 }
 
 const failed = results.filter((r) => !r.pass)

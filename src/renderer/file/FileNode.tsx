@@ -269,6 +269,30 @@ function FileNodeImpl({
     if (fid !== null) restoreFocus(fid)
   }
 
+  // M27. A note opens ready to write in — that is the whole difference
+  // between "a place the user puts thought" and one more read-out.
+  //
+  // ONCE, behind a ref, and never on every render where `draft === null`:
+  // re-entering there would make Escape appear to do nothing at all, since
+  // the effect would reopen the draft the user had just discarded. After the
+  // first entry a note behaves exactly like any other file panel, and the ✎
+  // control is how it is re-entered.
+  //
+  // Gated on `model.editable` for the reason the save path is gated on it: a
+  // truncated or non-text note must not open an editor whose save the gate
+  // will then refuse. Such a note opens as a read view instead, which is the
+  // honest answer rather than a degradation — there is nothing safe to type.
+  const autoEditedRef = useRef(false)
+  useEffect(() => {
+    if (autoEditedRef.current) return
+    if (panel.source.prose !== true) return
+    if (!model.editable || result === undefined || result.kind !== 'text') return
+    autoEditedRef.current = true
+    seedRef.current = result.content
+    setDraft(result.content)
+    setBaseMtimeMs(result.mtimeMs)
+  }, [panel.source.prose, model.editable, result])
+
   // Read on mount, close on unmount. This is what makes "the renderer is
   // showing this file" and "main is watching it" one statement: a workspace
   // switch unmounts without disposing, so it correctly stops the watch for a
@@ -623,6 +647,16 @@ function FileNodeImpl({
           </>
         ) : model.note !== undefined ? (
           <p className="file-node__note" data-file-node-note>{model.note}</p>
+        ) : model.prose ? (
+          /* M27. A note renders as WRAPPED PROSE with no gutter. It is the
+             same `model.lines` the code view uses, joined back — the model
+             carries the file's real numbering either way, and what changes
+             here is only the painting. `data-file-node-lines` stays on it, so
+             every existing reader that asks "is there content on screen"
+             keeps working for a note without knowing notes exist. */
+          <div className="file-node__prose" data-file-node-lines>
+            {model.lines.map((line) => line.text).join('\n')}
+          </div>
         ) : (
           <pre className="file-node__pre" data-file-node-lines>
             {model.lines.map((line) => (

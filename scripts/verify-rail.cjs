@@ -1872,6 +1872,82 @@ const inventory = (over) => ({
     JSON.stringify({ rectStable: a === moved, modeMoves: a !== b, effortMoves: a !== c }))
 }
 
+// ── M27. The note: a file panel in PROSE mode. ──────────────────────────
+
+// 110 — the prose flag reaches the model, and an ordinary file panel is
+// UNCHANGED by its existence. Both directions in one read, because a model
+// that always reported prose satisfies the first half perfectly and would
+// silently strip the line-number gutter off every source file on the canvas.
+// The lines are still built either way: prose changes how the body is
+// PAINTED, not what was read, so nothing downstream loses the content.
+{
+  const note = R.buildFileNodeModel({
+    source: { path: '/Users/x/notes/standup.md', prose: true },
+    title: undefined,
+    result: { kind: 'text', content: 'a\nb', bytes: 3, lines: 2, truncatedLines: 0, mtimeMs: 0 }
+  })
+  const code = R.buildFileNodeModel({
+    source: { path: '/Users/x/src/a.ts' },
+    title: undefined,
+    result: { kind: 'text', content: 'a\nb', bytes: 3, lines: 2, truncatedLines: 0, mtimeMs: 0 }
+  })
+  ok(110, note.prose === true && code.prose === false
+      && note.lines.length === 2 && note.heading === 'standup.md',
+    `110 — prose reaches the model and leaves an ordinary file panel alone: ` +
+    `note=${note.prose} code=${code.prose} lines=${note.lines.length}`)
+}
+
+// 111 — a note inherits M22's truncation gate UNCHANGED, and that is the half
+// worth pinning: `prose` is a rendering fact and `editable` is a safety one,
+// so an implementation that treated "this is a note, notes are for writing"
+// as a reason to bypass the gate would let a save delete every line past
+// FILE_MAX_LINES while reporting success. The editable clause for a SHORT
+// note is the non-vacuity guard — an `editable` wired to `!prose` satisfies
+// the truncated half and deletes the feature.
+{
+  const long = R.buildFileNodeModel({
+    source: { path: '/Users/x/notes/log.md', prose: true },
+    title: undefined,
+    result: { kind: 'text', content: 'a\nb', bytes: 999, lines: 40000, truncatedLines: 30000, mtimeMs: 0 }
+  })
+  const short = R.buildFileNodeModel({
+    source: { path: '/Users/x/notes/ok.md', prose: true },
+    title: undefined,
+    result: { kind: 'text', content: 'a\nb', bytes: 3, lines: 2, truncatedLines: 0, mtimeMs: 0 }
+  })
+  const missing = R.buildFileNodeModel({
+    source: { path: '/Users/x/notes/gone.md', prose: true },
+    title: undefined,
+    result: { kind: 'missing' }
+  })
+  ok(111, long.editable === false && typeof long.editableNote === 'string'
+      && short.editable === true
+      && missing.prose === true && missing.editable === false,
+    `111 — a note inherits the truncation gate unchanged: ` +
+    `long=${long.editable} short=${short.editable} missingProse=${missing.prose}`)
+}
+
+// 112 — the rail tail reads `note` for a prose panel and `file` for an
+// ordinary one, while BOTH stay never-dormant and refuse the process verbs.
+// The `file` clause is what stops a fix over-correcting into "every file
+// panel is a note"; the never-dormant clause is inherited rather than
+// re-argued — a "click to start" arrow on a panel with no process to start is
+// a promise nothing can keep, whichever way it is being painted.
+{
+  const note = { kind: 'file', rect: { id: 'f1', x: 0, y: 0, w: 640, h: 520 }, z: 1,
+    source: { path: '/Users/x/notes/standup.md', prose: true } }
+  const code = { kind: 'file', rect: { id: 'f2', x: 0, y: 0, w: 640, h: 520 }, z: 1,
+    source: { path: '/Users/x/src/a.ts' } }
+  const rows = R.buildRailRows([note, code], () => undefined, new Set(['f1', 'f2']))
+  const im = R.buildInspectorModel(note, undefined)
+  ok(112, rows[0].tail === 'note' && rows[1].tail === 'file'
+      && rows[0].dormant === false && rows[1].dormant === false
+      && rows[0].label === 'standup.md'
+      && im.kind === 'file' && im.restartable === false,
+    `112 — the rail tail says note for prose and file otherwise: ` +
+    `tails=${JSON.stringify(rows.map((r) => r.tail))} dormant=${JSON.stringify(rows.map((r) => r.dormant))}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

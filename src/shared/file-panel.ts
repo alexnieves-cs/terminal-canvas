@@ -24,6 +24,20 @@
  */
 export interface FileSource {
   path: string
+  /**
+   * M27. Render this file as PROSE — wrapped, no line-number gutter — and open
+   * it in edit mode on first mount. A note IS a file: same path, same read,
+   * same watch, same compare-and-swap write. This flag is the whole of what
+   * makes one a note, which is why it is a display fact on the SOURCE rather
+   * than a sixth `kind`: a note is not a different sort of thing, it is a
+   * different way of looking at the same thing.
+   *
+   * `true` or ABSENT, never `false`. The absent-stays-absent rule `command`,
+   * `title` and `agent` already obey — a spread that wrote `prose: undefined`
+   * puts the key in layout.json, where `'prose' in source` reads TRUE for a
+   * file panel that was never a note.
+   */
+  prose?: true
 }
 
 /**
@@ -103,4 +117,26 @@ export const BINARY_SCAN_BYTES = 8 * 1024
 export type FileWriteResult =
   | { kind: 'written'; mtimeMs: number; bytes: number }
   | { kind: 'stale'; detail: string }
+  | { kind: 'failed'; detail: string }
+
+/**
+ * What creating a note did, and why it did not.
+ *
+ * FOUR arms rather than three, and `exists` is the one that earns its own:
+ * "there is already a file called that" is a different situation with a
+ * different fix from "this write failed" — the user renames, rather than
+ * looking at their filesystem — and collapsing it into `failed` would send
+ * them to the wrong place. `refused` is the pre-flight rejection (an empty
+ * name, or one that resolves outside the root); `failed` is the filesystem
+ * saying no.
+ *
+ * Declared here rather than in main/file-create.ts, the same split FileResult
+ * and FileWriteResult already draw: the renderer's bridge signature needs this
+ * type, and shared is the one tsconfig project both main and the web bundle
+ * include.
+ */
+export type FileCreateResult =
+  | { kind: 'created'; path: string; mtimeMs: number }
+  | { kind: 'exists'; path: string }
+  | { kind: 'refused'; detail: string }
   | { kind: 'failed'; detail: string }

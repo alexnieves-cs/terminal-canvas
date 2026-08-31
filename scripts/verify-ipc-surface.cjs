@@ -167,7 +167,14 @@ app.whenReady().then(() => {
   // 46 = M23's machine:sample process-tree readout. It is an invoke rather
   // than an event because the renderer owns the deliberately slow polling
   // cadence; main returns one ps snapshot for every requested panel PID.
-  const EXPECTED_CHANNELS = 46
+  // M27 adds ONE: file:create, the note verb. 46 -> 47. It is an INVOKE, so
+  // unlike M12's session:live / M15's subagent:state / M17's usage:panel — all
+  // IPC_EVENTS sends, handled by nobody and counted by nothing — it does move
+  // this number. It is deliberately not a flag on file:write: a write is a
+  // compare-and-swap against a file that exists and a create is refused
+  // precisely because one does, so sharing a door would turn `baseMtimeMs:
+  // null` (the deliberate force-overwrite) into an accidental create.
+  const EXPECTED_CHANNELS = 47
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -440,7 +440,17 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
     warnings.push(`dropped file panel ${id}: source path was unusable`)
     return null
   }
-  return { path }
+  // M27's note flag, and it is deliberately NOT all-or-drop like `path` above.
+  // A path is the FACT a file panel is made of; `prose` is a display
+  // convenience, so a malformed one drops the FIELD and keeps the panel — the
+  // toolbox `label` precedent, and the right trade: a note that reopens as a
+  // code view is a wrong view, while a dropped panel is no view at all.
+  //
+  // Accepted only when it is EXACTLY `true`, never merely truthy: the field is
+  // declared `prose?: true`, so absent is the other half of a two-state fact
+  // rather than a third state, and coercing `"yes"` would carry a value the
+  // type says cannot exist.
+  return raw.prose === true ? { path, prose: true } : { path }
 }
 
 function parsePanel(

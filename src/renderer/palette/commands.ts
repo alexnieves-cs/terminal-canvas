@@ -291,6 +291,15 @@ export interface PaletteActions {
    * keyboard entirely.
    */
   openFile(): void
+  /**
+   * M27. Begin creating a note: prompt for a name, create the file under the
+   * selected panel's cwd, and open it as a prose file panel already in edit
+   * mode. Its own actions member rather than an argument to openFile, for the
+   * reason moveSelectionToNewWorkspace is its own: WHICH action ran is the
+   * only thing the plain-node tier can observe, and a create that could be
+   * mistaken for an open is a create nothing here could pin.
+   */
+  newNote(): void
   openJira(): void
 }
 
@@ -325,6 +334,21 @@ export interface PaletteContext {
    * every panel-acting command targets the panel the user was in.
    */
   capturedId: string | null
+  /**
+   * M27. The directory a new note would be created in, or null when there is
+   * none — the SELECTED panel's live cwd, which is the same value the file
+   * tree already roots on (Canvas.tsx's `treeRoot`).
+   *
+   * Selected rather than captured, and that is deliberate: a rail-row click
+   * selects a panel without focusing it, so a user browsing a project has it
+   * selected while some other panel still holds `capturedId`. A note belongs
+   * to the project the user is looking at.
+   *
+   * REQUIRED rather than optional, the rule `settings` above already states:
+   * an optional field lets a half-finished wiring compile with the row
+   * permanently disabled, and `tsc` says nothing.
+   */
+  noteRoot: string | null
   hasSelection: boolean
   /**
    * The rubber-band selection, as ids. A plain array rather than the Set
@@ -383,6 +407,14 @@ export const REASON_GROUP_NEEDS_TWO = 'select at least two panels to make a grou
  */
 export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
 export const REASON_NOTHING_TO_LINK = 'this canvas has only one panel'
+/**
+ * Its OWN reason rather than REASON_NO_FOCUS, because the fix is different:
+ * a note is rooted on the SELECTED panel, and selecting one is not the same
+ * gesture as focusing one — a rail click does the first and never the second.
+ * Telling a user to click into a panel when what they need is to select one
+ * sends them to the wrong gesture.
+ */
+export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -681,6 +713,25 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'spawn',
     run: () => actions.openFile()
   })
+
+  // M27. A note is a file panel in prose mode, so this sits beside Open file…
+  // as a second CREATE verb rather than anywhere new. Visible at rest for
+  // that row's reason: it is the only gesture in the app that makes one, so a
+  // hidden row would be a feature reachable only by someone who already knew
+  // it existed. Disabled-with-a-reason rather than absent when there is
+  // nowhere to put it — verify:palette 31's standing rule.
+  out.push(
+    withReason(
+      {
+        id: 'panel.new-note',
+        title: 'New note…',
+        searchText: 'new note markdown scratch write jot memo notes',
+        group: 'spawn',
+        run: () => actions.newNote()
+      },
+      ctx.noteRoot === null ? REASON_NO_NOTE_ROOT : undefined
+    )
+  )
 
   for (const preset of ctx.presets) {
     out.push(

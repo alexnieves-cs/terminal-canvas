@@ -28,6 +28,22 @@ export interface FileNodeModel {
   /** Present only for the non-text arms — the sentence that says what happened. */
   note?: string
   lines: FileLine[]
+  /**
+   * M27. Paint the body as PROSE — wrapped, no line-number gutter — rather
+   * than as numbered code, and open it in edit mode on first mount.
+   *
+   * A field on the model rather than a prop on the component, so the decision
+   * is checkable in the cheapest tier the repo has and the component branches
+   * on what it was HANDED rather than on what it was told — the same trade
+   * `editable` one field down already makes.
+   *
+   * It is deliberately NOT a second discriminated `body` union. `lines` is
+   * still built for a note and still carries the file's real numbering; what
+   * `prose` changes is how those lines are PAINTED, not what was read. A
+   * union here would force every existing consumer and every existing check
+   * to branch for a difference that is one gutter wide.
+   */
+  prose: boolean
   /** Present only when the render cap dropped something. */
   truncatedNote?: string
   /**
@@ -82,7 +98,11 @@ export function buildFileNodeModel(input: {
   const heading = input.title ?? base
   // Uneditable is the default so no arm can forget to say why; the `text`
   // arm below is the one place that overrides it.
-  const shell = { heading, directory: dir, lines: [] as FileLine[], editable: false }
+  // `prose` rides the shell, so every arm inherits it — a note that is
+  // MISSING or BINARY is still a note, and an arm that dropped the flag would
+  // paint that arm's own note text in a code view for no reason.
+  const prose = input.source.prose === true
+  const shell = { heading, directory: dir, lines: [] as FileLine[], editable: false, prose }
 
   // Undefined is the in-flight state: the read is an IPC round trip, so this
   // is every panel for its first moment. It renders a sentence rather than

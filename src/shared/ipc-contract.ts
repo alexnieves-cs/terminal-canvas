@@ -21,7 +21,7 @@ import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem } from './work-item'
-import type { FileResult, FileWriteResult } from './file-panel'
+import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
@@ -308,7 +308,19 @@ export const IPC = {
    * would make FileResult carry write outcomes it has no business knowing
    * about.
    */
-  FILE_WRITE: 'file:write'
+  FILE_WRITE: 'file:write',
+  /**
+   * M27. Create one file and refuse rather than clobber — the note verb.
+   *
+   * Its own channel rather than a flag on FILE_WRITE, because the two answer
+   * different questions and must refuse for different reasons: a write is a
+   * compare-and-swap against a file that EXISTS, and a create is refused
+   * precisely BECAUSE one does. Folding them would make `baseMtimeMs: null`
+   * — the deliberate force-overwrite a user reaches only after seeing a
+   * conflict — into an accidental create, which is the one thing this verb is
+   * built never to do.
+   */
+  FILE_CREATE: 'file:create'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -471,6 +483,23 @@ export interface ToolboxPermissionsRequest {
  * watch it arms is keyed by it. A write is a plain request/response with
  * nothing to key — the panel that issues it is not this channel's business.
  */
+/**
+ * Create a note. `root` is the directory `name` resolves against — the
+ * selected panel's cwd, so a note lands in the project it is about — and
+ * `name` is what the user typed, which may carry directories.
+ *
+ * MAIN joins the two, because the renderer has no `node:path` at all
+ * (file-node-model.ts hand-rolls `splitPath` for that reason), so a
+ * renderer-side join would be a second, worse implementation of a problem
+ * this process already has a library for.
+ */
+export interface FileCreateRequest {
+  root: string
+  name: string
+  /** Initial contents. Written atomically with the create, never appended after. */
+  seed: string
+}
+
 export interface FileWriteRequest {
   path: string
   content: string
@@ -780,6 +809,12 @@ export interface CanvasBridge {
      * (the write did not run). Never rejects.
      */
     write(req: FileWriteRequest): Promise<FileWriteResult>
+    /**
+     * Create a note. Four arms: `created`, `exists` (that name is taken and
+     * the existing bytes are UNTOUCHED), `refused` (an empty name, or one
+     * resolving outside the root), `failed`. Never rejects.
+     */
+    create(req: FileCreateRequest): Promise<FileCreateResult>
     /** Returns its own unsubscribe, like every other on* in this bridge. */
     onChanged(listener: (event: FileChangedEvent) => void): () => void
     /**

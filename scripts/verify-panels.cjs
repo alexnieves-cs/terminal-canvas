@@ -7587,6 +7587,11 @@ app.whenReady().then(async () => {
         ok('107 a review node cannot mint an id a persisted node already owns',
           subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
             minted !== collideId && new Set(finalIds).size === finalIds.length,
+          // The detail names WHICH precondition failed. Without subject/
+          // baseline in here a failure reads as "the mint went wrong" when the
+          // commonest cause is that the fixture never got a baseline to seed
+          // from — two different problems in two different files.
+          `subject=${subjectPanel} baseline=${seedBaseline ? 'yes' : 'no'} ` +
           `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
       }
 
@@ -11946,6 +11951,196 @@ app.whenReady().then(async () => {
 
       try { rmSync(M22_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
+
+    // ── M27. The note: created through the REAL palette row. ─────────────
+    //
+    // A spaced fixture directory, the standing rule after the pane-died
+    // quoting bug shipped through eight reviews on space-free paths.
+    {
+      const M27_DIR = mkdtempSync(join(tmpdir(), 'tc note panel '))
+      // A terminal panel rooted at the fixture, because the row is rooted on
+      // the SELECTED panel's cwd and there may be none left by now — M18's
+      // move and delete checks empty the active workspace, the fixture lesson
+      // check 165 already records. Spawned rather than borrowed for that
+      // reason.
+      const notePanelId = await (async () => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: M27_DIR, command: '/bin/sh', args: [], w: 400, h: 300 })
+        return waitUntil(async () => {
+          const ids = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return ids.find((id) => !before.has(id)) ?? null
+        }, 5000)
+      })()
+      // SELECTED through its rail row, never a coordinate click: cascaded
+      // spawns overlap, so a click aimed at one panel lands on whichever is
+      // top of the z-order there — check 100b's own lesson. Selection rather
+      // than focus is what the row is rooted on, and a rail click is exactly
+      // the gesture that sets one without the other.
+      await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-rail-row=${JSON.stringify(notePanelId)}] .rail-row__main')
+        if (!el) return false
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true
+      })()`)
+      await settle()
+
+      /** Drives the REAL New note… row, then the REAL input mode. */
+      const createNote = (name, key) => wc.executeJavaScript(`(async () => {
+        const nativeSet = (input, v) => {
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, v)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        let input = document.querySelector('.palette__input')
+        if (!input) return 'the palette did not open'
+        nativeSet(input, 'new note')
+        await new Promise((r) => setTimeout(r, 100))
+        const row = [...document.querySelectorAll('.palette__row')]
+          .find((r) => r.textContent.includes('New note'))
+        if (!row) return 'no New note row'
+        if (row.className.includes('palette__row--disabled')) return 'the New note row was disabled'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        input = document.querySelector('.palette__input')
+        if (!input) return 'the palette closed instead of entering input mode'
+        // Set, WAIT, and set again if it did not stick. Palette.tsx reseeds
+        // its query from inputMode.initial in an effect keyed on the mode
+        // object, so a value written before that effect lands is silently
+        // overwritten and Enter submits the DEFAULT name instead — which on
+        // the second run of this block created a differently-named note and
+        // made check 176 look like a product bug for two rounds. It is a
+        // fixture race, not a behaviour: the same 150ms happened to be enough
+        // on the first open and not on the second, when a note panel's own
+        // read and watch were also in flight.
+        for (let i = 0; i < 6; i += 1) {
+          nativeSet(input, ${JSON.stringify(name)})
+          await new Promise((r) => setTimeout(r, 120))
+          if (input.value === ${JSON.stringify(name)}) break
+        }
+        const atEnter = input.value
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true }))
+        await new Promise((r) => setTimeout(r, 600))
+        return 'ok:' + atEnter
+      })()`)
+
+      const NOTE_NAME = 'notes/standup'
+      const opened = (await createNote(NOTE_NAME, 'Enter')).split(':')[0]
+      await settle()
+
+      // 174 — the whole create path in one read: the REAL row, the REAL input
+      // mode, a REAL file on disk, and a panel that came up in EDIT MODE
+      // already holding the seed. The disk clause is what makes it a note
+      // rather than a rendering; the textarea clause is what makes it a place
+      // to write rather than one more read-out — a panel that opened in read
+      // mode satisfies "a file panel exists" completely and delivers none of
+      // this milestone.
+      {
+        const notePath = join(M27_DIR, 'notes', 'standup.md')
+        let onDisk = null
+        try { onDisk = readFileSync(notePath, 'utf8') } catch { /* reported below */ }
+        const draft = await wc.executeJavaScript(`(() => {
+          const panels = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]
+          const node = panels[panels.length - 1]
+          if (!node) return null
+          const ta = node.querySelector('[data-file-node-editor]')
+          return { id: node.getAttribute('data-panel-id'), editing: !!ta, value: ta ? ta.value : null }
+        })()`)
+        ok('174 the New note row creates a real .md on disk and opens it in edit mode',
+          opened === 'ok' && onDisk === '# standup\n\n'
+            && draft !== null && draft.editing === true && draft.value === '# standup\n\n',
+          `opened=${opened} disk=${JSON.stringify(onDisk)} draft=${JSON.stringify(draft)}`)
+      }
+
+      // 175 — typing plus Cmd+S lands the bytes ON DISK, read back off the
+      // filesystem rather than off the panel. The panel is precisely what
+      // would lie about it: a save that never ran leaves a textarea holding
+      // exactly what was typed into it, which is check 169's own rule.
+      {
+        const notePath = join(M27_DIR, 'notes', 'standup.md')
+        await wc.executeJavaScript(`(async () => {
+          const panels = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]
+          const node = panels[panels.length - 1]
+          const ta = node && node.querySelector('[data-file-node-editor]')
+          if (!ta) return 'no editor'
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype, 'value').set
+          // The escapes below are DOUBLED deliberately. This string lives
+          // inside a backtick template, so a single-backslash escape is
+          // consumed by the OUTER literal and splits the inner quoted string
+          // across real lines — a renderer-side SyntaxError that surfaces only
+          // as "Script failed to execute", pointing nowhere near this line.
+          // Note this comment carries no single-backslash escape either, for
+          // exactly the same reason.
+          setter.call(ta, '# standup\\n\\nremember the flaky test hunt\\n')
+          ta.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 80))
+          ta.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true }))
+          await new Promise((r) => setTimeout(r, 600))
+          return 'ok'
+        })()`)
+        let saved = null
+        try { saved = readFileSync(notePath, 'utf8') } catch { /* reported below */ }
+        ok('175 typing into a note and pressing Cmd+S lands the bytes on disk',
+          saved === '# standup\n\nremember the flaky test hunt\n',
+          `disk=${JSON.stringify(saved)}`)
+      }
+
+      // 176 — a DUPLICATE name re-prompts and does NOT clobber. Both clauses,
+      // because each alone passes against a different real bug: the bytes
+      // alone are satisfied by a create that silently OPENED the existing file
+      // (which is the wrong act, not a safe one — a user who asked to create
+      // ends up appending to work they did not know was there), and the
+      // re-prompt alone is satisfied by one that refused after writing.
+      {
+        const notePath = join(M27_DIR, 'notes', 'standup.md')
+        const before = readFileSync(notePath, 'utf8')
+        // Re-select the TERMINAL panel first. Creating a note selects it, and
+        // a selected note roots the next one on its OWN directory — so the
+        // same relative name would resolve to notes/notes/standup.md and be a
+        // perfectly legitimate CREATE rather than the duplicate this check is
+        // about. That cost two diagnostic rounds and is the product behaving
+        // correctly; the fixture was what assumed otherwise.
+        await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-rail-row=${JSON.stringify(notePanelId)}] .rail-row__main')
+          if (!el) return false
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          return true
+        })()`)
+        await settle()
+        const dupOpened = await createNote(NOTE_NAME, 'Enter')
+        const state = await wc.executeJavaScript(`(() => {
+          const input = document.querySelector('.palette__input')
+          const feedback = document.querySelector('.palette__feedback')
+          return {
+            overlay: !!document.querySelector('.palette'),
+            stillInInput: !!input && !document.querySelector('.palette__list'),
+            said: feedback ? feedback.textContent : null,
+            label: input ? input.placeholder : null
+          }
+        })()`)
+        const after = readFileSync(notePath, 'utf8')
+        await wc.executeJavaScript(`(async () => {
+          for (let i = 0; i < 3 && document.querySelector('.palette'); i++) {
+            const t = document.activeElement || document.body
+            t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+            await new Promise((r) => setTimeout(r, 80))
+          }
+        })()`)
+        await settle()
+        const complained = (state.said || state.label || '').includes('already')
+        ok('176 a duplicate note name re-prompts and leaves the existing file untouched',
+          after === before && state.stillInInput === true && complained,
+          `opened=${dupOpened} unchanged=${after === before} state=${JSON.stringify(state)}`)
+      }
+
+      try { rmSync(M27_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
+
 
 
   } catch (error) {

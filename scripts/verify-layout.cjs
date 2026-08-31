@@ -2583,6 +2583,69 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ bare, withOpts, capBare, capOpts }))
 }
 
+// ── M27. `prose` on a file panel's source: the note flag. ────────────────
+
+// 150 — prose:true round-trips through parseLayout with no warning of its own.
+// A note IS a file panel, so this flag is the only thing on disk that
+// distinguishes one, and losing it makes every note reopen as a code view.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'f9', kind: 'file', x: 1, y: 2, w: 640, h: 520, z: 1,
+        source: { path: '/tmp/a b/note.md', prose: true } }
+    ], camera: L.DEFAULT_CAMERA }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panel = out.snapshot.workspaces[0].panels[0]
+  ok('150 prose:true survives parseLayout',
+    panel !== undefined && panel.kind === 'file'
+      && panel.source.path === '/tmp/a b/note.md' && panel.source.prose === true
+      && !out.warnings.some((w) => w.includes('f9')),
+    JSON.stringify(panel && panel.source))
+}
+
+// 151 — a non-`true` prose value drops THE FIELD and KEEPS THE PANEL. That is
+// the toolbox `label` precedent rather than parseFileSource's own all-or-drop
+// `path` rule: a path is the fact, a note flag is a display convenience, and
+// losing the panel over it trades a wrong view for no view at all. Both
+// clauses in one read, because "prose is absent" is satisfied just as well by
+// an implementation that threw the whole panel away.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'f8', kind: 'file', x: 1, y: 2, w: 640, h: 520, z: 1,
+        source: { path: '/tmp/x.md', prose: 'yes' } }
+    ], camera: L.DEFAULT_CAMERA }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panel = out.snapshot.workspaces[0].panels[0]
+  ok('151 a non-true prose value drops the field, never the panel',
+    panel !== undefined && panel.kind === 'file' && panel.source.path === '/tmp/x.md'
+      && !('prose' in panel.source),
+    JSON.stringify(panel && panel.source))
+}
+
+// 152 — layout-adapt's own round trip, the OTHER door onto this format and the
+// one a schema-only check cannot see (check 108b's argument, for a new field).
+// The ABSENT clause is the one with teeth: a spread writes `prose: undefined`
+// into layout.json, where `'prose' in source` then reads TRUE for a file panel
+// that was never a note — the trap `command`, `title` and `agent` all record.
+{
+  const kept = L.fromPanels(L.toPanels([
+    { id: 'f7', kind: 'file', x: 1, y: 2, w: 640, h: 520, z: 3,
+      source: { path: '/tmp/n.md', prose: true } }
+  ]))[0]
+  const plain = L.fromPanels(L.toPanels([
+    { id: 'f6', kind: 'file', x: 1, y: 2, w: 640, h: 520, z: 3,
+      source: { path: '/tmp/p.txt' } }
+  ]))[0]
+  ok('152 prose survives toPanels/fromPanels and absence stays absent',
+    kept.kind === 'file' && kept.source.prose === true
+      && plain.kind === 'file' && !('prose' in plain.source)
+      && !('cwd' in plain) && !('args' in plain),
+    `kept=${JSON.stringify(kept.source)} plain=${JSON.stringify(plain.source)}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

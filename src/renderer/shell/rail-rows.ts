@@ -77,7 +77,17 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
  * every existing `verify:rail` fixture, checks 5–9 included — keeps compiling
  * and keeps meaning what it meant.
  */
-export function railTail(status: PanelStatus | undefined, dormant: boolean, kind: Panel['kind'] = 'terminal'): string {
+/**
+ * What a rail row's TAIL says, which is a display vocabulary rather than the
+ * panel union's own. It is `Panel['kind']` plus M27's `note` — a note is a
+ * file panel carrying `source.prose`, so it has no `kind` of its own and
+ * never should: making it one would move `isTerminalPanel`, both `nextIdRef`
+ * regexes, five dispose guards and three store clears to express a difference
+ * that is entirely in how the panel is painted.
+ */
+export type RailTailKind = Panel['kind'] | 'note'
+
+export function railTail(status: PanelStatus | undefined, dormant: boolean, kind: RailTailKind = 'terminal'): string {
   // Before the dormant test, because a review node is never dormant and the
   // whole status vocabulary below ('not started', 'exited 0', 'pid 4821') is
   // a sentence about a process it does not have.
@@ -86,6 +96,12 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
   // 'not started', 'exited 0' and 'pid 4821' are all sentences about a process
   // this panel does not have, and `dormant` in particular would render a
   // start control that nothing can honour.
+  // M27. A note is a file panel in prose mode, so `kind` alone cannot answer
+  // this — the tail kind is a DISPLAY kind rather than the panel union's, and
+  // 'note' is a member of it and of nothing else. A row that said `file` for a
+  // note is not wrong so much as unhelpful: the rail is where a user finds a
+  // panel again, and the whole point of a note is that it is not source.
+  if (kind === 'note') return 'note'
   if (kind === 'file') return 'file'
   // Same reason again, and the same placement BEFORE the dormant test: a
   // toolbox node owns no process, so a 'dormant' tail would render a start
@@ -127,7 +143,12 @@ export function buildRailRows(
     // reporting dormant would offer a "start" arrow for a panel with nothing
     // to start — a visible control that cannot work.
     const dormant = isTerminalPanel(panel) ? dormantIds.has(id) : false
-    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, panel.kind), dormant }
+    // A prose file panel reports the display kind `note`. Derived HERE rather
+    // than inside railTail, which is handed a kind and not a panel — and which
+    // several callers reach with nothing else in hand.
+    const tailKind: RailTailKind =
+      isFilePanel(panel) && panel.source.prose === true ? 'note' : panel.kind
+    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, tailKind), dormant }
   })
 }
 

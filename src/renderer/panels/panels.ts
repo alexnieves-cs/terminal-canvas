@@ -655,7 +655,11 @@ export function makeFilePanel(
   return {
     kind: 'file',
     rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
-    source: { path: source.path },
+    // Field by field, and `prose` conditionally — never `{ ...source }`. The
+    // spread would both share the caller's object (so a later mutation of it
+    // rewrites a panel already on the canvas) and write `prose: undefined`,
+    // which reads as present. makeReviewPanel's warning, at a sixth mint.
+    source: { path: source.path, ...(source.prose === true ? { prose: true as const } : {}) },
     z
   }
 }

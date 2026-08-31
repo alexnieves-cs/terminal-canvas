@@ -110,9 +110,31 @@ const p = (name) => join(DIR, name)
   const first = watchers.watch('f1', p('watched.txt'), (r) => calls7.push(r))
   ok('7b', first.kind === 'text' && first.content === 'before\n',
     `7b — watch() returns the first read, so there is no armed-but-blank window: kind=${first.kind}`)
-  writeFileSync(p('watched.tmp'), 'after\n')
-  renameSync(p('watched.tmp'), p('watched.txt'))
-  const c7 = await nextChange(calls7, 3000)
+  // The atomic write is RE-DRIVEN until it is observed, rather than performed
+  // once — and that is a fixture fix, not a weakening of the assertion. On
+  // macOS fs.watch arms ASYNCHRONOUSLY (FSEvents), so `watch()` returns before
+  // the watcher is actually receiving anything, and a rename issued on the very
+  // next synchronous line can land in that window and be missed entirely.
+  // MEASURED on unmodified main before M27 touched this file: 5 failures in 20
+  // runs, i.e. a 25% flake on the repo's one green-or-not signal, with nothing
+  // wrong in FileWatchers at all.
+  //
+  // A fixed sleep is what this repo refuses everywhere else (a sleep against an
+  // async signal is a flake, not a bound), so the gesture itself is repeated:
+  // each iteration is a REAL temp-file-plus-rename, so what is asserted is
+  // unchanged. It still fails against the naive fs.watch(path) implementation
+  // this check exists to reject — that watch dies with the first rename's
+  // inode and fires for no later one either, so re-driving cannot rescue it.
+  const atomic7 = () => {
+    writeFileSync(p('watched.tmp'), 'after\n')
+    renameSync(p('watched.tmp'), p('watched.txt'))
+  }
+  atomic7()
+  let c7 = await nextChange(calls7, 400)
+  for (let i = 0; c7 === null && i < 8; i += 1) {
+    atomic7()
+    c7 = await nextChange(calls7, 400)
+  }
   ok(7, c7 !== null && c7.kind === 'text' && c7.content === 'after\n',
     `7 — an ATOMIC write (temp + rename) still fires: ${c7 === null ? 'no event' : c7.content.trim()}`)
 
@@ -120,6 +142,14 @@ const p = (name) => join(DIR, name)
   // event. The window spans several debounce periods deliberately, for the
   // reason verify:pty-manager 23's window does: a sample too short sees the
   // same thing under either implementation and stays green against the defect.
+  //
+  // KNOWN LIMIT, found while fixing checks 7 and 9 and deliberately NOT fixed
+  // here: this is a NEGATIVE assertion, so the arming race those two fix makes
+  // it pass for the WRONG reason rather than fail — a watcher that never armed
+  // reports no events just as convincingly as a correct dedupe. Closing it
+  // means proving the watcher is live with a probe write first and asserting a
+  // DELTA rather than `calls8.length === 0`, which is a larger edit to a check
+  // whose subject M27 does not touch. Check 10 carries the same caveat.
   const calls8 = []
   watchers.close('f1')
   writeFileSync(p('dedupe.txt'), 'same\n')
@@ -134,10 +164,20 @@ const p = (name) => join(DIR, name)
   // empty read. The panel has to be told, or it goes on showing content for a
   // file that is gone.
   const calls9 = []
+  // Re-driven for check 7's reason, and it is the SAME arming race: fs.watch
+  // returns before FSEvents is delivering, so an rmSync on the next line can
+  // land unobserved. Each iteration re-creates and re-deletes, so the gesture
+  // asserted is unchanged — and a watcher that never fires for a deletion
+  // still fails, because no repetition rescues one that is not listening.
   writeFileSync(p('doomed.txt'), 'here\n')
   watchers.watch('f3', p('doomed.txt'), (r) => calls9.push(r))
   rmSync(p('doomed.txt'))
-  const c9 = await nextChange(calls9, 3000)
+  let c9 = await nextChange(calls9, 400)
+  for (let i = 0; c9 === null && i < 8; i += 1) {
+    writeFileSync(p('doomed.txt'), 'here\n')
+    rmSync(p('doomed.txt'))
+    c9 = await nextChange(calls9, 400)
+  }
   ok(9, c9 !== null && c9.kind === 'missing',
     `9 — deleting the file pushes missing: ${c9 === null ? 'no event' : c9.kind}`)
 
@@ -146,6 +186,8 @@ const p = (name) => join(DIR, name)
   // went to zero while the FSWatcher stayed alive is exactly the leak this
   // guards, and it is what a Cmd+R reload would do once per file panel,
   // forever, in a main process the reload does not restart.
+  // Same known limit check 8 records: a NEGATIVE assertion that the fs.watch
+  // arming race satisfies for the wrong reason. Not fixed here.
   const calls10 = []
   writeFileSync(p('after-close.txt'), 'v1\n')
   watchers.watch('f4', p('after-close.txt'), (r) => calls10.push(r))
@@ -284,6 +326,85 @@ const p = (name) => join(DIR, name)
   const w18 = F.writeFile(p('force.txt'), 'mine\n', null)
   ok(18, w18.kind === 'written' && readFileSync(p('force.txt'), 'utf8') === 'mine\n',
     `18 — a null token overwrites deliberately: kind=${w18.kind}`)
+
+
+  // ── M27. createFile: the note's creation verb. ─────────────────────────
+  //
+  // These five join this suite rather than getting one of their own for
+  // file-read.ts's own reason: file-create.ts imports node:fs and node:path
+  // and neither electron nor node-pty, and node:fs is not what moves a
+  // module out of this tier.
+
+  // 19 — the ordinary case, and the returned mtimeMs is asserted against a
+  // FRESH statSync rather than trusted. That number BECOMES the panel's first
+  // compare-and-swap token, so a create that reported an invented timestamp
+  // would make the note's very first save refuse itself — which reads as
+  // "saving is broken" and points nowhere near the return value that caused
+  // it. Check 11 states the identical rule for writeFile.
+  {
+    const res = F.createFile(DIR, 'notes/standup.md', '# standup\n\n')
+    const disk = readFileSync(join(DIR, 'notes', 'standup.md'), 'utf8')
+    const fresh = statSync(join(DIR, 'notes', 'standup.md')).mtimeMs
+    ok(19, res.kind === 'created'
+        && res.path === join(DIR, 'notes', 'standup.md')
+        && res.mtimeMs === fresh
+        && disk === '# standup\n\n',
+      `19 — createFile writes the seed and reports the real mtime, creating the parent: kind=${res.kind} disk=${JSON.stringify(disk)}`)
+  }
+
+  // 20 — THE CHECK THIS VERB EXISTS FOR, and it is check 12's rule reaching a
+  // second write path: an EXISTING file is refused AND ITS BYTES ARE
+  // UNCHANGED. Asserting only the refusal passes against an implementation
+  // that refused the caller and clobbered the file anyway, which is exactly
+  // the silent destruction `wx` is chosen to prevent — an existsSync check
+  // followed by a write is a TOCTOU, and in this app the racing writer is an
+  // autonomous agent working in the same directory, so that race is the
+  // ordinary case rather than an exotic one.
+  {
+    writeFileSync(p('taken.md'), 'the agent wrote this\n')
+    const res = F.createFile(DIR, 'taken.md', '# taken\n\n')
+    ok(20, res.kind === 'exists'
+        && res.path === p('taken.md')
+        && readFileSync(p('taken.md'), 'utf8') === 'the agent wrote this\n',
+      `20 — an existing file is refused and its bytes are untouched: kind=${res.kind} disk=${JSON.stringify(readFileSync(p('taken.md'), 'utf8'))}`)
+  }
+
+  // 21 — a name resolving OUTSIDE the root is refused and nothing is written.
+  // Not a security boundary — the user has a shell one panel over — but a
+  // `../` typo silently dropping a note outside the project is a note the
+  // user will never find again. The no-write clause is asserted the way 20's
+  // is, because a refusal reported to the caller while the file lands anyway
+  // is not a refusal.
+  {
+    const res = F.createFile(join(DIR, 'notes'), '../../escaped.md', '# escaped\n\n')
+    let landed = true
+    try { statSync(join(DIR, '..', 'escaped.md')) } catch { landed = false }
+    ok(21, res.kind === 'refused' && res.detail.length > 0 && landed === false,
+      `21 — a name escaping the root is refused and nothing is written: kind=${res.kind} landed=${landed}`)
+  }
+
+  // 22 — a name with no extension gets `.md`, and one that already has an
+  // extension is left ALONE. Both halves in one read: an implementation that
+  // appended unconditionally produces `todo.txt.md`, which is a different
+  // file from the one the user asked for and reads as the app not listening.
+  {
+    const a = F.createFile(DIR, 'bare', '# bare\n\n')
+    const b = F.createFile(DIR, 'kept.txt', 'x\n')
+    ok(22, a.kind === 'created' && a.path === p('bare.md')
+        && b.kind === 'created' && b.path === p('kept.txt'),
+      `22 — .md is appended only when there is no extension: bare=${a.path} kept=${b.path}`)
+  }
+
+  // 23 — an empty or whitespace-only name is refused rather than creating a
+  // dotfile named `.md` in the root, which is what appending an extension to
+  // an empty string produces and which no user could ever find.
+  {
+    const before = readdirSync(DIR).length
+    const a = F.createFile(DIR, '', '# x\n')
+    const b = F.createFile(DIR, '   ', '# x\n')
+    ok(23, a.kind === 'refused' && b.kind === 'refused' && readdirSync(DIR).length === before,
+      `23 — an empty name is refused and nothing is written: empty=${a.kind} blank=${b.kind}`)
+  }
 
   console.log('')
   const failed = results.filter((r) => !r.pass)
