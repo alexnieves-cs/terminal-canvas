@@ -35,5 +35,8 @@ module.exports = {
   // M23a: the nav dock's own model. Joins this bundle for the reason every
   // view model since M8c has — pure, type-only imports, and a suite of its own
   // would re-prove the same esbuild wiring for one file.
-  ...require('../src/renderer/shell/nav-dock')
+  ...require('../src/renderer/shell/nav-dock'),
+  // M23a: the context pane's tab grouping. Pure, type-only imports, and it
+  // reads nothing but the three view models this bundle already carries.
+  ...require('../src/renderer/shell/inspector-tabs')
 }

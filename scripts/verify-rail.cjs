@@ -1926,6 +1926,143 @@ const inventory = (over) => ({
   ok(113, typeof att.badge === 'number' && !/\d/.test(att.label),
     `badge=${typeof att.badge} label=${att.label}`)
 }
+
+// -------------------------------------------------- M23a inspector tabs --
+// The context pane's three tabs, grouped by QUESTION rather than by feature:
+// Detail answers "what is this panel", Work answers "what has it done and
+// what did it cost", Tools answers "what can it do". Joins this suite for the
+// reason every pure view model since M8c has — no DOM, no native dependency,
+// type-only imports, and a suite of its own would re-prove the same esbuild
+// wiring for one file.
+//
+// buildTabs takes `review` and `toolbox` BESIDE the model, and the plan's own
+// one-argument `buildTabs(model)` could not have worked: Work's Changes half
+// and the whole of Tools are separate PROPS of Inspector.tsx rather than
+// fields of InspectorModel, so a builder holding only the model would have to
+// guess Tools from the panel's KIND — a confident wrong answer for the
+// ordinary case, a terminal panel with a cwd and a real toolbox. Both are
+// OPTIONAL and defaulted to null, the trade buildInspectorModel already makes
+// four times over (`live`, `panels`, `usage`, `agent`): a required parameter
+// would change what every existing caller means while looking like a
+// widening, which is the shape this file already records for M9a's notARepo.
+
+// A model helper local to this block. Built from the REAL builder rather than
+// hand-rolled, so a change to InspectorModel's shape fails HERE rather than
+// silently leaving these checks asserting against a shape nothing produces.
+const tabModel = (over = {}) => Object.assign(
+  R.buildInspectorModel(panel('n1'), undefined), over)
+
+// A review model with something to say, and a toolbox with something to show.
+// Only `hidden` and the fields buildTabs can legitimately read are filled —
+// anything more would be this suite inventing a shape its own producer does
+// not make.
+const REVIEW_LIVE = { hidden: false, summary: '2 files changed', files: [], more: 0 }
+const REVIEW_HIDDEN = { hidden: true, summary: '', files: [], more: 0 }
+const TOOLBOX_LIVE = { hidden: false, summary: '3 skills', rows: [] }
+const TOOLBOX_HIDDEN = { hidden: true, summary: '', rows: [] }
+
+// 114. A terminal panel that never started: Detail carries its fields, and
+//      Work and Tools are EMPTY — an unpinned panel can never have a cost,
+//      nothing has reviewed it, and no inventory has been read. That is the
+//      ORDINARY case rather than an edge one: it is every panel on a restored
+//      canvas, which is exactly why an implementation that hid its empty tabs
+//      would delete two thirds of the pane on the commonest input it sees.
+//      The ids are compared against the EXPORTED constant rather than a
+//      literal, the rule verify:palette 30 was rewritten to follow: an order
+//      written down twice is an order that drifts, and the copy nobody is
+//      looking at is the one that goes stale.
+{
+  const tabs = R.buildTabs(tabModel())
+  // The `??` is not defensiveness — it is CLAUDE.md's own rule about a check
+  // that THROWS. `find` answers undefined for a tab that is not there, which
+  // is precisely the "hide the empty ones" implementation this check exists
+  // to reject, and a bare `.empty` on it ends the whole process where it
+  // stands: 115, 116 and 117 are then never reached and their green means
+  // nothing. Measured against that exact injection, not predicted.
+  const by = (id) => tabs.find((t) => t.id === id) ?? { empty: 'MISSING' }
+  ok(114,
+    tabs.map((t) => t.id).join(',') === [...R.TAB_ORDER].join(',')
+      && by('detail').empty === false
+      && by('work').empty === true
+      && by('tools').empty === true,
+    `ids=${tabs.map((t) => t.id).join(',')} detail=${by('detail').empty} work=${by('work').empty} tools=${by('tools').empty}`)
+}
+
+// 115. A kind with NO SESSION marks Work and Tools empty and still fills
+//      Detail — a review node has an identity to show and no process to have
+//      spent anything on. The clause that discriminates is DETAIL staying
+//      NON-EMPTY: an implementation that emptied every tab for a sessionless
+//      kind satisfies the first half perfectly and renders a pane with
+//      nothing in it at all, which reads as a broken pane rather than as an
+//      honest answer. The length clause is verify:palette 31's rule reaching
+//      a fourth surface — a tab that disappears is indistinguishable from a
+//      feature that was never built.
+{
+  const m = R.buildInspectorModel(reviewPanel('r1'), undefined)
+  const tabs = R.buildTabs(m)
+  const by = (id) => tabs.find((t) => t.id === id) ?? { empty: 'MISSING' }
+  ok(115,
+    by('detail').empty === false && by('work').empty === true
+      && by('tools').empty === true && tabs.length === R.TAB_ORDER.length,
+    `detail=${by('detail').empty} work=${by('work').empty} tools=${by('tools').empty} len=${tabs.length}`)
+}
+
+// 116. THE ONE WORTH KNOWING BY NUMBER, and the only check here that proves
+//      buildTabs CONSULTS its two new parameters at all. 114 and 115 are both
+//      negatives, so a builder that ignored `review` and `toolbox` entirely —
+//      answering "empty" for Work and Tools unconditionally — passes both of
+//      them perfectly and leaves the Tools tab dead forever, on every panel,
+//      with nothing thrown and nothing on screen to say the inventory was
+//      ever read.
+//
+//      Its second half is the null-versus-hidden line this repo draws
+//      everywhere else (M9a's not-a-repo versus never-started, M17's three
+//      usage states): `null` is "nobody has asked yet" and `hidden` is "the
+//      engine answered, and the answer is that there is nothing to show".
+//      They are different facts with different causes and they agree on
+//      exactly one thing — the tab has nothing in it — so both must read
+//      empty, and an implementation testing only for null would mark a tab
+//      non-empty and then render a section that draws nothing.
+{
+  const live = R.buildTabs(tabModel(), REVIEW_LIVE, TOOLBOX_LIVE)
+  const hidden = R.buildTabs(tabModel(), REVIEW_HIDDEN, TOOLBOX_HIDDEN)
+  const by = (tabs, id) => tabs.find((t) => t.id === id) ?? { empty: 'MISSING' }
+  ok(116,
+    by(live, 'work').empty === false && by(live, 'tools').empty === false
+      && by(hidden, 'work').empty === true && by(hidden, 'tools').empty === true,
+    `live work=${by(live, 'work').empty} tools=${by(live, 'tools').empty} | hidden work=${by(hidden, 'work').empty} tools=${by(hidden, 'tools').empty}`)
+}
+
+// 117. defaultTab lands on the FIRST NON-EMPTY tab in TAB_ORDER, never on an
+//      empty one: opening the pane onto a tab with nothing in it reads as a
+//      broken pane, and it is the ordinary case rather than an edge one,
+//      since Detail is the only tab with content for a panel that has not
+//      started.
+//
+//      THE SECOND CLAUSE IS THE WHOLE CHECK, and the plan had it wrong. It
+//      specified both fixtures answering 'detail' and called the second an
+//      "over-correction guard" against a hardcoded return — which it cannot
+//      be, because a `return 'detail'` satisfies both. The fixture it names
+//      empties `fields` and supplies usage, which makes Detail legitimately
+//      EMPTY and Work the first tab with anything in it, so the honest
+//      expectation is 'work' — and that is the only expectation a constant
+//      cannot satisfy. Corrected rather than relaxed, which is what the
+//      plan's own note asks for.
+//
+//      The third clause is the floor: a model with nothing anywhere must
+//      still name a tab, or the pane opens onto no tab at all.
+{
+  const bare = R.defaultTab(tabModel())
+  const workOnly = R.defaultTab(tabModel({
+    fields: [], links: [],
+    usage: { hidden: false, rows: [{ label: 'input', tokens: 10 }], turns: 1, subagentTurns: 0 }
+  }))
+  const nothing = R.defaultTab(tabModel({ fields: [], links: [] }))
+  ok(117,
+    bare === 'detail' && workOnly === 'work' && nothing === R.TAB_ORDER[0],
+    `bare=${bare} workOnly=${workOnly} nothing=${nothing}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
