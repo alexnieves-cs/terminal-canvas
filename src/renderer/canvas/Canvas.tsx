@@ -467,9 +467,16 @@ export function Canvas({
     [commitHistory]
   )
   const [openingContexts, setOpeningContexts] = useState<Map<string, string>>(() => new Map())
-  const spawnWorkItem = useCallback((item: WorkItem) => {
+  // Takes the PROVIDER as well as the item, because the context it pastes
+  // names the service. It said "Jira ticket" unconditionally until M24, which
+  // for a GitHub item would paste "Jira ticket acme/web#1" into an agent's
+  // prompt -- a confidently wrong label, on the one surface where this app's
+  // words become an agent's instructions. WORK_PROVIDER_LABEL is the same
+  // single source of truth the panel title, the rail row and the palette rows
+  // all read, so the four cannot drift.
+  const spawnWorkItem = useCallback((provider: WorkProvider, item: WorkItem) => {
     const id = `n${nextIdRef.current}`
-    setOpeningContexts((current) => new Map(current).set(id, `Jira ticket ${item.id}: ${item.title}\n\n${item.description}`))
+    setOpeningContexts((current) => new Map(current).set(id, `${WORK_PROVIDER_LABEL[provider]} ${item.id}: ${item.title}\n\n${item.description}`))
     onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
   // Mints the `w` prefix. Legacy `j` ids stay readable by both id-seed regexes
@@ -4637,7 +4644,7 @@ export function Canvas({
                 />
               )
             }
-            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnWorkItem} onConnect={paletteActions.beginSetCredential} />
+            if (isWorkPanel(panel)) return <WorkNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={(item) => spawnWorkItem(panel.provider, item)} onConnect={paletteActions.beginSetCredential} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

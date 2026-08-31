@@ -28,7 +28,7 @@ export interface InspectorProps {
   review: ReviewFieldModel | null
   /**
    * null when the selected panel has no directory at all (a review node, a
-   * file panel, a Jira panel), and `hidden` when the inventory itself says
+   * file panel, a work panel), and `hidden` when the inventory itself says
    * there is nothing to show. Two different facts, and the pane must not
    * collapse them — see buildToolboxFields' own three-state comment.
    *

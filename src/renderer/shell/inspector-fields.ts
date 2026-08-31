@@ -754,7 +754,7 @@ function activeLabel(active: ToolActive): string {
  * `buildUsageFields`' rule and M9a's `not-a-repo`/`never-started` split
  * reaching a third section.
  *
- *   - A panel with no directory (a review node, a file panel, a Jira panel)
+ *   - A panel with no directory (a review node, a file panel, a work panel)
  *     renders NOTHING. "0 skills" beside a panel that is not an agent is the
  *     confident wrong answer that teaches a user to stop believing the
  *     section.
