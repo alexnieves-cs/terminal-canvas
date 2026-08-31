@@ -11893,9 +11893,18 @@ app.whenReady().then(async () => {
     // network fence installed beside registerIpcHandlers above. Tasks 6-11
     // built the requester, the channel, the GitHub adapter, the pure model,
     // the component and the palette rows in isolation; this is the
-    // milestone's only proof those pieces are wired to each other. Numbered
-    // 172-174, appended after main's last check rather than renumbered into
-    // any gap -- a number that has ever been written down is a number
+    // milestone's only proof those pieces are wired to each other.
+    //
+    // Numbered 175-177, and they were 172-174 for one run. That was a real
+    // COLLISION rather than a near miss: M23's agent-mode block already
+    // labels its checks 172 and 173, so the suite printed two different
+    // `172`s in one log while still counting 193 and still exiting on its
+    // own merits -- exactly the silent failure CLAUDE.md's M18 merge scar
+    // records, and caught the same way that one was, by auditing the ok()
+    // LABELS rather than the comment headers. The labels are the numbers a
+    // reader sees and the only ones a check reports; a scan over the headers
+    // finds nothing. Appended past M23's last rather than renumbered into
+    // any gap, because a number that has ever been written down is a number
     // somebody may already be citing.
     // ---------------------------------------------------------------------
     {
@@ -11909,7 +11918,7 @@ app.whenReady().then(async () => {
         return id === null ? false : id
       }, 5000)
 
-      // 172 — the panel renders REAL items from the adapter, under BOTH group
+      // 175 — the panel renders REAL items from the adapter, under BOTH group
       //     labels. The GROUP clause is what separates this from a check a
       //     flat list would pass just as well: the entire surface widening in
       //     this milestone is that the panel says which pile an item is in,
@@ -11927,14 +11936,14 @@ app.whenReady().then(async () => {
         })()`)
         return read !== null && read.labels.length === 2 ? read : false
       }, 8000)
-      ok('172 a github work panel renders both groups and their real items',
+      ok('175 a github work panel renders both groups and their real items',
         seen !== null &&
           seen.labels[0] === 'Assigned to you' && seen.labels[1] === 'Awaiting your review' &&
           seen.ids.some((text) => text.includes('acme/web#1')) &&
           seen.ids.some((text) => text.includes('acme/api#9')),
         JSON.stringify(seen))
 
-      // 173 — check 103's argument applied to a SIXTH kind. The panel holds
+      // 176 — check 103's argument applied to a SIXTH kind. The panel holds
       //     no PanelSession, read from __m4aSessions (the RENDERER's own
       //     registry, not pty:list), and the .xterm count is unchanged FROM
       //     BEFORE the node existed. The second clause is what rejects an
@@ -11945,11 +11954,11 @@ app.whenReady().then(async () => {
         sessions: Object.keys(window.__m4aSessions()),
         xterms: document.querySelectorAll('.xterm').length
       })`)
-      ok('173 a work panel holds no session and costs no WebGL context',
+      ok('176 a work panel holds no session and costs no WebGL context',
         workId !== null && !after.sessions.includes(workId) && after.xterms === xtermsBefore,
         `work=${String(workId)} xterms ${xtermsBefore} -> ${after.xterms}`)
 
-      // 174 — closing it sends NO pty.kill for its id, asserted against the
+      // 177 — closing it sends NO pty.kill for its id, asserted against the
       //     SHADOWED recorder rather than by absence of a crash: a kill aimed
       //     at an id naming no session is swallowed at every layer below the
       //     IPC door (the direct backend's destroy is a no-op, tmux's cli
@@ -11984,7 +11993,7 @@ app.whenReady().then(async () => {
       if (termId3 !== null) await clickPanelClose(wc, termId3)
       await settle()
       const killsSince = killedPanelIds.slice(killsBefore)
-      ok('174 closing a work panel sends no pty.kill, while a terminal close still does',
+      ok('177 closing a work panel sends no pty.kill, while a terminal close still does',
         workId !== null && termId3 !== null &&
           !killsSince.includes(workId) && killsSince.includes(termId3),
         `work=${String(workId)} terminal=${String(termId3)} kills=${JSON.stringify(killsSince)}`)

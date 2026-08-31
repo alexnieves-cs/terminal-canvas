@@ -1563,7 +1563,7 @@ git commit -m "feat(m24): one always-visible palette row per work provider"
 ### Task 12: End to end in a real renderer
 
 **Files:**
-- Modify: `scripts/panels-entry.cjs` (stub the requester), `scripts/verify-panels.cjs` (checks 172–174)
+- Modify: `scripts/panels-entry.cjs` (stub the requester), `scripts/verify-panels.cjs` (checks 175–177 (drafted as 172–174; M23 already held those))
 
 **Interfaces:**
 - Consumes: everything above.
@@ -1576,7 +1576,7 @@ git commit -m "feat(m24): one always-visible palette row per work provider"
 - [ ] **Step 2: Write the three failing checks**
 
 ```js
-// 172. The panel renders REAL items from the adapter, under BOTH group labels.
+// 175. The panel renders REAL items from the adapter, under BOTH group labels.
 // The group clause is what separates this from a check a flat list would pass:
 // the whole surface widening is that the panel says which pile an item is in.
 {
@@ -1589,14 +1589,14 @@ git commit -m "feat(m24): one always-visible palette row per work provider"
       ids: [...node.querySelectorAll('.work-node__item strong')].map((el) => el.textContent)
     }
   })()`)
-  ok('172 a github work panel renders both groups and their real items',
+  ok('175 a github work panel renders both groups and their real items',
     seen !== null && seen.labels.length === 2 &&
       seen.labels[0] === 'Assigned to you' && seen.labels[1] === 'Awaiting your review' &&
       seen.ids.some((text) => text.includes('acme/web#1')),
     JSON.stringify(seen))
 }
 
-// 173. Check 103's argument applied to a SIXTH kind. The panel holds no
+// 176. Check 103's argument applied to a SIXTH kind. The panel holds no
 // PanelSession, and the .xterm count is unchanged FROM BEFORE the node existed
 // — the second clause is what rejects an implementation that quietly demoted
 // some other panel to pay for this one, which "no xterm" alone is satisfied by.
@@ -1605,12 +1605,12 @@ git commit -m "feat(m24): one always-visible palette row per work provider"
     sessions: Object.keys(window.__m4aSessions()),
     xterms: document.querySelectorAll('.xterm').length
   })`)
-  ok('173 a work panel holds no session and costs no WebGL context',
+  ok('176 a work panel holds no session and costs no WebGL context',
     !after.sessions.includes(workId) && after.xterms === xtermsBefore,
     `xterms ${xtermsBefore} -> ${after.xterms}`)
 }
 
-// 174. Closing it sends NO pty.kill for its id — asserted against a SHADOWED
+// 177. Closing it sends NO pty.kill for its id — asserted against a SHADOWED
 // recorder, never by absence of a crash, because a kill aimed at an id naming
 // no session is swallowed at every layer below the IPC door. The positive half
 // is in the SAME window: a real terminal panel closed here IS recorded, or the
@@ -1621,7 +1621,7 @@ git commit -m "feat(m24): one always-visible palette row per work provider"
   await closePanel(wc, workId)
   await closePanel(wc, termId)
   const kills = await wc.executeJavaScript('window.__m24Kills')
-  ok('174 closing a work panel kills nothing, while a real terminal close is recorded',
+  ok('177 closing a work panel kills nothing, while a real terminal close is recorded',
     !kills.includes(workId) && kills.includes(termId),
     `kills=${JSON.stringify(kills)}`)
 }
