@@ -503,6 +503,64 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     offenders.length ? offenders.join(',') : `${stores} stores, none numbered`)
 }
 
+// The two checks below arrived from the M24 Jira-writes branch numbered 22 and
+// 23 — the same integers main had independently just used above. That is the
+// exact collision check 22 exists to catch, and it would have flagged itself
+// here. Renumbered to scoped ids on merge, per CLAUDE.md's convention: a NEW
+// check takes a SCOPED id, never the next global integer.
+// jira-write.1 / jira-write.2. M24's rule: NO AGENT-REACHABLE PATH TRIGGERS A JIRA WRITE. Both
+// checks read source text rather than behaviour, for check 20 and 21's own
+// reason — a violation has NO RUNTIME SYMPTOM. Add a channel that let an
+// agent's output drive a write and the app works exactly as it does now,
+// plus one capability nobody asked for.
+//
+// Both reads are COMMENT-STRIPPED, because jira-client.ts and ipc-contract.ts
+// each carry prose naming the very things that must not appear — a bare
+// substring search fails against the correct tree.
+//
+// jira-write.1 is an ALLOWLIST, never a test for a forbidden spelling. Testing for
+// `jira:delete` would pin THAT spelling and let a sibling named
+// JIRA_DELETE_ISSUE sail through, which is exactly the trap check 20 records.
+//
+// jira-write.1 CARRIES A THIRD LIMIT OF ITS OWN, beside the two 23 records below, and it
+// is stated here so a green run is not over-read: this is a PREFIX-KEYED
+// allowlist. It matches /JIRA_[A-Z_]+/ inside the `IPC` object alone, so a
+// write channel named without that prefix — WORKITEM_DELETE, TICKET_UPDATE —
+// is invisible to it, as is anything added to IPC_EVENTS. That is inherent to
+// keying on a prefix and is the right trade (the alternative, an allowlist
+// over EVERY channel, goes red on every unrelated milestone and is therefore
+// the kind that gets widened until it means nothing), but it means a green jira-write.1
+// says "no unexpected JIRA_* invoke exists", never "no write channel exists".
+{
+  const contract = stripComments(read('src/shared/ipc-contract.ts') ?? '')
+  const objMatch = contract.match(/export const IPC = \{([\s\S]*?)\n\} as const/)
+  const body = objMatch ? objMatch[1] : ''
+  const keys = [...body.matchAll(/\bJIRA_[A-Z_]+\b/g)].map((m) => m[0])
+  const ALLOWED = ['JIRA_LIST', 'JIRA_TRANSITIONS', 'JIRA_COMMENT', 'JIRA_TRANSITION']
+  const unexpected = keys.filter((k) => !ALLOWED.includes(k))
+  const missing = ALLOWED.filter((k) => !keys.includes(k))
+
+  ok('jira-write.1 the JIRA_* channel set is exactly {list,transitions,comment,transition}',
+    objMatch !== null && unexpected.length === 0 && missing.length === 0,
+    `parsed=${objMatch !== null} unexpected=${JSON.stringify(unexpected)} missing=${JSON.stringify(missing)}`)
+}
+
+// jira-write.2 carries the SAME two honest limits check 21 records, and they are stated
+// here rather than left for a reader to discover: it greps each offender
+// file's OWN source, so a second hop through some other, non-Jira module is
+// unchecked; and the three-file offender list is a HARDCODED SNAPSHOT of "the
+// modules that build a process environment" as of M24, so a fourth such
+// module added later is unchecked by construction. A green run means these
+// shapes hold. It is not proof the rule holds.
+{
+  const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/session-backend.ts']
+    .filter((f) => /jira-client/.test(stripComments(read(f) ?? '')))
+
+  ok('jira-write.2 no env-building module imports the Jira client',
+    offenders.length === 0,
+    offenders.length ? offenders.join(',') : 'none')
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

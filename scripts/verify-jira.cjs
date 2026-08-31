@@ -1,4 +1,4 @@
-/* Offline contract checks for M17's Jira adapter.  The requester is injected:
+/* Offline contract checks for M24's Jira adapter (built in M19, extended in M24).  The requester is injected:
    npm run verify is the repo's one green-or-not signal and must not call Jira. */
 'use strict'
 const { existsSync } = require('node:fs')
@@ -70,6 +70,130 @@ void (async () => {
     item?.id === 'TC-12' && item.title === 'Ship Jira context' && item.description === 'First line\nSecond line' &&
       item.assignee === 'Ada Lovelace' && item.state === 'In Progress' && item.url === 'https://acme.atlassian.net/browse/TC-12' &&
       request?.url.includes('/rest/api/3/search/jql') && request?.url.includes('maxResults=50'))
+
+  // 6. The seam that keeps this suite offline. `method` is REQUIRED on the
+  //    record rather than optional-with-a-GET-default: an optional field lets
+  //    a write function that forgot to set it silently perform a GET against a
+  //    POST endpoint, which returns something plausible instead of failing.
+  ok('6 the requester contract carries an explicit method',
+    request?.method === 'GET')
+
+  // 7. textToAdf is the deliberate INVERSE of adfText, so the pair is asserted
+  //    as a ROUND TRIP rather than as two independent guesses about a format
+  //    this repo does not own. A blank line between paragraphs is included
+  //    because that is the case a naive one-paragraph builder loses.
+  const SOURCE = 'First line\nSecond line\n\nAfter a blank'
+  ok('7 textToAdf and adfText are inverses over the text a comment can hold',
+    typeof J.textToAdf === 'function' && typeof J.adfText === 'function' &&
+      J.adfText(J.textToAdf(SOURCE)).trim() === SOURCE)
+
+  // A requester that records EVERY call, so the zero-call assertions below
+  // are about a probe that was demonstrably alive rather than about silence.
+  const recorder = (reply) => {
+    const calls = []
+    return { calls, requester: async (r) => { calls.push(r); return reply(r) } }
+  }
+
+  const tRec = recorder(() => ({ status: 200, body: JSON.stringify({ transitions: [
+    { id: '31', name: 'Done', to: { name: 'Done' } },
+    { id: '21', name: 'In Progress', to: { name: 'In Progress' } },
+    { id: 'skip-me' }
+  ] }) }))
+  const transitions = typeof J.listWorkItemTransitions === 'function'
+    ? await J.listWorkItemTransitions({ store: store(BUNDLE), requester: tRec.requester }, 'TC-12')
+    : null
+  ok('8 transitions are read per issue and mapped to a neutral shape',
+    transitions?.kind === 'transitions' && transitions.transitions.length === 2 &&
+      transitions.transitions[0].id === '31' && transitions.transitions[0].name === 'Done' &&
+      transitions.transitions[0].toState === 'Done' &&
+      tRec.calls[0]?.method === 'GET' &&
+      tRec.calls[0]?.url === 'https://acme.atlassian.net/rest/api/3/issue/TC-12/transitions')
+
+  const cRec = recorder(() => ({ status: 201, body: '{}' }))
+  const commented = typeof J.commentOnWorkItem === 'function'
+    ? await J.commentOnWorkItem({ store: store(BUNDLE), requester: cRec.requester }, 'TC-12', 'Agent finished\nSecond line')
+    : null
+  const sentBody = (() => { try { return JSON.parse(cRec.calls[0]?.body ?? 'null') } catch { return null } })()
+  ok('9 a comment POSTs ADF that flattens back to what was typed',
+    commented?.kind === 'done' && cRec.calls[0]?.method === 'POST' &&
+      cRec.calls[0]?.url === 'https://acme.atlassian.net/rest/api/3/issue/TC-12/comment' &&
+      cRec.calls[0]?.headers['Content-Type'] === 'application/json' &&
+      J.adfText(sentBody?.body).trim() === 'Agent finished\nSecond line')
+
+  const xRec = recorder(() => ({ status: 204, body: '' }))
+  const moved = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: xRec.requester }, 'TC-12', '31')
+    : null
+  ok('10 a transition POSTs the chosen id and treats 204 as success',
+    moved?.kind === 'done' && xRec.calls[0]?.method === 'POST' &&
+      xRec.calls[0]?.url === 'https://acme.atlassian.net/rest/api/3/issue/TC-12/transitions' &&
+      JSON.parse(xRec.calls[0]?.body ?? 'null')?.transition?.id === '31')
+
+  // 11. The rule verify:jira 4 states for the read path, restated for all
+  //     three new channels at once. A write attempted with no stored
+  //     credential must not reach the network to find that out.
+  const nRec = recorder(() => ({ status: 200, body: '{}' }))
+  const noCred = typeof J.commentOnWorkItem === 'function' ? [
+    await J.listWorkItemTransitions({ store: store(undefined), requester: nRec.requester }, 'TC-12'),
+    await J.commentOnWorkItem({ store: store(undefined), requester: nRec.requester }, 'TC-12', 'hi'),
+    await J.transitionWorkItem({ store: store(undefined), requester: nRec.requester }, 'TC-12', '31')
+  ] : []
+  ok('11 all three channels refuse a missing credential with zero requests',
+    noCred.length === 3 && noCred.every((r) => r.kind === 'no-credential') && nRec.calls.length === 0)
+
+  // 12. The split this milestone adds, and the reason it is two arms: a board
+  //     declining a transition and Jira being unreachable have two different
+  //     fixes. A check asserting only "not done" passes against the collapse.
+  const refused = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: async () => ({
+      status: 400, body: JSON.stringify({ errorMessages: ['Transition is not valid for this issue.'] })
+    }) }, 'TC-12', '31')
+    : null
+  const down = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: async () => { throw new Error('ECONNREFUSED') } }, 'TC-12', '31')
+    : null
+  ok('12 a 400 is refused with Jira\'s own message; an unreachable Jira is not',
+    refused?.kind === 'refused' && refused.reason === 'Transition is not valid for this issue.' &&
+      down?.kind === 'unavailable')
+
+  // 13. An empty comment is refused BEFORE the network, like a missing
+  //     credential — the panel's Send is disabled for it, so reaching this
+  //     branch at all means something upstream changed.
+  const eRec = recorder(() => ({ status: 201, body: '{}' }))
+  const empty = typeof J.commentOnWorkItem === 'function'
+    ? await J.commentOnWorkItem({ store: store(BUNDLE), requester: eRec.requester }, 'TC-12', '   ')
+    : null
+  ok('13 an empty comment is refused with zero requests',
+    empty?.kind === 'refused' && eRec.calls.length === 0)
+
+  // 14. One status mapping, not two. The transitions READ is the path
+  //     `Move…` hits FIRST, so it is where "you cannot move this ticket" is
+  //     DISCOVERED — and Jira answers 404 for an issue the account may not
+  //     browse, which is a permission answer wearing a not-found status. A
+  //     404 here must therefore land in the same arm a 404 from a WRITE does,
+  //     asserted as an EQUALITY between the two rather than against a literal
+  //     'refused': a check written against the literal stays green when one
+  //     side is later changed and the other is not, which is precisely the
+  //     two-copies-of-one-rule drift that made these two disagree to begin
+  //     with. Both reasons carry Jira's own sentence for the same reason.
+  const readMissing = typeof J.listWorkItemTransitions === 'function'
+    ? await J.listWorkItemTransitions({ store: store(BUNDLE), requester: async () => ({
+      status: 404, body: JSON.stringify({ errorMessages: ['Issue does not exist or you do not have permission to see it.'] })
+    }) }, 'TC-12')
+    : null
+  const writeMissing = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: async () => ({
+      status: 404, body: JSON.stringify({ errorMessages: ['Issue does not exist or you do not have permission to see it.'] })
+    }) }, 'TC-12', '31')
+    : null
+  const readDown = typeof J.listWorkItemTransitions === 'function'
+    ? await J.listWorkItemTransitions({ store: store(BUNDLE), requester: async () => ({ status: 503, body: '' }) }, 'TC-12')
+    : null
+  ok('14 a 404 on the transitions READ takes the same arm as a 404 on a write',
+    readMissing?.kind === writeMissing?.kind && readMissing?.kind === 'refused' &&
+      readMissing.reason === 'Issue does not exist or you do not have permission to see it.' &&
+      readDown?.kind === 'unavailable',
+    `read=${readMissing?.kind} write=${writeMissing?.kind} down=${readDown?.kind}`)
 
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)

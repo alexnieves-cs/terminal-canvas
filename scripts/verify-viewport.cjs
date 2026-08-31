@@ -1288,7 +1288,7 @@ ok('74 a panel with no kind is not a review panel',
   const refusedKind = V.setRestartOnExit(bToC, 'a', 'f', true)
   const disabled = V.setRestartOnExit(bToC, 'a', 'b', false)
   const link = V.linksOf(aToB[0])[0]
-  ok('93 restart-on-exit is terminal-only, preserves labels, disables, and refuses cycles',
+  ok('restart-on-exit.1 restart-on-exit is terminal-only, preserves labels, disables, and refuses cycles',
     link.label === 'feeds' && link.automation?.enabled === true &&
     refusedCycle === bToC && refusedKind === bToC &&
     V.linksOf(disabled[0])[0].automation?.enabled === false,

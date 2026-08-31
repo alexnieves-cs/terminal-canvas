@@ -3266,7 +3266,11 @@ export function Canvas({
     // a parallel one, the rule __m13Open already obeys.
     w.__m20Toolbox = (cwd: string, label: string): void =>
       openToolboxPanel(cwd, label, worldCentre())
-  }, [openFilePanel, worldCentre])
+    // M24's mint, through the SAME openJiraPanel the palette row calls — so
+    // the hook proves the real gesture rather than a parallel mint, the rule
+    // __m13Open and __m20Toolbox already obey.
+    w.__m24Jira = (): void => openJiraPanel()
+  }, [openFilePanel, worldCentre, openJiraPanel])
 
   /**
    * A node committed. Advance ITS OWN stored baseline to the commit it just
@@ -5130,7 +5134,7 @@ export function Canvas({
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

@@ -2,8 +2,9 @@ import { useEffect, useState, type JSX } from 'react'
 import type { JiraPanel } from '@renderer/panels/panels'
 import type { WorkItem } from '@shared/work-item'
 import type { DragState } from '@renderer/canvas/panel-interaction'
+import { JiraTicket } from '@renderer/jira/JiraTicket'
 
-export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string, additive?: boolean): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void }): JSX.Element {
+export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string, additive?: boolean): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void; focusedId: string | null; restoreFocus(id: string): void }): JSX.Element {
   const { panel } = props
   const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.jira.list>> | null>(null)
   const load = (): void => { void window.canvas.jira.list().then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'Jira could not be reached.' })) }
@@ -13,7 +14,11 @@ export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(
       <span className="panel__title">{panel.title ?? 'Jira tickets'}</span><button type="button" className="jira-node__refresh" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); load() }}>⟳</button><button type="button" className="panel__close" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); props.onClose(panel.rect.id) }}>×</button>
     </header>
     <div className="jira-node__body" data-scroll-host onMouseDown={(e) => { e.stopPropagation(); props.onFocus(panel.rect.id) }}>
-      {result === null ? <p>Loading Jira tickets…</p> : result.kind === 'items' ? result.items.length === 0 ? <p>No assigned tickets.</p> : result.items.map((item) => <article className="jira-node__item" key={item.id}><strong>{item.id}: {item.title}</strong><small>{item.state ?? 'No state'}{item.assignee ? ` · ${item.assignee}` : ''}</small><p>{item.description || 'No description.'}</p><button type="button" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); props.onSpawn(item) }}>Start session</button></article>) : <p className="jira-node__note">{result.reason}</p>}
+      {result === null ? <p>Loading Jira tickets…</p> : result.kind === 'items' ? result.items.length === 0 ? <p>No assigned tickets.</p> : result.items.map((item) => <JiraTicket
+        key={item.id} item={item}
+        focusedId={props.focusedId} restoreFocus={props.restoreFocus}
+        onSpawn={props.onSpawn} onWritten={load}
+      />) : <p className="jira-node__note">{result.reason}</p>}
     </div>
   </div>
 }

@@ -249,7 +249,7 @@ A theme the user picks — light or dark — plus, presumably, "follow the syste
   so it can say the stylesheet obeys the rules and nothing at all about whether the app
   looks right. There is no visual regression test in this repo, deliberately.
 
-## 12. Jira connection — landed in M19; writes, Server/DC, OAuth and a second provider are what's left
+## 12. Jira connection — reads landed in M19 and the two writes in M24; Server/DC, OAuth and a second provider are what's left
 
 **M19 shipped the Jira Cloud read path AND the handoff this entry called "the version worth
 building".** Jira is deliberately the first #9 tier-2 implementation rather than an invented
@@ -269,12 +269,42 @@ goes through M14's store, so this integration **inherited a boundary rather than
 one** — which is what #9's design-pass bullet said the first tier-2 implementation should be
 able to do.
 
+**M24 made the decision this entry said had not been made, and settled it narrowly.** The
+read-only-first constraint was a stance rather than a scope cut — writing to Jira from an app
+where agents run arbitrary commands is a meaningfully different risk posture than reading —
+and what shipped is the smallest thing that answers it: exactly **two verbs**, comment and
+transition, on a ticket the panel is already showing. Both are reached **only from a human
+gesture** in the renderer; there is no channel taking a panel id and nothing main can call on
+a PTY's behalf, so no agent-reachable path triggers a write. That rule has **no runtime symptom
+when broken** — add such a path and the app works exactly as it does now, plus one capability
+nobody asked for — so it is pinned as **source text** rather than as behaviour, by `verify:meta`
+22 (the `JIRA_*` channel set asserted exactly equal to {list, transitions, comment, transition},
+an allowlist so a fifth cannot arrive unremarked) and 23 (no module that builds a process
+environment imports the Jira client), with both of 23's honest limits stated in its own comment
+rather than left to be discovered. **Transition screens are explicitly still open**: a Jira
+workflow can require fields at transition time, and this app neither collects nor renders them,
+so a transition into such a screen is refused with Jira's own sentence rather than handled.
+
 What's still open:
 
-- **Writes — transitioning a ticket, commenting.** The original read-only-first constraint
-  stands unchanged and was a stance rather than a scope cut: writing to Jira from an app where
-  agents run arbitrary commands is a meaningfully different risk posture than reading. Ship
-  reads, then decide about writes deliberately — that decision has not been made.
+- **One declaration for the three Jira result types.** `JiraListResult`,
+  `JiraTransitionsResult` and `JiraWriteResult` are each declared TWICE — in
+  `main/jira-client.ts` and again in `shared/ipc-contract.ts` — because that is how M19
+  left `JiraListResult` and M24 followed the established pattern rather than making the
+  new pair the odd ones out. `ipcMain.handle` is not typed by the contract, so the two
+  copies can drift with `tsc` silent, and the failure is one-directional and quiet:
+  rename a field in `jira-client.ts` alone and the renderer reads `undefined`, rendering
+  an empty transition list — indistinguishable from a ticket with no legal moves, which
+  is a routine state. The fix is small (`import type` is erased by esbuild, so the
+  plain-node verify tier is untouched) and the evidence for it is a measurement rather
+  than a principle: M24's own final fix round had to edit the same three-line type in two
+  files and confirm the match by reading a diff, which nothing enforces. Unify all three
+  at once — fixing only the new pair recreates the asymmetry that produced this.
+  **`listAssignedWorkItems` is where the same drift recurs next**: it still maps HTTP
+  statuses inline rather than through `statusFailure`, correctly for now (a different
+  union answering a different question), and the day it grows a `refused` arm is the day
+  that inline copy has to agree with a mapping it does not share.
+
 - **Server / Data Center.** A different auth story entirely, and still unaddressed. Cloud was
   assumed and said so, which is what this entry asked for.
 - **OAuth 3LO**, per the deferral above.

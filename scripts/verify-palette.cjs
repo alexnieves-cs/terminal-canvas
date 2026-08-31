@@ -304,7 +304,7 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   const ready = byId(P.buildCommands(activeContext), 'canvas.broadcast-input')
   ready.run()
   const stop = byId(P.buildCommands(ctx({ selectedIds: ['n1', 'n2'], broadcastActive: true })), 'canvas.broadcast-input')
-  ok('85 broadcast input is explicit, target-counted and disabled without two live terminals',
+  ok('broadcast-input.1 broadcast input is explicit, target-counted and disabled without two live terminals',
     disabled !== undefined && disabled.disabledReason === P.REASON_BROADCAST_NEEDS_TWO &&
       ready !== undefined && ready.disabledReason === undefined &&
       activeContext.actions.calls[0][0] === 'toggleBroadcastInput' &&

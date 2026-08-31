@@ -175,7 +175,22 @@ app.whenReady().then(() => {
   // diagnostics:export) — main's own IPC send rate, and the atomic write of
   // the renderer's already-scrubbed bundle. Both are pull-only invokes, the
   // same shape machine:sample already established.
-  const EXPECTED_CHANNELS = 48
+  // 49 = 48 plus M27's file:create. Deliberately not a flag on file:write: a
+  // write is a compare-and-swap against a file that EXISTS and a create is
+  // refused precisely BECAUSE one does. This count was left at 48 when M27
+  // merged, so main carried a RED verify:ipc until the M24 merge below
+  // recomputed it — the fifth time this file's own arithmetic has gone stale
+  // at a merge, and the reason the number lives here and not only in prose.
+  // 52 = 49 plus M24's three: jira:transitions (the legal next states for one
+  // issue, its own channel rather than a field on jira:list — see
+  // IPC.JIRA_TRANSITIONS' own comment) and the two Jira writes, jira:comment
+  // and jira:transition. Both sides of that merge independently declared 48
+  // from different additions (main: machine:sample + two diagnostics; M24:
+  // the three Jira channels), so the literal agreed while the arithmetic
+  // did not — git reported no conflict on the number itself, only on the
+  // comments above it. Recompute from Object.values(IPC), never by adding
+  // your own branch's delta to whatever this line last said.
+  const EXPECTED_CHANNELS = 52
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
