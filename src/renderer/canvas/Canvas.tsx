@@ -4668,6 +4668,7 @@ export function Canvas({
                   focusedId={focusedId}
                   readOnly={merged}
                   onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }
@@ -4693,6 +4694,7 @@ export function Canvas({
                   focusedId={focusedId}
                   readOnly={merged}
                   onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }
@@ -4711,10 +4713,11 @@ export function Canvas({
                   onClose={onClosePanel}
                   readOnly={merged}
                   onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} readOnly={merged} onBeginLink={onBeginLink} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={panel.rect.id === selectedId} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

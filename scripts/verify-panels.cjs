@@ -12316,6 +12316,15 @@ app.whenReady().then(async () => {
       //      the file. Ruling P7: hoisting one out would couple two
       //      unrelated fixtures, this suite's most common check failure. A
       //      one-line file is written into its own spaced temp directory.
+      //
+      //      FIX ROUND 1 extends this check with the ring clause below
+      //      (`midFileTarget`) rather than adding a new check, per the
+      //      coordinator's ruling: the original body proved presence and
+      //      merged-view absence only, and said nothing about whether
+      //      `linkTarget`/`data-link-target` — the RING — is ever wired for
+      //      a non-terminal kind. It was not: `onBeginLink` being required
+      //      on all four protected nothing there, because a prop a
+      //      component never declares has nothing to omit.
       {
         const m24PortsDir = mkdtempSync(join(tmpdir(), 'tc panels m24 ports '))
         const m24PortsFixture = join(m24PortsDir, 'ports.md')
@@ -12342,6 +12351,61 @@ app.whenReady().then(async () => {
 
         const onFile = fileId ? await portBox(fileId, 'e') : null
         const onTerminal = await portBox(M24_A, 'e')
+
+        // Fix round 1's finding: onBeginLink being required on all four kinds
+        // says nothing about whether the RING (`linkTarget`) is ever wired,
+        // because a component that never DECLARES a prop has nothing to omit
+        // for requiredness to catch — `onBeginLink` was protected by
+        // `<PanelPorts>` not compiling without it, `linkTarget` had no such
+        // forcing function anywhere in the four. So this drags for REAL from
+        // the terminal panel's own port toward the file panel just minted,
+        // and reads the DOM mid-gesture (pressPort/movePortTo/releasePort,
+        // check 177's split of dragPortTo) for the target's OWN
+        // data-panel-id — check 58's rule: a ring on the wrong panel still
+        // renders A ring, so "does [data-link-target] exist anywhere" would
+        // pass against exactly the regression this clause exists to catch.
+        // Released cleanly afterward (readOnly is false throughout this
+        // sub-block, so the drop actually resolves and completes rather than
+        // leaving a draw in flight for the merged-view read below).
+        //
+        // A file panel opens at the CURRENT viewport's world centre
+        // (__m13Open -> worldCentre()), which after the M13 block's own
+        // railGoTo(M24_B) is right on top of the whole tight 260-unit M24
+        // A/B/C/dormant cluster — and the file panel's default size (640x520
+        // here) is large enough to cover all four of them entirely. Minted
+        // AFTER them, it also paints ABOVE them, so a raw mousedown at
+        // M24_A's port screen coordinate lands on the FILE PANEL's own body,
+        // not on the port underneath it — confirmed by a debug read during
+        // this fix: pressing there produced no ghost and no `canvas--linking`
+        // class at all, i.e. the gesture never began, before this
+        // railGoTo(M24_A) was added. `railGoTo` selects AND raises (the same
+        // selectAndRaise every rail click already uses), which puts M24_A's
+        // whole DOM subtree — port included — back on top of the file panel
+        // in paint order, so the port genuinely receives the mousedown. Both
+        // boxes are recomputed AFTER this call: the raise does not move
+        // anything, but it is still a fresh read rather than reusing values
+        // captured before the click, on the same discipline check 176's
+        // `port2` re-read after its own far drag already applies.
+        await railGoTo(M24_A)
+        const onTerminalRaised = await portBox(M24_A, 'e')
+        const fileBox = fileId ? await panelBox(fileId) : null
+        let midGhost = null
+        let midFileTarget = null
+        if (onTerminalRaised && onTerminalRaised.zero !== true && fileBox) {
+          pressPort(onTerminalRaised)
+          movePortTo(onTerminalRaised, { x: Math.round(fileBox.cx), y: Math.round(fileBox.cy) })
+          await settle()
+          // The non-vacuity pairing check 177 already establishes: a ghost
+          // that genuinely never painted (a gesture that silently failed to
+          // begin) would satisfy "no ring on the file panel" for a reason
+          // that has nothing to do with the ring's own wiring.
+          midGhost = await wc.executeJavaScript(
+            `document.querySelector('.link-layer__ghost') !== null`)
+          midFileTarget = await wc.executeJavaScript(
+            `document.querySelector('[data-panel-id="${fileId}"][data-link-target]') !== null`)
+          await releasePort({ x: Math.round(fileBox.cx), y: Math.round(fileBox.cy) })
+        }
+
         // Enter the merged view; ports must vanish on BOTH, because geometry
         // and links are read-only there and addLink would write to a
         // workspace record this canvas does not own.
@@ -12351,11 +12415,13 @@ app.whenReady().then(async () => {
         const mergedTerminal = await portBox(M24_A, 'e')
         await MERGE_M24()
         await settle()
-        ok('179 ports render on a file panel and vanish in the merged view',
+        ok('179 ports render on a file panel and vanish in the merged view, and the target ring lands on the file panel by id',
           Boolean(fileId) && onFile !== null && onFile.zero !== true &&
             onTerminal !== null && onTerminal.zero !== true &&
+            midGhost === true && midFileTarget === true &&
             mergedFile === null && mergedTerminal === null,
           `fileId=${fileId} onFile=${JSON.stringify(onFile)} onTerminal=${JSON.stringify(onTerminal)} ` +
+          `fileBox=${JSON.stringify(fileBox)} midGhost=${midGhost} midFileTarget=${midFileTarget} ` +
           `mergedFile=${JSON.stringify(mergedFile)} mergedTerminal=${JSON.stringify(mergedTerminal)}`)
       }
     }

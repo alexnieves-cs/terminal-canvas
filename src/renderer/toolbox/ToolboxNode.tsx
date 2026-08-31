@@ -37,6 +37,15 @@ export interface ToolboxNodeProps {
    * unbuilt, `PanelRow.agent`'s own lesson.
    */
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
+  /**
+   * Whether an in-flight link draw would land on THIS node if released now
+   * (M24, Task 7 fix round 1). Required on TerminalPanel's own `linkTarget`
+   * precedent: an optional prop here compiles clean on a missed wiring and
+   * produces "the ring never appears for toolbox nodes" — the exact gap a
+   * required `onBeginLink` did not itself catch, because a component that
+   * never declares a prop at all has nothing to omit.
+   */
+  linkTarget: boolean
 }
 
 /**
@@ -60,7 +69,7 @@ export interface ToolboxNodeProps {
  */
 function ToolboxNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose,
-  readOnly = false, onBeginLink
+  readOnly = false, onBeginLink, linkTarget
 }: ToolboxNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -106,6 +115,7 @@ function ToolboxNodeImpl({
       // states: verify:panels reads it to tell a toolbox node apart from a
       // terminal panel in a canvas where both are just `.panel`.
       data-panel-kind="toolbox"
+      data-link-target={linkTarget ? '' : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header

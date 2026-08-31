@@ -62,6 +62,15 @@ export interface ReviewNodeProps {
    * unbuilt, `PanelRow.agent`'s own lesson.
    */
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
+  /**
+   * Whether an in-flight link draw would land on THIS node if released now
+   * (M24, Task 7 fix round 1). Required on TerminalPanel's own `linkTarget`
+   * precedent: an optional prop here compiles clean on a missed wiring and
+   * produces "the ring never appears for review nodes" — the exact gap a
+   * required `onBeginLink` did not itself catch, because a component that
+   * never declares a prop at all has nothing to omit.
+   */
+  linkTarget: boolean
 }
 
 /**
@@ -81,7 +90,7 @@ export interface ReviewNodeProps {
  */
 function ReviewNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted,
-  restoreFocus, focusedId, readOnly = false, onBeginLink
+  restoreFocus, focusedId, readOnly = false, onBeginLink, linkTarget
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
@@ -294,6 +303,7 @@ function ReviewNodeImpl({
       // panel" must not be spelled as "not a file panel", which a review
       // node also satisfies with no marker of its own.
       data-panel-kind="review"
+      data-link-target={linkTarget ? '' : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       <header
