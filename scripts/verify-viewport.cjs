@@ -1318,7 +1318,7 @@ ok('74 a panel with no kind is not a review panel',
 }
 // 92 is check 90b widened to a FIFTH kind, and it is the check that would
 // fail against the exact regression this milestone forces. `!isReviewPanel &&
-// !isFilePanel && !isJiraPanel` answers TRUE for a toolbox panel: it lands in
+// !isFilePanel && !isWorkPanel` answers TRUE for a toolbox panel: it lands in
 // assignTiers and registry.ensure with no spec, burning a LIVE_BUDGET slot and
 // a WebGL context on a <div> that owns no process.
 //
