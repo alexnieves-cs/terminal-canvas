@@ -209,9 +209,37 @@ together: the canvas as an agentic super app, not a terminal multiplexer.**
   surface deliberately doesn't cover. Building a general plugin API before two concrete
   integrations exist is the classic way to get an abstraction that fits neither.
 
-  Jira is currently the first tier-2 implementation; it deliberately does not claim this
-  surface. GitHub remains the preferred second reference implementation, at which point the
-  common boundary can be derived rather than guessed.
+  Jira was the first tier-2 implementation and deliberately did not claim this surface.
+  **M24 built the second — GitHub — and derived the boundary. This entry is NOT done: one
+  tier-2 pair is one slice of four tiers.**
+
+- **What the derivation actually found, M24.** The interesting result is a negative:
+  `WorkItem`'s six fields (`id`, `title`, `description`, `assignee`, `state`, `url`)
+  SURVIVED a second provider completely unchanged. That is what justifies one `work` panel
+  kind carrying a `provider` field, rather than a `github` kind sitting beside a `jira`
+  one — a shape guessed after one customer turned out to fit the second.
+
+  What did NOT survive is the flat list. Jira asks one question; GitHub asks two
+  (`assignee:@me` and `review-requested:@me`), and an item found by the second is identical
+  on the wire to the same item found by the first — **the item does not know which pile it
+  is in, the query does.** So the surface widened in exactly one place, the RESULT: it is
+  now groups, each carrying a label and the service's own total. Tagging the ITEM with a
+  `kind`/`isPr` field was the obvious alternative and is wrong for that reason, since Jira
+  would have to invent a value for it.
+
+  Concretely, the derived surface is: `WorkItem` (unchanged), `WorkGroup`, `WorkListResult`
+  (a six-arm failure union beside the groups), one injected `WorkRequester`, and one
+  `work:list(provider)` invoke — a RENAME of `jira:list`, so the channel count did not move.
+  A third provider needs an adapter and an entry in `WORK_PROVIDERS`; it needs no palette
+  code, no panel kind, no channel and no schema arm.
+
+- **What M24 did not touch, and what is therefore still open here.** **Tier 1 has no
+  reference implementation at all** — Obsidian is still the recommended one, and it is the
+  half that would test whether a local-files integration fits this surface or needs its own
+  (the honest expectation is its own: `work:list` is a poll of a remote service, and a vault
+  is a filesystem this app can watch). Tiers 3 and 4 are untouched. Within tier 2, the work
+  panel is READ-ONLY for both providers: nothing comments, assigns, merges or transitions.
+  And #12's own open items — Jira writes, Server/DC, OAuth — are unaffected by this.
 
 ## 10. Light mode / dark mode
 
