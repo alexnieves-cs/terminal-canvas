@@ -8,7 +8,7 @@ import type { Command } from './palette-model'
 // pre-emptive. Measured in M14 by deleting the alias and building.
 import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
-import type { WorkProvider } from '@shared/work-item'
+import { WORK_PROVIDERS, WORK_PROVIDER_LABEL, type WorkProvider } from '@shared/work-item'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
@@ -353,6 +353,15 @@ export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
+/**
+ * Names WHICH service to connect. "Connect an account" would leave a user with
+ * two integrations unable to tell which row they are looking at -- and with a
+ * third it gets worse, not better. Exported so a check compares against the
+ * constant rather than a string literal, which would keep passing while the
+ * text the user actually reads said something else entirely.
+ */
+export const REASON_NO_CONNECTION = (label: string): string => `connect ${label} first`
+
 export const REASON_NOT_STARTED = 'that panel has not started'
 /**
  * M20. A THIRD distinct blocked situation for the mode rows, beside
@@ -867,8 +876,26 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // be driven directly by verify:palette without constructing a whole
   // PaletteContext.
   out.push(...buildCredentialRows(ctx.credentials, SERVICES, actions))
-  if (ctx.credentials.some((credential) => credential.service === 'jira')) {
-    out.push({ id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openWork('jira') })
+  // One row per provider, generated from WORK_PROVIDERS, so a third
+  // integration needs no palette code at all -- the trade every settings row
+  // and every credential row already makes.
+  for (const provider of WORK_PROVIDERS) {
+    const label = WORK_PROVIDER_LABEL[provider]
+    const connected = ctx.credentials.some((credential) => credential.service === provider)
+    out.push({
+      id: `work.open.${provider}`,
+      title: `Open ${label} work`,
+      subtitle: 'Assigned to you',
+      searchText: `${provider} ${label} tickets issues assigned work review`,
+      group: 'manage',
+      // PRESENT AND DISABLED rather than absent. M17's row rendered only once
+      // a Jira credential existed, which is exactly the failure check 70's
+      // own comment names for the credential Add row: the row a user WITHOUT
+      // the integration most needs to see was the one that was missing, and
+      // its absence is indistinguishable from a feature that was never built.
+      ...(connected ? {} : { disabledReason: REASON_NO_CONNECTION(label) }),
+      run: () => actions.openWork(provider)
+    })
   }
 
   // --- Manage --------------------------------------------------------------

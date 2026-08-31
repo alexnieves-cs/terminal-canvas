@@ -249,7 +249,12 @@ const spyActions = () => {
     // panel.open-file's row calls this (check 73, renumbered from this
     // milestone's own original 70 — main's credential checks claimed 70-72
     // first) — same reason as restartPanel and openReview above.
-    openFile: record('openFile')
+    openFile: record('openFile'),
+    // M24. The work rows ARE reached from row.run() in check 85, so this
+    // is not merely for shape -- without it row.run() calls undefined and
+    // the check dies with a TypeError, which in this single-script suite
+    // aborts every check written after it.
+    openWork: record('openWork')
   }
 }
 
@@ -1457,6 +1462,50 @@ const WS = [
       notAgent && notAgent.disabledReason
     ]))
 }
+
+
+// M24 — one palette row per work provider.
+//
+// 85. One row per provider, ALWAYS VISIBLE, each aimed at its OWN provider.
+// The always-visible half is the fix: M17's jira row rendered only when a Jira
+// credential existed, which is exactly the failure check 70's own comment
+// names for the credential Add row — the row a user WITHOUT the integration
+// most needs to see is the one that was missing, and its absence is
+// indistinguishable from a feature that was never built. The own-provider
+// clause is the other half: a row carrying a hardcoded provider opens the
+// wrong panel and looks entirely correct doing it.
+{
+  const bare = ctx({ credentials: [] })
+  const work = P.buildCommands(bare).filter((r) => r.id.startsWith('work.open.'))
+  const connected = ctx({ credentials: [{ service: 'github', label: 'octocat', addedAt: 'now', verifiedAt: 'now' }] })
+  const github = byId(P.buildCommands(connected), 'work.open.github')
+  if (github) github.run()
+  ok(85, work.length === 2 &&
+    work.every((r) => typeof r.disabledReason === 'string') &&
+    github !== undefined && github.disabledReason === undefined &&
+    connected.actions.calls.length === 1 &&
+    connected.actions.calls[0][0] === 'openWork' &&
+    connected.actions.calls[0][1] === 'github',
+    `rows=${work.length} ids=${work.map((r) => r.id).join(',')} calls=${JSON.stringify(connected.actions.calls)}`)
+}
+
+// 86. An unconnected provider's row is DISABLED WITH A REASON naming that
+// provider, never absent — and the two reasons DIFFER, because "connect Jira"
+// and "connect GitHub" send the user to two different places. Compared against
+// the EXPORTED constant rather than a string literal, which would keep passing
+// while the text the user actually reads said something else entirely — the
+// rule checks 66b, 68 and 77 already state for their own reasons.
+{
+  const rows = P.buildCommands(ctx({ credentials: [] }))
+  const jira = byId(rows, 'work.open.jira')
+  const github = byId(rows, 'work.open.github')
+  ok(86, typeof P.REASON_NO_CONNECTION === 'function' &&
+    jira?.disabledReason === P.REASON_NO_CONNECTION('Jira') &&
+    github?.disabledReason === P.REASON_NO_CONNECTION('GitHub') &&
+    jira.disabledReason !== github.disabledReason,
+    `jira=${jira?.disabledReason} github=${github?.disabledReason}`)
+}
+
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
