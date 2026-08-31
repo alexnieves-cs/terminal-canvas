@@ -74,6 +74,10 @@ const {
   createReviewCommitter,
   FileWatchers,
   ToolboxCache,
+  // M24: the network fence installed just after registerIpcHandlers.
+  listGithubWorkItems,
+  ipcMain,
+  IPC,
   readFrom,
   FILE_MAX_LINES
 } = require(ENTRY_OUT)
@@ -847,6 +851,56 @@ app.whenReady().then(async () => {
   // developer's real ~/.claude, which is the rule M9a's git fence and M15's
   // projects-root fence each cost a fix round to learn.
   toolboxCache)
+
+  // ---------------------------------------------------------------------
+  // M24's network fence. registerIpcHandlers' work:list handler constructs a
+  // REAL requester, so it is removed and re-registered here around the same
+  // production `listGithubWorkItems` with a STUB requester in its place.
+  //
+  // Everything but the socket is still exercised -- the adapter's own query
+  // building, its 403 split, its dedupe, the channel, the preload, the store,
+  // the model and the component -- which is the whole point of the requester
+  // being an injected dependency in the first place. What is NOT exercised is
+  // the one line M24 could not test offline anyway: a real HTTPS request.
+  //
+  // Installed AFTER registerIpcHandlers rather than before, because
+  // ipcMain.handle throws on a duplicate channel; removeHandler first is what
+  // makes the override legal. The rule it DOES obey from M15's projects-root
+  // fence is that it is installed before the window ever loads.
+  //
+  // The stub answers the two search URLs from a fixture and REFUSES anything
+  // else loudly, so a future query this fence does not know about fails
+  // visibly rather than silently returning an empty group.
+  // ---------------------------------------------------------------------
+  const WORK_FIXTURE = {
+    'assignee:@me': {
+      total_count: 2,
+      items: [
+        { number: 1, title: 'Fix the parser', body: 'A real body.', html_url: 'https://github.com/acme/web/issues/1', state: 'open', assignee: { login: 'octocat' }, repository_url: 'https://api.github.com/repos/acme/web' },
+        { number: 4, title: 'Ship the panel', body: '', html_url: 'https://github.com/acme/web/pull/4', state: 'open', draft: true, assignee: { login: 'octocat' }, repository_url: 'https://api.github.com/repos/acme/web' }
+      ]
+    },
+    'review-requested:@me': {
+      total_count: 1,
+      items: [
+        { number: 9, title: 'Review me', body: 'Please look.', html_url: 'https://github.com/acme/api/pull/9', state: 'open', assignee: null, repository_url: 'https://api.github.com/repos/acme/api' }
+      ]
+    }
+  }
+  ipcMain.removeHandler(IPC.WORK_LIST)
+  ipcMain.handle(IPC.WORK_LIST, async (_event, provider) => {
+    if (provider !== 'github') return { kind: 'malformed', reason: 'the harness fences github only' }
+    return listGithubWorkItems({
+      // A store that answers a token for github and nothing else, so the
+      // no-credential arm stays reachable for any other service.
+      store: { read: (service) => (service === 'github' ? 'ghp_harness' : undefined), setLabel: () => {}, list: () => [] },
+      requester: async ({ url }) => {
+        const key = Object.keys(WORK_FIXTURE).find((q) => url.includes(encodeURIComponent(q)))
+        if (key === undefined) throw new Error(`unfenced work query: ${url}`)
+        return { status: 200, body: JSON.stringify(WORK_FIXTURE[key]), headers: {} }
+      }
+    })
+  })
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
@@ -11833,6 +11887,109 @@ app.whenReady().then(async () => {
 
       try { rmSync(M22_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
+
+    // ---------------------------------------------------------------------
+    // M24: the work panel end to end through a real renderer, against the
+    // network fence installed beside registerIpcHandlers above. Tasks 6-11
+    // built the requester, the channel, the GitHub adapter, the pure model,
+    // the component and the palette rows in isolation; this is the
+    // milestone's only proof those pieces are wired to each other. Numbered
+    // 172-174, appended after main's last check rather than renumbered into
+    // any gap -- a number that has ever been written down is a number
+    // somebody may already be citing.
+    // ---------------------------------------------------------------------
+    {
+      const xtermsBefore = await wc.executeJavaScript(
+        `document.querySelectorAll('.xterm').length`)
+
+      await wc.executeJavaScript(`window.__m24Work('github')`)
+      const workId = await waitUntil(async () => {
+        const id = await wc.executeJavaScript(
+          `document.querySelector('[data-panel-kind="work"][data-work-provider="github"]')?.getAttribute('data-panel-id') ?? null`)
+        return id === null ? false : id
+      }, 5000)
+
+      // 172 — the panel renders REAL items from the adapter, under BOTH group
+      //     labels. The GROUP clause is what separates this from a check a
+      //     flat list would pass just as well: the entire surface widening in
+      //     this milestone is that the panel says which pile an item is in,
+      //     and an assertion that only counted items proves nothing about it.
+      //     It waits on the rendered rows rather than sleeping, because the
+      //     load is a real IPC round trip.
+      const seen = await waitUntil(async () => {
+        const read = await wc.executeJavaScript(`(() => {
+          const node = document.querySelector('[data-panel-kind="work"][data-work-provider="github"]')
+          if (!node) return null
+          return {
+            labels: [...node.querySelectorAll('.work-node__group-label')].map((el) => el.textContent),
+            ids: [...node.querySelectorAll('.work-node__item strong')].map((el) => el.textContent)
+          }
+        })()`)
+        return read !== null && read.labels.length === 2 ? read : false
+      }, 8000)
+      ok('172 a github work panel renders both groups and their real items',
+        seen !== null &&
+          seen.labels[0] === 'Assigned to you' && seen.labels[1] === 'Awaiting your review' &&
+          seen.ids.some((text) => text.includes('acme/web#1')) &&
+          seen.ids.some((text) => text.includes('acme/api#9')),
+        JSON.stringify(seen))
+
+      // 173 — check 103's argument applied to a SIXTH kind. The panel holds
+      //     no PanelSession, read from __m4aSessions (the RENDERER's own
+      //     registry, not pty:list), and the .xterm count is unchanged FROM
+      //     BEFORE the node existed. The second clause is what rejects an
+      //     implementation that quietly demoted some other panel to pay for
+      //     this one, which "no xterm under the work panel" alone is
+      //     satisfied by.
+      const after = await wc.executeJavaScript(`({
+        sessions: Object.keys(window.__m4aSessions()),
+        xterms: document.querySelectorAll('.xterm').length
+      })`)
+      ok('173 a work panel holds no session and costs no WebGL context',
+        workId !== null && !after.sessions.includes(workId) && after.xterms === xtermsBefore,
+        `work=${String(workId)} xterms ${xtermsBefore} -> ${after.xterms}`)
+
+      // 174 — closing it sends NO pty.kill for its id, asserted against the
+      //     SHADOWED recorder rather than by absence of a crash: a kill aimed
+      //     at an id naming no session is swallowed at every layer below the
+      //     IPC door (the direct backend's destroy is a no-op, tmux's cli
+      //     eats a non-zero exit, dropBaseline for an unknown id drops
+      //     nothing), so without this every renderer-visible fact would be
+      //     identical with the !isTerminalPanel guard removed entirely.
+      //     The positive half is in the SAME window, discharging the standing
+      //     obligation the recorder's own comment states: a negative against
+      //     a probe that has stopped recording is satisfied perfectly and
+      //     permanently. It spawns its OWN terminal rather than borrowing one
+      //     from the canvas -- check 165's fixture lesson, and this block
+      //     runs after it.
+      const killsBefore = killedPanelIds.length
+      const termId3 = await (async () => {
+        const before = new Set(await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '~', command: '/bin/sh', args: [], w: 400, h: 300 })
+        const ids = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.length > before.size ? now : false
+        }, 5000)
+        return ids ? (ids.find((id) => !before.has(id)) ?? null) : null
+      })()
+      // Waited on, so the close below cannot race the spawn: a kill for a
+      // panel whose session has not landed yet is swallowed at the IPC door
+      // and the positive clause would report a false negative.
+      if (termId3 !== null) {
+        await waitUntil(async () => (await sessionMap(wc)).has(termId3), 6000)
+      }
+      if (workId !== null) await clickPanelClose(wc, workId)
+      if (termId3 !== null) await clickPanelClose(wc, termId3)
+      await settle()
+      const killsSince = killedPanelIds.slice(killsBefore)
+      ok('174 closing a work panel sends no pty.kill, while a terminal close still does',
+        workId !== null && termId3 !== null &&
+          !killsSince.includes(workId) && killsSince.includes(termId3),
+        `work=${String(workId)} terminal=${String(termId3)} kills=${JSON.stringify(killsSince)}`)
+    }
+
 
 
   } catch (error) {

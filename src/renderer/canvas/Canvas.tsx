@@ -2991,7 +2991,12 @@ export function Canvas({
     // a parallel one, the rule __m13Open already obeys.
     w.__m20Toolbox = (cwd: string, label: string): void =>
       openToolboxPanel(cwd, label, worldCentre())
-  }, [openFilePanel, worldCentre])
+    // M24's mint, through the SAME openWorkPanel the palette rows call, for
+    // the reason the two hooks above obey: a check that passes through it is
+    // evidence about production code rather than about a second mint path
+    // only the suite can reach.
+    w.__m24Work = (provider: WorkProvider): void => openWorkPanel(provider)
+  }, [openFilePanel, openToolboxPanel, openWorkPanel, worldCentre])
 
   /**
    * A node committed. Advance ITS OWN stored baseline to the commit it just

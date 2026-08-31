@@ -94,6 +94,17 @@ module.exports = {
   // take in main/index.ts.
   FileWatchers: require('../src/main/file-watch').FileWatchers,
   ToolboxCache: require('../src/main/toolbox-cache').ToolboxCache,
+  /* M24's work adapter, plus electron's ipcMain, so verify-panels.cjs can
+     FENCE the work:list handler onto a stub requester. `npm run verify` is
+     this repo's one green-or-not signal and must stay fast and OFFLINE -- the
+     stated reason verify:packaged is kept out of the default chain, and the
+     same rule as "the verify suites must never touch the production socket".
+     The fence re-registers the handler around the REAL listGithubWorkItems,
+     so everything but the socket is still exercised: the adapter, the
+     channel, the preload, the store, the model and the component. */
+  listGithubWorkItems: require('../src/main/github-client').listGithubWorkItems,
+  ipcMain: require('electron').ipcMain,
+  IPC: require('../src/shared/ipc-contract').IPC,
   /* Check 140 has to push a file PAST the render cap, and it reads the cap
      from the source of truth rather than restating 10000 in the harness: a
      literal here would keep passing against a changed constant, i.e. the
