@@ -31,5 +31,11 @@ module.exports = {
   // M8c has: it is a pure function over plain data with no DOM and no native
   // dependency, and a suite of its own would re-prove the same esbuild wiring
   // for one file.
-  ...require('../src/renderer/toolbox/toolbox-node-model')
+  ...require('../src/renderer/toolbox/toolbox-node-model'),
+  // M24's work node model, joining for the reason every pure view model since
+  // M8c has. It is also the first module in this bundle to import a VALUE from
+  // @shared (WORK_PROVIDER_LABEL), which makes the @shared alias LOAD-BEARING
+  // here for the first time -- see the header comment, which records the
+  // measurement rather than the assumption.
+  ...require('../src/renderer/work/work-node-model')
 }

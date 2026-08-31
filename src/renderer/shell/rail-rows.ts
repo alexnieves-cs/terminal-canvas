@@ -92,6 +92,12 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
   // toolbox node owns no process, so a 'dormant' tail would render a start
   // control nothing can honour.
   if (kind === 'toolbox') return 'toolbox'
+  // Same reason again, same placement BEFORE the dormant test: a work panel
+  // owns no process, so 'not started' is a sentence about something it does
+  // not have, and 'dormant' would render a start control nothing can honour.
+  // M17's jira panel never had this arm and fell through to BOTH; the M24
+  // rename is what surfaced it, and verify:rail 113 is what pins it.
+  if (kind === 'work') return 'work'
   if (dormant) return 'dormant'
   if (status === undefined) return 'not started'
   switch (status.kind) {

@@ -28,10 +28,16 @@ buildSync({
   // which is why the honest way to answer the question is to DELETE the alias
   // and build rather than to read the imports. See CLAUDE.md's "The plain-node
   // verify bundles now configure a @shared alias" for the corrected table.
-  // @shared stays for the original reason: every @shared import reachable
-  // from here is an `import type`, which esbuild erases before bundling —
-  // and needing no alias YET is exactly the state verify-viewport.cjs was in
-  // right up until the day it broke.
+  // @shared is LOAD-BEARING TOO, and this comment claimed the opposite until
+  // M24 measured it — the same way it once claimed @renderer was pre-emptive.
+  // Deleting the @shared line and building reports SIX unresolved imports, of
+  // which FIVE predate M24: rail-rows.ts:2, file-node-model.ts:1,
+  // inspector-fields.ts:5 and :6, and panels.ts:6 all import VALUES from
+  // @shared. So the alias stopped being insurance some milestones ago and
+  // nobody noticed, because a required alias that is present looks exactly
+  // like a pre-emptive one. M24's work-node-model.ts:11 (WORK_PROVIDER_LABEL)
+  // is merely the sixth. The rule the file keeps re-learning: MEASURE by
+  // deleting the alias and building, never by reading the imports.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
@@ -1870,6 +1876,89 @@ const inventory = (over) => ({
   ok(109, a === moved && a !== b && a !== c && b !== c,
     JSON.stringify({ rectStable: a === moved, modeMoves: a !== b, effortMoves: a !== c }))
 }
+
+
+// M24 — the work node's own model, and the rail arm M17's jira panel never had.
+//
+// 110. Every non-groups arm renders a heading AND a note, never nothing. A work
+// panel is one the user deliberately opened and dragged, and a panel that
+// renders nothing at all is indistinguishable from a broken one — the rule
+// buildFileNodeModel's own arms already obey (check 78). The non-vacuity clause
+// demands the notes be DISTINCT sentences: "connect GitHub" and "GitHub
+// rejected your token" have two different fixes, and collapsing them tells a
+// user with a revoked token to connect an account they already connected.
+{
+  const arms = ['no-credential', 'invalid-credential', 'rejected', 'rate-limited', 'unavailable', 'malformed']
+  const models = arms.map((kind) => R.buildWorkNodeModel('github', { kind, reason: `reason ${kind}` }, undefined))
+  const notes = models.map((m) => m.note)
+  ok(110, models.every((m) => typeof m.heading === 'string' && m.heading !== '' &&
+      typeof m.note === 'string' && m.note !== '') &&
+    new Set(notes).size === arms.length,
+    JSON.stringify(notes))
+}
+
+// 111. `connectable` is true for no-credential ALONE. It is what the node's
+// "Connect GitHub" verb is gated on, and a flag that is always true offers to
+// re-enter a credential to a user whose token was merely rate-limited — while a
+// flag that is always false deletes the one affordance a user with nothing
+// stored is guaranteed to be looking for, which is verify:palette 31's rule.
+// Both directions, because a gate written backwards satisfies either half
+// alone.
+{
+  const connect = R.buildWorkNodeModel('github', { kind: 'no-credential', reason: 'x' }, undefined)
+  const others = ['invalid-credential', 'rejected', 'rate-limited', 'unavailable', 'malformed']
+    .map((kind) => R.buildWorkNodeModel('github', { kind, reason: 'x' }, undefined))
+  const listed = R.buildWorkNodeModel('github', { kind: 'groups', groups: [] }, undefined)
+  ok(111, connect.connectable === true && others.every((m) => m.connectable === false) &&
+    listed.connectable === false,
+    `connect=${connect.connectable} others=${others.map((m) => m.connectable).join(',')}`)
+}
+
+// 112. An EMPTY group RENDERS with its own note rather than vanishing, and a
+// group holding fewer items than the service's total SAYS so. verify:rail 43's
+// rule for the review pane's `clean` arm reaching a second section: a user with
+// no review requests and a user whose query silently failed must not see the
+// same thing. The title clause is M6a's honest chain reaching a sixth kind — a
+// user's own title outranks the provider label.
+{
+  const result = {
+    kind: 'groups',
+    groups: [
+      { label: 'Assigned to you', items: [{ id: 'acme/web#1', title: 'Fix it', description: 'body', assignee: 'octocat', state: 'open', url: 'https://example.test/1' }], total: 231 },
+      { label: 'Awaiting your review', items: [], total: 0 }
+    ]
+  }
+  const m = R.buildWorkNodeModel('github', result, 'My queue')
+  ok(112, m.heading === 'My queue' && m.note === null && m.groups.length === 2 &&
+    m.groups[0].rows.length === 1 &&
+    typeof m.groups[0].note === 'string' && m.groups[0].note.includes('231') &&
+    m.groups[1].rows.length === 0 &&
+    typeof m.groups[1].note === 'string' && m.groups[1].note !== '' &&
+    R.buildWorkNodeModel('github', result, undefined).heading === 'GitHub',
+    JSON.stringify(m.groups.map((g) => [g.label, g.rows.length, g.note])))
+}
+
+// 113. The rail and inspector arms together, and this check closes a
+// PRE-EXISTING gap the rename surfaced rather than caused: `rail-rows.ts` has
+// arms for `file` and `toolbox` — both placed BEFORE the dormant test, both
+// commented with the same reason — and has never had one for `jira`. So a work
+// panel fell through to `if (dormant) return 'dormant'` and then to
+// `'not started'`: a sentence about a process it does not have, above a start
+// control nothing can honour. The dormant clause is asserted with `true`
+// passed IN, because buildRailRows already zeroes it for a non-terminal kind
+// and a check reading only the row would pass against an unfixed railTail. The
+// inspector clause is the other half — a node with no process refuses the
+// process verbs, the refusal a review node and a file panel already earn.
+{
+  const wp = { kind: 'work', provider: 'github', rect: { id: 'w1', x: 0, y: 0, w: 640, h: 520 }, z: 1 }
+  const tail = R.railTail(undefined, true, 'work')
+  const rows = R.buildRailRows([wp], () => undefined, new Set(['w1']))
+  const inspector = R.buildInspectorModel(wp, undefined)
+  ok(113, tail === 'work' && rows[0]?.tail === 'work' && rows[0]?.dormant === false &&
+    inspector.restartable === false && inspector.reattached === false,
+    `tail=${tail} rowTail=${rows[0]?.tail} dormant=${rows[0]?.dormant} restartable=${inspector.restartable}`)
+}
+
 
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
