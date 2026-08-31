@@ -45,6 +45,25 @@ const centreOfRect = (r: WorldRect): { x: number; y: number } => ({
 })
 
 /**
+ * Which border an anchor sits on. Reported rather than computed separately:
+ * linkAnchors already decides this when it takes Math.min(tx, ty), and a
+ * second derivation elsewhere would drift from it the first time one of them
+ * was wrong.
+ */
+export type LinkSide = 'n' | 'e' | 's' | 'w'
+
+export interface LinkAnchors {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** The side of `from` the ray leaves through. */
+  fromSide: LinkSide
+  /** The side of `to` the ray enters through. */
+  toSide: LinkSide
+}
+
+/**
  * Where the segment between two panels starts and ends: on each rect's
  * BORDER, along the centre-to-centre ray.
  *
@@ -70,8 +89,17 @@ const centreOfRect = (r: WorldRect): { x: number; y: number } => ({
  */
 export function linkAnchors(
   from: WorldRect,
-  to: WorldRect
-): { x1: number; y1: number; x2: number; y2: number } | null {
+  to: WorldRect,
+  /**
+   * RESERVED and unused. M24's design decision 2 chose derived anchors, which
+   * is what kept shared/layout-schema.ts out of that milestone entirely. This
+   * parameter exists so the deferred half — an edge that REMEMBERS which side
+   * it left from — can be taken later without rewriting this module. Nothing
+   * passes it today; if you are adding the first caller, that is the milestone
+   * that also grows PanelLink and both parsers.
+   */
+  _sides?: undefined
+): LinkAnchors | null {
   const a = centreOfRect(from)
   const b = centreOfRect(to)
   const dx = b.x - a.x
@@ -81,15 +109,33 @@ export function linkAnchors(
   // Infinity for a zero component is correct and deliberate rather than a
   // guard against division by zero: an axis the ray does not travel along can
   // never be the binding crossing, and Math.min then picks the other one.
-  const exit = (r: WorldRect, ox: number, oy: number): { x: number; y: number } => {
+  const exit = (
+    r: WorldRect,
+    ox: number,
+    oy: number
+  ): { x: number; y: number; side: LinkSide } => {
     const tx = ox === 0 ? Infinity : r.w / 2 / Math.abs(ox)
     const ty = oy === 0 ? Infinity : r.h / 2 / Math.abs(oy)
     const t = Math.min(tx, ty)
-    return { x: ox * t, y: oy * t }
+    // The side falls out of WHICH crossing bound. tx binding means the ray
+    // left through a vertical border (east or west) and the sign of ox says
+    // which; ty binding means a horizontal one. The <= rather than < settles
+    // the exact-45-degree tie toward the vertical border deterministically —
+    // either answer is defensible there, and picking one in code rather than
+    // leaving it to float comparison is what keeps linkPath reproducible.
+    const side: LinkSide = tx <= ty ? (ox > 0 ? 'e' : 'w') : oy > 0 ? 's' : 'n'
+    return { x: ox * t, y: oy * t, side }
   }
   const out = exit(from, dx, dy)
   const back = exit(to, -dx, -dy)
-  return { x1: a.x + out.x, y1: a.y + out.y, x2: b.x + back.x, y2: b.y + back.y }
+  return {
+    x1: a.x + out.x,
+    y1: a.y + out.y,
+    x2: b.x + back.x,
+    y2: b.y + back.y,
+    fromSide: out.side,
+    toSide: back.side
+  }
 }
 
 /**
@@ -128,4 +174,71 @@ export function buildLinkSegments(panels: Panel[]): LinkSegment[] {
     }
   }
   return out
+}
+
+/**
+ * How far a control point is pushed out of its border, as a fraction of the
+ * distance between the two anchors, clamped at both ends.
+ *
+ * The clamps are not defensive. Unclamped, a link between two adjacent panels
+ * gets an offset of a few units and reads as a straight line with a kink,
+ * while a link across a panned canvas gets an offset of thousands and loops
+ * off screen before coming back. The clamp is what makes the curve read the
+ * same way at every distance, which is the whole of "clean" here.
+ *
+ * All three are TUNING values with no automated coverage of how they LOOK.
+ * verify:viewport 94 and 95 pin the relation (perpendicular, clamped, pure)
+ * and say nothing about whether the result is attractive. There is no visual
+ * regression test in this repo and that is a stated position; these were
+ * checked by hand once and are recorded as such in CLAUDE.md.
+ */
+export const CURVE_RATIO = 0.4
+export const CURVE_MIN = 24
+export const CURVE_MAX = 160
+
+const OUTWARD: Record<LinkSide, { x: number; y: number }> = {
+  n: { x: 0, y: -1 },
+  s: { x: 0, y: 1 },
+  e: { x: 1, y: 0 },
+  w: { x: -1, y: 0 }
+}
+
+/**
+ * The two cubic control points, pushed PERPENDICULAR out of the border each
+ * anchor sits on.
+ *
+ * Perpendicular to the SIDE, never along the segment. Those two are identical
+ * for a horizontal pair and diverge everywhere else, so the shorthand looks
+ * correct on the fixture a first check reaches for and produces a curve that
+ * kinks at the border for every other pair. verify:viewport 94 uses a VERTICAL
+ * fixture precisely because it is one the shorthand gets wrong.
+ *
+ * Exported separately from linkPath so the relation is checkable without
+ * parsing an SVG path string back apart — a check that had to parse `d` would
+ * be testing a regex rather than the geometry.
+ */
+export function linkControls(a: LinkAnchors): {
+  c1: { x: number; y: number }
+  c2: { x: number; y: number }
+} {
+  const dx = a.x2 - a.x1
+  const dy = a.y2 - a.y1
+  const distance = Math.hypot(dx, dy)
+  const offset = Math.min(CURVE_MAX, Math.max(CURVE_MIN, distance * CURVE_RATIO))
+  const o1 = OUTWARD[a.fromSide]
+  const o2 = OUTWARD[a.toSide]
+  return {
+    c1: { x: a.x1 + o1.x * offset, y: a.y1 + o1.y * offset },
+    c2: { x: a.x2 + o2.x * offset, y: a.y2 + o2.y * offset }
+  }
+}
+
+/**
+ * The SVG `d` for one link. Pure: the same anchors always produce a
+ * byte-identical string, because anything consulting a clock or a random seed
+ * here would make every link on the canvas twitch on every repaint.
+ */
+export function linkPath(a: LinkAnchors): string {
+  const { c1, c2 } = linkControls(a)
+  return `M ${a.x1} ${a.y1} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${a.x2} ${a.y2}`
 }
