@@ -29,8 +29,17 @@ export type JiraListResult =
   | { kind: 'items'; items: WorkItem[] }
   | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
 
-/** The store holds one opaque string. This parser is the only reader that
- * understands Jira's site/email/token bundle, and it never returns it over IPC. */
+/**
+ * The store holds one opaque string, and this parser is its only reader.
+ *
+ * Say what actually holds, not the broader thing: **`email` and `token` never
+ * cross IPC**, and `site` DOES — `WorkItem.url` is `${site}/browse/${key}`,
+ * which is the whole point of that field, since the renderer needs the tenant
+ * host to render a browse link. "The bundle stays behind this module" is the
+ * tempting sentence and it is false of one of the three fields; an invariant
+ * stated more broadly than it holds is worse than one stated narrowly, because
+ * the next reader trusts the broad version.
+ */
 export function parseJiraCredential(value: string): JiraCredential | null {
   try {
     const parsed = JSON.parse(value) as Partial<JiraCredential>
@@ -122,7 +131,7 @@ export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListRes
 
 export type JiraTransitionsResult =
   | { kind: 'transitions'; transitions: WorkItemTransition[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
+  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
 
 /**
  * `refused` is this milestone's one new arm and is NOT a flavour of
@@ -166,13 +175,27 @@ function jiraMessage(body: string): string | null {
 }
 
 /**
+ * ONE status mapping, shared by the reads and the writes, and it is named
+ * for a status rather than for a write on purpose: it was `writeFailure`
+ * and the transitions READ carried a second, narrower copy of the same rule
+ * inline, which is how the two came to disagree — a 404 landed in `refused`
+ * from a write and in `unavailable` from the read of the very same issue.
+ * Two copies of one rule drift the first time only one is edited.
+ *
  * 400 and 404 are both `refused` rather than `unavailable`, and 404
  * deliberately so: Jira answers 404 for an issue the account may not browse,
  * to avoid disclosing that the issue exists. That is the board saying no,
  * not the network failing, so it takes the arm whose fix is "check your
- * permissions" rather than "check your connection".
+ * permissions" rather than "check your connection". It matters MOST on the
+ * read, because clicking `Move…` is what fetches the list, so the read is
+ * where "you cannot move this ticket" is discovered at all.
+ *
+ * `listAssignedWorkItems` deliberately still maps its own statuses inline:
+ * its union has no `refused` arm, a 404 on a JQL search is not a per-issue
+ * permission answer, and widening it is M19's surface rather than this
+ * milestone's. verify:jira 14 pins the read/write agreement this covers.
  */
-function writeFailure(
+function statusFailure(
   response: { status: number; body: string },
   okStatuses: readonly number[]
 ): { kind: 'rejected' | 'refused' | 'unavailable'; reason: string } | null {
@@ -203,8 +226,10 @@ export async function listWorkItemTransitions(deps: JiraDeps, itemId: string): P
       url: issueUrl(c, itemId, '/transitions'), method: 'GET', headers: auth(c), timeoutMs: TIMEOUT_MS
     })
   } catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
-  if (response.status === 401 || response.status === 403) return { kind: 'rejected', reason: 'Jira rejected the credential.' }
-  if (response.status !== 200) return { kind: 'unavailable', reason: `Jira answered ${response.status}.` }
+  // The SAME mapping the writes use, never a second copy of it: see
+  // statusFailure's own comment for the 404 that made this necessary.
+  const failure = statusFailure(response, [200])
+  if (failure) return failure
   try {
     const raw = (JSON.parse(response.body) as { transitions?: unknown }).transitions
     if (!Array.isArray(raw)) return { kind: 'malformed', reason: 'Jira returned no transition list.' }
@@ -241,7 +266,7 @@ export async function commentOnWorkItem(deps: JiraDeps, itemId: string, text: st
       timeoutMs: TIMEOUT_MS, body: JSON.stringify({ body: textToAdf(message) })
     })
   } catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
-  return writeFailure(response, [200, 201]) ?? { kind: 'done' }
+  return statusFailure(response, [200, 201]) ?? { kind: 'done' }
 }
 
 export async function transitionWorkItem(deps: JiraDeps, itemId: string, transitionId: string): Promise<JiraWriteResult> {
@@ -258,7 +283,7 @@ export async function transitionWorkItem(deps: JiraDeps, itemId: string, transit
   // 204 is Jira's success for this endpoint; 200 is accepted too rather than
   // treated as a failure, because a success status must never land in an
   // error arm and cost the user a second, duplicate transition attempt.
-  return writeFailure(response, [200, 204]) ?? { kind: 'done' }
+  return statusFailure(response, [200, 204]) ?? { kind: 'done' }
 }
 
 export function createJiraRequester(): JiraRequester {

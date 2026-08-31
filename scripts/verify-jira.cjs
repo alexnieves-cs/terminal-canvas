@@ -1,4 +1,4 @@
-/* Offline contract checks for M17's Jira adapter.  The requester is injected:
+/* Offline contract checks for M24's Jira adapter (built in M19, extended in M24).  The requester is injected:
    npm run verify is the repo's one green-or-not signal and must not call Jira. */
 'use strict'
 const { existsSync } = require('node:fs')
@@ -165,6 +165,35 @@ void (async () => {
     : null
   ok('13 an empty comment is refused with zero requests',
     empty?.kind === 'refused' && eRec.calls.length === 0)
+
+  // 14. One status mapping, not two. The transitions READ is the path
+  //     `Move…` hits FIRST, so it is where "you cannot move this ticket" is
+  //     DISCOVERED — and Jira answers 404 for an issue the account may not
+  //     browse, which is a permission answer wearing a not-found status. A
+  //     404 here must therefore land in the same arm a 404 from a WRITE does,
+  //     asserted as an EQUALITY between the two rather than against a literal
+  //     'refused': a check written against the literal stays green when one
+  //     side is later changed and the other is not, which is precisely the
+  //     two-copies-of-one-rule drift that made these two disagree to begin
+  //     with. Both reasons carry Jira's own sentence for the same reason.
+  const readMissing = typeof J.listWorkItemTransitions === 'function'
+    ? await J.listWorkItemTransitions({ store: store(BUNDLE), requester: async () => ({
+      status: 404, body: JSON.stringify({ errorMessages: ['Issue does not exist or you do not have permission to see it.'] })
+    }) }, 'TC-12')
+    : null
+  const writeMissing = typeof J.transitionWorkItem === 'function'
+    ? await J.transitionWorkItem({ store: store(BUNDLE), requester: async () => ({
+      status: 404, body: JSON.stringify({ errorMessages: ['Issue does not exist or you do not have permission to see it.'] })
+    }) }, 'TC-12', '31')
+    : null
+  const readDown = typeof J.listWorkItemTransitions === 'function'
+    ? await J.listWorkItemTransitions({ store: store(BUNDLE), requester: async () => ({ status: 503, body: '' }) }, 'TC-12')
+    : null
+  ok('14 a 404 on the transitions READ takes the same arm as a 404 on a write',
+    readMissing?.kind === writeMissing?.kind && readMissing?.kind === 'refused' &&
+      readMissing.reason === 'Issue does not exist or you do not have permission to see it.' &&
+      readDown?.kind === 'unavailable',
+    `read=${readMissing?.kind} write=${writeMissing?.kind} down=${readDown?.kind}`)
 
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)

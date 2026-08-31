@@ -610,7 +610,7 @@ export type JiraListResult =
 
 export type JiraTransitionsResult =
   | { kind: 'transitions'; transitions: WorkItemTransition[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
+  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
 
 /** `refused` is the board saying no; `unavailable` is Jira being unreachable. Two fixes, two arms. */
 export type JiraWriteResult =

@@ -285,7 +285,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.JIRA_TRANSITIONS, (_event, itemId: string) =>
     listWorkItemTransitions({ store: credentialStore, requester: createJiraRequester() }, itemId))
   // The two writes. Each performs ONE named mutation and returns an arm —
-  // never the credential bundle, never anything derived from it.
+  // never the stored `email`, never the stored `token`, and never anything
+  // derived from either. Named per field rather than as "the credential
+  // bundle", because `site` legitimately DOES cross, inside `WorkItem.url`.
   ipcMain.handle(IPC.JIRA_COMMENT, (_event, req: { itemId: string; body: string }) =>
     commentOnWorkItem({ store: credentialStore, requester: createJiraRequester() }, req.itemId, req.body))
   ipcMain.handle(IPC.JIRA_TRANSITION, (_event, req: { itemId: string; transitionId: string }) =>

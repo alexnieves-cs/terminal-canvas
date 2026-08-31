@@ -11969,7 +11969,13 @@ app.whenReady().then(async () => {
       ok('174 a Jira comment typed into a real draft reaches the adapter',
         minted === true && row === true && jiraSent.length === 1 &&
           jiraSent[0].itemId === 'TC-12' && jiraSent[0].body === 'agent finished the refactor' &&
-          /comment/i.test(String(outcome)),
+          // EXACT, never /comment/i: the failure text on a rejected invoke
+          // is 'the comment could not be sent', which matches that regex
+          // just as well as the success text does — a clause that cannot
+          // separate success from failure. The conjunction above happens to
+          // make it unreachable today, which is precisely the state in which
+          // a loose assertion survives into a future where it is reachable.
+          outcome === 'comment added',
         `minted=${minted} row=${row} sent=${JSON.stringify(jiraSent)} outcome=${outcome}`)
     }
 

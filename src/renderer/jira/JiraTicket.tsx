@@ -17,7 +17,15 @@ export function JiraTicket(props: {
   const { item } = props
   const [draft, setDraft] = useState<string | null>(null)
   const [transitions, setTransitions] = useState<WorkItemTransition[] | null>(null)
-  const [busy, setBusy] = useState(false)
+  /**
+   * WHICH verb is in flight, never a bare boolean. One shared boolean made
+   * every control read as busy, so sending a COMMENT relabelled the Move
+   * button "Loading…" — a label claiming a transition fetch that was not
+   * happening. Two booleans would desync; one value that names the verb
+   * cannot. Every control still disables on any in-flight write, which is
+   * correct: the row has one row's worth of state to keep consistent.
+   */
+  const [busy, setBusy] = useState<null | 'comment' | 'transitions' | 'transition'>(null)
   const [outcome, setOutcome] = useState<string | null>(null)
 
   /**
@@ -49,9 +57,9 @@ export function JiraTicket(props: {
     // there is nothing left to say. The empty case is reachable from the
     // primary path — press Enter on an empty field — and must say why, or
     // Enter becomes an inert key with no explanation.
-    if (busy) return
+    if (busy !== null) return
     if (body === '') { setOutcome('a comment needs a body'); return }
-    setBusy(true)
+    setBusy('comment')
     void window.canvas.jira.comment({ itemId: item.id, body })
       .then((result) => {
         setOutcome(result.kind === 'done' ? 'comment added' : result.reason)
@@ -60,14 +68,14 @@ export function JiraTicket(props: {
       // A rejected invoke must LAND IN AN ARM, never be swallowed: an
       // unresolved promise leaves the row reading "sending…" forever.
       .catch(() => setOutcome('the comment could not be sent'))
-      .finally(() => setBusy(false))
+      .finally(() => setBusy(null))
   }
 
   /** The FETCH is the arm. It is also where "you cannot transition this" is
    *  discovered, before a button that would fail is ever offered. */
   const armTransition = (): void => {
-    if (busy) return
-    setBusy(true)
+    if (busy !== null) return
+    setBusy('transitions')
     void window.canvas.jira.transitions(item.id)
       .then((result) => {
         if (result.kind === 'transitions') {
@@ -76,12 +84,12 @@ export function JiraTicket(props: {
         } else setOutcome(result.reason)
       })
       .catch(() => setOutcome('transitions could not be read'))
-      .finally(() => setBusy(false))
+      .finally(() => setBusy(null))
   }
 
   const runTransition = (transitionId: string): void => {
-    if (busy) return
-    setBusy(true)
+    if (busy !== null) return
+    setBusy('transition')
     void window.canvas.jira.transition({ itemId: item.id, transitionId })
       .then((result) => {
         setOutcome(result.kind === 'done' ? 'ticket moved' : result.reason)
@@ -92,7 +100,7 @@ export function JiraTicket(props: {
         if (result.kind === 'done') props.onWritten()
       })
       .catch(() => setOutcome('the transition could not be sent'))
-      .finally(() => setBusy(false))
+      .finally(() => setBusy(null))
   }
 
   const stop = (event: { stopPropagation(): void; preventDefault(): void }): void => {
@@ -109,22 +117,22 @@ export function JiraTicket(props: {
       <button
         type="button"
         data-jira-comment-open
-        disabled={busy}
+        disabled={busy !== null}
         onMouseDown={(e) => {
           stop(e)
           if (draft === null) { capturedFocusRef.current = props.focusedId; setDraft('') }
           else closeDraft()
         }}
       >Comment</button>
-      <button type="button" disabled={busy} onMouseDown={(e) => { stop(e); armTransition() }}>
-        {busy && transitions === null ? 'Loading…' : 'Move…'}
+      <button type="button" disabled={busy !== null} onMouseDown={(e) => { stop(e); armTransition() }}>
+        {busy === 'transitions' ? 'Loading…' : 'Move…'}
       </button>
     </div>
 
     {transitions !== null && transitions.length > 0 && (
       <div className="jira-node__transitions">
         {transitions.map((t) => <button
-          key={t.id} type="button" disabled={busy}
+          key={t.id} type="button" disabled={busy !== null}
           onMouseDown={(e) => { stop(e); runTransition(t.id) }}
         >{t.name}{t.toState !== null && t.toState !== t.name ? ` → ${t.toState}` : ''}</button>)}
       </div>
@@ -158,8 +166,8 @@ export function JiraTicket(props: {
           }}
           onMouseDown={(event) => event.stopPropagation()}
         />
-        <button type="button" disabled={busy} onMouseDown={(e) => { stop(e); sendComment() }}>
-          {busy ? 'Sending…' : 'Send'}
+        <button type="button" disabled={busy !== null} onMouseDown={(e) => { stop(e); sendComment() }}>
+          {busy === 'comment' ? 'Sending…' : 'Send'}
         </button>
       </div>
     )}

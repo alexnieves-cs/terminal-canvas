@@ -426,6 +426,16 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 // 22 is an ALLOWLIST, never a test for a forbidden spelling. Testing for
 // `jira:delete` would pin THAT spelling and let a sibling named
 // JIRA_DELETE_ISSUE sail through, which is exactly the trap check 20 records.
+//
+// 22 CARRIES A THIRD LIMIT OF ITS OWN, beside the two 23 records below, and it
+// is stated here so a green run is not over-read: this is a PREFIX-KEYED
+// allowlist. It matches /JIRA_[A-Z_]+/ inside the `IPC` object alone, so a
+// write channel named without that prefix — WORKITEM_DELETE, TICKET_UPDATE —
+// is invisible to it, as is anything added to IPC_EVENTS. That is inherent to
+// keying on a prefix and is the right trade (the alternative, an allowlist
+// over EVERY channel, goes red on every unrelated milestone and is therefore
+// the kind that gets widened until it means nothing), but it means a green 22
+// says "no unexpected JIRA_* invoke exists", never "no write channel exists".
 {
   const contract = stripComments(read('src/shared/ipc-contract.ts') ?? '')
   const objMatch = contract.match(/export const IPC = \{([\s\S]*?)\n\} as const/)
