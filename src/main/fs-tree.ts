@@ -1,5 +1,4 @@
 import { readdirSync } from 'node:fs'
-import { join } from 'node:path'
 import type { DirResult, FsEntry, FsEntryKind } from '../shared/fs-tree'
 
 /**
@@ -79,7 +78,3 @@ export function readDir(path: string, opts: { showHidden: boolean }): DirResult 
   return { kind: 'ok', entries, truncated: all.length - entries.length }
 }
 
-/** Exported for the ipc handler; kept here so the join is not re-derived. */
-export function childPath(dir: string, name: string): string {
-  return join(dir, name)
-}

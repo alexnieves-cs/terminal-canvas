@@ -318,6 +318,27 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
   subagentTurns: 0
 }) as UsageFieldModel
 
+/**
+ * The noun each sessionless kind is called by, in the one place a control has
+ * to explain why it is disabled.
+ *
+ * It is a Record over `Exclude<Panel['kind'], 'terminal'>` rather than a
+ * lookup with a fallback, and that is the entire point: a SIXTH panel kind is
+ * a compile error here rather than a silent fall-through. Inspector.tsx used
+ * to spell this as a nested `kind === 'review' ? … : kind === 'file' ? …`
+ * ternary, so `toolbox` — and then `jira` — fell past both arms into the
+ * terminal branch and rendered "<name> has not started yet" on the Restart
+ * control: a sentence about a process, on a panel that owns none, which is the
+ * same defect railTail's own missing arm produced one file over. A default
+ * string would have hidden the next one exactly as well; tsc will not.
+ */
+export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  review: 'A review node',
+  file: 'A file panel',
+  toolbox: 'A toolbox node',
+  jira: 'A Jira panel'
+}
+
 export function buildInspectorModel(
   panel: Panel,
   status: PanelStatus | undefined,
@@ -439,7 +460,7 @@ export function buildInspectorModel(
       ]
     }
   }
-  if (isJiraPanel(panel)) return { kind: 'file', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
+  if (isJiraPanel(panel)) return { kind: 'jira', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
     { key: 'command', label: 'command', value: running?.command ?? 'not started' },

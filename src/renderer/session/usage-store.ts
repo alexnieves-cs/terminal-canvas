@@ -5,13 +5,13 @@ import type { PanelUsage } from '@shared/cost'
 /**
  * What each panel's agent has spent, as told by main.
  *
- * A FOURTH module-level store beside agent-state-store.ts, live-session-store.ts
+ * Another module-level store beside agent-state-store.ts, live-session-store.ts
  * and the link store, and subscribed the same way: PER PANEL ID. This must
  * never bump registry.version() — that counter deliberately moves only on
  * tier/status/focus/exit so a chatty agent cannot re-render the canvas at
  * 60Hz, and a fact that changes on every agent TURN riding it would put that
  * traffic straight back, for every panel, on every OTHER panel's turn. This is
- * the fourth entry to record that rule; each of the previous three found it
+ * one more entry recording that rule; each of the others found it
  * independently.
  *
  * A CACHE of main's answer, never a second author of it. Nothing here counts

@@ -2112,7 +2112,13 @@ body {
    needs. The body is the ONE element carrying data-scroll-host, which is what
    gives this kind the wheel over itself; shouldYieldWheel needed no edit for
    it, because rule 3 asks the DOM rather than the panel's kind. */
-.file-node__body {
+.file-node__body,
+/* M27 audit: JiraNode rendered the .file-node__* class names literally, so a
+   change to the file panel's chrome silently restyled Jira panels. Sharing the
+   RULE by naming both selectors keeps the two visually identical — which they
+   are meant to be — without either kind reading as the other in the markup. It
+   collapses to one selector when <PanelFrame> lands. */
+.jira-node__body {
   flex: 1;
   min-height: 0;          /* or the <pre> refuses to shrink and the box overflows */
   /* BOTH axes, unlike .review-node__body's overflow-y. Lines here do not wrap
@@ -2147,7 +2153,8 @@ body {
 /* Amber, like .review-node__note: every non-text arm (missing, too-large,
    binary, unreadable) lands here, and each is a state the user may want to act
    on rather than an error. */
-.file-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
+.file-node__note,
+.jira-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
 
 .file-node__pre {
   margin: 0;
@@ -2180,7 +2187,8 @@ body {
 .jira-node__item small { display: block; color: var(--fg-3); margin-top: var(--sp-1); }
 .jira-node__item p { white-space: pre-wrap; margin: var(--sp-2) 0; }
 
-.file-node__refresh {
+.file-node__refresh,
+.jira-node__refresh {
   /* Never shrunk to make room for a long heading — the same rule
      .panel__close obeys, and it shares that button's chrome row. */
   flex: none;
@@ -2192,7 +2200,8 @@ body {
   color: var(--fg-3);
 }
 
-.file-node__refresh:hover { color: var(--fg); }
+.file-node__refresh:hover,
+.jira-node__refresh:hover { color: var(--fg); }
 
 /* Present and DISABLED when model.editable is false — see FileNode's own
    comment on the button. The disabled colour matches .review-node__commit's,
@@ -2772,6 +2781,7 @@ body {
 .review-node__refresh,
 .review-node__commit,
 .file-node__refresh,
+.jira-node__refresh,
 .file-node__edit,
 .file-node__save,
 .file-node__conflict button {

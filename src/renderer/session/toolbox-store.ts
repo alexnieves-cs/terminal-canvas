@@ -3,9 +3,9 @@ import type { PanelId } from '@shared/types'
 import type { ToolInventoryResult } from '@shared/toolbox'
 
 /**
- * A SIXTH module-level store, subscribed per panel id, over a cached snapshot.
+ * Another module-level store, subscribed per panel id, over a cached snapshot.
  *
- * The rule this file has now recorded six times, and it is the one that must
+ * The rule every store in this directory records, and it is the one that must
  * not be undone: **this store must never bump `registry.version()`.** That
  * counter is what `TerminalPanel`'s `memo` is gated on, and it deliberately
  * moves only on tier/status/focus/exit — anything higher-frequency riding it

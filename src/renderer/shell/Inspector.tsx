@@ -1,7 +1,7 @@
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import { agentStateLabel } from './inspector-fields'
+import { agentStateLabel, KIND_NOUN } from './inspector-fields'
 import { shellControl } from './shell-control'
 
 export interface AutomationRow {
@@ -318,13 +318,21 @@ function InspectorPanel({
           className="inspector__action"
           data-inspector-action="restart"
           disabled={model.kind !== 'terminal' || !model.restartable}
-          title={model.kind === 'review'
-            ? 'A review node has no process to restart'
-            : model.kind === 'file'
-              ? 'A file panel has no process to restart'
-              : model.restartable
-                ? `Restart ${model.heading} — ends the running process and starts it again`
-                : `${model.heading} has not started yet`}
+          title={
+            // Terminal is the SPECIAL case and every other kind is uniform,
+            // which is the inverse of how this read until the M27 audit. The
+            // old shape named 'review' and 'file' explicitly and let everything
+            // else fall into the terminal branch — so a toolbox node, and then
+            // a Jira panel, advertised "<name> has not started yet" on a
+            // control disabled precisely because there is nothing to start.
+            // KIND_NOUN is a total Record over the sessionless kinds, so a
+            // sixth kind cannot reach this sentence without failing to compile.
+            model.kind === 'terminal'
+            ? model.restartable
+              ? `Restart ${model.heading} — ends the running process and starts it again`
+              : `${model.heading} has not started yet`
+            : `${KIND_NOUN[model.kind]} has no process to restart`
+          }
           {...shellControl(() => onRestart(model.id))}
         >
           Restart
@@ -343,11 +351,9 @@ function InspectorPanel({
           className="inspector__action"
           data-inspector-action="save-preset"
           disabled={model.kind !== 'terminal'}
-          title={model.kind === 'review'
-            ? 'A review node is not a spawnable panel'
-            : model.kind === 'file'
-              ? 'A file panel is not a spawnable panel'
-              : `Save ${model.heading} as a preset`}
+          title={model.kind === 'terminal'
+            ? `Save ${model.heading} as a preset`
+            : `${KIND_NOUN[model.kind]} is not a spawnable panel`}
           {...shellControl(() => onSavePreset(model.id))}
         >
           Save as preset

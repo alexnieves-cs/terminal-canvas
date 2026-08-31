@@ -4,7 +4,7 @@ import type { PanelId, SubagentRecord, SubagentUpdate } from '@shared/types'
 /**
  * Which subagents each panel's agent is running, as told by main.
  *
- * A FIFTH module-level store beside agent-state-store.ts and
+ * Another module-level store beside agent-state-store.ts and
  * live-session-store.ts, subscribed the same way: PER PANEL ID. It must never
  * bump registry.version() — that counter deliberately moves only on
  * tier/status/focus/exit, and a fact that changes when a model decides to fan

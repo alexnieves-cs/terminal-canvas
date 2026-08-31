@@ -1872,6 +1872,72 @@ const inventory = (over) => ({
     JSON.stringify({ rectStable: a === moved, modeMoves: a !== b, effortMoves: a !== c }))
 }
 
+/* ---- Every kind answers for itself ---- */
+
+// kind-tail.1. EVERY member of the Panel['kind'] union gets a tail of its own,
+//     and only 'terminal' is allowed to answer the process vocabulary.
+//
+//     railTail's three sessionless arms are a hand-maintained checklist, and a
+//     kind added without one does not fail — it FALLS THROUGH to `dormant`
+//     (always false for a sessionless kind, per buildRailRows) and then to
+//     `status === undefined`, and renders 'not started'. That is a sentence
+//     about a process the panel does not own, on a panel that will never have
+//     one, and it is exactly what the comments above each existing arm say
+//     those arms are there to prevent.
+//
+//     This is not hypothetical. 'jira' — the kind added most recently and
+//     written most tersely — shipped with no arm at all and rendered
+//     'not started' in the rail for the life of every Jira panel. This check
+//     was watched RED against that code, reporting jira -> "not started".
+//
+//     The list is spelled out rather than derived, because Panel['kind'] is a
+//     TYPE and this suite is plain node with no type information at runtime —
+//     so a sixth kind must be added here by hand. That is the same obligation
+//     isTerminalPanel already carries (panels.ts says so in its own comment),
+//     and a failing check is a far cheaper reminder than a rail row that lies.
+//
+//     The TERMINAL clause is the non-vacuity guard: 'not started' is the
+//     CORRECT answer for a terminal panel that has not spawned, so a check
+//     that only asserted "no kind says 'not started'" would be demanding the
+//     wrong thing of the one kind that owns a process.
+{
+  const PROCESS_WORDS = ['not started', 'dormant', 'exited', 'pid ', 'starting']
+  const SESSIONLESS = ['review', 'file', 'toolbox', 'jira']
+  const tails = {}
+  for (const k of SESSIONLESS) tails[k] = R.railTail(undefined, false, k)
+  const bad = SESSIONLESS.filter((k) => PROCESS_WORDS.some((w) => tails[k].includes(w)))
+  // Each kind must also be DISTINGUISHABLE — two kinds sharing one tail is the
+  // copy-paste that produced this defect's sibling in inspector-fields.ts.
+  const distinct = new Set(SESSIONLESS.map((k) => tails[k])).size === SESSIONLESS.length
+  const terminalStillHonest = R.railTail(undefined, false, 'terminal') === 'not started'
+  ok('kind-tail.1 every sessionless kind has its own tail and only terminal speaks of processes',
+    bad.length === 0 && distinct && terminalStillHonest,
+    JSON.stringify({ tails, bad, distinct, terminalStillHonest }))
+}
+
+// kind-tail.2. buildInspectorModel reports each kind AS ITSELF. InspectorModel.kind
+//     is typed Panel['kind'], so every kind name is legal in every arm and a
+//     copy-pasted arm is invisible to tsc — which is exactly what happened:
+//     the Jira arm returned `kind: 'file'`. That field is what the Inspector
+//     reads to decide which controls a panel gets, so a mislabelled panel is
+//     offered another kind's verbs.
+//
+//     Asserted for all four sessionless kinds in ONE read, because an arm that
+//     got any single one wrong still looks correct beside the other three.
+{
+  const R_ = R
+  const mk = (kind, extra) => ({ kind, rect: { id: kind[0] + '1', x: 0, y: 0, w: 100, h: 100 }, z: 1, ...extra })
+  const got = {
+    review: R_.buildInspectorModel(mk('review', { subject: { subjectId: 'p1', repoRoot: '/r', baselineSha: 'abc', label: 'x' } }), undefined, undefined, []).kind,
+    file: R_.buildInspectorModel(mk('file', { source: { path: '/a/b.txt' } }), undefined, undefined, []).kind,
+    toolbox: R_.buildInspectorModel(mk('toolbox', { source: { cwd: '/a', label: 'a' } }), undefined, undefined, []).kind,
+    jira: R_.buildInspectorModel(mk('jira', { title: 'Jira tickets' }), undefined, undefined, []).kind
+  }
+  const allSelf = Object.entries(got).every(([k, v]) => k === v)
+  ok('kind-tail.2 the inspector model reports every sessionless kind as itself',
+    allSelf, JSON.stringify(got))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

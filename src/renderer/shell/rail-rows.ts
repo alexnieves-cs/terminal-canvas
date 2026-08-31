@@ -91,6 +91,15 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
   // toolbox node owns no process, so a 'dormant' tail would render a start
   // control nothing can honour.
   if (kind === 'toolbox') return 'toolbox'
+  // Same reason a fourth time, and the same placement BEFORE the dormant test.
+  // This arm was MISSING until the M27 refactor audit, and its absence is the
+  // clearest evidence that this if-chain is a hand-maintained checklist: a Jira
+  // panel fell through to `dormant` (always false for a sessionless kind, per
+  // buildRailRows below) and then to `status === undefined`, so every Jira
+  // panel's rail row read 'not started' — a process sentence, permanently, for
+  // a panel that owns no process. verify:rail kind-tail.1 is pinned against it
+  // and covers every kind at once, so a sixth kind cannot repeat this quietly.
+  if (kind === 'jira') return 'jira'
   if (dormant) return 'dormant'
   if (status === undefined) return 'not started'
   switch (status.kind) {

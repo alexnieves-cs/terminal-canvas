@@ -5,7 +5,7 @@ import type { FileResult } from '@shared/file-panel'
 /**
  * What each open file panel's file currently says, as told by main.
  *
- * A FOURTH module-level store beside agent-state-store.ts and
+ * Another module-level store beside agent-state-store.ts and
  * live-session-store.ts, subscribed the same way: PER PANEL ID.
  *
  * It must never bump registry.version(). That counter deliberately moves only
@@ -13,7 +13,14 @@ import type { FileResult } from '@shared/file-panel'
  * 60Hz, and this is the most acute case yet — file content can change several
  * times a second while an agent writes, and riding that counter would
  * re-render every panel on the canvas on every byte some OTHER panel's file
- * gained. CLAUDE.md records this rule three times already; this is the fourth.
+ * gained. CLAUDE.md records this rule for every store in this directory.
+ *
+ * The ordinal this comment used to carry ("a FOURTH...") was dropped in the
+ * M27 audit: it was maintained by hand across seven files and had already
+ * drifted — usage-store.ts and machine-cost-store.ts were never counted, so
+ * this file said FOURTH and toolbox-store.ts said SIXTH when the directory
+ * held seven. A count restated in prose in seven places is the same failure
+ * the check-id sequence had; the rule is what matters, not the tally.
  *
  * A CACHE of main's answer, never a second author of it. Nothing here decides
  * what a file says; main reads and this holds what arrived.
