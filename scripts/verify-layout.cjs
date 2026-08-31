@@ -1379,37 +1379,56 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     JSON.stringify(res && res.state.panels))
 }
 
-// 95. M8a's rail toggle. Declared like every other def and round-tripping
-//     through a write and a reopen. The keywords carry more weight here than
-//     usual: a user who wants the sidebar back has no vocabulary for "rail",
-//     so "sidebar" and "panel list" have to be in the haystack or the switch
-//     is reachable only by someone who already knows its name.
+// 95. M23a: the navigator pane's id, which REPLACES M8a's shell.railOpen and
+//     files.treeOpen. This check's subject genuinely changed — three region
+//     booleans became one enumerated id — which is the bar for rewriting a
+//     check rather than deleting it.
+//
+//     The keywords carry more weight here than usual, and for the reason the
+//     old check recorded about "rail": a user who wants the sidebar back has
+//     no vocabulary for "navigator" either, so both words have to be in the
+//     haystack or the switch is reachable only by someone who already knows
+//     its name.
+//
+//     `default === 'panels'` and NOT 'none'. A default of 'none' would leave a
+//     fresh install showing a bare icon column with no list beside it, and
+//     would leave the Wide breakpoint holding a resident column with nothing
+//     in it — residency is a CSS width, but the CONTENT still needs a pane id.
 {
-  const def = L.settingDef('shell.railOpen')
-  const declared = def !== undefined && def.type === 'boolean' && def.default === true &&
+  const def = L.settingDef('shell.navigatorPane')
+  const declared = def !== undefined && def.type === 'string' && def.default === 'panels' &&
     def.category === L.SHELL_CATEGORY &&
+    Array.isArray(def.values) && def.values.includes('none') && def.values.includes('files') &&
     typeof def.label === 'string' && def.label.length > 0 &&
     typeof def.description === 'string' && def.description.length > 0 &&
-    Array.isArray(def.keywords) && def.keywords.includes('sidebar')
+    Array.isArray(def.keywords) && def.keywords.includes('sidebar') &&
+    def.keywords.includes('navigator')
   const path = tmp()
   const a = L.createLayoutStore({ filePath: path })
   a.load()
-  a.setPreference('shell.railOpen', false)
+  a.setPreference('shell.navigatorPane', 'files')
   a.flushSync()
   const b = L.createLayoutStore({ filePath: path })
   b.load()
-  ok('95 shell.railOpen is declared and round-trips',
-    declared && b.getSetting('shell.railOpen') === false,
-    `declared=${declared} reopened=${b.getSetting('shell.railOpen')}`)
+  ok('95 shell.navigatorPane is declared and round-trips',
+    declared && b.getSetting('shell.navigatorPane') === 'files',
+    `declared=${declared} reopened=${b.getSetting('shell.navigatorPane')}`)
 }
 
-// 96. The inspector toggle, and the half that is not a copy of 95: the two
-//     ids are INDEPENDENT. One sparse map holds both, and writing one must
-//     not disturb the other — a shared key, or a def whose id was pasted from
-//     its neighbour, produces two switches that move together and looks like
-//     a rendering bug rather than a schema one.
+// 96. The context pane's toggle, and the half that is not a copy of 95 is
+//     unchanged from the check this replaces: the two ids are INDEPENDENT.
+//     One sparse map holds both, and writing one must not disturb the other —
+//     a shared key, or a def whose id was pasted from its neighbour, produces
+//     two switches that move together and looks like a rendering bug rather
+//     than a schema one.
+//
+//     Independence matters MORE now than it did for the rail/inspector pair,
+//     not less: the two ids are no longer the same TYPE, so a paste that got
+//     the id wrong would now also be writing a boolean into a def that
+//     declares string values — refused by both doors, which means the switch
+//     would silently do nothing at all rather than move its neighbour.
 {
-  const def = L.settingDef('shell.inspectorOpen')
+  const def = L.settingDef('shell.contextOpen')
   const declared = def !== undefined && def.type === 'boolean' && def.default === true &&
     def.category === L.SHELL_CATEGORY &&
     typeof def.label === 'string' && def.label.length > 0 &&
@@ -1418,14 +1437,14 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
   const path = tmp()
   const a = L.createLayoutStore({ filePath: path })
   a.load()
-  a.setPreference('shell.inspectorOpen', false)
+  a.setPreference('shell.contextOpen', false)
   a.flushSync()
   const b = L.createLayoutStore({ filePath: path })
   b.load()
-  ok('96 shell.inspectorOpen is declared, round-trips, and is independent of the rail',
-    declared && b.getSetting('shell.inspectorOpen') === false &&
-      b.getSetting('shell.railOpen') === true,
-    `declared=${declared} inspector=${b.getSetting('shell.inspectorOpen')} rail=${b.getSetting('shell.railOpen')}`)
+  ok('96 shell.contextOpen is declared, round-trips, and is independent of the navigator',
+    declared && b.getSetting('shell.contextOpen') === false &&
+      b.getSetting('shell.navigatorPane') === 'panels',
+    `declared=${declared} context=${b.getSetting('shell.contextOpen')} nav=${b.getSetting('shell.navigatorPane')}`)
 }
 
 // 97. THE SHARED MINT. Both save surfaces — the menu's focused-panel path and
@@ -2617,8 +2636,11 @@ const filePanelOnDisk = (id, over = {}) => ({
 //      the half that proves "alone".
 {
   const w = []
+  // The neighbour is `files.showHidden`, NOT a retired region id: M23a
+  // migrates shell.railOpen onto shell.navigatorPane, so using it here would
+  // make the "alone" clause read a key this fixture never wrote.
   const out = L.parsePreferences(
-    { 'appearance.theme': 'chartreuse', 'shell.railOpen': false }, w)
+    { 'appearance.theme': 'chartreuse', 'files.showHidden': true }, w)
   // The warning must name the PERMITTED VALUES, not merely the id. Without
   // that clause this check passes for the wrong reason and cannot be watched
   // failing at all: before appearance.theme is declared, parsePreferences
@@ -2628,7 +2650,7 @@ const filePanelOnDisk = (id, over = {}) => ({
   // something only the values-list branch can do.
   ok('152 an undeclared string value is dropped on load, with a warning, alone',
     !('appearance.theme' in out) &&
-      out['shell.railOpen'] === false &&
+      out['files.showHidden'] === true &&
       w.some((m) => m.includes('appearance.theme') && m.includes('system')),
     JSON.stringify(out) + ' | ' + w.join('|'))
 }
@@ -2658,6 +2680,43 @@ const filePanelOnDisk = (id, over = {}) => ({
   ok('153 appearance.theme is declared and round-trips',
     declared && b.getSetting('appearance.theme') === 'dark',
     `declared=${declared} reopened=${b.getSetting('appearance.theme')}`)
+}
+
+
+// 154. M23a: the three retired region ids migrate onto the new pair, and a
+//      file that held NONE of them stays ABSENT rather than being given an
+//      explicit value.
+//
+//      That second clause is the one that matters. The preferences map is
+//      sparse on purpose — absent means "still at the schema default" — so
+//      seeding a value for a file with no choice to preserve would make every
+//      fresh install explicit on its first launch and freeze both defaults in
+//      place forever. It is the same trap parseLayout's own pre-M6b migration
+//      records having to deviate from a literal reading to avoid.
+//
+//      The third clause covers the branch the plan omitted: a user who
+//      DELIBERATELY closed the rail and never opened the tree must land on
+//      'none', not on absent — absent resolves to the 'panels' default and
+//      would re-open a column they had shut.
+{
+  const w = []
+  const withLegacy = L.parsePreferences(
+    { 'files.treeOpen': true, 'shell.inspectorOpen': false }, w)
+  const fresh = L.parsePreferences({}, w)
+  const closed = L.parsePreferences({ 'shell.railOpen': false }, w)
+  ok('154 the retired region ids migrate, and absence stays absent',
+    withLegacy['shell.navigatorPane'] === 'files' &&
+      withLegacy['shell.contextOpen'] === false &&
+      fresh['shell.navigatorPane'] === undefined &&
+      fresh['shell.contextOpen'] === undefined &&
+      closed['shell.navigatorPane'] === 'none' &&
+      // A recognised id must NOT warn as unknown: it was carried forward, and
+      // a message saying it was dropped is false in the one direction that
+      // sends somebody hunting for a bug that is not there.
+      !w.some((m) => m.includes('unknown setting')),
+    `migrated=${withLegacy['shell.navigatorPane']}/${withLegacy['shell.contextOpen']} ` +
+    `fresh=${fresh['shell.navigatorPane']}/${fresh['shell.contextOpen']} ` +
+    `closed=${closed['shell.navigatorPane']} warns=${w.length}`)
 }
 
 console.log('\n' + '='.repeat(60))

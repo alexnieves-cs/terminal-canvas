@@ -1458,6 +1458,93 @@ const WS = [
     ]))
 }
 
+
+// ---------------------------------------------------------------------------
+// M23a — the enum setting's own rows.
+// ---------------------------------------------------------------------------
+
+// 85. A `'string'` SettingDef with declared values generates ONE RUNNABLE ROW
+//     PER VALUE, each scoped and hidden at rest, each wired to the value it
+//     names.
+//
+//     This branch is what stops an enum setting being reachable only from a
+//     surface that already knows its name. Until it existed a `'string'` def
+//     generated no row at all — so retiring shell.railOpen, whose own keywords
+//     comment agonises over a user having no vocabulary for "rail", would have
+//     removed the sidebar from the palette entirely as a SIDE EFFECT of the id
+//     changing type.
+//
+//     The clause that discriminates is the one asserting the two rows run
+//     DIFFERENT values. A loop that pushed N rows all wired to the same value
+//     satisfies every count, renders a perfectly plausible list, and leaves
+//     four of the five rows silently doing the same thing — which reads as the
+//     palette being broken rather than as a wiring bug, because pressing any
+//     of them appears to work.
+//
+//     hiddenAtRest is not decoration here: M6p sized the resting list to
+//     roughly eight rows on purpose, and one five-valued enum un-hidden there
+//     is exactly the drift hiddenAtRest exists to refuse.
+{
+  const ENUM = {
+    id: 'shell.navigatorPane', label: 'Navigator pane',
+    description: 'Which navigator pane is open beside the canvas.',
+    keywords: ['sidebar', 'navigator'], type: 'string', value: 'panels',
+    values: ['none', 'workspaces', 'panels', 'files'],
+    category: 'Shell'
+  }
+  const written = []
+  const actions = { toggleSetting: (id, value) => written.push([id, value]) }
+  const rows = P.buildCommands(ctx({ settings: [ENUM], actions }))
+  const ids = rows.filter((r) => r.id.startsWith('setting.shell.navigatorPane'))
+  const files = byId(rows, 'setting.shell.navigatorPane.files')
+  const none = byId(rows, 'setting.shell.navigatorPane.none')
+  if (files) files.run()
+  if (none) none.run()
+  ok(85,
+    ids.length === 4 &&
+      files !== undefined && none !== undefined &&
+      files.disabledReason === undefined &&
+      files.scope === 'settings' && files.hiddenAtRest === true &&
+      files.title.includes('Navigator pane') &&
+      // Different values, not four rows wired to one.
+      written.length === 2 &&
+      written[0][0] === 'shell.navigatorPane' && written[0][1] === 'files' &&
+      written[1][1] === 'none',
+    `rows=${ids.length} wrote=${JSON.stringify(written)}`)
+}
+
+// 86. The CURRENT value is marked, and every row is findable by the def's own
+//     keywords AND by the raw value.
+//
+//     Marking matters because the alternative readings are both wrong: a list
+//     that DROPPED the active value leaves the user unable to see what the
+//     setting is set to, and one that gave no sign at all makes every row look
+//     equally like the answer. Findability by the RAW value is what makes the
+//     prettified title safe — the row renders "Files" and the user may well
+//     type "files".
+{
+  const ENUM = {
+    id: 'appearance.theme', label: 'Theme',
+    description: 'Match the system, or force light or dark.',
+    keywords: ['appearance'], type: 'string', value: 'dark',
+    values: ['system', 'light', 'dark'],
+    category: 'Appearance'
+  }
+  const rows = P.buildCommands(ctx({ settings: [ENUM] }))
+  const dark = byId(rows, 'setting.appearance.theme.dark')
+  const light = byId(rows, 'setting.appearance.theme.light')
+  const foundByValue = P.filterCommands(rows, 'light')
+    .some((r) => r.id === 'setting.appearance.theme.light')
+  const foundByKeyword = P.filterCommands(rows, 'appearance')
+    .some((r) => r.id === 'setting.appearance.theme.dark')
+  ok(86,
+    dark !== undefined && light !== undefined &&
+      dark.subtitle.includes('current') && !light.subtitle.includes('current') &&
+      foundByValue && foundByKeyword,
+    `dark="${dark && dark.subtitle}" light="${light && light.subtitle}" ` +
+    `byValue=${foundByValue} byKeyword=${foundByKeyword}`)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -165,42 +165,15 @@ export const SETTINGS: readonly SettingDef[] = [
     default: true,
     category: AGENT_CATEGORY
   },
-  {
-    id: 'shell.railOpen',
-    label: 'Show the side rail',
-    description: 'Keep the left rail open beside the canvas.',
-    keywords: ['rail', 'sidebar', 'side bar', 'left', 'panel list', 'outline', 'shell', 'chrome', 'hide'],
-    type: 'boolean',
-    default: true,
-    category: SHELL_CATEGORY
-  },
-  {
-    id: 'shell.inspectorOpen',
-    label: 'Show the inspector',
-    description: 'Keep the right inspector open beside the canvas.',
-    keywords: ['inspector', 'details', 'properties', 'right', 'sidebar', 'info', 'shell', 'chrome', 'hide'],
-    type: 'boolean',
-    default: true,
-    category: SHELL_CATEGORY
-  },
-  {
-    id: 'files.treeOpen',
-    label: 'Show the file tree',
-    // Says what it DOES, not what it is.
-    description: 'Keep the file tree open on the far left, beside the rail.',
-    // A user who wants this has no vocabulary for "tree". They will type
-    // "files", "explorer", "sidebar" or "browser" — so a setting findable only
-    // by its own label is a setting most users will not find. The rail's own
-    // keywords make the same argument for "sidebar".
-    keywords: ['files', 'file tree', 'tree', 'explorer', 'browser', 'directory',
-      'folder', 'sidebar', 'shell', 'chrome', 'hide'],
-    type: 'boolean',
-    // CLOSED by default, unlike the rail and inspector. It is a fourth thing
-    // competing for horizontal width — at 220 + 240 + 260 a 1280px window has
-    // 560px of canvas left — so the user opens it when they want it.
-    default: false,
-    category: FILES_CATEGORY
-  },
+  // M23a. shell.railOpen, shell.inspectorOpen and files.treeOpen USED TO SIT
+  // HERE. They are RETIRED, not merely superseded, and deleting the defs is
+  // the half that matters: leaving them declared beside their replacements
+  // keeps main's settings:list generating live palette rows for them, and a
+  // user toggling "Show the side rail" would write a preference that
+  // parsePreferences then MIGRATES over their real navigator choice at the
+  // next launch — a switch that appears to work and silently rewrites a
+  // different setting a launch later. RETIRED_REGION_IDS in layout-schema.ts
+  // is where they live on, for the load path alone.
   {
     id: 'files.showHidden',
     label: 'Show hidden files',
@@ -212,6 +185,45 @@ export const SETTINGS: readonly SettingDef[] = [
     // anything a user can toggle lives in this one schema.
     default: false,
     category: FILES_CATEGORY
+  },
+  {
+    // M23a. The three region booleans above collapse into this one id plus
+    // shell.contextOpen. They are RETIRED rather than deleted: parsePreferences
+    // migrates a stored value for any of them onto this pair, because a
+    // preference that vanishes is one the user set that stopped applying with
+    // nothing saying why.
+    id: 'shell.navigatorPane',
+    label: 'Navigator pane',
+    description: 'Which navigator pane is open beside the canvas.',
+    // A user who wants the sidebar back has no vocabulary for "navigator" —
+    // exactly the point shell.railOpen's own entry makes about "rail" — so
+    // every word they might reach for has to be in the haystack or the switch
+    // is findable only by someone who already knows its name.
+    keywords: ['sidebar', 'rail', 'navigator', 'panel list', 'panels',
+      'workspaces', 'files', 'tree', 'explorer', 'attention', 'shell', 'hide'],
+    type: 'string',
+    values: ['none', 'workspaces', 'panels', 'files', 'attention'],
+    // 'panels', NOT 'none', and this differs from the plan deliberately.
+    // 'none' would leave a fresh install showing a bare icon column with no
+    // list beside it — a discoverability regression against today's behaviour,
+    // where shell.railOpen defaults true and the rail's Panels section is what
+    // a new user first sees. It would also leave the Wide breakpoint holding a
+    // resident 260px column with nothing in it, because residency is a CSS
+    // width and the CONTENT still needs a pane id: the breakpoint cannot
+    // "decide" to show a pane that names none.
+    default: 'panels',
+    category: SHELL_CATEGORY
+  },
+  {
+    id: 'shell.contextOpen',
+    label: 'Show the context pane',
+    description: 'Keep the pane on the right showing the selected panel.',
+    keywords: ['inspector', 'context', 'sidebar', 'details', 'right',
+      'properties', 'info', 'shell', 'chrome', 'hide'],
+    type: 'boolean',
+    // True, matching shell.inspectorOpen, which it replaces.
+    default: true,
+    category: SHELL_CATEGORY
   },
   {
     // M23a. The first `'string'` def, and the reason that type exists at all.

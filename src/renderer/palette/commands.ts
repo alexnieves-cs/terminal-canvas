@@ -815,6 +815,12 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // the resting list stays the ~8 rows M6p sized it to rather than growing one
   // row per setting. The door below is the always-visible way in.
 
+  // Title-case for display. The stored value stays the raw string — this is
+  // presentation only, and the raw value is still in searchText so typing it
+  // finds the row.
+  const labelForValue = (value: string): string =>
+    value.charAt(0).toUpperCase() + value.slice(1)
+
   for (const setting of ctx.settings) {
     if (setting.type === 'boolean') {
       const on = setting.value === true
@@ -854,9 +860,50 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       })
       continue
     }
-    // An enum (or any future type) has no row yet — building the input mode
-    // for a type with no customer would repeat the trap ideas-backlog #11
-    // warns about for the schema itself. Falls through to nothing pushed.
+    if (setting.type === 'string' && setting.values !== undefined) {
+      // ONE RUNNABLE ROW PER VALUE, not a row that opens an input mode. The
+      // shape M23's permission-mode rows already established, and the reason
+      // is the same: the set is small, closed and declared, so an input mode
+      // would ask the user to TYPE one of five strings correctly when the
+      // palette could simply offer them.
+      //
+      // This branch is what stops an enum setting being reachable only from a
+      // surface that already knows its name. Until it existed, a `'string'`
+      // def generated no row at all — so retiring shell.railOpen, whose
+      // keywords comment agonises over a user having no vocabulary for "rail",
+      // would have removed the sidebar from the palette entirely as a SIDE
+      // EFFECT of the id changing type. verify:panels 79 is what would have
+      // gone red.
+      const current = typeof setting.value === 'string' ? setting.value : undefined
+      for (const value of setting.values) {
+        out.push({
+          id: `setting.${setting.id}.${value}`,
+          // The VALUE leads the title after the label, and the current one is
+          // marked rather than hidden: a list that dropped the active value
+          // would leave the user unable to see what it is set to, and one that
+          // gave no sign would make every row look equally like the answer.
+          title: `${setting.label}: ${labelForValue(value)}`,
+          subtitle: value === current ? `${setting.description} (current)` : setting.description,
+          // The def's own synonyms PLUS the raw value, so typing the value
+          // finds its row even when the rendered label is a prettier form of
+          // it. searchText leads with the keywords for the reason the haystack
+          // note in palette-model.ts gives.
+          searchText: `${setting.keywords.join(' ')} ${value}`,
+          group: 'setting',
+          scope: 'settings',
+          hiddenAtRest: true,
+          // hiddenAtRest is doing more work here than for a boolean: five
+          // values is five rows, and M6p sized the resting list to roughly
+          // eight rows on purpose. One enum un-hidden there is exactly the
+          // drift hiddenAtRest exists to refuse.
+          run: () => actions.toggleSetting(setting.id, value)
+        })
+      }
+      continue
+    }
+    // Any future type with no row yet — building the input mode for a type
+    // with no customer would repeat the trap ideas-backlog #11 warns about for
+    // the schema itself. Falls through to nothing pushed.
   }
 
   // --- Credentials -----------------------------------------------------------
@@ -908,8 +955,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // ctx.settings.length, so a future type that produces no row (an enum,
     // still uncustomered) cannot make this door claim a setting the scope
     // does not show.
+    // An enum contributes ONE to this count and several rows to the scope,
+    // which is the honest reading: the door says how many SETTINGS are in
+    // there, not how many rows. The predicate still mirrors the loop's own
+    // guards, so a type the loop pushes nothing for cannot be counted.
     const settingCount = ctx.settings.filter(
-      (s) => s.type === 'boolean' || s.type === 'number'
+      (s) => s.type === 'boolean' || s.type === 'number' ||
+        (s.type === 'string' && s.values !== undefined)
     ).length
     out.push({
       id: 'manage.settings',

@@ -5209,8 +5209,9 @@ app.whenReady().then(async () => {
           // precisely a canvas WIDER than the space the other three leave it.
           // ±1 for fractional device pixels, not for slack in the claim.
           //
-          // The tree is COLLAPSED here (files.treeOpen defaults false, and
-          // nothing before this check has touched it), so treeWidth is the
+          // The tree is COLLAPSED here (shell.navigatorPane defaults to
+          // 'panels' rather than 'files', and nothing before this check has
+          // touched it), so treeWidth is the
           // 22px strip rather than the full 220px column — measured, not
           // assumed, the same rule check 125 states for its own open read.
           Math.abs(geom.canvasWidth -
@@ -5300,11 +5301,15 @@ app.whenReady().then(async () => {
         `document.querySelector('.canvas').getBoundingClientRect().width`)
       const liveAfter = await wc.executeJavaScript(
         `document.querySelectorAll('.panel .xterm').length`)
+      // M23a: shell.railOpen is retired and the toggle now writes the
+      // navigator's own id. 'none' rather than false — the region became one
+      // of five states rather than one of two — and the claim is unchanged:
+      // the collapse reached MAIN's store, not only a local boolean.
       const stored = await wc.executeJavaScript(
         `window.canvas.settings.list().then((rows) =>
-           rows.find((r) => r.id === 'shell.railOpen').value)`)
+           rows.find((r) => r.id === 'shell.navigatorPane').value)`)
       ok('75 collapsing the rail widens the canvas, reaches main\'s store, and demotes nothing',
-        after > before + 100 && stored === false &&
+        after > before + 100 && stored === 'none' &&
           liveBefore > 0 && liveAfter >= liveBefore,
         `before=${before} after=${after} stored=${stored} ` +
           `live ${liveBefore} -> ${liveAfter}`)
@@ -5434,7 +5439,7 @@ app.whenReady().then(async () => {
         `panel=${id} before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
       // What 75/75b/75c LEAVE BEHIND, in the spirit of 73's own closing note:
       // the one-panel, one-workspace world is unchanged, but the rail is now
-      // COLLAPSED and `shell.railOpen` is false in main's store (75 collapsed
+      // COLLAPSED and `shell.navigatorPane` is 'none' in main's store (75 collapsed
       // it, 75b's one real chord reopened it, 75c's button click collapsed it
       // again). The inspector is untouched and still open. Anything appended
       // below that measures the canvas's width — or clicks at a screen point
@@ -5632,7 +5637,7 @@ app.whenReady().then(async () => {
 
     // 79. A PALETTE TOGGLE OF THE RAIL REACHES THE SCREEN, not only the store.
     //
-    //     `shell.railOpen` is an ordinary boolean SettingDef, so main's
+    //     `shell.navigatorPane` is an ordinary SettingDef, so main's
     //     settings:list AUTO-GENERATES a runnable palette row for it — nobody
     //     wrote that row, and nobody wired it to the shell. Running it writes
     //     through settings:set and reloads settingRows, which is everything
@@ -5659,7 +5664,7 @@ app.whenReady().then(async () => {
     //     unchanged and shell--rail-collapsed still on the root.
     //
     //     World state inherited from 78: two live panels, camera wherever Fit
-    //     put it, RAIL COLLAPSED (shell.railOpen === false in main's store),
+    //     put it, RAIL COLLAPSED (shell.navigatorPane === 'none' in main's store),
     //     inspector open, palette closed. So the toggle below opens the rail,
     //     and the canvas gets NARROWER — the opposite direction from 75's.
     {
@@ -5674,9 +5679,14 @@ app.whenReady().then(async () => {
       }
       const canvasWidth = () => wc.executeJavaScript(
         `document.querySelector('.canvas').getBoundingClientRect().width`)
+      // M23a: shell.railOpen is retired and its successor is an ENUM def, so
+      // the row this drives is one of the per-value rows commands.ts generates
+      // for a 'string' setting rather than a boolean's single toggle. The
+      // claim is unchanged and is the reason this check exists: a GENERATED
+      // settings row must move the FRAME, not only the store.
       const railStored = () => wc.executeJavaScript(
         `window.canvas.settings.list().then((rows) =>
-           rows.find((r) => r.id === 'shell.railOpen').value)`)
+           rows.find((r) => r.id === 'shell.navigatorPane').value)`)
 
       const storedBefore = await railStored()
       const before = await canvasWidth()
@@ -5688,16 +5698,16 @@ app.whenReady().then(async () => {
         const setter = Object.getOwnPropertyDescriptor(
           window.HTMLInputElement.prototype, 'value').set
         const input = document.querySelector('.palette__input')
-        setter.call(input, 'side rail')
+        setter.call(input, 'navigator pane')
         input.dispatchEvent(new Event('input', { bubbles: true }))
         await new Promise((r) => setTimeout(r, 100))
         const row = [...document.querySelectorAll('.palette__row')]
-          .find((r) => r.textContent.includes('Show the side rail'))
+          .find((r) => r.textContent.includes('Navigator pane: Panels'))
         if (!row) return 'not found'
         row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         return 'ok'
       })()`)
-      if (picked !== 'ok') throw new Error(`79: the rail setting row was ${picked}`)
+      if (picked !== 'ok') throw new Error(`79: the navigator setting row was ${picked}`)
       // runRow closes the overlay BEFORE running the command, so this is an
       // assertion rather than a wait for something optional — a left-open
       // palette would swallow check 80's chord.
@@ -5705,22 +5715,22 @@ app.whenReady().then(async () => {
         `document.querySelector('.palette') === null`), 2000)
 
       const storedAfter = await waitUntil(async () =>
-        (await railStored()) === true ? true : false, 3000)
+        (await railStored()) === 'panels' ? 'panels' : false, 3000)
       const moved = await waitUntil(async () =>
         (await canvasWidth()) < before - 100 ? true : false, 3000)
       const after = await canvasWidth()
       const collapsed = await wc.executeJavaScript(
         `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
-      ok('79 a palette toggle of the rail moves the rail, not only the store',
-        storedBefore === false && storedAfter === true &&
+      ok('79 a palette toggle of a region moves the region, not only the store',
+        storedBefore === 'none' && storedAfter === 'panels' &&
           moved === true && collapsed === false,
         `storedBefore=${storedBefore} storedAfter=${storedAfter} ` +
           `width ${before} -> ${after} collapsed=${collapsed}`)
       // What 79 LEAVES BEHIND, in the spirit of 73's, 75c's and 78's closing
       // notes: the world's two live panels and the camera are untouched, the
-      // palette is closed, and the RAIL IS NOW OPEN — `shell.railOpen` is true
-      // in main's store and the canvas is back to its narrower, three-column
-      // width. The inspector is still open and still untouched. Anything
+      // palette is closed, and the RAIL IS NOW OPEN — `shell.navigatorPane` is
+      // 'panels' in main's store and the canvas is back to its narrower,
+      // three-column width. The inspector is still open and still untouched. Anything
       // appended below that measures the canvas must account for the rail
       // having reopened.
     }
@@ -5770,7 +5780,7 @@ app.whenReady().then(async () => {
         after.inspector !== before.inspector && after.rail === before.rail,
         `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
       // What 80 LEAVES BEHIND: the inspector is now COLLAPSED (it was open on
-      // entry, from 79's note) and `shell.inspectorOpen` is false in main's
+      // entry, from 79's note) and `shell.contextOpen` is false in main's
       // store; the rail stays open, the two panels and the camera are
       // untouched, and the palette is closed.
     }
@@ -9305,7 +9315,7 @@ app.whenReady().then(async () => {
           return true
         }
 
-        // Open the column. It defaults CLOSED (files.treeOpen's schema
+        // Open the column. It defaults CLOSED (shell.navigatorPane's schema
         // default), so every check below needs this, and check 73's own
         // collapsed measurement ran long before this block and is unaffected.
         if (await readTreeCollapsed()) { await dispatchClick('.shell__tree-toggle'); await settle() }
@@ -9537,13 +9547,21 @@ app.whenReady().then(async () => {
         }
 
         // 159. The palette -> SCREEN direction, and the only check that
-        //      covers it. files.treeOpen is an ordinary boolean SettingDef,
-        //      so main's settings:list AUTO-GENERATES a row nobody wrote;
-        //      running it must MOVE THE FRAME rather than only persist. Read
-        //      off .shell's class list, never off main's store: a toggle that
-        //      writes to main and leaves the frame where it was reads "Off"
-        //      beside a visibly open column. Found by a keyword ("explorer")
-        //      the row's own label never displays — check 52's rule.
+        //      covers it for this column. Running an AUTO-GENERATED settings
+        //      row must MOVE THE FRAME rather than only persist. Read off
+        //      .shell's class list, never off main's store: a row that writes
+        //      to main and leaves the frame where it was reads "Off" beside a
+        //      visibly open column. Found by a keyword ("explorer") the row's
+        //      own label never displays — check 52's rule.
+        //
+        //      M23a: files.treeOpen is retired, and its successor
+        //      shell.navigatorPane is an ENUM — so opening and closing are two
+        //      DIFFERENT rows rather than one toggle pressed twice. The check
+        //      therefore reads the stored pane first and restores to exactly
+        //      that value, rather than running the same row again: with an
+        //      enum, re-running a row is a no-op, and a restore written that
+        //      way would leave the column wherever this check put it and hand
+        //      check 129 a baseline it did not expect.
         {
           const openPalette = async () => {
             await wc.executeJavaScript(`
@@ -9572,9 +9590,19 @@ app.whenReady().then(async () => {
             return 'ok'
           })()`)
 
+          const storedPane = () => wc.executeJavaScript(
+            `window.canvas.settings.list().then((rows) =>
+               rows.find((r) => r.id === 'shell.navigatorPane').value)`)
+          const paneRow = (value) =>
+            'Navigator pane: ' + value.charAt(0).toUpperCase() + value.slice(1)
+
+          const beforePane = await storedPane()
           const before = await readTreeCollapsed()
           await openPalette()
-          const picked = await runByKeyword('explorer', 'file tree')
+          // Collapsed means the Files pane is not the open one, so the row
+          // that MOVES the frame is Files; open means it is, so the row that
+          // moves it is None.
+          const picked = await runByKeyword('explorer', paneRow(before ? 'files' : 'none'))
           await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
           // The auto-generated row's run() is `settings:set` over IPC, not a
           // call into useShellChrome's local toggleTree — main's store write
@@ -9596,7 +9624,7 @@ app.whenReady().then(async () => {
           // closing note: leave the tree exactly as this block found it.
           if (after !== before) {
             await openPalette()
-            await runByKeyword('explorer', 'file tree')
+            await runByKeyword('explorer', paneRow(beforePane))
             await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
             await waitUntil(async () => (await readTreeCollapsed()) === before ? true : false, 3000)
           }

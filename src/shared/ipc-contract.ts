@@ -619,6 +619,18 @@ export interface SettingRow {
    */
   min?: number
   max?: number
+  /**
+   * The permitted values for a `'string'` setting, mirrored from `SettingDef`.
+   * Absent for a boolean or a number.
+   *
+   * It has to cross for the same reason `min`/`max` do, one shape along: the
+   * palette builds a runnable ROW PER VALUE from this, and a def whose values
+   * never arrived would generate no rows at all — a setting reachable only by
+   * a surface that already knows its name. That is the exact failure
+   * `shell.railOpen`'s keywords were written to prevent, arriving through the
+   * type system instead of through vocabulary.
+   */
+  values?: readonly string[]
 }
 
 /** Shape of the bridge the preload exposes on window.canvas. */

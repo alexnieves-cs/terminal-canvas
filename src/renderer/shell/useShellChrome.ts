@@ -1,6 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { DOCK_ORDER, type NavPaneId } from './nav-dock'
 
 export interface ShellChrome {
+  /** Which navigator pane is open, or null for none. */
+  navigatorPane: NavPaneId | null
+  /** Selecting the ACTIVE pane collapses it — one control, two directions. */
+  selectPane: (id: NavPaneId) => void
+  /** Open the last-used pane, or close whichever is open. */
+  toggleNavigator: () => void
+  contextOpen: boolean
+  toggleContext: () => void
+
+  // -- Retired, and kept only until the grid is rewired -------------------
+  // Canvas still renders the old four-column frame, so these are DERIVED from
+  // the two real values above rather than stored beside them. Two sources for
+  // one fact is the drift "One map, and a typed view over it" exists to
+  // prevent, and deriving is what makes the intermediate state honest rather
+  // than merely compiling. They go when the grid does.
   railOpen: boolean
   inspectorOpen: boolean
   treeOpen: boolean
@@ -9,27 +25,48 @@ export interface ShellChrome {
   toggleTree: () => void
 }
 
+/** The pane a fresh `toggleNavigator` opens, and the schema's own default.
+ *  Panels rather than Workspaces because it is what the rail this replaces
+ *  showed most of, and because a canvas with one workspace has a Workspaces
+ *  pane with one row in it. */
+const DEFAULT_PANE: NavPaneId = 'panels'
+
+function asPane(value: unknown): NavPaneId | null {
+  // 'none' is a legitimate stored value meaning "closed", and every other
+  // string is checked against DOCK_ORDER rather than trusted: parsePreferences
+  // guards the load door and setPreference guards the write door, but this is
+  // a THIRD reader, and a value that reached here from a build that knew a
+  // fifth pane must render as closed rather than as a pane this build cannot
+  // draw.
+  if (typeof value !== 'string' || value === 'none') return null
+  return (DOCK_ORDER as readonly string[]).includes(value) ? (value as NavPaneId) : null
+}
+
 /**
- * Rail and inspector visibility, persisted through main's settings store.
+ * Navigator and context visibility, persisted through main's settings store.
  *
  * Read at mount AND on every change to main's setting rows, and written
  * through settings:set — never held only in React state. The preferences map
  * is already the one place a user toggle lives ("One map, and a typed view
- * over it"), and a second store for two booleans would be exactly the drift
- * that entry exists to prevent.
+ * over it"), and a second store for these would be exactly the drift that
+ * entry exists to prevent.
  *
  * `settingsSignal` is what closes the last hop of that rule. Both settings are
- * ordinary boolean `SettingDef`s, so main's `settings:list` auto-generates a
- * runnable palette row for each of them — nobody wrote those rows and nobody
- * wired them to this hook. Running one writes to main's store and reloads
- * `settingRows`; without a dependency on that reload, the store changes and
- * the frame does not, so the row's own title ("Show the side rail: Off")
- * reads the opposite of what is on screen until the next launch. The value is
- * used for its IDENTITY only — the list is re-read from main rather than
- * picked out of the passed rows, exactly as `glowEnabled`/`pipsEnabled` do in
- * `Canvas.tsx`, because `settingRows` is empty until the palette has been
- * opened and the frame has to be right on the first paint.
- * `verify:panels` 78 is the check.
+ * ordinary `SettingDef`s, so main's `settings:list` auto-generates a runnable
+ * palette row for each of them — nobody wrote those rows and nobody wired them
+ * to this hook. Running one writes to main's store and reloads `settingRows`;
+ * without a dependency on that reload, the store changes and the frame does
+ * not, so the row's own title reads the opposite of what is on screen until
+ * the next launch. The value is used for its IDENTITY only — the list is
+ * re-read from main rather than picked out of the passed rows, exactly as
+ * `glowEnabled`/`pipsEnabled` do in `Canvas.tsx`, because `settingRows` is
+ * empty until the palette has been opened and the frame has to be right on the
+ * first paint. `verify:panels` 79 is the check.
+ *
+ * NOTHING IS WRITTEN AT MOUNT. The preferences map is sparse on purpose — an
+ * absent id means "still at the schema default" — and writing a value here
+ * would make every user explicit on their first launch, which is what would
+ * destroy the adaptive residency this milestone runs on.
  */
 export function useShellChrome(deps: {
   paletteIsOpen: () => boolean
@@ -37,20 +74,29 @@ export function useShellChrome(deps: {
   settingsSignal: unknown
 }): ShellChrome {
   const { paletteIsOpen, settingsSignal } = deps
-  const [railOpen, setRailOpen] = useState(true)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
-  // Matches the schema default, so the first paint is right before the
+  // Matches the schema defaults, so the first paint is right before the
   // settings read below resolves.
-  const [treeOpen, setTreeOpen] = useState(false)
+  const [navigatorPane, setNavigatorPane] = useState<NavPaneId | null>(DEFAULT_PANE)
+  const [contextOpen, setContextOpen] = useState(true)
+
+  // The pane toggleNavigator reopens. A REF and not state: nothing renders it,
+  // so making it state would re-render the whole shell every time a pane
+  // changed in order to store a value only a callback reads.
+  const lastPaneRef = useRef<NavPaneId>(DEFAULT_PANE)
 
   useEffect(() => {
     void window.canvas.settings.list().then((rows) => {
-      const rail = rows.find((r) => r.id === 'shell.railOpen')
-      const inspector = rows.find((r) => r.id === 'shell.inspectorOpen')
-      const tree = rows.find((r) => r.id === 'files.treeOpen')
-      if (rail) setRailOpen(rail.value === true)
-      if (inspector) setInspectorOpen(inspector.value === true)
-      if (tree) setTreeOpen(tree.value === true)
+      const nav = rows.find((r) => r.id === 'shell.navigatorPane')
+      const context = rows.find((r) => r.id === 'shell.contextOpen')
+      if (nav) {
+        const pane = asPane(nav.value)
+        setNavigatorPane(pane)
+        // Only a REAL pane seeds the reopen target. A stored 'none' means the
+        // user closed the navigator, not that they want it reopened onto
+        // nothing — so the ref keeps whatever it had.
+        if (pane !== null) lastPaneRef.current = pane
+      }
+      if (context) setContextOpen(context.value === true)
     })
   }, [settingsSignal])
 
@@ -59,27 +105,34 @@ export function useShellChrome(deps: {
   // effect inside it fires twice too, which is the same hazard Canvas.tsx's
   // `commitHistory` comment flags. main.tsx omits StrictMode today, so the
   // updater form was not actually broken; it was one `<StrictMode>` away from
-  // writing every toggle to the store twice. Reading `railOpen` from the
-  // closure costs this callback its stable identity, which is fine: its only
-  // consumers are the keydown effect below (which already depends on it) and
+  // writing every toggle to the store twice. Reading state from the closure
+  // costs these callbacks their stable identity, which is fine: their only
+  // consumers are the keydown effect below (which already depends on them) and
   // a button's onClick.
-  const toggleRail = useCallback(() => {
-    const next = !railOpen
-    setRailOpen(next)
-    void window.canvas.settings.set('shell.railOpen', next)
-  }, [railOpen])
+  const selectPane = useCallback((id: NavPaneId) => {
+    // Selecting the ACTIVE pane collapses it. One control, two directions —
+    // the same toggle the dock button's aria-pressed already describes — and
+    // it means a user who opened a pane can close it without hunting for a
+    // second affordance.
+    const next = navigatorPane === id ? null : id
+    setNavigatorPane(next)
+    if (next !== null) lastPaneRef.current = next
+    void window.canvas.settings.set('shell.navigatorPane', next ?? 'none')
+  }, [navigatorPane])
 
-  const toggleInspector = useCallback(() => {
-    const next = !inspectorOpen
-    setInspectorOpen(next)
-    void window.canvas.settings.set('shell.inspectorOpen', next)
-  }, [inspectorOpen])
+  const toggleNavigator = useCallback(() => {
+    const next = navigatorPane === null ? lastPaneRef.current : null
+    setNavigatorPane(next)
+    void window.canvas.settings.set('shell.navigatorPane', next ?? 'none')
+  }, [navigatorPane])
 
-  const toggleTree = useCallback(() => {
-    const next = !treeOpen
-    setTreeOpen(next)
-    void window.canvas.settings.set('files.treeOpen', next)
-  }, [treeOpen])
+  const toggleContext = useCallback(() => {
+    const next = !contextOpen
+    setContextOpen(next)
+    void window.canvas.settings.set('shell.contextOpen', next)
+  }, [contextOpen])
+
+  const toggleTree = useCallback(() => { selectPane('files') }, [selectPane])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -88,7 +141,7 @@ export function useShellChrome(deps: {
       if (!event.metaKey || event.ctrlKey || event.altKey) return
       // Cmd+B. Free — Cmd+0/1/=/+/-/n/j are useViewport's, Cmd+K is the
       // palette's, Cmd+G is the nav grid's, Cmd+\ and Cmd+Shift+\ are the two
-      // above, and Cmd+Z/C/V are menu accelerators — and it is the chord a
+      // below, and Cmd+Z/C/V are menu accelerators — and it is the chord a
       // user already has muscle memory for as "toggle the file sidebar".
       if (event.code === 'KeyB') {
         if (paletteIsOpen()) return
@@ -103,11 +156,11 @@ export function useShellChrome(deps: {
         // the Cmd+K defect exactly. Not in REPEATABLE_KEYS and not a candidate
         // for it.
         if (event.repeat) return
-        toggleTree()
+        selectPane('files')
         return
       }
       // event.code, not event.key: with Shift held macOS reports key '|', so
-      // a key check would silently miss the inspector's chord.
+      // a key check would silently miss the context pane's chord.
       if (event.code !== 'Backslash') return
       // Canvas shortcuts stand down while the palette is open — rule 3 of
       // "who owns the keyboard". isOpen reads a ref, so this listener is not
@@ -119,18 +172,34 @@ export function useShellChrome(deps: {
       // held Cmd+\ must still be swallowed rather than leaking to the focused
       // agent's PTY.
       event.preventDefault()
-      // A held toggle would flicker the region at the OS repeat rate and
-      // leave it open or closed depending on whether the user released on an
-      // odd or an even repeat — the Cmd+K defect exactly. Not in
-      // REPEATABLE_KEYS, and not an allow-list case: for a toggle the repeat
-      // stream is never the feature.
+      // A held toggle would flicker the region at the OS repeat rate and leave
+      // it open or closed depending on whether the user released on an odd or
+      // an even repeat — the Cmd+K defect exactly.
       if (event.repeat) return
-      if (event.shiftKey) toggleInspector()
-      else toggleRail()
+      // The MAPPING is inherited, not chosen: Cmd+\ moved the left region and
+      // Cmd+Shift+\ the right one, so each chord keeps the region it had, now
+      // pointing at that region's successor. The plan said Cmd+\ should reach
+      // the CONTEXT pane, which contradicts its own stated reason for keeping
+      // these chords at all — existing muscle memory — so the reason wins.
+      if (event.shiftKey) toggleContext()
+      else toggleNavigator()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [paletteIsOpen, toggleRail, toggleInspector, toggleTree])
+  }, [paletteIsOpen, toggleNavigator, toggleContext, selectPane])
 
-  return { railOpen, inspectorOpen, treeOpen, toggleRail, toggleInspector, toggleTree }
+  return {
+    navigatorPane,
+    selectPane,
+    toggleNavigator,
+    contextOpen,
+    toggleContext,
+    // Derived, never stored — see the interface note.
+    railOpen: navigatorPane !== null,
+    inspectorOpen: contextOpen,
+    treeOpen: navigatorPane === 'files',
+    toggleRail: toggleNavigator,
+    toggleInspector: toggleContext,
+    toggleTree
+  }
 }

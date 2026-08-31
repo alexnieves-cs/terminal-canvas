@@ -171,7 +171,11 @@ export function registerIpcHandlers(
       // Passed through so the palette can reject an out-of-range edit before
       // it ever reaches this process's own (silent) range check below.
       min: def.min,
-      max: def.max
+      max: def.max,
+      // Passed through for the reason min/max are, one shape along: the
+      // palette generates a runnable row per permitted value, and a def whose
+      // values never crossed would generate none.
+      values: def.values
     }))
   )
   ipcMain.handle(IPC.SETTINGS_SET, (_event, id: string, value: SettingValue) => {

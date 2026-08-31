@@ -683,6 +683,22 @@ export function parsePresets(raw: unknown, warnings: string[]): Preset[] {
  * deliberately set that quietly stopped applying, with nothing anywhere
  * saying why.
  */
+/**
+ * M23a. The three region booleans the navigator pane replaces.
+ *
+ * They are RETIRED rather than deleted, and the difference is the whole reason
+ * this array exists: a retired id is one this build RECOGNISES and migrates,
+ * so it must not fall into parsePreferences' unknown-id branch, which would
+ * warn `dropped an unknown setting` about a value that was in fact carried
+ * forward — a message that is not merely noisy but false, and false in the one
+ * direction that sends somebody looking for a bug that is not there.
+ */
+const RETIRED_REGION_IDS: readonly string[] = [
+  'shell.railOpen',
+  'shell.inspectorOpen',
+  'files.treeOpen'
+]
+
 export function parsePreferences(
   raw: unknown,
   warnings: string[]
@@ -696,7 +712,17 @@ export function parsePreferences(
     return {}
   }
   const out: Record<string, SettingValue> = {}
+  const legacy: Record<string, boolean> = {}
   for (const [id, value] of Object.entries(raw)) {
+    // M23a. Retired ids are recognised and set aside for the migration below,
+    // BEFORE the unknown-id branch can warn about them. A non-boolean value
+    // for one of these is simply not carried: there is nothing to migrate,
+    // and the id is gone from the schema, so there is no def to complain on
+    // behalf of.
+    if (RETIRED_REGION_IDS.includes(id)) {
+      if (typeof value === 'boolean') legacy[id] = value
+      continue
+    }
     const def = settingDef(id)
     if (def === undefined) {
       // A setting this build does not know about. Dropping it is right —
@@ -747,6 +773,43 @@ export function parsePreferences(
     }
     out[id] = value as SettingValue
   }
+
+  // M23a MIGRATION. The three region booleans collapse onto shell.navigatorPane
+  // and shell.contextOpen. Seeded here rather than dropped, because a stored
+  // preference that vanishes is one the user set that stopped applying with
+  // nothing saying why — the same argument the pre-M6b settings->preferences
+  // migration in parseLayout makes, and the same guard: seeded ONLY where a
+  // legacy key was actually PRESENT.
+  //
+  // That guard is the whole mechanism and not a tidiness measure. The
+  // preferences map is sparse ON PURPOSE — an absent id means "still at the
+  // schema default", which is what lets a default change later and reach
+  // people — so writing a value for a file that held no choice to preserve
+  // makes every fresh install explicit on its first launch and freezes these
+  // two defaults in place forever. parseLayout's own migration records having
+  // to deviate from a literal reading for exactly this reason.
+  //
+  // A value already present under the NEW id always wins: once written, the
+  // new key is the answer and the legacy one is history.
+  if (out['shell.navigatorPane'] === undefined) {
+    // Precedence is the order the old shell rendered in, left to right. A user
+    // with BOTH the tree and the rail open had two resident columns and now
+    // gets one, and the leftmost is the one they would look for first.
+    if (legacy['files.treeOpen'] === true) out['shell.navigatorPane'] = 'files'
+    else if (legacy['shell.railOpen'] === true) out['shell.navigatorPane'] = 'panels'
+    // Deliberately closed, rather than never touched. This branch is NOT in
+    // the plan and is the difference between migrating a preference and
+    // migrating only the convenient half of one: a user who explicitly closed
+    // the rail and never opened the tree gets 'none', where falling through to
+    // absent would resolve to the 'panels' default and re-open a column they
+    // had shut. `=== false` and not `!== true`, so an ABSENT key still falls
+    // through to absent and the sparse rule above holds.
+    else if (legacy['shell.railOpen'] === false) out['shell.navigatorPane'] = 'none'
+  }
+  if (out['shell.contextOpen'] === undefined && legacy['shell.inspectorOpen'] !== undefined) {
+    out['shell.contextOpen'] = legacy['shell.inspectorOpen']
+  }
+
   return out
 }
 
