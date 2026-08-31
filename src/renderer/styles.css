@@ -1392,6 +1392,18 @@ body {
   stroke-width: 4px;
 }
 
+/* M24 Task 5. The in-flight preview. Dashed so it reads as provisional rather
+   than as a link that already exists — the whole point of the preview is
+   that it says what WOULD happen, and a solid ghost is indistinguishable
+   from a committed link that failed to attach. */
+.link-layer__ghost {
+  stroke: var(--iris);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-dasharray: 6 5;
+  fill: none;
+}
+
 /* A panel is positioned once in WORLD pixels. Only .world's transform moves. */
 .panel {
   position: absolute;
@@ -1434,6 +1446,13 @@ body {
 .panel--selected {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px var(--blue), var(--e-3);
+}
+
+/* M24 Task 5. The panel a release right now would link to. A ring rather
+   than a fill: a fill would hide the agent output this app exists to show,
+   on the one panel the user is currently looking at. */
+.panel[data-link-target] {
+  box-shadow: 0 0 0 2px var(--iris);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a

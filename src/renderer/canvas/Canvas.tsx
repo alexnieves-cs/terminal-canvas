@@ -1570,6 +1570,14 @@ export function Canvas({
     // not have to prove that to know the window is closed.
     if (transitionRef.current) return
     transitionRef.current = true
+    // T4-7: a draw begun on the ordinary canvas and still held when either
+    // direction of this toggle lands must not survive it — see LinkDraw.end's
+    // own comment for the failure this prevents (a ghost painting across lane
+    // space, and an onUp that would commit a link to a foreign workspace's
+    // panel id). Synchronous, before the first await, for the same reason
+    // transitionRef is set synchronously above: cancel WITHOUT committing,
+    // the same path Escape takes.
+    linkDraw.end()
     void (async (): Promise<void> => {
       try {
         if (mergedRef.current) {
@@ -1630,7 +1638,7 @@ export function Canvas({
         transitionRef.current = false
       }
     })()
-  }, [resolveDormant, restoreCamera, selectedId, focusedId])
+  }, [resolveDormant, restoreCamera, selectedId, focusedId, linkDraw.end])
   // Cmd+Shift+A's implementation, handed to useViewport through the ref
   // declared beside its call — see that ref's own comment for why the
   // indirection exists rather than a direct argument.
@@ -4620,7 +4628,7 @@ export function Canvas({
               panels they join. buildLinkSegments skips a link whose target is
               not in the array it was handed, so a link that crosses a lane
               boundary simply does not draw rather than drawing wrong. */}
-          <LinkLayer panels={displayPanels} />
+          <LinkLayer panels={displayPanels} draw={linkDraw.state} />
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls
@@ -4712,6 +4720,7 @@ export function Canvas({
                 entering={enteringPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
                 onBeginLink={onBeginLink}
+                linkTarget={linkDraw.state?.target === panel.rect.id}
               />
             )
           })}

@@ -1,6 +1,7 @@
 import { memo, useMemo, type JSX } from 'react'
-import { buildLinkSegments } from './link-geometry'
+import { buildLinkSegments, linkAnchors, linkPath } from './link-geometry'
 import type { Panel } from '@renderer/panels/panels'
+import type { LinkDrawState } from './useLinkDraw'
 
 /**
  * Every link on the canvas, as one SVG inside `.world`.
@@ -38,16 +39,42 @@ import type { Panel } from '@renderer/panels/panels'
  * Nobody has measured a canvas with two hundred links; if that is ever slow,
  * the fix is a viewport intersection test here, and this is where it goes.
  */
-function LinkLayerImpl({ panels }: { panels: Panel[] }): JSX.Element | null {
+function LinkLayerImpl({
+  panels,
+  draw
+}: {
+  panels: Panel[]
+  draw?: LinkDrawState | null
+}): JSX.Element | null {
   // Rebuilt whenever the panel array's identity changes — which includes every
   // frame of a drag, correctly, because a link's endpoint is moving. That is
   // the same cost EdgeIndicators already pays. The memo is what stops a Canvas
   // re-render that moved no rect (a cursor move, a palette open) repainting.
   const segments = useMemo(() => buildLinkSegments(panels), [panels])
+  // The ghost is the one thing in this layer drawn from state that is not
+  // persisted. It is built here rather than in its own sibling layer because
+  // it needs exactly the same world-space transform the committed links do,
+  // and a second absolutely-positioned SVG would be one more node for every
+  // hit test in the layer above to walk past.
+  const ghost = useMemo(() => {
+    if (!draw) return null
+    const from = panels.find((p) => p.rect.id === draw.from)
+    if (!from) return null
+    // A 1x1 rect standing in for the cursor, so the SAME clip arithmetic the
+    // committed links use decides where the ghost leaves the source border.
+    // Building a second, special-cased path for the in-flight case is how the
+    // preview and the committed link end up disagreeing about where a link
+    // starts, which reads as the line JUMPING on release.
+    const cursorRect = { id: '', x: draw.cursor.x, y: draw.cursor.y, w: 1, h: 1 }
+    const anchors = linkAnchors(from.rect, cursorRect)
+    return anchors ? linkPath(anchors) : null
+  }, [draw, panels])
+
   // Nothing at all rather than an empty <svg>: the common case is a canvas
-  // with no links, and an empty absolutely-positioned element is one more node
-  // for every hit test in the layer above to walk past.
-  if (segments.length === 0) return null
+  // with no links and no draw in flight, and an empty absolutely-positioned
+  // element is one more node for every hit test in the layer above to walk
+  // past.
+  if (segments.length === 0 && ghost === null) return null
   return (
     <svg className="link-layer" aria-hidden="true">
       <defs>
@@ -91,6 +118,9 @@ function LinkLayerImpl({ panels }: { panels: Panel[] }): JSX.Element | null {
           )}
         </g>
       ))}
+      {ghost !== null && (
+        <path className="link-layer__ghost" d={ghost} markerEnd="url(#link-arrow)" />
+      )}
     </svg>
   )
 }

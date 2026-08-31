@@ -84,6 +84,15 @@ export interface TerminalPanelProps {
    * cascade `version`/`title`/`glow` are props specifically to survive.
    */
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
+  /**
+   * Whether an in-flight link draw would land on THIS panel if released now
+   * (M24). A prop, computed once in Canvas from `linkDraw.state?.target`,
+   * for the same reason `glow`/`version`/`title` all are: memo's shallow
+   * compare has to SEE it change, or the ring would stick to whichever panel
+   * happened to be the target when this component last rendered for some
+   * other reason.
+   */
+  linkTarget?: boolean
 }
 
 const CARD_LINES = 6
@@ -94,7 +103,7 @@ const CONFIRM_CLOSE_MS = 3000
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
-  onBeginLink
+  onBeginLink, linkTarget = false
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -173,6 +182,7 @@ function TerminalPanelImpl({
       // a review node would also match).
       data-panel-kind="terminal"
       data-agent-state={glow ? agentState : undefined}
+      data-link-target={linkTarget ? '' : undefined}
       style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
     >
       {/* Motion lives on this wrapper, never .panel: .panel's geometry rides

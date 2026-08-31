@@ -31,6 +31,23 @@ export interface LinkDraw {
    * all already record.
    */
   isDrawing: () => boolean
+  /**
+   * Ends an in-flight draw WITHOUT committing — the same path Escape takes.
+   * Additive: Task 6 consumes `isDrawing()` and neither existing member
+   * changes shape.
+   *
+   * Its one caller today is `toggleMerged` (Canvas.tsx), for the reason the
+   * marquee's own `marqueeEndRef` exists one gesture over: a draw begun on
+   * the ordinary canvas and still held when the user enters the merged view
+   * is not stood down by the mousedown gate alone (ports are already
+   * suppressed under `readOnly`, but that only stops a NEW draw from
+   * beginning). Left running, its ghost paints across lane space and its
+   * `onUp` commits a link to a foreign workspace's panel id — persisted into
+   * the ACTIVE workspace's record, invisible on screen because
+   * `buildLinkSegments` prunes a link naming a panel this canvas does not
+   * hold. A no-op when nothing is in flight.
+   */
+  end(): void
 }
 
 /**
@@ -91,6 +108,16 @@ export function useLinkDraw(deps: LinkDrawDeps): LinkDraw {
   depsRef.current = deps
 
   const isDrawing = useCallback(() => gestureRef.current !== null, [])
+
+  // See the LinkDraw interface's own comment on `end` for why this exists and
+  // who calls it. Cancels through the same two writes Escape and blur both
+  // use — clearing gestureRef is what a subsequent onUp reads as "nothing in
+  // flight", and clearing state is what stops the ghost curve painting one
+  // more frame after the view it was drawn into is gone.
+  const end = useCallback(() => {
+    gestureRef.current = null
+    setState(null)
+  }, [])
 
   const begin = useCallback((from: string, event: { clientX: number; clientY: number }) => {
     const host = depsRef.current.hostRef.current
@@ -191,5 +218,5 @@ export function useLinkDraw(deps: LinkDrawDeps): LinkDraw {
     }
   }, [state === null])
 
-  return { state, begin, isDrawing }
+  return { state, begin, isDrawing, end }
 }

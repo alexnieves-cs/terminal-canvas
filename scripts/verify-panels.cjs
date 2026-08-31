@@ -12030,6 +12030,49 @@ app.whenReady().then(async () => {
             target !== undefined && target.spawned === false && target.dormant === true,
           `target=${JSON.stringify(target)} links=${JSON.stringify(links)}`)
       }
+
+      // 176. A release in genuinely empty space, outside the snap radius,
+      //      creates NOTHING — and the same fixture's in-radius release DOES
+      //      create a link.
+      //
+      //      The second half is the non-vacuity guard and is not optional. The
+      //      "creates nothing" clause alone passes perfectly against a gesture
+      //      that never worked at all, which is the trap check 100 records for
+      //      its own negative and the reason it is described there as evidence
+      //      only once its positive neighbour has been watched red.
+      //
+      //      Distances are in SCREEN pixels because SNAP_RADIUS_PX is: the
+      //      far drop is 6x the radius away, comfortably outside it at any
+      //      scale this fixture runs at.
+      {
+        const src = M24_C
+        const dst = M24_B
+        await railGoTo(dst)
+        const box = await panelBox(dst)
+        const port = await portBox(src, 'e')
+        let farLinks = null
+        let nearLinks = null
+        if (port && !port.zero && box) {
+          const before = await m24Links()
+          // Far: well outside the radius, in empty canvas.
+          await dragPortTo(port, { x: Math.round(box.cx) + 540, y: Math.round(box.cy) + 540 })
+          farLinks = await m24Links()
+          // Near: just outside the panel's own border, inside the radius.
+          const port2 = await portBox(src, 'e')
+          if (port2 && !port2.zero) {
+            await dragPortTo(port2, { x: Math.round(box.x) - 20, y: Math.round(box.cy) })
+          }
+          nearLinks = await m24Links()
+          farLinks = { before, after: farLinks }
+        }
+        const key = src + ' ' + dst
+        ok('176 a drop outside the radius creates nothing; a near-miss still snaps',
+          farLinks !== null && nearLinks !== null &&
+            farLinks.after.length === farLinks.before.length &&
+            !farLinks.after.includes(key) &&
+            nearLinks.includes(key),
+          `far=${JSON.stringify(farLinks)} near=${JSON.stringify(nearLinks)}`)
+      }
     }
 
   } catch (error) {
