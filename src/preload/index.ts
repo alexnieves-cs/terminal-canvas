@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import type { WorkProvider } from '../shared/work-item'
 import {
   IPC,
   IPC_EVENTS,
@@ -137,7 +138,7 @@ const bridge: CanvasBridge = {
     remove: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_DELETE, service),
     verify: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_VERIFY, service)
   },
-  jira: { list: () => ipcRenderer.invoke(IPC.JIRA_LIST) },
+  work: { list: (provider: WorkProvider) => ipcRenderer.invoke(IPC.WORK_LIST, provider) },
   file: {
     open: () => ipcRenderer.invoke(IPC.FILE_OPEN),
     read: (req: FileReadRequest) => ipcRenderer.invoke(IPC.FILE_READ, req),

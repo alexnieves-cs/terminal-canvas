@@ -20,7 +20,7 @@ import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
-import type { WorkListResult } from './work-item'
+import type { WorkListResult, WorkProvider } from './work-item'
 import type { FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
@@ -212,8 +212,20 @@ export const IPC = {
   CREDENTIAL_DELETE: 'credential:delete',
   /** Uses the token to make one request; returns what the service said. */
   CREDENTIAL_VERIFY: 'credential:verify',
-  /** Main reads the authenticated user's assigned Jira work. */
-  JIRA_LIST: 'jira:list',
+  /**
+   * Main reads what a work service says the authenticated user owes.
+   *
+   * A RENAME of M17's `jira:list`, not a sibling: a second provider is a
+   * PARAMETER, and a channel per provider would make verify:ipc's count a
+   * function of how many integrations exist rather than of how many questions
+   * the renderer can ask. So M24 adds none and the count stays 45.
+   *
+   * No return carries a secret. The result is WorkItems and reasons, the
+   * credential never leaves main, and there is still no credential:get — the
+   * M14 boundary this milestone INHERITS rather than reinvents, which is the
+   * whole reason a second tier-2 integration is cheap.
+   */
+  WORK_LIST: 'work:list',
   /**
    * Ask main to show a native open dialog. Resolves to the chosen absolute
    * path, or null if the user cancelled.
@@ -751,7 +763,7 @@ export interface CanvasBridge {
     remove(service: string): Promise<boolean>
     verify(service: string): Promise<CredentialSetResult>
   }
-  jira: { list(): Promise<WorkListResult> }
+  work: { list(provider: WorkProvider): Promise<WorkListResult> }
   file: {
     /** A native open dialog. `null` when the user cancelled. */
     open(): Promise<string | null>

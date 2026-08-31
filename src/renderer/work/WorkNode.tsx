@@ -6,8 +6,8 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 
 export function WorkNode(props: { panel: WorkPanel; selected: boolean; onSelect(id: string): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void }): JSX.Element {
   const { panel } = props
-  const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.jira.list>> | null>(null)
-  const load = (): void => { void window.canvas.jira.list().then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'Jira could not be reached.' })) }
+  const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.work.list>> | null>(null)
+  const load = (): void => { void window.canvas.work.list(panel.provider).then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'Jira could not be reached.' })) }
   useEffect(() => { load() }, [])
   return <div className={`panel work-node${props.selected ? ' panel--selected' : ''}`} data-panel-id={panel.rect.id} data-panel-kind="work" style={{ left: panel.rect.x, top: panel.rect.y, width: panel.rect.w, height: panel.rect.h, zIndex: panel.z }}>
     <header className="panel__chrome" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); props.onSelect(panel.rect.id); props.onBeginDrag({ panelId: panel.rect.id, mode: { kind: 'move' }, originRect: panel.rect, originWorld: { x: e.clientX, y: e.clientY } }) }}>

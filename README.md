@@ -191,7 +191,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        review:diff / review:commit
                        credential:list / credential:set / credential:delete
                        credential:verify
-                       jira:list
+                       work:list
                        file:open / file:read / file:close / file:write
                        fs:list
                        toolbox:read / toolbox:permissions

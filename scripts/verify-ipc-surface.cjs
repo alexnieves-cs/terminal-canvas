@@ -164,6 +164,11 @@ app.whenReady().then(() => {
   // had already claimed M17 (the Jira canvas context, and a separate
   // M15 -> M17 renumber before that) by the time it landed. That makes it the
   // fourth milestone in this file's own history to be renumbered at a merge.
+  // M24 renamed `jira:list` to `work:list` and added NONE — a second work
+  // provider is a parameter, not a channel. It is the sixth milestone to
+  // reach this boundary and decline it, after M6d's attention set, M7's
+  // waiting counts, M12's session:live, M15's subagent:state and M17's
+  // usage:panel. Still 45.
   const EXPECTED_CHANNELS = 45
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,

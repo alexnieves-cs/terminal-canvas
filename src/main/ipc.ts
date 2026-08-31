@@ -1,5 +1,6 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
+import { isWorkProvider, type WorkListResult } from '../shared/work-item'
 import type {
   PanelId,
   PanelSpec,
@@ -272,8 +273,21 @@ export function registerIpcHandlers(
       ? verifyJiraCredential({ store: credentialStore, requester: createWorkRequester() })
       : verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
 
-  ipcMain.handle(IPC.JIRA_LIST, () =>
-    listAssignedWorkItems({ store: credentialStore, requester: createWorkRequester() }))
+  ipcMain.handle(IPC.WORK_LIST, async (_event, provider: unknown): Promise<WorkListResult> => {
+    // Validated AT THE DOOR rather than trusted. This argument arrives from
+    // the renderer, and an unvalidated value would reach a ternary whose other
+    // arm is the easiest thing in the world to write as a silent empty answer
+    // — a panel that renders "no work" for a provider nobody implemented.
+    if (!isWorkProvider(provider)) {
+      return { kind: 'malformed', reason: 'unknown work provider' }
+    }
+    const requester = createWorkRequester()
+    // TASK 8 replaces the github arm. This is the plan's one deliberate stub,
+    // and it is replaced in the very next commit.
+    return provider === 'jira'
+      ? listAssignedWorkItems({ store: credentialStore, requester })
+      : { kind: 'no-credential', reason: 'GitHub is not wired up yet.' }
+  })
 
   ipcMain.handle(IPC.FILE_OPEN, async () => {
     const win = getWindow()
