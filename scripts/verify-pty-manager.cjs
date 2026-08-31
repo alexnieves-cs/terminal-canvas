@@ -550,6 +550,26 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     ok('37 knobs with no agent emit nothing — the gate is spec.agent, not the knob',
       notAnAgent.length === 1 && notAnAgent[0] === '-l',
       JSON.stringify(notAnAgent))
+
+    // 38. Codex uses a different argv contract and has no create-session
+    // flag. A Claude-only option in a shared layout must remain inert rather
+    // than causing Codex to reject a foreign flag at launch.
+    const codex = A.agentArgs(
+      {
+        agent: 'codex',
+        args: [],
+        agentOptions: {
+          permissionMode: 'plan',
+          model: 'gpt-5.6',
+          sandbox: 'workspace-write',
+          approvalPolicy: 'on-request'
+        }
+      },
+      'not-a-codex-session'
+    )
+    ok('38 Codex receives only its supported flags and no synthetic session id',
+      codex.join(' ') === '--model gpt-5.6 --sandbox workspace-write --ask-for-approval on-request',
+      JSON.stringify(codex))
   }
 
   // 11-15 need a real tmux. Skipping is reported, never silent: a suite that

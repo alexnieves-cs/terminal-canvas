@@ -228,6 +228,15 @@ function TerminalPanelImpl({
             {session.spec.agentOptions.permissionMode}
           </span>
         )}
+        {session.spec.agentOptions?.sandbox !== undefined && (
+          <span
+            className="panel__mode"
+            data-sandbox={session.spec.agentOptions.sandbox}
+            title={`Started with --sandbox ${session.spec.agentOptions.sandbox}`}
+          >
+            {session.spec.agentOptions.sandbox}
+          </span>
+        )}
         <StatusBadge status={session.status} />
         {live && machineCost !== undefined && <MachineCostBadge cost={machineCost} />}
         {/* onMouseDown rather than onClick, so it runs in the same phase as

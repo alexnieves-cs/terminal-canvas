@@ -6,11 +6,15 @@ import type { ToolboxSource } from './toolbox'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import {
   AGENT_KINDS,
+  CODEX_APPROVAL_POLICIES,
+  CODEX_SANDBOXES,
   EFFORTS,
   MODEL_PATTERN,
   PERMISSION_MODES,
   type AgentKind,
   type AgentOptions,
+  type CodexApprovalPolicy,
+  type CodexSandbox,
   type Effort,
   type PermissionMode
 } from './cost'
@@ -579,7 +583,7 @@ export function parseAgentOptions(
     warnings.push(`${label} had a malformed agentOptions; dropped it`)
     return undefined
   }
-  const { permissionMode, effort, model } = raw
+  const { permissionMode, effort, model, sandbox, approvalPolicy } = raw
   const out: AgentOptions = {}
 
   if (permissionMode !== undefined) {
@@ -617,7 +621,24 @@ export function parseAgentOptions(
     }
   }
 
-  return out.permissionMode === undefined && out.effort === undefined && out.model === undefined
+  if (sandbox !== undefined) {
+    if (isStr(sandbox) && (CODEX_SANDBOXES as readonly string[]).includes(sandbox)) {
+      out.sandbox = sandbox as CodexSandbox
+    } else {
+      warnings.push(`${label} named an unknown sandbox; dropped that field`)
+    }
+  }
+
+  if (approvalPolicy !== undefined) {
+    if (isStr(approvalPolicy) && (CODEX_APPROVAL_POLICIES as readonly string[]).includes(approvalPolicy)) {
+      out.approvalPolicy = approvalPolicy as CodexApprovalPolicy
+    } else {
+      warnings.push(`${label} named an unknown approvalPolicy; dropped that field`)
+    }
+  }
+
+  return out.permissionMode === undefined && out.effort === undefined && out.model === undefined &&
+      out.sandbox === undefined && out.approvalPolicy === undefined
     ? undefined
     : out
 }

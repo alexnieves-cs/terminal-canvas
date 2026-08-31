@@ -1,4 +1,4 @@
-import { AGENT_FLAGS, type AgentOptions } from '@shared/cost'
+import { AGENT_CAPABILITIES, type AgentOptions } from '@shared/cost'
 import type { PanelSpec } from '@shared/types'
 
 /**
@@ -20,8 +20,8 @@ import type { PanelSpec } from '@shared/types'
  *    outright rather than ignoring it, so a second `--permission-mode` does
  *    not override anything — it stops the panel starting at all.
  *
- * The flag spellings live in `AGENT_FLAGS` beside the knob type, so adding a
- * knob without a spelling is a compile error rather than a silent no-op.
+ * The per-agent spellings live in `AGENT_CAPABILITIES`, so a Claude option can
+ * never leak into Codex argv (or vice versa).
  */
 export function agentArgs(
   spec: Pick<PanelSpec, 'agent' | 'args' | 'agentOptions'>,
@@ -36,7 +36,7 @@ export function agentArgs(
   // "spec.args is not iterable" from inside an async create() — an unhandled
   // rejection that takes the whole suite down before its first check prints.
   // Caught exactly that way; the copy was a real regression, not a tidy-up.
-  if (spec.agent !== 'claude-code') return spec.args
+  if (spec.agent === undefined) return spec.args
 
   let args = [...spec.args]
   const append = (flag: string, value: string): void => {
@@ -45,14 +45,19 @@ export function agentArgs(
     args = [...args, flag, value]
   }
 
-  append('--session-id', sessionId)
+  const capability = AGENT_CAPABILITIES[spec.agent]
+  if (capability.sessionIdFlag !== undefined && sessionId !== '') {
+    append(capability.sessionIdFlag, sessionId)
+  }
 
   const options: AgentOptions = spec.agentOptions ?? {}
-  // Iterated over AGENT_FLAGS rather than written out three times, so a knob
-  // added to AgentOptions is emitted the moment it is given a spelling.
-  for (const key of Object.keys(AGENT_FLAGS) as (keyof AgentOptions)[]) {
+  // Iterated over this agent's flags rather than written out at each call
+  // site, so unsupported saved fields remain inert instead of breaking a
+  // launch with a foreign CLI flag.
+  for (const key of Object.keys(capability.flags) as (keyof AgentOptions)[]) {
     const value = options[key]
-    if (value !== undefined) append(AGENT_FLAGS[key], value)
+    const flag = capability.flags[key]
+    if (value !== undefined && flag !== undefined) append(flag, value)
   }
 
   return args

@@ -1,6 +1,6 @@
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
-import type { AgentOptions, PanelUsage } from '@shared/cost'
+import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
 import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
@@ -492,6 +492,12 @@ export function buildInspectorModel(
   if (sessionOptions?.model !== undefined) {
     fields.push({ key: 'agent-model', label: 'model', value: sessionOptions.model })
   }
+  if (sessionOptions?.sandbox !== undefined) {
+    fields.push({ key: 'agent-sandbox', label: 'sandbox', value: sessionOptions.sandbox })
+  }
+  if (sessionOptions?.approvalPolicy !== undefined) {
+    fields.push({ key: 'agent-approval', label: 'approval', value: sessionOptions.approvalPolicy })
+  }
   // BESIDE, never instead of. See this function's own doc comment: the pane
   // renders the links rather than the answer, and a panel that has cd'd is
   // exactly the case where both halves are the point. Gated on isRunning, not
@@ -529,10 +535,12 @@ export function buildInspectorModel(
   // `panel` is narrowed to the terminal branch by the isReviewPanel check
   // above (isReviewPanel), never `!isTerminalPanel`, so a third kind added
   // later inherits this path only where the type system says it is safe.
-  // `spec.agent` is set only by presets this app knows how to account for
-  // (see PanelSpec.agent's own comment) — undefined means a login shell or a
-  // hand-written preset, which can never have a cost.
-  const pinned = panel.spec.agent !== undefined
+  // An integrated CLI may expose spawn controls before it exposes a stable
+  // transcript. Only the latter earns a Cost section: showing "$0.00" or
+  // "no answer yet" for Codex when this process has no per-panel transcript
+  // adapter would be a confident wrong answer.
+  const pinned =
+    panel.spec.agent !== undefined && AGENT_CAPABILITIES[panel.spec.agent].transcriptAccounting
   return {
     kind: 'terminal',
     id: panel.rect.id,
