@@ -19,6 +19,7 @@ import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
 import { createWorkRequester, listAssignedWorkItems, verifyJiraCredential } from './jira-client'
+import { listGithubWorkItems } from './github-client'
 import type { FileWatchers } from './file-watch'
 import { readDir } from './fs-tree'
 import type { ToolboxCache } from './toolbox-cache'
@@ -282,11 +283,9 @@ export function registerIpcHandlers(
       return { kind: 'malformed', reason: 'unknown work provider' }
     }
     const requester = createWorkRequester()
-    // TASK 8 replaces the github arm. This is the plan's one deliberate stub,
-    // and it is replaced in the very next commit.
     return provider === 'jira'
       ? listAssignedWorkItems({ store: credentialStore, requester })
-      : { kind: 'no-credential', reason: 'GitHub is not wired up yet.' }
+      : listGithubWorkItems({ store: credentialStore, requester })
   })
 
   ipcMain.handle(IPC.FILE_OPEN, async () => {
