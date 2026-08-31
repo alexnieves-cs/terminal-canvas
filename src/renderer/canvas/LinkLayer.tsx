@@ -92,6 +92,22 @@ function LinkLayerImpl({
         >
           <path d="M 0 0 L 10 5 L 0 10 z" className="link-layer__head" />
         </marker>
+        {/* A SEPARATE marker, not a reuse of `link-arrow`: an SVG marker does
+            NOT inherit the referencing element's stroke or fill, so pointing
+            the ghost at `link-arrow` paints a dashed iris curve ending in a
+            solid `--line-strong` arrowhead — a committed-link colour on a
+            path whose whole job is to say "not committed yet". */}
+        <marker
+          id="link-arrow-ghost"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" className="link-layer__ghost-head" />
+        </marker>
       </defs>
       {segments.map((s) => (
         <g key={s.key}>
@@ -119,7 +135,7 @@ function LinkLayerImpl({
         </g>
       ))}
       {ghost !== null && (
-        <path className="link-layer__ghost" d={ghost} markerEnd="url(#link-arrow)" />
+        <path className="link-layer__ghost" d={ghost} markerEnd="url(#link-arrow-ghost)" />
       )}
     </svg>
   )

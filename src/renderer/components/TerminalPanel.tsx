@@ -91,8 +91,17 @@ export interface TerminalPanelProps {
    * compare has to SEE it change, or the ring would stick to whichever panel
    * happened to be the target when this component last rendered for some
    * other reason.
+   *
+   * REQUIRED, not optional-with-default, on `onBeginLink`'s own precedent
+   * one field up: that prop was added by this same milestone and is
+   * required, so an optional sibling here is the inconsistency. Task 7
+   * copies this shape onto ReviewNode/FileNode/JiraNode/ToolboxNode, and
+   * optional there means a missed `linkTarget={...}` compiles clean and
+   * yields "the ring never appears for review nodes" — a feature that reads
+   * as unbuilt. Required makes a missed prop four compile errors at the one
+   * place that builds those call sites, `PanelRow.agent`'s own lesson.
    */
-  linkTarget?: boolean
+  linkTarget: boolean
 }
 
 const CARD_LINES = 6
@@ -103,7 +112,7 @@ const CONFIRM_CLOSE_MS = 3000
 function TerminalPanelImpl({
   session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
-  onBeginLink, linkTarget = false
+  onBeginLink, linkTarget
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'

@@ -1380,6 +1380,15 @@ body {
   fill: var(--line-strong);
 }
 
+/* M24 Task 5 fix round 1. The ghost's OWN arrowhead: an SVG marker does not
+   inherit the referencing path's stroke, so pointing the ghost at
+   `link-arrow`'s head painted a solid `--line-strong` tip on a dashed iris
+   curve — a committed-link colour on a path whose whole job is to say "not
+   committed yet". */
+.link-layer__ghost-head {
+  fill: var(--iris);
+}
+
 /* paint-order: stroke draws the halo UNDER the glyphs, so a label stays
    readable over a panel edge or the dot grid without a background rect that
    would have to be measured. */
@@ -1450,9 +1459,16 @@ body {
 
 /* M24 Task 5. The panel a release right now would link to. A ring rather
    than a fill: a fill would hide the agent output this app exists to show,
-   on the one panel the user is currently looking at. */
+   on the one panel the user is currently looking at.
+
+   var(--e-2) belongs here for the identical reason .panel--selected's own
+   comment states for var(--e-3): the attribute selector's specificity (0,2,0)
+   beats the plain .panel rule (0,1,0) that supplies the base elevation, so
+   without it the target ring REPLACED box-shadow wholesale and the
+   highlighted panel visually flattened against the canvas at the exact
+   moment it was being pointed at — fix round 1's finding. */
 .panel[data-link-target] {
-  box-shadow: 0 0 0 2px var(--iris);
+  box-shadow: 0 0 0 2px var(--iris), var(--e-2);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a

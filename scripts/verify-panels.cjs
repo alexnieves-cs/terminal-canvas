@@ -11956,8 +11956,22 @@ app.whenReady().then(async () => {
       // `button` field — the same spelling trap the isAutoRepeat note records
       // — and the gesture ends itself on a move with no button held, so
       // without it every drag here would end on its first move.
-      const dragPortTo = async (from, to) => {
+      //
+      // Split into three (fix round 1) so a check can read the DOM MID-GESTURE
+      // — after the press and the move, before the release — which
+      // `dragPortTo` alone cannot do: it presses, moves and releases inside
+      // one call with nothing to observe in between. `settle()` sends no
+      // input events, so a read taken here cannot disturb the gesture —
+      // `onMove` (useLinkDraw.ts) only ends a draw on a BUTTONLESS move, and
+      // none is sent by reading the DOM. `dragPortTo` below is recomposed
+      // from these three with IDENTICAL timing to the original single
+      // function (settle() still runs exactly once, after the release), so
+      // checks 174/175/176 are unaffected.
+      const pressPort = (from) => {
         wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+      }
+
+      const movePortTo = (from, to) => {
         for (let i = 1; i <= 4; i++) {
           wc.sendInputEvent({
             type: 'mouseMove',
@@ -11967,8 +11981,17 @@ app.whenReady().then(async () => {
             modifiers: ['leftButtonDown']
           })
         }
+      }
+
+      const releasePort = async (to) => {
         wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
         await settle()
+      }
+
+      const dragPortTo = async (from, to) => {
+        pressPort(from)
+        movePortTo(from, to)
+        await releasePort(to)
       }
 
       const m24Links = () => wc.executeJavaScript(
@@ -12044,6 +12067,14 @@ app.whenReady().then(async () => {
       //      Distances are in SCREEN pixels because SNAP_RADIUS_PX is: the
       //      far drop is 6x the radius away, comfortably outside it at any
       //      scale this fixture runs at.
+      //
+      //      HONESTY NOTE (fix round 1): this check is about SNAPPING, not
+      //      the drop preview Task 5 adds — it names `m24Links()`, never the
+      //      ghost path or the target ring, and it was watched PASS before
+      //      either existed (Tasks 3-4 already deliver the underlying
+      //      resolve-on-release). Its title reads like a drop-feedback check
+      //      and is not one; check 177, below, is where the ghost and the
+      //      ring actually earn coverage.
       {
         const src = M24_C
         const dst = M24_B
@@ -12072,6 +12103,51 @@ app.whenReady().then(async () => {
             !farLinks.after.includes(key) &&
             nearLinks.includes(key),
           `far=${JSON.stringify(farLinks)} near=${JSON.stringify(nearLinks)}`)
+      }
+
+      // 177. The ghost curve exists MID-GESTURE and is gone the instant the
+      //      gesture ends — that pairing is its own non-vacuity guard, the
+      //      same shape check 100's own comment states for a negative read
+      //      alone — AND the target ring lands on the DESTINATION panel
+      //      SPECIFICALLY, matched by its own data-panel-id rather than by
+      //      "some element carries data-link-target somewhere". Check 58's
+      //      rule: a ring on the wrong panel still renders a ring, and an
+      //      assertion that only asked "does [data-link-target] exist
+      //      anywhere" would pass against that regression identically.
+      //
+      //      Uses pressPort/movePortTo/releasePort (fix round 1's split of
+      //      dragPortTo) to read the DOM BETWEEN the move and the release —
+      //      settle() sends no input events, so this cannot disturb the
+      //      gesture in progress (onMove only ends a draw on a BUTTONLESS
+      //      move, and none is sent here).
+      {
+        const src = M24_C
+        const dst = M24_B
+        await railGoTo(dst)
+        const box = await panelBox(dst)
+        const port = await portBox(src, 'e')
+        let midGhost = null
+        let midTarget = null
+        let afterGhost = null
+        if (port && !port.zero && box) {
+          pressPort(port)
+          // Onto the destination panel's own centre — containment, the
+          // strongest of nearestLinkTarget's cases — so the target resolves
+          // unambiguously rather than depending on the radius arithmetic
+          // check 176 already covers.
+          movePortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
+          await settle()
+          midGhost = await wc.executeJavaScript(
+            `document.querySelector('.link-layer__ghost') !== null`)
+          midTarget = await wc.executeJavaScript(
+            `document.querySelector('[data-panel-id="${dst}"][data-link-target]') !== null`)
+          await releasePort({ x: Math.round(box.cx), y: Math.round(box.cy) })
+          afterGhost = await wc.executeJavaScript(
+            `document.querySelector('.link-layer__ghost') !== null`)
+        }
+        ok('177 the ghost curve paints mid-gesture and clears on release, and the target ring names the destination panel',
+          midGhost === true && midTarget === true && afterGhost === false,
+          `midGhost=${midGhost} midTarget=${midTarget} afterGhost=${afterGhost}`)
       }
     }
 
