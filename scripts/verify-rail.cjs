@@ -1141,10 +1141,11 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
   const none = sig([panel('a'), panel('b')])
   const one = sig([panel('a', { links: [{ to: 'b' }] }), panel('b')])
   const labelled = sig([panel('a', { links: [{ to: 'b', label: 'feeds' }] }), panel('b')])
+  const automated = sig([panel('a', { links: [{ to: 'b', automation: { kind: 'restart-on-exit', enabled: true } }] }), panel('b')])
   ok('75 inspectorSignature moves on a link added, removed and relabelled',
     Array.isArray(noArg.links) && noArg.links.length === 0 &&
-    none !== one && one !== labelled && none !== labelled,
-    `noArg=${JSON.stringify(noArg.links)} distinct=${new Set([none, one, labelled]).size}`)
+    none !== one && one !== labelled && none !== labelled && automated !== one,
+    `noArg=${JSON.stringify(noArg.links)} distinct=${new Set([none, one, labelled, automated]).size}`)
 }
 
 // M16: the file node's view model, and the rail/inspector arms it feeds.

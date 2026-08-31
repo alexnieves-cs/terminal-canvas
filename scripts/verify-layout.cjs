@@ -1944,6 +1944,27 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify(persisted))
 }
 
+// 113b. A functional link survives both durable doors, while a hand-edited
+// cycle is stripped before it can make two terminals restart one another.
+{
+  const r = L.parseLayout(file({
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [
+        panel({ id: 'a', links: [{ to: 'b', automation: { kind: 'restart-on-exit', enabled: true } }] }),
+        panel({ id: 'b', links: [{ to: 'a', automation: { kind: 'restart-on-exit', enabled: true } }] })
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const links = active(r.snapshot).panels[0].links
+  const other = active(r.snapshot).panels[1].links
+  ok('113b restart-on-exit persists but a hand-edited cycle is dropped',
+    [links[0].automation?.enabled === true, other[0].automation?.enabled === true]
+      .filter(Boolean).length === 1 &&
+    r.warnings.some((w) => /restart cycle/.test(w)),
+    JSON.stringify({ links, other, warnings: r.warnings }))
+}
+
 const filePanelOnDisk = (id, over = {}) => ({
   id, x: 1, y: 2, w: 640, h: 520, z: 3, kind: 'file', source: { path: '/tmp/a b/c.txt' }, ...over
 })

@@ -3,7 +3,7 @@ import type { ReviewResult } from '@shared/review'
 import type { AgentOptions, PanelUsage } from '@shared/cost'
 import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
-import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, linksOf, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -73,6 +73,9 @@ export interface InspectorLinkRow {
   label?: string
   /** The other panel's name, by the honest chain. Never its bare id. */
   title: string
+  /** #24: only a terminal -> terminal outgoing link can restart on exit. */
+  canRestartOnExit: boolean
+  restartOnExit: boolean
 }
 
 export interface InspectorSummary {
@@ -200,10 +203,23 @@ export function buildLinkRows(panel: Panel, panels: Panel[]): InspectorLinkRow[]
       to,
       direction,
       ...(label === undefined ? {} : { label }),
-      title: railLabel(other, undefined)
+      title: railLabel(other, undefined),
+      canRestartOnExit: false,
+      restartOnExit: false
     })
   }
-  for (const link of linksOf(panel)) push(byId.get(link.to), link.to, 'out', link.label)
+  for (const link of linksOf(panel)) {
+    const other = byId.get(link.to)
+    if (!other) continue
+    rows.push({
+      to: link.to,
+      direction: 'out',
+      ...(link.label === undefined ? {} : { label: link.label }),
+      title: railLabel(other, undefined),
+      canRestartOnExit: isTerminalPanel(panel) && isTerminalPanel(other),
+      restartOnExit: link.automation?.kind === 'restart-on-exit' && link.automation.enabled
+    })
+  }
   for (const source of panels) {
     if (source.rect.id === id) continue
     for (const link of linksOf(source)) {

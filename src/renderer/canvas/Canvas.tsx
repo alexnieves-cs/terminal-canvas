@@ -59,7 +59,7 @@ import {
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
-  addLink, removeLink, setLinkLabel,
+  addLink, removeLink, setLinkLabel, setRestartOnExit, linksOf,
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
@@ -77,6 +77,7 @@ import { JiraNode } from '@renderer/jira/JiraNode'
 import { TopBar } from '../shell/TopBar'
 import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
+import type { AutomationRow } from '../shell/Inspector'
 import { FileTree } from '../shell/FileTree'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railLabel, railSignature } from '../shell/rail-rows'
@@ -3097,6 +3098,63 @@ export function Canvas({
     [registry]
   )
 
+  // #24: functional links run from the registry's post-status exit hook, not
+  // from a second raw IPC listener. A dormant or absent target is RECORDED as
+  // skipped and never woken: an automation may restart an already-running
+  // terminal, but it must not create an agent the user did not explicitly
+  // start. The rule graph is cycle-free at creation and load, so one exit can
+  // cascade only along a finite directed chain.
+  const [automationResult, setAutomationResult] = useState<Map<string, string>>(() => new Map())
+  const automationRowsBuilt: AutomationRow[] = panels.flatMap((source) => linksOf(source)
+    .filter((link) => link.automation?.kind === 'restart-on-exit')
+    .map((link) => {
+      const target = panels.find((panel) => panel.rect.id === link.to)
+      return target === undefined ? null : {
+        from: source.rect.id,
+        to: target.rect.id,
+        source: railLabel(source, undefined),
+        target: railLabel(target, undefined),
+        enabled: link.automation!.enabled
+      }
+    })
+    .filter((row): row is AutomationRow => row !== null))
+  const automationRowsSignature = JSON.stringify(automationRowsBuilt)
+  const automationRows = useMemo(() => automationRowsBuilt, [automationRowsSignature])
+  useEffect(() => registry.onExit((info) => {
+    const source = panelsRef.current.find((panel) => panel.rect.id === info.panelId)
+    if (!source || !isTerminalPanel(source)) return
+    for (const link of linksOf(source)) {
+      if (link.automation?.kind !== 'restart-on-exit' || !link.automation.enabled) continue
+      const key = `${source.rect.id}:${link.to}`
+      const target = panelsRef.current.find((panel) => panel.rect.id === link.to)
+      const session = target && isTerminalPanel(target) ? registry.get(target.rect.id) : undefined
+      if (!target || !isTerminalPanel(target) || !session || session.dormant) {
+        setAutomationResult((current) => new Map(current).set(key, 'skipped — target is dormant'))
+        continue
+      }
+      if (!isRestartable(session.status)) {
+        setAutomationResult((current) => new Map(current).set(key, 'skipped — target has not started'))
+        continue
+      }
+      setAutomationResult((current) => new Map(current).set(key, `ran after exit ${info.exitCode}`))
+      restartWithSpec(target.rect.id, target.spec)
+    }
+  }), [registry, restartWithSpec])
+
+  const onSetRestartOnExit = useCallback((from: string, to: string, enabled: boolean) => {
+    setPanels((current) => {
+      const next = setRestartOnExit(current, from, to, enabled)
+      if (next === current) return current
+      commitHistory(next)
+      return next
+    })
+    if (!enabled) setAutomationResult((current) => {
+      const next = new Map(current)
+      next.delete(`${from}:${to}`)
+      return next
+    })
+  }, [commitHistory])
+
   // Palette actions. Everything the palette can do that needs the registry,
   // the camera, or IPC lives here — buildCommands takes callbacks precisely so
   // none of that reaches the pure layer.
@@ -4783,6 +4841,9 @@ export function Canvas({
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}
+        onSetRestartOnExit={onSetRestartOnExit}
+        automationResults={automationResult}
+        automations={automationRows}
         review={reviewModel}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}
