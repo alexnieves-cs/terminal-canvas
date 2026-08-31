@@ -25,6 +25,7 @@ import type { FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
+import type { MachineCostSnapshot, MachineCostTarget } from './machine-cost'
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
@@ -34,6 +35,12 @@ export const IPC = {
   PTY_KILL: 'pty:kill',
   /** Live sessions, so a fresh renderer can reconcile instead of guessing. */
   PTY_LIST: 'pty:list',
+  /**
+   * One slow process-table snapshot for the terminal process trees currently
+   * visible to this canvas. Pull-only: main has no reason to poll when no
+   * renderer is asking, and a push timer would live after a canvas closes.
+   */
+  MACHINE_COST_SAMPLE: 'machine:sample',
   /**
    * The resolved starting canvas. Main applies the restore settings before
    * answering, so the renderer never learns those settings exist.
@@ -637,6 +644,10 @@ export interface CanvasBridge {
     /** Each subscribe returns its own unsubscribe, so React effects clean up. */
     onData(listener: (chunk: PtyDataChunk) => void): () => void
     onExit(listener: (info: PtyExitInfo) => void): () => void
+  }
+  machine: {
+    /** Aggregate each terminal PID and its descendants from ONE ps snapshot. */
+    sample(targets: MachineCostTarget[]): Promise<MachineCostSnapshot>
   }
   edit: {
     onCopy(listener: () => void): () => void
