@@ -1253,6 +1253,27 @@ ok('74 a panel with no kind is not a review panel',
     segs.length === 2 && segs.some((s) => s.to === 'r1') && segs.some((s) => s.from === 'r1'))
 }
 
+// 93. Functional links are terminal-only, preserve ordinary link metadata,
+// and reject a cycle. The cycle clause matters more than a rate limit: a
+// restart chain that eventually stops is still a configuration that surprised
+// its owner; one that cannot be created is auditable before it fires.
+{
+  const term = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const file = { kind: 'file', rect: { id: 'f', x: 0, y: 0, w: 10, h: 10 }, z: 1, source: { path: '/tmp/f' } }
+  const base = [term('a', [{ to: 'b', label: 'feeds' }]), term('b', [{ to: 'c' }]), term('c'), file]
+  const aToB = V.setRestartOnExit(base, 'a', 'b', true)
+  const bToC = V.setRestartOnExit(aToB, 'b', 'c', true)
+  const refusedCycle = V.setRestartOnExit(bToC, 'c', 'a', true)
+  const refusedKind = V.setRestartOnExit(bToC, 'a', 'f', true)
+  const disabled = V.setRestartOnExit(bToC, 'a', 'b', false)
+  const link = V.linksOf(aToB[0])[0]
+  ok('93 restart-on-exit is terminal-only, preserves labels, disables, and refuses cycles',
+    link.label === 'feeds' && link.automation?.enabled === true &&
+    refusedCycle === bToC && refusedKind === bToC &&
+    V.linksOf(disabled[0])[0].automation?.enabled === false,
+    JSON.stringify(V.linksOf(bToC[0])))
+}
+
 // M16 (originally numbered 79-80b under this branch's own M13, which
 // collided with main's own DIFFERENT M13 — "links between panels", which
 // independently claimed 79-88 in this file. See the milestone-wide

@@ -4,6 +4,14 @@ import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldMo
 import { agentStateLabel } from './inspector-fields'
 import { shellControl } from './shell-control'
 
+export interface AutomationRow {
+  from: string
+  to: string
+  source: string
+  target: string
+  enabled: boolean
+}
+
 export interface InspectorProps {
   onToggle: () => void
   /** null when nothing is selected — the launch state, and every background click. */
@@ -17,6 +25,10 @@ export interface InspectorProps {
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
+  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  /** Ephemeral evidence of what a functional link most recently did. */
+  automationResults: ReadonlyMap<string, string>
+  automations: AutomationRow[]
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -61,7 +73,7 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, review, toolbox, onOpenToolbox
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, automationResults, automations, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -75,6 +87,7 @@ function InspectorImpl({
         ›
       </button>
       <div className="shell__region-title">Panel</div>
+      <AutomationList rows={automations} results={automationResults} onSetRestartOnExit={onSetRestartOnExit} />
       {model === null
         ? <InspectorEmpty summary={summary} />
         : <InspectorPanel
@@ -90,12 +103,47 @@ function InspectorImpl({
             onLink={onLink}
             onRemoveLink={onRemoveLink}
             onRelabelLink={onRelabelLink}
+            onSetRestartOnExit={onSetRestartOnExit}
+            automationResults={automationResults}
           />}
     </aside>
   )
 }
 
 export const Inspector = memo(InspectorImpl)
+
+/** The audit surface #24 requires: rules are readable without tracing lines. */
+function AutomationList({
+  rows, results, onSetRestartOnExit
+}: {
+  rows: AutomationRow[]
+  results: ReadonlyMap<string, string>
+  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+}): JSX.Element | null {
+  if (rows.length === 0) return null
+  return (
+    <section className="inspector__links" data-automation-list>
+      <div className="inspector__links-label">automations</div>
+      {rows.map((row) => {
+        const key = `${row.from}:${row.to}`
+        return (
+          <div className="inspector__link" key={key} data-automation={key}>
+            <span className="inspector__link-title">{row.source} exits → restart {row.target}</span>
+            <button
+              type="button"
+              className="inspector__link-action"
+              title={row.enabled ? 'Disable this automation' : 'Enable this automation'}
+              {...shellControl(() => onSetRestartOnExit(row.from, row.to, !row.enabled))}
+            >
+              {row.enabled ? 'on' : 'off'}
+            </button>
+            {results.get(key) !== undefined && <span className="inspector__link-label">{results.get(key)}</span>}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
 
 /**
  * Nothing selected. Deliberately a summary rather than a blank pane or a
@@ -136,7 +184,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, automationResults
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
@@ -150,6 +198,8 @@ function InspectorPanel({
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
+  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
   const state = useAgentState(model.id)
   return (
@@ -205,6 +255,27 @@ function InspectorPanel({
                 <span className="inspector__link-title">{link.title}</span>
                 {link.label !== undefined && (
                   <span className="inspector__link-label">{link.label}</span>
+                )}
+                {link.direction === 'out' && (
+                  <button
+                    type="button"
+                    className="inspector__link-action"
+                    data-link-automation={`${from}:${to}`}
+                    disabled={!link.canRestartOnExit}
+                    title={link.canRestartOnExit
+                      ? (link.restartOnExit
+                          ? 'Disable restart when this panel exits'
+                          : 'Restart this terminal when this panel exits')
+                      : 'Restart-on-exit requires two terminal panels'}
+                    {...shellControl(() => onSetRestartOnExit(from, to, !link.restartOnExit))}
+                  >
+                    {link.restartOnExit ? '↻ on' : '↻'}
+                  </button>
+                )}
+                {link.direction === 'out' && link.restartOnExit && automationResults.get(`${from}:${to}`) !== undefined && (
+                  <span className="inspector__link-label" data-link-automation-result={`${from}:${to}`}>
+                    {automationResults.get(`${from}:${to}`)}
+                  </span>
                 )}
                 {/* Both controls go through shellControl, so neither takes DOM
                     focus off xterm — see CLAUDE.md's "A shell control never

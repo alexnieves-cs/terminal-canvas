@@ -29,6 +29,14 @@ export interface PanelLink {
   to: string
   /** What the user says it means. Absent until they say — links start bare. */
   label?: string
+  /**
+   * The one functional action #24 ships. Kept on the directed relation it
+   * belongs to: one source/target pair can have at most one restart rule, so
+   * inventing an id and a second collection would only create two ways to say
+   * the same thing. `enabled` is explicit because a rule that can fire while
+   * its owner is away must have a visible, durable off switch.
+   */
+  automation?: { kind: 'restart-on-exit'; enabled: boolean }
 }
 
 export interface PanelBase {
@@ -472,8 +480,63 @@ export function setLinkLabel(
   return mapPanel(panels, from, (p) => ({
     ...p,
     links: linksOf(p).map((l) =>
-      l.to === to ? (label === '' ? { to: l.to } : { to: l.to, label }) : l
+      l.to === to
+        ? (label === ''
+            ? { to: l.to, ...(l.automation === undefined ? {} : { automation: l.automation }) }
+            : { ...l, label })
+        : l
     )
+  }))
+}
+
+/** Whether adding `from -> to` to the enabled automation graph closes a cycle. */
+function wouldCycle(panels: Panel[], from: string, to: string): boolean {
+  const seen = new Set<string>()
+  const visit = (id: string): boolean => {
+    if (id === from) return true
+    if (seen.has(id)) return false
+    seen.add(id)
+    const panel = panels.find((p) => p.rect.id === id)
+    return panel !== undefined && linksOf(panel).some(
+      (link) => link.automation?.kind === 'restart-on-exit' && link.automation.enabled && visit(link.to)
+    )
+  }
+  return visit(to)
+}
+
+/**
+ * Enable or disable the restart-on-exit action on one existing link.
+ *
+ * A cycle is refused rather than rate-limited: a limit merely turns a
+ * configured loop into a delayed surprise, while refusing it leaves the
+ * canvas in a state a user can reason about. Returns the identical array for
+ * a missing link, a sessionless endpoint, or a cyclic enable so callers do
+ * not create a no-op undo entry.
+ */
+export function setRestartOnExit(
+  panels: Panel[],
+  from: string,
+  to: string,
+  enabled: boolean
+): Panel[] {
+  const source = panels.find((p) => p.rect.id === from)
+  const target = panels.find((p) => p.rect.id === to)
+  if (!source || !target || !isTerminalPanel(source) || !isTerminalPanel(target)) return panels
+  const link = linksOf(source).find((candidate) => candidate.to === to)
+  if (!link) return panels
+  const current = link.automation?.kind === 'restart-on-exit' && link.automation.enabled
+  if (current === enabled) return panels
+  if (enabled && wouldCycle(panels, from, to)) return panels
+  return mapPanel(panels, from, (panel) => ({
+    ...panel,
+    links: linksOf(panel).map((candidate) => candidate.to !== to
+      ? candidate
+      : {
+          ...candidate,
+          ...(enabled
+            ? { automation: { kind: 'restart-on-exit' as const, enabled: true } }
+            : { automation: { kind: 'restart-on-exit' as const, enabled: false } })
+        })
   }))
 }
 

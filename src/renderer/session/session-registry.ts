@@ -95,6 +95,13 @@ export interface Registry {
   touch(id: PanelId): void
   subscribe(listener: () => void): () => void
   /**
+   * Observe an actual process exit after the registry has recorded it. #24
+   * uses this for auditable automations rather than a second raw bridge
+   * subscription, so the action and every rendered status agree on the same
+   * event ordering.
+   */
+  onExit(listener: (info: PtyExitInfo) => void): () => void
+  /**
    * Close one panel: free its terminal and kill its process. One of exactly
    * TWO places pty.kill is called in the renderer, the other being disposeAll.
    * Tiering must never reach either.
@@ -136,6 +143,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
 
   const sessions = new Map<PanelId, PanelSession>()
   const listeners = new Set<() => void>()
+  const exitListeners = new Set<(info: PtyExitInfo) => void>()
   let version = 0
 
   /**
@@ -158,6 +166,7 @@ export function createRegistry(deps: RegistryDeps): Registry {
       `\r\n\x1b[38;5;244m[process exited with code ${info.exitCode}]\x1b[0m\r\n`
     )
     bump()
+    for (const listener of exitListeners) listener(info)
   })
 
   function bump(): void {
@@ -354,6 +363,11 @@ export function createRegistry(deps: RegistryDeps): Registry {
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
+    },
+
+    onExit(listener) {
+      exitListeners.add(listener)
+      return () => exitListeners.delete(listener)
     },
 
     async dispose(id) {

@@ -25,7 +25,9 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       // Absent stays absent, the rule `title` above and `command` below obey.
       // Copied element-wise rather than by reference so a parsed record and
       // the live Panel cannot share a mutable array.
-      ...(p.links === undefined ? {} : { links: p.links.map((l) => ({ ...l })) })
+      ...(p.links === undefined
+        ? {}
+        : { links: p.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) })
     }
     // The disk rule stated once, in the one place it converts: only 'review'
     // is tested positively, so an absent kind — every pre-M9b file — becomes
@@ -76,7 +78,9 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       z: panel.z,
       // Same absent-stays-absent rule as `command`, and for the same reason.
       ...(panel.title === undefined ? {} : { title: panel.title }),
-      ...(panel.links === undefined ? {} : { links: panel.links.map((l) => ({ ...l })) })
+      ...(panel.links === undefined
+        ? {}
+        : { links: panel.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) })
     }
     // No cwd and no args keys AT ALL on this branch — not `cwd: undefined`.
     // A review record carrying an explicit undefined cwd fails its own parse

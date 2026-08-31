@@ -49,7 +49,7 @@ OAuth 3LO and a second provider), **#13** (the drop guard and Finder path resolu
 landed; the handoff into the PTY did not), **#14** (M16 left tiers 2–4, and M22 answered
 the who-wins-on-conflict question), **#17** (M6d left the OS notification), **#19** (M17
 left history/retention, a second CLI adapter, the un-pinned panel and aggregate totals),
-**#24** (M13 left the functional flavour), **#25** (M6 left snapping and tidy), **#26** (M21
+**#25** (M6 left snapping and tidy), **#26** (M21
 left the cross-panel query and the editing half), **#27** (M5b left placeholders), **#34**
 (M5a left per-preset environment), **#41** (M12 left review's cwd resolution), **#51**
 (M9a–c left discard) and **#52** (M18 left shift-click and group drag). The membership
@@ -751,7 +751,7 @@ The universal "maximise this" gesture.
   because the user zoomed in on one is exactly the kind of decision-on-their-behalf that
   dormancy exists to avoid. Probably not — but it should be a decision, not a default.
 
-## 24. Edges between panels — the FUNCTIONAL half is what is left
+## 24. Edges between panels — functional restart-on-exit shipped in M25
 
 **The decorative half shipped in M13**, as *links*. A user draws a directed,
 optionally labelled line from one panel to another; it persists, it survives a
@@ -760,20 +760,26 @@ reload, and closing either endpoint removes it in the same undoable step. See
 and the eleven entries after it, and
 [`docs/superpowers/specs/2026-08-30-m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md).
 
-The entry stays because #24 named **two flavours and said they should not be
-built at once**. One was built. This is the other.
+The entry named **two flavours and said they should not be built at once**.
+Both are now built: decorative links shipped in M13; M25 adds the smallest
+functional action that is useful without turning the canvas into an invisible
+PTY writer.
 
-- **Functional edges — the open half.** An edge that *does* something: pipe
-  this panel's output into that one's input, or "restart this one when that one
-  exits". Genuinely powerful and genuinely dangerous, because it means the
-  canvas is writing to PTYs on its own initiative. Everything #21 says about a
-  mode you can forget you are in applies double to a rule that fires while you
-  are not present.
-- **Open question, unchanged and now the blocking one:** if the functional
-  flavour happens, is the edge the *only* place that behaviour is expressed? A
-  rule you can only see by finding a line on the canvas is hard to audit. This
-  may be the point at which the canvas needs a plain list view of its own
-  automations — and that list, not the edge, is probably the real feature.
+- **Functional action — shipped.** On an outgoing terminal-to-terminal link,
+  the Inspector's `↻` enables “when this exits, restart that terminal.” The
+  Inspector also has a plain **Automations** list, naming both endpoints,
+  enabled state and the most recent run/skipped outcome; the canvas line is
+  never the only evidence that a process can be restarted.
+- **Safety boundaries.** The action never wakes a dormant or never-started
+  target, so a saved rule cannot launch an agent merely because another panel
+  exited. It only acts after the registry records the source exit, and a
+  directed cycle is refused at creation and stripped on load — a rate limit
+  would only turn a configured loop into a delayed surprise. A restart may
+  cascade down a finite configured chain; that is visible in the list and is
+  the semantics of “on exit,” including an exit caused by an upstream restart.
+- **Deliberately not included.** Piping terminal output remains absent. It
+  would make the canvas write arbitrary bytes to a PTY, needs a payload/audit
+  model beyond this relation-owned action, and must be designed separately.
 - **What M13 leaves ready.** The primitive is built generally rather than as a
   private detail of #7's subagent visualisation, which is what #24 asked for:
   same renderer, same z-order answer, same persistence. #7's parent-to-subagent
@@ -2351,8 +2357,9 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 41. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
    argument for #28's accounts than sync is.
 42. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-43. **#24, the functional flavour** — an edge that writes to a PTY on its own initiative.
-   Only after there is somewhere to audit automations that is not the canvas itself.
+43. ~~**#24, the functional flavour**~~ — **done, M25.** Restart-on-exit is
+   guarded by the Inspector's automation list; output piping remains a separate
+   future design rather than an un-audited expansion of the rule.
 44. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 

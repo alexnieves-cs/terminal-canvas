@@ -267,6 +267,25 @@ const tick = () => new Promise((r) => setImmediate(r))
       JSON.stringify(session.status))
   }
 
+  // 8b. Functional links observe the registry's settled exit, not the raw
+  // bridge event. Seeing the status already be `exited` is the ordering that
+  // lets #24 decide from the same fact the Inspector renders; a second raw
+  // subscription could restart a target while the source still read running.
+  {
+    const { bridge, registry } = setup()
+    registry.ensure('p1', SPEC)
+    let observed = null
+    const off = registry.onExit((info) => {
+      observed = { info, status: registry.get(info.panelId)?.status.kind }
+    })
+    bridge.emitExit({ panelId: 'p1', exitCode: 7 })
+    off()
+    bridge.emitExit({ panelId: 'p1', exitCode: 8 })
+    ok('8b functional exit observers run after status and unsubscribe cleanly',
+      observed?.info.exitCode === 7 && observed.status === 'exited',
+      JSON.stringify(observed))
+  }
+
   // 9. A spawn failure becomes an error status, not an unhandled rejection.
   {
     const bridge = fakeBridge()
