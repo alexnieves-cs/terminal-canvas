@@ -140,12 +140,30 @@ function LinkLayerImpl({
               broken. A stopPropagation added here would look entirely
               reasonable in review and would pin a panel live for the rest of
               the run, holding a WebGL context, with nothing on screen to
-              explain it. */}
+              explain it.
+
+              Fix round 1: while `onRemove` is undefined (the merged view,
+              where links are read-only) it takes NO pointer events at all,
+              via an inline override rather than a second class. Without
+              this it still hovered, still lit the `--iris` highlight, and
+              still showed a pointer cursor for a click the badge would
+              never render to answer — `.palette__row`'s own recorded rule,
+              "a pointer cursor over a row that takes neither the hover nor
+              a click promises both," applied here. Disabling pointer-events
+              entirely also stops the CSS :hover pseudo-class from ever
+              matching on this element, which is what silences the
+              highlight and the cursor together rather than needing a third
+              gate for each. */}
           <path
             className="link-layer__hit"
             d={s.d}
-            onMouseEnter={() => setHovered(s.key)}
-            onMouseLeave={() => setHovered((h) => (h === s.key ? null : h))}
+            style={onRemove === undefined ? { pointerEvents: 'none' } : undefined}
+            onMouseEnter={onRemove === undefined ? undefined : () => setHovered(s.key)}
+            onMouseLeave={
+              onRemove === undefined
+                ? undefined
+                : () => setHovered((h) => (h === s.key ? null : h))
+            }
           />
           {/* The visible line MUST immediately follow the hit stroke above —
               not merely come after it eventually. `.link-layer__hit:hover +

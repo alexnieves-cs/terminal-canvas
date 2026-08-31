@@ -8893,6 +8893,22 @@ app.whenReady().then(async () => {
       //      NOT __m4aSelection, which is the focused terminal's TEXT
       //      selection and answers '' whatever the click did — the trap this
       //      check's own first draft fell into.
+      //
+      //      Fix round 1 restores the one structural fact the rewrite
+      //      dropped, cheaply: `.link-layer` ITSELF still computes
+      //      `pointer-events: none`. This is the one class of regression the
+      //      behavioural clause alone cannot see — reverting the LAYER's own
+      //      declaration to `auto` leaves the behavioural half green, because
+      //      the topmost element at `mid` becomes `.link-layer__line`, which
+      //      carries no handler, so the mousedown still bubbles unchanged.
+      //      Every production reader of target identity is a containment
+      //      test a link element already fails identically to the canvas
+      //      element (there is no elementFromPoint anywhere in src/), so that
+      //      specific regression is inert today — but it is still worth
+      //      pinning, since "inert today" is not "inert forever". This
+      //      restores the STRUCTURAL claim without restoring the part M24
+      //      makes false by design (that NOTHING in the layer is hit-testable
+      //      — two descendants now are, on purpose).
       {
         await railGoTo(LINK_A)
         const mid = await wc.executeJavaScript(`(() => {
@@ -8900,6 +8916,10 @@ app.whenReady().then(async () => {
           if (!el) return null
           const r = el.getBoundingClientRect()
           return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
+        })()`)
+        const layerPointerEvents = await wc.executeJavaScript(`(() => {
+          const layer = document.querySelector('.link-layer')
+          return layer ? getComputedStyle(layer).pointerEvents : null
         })()`)
         // The SELECTED PANEL, read from production markup. NOT __m4aSelection,
         // which is the focused terminal's TEXT selection and answers '' here
@@ -8916,9 +8936,10 @@ app.whenReady().then(async () => {
           await clickAt(mid.x, mid.y)
           after = await selectedId()
         }
-        ok('127 a click on a link still reaches the background handler beneath it',
-          mid !== null && before !== null && after === null,
-          `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+        ok('127 a click on a link still reaches the background handler beneath it, and .link-layer itself still takes no pointer events',
+          mid !== null && before !== null && after === null && layerPointerEvents === 'none',
+          `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)} ` +
+          `layerPointerEvents=${JSON.stringify(layerPointerEvents)}`)
       }
 
       // 128. THE SECOND ONE WORTH KNOWING BY NUMBER. Closing the target
@@ -12193,8 +12214,21 @@ app.whenReady().then(async () => {
       //      dispatched mouseover, because the badge's visibility is driven by
       //      React state set from onMouseEnter and an untrusted event would
       //      prove the handler works while proving nothing about the pointer.
+      //
+      //      Fix round 1 adds the hover-highlight clause: the hovered link's
+      //      computed stroke must differ from an UN-HOVERED sibling link's
+      //      computed stroke, read inside this SAME hover window (before the
+      //      removal, while `key`'s hit stroke is still genuinely hovered).
+      //      Compared against a real sibling's colour rather than a
+      //      hardcoded rgb() literal, because a hardcoded value would turn
+      //      this check red on a retheme — a copy reason, not a behavioural
+      //      one — the same discipline verify:styles' own theme-token rules
+      //      already enforce for the stylesheet itself. m24A -> m24-dormant
+      //      is the sibling, seeded by check 175 and never removed by
+      //      anything before this point.
       {
         const key = M24_A + ' ' + M24_B
+        const siblingKey = M24_A + ' ' + M24_DORMANT
         await railGoTo(M24_B)
         const mid = await wc.executeJavaScript(`(() => {
           const el = document.querySelector('.link-layer [data-link="${key}"]')
@@ -12203,6 +12237,7 @@ app.whenReady().then(async () => {
           return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
         })()`)
         let badge = null
+        let hoverColors = null
         let afterRemove = null
         let afterUndo = null
         if (mid) {
@@ -12214,6 +12249,12 @@ app.whenReady().then(async () => {
             const r = b.getBoundingClientRect()
             return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }
           })()`)
+          hoverColors = await wc.executeJavaScript(`(() => {
+            const hovered = document.querySelector('.link-layer [data-link="${key}"]')
+            const sibling = document.querySelector('.link-layer [data-link="${siblingKey}"]')
+            if (!hovered || !sibling) return null
+            return { hovered: getComputedStyle(hovered).stroke, sibling: getComputedStyle(sibling).stroke }
+          })()`)
           if (badge) {
             await clickAt(badge.x, badge.y)
             afterRemove = await m24Links()
@@ -12222,11 +12263,12 @@ app.whenReady().then(async () => {
             afterUndo = await m24Links()
           }
         }
-        ok('178 the hover badge removes a link, and ONE undo restores it',
+        ok('178 the hover badge removes a link, and ONE undo restores it, and the hover highlight actually changes the line\'s colour',
           mid !== null && badge !== null &&
+            hoverColors !== null && hoverColors.hovered !== hoverColors.sibling &&
             afterRemove !== null && !afterRemove.includes(key) &&
             afterUndo !== null && afterUndo.includes(key),
-          `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} ` +
+          `mid=${JSON.stringify(mid)} badge=${JSON.stringify(badge)} hoverColors=${JSON.stringify(hoverColors)} ` +
           `afterRemove=${JSON.stringify(afterRemove)} afterUndo=${JSON.stringify(afterUndo)}`)
       }
     }

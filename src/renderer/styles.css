@@ -1245,9 +1245,16 @@ body {
    because linkAnchors anchors both ends ON the panel borders, so the whole
    segment is outside both rects.
 
-   pointer-events: none is a property of the LAYER, not a hit test anyone has
-   to remember: a link can never swallow a click meant for a panel, nor the
-   background click that clears focusedId. */
+   pointer-events: none on the LAYER, not a hit test anyone has to remember —
+   but M24 Task 6 narrows that surgically rather than removing it: exactly two
+   descendants opt back in, `.link-layer__hit` (below) with
+   `pointer-events: stroke` and `.link-layer__badge` with `pointer-events:
+   all`. Nothing else in this layer is hit-testable. The invariant this
+   became is "things that can be hit do not consume" rather than "nothing in
+   this layer can be hit": the hit stroke's own handlers must never call
+   stopPropagation, so a mousedown on it still bubbles to Canvas's background
+   handler and clears focusedId exactly as a click on bare canvas does. See
+   verify:panels 127 (rewritten in M24) and 178. */
 .link-layer {
   position: absolute;
   top: 0;
