@@ -8,21 +8,22 @@ export interface ShellChrome {
   selectPane: (id: NavPaneId) => void
   /** Open the last-used pane, or close whichever is open. */
   toggleNavigator: () => void
+  /** The PERSISTED preference: does the user want a context pane at all. At a
+   *  width that gives it a real column, this is what fills it. */
   contextOpen: boolean
+  /**
+   * The EPHEMERAL one: is the context DRAWER showing right now.
+   *
+   * Separate from `contextOpen` and deliberately not persisted, because a
+   * drawer that survived a launch would not be a drawer. At a width with no
+   * column for it, the context pane floats OVER the canvas — and a floating
+   * pane that is open by default is a RESIDENT overlay, which puts panels
+   * permanently under chrome and makes every world coordinate the canvas
+   * computes a lie. That is the one thing insetting exists to avoid, so the
+   * drawer starts closed and only a deliberate gesture opens it.
+   */
+  contextDrawerOpen: boolean
   toggleContext: () => void
-
-  // -- Retired, and kept only until the grid is rewired -------------------
-  // Canvas still renders the old four-column frame, so these are DERIVED from
-  // the two real values above rather than stored beside them. Two sources for
-  // one fact is the drift "One map, and a typed view over it" exists to
-  // prevent, and deriving is what makes the intermediate state honest rather
-  // than merely compiling. They go when the grid does.
-  railOpen: boolean
-  inspectorOpen: boolean
-  treeOpen: boolean
-  toggleRail: () => void
-  toggleInspector: () => void
-  toggleTree: () => void
 }
 
 /** The pane a fresh `toggleNavigator` opens, and the schema's own default.
@@ -78,6 +79,9 @@ export function useShellChrome(deps: {
   // settings read below resolves.
   const [navigatorPane, setNavigatorPane] = useState<NavPaneId | null>(DEFAULT_PANE)
   const [contextOpen, setContextOpen] = useState(true)
+  // Never seeded from the store: see the interface note. A drawer is a
+  // gesture, not a setting.
+  const [contextDrawerOpen, setContextDrawerOpen] = useState(false)
 
   // The pane toggleNavigator reopens. A REF and not state: nothing renders it,
   // so making it state would re-render the whole shell every time a pane
@@ -127,12 +131,18 @@ export function useShellChrome(deps: {
   }, [navigatorPane])
 
   const toggleContext = useCallback(() => {
+    // BOTH, and the breakpoint decides which one is doing anything. At a width
+    // that gives context a column, `contextOpen` fills it and the drawer class
+    // is inert because the drawer rules are scoped inside the narrow container
+    // queries; at a width that gives it none, the reverse. That is what keeps
+    // this hook from having to know the breakpoint at all — the alternative is
+    // a ResizeObserver here duplicating a decision CSS already makes, and two
+    // authors of one fact is the drift this file's own header warns about.
     const next = !contextOpen
     setContextOpen(next)
+    setContextDrawerOpen(next)
     void window.canvas.settings.set('shell.contextOpen', next)
   }, [contextOpen])
-
-  const toggleTree = useCallback(() => { selectPane('files') }, [selectPane])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -189,17 +199,7 @@ export function useShellChrome(deps: {
   }, [paletteIsOpen, toggleNavigator, toggleContext, selectPane])
 
   return {
-    navigatorPane,
-    selectPane,
-    toggleNavigator,
-    contextOpen,
-    toggleContext,
-    // Derived, never stored — see the interface note.
-    railOpen: navigatorPane !== null,
-    inspectorOpen: contextOpen,
-    treeOpen: navigatorPane === 'files',
-    toggleRail: toggleNavigator,
-    toggleInspector: toggleContext,
-    toggleTree
+    navigatorPane, selectPane, toggleNavigator,
+    contextOpen, contextDrawerOpen, toggleContext
   }
 }

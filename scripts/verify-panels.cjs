@@ -5170,52 +5170,72 @@ app.whenReady().then(async () => {
       const geom = await wc.executeJavaScript(`(() => {
         const shell = document.querySelector('.shell')
         const canvas = document.querySelector('.canvas')
-        const tree = document.querySelector('.shell__tree')
-        const rail = document.querySelector('.shell__rail')
-        const inspector = document.querySelector('.shell__inspector')
-        if (!shell || !canvas || !tree || !rail || !inspector) return null
+        const dock = document.querySelector('.dock')
+        const nav = document.querySelector('.navpane')
+        const context = document.querySelector('.shell__inspector')
+        if (!shell || !canvas || !dock) return null
         const c = canvas.getBoundingClientRect()
         return {
           canvasWidth: c.width,
+          shellWidth: shell.getBoundingClientRect().width,
           windowWidth: window.innerWidth,
-          // M20: a THIRD inset region. The identity is still the clause that
-          // discriminates — an element pushed out of view reports its width
-          // exactly as a visible one does, so every looser bound survives the
-          // min-width:auto failure this check exists for.
-          treeWidth: tree.getBoundingClientRect().width,
-          railWidth: rail.getBoundingClientRect().width,
-          inspectorWidth: inspector.getBoundingClientRect().width,
+          dockWidth: dock.getBoundingClientRect().width,
+          // A region the breakpoint gives no column reads 0 rather than being
+          // absent: the column is a CSS width, and the element and its content
+          // stay in the DOM so a drawer can float it over the canvas without
+          // remounting anything.
+          navWidth: nav ? nav.getBoundingClientRect().width : 0,
+          contextWidth: context ? context.getBoundingClientRect().width : 0,
+          // A DRAWER costs the canvas no width at all, and that is the whole
+          // reason a transient overlay is legitimate here where a resident one
+          // would not be: it floats over the canvas rather than insetting it,
+          // so every getBoundingClientRect() the canvas takes stays honest.
+          // position:absolute is exactly what expresses that, so it is what
+          // the arithmetic below reads — never the element's box, which
+          // reports a drawer's 300px identically to a column's.
+          navFloats: nav ? getComputedStyle(nav).position === 'absolute' : false,
+          contextFloats: context ? getComputedStyle(context).position === 'absolute' : false,
           canvasLeft: c.left
         }
       })()`)
       const live = await wc.executeJavaScript(
         `document.querySelectorAll('.panel .xterm').length`)
       ok('73 the shell frame insets the canvas and leaves a panel promoted',
-        geom !== null && geom.treeWidth > 15 && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
+        geom !== null &&
+          // The dock is RESIDENT at every breakpoint. It is what the three
+          // 22px collapsed strips it replaces were each standing in for — the
+          // only way back to a pane the user closed — so a dock measuring 0
+          // anywhere would delete that way back for all four panes at once.
+          geom.dockWidth > 0 &&
           geom.canvasWidth < geom.windowWidth - 80 &&
-          geom.canvasLeft >= geom.treeWidth + geom.railWidth - 1 &&
+          geom.canvasLeft >= geom.dockWidth + (geom.navFloats ? 0 : geom.navWidth) - 1 &&
           // The EXACT inset, and it is the clause that does the discriminating.
           // Every bound above it is loose enough to survive the one CSS failure
           // the frame's own comment names: drop `min-width: 0` from the canvas
           // cell and the grid item refuses to shrink, so the canvas overflows
-          // and shoves the inspector off screen — yet getBoundingClientRect()
+          // and shoves the context pane off screen — yet getBoundingClientRect()
           // reports width for an element pushed out of view exactly as it does
-          // for a visible one, so treeWidth is still 22 (collapsed by default —
-          // see below), railWidth is still 240, inspectorWidth is still 260,
-          // canvasLeft is still treeWidth + 240, and an overflowing canvasWidth
-          // is still comfortably under windowWidth - 80. All six loose clauses
-          // pass under that regression. Only the identity — the four columns
-          // summing to the window — fails, because an overflowing middle cell is
+          // for a visible one, so dockWidth is still 48, navWidth still 260,
+          // and an overflowing canvasWidth is still comfortably under
+          // windowWidth - 80. Every loose clause passes under that regression.
+          // Only the identity fails, because an overflowing middle cell is
           // precisely a canvas WIDER than the space the other three leave it.
           // ±1 for fractional device pixels, not for slack in the claim.
-          //
-          // The tree is COLLAPSED here (shell.navigatorPane defaults to
-          // 'panels' rather than 'files', and nothing before this check has
-          // touched it), so treeWidth is the
-          // 22px strip rather than the full 220px column — measured, not
-          // assumed, the same rule check 125 states for its own open read.
           Math.abs(geom.canvasWidth -
-            (geom.windowWidth - geom.treeWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
+            (geom.shellWidth -
+              (geom.navFloats ? 0 : geom.navWidth) -
+              (geom.contextFloats ? 0 : geom.contextWidth) -
+              geom.dockWidth)) <= 1 &&
+          // THE MILESTONE'S OWN CLAIM, rather than the grid's. At this 1400px
+          // window the old four-column frame left the canvas 878px, and the
+          // whole argument for restructuring was that three permanently
+          // resident columns is more chrome than a canvas app can afford. A
+          // grid satisfying the identity while leaving the canvas where it was
+          // would be a refactor rather than this milestone. Measured: 1092.
+          geom.canvasWidth > 1000 &&
+          // Not tautological: a smaller canvas is a smaller cull region, and a
+          // frame that quietly demoted the panel the user was looking at
+          // renders a card with no error anywhere.
           live > 0,
         JSON.stringify(geom) + ` live=${live}`)
       // The state this check LEAVES BEHIND, in the same spirit as 71's own
@@ -5227,6 +5247,7 @@ app.whenReady().then(async () => {
       // one. A later check that counts panels, counts sessions, or presses
       // Cmd+Z expecting nothing to undo must account for it.
     }
+
 
     // 74. THE PALETTE'S THIRD EXIT STILL WORKS FROM THE SHELL.
     //
@@ -5248,7 +5269,7 @@ app.whenReady().then(async () => {
       const opened = await waitUntil(
         () => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
       const dismissed = await wc.executeJavaScript(`(async () => {
-        const rail = document.querySelector('.shell__rail')
+        const rail = document.querySelector('.navpane')
         rail.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 20, clientY: 300 }))
         await new Promise((r) => setTimeout(r, 120))
         return document.querySelector('.palette') === null
@@ -5289,7 +5310,7 @@ app.whenReady().then(async () => {
       const liveBefore = await wc.executeJavaScript(
         `document.querySelectorAll('.panel .xterm').length`)
       await wc.executeJavaScript(`
-        document.querySelector('.shell__rail-toggle').dispatchEvent(
+        document.querySelector('.dock__btn[data-dock-id=\"panels\"]').dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
       // Longer than the 150ms this used to wait: DEMOTE_DELAY_MS is 250, so a
@@ -5325,7 +5346,7 @@ app.whenReady().then(async () => {
       // rail is COLLAPSED, so the detail string below read backwards: a
       // passing run printed start=true for a rail that was shut.
       const collapsed = () => wc.executeJavaScript(
-        `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+        `document.querySelector('.shell').classList.contains('shell--nav-closed')`)
       const start = await collapsed()
       await wc.executeJavaScript(`
         for (let i = 0; i < 5; i++) {
@@ -5430,7 +5451,7 @@ app.whenReady().then(async () => {
       // preventDefault(), and a dispatched-event version of this check passes
       // identically against the very regression it exists to catch. Confirmed
       // by deleting the preventDefault and watching this go red.
-      await realClick('.shell__rail-toggle')
+      await realClick('.dock__btn[data-dock-id="panels"]')
       const after = await probe()
       ok('75c a shell control takes neither focusedId nor DOM focus',
         before.inside === true && after.inside === true &&
@@ -5661,7 +5682,7 @@ app.whenReady().then(async () => {
     //
     //     Watched failing against the empty-dep-array read effect before the
     //     fix: stored=true (main took the write) with the canvas width
-    //     unchanged and shell--rail-collapsed still on the root.
+    //     unchanged and shell--nav-closed still on the root.
     //
     //     World state inherited from 78: two live panels, camera wherever Fit
     //     put it, RAIL COLLAPSED (shell.navigatorPane === 'none' in main's store),
@@ -5720,7 +5741,7 @@ app.whenReady().then(async () => {
         (await canvasWidth()) < before - 100 ? true : false, 3000)
       const after = await canvasWidth()
       const collapsed = await wc.executeJavaScript(
-        `document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+        `document.querySelector('.shell').classList.contains('shell--nav-closed')`)
       ok('79 a palette toggle of a region moves the region, not only the store',
         storedBefore === 'none' && storedAfter === 'panels' &&
           moved === true && collapsed === false,
@@ -5757,14 +5778,14 @@ app.whenReady().then(async () => {
     //         render an inspector that never collapses with nothing red.
     //
     //     The rail clause is what makes (b) fail rather than merely look odd:
-    //     both-branches-rail flips shell--rail-collapsed and leaves
+    //     both-branches-rail flips shell--nav-closed and leaves
     //     shell--inspector-collapsed alone, which is exactly the pair this
     //     check forbids.
     {
       const classes = () => wc.executeJavaScript(`(() => {
         const shell = document.querySelector('.shell')
         return {
-          rail: shell.classList.contains('shell--rail-collapsed'),
+          rail: shell.classList.contains('shell--nav-closed'),
           inspector: shell.classList.contains('shell--inspector-collapsed')
         }
       })()`)
@@ -5801,7 +5822,7 @@ app.whenReady().then(async () => {
     //     bug at a glance.
     {
       const railOpen = await wc.executeJavaScript(
-        `!document.querySelector('.shell').classList.contains('shell--rail-collapsed')`)
+        `!document.querySelector('.shell').classList.contains('shell--nav-closed')`)
       // Scoped to .rail-list--panels: M8d's Workspaces section (Task 3) rows
       // share the bare .rail-row class for its layout rules, and an unscoped
       // query here would pick up the workspace list's row too.
@@ -6732,6 +6753,26 @@ app.whenReady().then(async () => {
     const activeWorkspaceId = () => wc.executeJavaScript(
       `window.canvas.workspace.list().then((r) => (r.find((w) => w.active) || {}).id)`)
 
+    // M23a. ONE PANE AT A TIME, so a check reaching for a workspace row or an
+    // attention row has to open that pane first. The rail's three sections are
+    // three panes now, and this is the REAL gesture rather than a workaround —
+    // it is exactly what a user does, and it is the trade this milestone
+    // accepts: the three lists share one column and gain its full height.
+    //
+    // IDEMPOTENT, and that is the whole of why it reads before it clicks: the
+    // dock button TOGGLES (selecting the active pane collapses it), so a blind
+    // click would CLOSE a pane that was already open and every row this helper
+    // exists to reach would then be absent — a fixture that does the exact
+    // opposite of its name, intermittently, depending on what ran before it.
+    const openPane = async (id) => {
+      const already = await wc.executeJavaScript(
+        `document.querySelector('.navpane[data-navpane=' + ${JSON.stringify(JSON.stringify(id))} + ']') !== null`)
+      if (already) return true
+      const hit = await clickRail(`.dock__btn[data-dock-id="${id}"]`)
+      await settle()
+      return hit
+    }
+
     // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
     //     Check 64 makes this claim for the palette's switcher and explains
     //     why the pid is the only observable that can make it: every other
@@ -6762,6 +6803,7 @@ app.whenReady().then(async () => {
       const before = await settledSessionMap(wc)
       await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('rail-away')`)
       await settle()
+      await openPane('workspaces')
       const clicked = await clickRail(
         `.rail-row[data-rail-workspace=${JSON.stringify(homeWorkspaceId)}] .rail-row__main`)
       await settle()
@@ -6781,6 +6823,7 @@ app.whenReady().then(async () => {
     //      missing, and here it would also make the rail's list silently
     //      disagree with its own count of how many workspaces exist.
     {
+      await openPane('workspaces')
       const state = await wc.executeJavaScript(`(() => {
         const row = document.querySelector(
           '.rail-row[data-rail-workspace=${JSON.stringify(homeWorkspaceId)}]')
@@ -6836,6 +6879,7 @@ app.whenReady().then(async () => {
            const w = rows.find((r) => !r.active)
            return w ? { id: w.id, name: w.name } : null
          })`)
+      await openPane('workspaces')
       const clicked = target !== null && await clickRail(
         `.rail-row[data-rail-workspace=${JSON.stringify(target && target.id)}] .rail-row__rename`)
       // Polled, not slept. Every other palette-opening check in this file waits
@@ -6921,6 +6965,7 @@ app.whenReady().then(async () => {
       await wc.executeJavaScript(
         `window.__m7aWorkspace().switchTo(${JSON.stringify(homeWorkspaceId)})`)
       await settle()
+      await openPane('workspaces')
       const tail = await wc.executeJavaScript(`(() => {
         const row = document.querySelector(
           '.rail-row[data-rail-workspace=${JSON.stringify(waitroomId)}]')
@@ -6974,6 +7019,7 @@ app.whenReady().then(async () => {
       // since this one is block-scoped to check 97.
       const attentionRowSel =
         `.rail-attention[data-rail-attention=${JSON.stringify(attentionPanelId)}]`
+      await openPane('attention')
       const rowAppeared = await waitUntil(() => wc.executeJavaScript(
         `document.querySelector(${JSON.stringify(attentionRowSel)}) !== null`), 4000)
 
@@ -7061,12 +7107,22 @@ app.whenReady().then(async () => {
     // section header with a void under it reads as a broken list rather than
     // as "nobody needs you".
     {
+      await openPane('attention')
       const empty = await wc.executeJavaScript(`(() => {
         const el = document.querySelector('.rail-list--attention .rail-empty')
         return el ? el.textContent : null
       })()`)
       ok('98b an empty attention queue says so rather than rendering nothing',
         typeof empty === 'string' && empty.trim().length > 0, `empty=${JSON.stringify(empty)}`)
+      // WHAT THIS BLOCK LEAVES BEHIND, in the spirit of 71's and 73's own
+      // closing notes, and a NEW obligation that did not exist before M23a:
+      // one pane at a time means a check which opened Workspaces or Attention
+      // has taken the PANELS list off screen, and nearly everything below here
+      // reaches for a rail row to select a panel with. Leaving Attention open
+      // makes every one of those clicks find nothing — which surfaced as eight
+      // review-node checks failing at once with `clicked=false`, none of them
+      // about the rail at all. Restore the pane the rest of the file assumes.
+      await openPane('panels')
     }
 
     // 99-101 share one fixture repository and one block. This is the only
@@ -7542,9 +7598,27 @@ app.whenReady().then(async () => {
         // never sees this r-node at all, so it recomputes the same
         // n-max-plus-one it would have without this node existing.
         const collideId = `r${maxN + 1}`
+        // POLLED, never read once. sessionMap above proves the PTY exists and
+        // says nothing about the baseline, because captureBaseline is
+        // fire-and-forget on top of the spawn by design — a spawn must never
+        // be delayed by a git process — and under tmux it is several
+        // subprocesses deep. Read once, it can legitimately answer null, and
+        // then EVERY clause below is skipped in one step: no seeded node, no
+        // reload, no gesture, `minted` still null, and the failure reports
+        // `minted=null` with the id-collision defect this check exists for
+        // entirely unexercised. That is the identical race check 101 already
+        // polls review:panel for, and its own comment says why the session
+        // wait cannot stand in for it.
+        // The trailing `|| null` is not decoration: waitUntil hands back its
+        // last falsy value on timeout, which here is `false`, and `false !==
+        // null` would satisfy the assertion's own seedBaseline clause
+        // VACUOUSLY — reporting a bare `minted=null` for a check that never
+        // got a baseline to seed with, which is the one distinction this poll
+        // was added to make legible.
         const seedBaseline = subjectPanel
-          ? await wc.executeJavaScript(
-              `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
+          ? (await waitUntil(async () => (await wc.executeJavaScript(
+              `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)) || false,
+            8000)) || null
           : null
         let minted = null
         let idsAfterReload = null
@@ -7597,7 +7671,8 @@ app.whenReady().then(async () => {
         ok('107 a review node cannot mint an id a persisted node already owns',
           subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
             minted !== collideId && new Set(finalIds).size === finalIds.length,
-          `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
+          `collideId=${collideId} subject=${subjectPanel} baseline=${seedBaseline !== null} ` +
+            `minted=${minted} ids=${JSON.stringify(finalIds)}`)
       }
 
       // 108. The node is in the rail, and its row NAVIGATES — the rule
@@ -9277,8 +9352,29 @@ app.whenReady().then(async () => {
         // /private/var/folders/... for the identical directory.
         const treeDir2Real = (() => { try { return realpathSync(treeDir2) } catch { return treeDir2 } })()
 
+        // M23a: the tree is a PANE now, not a region, so "collapsed" is no
+        // longer a fact about the frame at all — there is no width to read.
+        // It is whether the Files pane is the open one, which is the pane's
+        // own identity. Read off the rendered pane rather than off main's
+        // store, for check 79's reason: a setting that persists while the
+        // frame stays put is exactly the defect these checks exist to catch.
         const readTreeCollapsed = () => wc.executeJavaScript(
-          `document.querySelector('.shell').classList.contains('shell--tree-collapsed')`)
+          `document.querySelector('.navpane[data-navpane="files"]') === null`)
+
+        // One pane at a time means the Panels list and the file tree are no
+        // longer on screen together, so a check that reaches for a rail row
+        // mid-tree-block has to open Panels, click, and come back. That is the
+        // real gesture a user makes, not a workaround: the trade this
+        // milestone accepts is that the two lists share one column.
+        const selectViaPanelsPane = async (id) => {
+          await dispatchClick('.dock__btn[data-dock-id="panels"]')
+          await settle()
+          const hit = await dispatchClick(`[data-rail-row="${id}"] .rail-row__main`)
+          await settle()
+          await dispatchClick('.dock__btn[data-dock-id="files"]')
+          await settle()
+          return hit
+        }
 
         // A plain dispatched click, the same shape clickRail (~line 6567)
         // already uses: shellControl's onClick fires for any 'click' event
@@ -9318,32 +9414,47 @@ app.whenReady().then(async () => {
         // Open the column. It defaults CLOSED (shell.navigatorPane's schema
         // default), so every check below needs this, and check 73's own
         // collapsed measurement ran long before this block and is unaffected.
-        if (await readTreeCollapsed()) { await dispatchClick('.shell__tree-toggle'); await settle() }
+        if (await readTreeCollapsed()) { await dispatchClick('.dock__btn[data-dock-id="files"]'); await settle() }
 
-        // 156. The exact FOUR-column inset, tree OPEN this time — check 73's
-        //      argument with a third region, complementing its collapsed
-        //      measurement with this one's open measurement. Every looser
-        //      bound survives the min-width:auto failure, because an element
-        //      pushed out of view reports its width exactly as a visible one
-        //      does, and only the IDENTITY fails — an overflowing middle cell
-        //      is precisely a canvas wider than the space the other three
-        //      leave it.
+        // 156. The exact inset with the FILES pane resident, where check 73
+        //      measured it with Panels resident. Its subject changed with the
+        //      frame — there is no fourth column any more, and `tree` and
+        //      `rail` now resolve to the SAME .navpane element, so the old
+        //      arithmetic double-counted one region — but what it is FOR
+        //      survives intact and is worth more under the new layout than the
+        //      old: the identity must hold whichever pane is open, which is
+        //      what says switching panes changes the pane's CONTENT and not
+        //      the column's width. A navigator that resized itself per pane
+        //      would move every panel on the canvas sideways each time the
+        //      user looked at a different list.
+        //
+        //      Every looser bound still survives the min-width:auto failure,
+        //      because an element pushed out of view reports its width exactly
+        //      as a visible one does, and only the IDENTITY fails.
         {
           const m = await wc.executeJavaScript(`(() => {
+            const shell = document.querySelector('.shell')
             const canvas = document.querySelector('.canvas')
-            const tree = document.querySelector('.shell__tree')
-            const rail = document.querySelector('.shell__rail')
-            const inspector = document.querySelector('.shell__inspector')
-            if (!canvas || !tree || !rail || !inspector) return null
+            const dock = document.querySelector('.dock')
+            const nav = document.querySelector('.navpane[data-navpane="files"]')
+            const context = document.querySelector('.shell__inspector')
+            if (!shell || !canvas || !dock || !nav) return null
             return {
               canvasWidth: canvas.getBoundingClientRect().width,
-              windowWidth: window.innerWidth,
-              treeWidth: tree.getBoundingClientRect().width,
-              railWidth: rail.getBoundingClientRect().width,
-              inspectorWidth: inspector.getBoundingClientRect().width
+              shellWidth: shell.getBoundingClientRect().width,
+              dockWidth: dock.getBoundingClientRect().width,
+              treeWidth: nav.getBoundingClientRect().width,
+              contextWidth: context ? context.getBoundingClientRect().width : 0,
+              // A drawer floats and costs the canvas nothing; see check 73.
+              navFloats: getComputedStyle(nav).position === 'absolute',
+              contextFloats: context ? getComputedStyle(context).position === 'absolute' : false
             }
           })()`)
-          const expected = m ? m.windowWidth - m.treeWidth - m.railWidth - m.inspectorWidth : NaN
+          const expected = m
+            ? m.shellWidth - m.dockWidth -
+              (m.navFloats ? 0 : m.treeWidth) -
+              (m.contextFloats ? 0 : m.contextWidth)
+            : NaN
           // The xterm clause is not tautological the way "the canvas got
           // narrower" is: a smaller canvas is a smaller cull region, and a
           // frame that quietly demoted the panel the user was looking at
@@ -9351,8 +9462,11 @@ app.whenReady().then(async () => {
           const live = await wc.executeJavaScript(
             `document.querySelectorAll('.panel .xterm').length`)
           ok('156 the four-column frame insets the canvas exactly, panel still promoted',
-            m !== null && Math.abs(m.canvasWidth - expected) <= 1 && m.treeWidth > 100 && live > 0,
-            m ? `canvas=${m.canvasWidth} expected=${expected} tree=${m.treeWidth} xterm=${live}` : 'no frame')
+            m !== null && Math.abs(m.canvasWidth - expected) <= 1 &&
+              m.treeWidth > 100 && m.dockWidth > 0 && live > 0,
+            m ? `canvas=${m.canvasWidth} expected=${expected} tree=${m.treeWidth} ` +
+                `dock=${m.dockWidth} ctx=${m.contextWidth} floats=${m.contextFloats} xterm=${live}`
+              : 'no frame')
         }
 
         // 157. THE ONE THAT MATTERS, and the only one in this milestone that
@@ -9471,18 +9585,18 @@ app.whenReady().then(async () => {
 
           // The tree re-roots and re-reads its directory over an async IPC
           // round trip (files.list), so wait for actual file rows rather
-          // than just the heading updating. Scoped to .shell__tree so a
+          // than just the heading updating. Scoped to the Files pane so a
           // false positive can only come from the tree itself, never from
           // some other part of the page that happens to reuse the class name.
           if (focused) {
             await waitUntil(() => wc.executeJavaScript(
-              `document.querySelectorAll('.shell__tree .file-row [data-file-path]').length > 0`), 5000)
+              `document.querySelectorAll('.navpane[data-navpane=\"files\"] .file-row [data-file-path]').length > 0`), 5000)
           }
 
           // The first FILE row — a directory row toggles instead of
           // inserting, and its twist glyph (▸/▾) is what tells the two apart.
           const filePath = focused ? await wc.executeJavaScript(`(() => {
-            const rows = [...document.querySelectorAll('.shell__tree .file-row [data-file-path]')]
+            const rows = [...document.querySelectorAll('.navpane[data-navpane=\"files\"] .file-row [data-file-path]')]
             const file = rows.find((r) => {
               const twist = r.querySelector('.file-row__twist')
               return twist !== null && twist.textContent === ''
@@ -9490,7 +9604,7 @@ app.whenReady().then(async () => {
             return file ? file.getAttribute('data-file-path') : null
           })()`) : null
           const clicked = filePath
-            ? await realClick(`.shell__tree [data-file-path="${filePath}"]`)
+            ? await realClick(`.navpane[data-navpane=\"files\"] [data-file-path="${filePath}"]`)
             : false
           await settle()
 
@@ -9530,7 +9644,7 @@ app.whenReady().then(async () => {
         {
           const id2 = await spawnAt(treeDir2)
           if (id2) await waitUntil(async () => (await sessionMap(wc)).has(id2), 8000)
-          const switched = id2 ? await dispatchClick(`[data-rail-row="${id2}"] .rail-row__main`) : false
+          const switched = id2 ? await selectViaPanelsPane(id2) : false
           await settle()
           const read = await wc.executeJavaScript(`(() => {
             const sel = document.querySelector('.panel--selected')
@@ -9688,20 +9802,20 @@ app.whenReady().then(async () => {
           const id3 = await spawnAt(treeDir3)
           if (id3) await waitUntil(async () => (await sessionMap(wc)).has(id3), 8000)
           const switched3 = id3
-            ? await dispatchClick(`[data-rail-row="${id3}"] .rail-row__main`)
+            ? await selectViaPanelsPane(id3)
             : false
           await settle()
           if (switched3) {
             await waitUntil(() => wc.executeJavaScript(
-              `document.querySelectorAll('.shell__tree .file-row [data-file-path]').length > 0`), 5000)
+              `document.querySelectorAll('.navpane[data-navpane=\"files\"] .file-row [data-file-path]').length > 0`), 5000)
           }
           // Delete the whole root from disk — the fixture setup for the
           // failure this check exists to catch, not a teardown.
           try { rmSync(treeDir3, { recursive: true, force: true }) } catch { /* setup, not teardown */ }
-          // The refresh control, scoped to .shell__tree so this cannot
+          // The refresh control, scoped to the Files pane so this cannot
           // accidentally hit SideRail's own shell__region-add.
           const refreshed = switched3
-            ? await dispatchClick('.shell__tree .shell__region-add')
+            ? await dispatchClick('.navpane[data-navpane=\"files\"] .shell__region-add')
             : false
           // Both spellings tried, in order — the same OR check 127 already
           // makes on `read.root`: treeRoot may have moved to the RESOLVED
@@ -9713,8 +9827,8 @@ app.whenReady().then(async () => {
           // actual selectors rather than compared afterward.
           const noteText = refreshed
             ? await waitUntil(() => wc.executeJavaScript(`(() => {
-                const byRaw = document.querySelector('.shell__tree [data-file-note="${treeDir3}"]')
-                const byReal = document.querySelector('.shell__tree [data-file-note="${treeDir3Real}"]')
+                const byRaw = document.querySelector('.navpane[data-navpane=\"files\"] [data-file-note="${treeDir3}"]')
+                const byReal = document.querySelector('.navpane[data-navpane=\"files\"] [data-file-note="${treeDir3Real}"]')
                 const el = byRaw || byReal
                 return el ? el.textContent : null
               })()`), 5000)
@@ -9943,6 +10057,49 @@ app.whenReady().then(async () => {
       //      any background mousedown whether or not React was told.
       await zoomTo(wc, '0')
       await waitUntil(async () => (await liveCount(wc)) > 0, 4000)
+      // M23a. FRAME AND RAISE a live panel before hit-testing for one.
+      //
+      // The hit test below can legitimately find NOTHING while liveCount
+      // reports several, and the new grid made that reachable: a panel is
+      // promoted when it is inside the cull region, which is the canvas plus
+      // CULL_MARGIN_PX — so "live" has never meant "on screen", and which
+      // panels tiering promotes moved when the canvas moved and grew. The
+      // search then falls through to clicking the first `.panel__slot` blind,
+      // which under this frame lands on the NAVIGATOR, whose shellControl
+      // calls preventDefault on mousedown precisely so DOM focus does not
+      // move — so activeElement stays on <body>, and this check reports
+      // `before=false` with the marquee entirely innocent. That is the same
+      // failure the note below records from the z-order side, arriving
+      // through the frame instead, and it is a FIXTURE fault both times.
+      //
+      // A rail row is the one gesture that fixes both halves at once, because
+      // goToPanel CENTRES the panel (so its own centre is on screen) and
+      // RAISES it (so that centre hit-tests back to itself rather than to an
+      // overlapping neighbour) — exactly the two properties the search wants,
+      // and neither of them asserted here, so this stays setup rather than
+      // becoming a second, quieter copy of the check.
+      //
+      // Leaves the PANELS pane open where the M20 block left Files. Nothing
+      // below reaches for the tree — the file-panel and toolbox checks work
+      // on nodes on the canvas, not on the navigator — but it is the state
+      // whoever appends after this block inherits.
+      {
+        const liveId = await wc.executeJavaScript(`(() => {
+          const x = document.querySelector('.panel__slot .xterm')
+          const p = x && x.closest('.panel')
+          return p ? p.getAttribute('data-panel-id') : null })()`)
+        if (liveId) {
+          const clickIt = (sel) => wc.executeJavaScript(`(() => {
+            const el = document.querySelector(${JSON.stringify(sel)})
+            if (!el) return false
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            return true })()`)
+          await clickIt('.dock__btn[data-dock-id="panels"]')
+          await settle()
+          await clickIt(`[data-rail-row="${liveId}"] .rail-row__main`)
+          await settle()
+        }
+      }
       // The focus target is CHOSEN by hit test, never taken as "the first
       // .panel__slot in the document". DOM order is the panels array and paint
       // order is Panel.z — deliberately different things, as the note on

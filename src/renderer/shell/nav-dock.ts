@@ -89,3 +89,23 @@ export function buildDock(
     return entry
   })
 }
+
+/**
+ * The dock's own 60Hz defence, in the shape every list in this shell already
+ * has one.
+ *
+ * Canvas re-renders on every mousemove over the canvas and on every frame of a
+ * drag, and rebuilds this array each time — so `NavDock`'s memo is defeated
+ * outright unless the array's IDENTITY is frozen on something that only moves
+ * when a rendered fact does. `JSON.stringify` over the entries rather than a
+ * separator-joined concatenation, for `railSignature`'s reason one file over:
+ * a label free to contain the separator can forge a field boundary and make
+ * two different docks produce one string.
+ *
+ * Taken over the ENTRIES rather than their inputs, which is what makes
+ * "covers exactly what a dock renders" structurally true instead of dependent
+ * on somebody remembering to add a field.
+ */
+export function dockSignature(entries: DockEntry[]): string {
+  return JSON.stringify(entries)
+}

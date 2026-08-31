@@ -73,9 +73,10 @@ import { JiraNode } from '@renderer/jira/JiraNode'
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
-import { SideRail } from '../shell/SideRail'
+import { NavDock } from '../shell/NavDock'
+import { NavigatorPane } from '../shell/NavigatorPane'
+import { buildDock, dockSignature } from '../shell/nav-dock'
 import { Inspector } from '../shell/Inspector'
-import { FileTree } from '../shell/FileTree'
 import { useShellChrome } from '../shell/useShellChrome'
 import { buildRailRows, railLabel, railSignature } from '../shell/rail-rows'
 import {
@@ -4147,6 +4148,28 @@ export function Canvas({
   const railAttention = useMemo(() => attentionBuilt, [attentionSig])
 
   /**
+   * The dock's four entries, frozen exactly as every list beside it is and for
+   * the same reason: Canvas re-renders on every mousemove over the canvas and
+   * on every frame of a drag, so an unfrozen array defeats NavDock's memo
+   * outright and the symptom is invisible on a four-panel canvas.
+   *
+   * The counts come from the ALREADY-BUILT arrays rather than from `panels`,
+   * `workspaceRows` and `waitingIds` directly, which is what stops the dock
+   * disagreeing with the pane it opens: `buildAttentionRows` drops a phantom
+   * (an attention id whose panel is gone — agent state survives a panel's
+   * closure by design), so a badge counting `waitingIds` would say "1 waiting"
+   * over an Attention pane that renders "nothing waiting". One derivation,
+   * both surfaces — the rule waitingCount already states for the rail.
+   */
+  const dockBuilt = buildDock(chrome.navigatorPane, {
+    panels: railBuilt.length,
+    workspaces: workspaceBuilt.length,
+    attention: attentionBuilt.length
+  })
+  const dockSig = dockSignature(dockBuilt)
+  const dockEntries = useMemo(() => dockBuilt, [dockSig])
+
+  /**
    * The inspector's model, frozen the same way the rail's rows are and for the
    * same reason: the selected panel comes straight out of `panels`, a fresh
    * array on every setPanelRect — i.e. every frame of a drag — and this pane
@@ -4494,24 +4517,26 @@ export function Canvas({
 
   return (
     <div
-      className={`shell${chrome.railOpen ? '' : ' shell--rail-collapsed'}${
-        chrome.inspectorOpen ? '' : ' shell--inspector-collapsed'}${
-        chrome.treeOpen ? '' : ' shell--tree-collapsed'}`}
+      /* Three independent facts, and only two of them are the user's.
+         --nav-closed / --inspector-collapsed carry the user's own choice and
+         must beat the breakpoint, which is why their rules sit BELOW the
+         @container blocks in styles.css (both are specificity (0,1,0), so
+         source order is the only thing separating them). The two --drawer
+         classes carry the OTHER half: a pane the user wants open that this
+         breakpoint gives no column to floats over the canvas instead of
+         vanishing, because a dock button that does nothing visible reads as
+         broken. Which breakpoint is live is a CSS fact and stays one — the
+         drawer rules are scoped inside the @container blocks, so these classes
+         are inert at a width where the column is real. */
+      className={`shell${chrome.navigatorPane === null ? ' shell--nav-closed' : ' shell--nav-drawer'}${
+        chrome.contextOpen ? '' : ' shell--inspector-collapsed'}${
+        chrome.contextDrawerOpen ? ' shell--context-drawer' : ''}`}
       onMouseDownCapture={onMouseDownCapture}
     >
       {/* FIRST child, before TopBar: grid areas place every region regardless
-          of DOM order, but a screen reader walks DOM order, and the tree is
+          of DOM order, but a screen reader walks DOM order, and the dock is
           the leftmost region on screen. */}
-      <FileTree
-        onToggle={chrome.toggleTree}
-        rootPath={treeRoot}
-        rootLabel={treeRootLabel}
-        rows={treeRows}
-        rootPending={treeRootPending}
-        onToggleDir={toggleDir}
-        onInsertPath={insertPath}
-        onRefresh={refreshTree}
-      />
+      <NavDock entries={dockEntries} onSelect={chrome.selectPane} />
       <TopBar
         presets={presetRows}
         scale={viewport.scale}
@@ -4523,20 +4548,33 @@ export function Canvas({
         merged={merged}
         onToggleMerged={toggleMerged}
       />
-      <SideRail
-        onToggle={chrome.toggleRail}
-        workspaces={railWorkspaces}
-        onSwitchWorkspace={paletteActions.switchWorkspace}
-        onCreateWorkspace={paletteActions.beginCreateWorkspace}
-        onRenameWorkspace={paletteActions.beginRenameWorkspace}
-        onDeleteWorkspace={paletteActions.deleteWorkspace}
-        rows={railRows}
-        selectedId={selectedId}
-        onGoToPanel={paletteActions.goToPanel}
-        onStartPanel={paletteActions.startPanel}
-        onClosePanel={paletteActions.closePanel}
-        attention={railAttention}
-      />
+      {/* Nothing at all when no pane is open — never an empty column. A
+          mounted-but-blank 260px pane is width spent on nothing, and the grid
+          already gives it none, so rendering it would put a zero-width
+          scroll container in the tree for no reader to find. */}
+      {chrome.navigatorPane !== null && (
+        <NavigatorPane
+          pane={chrome.navigatorPane}
+          workspaces={railWorkspaces}
+          onSwitchWorkspace={paletteActions.switchWorkspace}
+          onCreateWorkspace={paletteActions.beginCreateWorkspace}
+          onRenameWorkspace={paletteActions.beginRenameWorkspace}
+          onDeleteWorkspace={paletteActions.deleteWorkspace}
+          rows={railRows}
+          selectedId={selectedId}
+          onGoToPanel={paletteActions.goToPanel}
+          onStartPanel={paletteActions.startPanel}
+          onClosePanel={paletteActions.closePanel}
+          attention={railAttention}
+          treeRootPath={treeRoot}
+          treeRootLabel={treeRootLabel}
+          treeRows={treeRows}
+          treeRootPending={treeRootPending}
+          onToggleDir={toggleDir}
+          onInsertPath={insertPath}
+          onRefreshTree={refreshTree}
+        />
+      )}
       <div
         className="canvas"
         ref={hostRef}
@@ -4718,7 +4756,7 @@ export function Canvas({
         )}
       </div>
       <Inspector
-        onToggle={chrome.toggleInspector}
+        onToggle={chrome.toggleContext}
         model={inspectorModel}
         summary={inspectorSummary}
         onRename={paletteActions.beginRenamePanel}

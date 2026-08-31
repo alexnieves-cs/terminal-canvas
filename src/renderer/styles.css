@@ -433,6 +433,36 @@ body {
    from the top edge of the window down. See --shell-top-h. */
 .app {
   height: 100%;
+  /* M23a. THE QUERY CONTAINER, and it lives HERE rather than on .shell for a
+     reason that cost this milestone a task to find: AN ELEMENT CANNOT QUERY
+     ITSELF. `@container` matches against the nearest ANCESTOR container, so
+     `container` declared on .shell with `@container shell { .shell { … } }`
+     never matches anything at all — the rules parse, the cascade is valid,
+     nothing warns, and every region silently keeps its fallback width.
+
+     It shipped green and undetectable for exactly one task, because that task
+     deliberately gave all three breakpoints IDENTICAL values so a mechanism
+     regression could not be confused with a layout one. The identical values
+     are also what hid it: with every branch producing the same widths, a
+     query that never fired was indistinguishable from one that fired
+     correctly. The first task to give the breakpoints DIFFERENT values found
+     it immediately, in one number — a canvas 300px narrower than the identity
+     said it should be, which is precisely the context column that was
+     supposed to have collapsed.
+
+     `inline-size`, never `size`: `size` containment requires a block size
+     independent of contents, which `height: 100%` does not guarantee, and a
+     container that fails that condition silently stops matching — the same
+     class of silence, through a different door.
+
+     A CONTAINER query and never a media query, and that is load-bearing
+     rather than stylistic. A media query measures the VIEWPORT, and the
+     entire reason insetting the canvas is safe is that nothing in the canvas
+     measures the window. @container measures this element, which is the one
+     that actually owns the shell's width, so the breakpoints cannot become
+     the "future window measurement" that comment warns breaks this
+     silently. */
+  container: shell / inline-size;
 }
 
 /* M8a. The frame. The rail and inspector are grid COLUMNS with real width,
@@ -443,27 +473,22 @@ body {
    whole reason insetting is safe; a future window measurement breaks this
    silently. */
 .shell {
-  /* M23a. The query container every breakpoint below resolves against.
-     `inline-size`, never `size`: `size` containment requires a block size
-     independent of contents, which `height: 100%` does not guarantee, and a
-     container that fails that condition silently stops matching — the queries
-     would never fire and every region would sit at its fallback width forever,
-     with nothing thrown.
-
-     A CONTAINER query and never a media query, and that is load-bearing rather
-     than stylistic. A media query measures the VIEWPORT, i.e. the window, and
-     the entire reason insetting the canvas is safe is stated four lines up:
-     nothing in the canvas measures the window. @container measures .shell,
-     which is the element that actually owns this grid, so the breakpoints
-     cannot become the "future window measurement" that comment warns breaks
-     this silently. */
-  container: shell / inline-size;
-  --shell-tree-w: 220px;
-  --shell-rail-w: 240px;
-  --shell-inspector-w: 260px;
+  /* M23a. FOUR AREAS, and only the first is resident at every width.
+     dock | navigator | canvas | context, replacing tree | rail | canvas |
+     inspector. The dock is 48px and never collapses: it is what the three
+     22px strips it replaces were each standing in for — "the only way back
+     for a user who does not know the chord" — except that one resident column
+     answers for every pane instead of each region spending width on its own
+     escape hatch. */
+  --shell-dock-w: 48px;
+  --shell-nav-w: 260px;
+  --shell-context-w: 300px;
   display: grid;
+  /* The drawers below are positioned against this. */
+  position: relative;
   height: 100%;
-  grid-template-columns: var(--shell-tree-w) var(--shell-rail-w) 1fr var(--shell-inspector-w);
+  grid-template-columns:
+    var(--shell-dock-w) var(--shell-nav-w) 1fr var(--shell-context-w);
   /* SPIKE. Was `36px 1fr` under a 38px .app padding — 74px of chrome in two
      mismatched bands. Now one 56px band that absorbs both. The traffic lights
      are NOT vertically centred in it (hiddenInset pins them near the top edge
@@ -473,8 +498,8 @@ body {
   --shell-top-h: 56px;
   grid-template-rows: var(--shell-top-h) 1fr;
   grid-template-areas:
-    "top top top top"
-    "tree rail canvas inspector";
+    "top  top       top    top"
+    "dock navigator canvas context";
 }
 
 /* M23a. The three breakpoints, and ALL THREE CURRENTLY PRODUCE TODAY'S WIDTHS
@@ -496,20 +521,62 @@ body {
    1100 are adjacent integers. An overlapping pair would let both blocks apply
    at exactly 1100px and the winner would again be source order, which is right
    until somebody reorders the file. */
+/* COMPACT. The dock only; both panes become transient DRAWERS over the canvas
+   (see .shell--*-drawer below). Legitimate precisely because they are
+   transient — the palette has been a canvas-overlaying surface since M5b, with
+   shouldYieldWheel rule 1 already written for it. A RESIDENT overlay would put
+   panels permanently under chrome and make every getBoundingClientRect() in
+   the canvas a lie, which is the one thing the inset must never become. */
 @container shell (max-width: 1099px) {
-  .shell { --shell-tree-w: 220px; --shell-rail-w: 240px; --shell-inspector-w: 260px; }
+  .shell { --shell-nav-w: 0px; --shell-context-w: 0px; }
+  /* Both panes float. The declarations are repeated in the Standard block
+     below rather than hoisted above these @container rules, and that is the
+     point rather than an oversight: hoisted, they would apply at EVERY width,
+     so a navigator with a real 260px column would also be absolutely
+     positioned over the canvas — chrome permanently covering panels, which is
+     the one thing the inset must never become. A drawer rule has to be inert
+     wherever the column is real, and the only thing that knows which widths
+     those are is the container query itself. */
+  .shell--nav-drawer .navpane,
+  .shell--context-drawer .shell__inspector {
+    position: absolute;
+    top: var(--shell-top-h);
+    bottom: 0;
+    /* Above the canvas and its panels, below the palette — a drawer must not
+       cover the overlay that can dismiss it. */
+    z-index: 5;
+    box-shadow: var(--e-3);
+  }
+  .shell--nav-drawer .navpane { left: var(--shell-dock-w); width: 260px; }
+  .shell--context-drawer .shell__inspector { right: 0; width: 300px; }
 }
+/* STANDARD. The dock plus ONE resident pane, and the navigator is the one that
+   earns it: it is how you reach every other pane, so a layout that made the
+   context pane resident here would leave navigation behind a drawer. Context
+   is still REACHABLE at this width — it becomes a drawer, not an absence. */
 @container shell (min-width: 1100px) and (max-width: 1599px) {
-  .shell { --shell-tree-w: 220px; --shell-rail-w: 240px; --shell-inspector-w: 260px; }
+  .shell { --shell-nav-w: 260px; --shell-context-w: 0px; }
+  /* The navigator has a real column here, so ONLY context floats. */
+  .shell--context-drawer .shell__inspector {
+    position: absolute;
+    top: var(--shell-top-h);
+    bottom: 0;
+    right: 0;
+    width: 300px;
+    z-index: 5;
+    box-shadow: var(--e-3);
+  }
 }
+/* WIDE. Both resident: at 1600px there is room for 48 + 260 + 300 of chrome
+   and still more canvas than the old three-column frame ever left. */
 @container shell (min-width: 1600px) {
-  .shell { --shell-tree-w: 220px; --shell-rail-w: 240px; --shell-inspector-w: 260px; }
+  .shell { --shell-nav-w: 260px; --shell-context-w: 300px; }
 }
 
 .shell__top { grid-area: top; }
-.shell__tree { grid-area: tree; }
-.shell__rail { grid-area: rail; }
-.shell__inspector { grid-area: inspector; }
+.dock { grid-area: dock; }
+.navpane { grid-area: navigator; }
+.shell__inspector { grid-area: context; }
 .canvas { grid-area: canvas; }
 
 /* min-width/min-height 0 on the canvas cell: a grid item defaults to
@@ -643,7 +710,8 @@ body {
    Workspaces and Attention are short by construction and are capped so a long
    workspace list cannot push the panel outline off screen. */
 .shell__tree,
-.shell__rail {
+.shell__rail,
+.navpane {
   background: var(--s-2);
   /* The rail and inspector are continuous physical surfaces, not boxes
      outlined against the canvas. M19 makes this the --sh-hi token rather than
@@ -659,23 +727,34 @@ body {
   box-shadow: inset 0 1px 0 var(--sh-hi);
 }
 
-/* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
-   to stay clickable or the region is unreachable without the chord. */
-.shell--tree-collapsed { --shell-tree-w: 22px; }
-.shell--rail-collapsed { --shell-rail-w: 22px; }
-.shell--inspector-collapsed { --shell-inspector-w: 22px; }
+/* M23a. THE USER'S OWN CHOICE, and it must stay BELOW the @container blocks
+   above. Both `.shell--nav-closed` and a `.shell` rule inside an @container
+   are specificity (0,1,0) — an @container wrapper adds NONE — so source order
+   is the only thing separating them. Declared above the breakpoints, a closed
+   pane would silently reopen at every width and the dock button would appear
+   dead while still writing its setting to main's store: a control that
+   persists and moves nothing, the defect verify:panels 79 exists to catch.
 
-.shell--tree-collapsed .shell__tree .rail-list,
-.shell--tree-collapsed .shell__tree .shell__region-title,
-.shell--rail-collapsed .shell__rail .rail-list,
-.shell--rail-collapsed .shell__rail .shell__region-title,
+   `shell--rail-collapsed` and `shell--tree-collapsed` are GONE, not renamed
+   in place: the tree is a pane rather than a region now, so "the tree is
+   collapsed" is no longer a fact about the frame at all — it is
+   `navigatorPane !== 'files'`, which is the pane's own identity and not a
+   width. `shell--inspector-collapsed` KEEPS its name because the element it
+   describes is still `.inspector`; the pair is renamed together when the pane
+   itself is restructured, rather than leaving a class and its element
+   disagreeing in the meantime. */
+.shell--nav-closed { --shell-nav-w: 0px; }
+.shell--inspector-collapsed { --shell-context-w: 0px; }
+
 .shell--inspector-collapsed .shell__inspector .shell__region-title,
 .shell--inspector-collapsed .shell__inspector .inspector__body {
   display: none;
 }
 
-.shell__tree-toggle,
-.shell__rail-toggle,
+/* Only the context pane still has a toggle of its own. The navigator's two
+   are gone with the regions they collapsed: the dock is the way back now, and
+   a per-region strip beside a resident dock would be two answers to one
+   question. */
 .shell__inspector-toggle {
   width: 100%;
   padding: var(--sp-3) 0;
