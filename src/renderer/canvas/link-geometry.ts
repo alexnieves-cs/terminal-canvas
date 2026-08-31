@@ -274,3 +274,97 @@ export function linkPath(a: LinkAnchors): string {
   const { c1, c2 } = linkControls(a)
   return `M ${a.x1} ${a.y1} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${a.x2} ${a.y2}`
 }
+
+/**
+ * How close to a panel a drop counts as landing on it, in SCREEN pixels.
+ *
+ * Screen pixels, converted to world by dividing by scale at the call site —
+ * deliberately UNLIKE cascadeCentre's CASCADE_STEP, which is world-fixed on
+ * purpose so a cascade stays constant relative to the panels at every zoom.
+ * A snap radius is the opposite problem: the user aims with a cursor in
+ * screen space, so a world-fixed radius would be unhittable at 0.2x and
+ * absurdly grabby at 3x — the same panel would need a 5x more accurate
+ * release depending only on how far the user happened to be zoomed out.
+ */
+export const SNAP_RADIUS_PX = 90
+
+/** Shortest distance from a point to a rect. Zero when the point is inside. */
+function distanceToRect(r: WorldRect, p: { x: number; y: number }): number {
+  const dx = Math.max(r.x - p.x, 0, p.x - (r.x + r.w))
+  const dy = Math.max(r.y - p.y, 0, p.y - (r.y + r.h))
+  return Math.hypot(dx, dy)
+}
+
+/**
+ * Which panel a drop at `world` should link to, or null.
+ *
+ * A panel CONTAINING the point always wins, even when a smaller neighbour's
+ * border is nearer — a user releasing squarely inside a panel meant that
+ * panel, and answering the neighbour is the most confusing outcome this
+ * gesture can produce. Only when nothing contains the point does proximity
+ * decide.
+ *
+ * `rects` is expected in the SAME z-order hitTest takes (bottom first), and
+ * the containment scan walks it backwards for hitTest's own reason: the
+ * topmost of two overlapping panels is the one the user can see and is
+ * pointing at. A caller that hands this an unsorted array gets a defensible
+ * but arbitrary answer on overlap, silently — Canvas passes hitOrder, which
+ * is already sorted by Panel.z.
+ *
+ * `excludeId` is REQUIRED rather than optional. Without it, a point still
+ * inside the SOURCE panel resolves to the source itself — every drag that
+ * has not yet left the panel it started on would name that panel as its own
+ * target, addLink refuses the self-link, and the gesture can never complete
+ * — a feature that is silently and totally broken, with no error anywhere.
+ * verify:viewport 96's (b) clause.
+ *
+ * The containment scan does NOT skip `excludeId` — it is checked AFTER a
+ * match is found, not used to filter which rects are considered. A point
+ * still over the source is a drag that has not left it yet, and there is no
+ * target to name there; falling through to the PROXIMITY half instead (by
+ * skipping the source during containment) would let a release that never
+ * left its own panel resolve to whatever smaller neighbour happens to be
+ * within radius — check 96's (b) fixture puts one exactly there (b sits well
+ * within `radiusWorld` of a point still inside a) specifically to catch that
+ * mistake, which passes every OTHER clause and looks like a working
+ * implementation until a real drag that overshoots its own border by a
+ * pixel snaps onto a neighbour it was never released near.
+ *
+ * This module deliberately does not import hitTest from viewport.ts, even
+ * though the containment half duplicates it: link-geometry.ts's only value
+ * import today is linksOf, and a second one would make the dependency
+ * direction between two pure canvas modules a thing a reader has to check.
+ * The duplicated test is four comparisons.
+ */
+export function nearestLinkTarget(
+  rects: WorldRect[],
+  world: { x: number; y: number },
+  radiusWorld: number,
+  excludeId: string
+): string | null {
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i]
+    if (
+      world.x >= r.x &&
+      world.x < r.x + r.w &&
+      world.y >= r.y &&
+      world.y < r.y + r.h
+    ) {
+      return r.id === excludeId ? null : r.id
+    }
+  }
+  let best: string | null = null
+  let bestDistance = radiusWorld
+  for (const r of rects) {
+    if (r.id === excludeId) continue
+    const d = distanceToRect(r, world)
+    // Strictly less, so a panel exactly AT the radius is out. The boundary has
+    // to fall one way or the other and out is the honest direction: the radius
+    // is the point at which the user has plainly not aimed at anything.
+    if (d < bestDistance) {
+      bestDistance = d
+      best = r.id
+    }
+  }
+  return best
+}

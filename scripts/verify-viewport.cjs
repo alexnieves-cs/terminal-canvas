@@ -1425,6 +1425,43 @@ ok('74 a panel with no kind is not a review panel',
     `near=${offNear} (min ${V.CURVE_MIN}) far=${offFar} (max ${V.CURVE_MAX}) d=${d1}`)
 }
 
+// 96. nearestLinkTarget resolves a drop. Four clauses, each rejecting a
+//     different wrong implementation, because any one of them alone passes
+//     against something broken:
+//
+//     (a) A panel CONTAINING the point beats a merely-near one. Without it, a
+//         drop squarely inside a panel that happens to sit near a smaller
+//         neighbour links the neighbour — the single most confusing outcome
+//         this gesture can produce, because the user was aiming at a thing
+//         they were pointing directly at.
+//     (b) The SOURCE is excluded. Without it every drag snaps back to itself,
+//         addLink refuses the self-link, and the gesture can never complete —
+//         a feature that is silently 100% broken.
+//     (c) A panel outside the radius answers null, or the drop has no empty
+//         space at all and a mis-aimed release always links SOMETHING.
+//     (d) Of two panels both in range, the NEARER wins.
+//
+//     The rects are given in the z-order the caller uses (hitOrder), and the
+//     containment scan walks it backwards, so the topmost of two overlapping
+//     panels wins — the same convention hitTest already established.
+{
+  const a = { id: 'a', x: 0, y: 0, w: 100, h: 100 }
+  const b = { id: 'b', x: 200, y: 0, w: 100, h: 100 }
+  const c = { id: 'c', x: 260, y: 0, w: 40, h: 40 }
+  const rects = [a, b, c]
+  // (a) a point INSIDE b, which is also within radius of c's rect.
+  const inside = V.nearestLinkTarget(rects, { x: 250, y: 20 }, 200, 'a')
+  // (b) a point inside a, with a as the source.
+  const self = V.nearestLinkTarget(rects, { x: 50, y: 50 }, 200, 'a')
+  // (c) a point far from everything.
+  const far = V.nearestLinkTarget(rects, { x: 5000, y: 5000 }, 90, 'a')
+  // (d) a point in empty space between b and a, closer to b.
+  const nearer = V.nearestLinkTarget(rects, { x: 180, y: 50 }, 200, 'a')
+  ok('96 nearestLinkTarget prefers containment, excludes the source, and respects the radius',
+    inside === 'b' && self === null && far === null && nearer === 'b',
+    `inside=${inside} self=${self} far=${far} nearer=${nearer}`)
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
