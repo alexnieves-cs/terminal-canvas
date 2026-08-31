@@ -5797,13 +5797,32 @@ app.whenReady().then(async () => {
       `)
       await sleep(250)
       const after = await classes()
+      // RESTORED, and this line is load-bearing rather than tidy. At this
+      // suite's 1400px the context pane has no column of its own — it is a
+      // transient DRAWER — so the chord above did not collapse a region, it
+      // OPENED one over the right 300px of the canvas. Left open, every
+      // later check that resolves a control's centre and clicks it by real
+      // coordinates in that strip lands on the inspector instead: measured,
+      // that took checks 125-129 and 157 down together, none of which has
+      // anything to do with this chord. Pressing it again puts the frame back
+      // exactly where the rest of the suite expects it.
+      await wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '|', code: 'Backslash', metaKey: true, shiftKey: true,
+          repeat: false, bubbles: true }))
+      `)
+      await sleep(250)
       ok('80 the inspector chord toggles the inspector and leaves the rail alone',
         after.inspector !== before.inspector && after.rail === before.rail,
         `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
-      // What 80 LEAVES BEHIND: the inspector is now COLLAPSED (it was open on
-      // entry, from 79's note) and `shell.contextOpen` is false in main's
-      // store; the rail stays open, the two panels and the camera are
-      // untouched, and the palette is closed.
+      // What 80 LEAVES BEHIND: the inspector is back where it started, which
+      // at a width where it is resident means OPEN and at a width where it
+      // floats means the drawer SHUT. `shell.contextOpen` in main's store is
+      // untouched either way — the chord writes it only where the pane has a
+      // real column, because dismissing an overlay at a narrow width must not
+      // persist "I want no context pane" for the next launch on a wide one.
+      // The rail stays open, the two panels and the camera are untouched, and
+      // the palette is closed.
     }
 
     /* ---- M8b: the panel outline rail ---- */
@@ -12019,6 +12038,244 @@ app.whenReady().then(async () => {
       try { rmSync(M22_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
     }
 
+    // ---------------------------------------------------------- M23a Task 8
+    // COMPACT DRAWERS. Everything above ran at this window's native 1400px,
+    // which is the STANDARD breakpoint — the navigator has a real column
+    // there and the drawer rules are inert by construction, so nothing in the
+    // suite has ever exercised them. These three run at 1000px, where both
+    // panes are transient, and they are the checks that make a canvas-
+    // overlaying surface legitimate under the spec's own rule: a drawer is
+    // "a surface the user OPENED and is about to close", where a RESIDENT
+    // overlay puts panels permanently under chrome and makes every world
+    // coordinate the canvas computes a lie.
+    //
+    // Resized through win.setBounds rather than window.resizeTo: this window
+    // is show:false, and a hidden window is exactly where the renderer-side
+    // call is least reliable. Restored at the end — nothing follows today,
+    // but the next block appended here inherits whatever this leaves.
+    {
+      win.setBounds({ width: 1000, height: 900 })
+      await settle()
+      await settle()
+
+      // Real input, never a dispatched MouseEvent: a synthetic event is
+      // isTrusted:false and Blink runs no default action for one, so it moves
+      // no DOM focus whether or not a handler calls preventDefault — which
+      // would make check 174 pass identically against the regression it
+      // exists to catch. The same limit check 75c already records.
+      const realClick8 = async (selector) => {
+        const box = await wc.executeJavaScript(
+          `(() => { const s = document.querySelector(${JSON.stringify(selector)});
+                    if (!s) return null;
+                    const r = s.getBoundingClientRect();
+                    return { x: Math.round(r.left + r.width / 2),
+                             y: Math.round(r.top + r.height / 2) } })()`)
+        if (!box) return false
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+        await settle()
+        return true
+      }
+
+      // Measured WIDTH, never the presence of the element or of a class name.
+      // The pane stays mounted at every breakpoint so a drawer can slide over
+      // the canvas without remounting its content, so "is it there" answers
+      // true for a closed drawer — and a class-name test would pin the
+      // implementation rather than what the user can see.
+      const navWidth = () => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.navpane')
+        return el ? Math.round(el.getBoundingClientRect().width) : 0 })()`)
+
+      const pressEscape = () => wc.executeJavaScript(
+        `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+
+      // IDEMPOTENT, for openPane's reason one screenful up: the dock button
+      // TOGGLES, so a blind click closes a drawer that was already open and
+      // every assertion below would then be about the opposite state. Both
+      // read before they click and both return the resulting width, so a
+      // caller asserts on the state it actually got rather than on the state
+      // it asked for.
+      const openDrawer = async () => {
+        if (await navWidth() > 0) return navWidth()
+        await realClick8('.dock__btn[data-dock-id="panels"]')
+        return navWidth()
+      }
+      const closeDrawer = async () => {
+        if (await navWidth() === 0) return 0
+        await realClick8('.dock__btn[data-dock-id="panels"]')
+        return navWidth()
+      }
+
+      // 174. A Compact drawer is dismissed by an OUTSIDE CLICK and by ESCAPE.
+      //      Both, and in one check, because they are the two exits a
+      //      transient surface owes — "Three ways out of the palette" applied
+      //      to a second overlay — and a drawer with only one of them is a
+      //      surface the user can get stuck behind.
+      //
+      //      The two `opened` clauses are the non-vacuity guards and neither
+      //      is optional: "the drawer is gone" is satisfied PERFECTLY by a
+      //      drawer that never opened, which is precisely what a broken dock
+      //      button produces, so without them this check is green against the
+      //      feature being absent entirely.
+      {
+        // Setup, not an assertion: whatever the checks above left open, this
+        // block has to start from CLOSED or `opened1` is measuring the state
+        // it inherited rather than the one the dock button produced.
+        await closeDrawer()
+        const opened1 = await openDrawer()
+        // A point on the canvas well clear of the drawer, which occupies the
+        // left 260px past the dock. Real input for the reason realClick8
+        // records: a dispatched mousedown never reaches the capture-phase
+        // listener the way a trusted one does.
+        const pt = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.canvas').getBoundingClientRect()
+          return { x: Math.round(b.right - 60), y: Math.round(b.bottom - 60) } })()`)
+        wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+        await settle()
+        const afterClick = await navWidth()
+
+        const opened2 = await openDrawer()
+        await pressEscape()
+        await settle()
+        const afterEsc = await navWidth()
+
+        ok('174 a Compact drawer is dismissed by an outside click and by Escape',
+          opened1 > 100 && afterClick === 0 && opened2 > 100 && afterEsc === 0,
+          `opened1=${opened1} afterClick=${afterClick} opened2=${opened2} afterEsc=${afterEsc}`)
+      }
+
+      // 175. A wheel over an OPEN drawer moves no camera and is left
+      //      UNCANCELLED, so the drawer's own list scrolls natively. It
+      //      asserts CANCELLATION rather than scrollTop for check 47's
+      //      reason: a synthetic WheelEvent is untrusted and Chromium
+      //      performs no default scroll for one, so a scrollTop assertion
+      //      would fail the very fix it exists to prove.
+      //
+      //      WORTH KNOWING FOR WHAT IT CANNOT DO, and this was MEASURED
+      //      rather than reasoned about. It passes VACUOUSLY today: watched
+      //      against a build with no drawer rule in shouldYieldWheel at all,
+      //      it reported `plain=false zoom=false scale 1->1` and went green.
+      //      The reason is structural — `.navpane` and `.shell__inspector`
+      //      are grid-area SIBLINGS of `.canvas`, and useViewport's wheel
+      //      listener is on `.canvas` itself, so a wheel over a drawer is
+      //      never on a propagation path that reaches the camera at all.
+      //      Absolute positioning floats the pane over the canvas and changes
+      //      no DOM ancestry.
+      //
+      //      That is why the plan's proposed rule was DELETED rather than
+      //      shipped: the palette this was modelled on lives INSIDE .canvas,
+      //      which is exactly why it needs rule 1, and a drawer does not.
+      //      The check stays as a REGRESSION GUARD — it is the only thing
+      //      that would catch a future refactor moving the panes inside the
+      //      canvas, where the camera really would steal the gesture — and it
+      //      is trustworthy only in that direction, the same standing check
+      //      62 already records for itself.
+      {
+        const opened = await openDrawer()
+        const res = await wc.executeJavaScript(`(() => {
+          const before = window.__m4aScale()
+          const pane = document.querySelector('.navpane')
+          // GUARDED, never bare. Canvas renders no .navpane at all when no
+          // pane is active, so a bare dereference here THROWS — and a throw
+          // in this file ends the process where it stands, taking every check
+          // below it with it and reporting an infrastructure failure that
+          // names none of them. That is exactly what happened on this block's
+          // first run: 173 and 174 never executed at all, and the run looked
+          // like one failing check plus a mystery. (No BACKTICKS in a
+          // comment inside a template literal either — one terminates it, and
+          // that is how this comment own first draft broke the file.)
+          if (!pane) return { before, after: before, plainCancelled: null, zoomCancelled: null }
+          const b = pane.getBoundingClientRect()
+          const mk = (over) => new WheelEvent('wheel', Object.assign({
+            clientX: Math.round(b.x + b.width / 2),
+            clientY: Math.round(b.y + b.height / 2),
+            deltaX: 0, deltaY: 120, deltaMode: 0, bubbles: true, cancelable: true
+          }, over))
+          // dispatchEvent returns false iff something called preventDefault(),
+          // which is precisely the bit this rule flips.
+          const plainCancelled = !pane.dispatchEvent(mk({}))
+          const zoomCancelled = !pane.dispatchEvent(mk({ ctrlKey: true }))
+          return { before, after: window.__m4aScale(), plainCancelled, zoomCancelled }
+        })()`)
+        ok('175 a wheel over an open drawer scrolls it and moves no camera',
+          opened > 100 && res.plainCancelled === false && res.zoomCancelled === false &&
+            res.after === res.before,
+          `opened=${opened} plain=${res.plainCancelled} zoom=${res.zoomCancelled} scale ${res.before}->${res.after}`)
+      }
+
+      // 176. A dock button takes NEITHER DOM focus NOR the app's focusedId —
+      //      shellControl's whole contract, reaching the newest control in
+      //      the shell. focusedId is not a highlight: assignTiers pins the
+      //      focused panel live UNCONDITIONALLY, so a control that cleared it
+      //      demotes the panel the user is working in, and one that moved DOM
+      //      focus leaves the next keystroke going nowhere at all.
+      //
+      //      Driven by real input for realClick8's stated reason. What it
+      //      cannot distinguish is recorded rather than implied, exactly as
+      //      check 75c records the same gap: a control that swapped focusedId
+      //      to a DIFFERENT live panel while DOM focus stayed put satisfies
+      //      both clauses.
+      //
+      //      A CHARACTERISATION CHECK, and fault-injected before it counted:
+      //      shellControl was already mounted on these buttons by the task
+      //      that built the dock, so this passed on first write and had never
+      //      been watched failing. Replacing the shellControl spread with a
+      //      bare onClick turns it RED reporting inPanel true->false, and
+      //      takes 75c with it — DOM focus moves to the button, which is the
+      //      whole regression. Note WHICH clause discriminates: the grid is
+      //      unchanged either way, because the injected control still selects
+      //      correctly and only stops preventing the browser default.
+      {
+        await pressEscape()
+        await settle()
+        // SPAWNS its own live panel rather than hunting for one. Watched
+        // reporting `panel=null`: by this point in the run every terminal
+        // panel that happens to be on screen may be carded, and tiering does
+        // not re-run on a resize (a standing limitation this file records),
+        // so the Compact window inherits whatever the 1400px layout left. A
+        // fixture that depends on what ran before it fails for reasons that
+        // have nothing to do with focus — check 83's own lesson.
+        await zoomTo(wc, 'n')
+        await waitUntil(async () => (await liveCount(wc)) > 0, 8000)
+        const panelId = await wc.executeJavaScript(`(() => {
+          const x = document.querySelector('.panel__slot .xterm')
+          const p = x && x.closest('.panel')
+          return p ? p.getAttribute('data-panel-id') : null })()`)
+        let before = null
+        let after = null
+        // Guarded for check 173's reason: clickPanelBody THROWS when its
+        // selector matches nothing, and a throw here would take the window
+        // restore below it down too — leaving every later block running at
+        // Compact for a reason nothing reports.
+        const slotSel = `[data-panel-id="${panelId}"] .panel__slot`
+        const haveSlot = panelId ? await wc.executeJavaScript(
+          `document.querySelector(${JSON.stringify(slotSel)}) !== null`) : false
+        if (panelId && haveSlot) {
+          await clickPanelBody(slotSel)
+          before = await wc.executeJavaScript(`({
+            grid: window.__m4aGrid(),
+            inPanel: !!(document.activeElement && document.activeElement.closest('.panel'))
+          })`)
+          await realClick8('.dock__btn[data-dock-id="files"]')
+          after = await wc.executeJavaScript(`({
+            grid: window.__m4aGrid(),
+            inPanel: !!(document.activeElement && document.activeElement.closest('.panel'))
+          })`)
+        }
+        ok('176 a dock button takes neither DOM focus nor the app\'s focusedId',
+          before !== null && before.inPanel === true && before.grid !== null &&
+            after.inPanel === true &&
+            JSON.stringify(after.grid) === JSON.stringify(before.grid),
+          `panel=${panelId} inPanel ${before && before.inPanel}->${after && after.inPanel} grid ${JSON.stringify(before && before.grid)}->${JSON.stringify(after && after.grid)}`)
+      }
+
+      // Restored, or everything appended after this block silently runs at
+      // Compact — where the panes are drawers and half this suite's real
+      // clicks would land on one.
+      win.setBounds({ width: 1400, height: 900 })
+      await settle()
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

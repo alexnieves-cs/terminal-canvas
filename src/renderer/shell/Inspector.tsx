@@ -6,6 +6,10 @@ import { shellControl } from './shell-control'
 
 export interface InspectorProps {
   onToggle: () => void
+  /** True only where this width gives the context pane NO column of its own,
+   *  so it floats over the canvas as a transient drawer. See NavigatorPane's
+   *  identical prop: residency is a CSS fact read once in useShellChrome. */
+  drawer: boolean
   /** null when nothing is selected — the launch state, and every background click. */
   model: InspectorModel | null
   summary: InspectorSummary
@@ -60,11 +64,17 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  onToggle, drawer, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   return (
-    <aside className="shell__inspector" aria-label="Inspector">
+    <aside
+      /* See NavigatorPane's own note: `--drawer` is FLOATING, not merely
+         open, and it is element-level so shouldYieldWheel's rule 1b can test
+         it from the wheel event's target. */
+      className={`shell__inspector${drawer ? ' shell__inspector--drawer' : ''}`}
+      aria-label="Inspector"
+    >
       <button
         type="button"
         className="shell__inspector-toggle"

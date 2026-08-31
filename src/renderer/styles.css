@@ -483,6 +483,16 @@ body {
   --shell-dock-w: 48px;
   --shell-nav-w: 260px;
   --shell-context-w: 300px;
+  /* Whether each pane has a REAL COLUMN at this width, declared here and
+     overridden per breakpoint below. It is read from JS (useShellChrome) and
+     never re-decided there: residency is a CSS fact, and two authors of one
+     fact is the drift this file's own comments warn about everywhere else.
+     The base value is 1/1 rather than 0/0 because the grid-template above
+     already reserves both columns — an unmatched container query must read as
+     the layout that is actually rendering, or the panes would float over a
+     canvas that had already been inset for them. */
+  --shell-nav-resident: 1;
+  --shell-context-resident: 1;
   display: grid;
   /* The drawers below are positioned against this. */
   position: relative;
@@ -528,7 +538,10 @@ body {
    panels permanently under chrome and make every getBoundingClientRect() in
    the canvas a lie, which is the one thing the inset must never become. */
 @container shell (max-width: 1099px) {
-  .shell { --shell-nav-w: 0px; --shell-context-w: 0px; }
+  .shell {
+    --shell-nav-w: 0px; --shell-context-w: 0px;
+    --shell-nav-resident: 0; --shell-context-resident: 0;
+  }
   /* Both panes float. The declarations are repeated in the Standard block
      below rather than hoisted above these @container rules, and that is the
      point rather than an oversight: hoisted, they would apply at EVERY width,
@@ -537,8 +550,16 @@ body {
      the one thing the inset must never become. A drawer rule has to be inert
      wherever the column is real, and the only thing that knows which widths
      those are is the container query itself. */
-  .shell--nav-drawer .navpane,
-  .shell--context-drawer .shell__inspector {
+  /* ELEMENT-level modifiers rather than `.shell--x-drawer .pane`, because
+     `shouldYieldWheel` has to answer "is this wheel over an open drawer" from
+     the event's own target, and `target.closest('.navpane--drawer')` is one
+     cheap ancestor walk where a shell-scoped class would need a computed-style
+     read on every wheel event. The class is applied by the renderer only when
+     the pane is BOTH open and non-resident; keeping the rules inside this
+     container query anyway is deliberate belt-and-braces, so a stale
+     residency read cannot float a pane at a width whose column is real. */
+  .navpane--drawer,
+  .shell__inspector--drawer {
     position: absolute;
     top: var(--shell-top-h);
     bottom: 0;
@@ -547,17 +568,20 @@ body {
     z-index: 5;
     box-shadow: var(--e-3);
   }
-  .shell--nav-drawer .navpane { left: var(--shell-dock-w); width: 260px; }
-  .shell--context-drawer .shell__inspector { right: 0; width: 300px; }
+  .navpane--drawer { left: var(--shell-dock-w); width: 260px; }
+  .shell__inspector--drawer { right: 0; width: 300px; }
 }
 /* STANDARD. The dock plus ONE resident pane, and the navigator is the one that
    earns it: it is how you reach every other pane, so a layout that made the
    context pane resident here would leave navigation behind a drawer. Context
    is still REACHABLE at this width — it becomes a drawer, not an absence. */
 @container shell (min-width: 1100px) and (max-width: 1599px) {
-  .shell { --shell-nav-w: 260px; --shell-context-w: 0px; }
+  .shell {
+    --shell-nav-w: 260px; --shell-context-w: 0px;
+    --shell-nav-resident: 1; --shell-context-resident: 0;
+  }
   /* The navigator has a real column here, so ONLY context floats. */
-  .shell--context-drawer .shell__inspector {
+  .shell__inspector--drawer {
     position: absolute;
     top: var(--shell-top-h);
     bottom: 0;
@@ -570,7 +594,10 @@ body {
 /* WIDE. Both resident: at 1600px there is room for 48 + 260 + 300 of chrome
    and still more canvas than the old three-column frame ever left. */
 @container shell (min-width: 1600px) {
-  .shell { --shell-nav-w: 260px; --shell-context-w: 300px; }
+  .shell {
+    --shell-nav-w: 260px; --shell-context-w: 300px;
+    --shell-nav-resident: 1; --shell-context-resident: 1;
+  }
 }
 
 .shell__top { grid-area: top; }

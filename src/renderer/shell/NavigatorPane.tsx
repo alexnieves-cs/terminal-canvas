@@ -12,6 +12,11 @@ export interface NavigatorPaneProps {
    *  when no pane is active, rather than mounting this with an empty body —
    *  an empty 240px column is width spent on nothing. */
   pane: NavPaneId
+  /** True only where this width gives the navigator NO column of its own, so
+   *  the pane floats over the canvas as a transient drawer. Passed in rather
+   *  than derived here: residency is a CSS fact that useShellChrome reads
+   *  once, and a second reader would be a second author of it. */
+  drawer: boolean
 
   // -- workspaces ---------------------------------------------------------
   workspaces: RailWorkspace[]
@@ -70,9 +75,18 @@ export interface NavigatorPaneProps {
  * outright, and the symptom is invisible on a four-panel canvas.
  */
 function NavigatorPaneImpl(props: NavigatorPaneProps): JSX.Element {
-  const { pane } = props
+  const { pane, drawer } = props
   return (
-    <aside className="navpane" data-navpane={pane} aria-label={PANE_LABEL[pane]}>
+    <aside
+      /* `--drawer` means FLOATING OVER THE CANVAS, not merely open: it is set
+         only where this width gives the pane no column of its own. It is an
+         element-level modifier rather than a shell-level one so that
+         shouldYieldWheel can answer "is this wheel over an open drawer" with
+         one ancestor walk from the event's own target — see its rule 1b. */
+      className={`navpane${drawer ? ' navpane--drawer' : ''}`}
+      data-navpane={pane}
+      aria-label={PANE_LABEL[pane]}
+    >
       {pane === 'workspaces' && <WorkspacesPane {...props} />}
       {pane === 'panels' && <PanelsPane {...props} />}
       {pane === 'files' && <FilesPane {...props} />}

@@ -23,7 +23,30 @@ export interface ShellChrome {
    * drawer starts closed and only a deliberate gesture opens it.
    */
   contextDrawerOpen: boolean
+  /** The navigator's own half of the same split, for the same reason. */
+  navDrawerOpen: boolean
   toggleContext: () => void
+  /**
+   * Which pane is VISIBLE right now, which is not the same question as which
+   * pane is selected: at a width where the navigator floats, a selected pane
+   * with its drawer shut is showing nothing at all. The dock's pressed state
+   * reads this rather than `navigatorPane`, or a fresh launch at Compact
+   * would mark a pane active with no pane on screen.
+   */
+  visiblePane: NavPaneId | null
+  /** Shut every transient drawer. The outside-click and Escape exits. */
+  dismissDrawers: () => void
+  /**
+   * Is the context pane SHOWING — the same question `visiblePane` answers for
+   * the navigator, and the two are asked for the same reason. A pane with no
+   * column whose drawer is shut is showing nothing, and must be hidden rather
+   * than merely narrow: rendered into a zero-width grid cell its children
+   * overflow the frame, and their rects then report coordinates OUTSIDE the
+   * window entirely (measured at x=1421 in a 1400px window), which every
+   * check and every real click that resolves an element's centre then aims
+   * at. Nothing throws; the clicks simply land nowhere.
+   */
+  contextVisible: boolean
 }
 
 /** The pane a fresh `toggleNavigator` opens, and the schema's own default.
@@ -82,6 +105,48 @@ export function useShellChrome(deps: {
   // Never seeded from the store: see the interface note. A drawer is a
   // gesture, not a setting.
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false)
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false)
+
+  /**
+   * WHETHER EACH PANE HAS A REAL COLUMN AT THIS WIDTH — read from CSS, never
+   * decided here.
+   *
+   * This hook needs the answer and cannot derive it: a dock button on the
+   * ACTIVE pane means "collapse the column" where the column is real and
+   * "close the drawer" where it is not, and those are different pieces of
+   * state — one persisted, one not. Without the distinction one breakpoint
+   * always gets a DEAD FIRST CLICK, because the toggle keys off whichever
+   * piece is not the visible one. That was measured, not reasoned about: with
+   * the toggle keyed on `navigatorPane` alone, a fresh launch at Compact has
+   * the pane selected and the drawer shut, so the first press CLOSES
+   * something already invisible.
+   *
+   * It is a READ of a custom property the container queries set, rather than
+   * a matchMedia or a width comparison, so CSS remains the single author of
+   * the breakpoint. A second copy of `1100px` in TypeScript is the drift that
+   * shows up the day somebody edits one of them.
+   *
+   * The ResizeObserver bails when nothing CHANGED, which is what keeps a
+   * window-resize drag from re-rendering the whole shell at the pointer's
+   * rate: the value only moves at a breakpoint, so the common frame returns
+   * the previous object identity untouched.
+   */
+  const [residency, setResidency] = useState({ nav: true, context: true })
+  useEffect(() => {
+    const el = document.querySelector('.shell')
+    if (!(el instanceof HTMLElement)) return
+    const read = (): void => {
+      const cs = getComputedStyle(el)
+      const nav = cs.getPropertyValue('--shell-nav-resident').trim() === '1'
+      const context = cs.getPropertyValue('--shell-context-resident').trim() === '1'
+      setResidency((prev) =>
+        prev.nav === nav && prev.context === context ? prev : { nav, context })
+    }
+    read()
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // The pane toggleNavigator reopens. A REF and not state: nothing renders it,
   // so making it state would re-render the whole shell every time a pane
@@ -117,32 +182,71 @@ export function useShellChrome(deps: {
     // Selecting the ACTIVE pane collapses it. One control, two directions —
     // the same toggle the dock button's aria-pressed already describes — and
     // it means a user who opened a pane can close it without hunting for a
-    // second affordance.
-    const next = navigatorPane === id ? null : id
-    setNavigatorPane(next)
-    if (next !== null) lastPaneRef.current = next
-    void window.canvas.settings.set('shell.navigatorPane', next ?? 'none')
-  }, [navigatorPane])
+    // second affordance. WHICH piece of state that collapses is the thing
+    // residency decides; see its own note above for the dead-click this
+    // branch exists to prevent.
+    if (residency.nav) {
+      const next = navigatorPane === id ? null : id
+      setNavigatorPane(next)
+      if (next !== null) lastPaneRef.current = next
+      void window.canvas.settings.set('shell.navigatorPane', next ?? 'none')
+      return
+    }
+    // Floating. Closing the drawer must NOT persist 'none': the user is
+    // dismissing an overlay at this width, not saying they want no navigator
+    // at a width that has a column for one — and a launch is far more likely
+    // to be at the wider size than the narrower.
+    if (navDrawerOpen && navigatorPane === id) {
+      setNavDrawerOpen(false)
+      return
+    }
+    // WHICH pane, on the other hand, is a real preference and is persisted
+    // from either breakpoint.
+    setNavigatorPane(id)
+    lastPaneRef.current = id
+    setNavDrawerOpen(true)
+    void window.canvas.settings.set('shell.navigatorPane', id)
+  }, [navigatorPane, navDrawerOpen, residency.nav])
 
   const toggleNavigator = useCallback(() => {
-    const next = navigatorPane === null ? lastPaneRef.current : null
-    setNavigatorPane(next)
-    void window.canvas.settings.set('shell.navigatorPane', next ?? 'none')
-  }, [navigatorPane])
+    if (residency.nav) {
+      const next = navigatorPane === null ? lastPaneRef.current : null
+      setNavigatorPane(next)
+      void window.canvas.settings.set('shell.navigatorPane', next ?? 'none')
+      return
+    }
+    if (navDrawerOpen) { setNavDrawerOpen(false); return }
+    // Opening a drawer onto NO pane would be an empty overlay, so a navigator
+    // the user had closed reopens on its last one — the same fallback the
+    // resident branch above makes through lastPaneRef.
+    if (navigatorPane === null) {
+      setNavigatorPane(lastPaneRef.current)
+      void window.canvas.settings.set('shell.navigatorPane', lastPaneRef.current)
+    }
+    setNavDrawerOpen(true)
+  }, [navigatorPane, navDrawerOpen, residency.nav])
 
   const toggleContext = useCallback(() => {
-    // BOTH, and the breakpoint decides which one is doing anything. At a width
-    // that gives context a column, `contextOpen` fills it and the drawer class
-    // is inert because the drawer rules are scoped inside the narrow container
-    // queries; at a width that gives it none, the reverse. That is what keeps
-    // this hook from having to know the breakpoint at all — the alternative is
-    // a ResizeObserver here duplicating a decision CSS already makes, and two
-    // authors of one fact is the drift this file's own header warns about.
-    const next = !contextOpen
-    setContextOpen(next)
-    setContextDrawerOpen(next)
-    void window.canvas.settings.set('shell.contextOpen', next)
-  }, [contextOpen])
+    // Whichever piece of state is the visible one at this width, and ONLY
+    // that piece. Writing both — which is what this did before residency was
+    // readable — means a drawer dismissal at Standard also persists "I do not
+    // want a context pane", silently changing what the user sees the next
+    // time they open the app on a wider display.
+    if (residency.context) {
+      const next = !contextOpen
+      setContextOpen(next)
+      void window.canvas.settings.set('shell.contextOpen', next)
+      return
+    }
+    setContextDrawerOpen((prev) => !prev)
+  }, [contextOpen, residency.context])
+
+  // One verb for both, because the two exits that own it — an outside click
+  // and Escape — are about TRANSIENT SURFACES rather than about either pane.
+  const dismissDrawers = useCallback(() => {
+    setNavDrawerOpen(false)
+    setContextDrawerOpen(false)
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -198,8 +302,50 @@ export function useShellChrome(deps: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [paletteIsOpen, toggleNavigator, toggleContext, selectPane])
 
+  /**
+   * ESCAPE dismisses a transient drawer — the second of the two exits a
+   * drawer owes, beside the outside click Canvas owns.
+   *
+   * The listener exists ONLY WHILE a drawer is open, which is what keeps the
+   * app's standing rule intact: a bare keystroke always reaches the PTY, and
+   * this exception lasts exactly as long as the overlay it belongs to is on
+   * screen saying so. The same shape useLinkMode already uses for its own
+   * armed-only Escape, and for the same reason.
+   *
+   * stopPropagation, because Escape is a very meaningful key to an agent and
+   * one that dismissed a drawer must not ALSO reach the terminal underneath —
+   * a single press doing two unrelated things is the worst outcome available
+   * here. Capture phase so it runs before the panel-level handlers that
+   * stopPropagation their own events.
+   *
+   * The palette is checked first and left alone: it is a transient surface
+   * too, it owns its own Escape, and it renders ABOVE the drawers — so the
+   * topmost surface answers, which is the order the user sees.
+   */
+  useEffect(() => {
+    if (!navDrawerOpen && !contextDrawerOpen) return
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      if (paletteIsOpen()) return
+      event.preventDefault()
+      event.stopPropagation()
+      dismissDrawers()
+    }
+    window.addEventListener('keydown', onEscape, true)
+    return () => window.removeEventListener('keydown', onEscape, true)
+  }, [navDrawerOpen, contextDrawerOpen, paletteIsOpen, dismissDrawers])
+
+  // A pane the user selected but whose drawer is shut is showing nothing, so
+  // "visible" and "selected" part company at exactly the width where the dock
+  // is the only thing on screen. The dock reads this.
+  const visiblePane = residency.nav
+    ? navigatorPane
+    : (navDrawerOpen ? navigatorPane : null)
+  const contextVisible = residency.context ? contextOpen : contextDrawerOpen
+
   return {
     navigatorPane, selectPane, toggleNavigator,
-    contextOpen, contextDrawerOpen, toggleContext
+    contextOpen, contextDrawerOpen, navDrawerOpen, toggleContext,
+    visiblePane, contextVisible, dismissDrawers
   }
 }

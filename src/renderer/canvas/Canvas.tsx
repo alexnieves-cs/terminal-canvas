@@ -823,6 +823,21 @@ export function Canvas({
     // palette is open, every other canvas gesture stands down.
     if (target?.closest?.('.palette')) return true
 
+    // NO RULE FOR A TRANSIENT DRAWER, and its absence is deliberate and
+    // measured rather than an omission. M23a's plan called for one here,
+    // modelled on rule 1 — and rule 1 exists because .palette mounts INSIDE
+    // .canvas, so this listener sees a wheel over the overlay before the
+    // overlay does. A drawer is not in that position: `.navpane` and
+    // `.shell__inspector` are grid-area SIBLINGS of `.canvas`, and absolute
+    // positioning floats a pane OVER the canvas without changing its DOM
+    // ancestry — so a wheel over an open drawer is never on a propagation
+    // path that reaches this listener at all, and the camera cannot move.
+    // Watched: with no such rule, verify:panels 175 reports the drawer's
+    // wheel uncancelled and the scale unmoved, exactly as it should. A rule
+    // here would be a branch nothing can reach, which is the code a later
+    // reader deletes as dead — correctly, and after spending the time this
+    // comment saves them.
+    //
     // 2. A zoom gesture is otherwise always the camera's, never a terminal
     // scroll, regardless of what is under the cursor. Both spellings are
     // claimed because canvas-input.ts treats both as a zoom intent: a trackpad
@@ -2451,11 +2466,36 @@ export function Canvas({
   // own bubble-phase stopPropagation cannot stop an ancestor's capture
   // listener that has already run.
   const onMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
+    const target = event.target as HTMLElement | null
+
+    // A TRANSIENT DRAWER exits on an outside click too, and it rides this
+    // listener rather than gaining one of its own — for the same reason the
+    // palette's exit is here: every panel's chrome handler stopPropagations
+    // its own mousedown, so a listener anywhere below .shell never sees the
+    // clicks that matter.
+    //
+    // The DOCK is excluded, and that exclusion is the whole of what makes the
+    // dock usable: its buttons are the gesture that opens a drawer, and this
+    // listener runs in the capture phase — BEFORE the button's own onClick —
+    // so without it every dock press would shut the drawer on the way down
+    // and reopen it on the way up, or shut the one it had just opened. A
+    // control that fights its own affordance reads as a broken button.
+    //
+    // Nothing is prevented or stopped, exactly as below: the click still does
+    // its ordinary job on whatever it landed on, which for a drawer dismissal
+    // means the canvas click that dismissed it also selects what was under
+    // it — the behaviour a user expects from every overlay of this kind.
+    if (chrome.navDrawerOpen || chrome.contextDrawerOpen) {
+      if (!target?.closest('.navpane--drawer, .shell__inspector--drawer, .dock, .palette')) {
+        chrome.dismissDrawers()
+      }
+    }
+
     if (!palette.isOpen()) return
     // Clicks INSIDE the overlay are not an exit. The .palette root's own
     // bubble-phase stopPropagation cannot help here — a capture listener on an
     // ancestor has already run by then — so the containment test is explicit.
-    if ((event.target as HTMLElement | null)?.closest('.palette')) return
+    if (target?.closest('.palette')) return
     palette.dismissPalette()
   }
 
@@ -4161,7 +4201,10 @@ export function Canvas({
    * over an Attention pane that renders "nothing waiting". One derivation,
    * both surfaces — the rule waitingCount already states for the rail.
    */
-  const dockBuilt = buildDock(chrome.navigatorPane, {
+  // VISIBLE, never merely selected: at a width where the navigator floats, a
+  // selected pane with its drawer shut is showing nothing at all, and a dock
+  // that marked it pressed would be pointing at an empty column.
+  const dockBuilt = buildDock(chrome.visiblePane, {
     panels: railBuilt.length,
     workspaces: workspaceBuilt.length,
     attention: attentionBuilt.length
@@ -4517,20 +4560,24 @@ export function Canvas({
 
   return (
     <div
-      /* Three independent facts, and only two of them are the user's.
-         --nav-closed / --inspector-collapsed carry the user's own choice and
-         must beat the breakpoint, which is why their rules sit BELOW the
-         @container blocks in styles.css (both are specificity (0,1,0), so
-         source order is the only thing separating them). The two --drawer
-         classes carry the OTHER half: a pane the user wants open that this
-         breakpoint gives no column to floats over the canvas instead of
-         vanishing, because a dock button that does nothing visible reads as
-         broken. Which breakpoint is live is a CSS fact and stays one — the
-         drawer rules are scoped inside the @container blocks, so these classes
-         are inert at a width where the column is real. */
-      className={`shell${chrome.navigatorPane === null ? ' shell--nav-closed' : ' shell--nav-drawer'}${
-        chrome.contextOpen ? '' : ' shell--inspector-collapsed'}${
-        chrome.contextDrawerOpen ? ' shell--context-drawer' : ''}`}
+      /* --nav-closed is the user's own choice and must beat the breakpoint,
+         which is why its rule sits BELOW the @container blocks in styles.css
+         — both are specificity (0,1,0), so source order is the only thing
+         separating them.
+         --inspector-collapsed is driven by VISIBILITY rather than by the
+         preference, and that distinction is load-bearing: it also HIDES the
+         pane's body, and a pane left un-collapsed in a zero-width column
+         renders its children into no space at all, where they overflow and
+         report rects outside the window (measured at x=1421 in a 1400px
+         frame). Every real click that resolves a control's centre then aims
+         off screen, silently — which is how one un-hidden pane took six
+         unrelated link and file-tree checks down with it.
+         The FLOATING half moved off the shell and onto the panes themselves
+         (`.navpane--drawer`, `.shell__inspector--drawer`), because a wheel
+         handler has to answer "is this over an open drawer" from the event's
+         own target and a shell-scoped class cannot be reached that way. */
+      className={`shell${chrome.navigatorPane === null ? ' shell--nav-closed' : ''}${
+        chrome.contextVisible ? '' : ' shell--inspector-collapsed'}`}
       onMouseDownCapture={onMouseDownCapture}
     >
       {/* FIRST child, before TopBar: grid areas place every region regardless
@@ -4554,6 +4601,7 @@ export function Canvas({
           scroll container in the tree for no reader to find. */}
       {chrome.navigatorPane !== null && (
         <NavigatorPane
+          drawer={chrome.navDrawerOpen}
           pane={chrome.navigatorPane}
           workspaces={railWorkspaces}
           onSwitchWorkspace={paletteActions.switchWorkspace}
@@ -4756,6 +4804,7 @@ export function Canvas({
         )}
       </div>
       <Inspector
+        drawer={chrome.contextDrawerOpen}
         onToggle={chrome.toggleContext}
         model={inspectorModel}
         summary={inspectorSummary}
