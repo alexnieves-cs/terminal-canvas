@@ -1941,6 +1941,89 @@ body {
   color: var(--fg);
 }
 
+/* Backlog #75. A sibling of .world like the HUD and the palette, so it never
+   pans or zooms with the panels it is reporting on. Cmd-gated, unlike the
+   HUD's own always-on strip — see CanvasHud.tsx's comment on why those are
+   two different designs. */
+.diagnostics-overlay {
+  position: absolute;
+  top: var(--sp-7);
+  right: var(--sp-7);
+  z-index: 1100;
+  width: min(480px, 90%);
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl);
+  background: var(--s-3);
+  box-shadow: var(--e-3);
+  padding: var(--sp-5);
+  font-size: var(--t-sm);
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+
+.diagnostics-overlay__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--t-md);
+  color: var(--fg-2);
+  margin-bottom: var(--sp-4);
+}
+
+.diagnostics-overlay__close {
+  background: none;
+  border: none;
+  color: var(--fg-2);
+  font-size: var(--t-lg);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.diagnostics-overlay__note {
+  color: var(--fg-3);
+}
+
+.diagnostics-overlay__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.diagnostics-overlay__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--sp-4);
+}
+
+.diagnostics-overlay__table th,
+.diagnostics-overlay__table td {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.diagnostics-overlay__table th {
+  color: var(--fg-3);
+  font-weight: normal;
+}
+
+.diagnostics-overlay__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+
+.diagnostics-overlay__export-result {
+  color: var(--fg-3);
+  word-break: break-all;
+}
+
 /* Resize handles. East, south, south-east only — see panel-interaction.ts.
    Positioned INSIDE the panel's border box so they scale with .world's
    transform like everything else; a handle in screen pixels would drift away

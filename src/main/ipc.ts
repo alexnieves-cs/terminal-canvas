@@ -26,6 +26,8 @@ import { resolveCwd } from './pty-manager'
 import { writeFile } from './file-write'
 import { sampleMachineCosts } from './machine-cost'
 import type { MachineCostTarget } from '../shared/machine-cost'
+import { writeDiagnosticsBundle } from './diagnostics-export'
+import type { DiagnosticsSnapshot } from '../shared/ipc-contract'
 
 /**
  * The preset AND prompt mutations the palette drives, handed in from
@@ -103,7 +105,13 @@ export function registerIpcHandlers(
    * Appended last, like every collaborator before it, so no existing
    * positional call site shifts — scripts/panels-entry.cjs included.
    */
-  toolboxCache: ToolboxCache
+  toolboxCache: ToolboxCache,
+  /**
+   * Backlog #75's export directory, resolved once by main/index.ts the same
+   * way layoutStore's and credentialStore's own file paths are — appended
+   * last, like every collaborator above it.
+   */
+  diagnosticsDir: string
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
@@ -149,6 +157,13 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
+
+  ipcMain.handle(IPC.DIAGNOSTICS_SAMPLE, () => ({
+    ipcMessagesPerSecond: ptyManager.ipcMessageRate()
+  }))
+  ipcMain.handle(IPC.DIAGNOSTICS_EXPORT, (_event, snapshot: DiagnosticsSnapshot) =>
+    writeDiagnosticsBundle({ dir: diagnosticsDir }, snapshot)
+  )
 
   ipcMain.handle(IPC.PRESET_LIST, () => palette.list())
   ipcMain.handle(IPC.PRESET_RENAME, (_event, id: string, name: string) => palette.rename(id, name))

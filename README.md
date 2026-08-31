@@ -196,6 +196,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        file:open / file:read / file:close / file:write
                        fs:list
                        toolbox:read / toolbox:permissions
+                       diagnostics:sample / diagnostics:export
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel

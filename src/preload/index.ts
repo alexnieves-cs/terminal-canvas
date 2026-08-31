@@ -7,7 +7,8 @@ import {
   type CapturedPanel,
   type FileReadRequest, type ToolboxReadRequest, type ToolboxPermissionsRequest,
   type FileWriteRequest,
-  type FileChangedEvent
+  type FileChangedEvent,
+  type DiagnosticsSnapshot
 } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
 import type {
@@ -100,6 +101,10 @@ const bridge: CanvasBridge = {
   },
   files: {
     list: (path: string) => ipcRenderer.invoke(IPC.FS_LIST, path)
+  },
+  diagnostics: {
+    sample: () => ipcRenderer.invoke(IPC.DIAGNOSTICS_SAMPLE),
+    export: (snapshot: DiagnosticsSnapshot) => ipcRenderer.invoke(IPC.DIAGNOSTICS_EXPORT, snapshot)
   },
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),

@@ -1938,6 +1938,116 @@ const inventory = (over) => ({
     allSelf, JSON.stringify(got))
 }
 
+// Backlog #75's diagnostics overlay model (buildDiagnosticsSnapshot). A
+// PanelSession as the registry actually holds one, trimmed to the fields the
+// model reads.
+const session = (id, over = {}) => ({
+  id,
+  tier: 'live',
+  dormant: false,
+  spawned: true,
+  status: { kind: 'idle' },
+  ...over
+})
+
+// 110. Every input field is a straight pass-through — liveCount, heldCount,
+//     budget, backend and the IPC rate all come from the caller, never
+//     recomputed here. A model that recomputed any of them would be a SECOND
+//     author of a fact the caller (Canvas.tsx's tiering effect, main's rate
+//     counter) already owns, the same drift "One map, and a typed view over
+//     it" exists to prevent.
+{
+  const backend = { kind: 'tmux', reason: '3.4' }
+  const snap = R.buildDiagnosticsSnapshot({
+    panels: [], budget: 8, liveCount: 3, heldCount: 2, backend, ipcMessagesPerSecond: 42
+  })
+  ok(110,
+    snap.liveCount === 3 && snap.heldCount === 2 && snap.budget === 8 &&
+      snap.backend === backend && snap.ipcMessagesPerSecond === 42,
+    JSON.stringify(snap))
+}
+
+// 111. A session row carries the pid ONLY for a running session — the same
+//     rule PtyCreateResult/PanelStatus already draw, since 'idle'/'starting'
+//     have no process to name and 'exited'/'error' no longer do.
+{
+  const snap = R.buildDiagnosticsSnapshot({
+    panels: [
+      session('p1', { status: { kind: 'running', pid: 501, command: 'claude', cwd: '/x', reattached: false } }),
+      session('p2', { status: { kind: 'idle' } }),
+      session('p3', { status: { kind: 'exited', code: 0 } })
+    ],
+    budget: 8, liveCount: 1, heldCount: 0, backend: null, ipcMessagesPerSecond: null
+  })
+  const byId = Object.fromEntries(snap.sessions.map((s) => [s.id, s]))
+  ok(111,
+    byId.p1.pid === 501 && byId.p1.status === 'running' &&
+      !('pid' in byId.p2) && byId.p2.status === 'idle' &&
+      !('pid' in byId.p3) && byId.p3.status === 'exited',
+    JSON.stringify(snap.sessions))
+}
+
+// 112. The row carries no field beyond {id, tier, dormant, spawned, status,
+//     pid} — the whole point of this model, per its own header comment: a
+//     PanelSession also carries `spec` (cwd/command/args), and a check that
+//     never looked at the row's own KEYS would pass just as well against an
+//     implementation that spread the panel and leaked all three. Fault
+//     injection: replacing `sessionOf`'s object literal with a spread of
+//     `panel` would add `spec`/`handle`/`sentGrid`/`lastFocusedAt` to this
+//     set and turn this check red while 110/111/113 all stayed green.
+{
+  const withSecrets = session('p1', {
+    spec: { panelId: 'p1', cwd: '/Users/alex/secret-project', args: ['--api-key=sk-live-x'] },
+    status: { kind: 'running', pid: 1, command: 'claude --api-key sk-live-x', cwd: '/Users/alex/secret-project', reattached: false }
+  })
+  const snap = R.buildDiagnosticsSnapshot({
+    panels: [withSecrets], budget: 8, liveCount: 1, heldCount: 0, backend: null, ipcMessagesPerSecond: null
+  })
+  const keys = Object.keys(snap.sessions[0]).sort()
+  const serialised = JSON.stringify(snap)
+  ok(112,
+    JSON.stringify(keys) === JSON.stringify(['dormant', 'id', 'pid', 'spawned', 'status', 'tier']) &&
+      !serialised.includes('secret-project') && !serialised.includes('sk-live-x'),
+    JSON.stringify({ keys, serialised }))
+}
+
+// 113. Purity: two calls with deep-equal input produce deep-equal output, and
+//     the input's own `panels` array is never mutated — an overlay polling
+//     this every two seconds off a live `registry.all()` array must not find
+//     the registry's own objects rewritten underneath it.
+{
+  const panels = [session('p1'), session('p2', { tier: 'card', dormant: true, spawned: false })]
+  const frozen = JSON.stringify(panels)
+  const input = { panels, budget: 8, liveCount: 1, heldCount: 0, backend: null, ipcMessagesPerSecond: 5 }
+  const a = R.buildDiagnosticsSnapshot(input)
+  const b = R.buildDiagnosticsSnapshot(input)
+  ok(113,
+    JSON.stringify(a) === JSON.stringify(b) && JSON.stringify(panels) === frozen,
+    JSON.stringify({ equal: JSON.stringify(a) === JSON.stringify(b) }))
+}
+
+// 114. An absent backend (the probe has not resolved yet, or this run has no
+//     tmux) and an absent IPC rate both render as null rather than a
+//     plausible wrong number — the same "zero and unmeasured are different
+//     facts" rule buildUsageFields already draws for a panel with no cost
+//     read yet.
+{
+  const snap = R.buildDiagnosticsSnapshot({
+    panels: [], budget: 8, liveCount: 0, heldCount: 0, backend: null, ipcMessagesPerSecond: null
+  })
+  ok(114, snap.backend === null && snap.ipcMessagesPerSecond === null, JSON.stringify(snap))
+}
+
+// 115. An empty canvas (no sessions at all, the state of a fresh install)
+//     answers an empty `sessions` array rather than throwing or answering
+//     undefined — the ordinary state of every launch before the first spawn.
+{
+  const snap = R.buildDiagnosticsSnapshot({
+    panels: [], budget: 8, liveCount: 0, heldCount: 0, backend: null, ipcMessagesPerSecond: null
+  })
+  ok(115, Array.isArray(snap.sessions) && snap.sessions.length === 0, JSON.stringify(snap.sessions))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

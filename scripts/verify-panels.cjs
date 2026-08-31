@@ -846,7 +846,10 @@ app.whenReady().then(async () => {
   // the one thing in this milestone that would otherwise read the running
   // developer's real ~/.claude, which is the rule M9a's git fence and M15's
   // projects-root fence each cost a fix round to learn.
-  toolboxCache)
+  toolboxCache,
+  // Backlog #75's export directory, scoped to this suite's own temp home so
+  // an export check never writes into the running developer's real userData.
+  join(mkdtempSync(join(tmpdir(), 'tc-panels-diagnostics-')), 'diagnostics'))
 
   // The same listener createWindow() installs, calling the same production
   // function — not a send written here. Check 32 is about WHEN main sends
