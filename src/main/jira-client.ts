@@ -1,20 +1,19 @@
-import { request } from 'node:https'
 import type { CredentialMeta } from '../shared/credential-schema'
-import type { WorkItem } from '../shared/work-item'
+import type { WorkItem, WorkListResult } from '../shared/work-item'
 import type { CredentialStore } from './credential-store'
+import { WORK_TIMEOUT_MS, type WorkRequester, type WorkResponse } from './work-request'
 
-const TIMEOUT_MS = 15000
-const MAX_BODY_BYTES = 1024 * 1024
+/**
+ * The one requester serves both providers, so main's wiring has a single
+ * import site rather than one per integration.
+ */
+export { createWorkRequester } from './work-request'
+
 const ASSIGNED_JQL = 'assignee = currentUser() ORDER BY updated DESC'
 
 export interface JiraCredential { site: string; email: string; token: string }
-export interface JiraRequest { url: string; headers: Record<string, string>; timeoutMs: number }
-export type JiraRequester = (request: JiraRequest) => Promise<{ status: number; body: string }>
-export interface JiraDeps { store: CredentialStore; requester: JiraRequester }
+export interface JiraDeps { store: CredentialStore; requester: WorkRequester }
 export type JiraVerifyResult = { ok: true; meta: CredentialMeta } | { ok: false; reason: string }
-export type JiraListResult =
-  | { kind: 'items'; items: WorkItem[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
 
 /** The store holds one opaque string. This parser is the only reader that
  * understands Jira's site/email/token bundle, and it never returns it over IPC. */
@@ -43,8 +42,8 @@ export async function verifyJiraCredential(deps: JiraDeps): Promise<JiraVerifyRe
   const c = credential(deps.store)
   if (c === 'missing') return { ok: false, reason: 'no stored credential to verify' }
   if (c === 'invalid') return { ok: false, reason: 'stored Jira credential is malformed' }
-  let response: { status: number; body: string }
-  try { response = await deps.requester({ url: `${c.site}/rest/api/3/myself`, headers: auth(c), timeoutMs: TIMEOUT_MS }) }
+  let response: WorkResponse
+  try { response = await deps.requester({ url: `${c.site}/rest/api/3/myself`, headers: auth(c), timeoutMs: WORK_TIMEOUT_MS }) }
   catch { return { ok: false, reason: 'the request to Jira failed' } }
   if (response.status === 401 || response.status === 403) return { ok: false, reason: 'Jira rejected the credential' }
   if (response.status !== 200) return { ok: false, reason: `Jira answered ${response.status}` }
@@ -66,18 +65,22 @@ function adfText(value: unknown): string {
   return node.type === 'paragraph' ? `${own}${children}\n` : node.type === 'hardBreak' ? '\n' : `${own}${children}`
 }
 
-export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListResult> {
+export async function listAssignedWorkItems(deps: JiraDeps): Promise<WorkListResult> {
   const c = credential(deps.store)
   if (c === 'missing') return { kind: 'no-credential', reason: 'Connect Jira before loading tickets.' }
   if (c === 'invalid') return { kind: 'invalid-credential', reason: 'The stored Jira credential is malformed.' }
   const query = new URLSearchParams({ jql: ASSIGNED_JQL, maxResults: '50', fields: 'summary,description,assignee,status' })
-  let response: { status: number; body: string }
-  try { response = await deps.requester({ url: `${c.site}/rest/api/3/search/jql?${query}`, headers: auth(c), timeoutMs: TIMEOUT_MS }) }
+  let response: WorkResponse
+  try { response = await deps.requester({ url: `${c.site}/rest/api/3/search/jql?${query}`, headers: auth(c), timeoutMs: WORK_TIMEOUT_MS }) }
   catch { return { kind: 'unavailable', reason: 'Jira could not be reached.' } }
   if (response.status === 401 || response.status === 403) return { kind: 'rejected', reason: 'Jira rejected the credential.' }
   if (response.status !== 200) return { kind: 'unavailable', reason: `Jira answered ${response.status}.` }
   try {
-    const issues = (JSON.parse(response.body) as { issues?: unknown }).issues
+    // Parsed ONCE into a local: `total` and `issues` are two fields of one
+    // answer, and a second JSON.parse of the same body is a megabyte of work
+    // to re-derive a number we already hold.
+    const payload = JSON.parse(response.body) as { issues?: unknown; total?: unknown }
+    const issues = payload.issues
     if (!Array.isArray(issues)) return { kind: 'malformed', reason: 'Jira returned no issue list.' }
     const items: WorkItem[] = []
     for (const issue of issues) {
@@ -85,21 +88,19 @@ export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListRes
       if (typeof record.key !== 'string' || typeof record.fields?.summary !== 'string') continue
       items.push({ id: record.key, title: record.fields.summary, description: adfText(record.fields.description).trim(), assignee: typeof record.fields.assignee?.displayName === 'string' ? record.fields.assignee.displayName : null, state: typeof record.fields.status?.name === 'string' ? record.fields.status.name : null, url: `${c.site}/browse/${encodeURIComponent(record.key)}` })
     }
-    return { kind: 'items', items }
+    // One group, and its label names the QUERY rather than the items. Jira
+    // asks one question; GitHub asks two, and an item found by
+    // `review-requested:@me` is identical on the wire to the same item found
+    // by `assignee:@me` — the item does not know which pile it is in, the
+    // query does. So the shape is the SECOND customer's, and Jira degenerates
+    // to it cleanly rather than the surface being widened again later.
+    //
+    // `total` is the service's own count, which may exceed what it returned:
+    // the request is capped at maxResults=50, and a capped list must be able
+    // to SAY so rather than silently stopping — the `+N more` rule
+    // REVIEW_FILE_CAP already states. It falls back to the returned length
+    // when the service does not say, which is never a lie, only less useful.
+    const total = typeof payload.total === 'number' ? payload.total : items.length
+    return { kind: 'groups', groups: [{ label: 'Assigned to you', items, total }] }
   } catch { return { kind: 'malformed', reason: 'Jira returned a response this app could not read.' } }
-}
-
-export function createJiraRequester(): JiraRequester {
-  return ({ url, headers, timeoutMs }) => new Promise((resolve, reject) => {
-    const req = request(url, { method: 'GET', headers, timeout: timeoutMs }, (res) => {
-      let body = ''; let bytes = 0
-      res.setEncoding('utf8')
-      res.on('data', (part: string) => { bytes += Buffer.byteLength(part); if (bytes > MAX_BODY_BYTES) res.destroy(new Error('response too large')); else body += part })
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
-      res.on('error', reject)
-    })
-    req.on('timeout', () => req.destroy(new Error('timeout')))
-    req.on('error', reject)
-    req.end()
-  })
 }

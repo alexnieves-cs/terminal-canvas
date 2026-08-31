@@ -20,7 +20,7 @@ import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
 import type { CredentialMeta } from './credential-schema'
-import type { WorkItem } from './work-item'
+import type { WorkListResult } from './work-item'
 import type { FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
@@ -585,10 +585,6 @@ export type CredentialSetResult =
   | { ok: true; meta: CredentialMeta }
   | { ok: false; reason: string }
 
-export type JiraListResult =
-  | { kind: 'items'; items: WorkItem[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
-
 /** One row of the palette's preset list. Mirrors PresetRow in the renderer. */
 export interface PresetListRow {
   id: string
@@ -755,7 +751,7 @@ export interface CanvasBridge {
     remove(service: string): Promise<boolean>
     verify(service: string): Promise<CredentialSetResult>
   }
-  jira: { list(): Promise<JiraListResult> }
+  jira: { list(): Promise<WorkListResult> }
   file: {
     /** A native open dialog. `null` when the user cancelled. */
     open(): Promise<string | null>

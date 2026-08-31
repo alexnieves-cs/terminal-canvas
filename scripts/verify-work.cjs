@@ -1,4 +1,4 @@
-/* Offline contract checks for M17's Jira adapter.  The requester is injected:
+/* Offline contract checks for the work adapters (M17's Jira, M24's GitHub).  The requester is injected:
    npm run verify is the repo's one green-or-not signal and must not call Jira. */
 'use strict'
 const { existsSync } = require('node:fs')
@@ -6,7 +6,7 @@ const { execFileSync } = require('node:child_process')
 const { join } = require('node:path')
 
 const source = join(__dirname, '..', 'src', 'main', 'jira-client.ts')
-const out = join(__dirname, '..', 'out', 'verify', 'jira.cjs')
+const out = join(__dirname, '..', 'out', 'verify', 'work.cjs')
 let J = {}
 if (existsSync(source)) {
   execFileSync('npx', ['esbuild', source, '--bundle', '--platform=node', '--outfile=' + out], { stdio: 'inherit' })
@@ -65,11 +65,29 @@ void (async () => {
       return { status: 200, body: JSON.stringify({ issues: [issue] }) }
     } })
     : null
-  const item = listed?.kind === 'items' ? listed.items[0] : undefined
+  const item = listed?.kind === 'groups' ? listed.groups[0]?.items[0] : undefined
   ok('5 assigned-ticket mapping is vendor-neutral and JQL is bounded',
     item?.id === 'TC-12' && item.title === 'Ship Jira context' && item.description === 'First line\nSecond line' &&
       item.assignee === 'Ada Lovelace' && item.state === 'In Progress' && item.url === 'https://acme.atlassian.net/browse/TC-12' &&
       request?.url.includes('/rest/api/3/search/jql') && request?.url.includes('maxResults=50'))
+
+  // 6. The result is GROUPED, and Jira returns exactly one group whose label
+  // names the QUERY. A flat list was the shape one customer could support; the
+  // second one cannot, and the group carries the service's own total so a
+  // capped list can say so rather than simply stopping.
+  const grouped = typeof J.listAssignedWorkItems === 'function'
+    ? await J.listAssignedWorkItems({ store: store(BUNDLE), requester: async () => ({
+      status: 200,
+      headers: {},
+      body: JSON.stringify({ total: 137, issues: [{ key: 'ENG-1', fields: { summary: 'Fix the thing' } }] })
+    }) })
+    : null
+  ok('6 Jira returns one labelled group carrying the service total',
+    grouped?.kind === 'groups' && grouped.groups.length === 1 &&
+      grouped.groups[0].label === 'Assigned to you' &&
+      grouped.groups[0].total === 137 &&
+      grouped.groups[0].items[0]?.id === 'ENG-1',
+    JSON.stringify(grouped))
 
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)

@@ -17,7 +17,7 @@ import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
 import { verifyCredential, createHttpsFetcher } from './credential-verify'
-import { createJiraRequester, listAssignedWorkItems, verifyJiraCredential } from './jira-client'
+import { createWorkRequester, listAssignedWorkItems, verifyJiraCredential } from './jira-client'
 import type { FileWatchers } from './file-watch'
 import { readDir } from './fs-tree'
 import type { ToolboxCache } from './toolbox-cache'
@@ -269,11 +269,11 @@ export function registerIpcHandlers(
   // read() directly — that would put a token on the IPC boundary.
   ipcMain.handle(IPC.CREDENTIAL_VERIFY, (_event, service: string) =>
     service === 'jira'
-      ? verifyJiraCredential({ store: credentialStore, requester: createJiraRequester() })
+      ? verifyJiraCredential({ store: credentialStore, requester: createWorkRequester() })
       : verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
 
   ipcMain.handle(IPC.JIRA_LIST, () =>
-    listAssignedWorkItems({ store: credentialStore, requester: createJiraRequester() }))
+    listAssignedWorkItems({ store: credentialStore, requester: createWorkRequester() }))
 
   ipcMain.handle(IPC.FILE_OPEN, async () => {
     const win = getWindow()
