@@ -3,6 +3,8 @@ import {
   type DragEvent, type JSX, type MouseEvent
 } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { DiagnosticsOverlay } from './DiagnosticsOverlay'
+import { useDiagnostics } from './useDiagnostics'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
@@ -2164,6 +2166,11 @@ export function Canvas({
   // current when the hold started — so a panel that came back into view during
   // the delay stays live instead of being demoted by a stale decision.
   const tiersRef = useRef<Record<string, Tier>>({})
+  // Backlog #75: live count, held count and the budget, lifted out of this
+  // effect's closure so the diagnostics overlay can read them. A plain ref,
+  // updated once at the end of the effect below — no new render, no new
+  // dependency, and nothing that could bump registry.version().
+  const tieringDiagnosticsRef = useRef({ liveCount: 0, heldCount: 0, budget: LIVE_BUDGET })
 
   // The timer belongs to the component, not to this effect's dependency list:
   // arming it inside an effect whose cleanup clears it meant any change to
@@ -2229,6 +2236,7 @@ export function Canvas({
     }
 
     registry.applyTiers(applied)
+    tieringDiagnosticsRef.current = { liveCount, heldCount: held.size, budget: LIVE_BUDGET }
 
     // Arm the release timer only when one is not already running. Re-arming on
     // every render is what made the delay unreachable during a gesture.
@@ -2812,6 +2820,25 @@ export function Canvas({
   // the rail never moved. See useShellChrome's own doc comment and
   // verify:panels 78.
   const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows })
+
+  // Backlog #75's diagnostics overlay toggle. Ephemeral, unlike chrome above:
+  // this is a debug view, not a persisted preference.
+  const diagnostics = useDiagnostics({ paletteIsOpen: palette.isOpen })
+  // Stable identity, for the same reason resetViewport/centreOn must stay
+  // useCallbacks: the overlay's own poll effect depends on this, and Canvas
+  // re-renders on every mousemove over .canvas (setCursor) — an unstable
+  // identity would restart that effect's interval on every frame the mouse
+  // moves while the overlay is open.
+  const getDiagnosticsInput = useCallback(
+    () => ({
+      panels: registry.all(),
+      budget: tieringDiagnosticsRef.current.budget,
+      liveCount: tieringDiagnosticsRef.current.liveCount,
+      heldCount: tieringDiagnosticsRef.current.heldCount,
+      backend: backendInfo
+    }),
+    [backendInfo]
+  )
 
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
@@ -4799,6 +4826,11 @@ export function Canvas({
           </div>
         )}
         <NavGrid controller={navGrid} />
+        <DiagnosticsOverlay
+          open={diagnostics.open}
+          onClose={diagnostics.close}
+          getRendererInput={getDiagnosticsInput}
+        />
         <CanvasHud
           viewport={viewport}
           cursor={cursor}

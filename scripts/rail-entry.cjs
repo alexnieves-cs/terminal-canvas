@@ -31,5 +31,10 @@ module.exports = {
   // M8c has: it is a pure function over plain data with no DOM and no native
   // dependency, and a suite of its own would re-prove the same esbuild wiring
   // for one file.
-  ...require('../src/renderer/toolbox/toolbox-node-model')
+  ...require('../src/renderer/toolbox/toolbox-node-model'),
+  // Backlog #75's diagnostics overlay model. Pure, type-only imports (a
+  // PanelSession shape and SessionBackendInfo), no DOM, no native dependency —
+  // the same reason every model above joined this bundle rather than earning
+  // a suite of its own.
+  ...require('../src/renderer/canvas/diagnostics-model')
 }
