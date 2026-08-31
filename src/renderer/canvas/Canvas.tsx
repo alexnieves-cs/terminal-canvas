@@ -512,6 +512,10 @@ export function Canvas({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() =>
     initial.selectedId === null ? EMPTY_SELECTION : new Set([initial.selectedId])
   )
+  // A visible, intentionally temporary keyboard route. It is not persisted:
+  // a relaunch must never resume sending a user's next keystroke to several
+  // agents just because that happened to be useful before the window closed.
+  const [broadcastInput, setBroadcastInput] = useState(false)
   // A chrome press selects and begins its drag in the same synchronous event.
   // React has not re-rendered between those two calls, so group drag reads this
   // mirror rather than a selection closure from the previous render.
@@ -1056,6 +1060,31 @@ export function Canvas({
       registry.ensure(panel.rect.id, panel.spec, { dormant: dormantIds.has(panel.rect.id) })
     }
   }, [terminalPanels, dormantIds])
+
+  // Only sessions that are already running can be broadcast targets. This is
+  // a filter over the existing registry, never a call to ensure/wake, so an
+  // inactive selection remains inactive when the mode is armed.
+  const broadcastTargetIds = useMemo(() => (
+    merged
+      ? []
+      : terminalPanels
+        .filter((panel) => {
+          const session = registry.get(panel.rect.id)
+          return selectedIds.has(panel.rect.id) && session?.status.kind === 'running'
+        })
+        .map((panel) => panel.rect.id)
+  ), [merged, selectedIds, terminalPanels, version])
+  const broadcastReady = broadcastTargetIds.length >= 2
+
+  useEffect(() => {
+    if (!broadcastInput || !broadcastReady) {
+      registry.setInputTargets([])
+      if (broadcastInput && !broadcastReady) setBroadcastInput(false)
+      return
+    }
+    registry.setInputTargets(broadcastTargetIds)
+    return () => registry.setInputTargets([])
+  }, [broadcastInput, broadcastReady, broadcastTargetIds])
 
   // Menu-driven clipboard. The old per-panel TerminalPanel used to own this
   // subscription directly against xterm; now that TerminalPanel is a dumb
@@ -3306,6 +3335,13 @@ export function Canvas({
      * built.
      */
     toggleMerged: () => toggleMerged(),
+    toggleBroadcastInput: () => {
+      // The command's disabled state is UX, not authority: the selection or a
+      // session can change while the palette is open, so re-check the live
+      // target set at the action boundary before arming the keyboard route.
+      if (!broadcastInput && !broadcastReady) return
+      setBroadcastInput((active) => !active)
+    },
     beginRenamePreset: (id, currentName) => {
       setInputMode({
         kind: 'text',
@@ -4236,7 +4272,8 @@ export function Canvas({
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
-       movePanelsToWorkspace, toggleMerged, openFilePanel, openJiraPanel, worldCentre])
+       movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
+       openFilePanel, openJiraPanel, worldCentre])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -4953,6 +4990,11 @@ export function Canvas({
             Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
           </div>
         )}
+        {broadcastInput && (
+          <div className="link-banner" role="status">
+            Broadcasting keyboard input to <strong>{broadcastTargetIds.length} terminals</strong> — open the palette to stop
+          </div>
+        )}
         <NavGrid controller={navGrid} />
         <CanvasHud
           viewport={viewport}
@@ -4980,6 +5022,8 @@ export function Canvas({
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
             merged={merged}
+            broadcastReady={broadcastReady}
+            broadcastActive={broadcastInput}
             inputMode={inputMode}
           />
         )}

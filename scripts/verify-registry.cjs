@@ -692,6 +692,28 @@ const tick = () => new Promise((r) => setImmediate(r))
       `version ${before} -> ${after}, notified=${notified}, stamp ${stampBefore} -> ${registry.lastFocusedAt().p1}, focused=${state.focused}`)
   }
 
+  // 26. Broadcast stays inside the existing pty:write choke point. It fans
+  //     keyboard bytes only to selected, already-running sessions; it does
+  //     not wake a dormant target, and a non-member sender remains ordinary.
+  {
+    const { bridge, factory, registry } = setup()
+    registry.ensure('p1', SPEC)
+    registry.ensure('p2', { ...SPEC, panelId: 'p2' })
+    registry.ensure('p3', { ...SPEC, panelId: 'p3' }, { dormant: true })
+    registry.applyTiers({ p1: 'live', p2: 'live', p3: 'live' })
+    registry.attachSlot('p1')
+    registry.attachSlot('p2')
+    await tick()
+    registry.setInputTargets(['p1', 'p2', 'p3'])
+    factory.made.get('p1').inputListener('shared')
+    factory.made.get('p2').inputListener('again')
+    ok('26 broadcast fans input to live members only and never wakes a dormant target',
+      bridge.calls.write.map((call) => `${call.panelId}:${call.data}`).join(',') ===
+        'p1:shared,p2:shared,p1:again,p2:again' &&
+        registry.get('p3').dormant === true && registry.get('p3').spawned === false,
+      JSON.stringify(bridge.calls.write))
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
