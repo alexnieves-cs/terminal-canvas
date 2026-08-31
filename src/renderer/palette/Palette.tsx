@@ -104,6 +104,8 @@ export interface PaletteProps {
   selectedIds: string[]
   /** Whether the merged view is open; the move rows refuse there. */
   merged: boolean
+  broadcastReady: boolean
+  broadcastActive: boolean
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
 }
@@ -163,6 +165,8 @@ export function Palette(props: PaletteProps): JSX.Element {
         hasSelection: props.hasSelection,
         selectedIds: props.selectedIds,
         merged: props.merged,
+        broadcastReady: props.broadcastReady,
+        broadcastActive: props.broadcastActive,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,

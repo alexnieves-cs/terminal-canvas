@@ -240,6 +240,7 @@ const spyActions = () => {
     // after it.
     movePanelsToWorkspace: record('movePanelsToWorkspace'),
     beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace'),
+    toggleBroadcastInput: record('toggleBroadcastInput'),
     // The three credential verbs (the credential checks exercise
     // buildCredentialRows directly, but buildCommands also reaches these
     // through ctx.actions).
@@ -263,6 +264,8 @@ const ctx = (over = {}) => ({
   capturedId: null,
   hasSelection: false,
   selectedIds: [],
+  broadcastReady: false,
+  broadcastActive: false,
   actions: spyActions(),
   credentials: [],
   ...over
@@ -283,6 +286,23 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   row.run()
   ok('19 a preset spawn row calls spawnPreset with its own id',
     c.actions.calls.length === 1 && c.actions.calls[0][0] === 'spawnPreset' && c.actions.calls[0][1] === 'u1')
+}
+
+// 85. Broadcast is a temporary keyboard route, so its one command states
+// both the selected object and the active stop action; it is not silently
+// offered for a one-panel or dormant selection.
+{
+  const disabled = byId(P.buildCommands(ctx({ selectedIds: ['n1'] })), 'canvas.broadcast-input')
+  const activeContext = ctx({ selectedIds: ['n1', 'n2'], broadcastReady: true })
+  const ready = byId(P.buildCommands(activeContext), 'canvas.broadcast-input')
+  ready.run()
+  const stop = byId(P.buildCommands(ctx({ selectedIds: ['n1', 'n2'], broadcastActive: true })), 'canvas.broadcast-input')
+  ok('85 broadcast input is explicit, target-counted and disabled without two live terminals',
+    disabled !== undefined && disabled.disabledReason === P.REASON_BROADCAST_NEEDS_TWO &&
+      ready !== undefined && ready.disabledReason === undefined &&
+      activeContext.actions.calls[0][0] === 'toggleBroadcastInput' &&
+      stop !== undefined && stop.title === 'Stop broadcasting input',
+    JSON.stringify({ disabled: disabled && disabled.disabledReason, title: stop && stop.title }))
 }
 
 // 20. An unavailable preset is DISABLED and says why, rather than being hidden.
