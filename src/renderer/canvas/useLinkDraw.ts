@@ -25,27 +25,18 @@ export interface LinkDraw {
   state: LinkDrawState | null
   begin(from: string, event: { clientX: number; clientY: number }): void
   /**
-   * Referentially STABLE, and reads a ref rather than state, so it can sit in
-   * a listener's dep array without tearing that listener down on every move —
-   * the constraint usePalette.isOpen, shouldYieldWheel and LinkMode.isArmed
-   * all already record.
-   */
-  isDrawing: () => boolean
-  /**
    * Ends an in-flight draw WITHOUT committing — the same path Escape takes.
-   * Additive: Task 6 consumes `isDrawing()` and neither existing member
-   * changes shape.
    *
    * Its one caller today is `toggleMerged` (Canvas.tsx), for the reason the
    * marquee's own `marqueeEndRef` exists one gesture over: a draw begun on
    * the ordinary canvas and still held when the user enters the merged view
    * is not stood down by the mousedown gate alone (ports are already
    * suppressed under `readOnly`, but that only stops a NEW draw from
-   * beginning). Left running, its ghost paints across lane space and its
-   * `onUp` commits a link to a foreign workspace's panel id — persisted into
-   * the ACTIVE workspace's record, invisible on screen because
-   * `buildLinkSegments` prunes a link naming a panel this canvas does not
-   * hold. A no-op when nothing is in flight.
+   * beginning). Left running, its ghost would go on painting across lane
+   * space until release — `onCommit`'s own `mergedRef` guard (Canvas.tsx)
+   * would still refuse the write, but a ghost that keeps drawing over a view
+   * the user just entered is its own visible defect worth standing down. A
+   * no-op when nothing is in flight.
    */
   end(): void
 }
@@ -106,8 +97,6 @@ export function useLinkDraw(deps: LinkDrawDeps): LinkDraw {
   const gestureRef = useRef<LinkDrawState | null>(null)
   const depsRef = useRef(deps)
   depsRef.current = deps
-
-  const isDrawing = useCallback(() => gestureRef.current !== null, [])
 
   // See the LinkDraw interface's own comment on `end` for why this exists and
   // who calls it. Cancels through the same two writes Escape and blur both
@@ -218,5 +207,5 @@ export function useLinkDraw(deps: LinkDrawDeps): LinkDraw {
     }
   }, [state === null])
 
-  return { state, begin, isDrawing, end }
+  return { state, begin, end }
 }

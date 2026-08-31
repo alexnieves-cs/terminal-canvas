@@ -4019,7 +4019,8 @@ after the first cut, so this is a measured list rather than a careful one:
 4. **`readOnly={merged}` at the call site in `Canvas.tsx`.** `readOnly` is
    optional-with-a-default on every non-terminal kind, so omitting it compiles
    clean and renders ports in the merged view; see the entry below for what a
-   drag there writes.
+   drag there actually writes — corrected in the M24 final review from an
+   earlier draft of this note that overstated the damage.
 
 **The merged view refuses links at the VERB now, not only at the affordance
 (`Canvas.tsx`'s `linkDraw.onCommit`).** Three mechanisms, in the order they
@@ -4030,13 +4031,34 @@ left painting a ghost across lane space; and `onCommit` early-returns on
 `mergedRef.current`. The third is the one added last, and it is there for the
 reason the move verb already states — it "refuses on `mergedRef` too rather
 than only its palette rows going disabled — a disabled row is an affordance,
-and the verb has to be the authority." Since `readOnly` is optional with a
-default on four of the five kinds, a dropped `readOnly={merged}` is a clean
-compile that renders ports in the merged view, and a drag there calls `addLink`
-into the ACTIVE workspace's record naming a FOREIGN panel id: **persisted, and
-then invisible**, because `buildLinkSegments` prunes a link naming a panel this
-canvas does not hold. The user sees a gesture that appeared to work and
-produced nothing, and `layout.json` grows a link nothing will ever render.
+and the verb has to be the authority." The guard stays for exactly that
+reason: it is still correct, even though the failure it was written to
+describe turned out not to be reachable — see below.
+
+**What a dropped `readOnly={merged}` actually reaches, corrected from an
+earlier draft that claimed a foreign-panel write.** The earlier text said a
+drag there calls `addLink` into the active workspace's record naming a
+FOREIGN panel id, persisted and then silently pruned. That path is NOT
+reachable, and the reason is `addLink`'s own guard in the FROZEN
+`panels.ts` (line 445): `displayPanels` is the merged, lane-translated array
+the ports would render against, but `setPanels`'s `current` — the array
+`onCommit`'s `addLink(current, from, to)` actually mutates — is always the
+ACTIVE workspace's own `panels`, merged or not (`Canvas.tsx`'s `displayPanels
+= merged && mergedView ? mergedView.panels : panels`, read only for display).
+`addLink` refuses unless BOTH `from` and `to` are already in that array, so a
+foreign endpoint on either end returns the SAME array — nothing written, no
+history entry, nothing persisted. A dropped `readOnly` cannot smuggle a
+cross-workspace link onto disk.
+
+What IS reachable with a dropped `readOnly={merged}` is a drag between two
+panels that are BOTH in the active workspace, drawn while the merged view
+happens to be showing them in a foreign lane: a REAL write, of a perfectly
+ordinary, valid link between two panels this canvas already owns. That is not
+data corruption — it is a violation of "the merged view is read-only", the
+same category of violation the drag/resize/close/marquee gates on `mergedRef`
+already exist to prevent, reached through the one gesture that had not yet
+been gated when this was written.
+
 **No check exercises the `onCommit` guard**, and that is stated rather than
 implied: ports do not render while merged, so the gesture cannot be driven
 through the UI there at all, and a check that reached past the UI to call
@@ -4044,6 +4066,34 @@ through the UI there at all, and a check that reached past the UI to call
 the feature. `verify:panels` 179 covers the affordance half (ports absent while
 merged) for a file panel and a terminal panel; Review, Jira and Toolbox are
 argued from the identity of one conditional expression, not observed.
+
+**A draw held across an ordinary WORKSPACE SWITCH — not a merge — is safe for
+a reason M24 does not own and did not build (`Canvas.tsx`'s
+`switchWorkspace`, `panels.ts`'s `addLink`, frozen).** `toggleMerged` calls
+`linkDraw.end()` synchronously, before its first await, precisely so an
+in-flight draw cannot survive entering or leaving the merged view (see the
+entries above). `switchWorkspace` calls no such thing — a draw begun on
+workspace A and still held when the user switches to workspace B via the
+rail, the palette, or `Cmd+Shift+]`/`[` is left running with nothing to stand
+it down. If the release lands after the switch, `onCommit`'s `addLink(current,
+from, to)` runs with `current` now B's own panel array and `from` naming a
+panel that belongs to A — a foreign id at the SOURCE end this time, the
+mirror image of the merged-view case above. The whole of what stops that
+becoming a real cross-workspace write is `addLink`'s own both-endpoint guard
+in the FROZEN `panels.ts`, a module M24 deliberately did not touch and does
+not own: refuse unless BOTH `from` and `to` are already in the array handed
+to it. **A future milestone that relaxes that guard — to allow a link across
+workspaces on purpose, say — turns this into a genuine corruption, and
+nothing in M24 would notice**, because M24 built no defence of its own here
+and the safety is entirely borrowed. While the draw is held across the
+switch, `.canvas--linking` stays on (`linkDraw.state !== null` does not care
+which workspace is displayed), so every panel in the ARRIVING workspace
+reveals its ports via `.canvas--linking .panel__port` and a panel there can
+take the target ring exactly as if the draw had started in that workspace.
+All of it is cosmetic and clears on the eventual mouseup (which calls
+`onCommit` once, wherever it lands, and then always calls the drag's own
+`end()`); no data is at risk from the visual half, only from the write
+`addLink`'s guard is what actually refuses.
 
 **The ports sit flush INSIDE the border, never straddling it, because `.panel`
 carries `overflow: hidden` (`styles.css`).** Found by a failing check rather

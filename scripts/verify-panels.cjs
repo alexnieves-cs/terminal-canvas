@@ -332,7 +332,7 @@ app.on('window-all-closed', () => {})
 // Raised 60s -> 120s at M8c, and 120s -> 300s at the M18 merge. It bounds the
 // WHOLE SUITE, not any one check: a single setTimeout armed once at whenReady.
 //
-// 120s was set when this file held 114 checks. It now holds 175, from five
+// 120s was set when this file held 114 checks. It now holds 196, from many
 // tracks that landed within days of each other, and the suite MEASURED at
 // 3-4 minutes on a 2026 M-series laptop — so the old bound was no longer
 // reachable at all, and every run ended in `FAIL watchdog` with the real
@@ -347,8 +347,10 @@ app.on('window-all-closed', () => {})
 // come up costs ~20s of nothing rather than failing fast. That converts a
 // fixture flake into "the suite hangs" and it is what tripped the old bound
 // three runs in four. The real fix is bounding those fixtures — or splitting
-// this file, which is 10,000 lines and rising — and a bigger number only buys
-// room for the next milestone to hit the same wall.
+// this file, which is over 12,000 lines and rising (measured at the M24 final
+// review: 12,469 before that review's own fix round, more again after it) —
+// and a bigger number only buys room for the next milestone to hit the same
+// wall.
 //
 // 300s is ~25% headroom over the measured worst case, chosen so a genuine
 // hang still fails in minutes rather than never. Whoever finds themselves
@@ -8909,8 +8911,46 @@ app.whenReady().then(async () => {
       //      restores the STRUCTURAL claim without restoring the part M24
       //      makes false by design (that NOTHING in the layer is hit-testable
       //      — two descendants now are, on purpose).
+      //
+      //      Fix round 2 (M24 final review) adds the `focusedId` clause
+      //      success criterion 4 always named and this check never asserted:
+      //      "a plain click on a link behaves exactly as a click on bare
+      //      canvas: selection clears, focusedId clears, a marquee begins."
+      //      An uncleared focusedId is the dangerous half — assignTiers pins
+      //      the focused panel live UNCONDITIONALLY, so a stray link click
+      //      that left it standing would hold a WebGL context and a
+      //      LIVE_BUDGET slot for the rest of the run with nothing on screen
+      //      wrong, the identical failure check 144 exists to catch for the
+      //      marquee. `__m4aGrid()` is the app-level read rather than a DOM
+      //      one, for check 144's own reason: it resolves through
+      //      focusedIdRef and answers non-null only for a focusedId naming a
+      //      LIVE session, where `document.activeElement.closest('.panel')`
+      //      is a browser DEFAULT ACTION that stays green under exactly the
+      //      regression this clause exists to catch (`setFocusedId(null)`
+      //      deleted from the background handler).
+      //
+      //      LINK_A is still DORMANT here — check 125/126's port-driven
+      //      gestures never wake it, because a port's own mousedown stops
+      //      propagation before it ever reaches the background hit test that
+      //      calls onSelectPanel (see PanelPorts.tsx) — so establishing a
+      //      GENUINE focus needs two real clicks, not one: the first lands on
+      //      the card and only WAKES it (onSelectPanel, no focus — a carded
+      //      panel has no .panel__slot mousedown handler of its own to call
+      //      onFocusPanel), the second lands on the now-live .panel__slot and
+      //      actually focuses it. Skipping the wait between them, or reading
+      //      __m4aGrid() only once, is exactly how check 144 once reported a
+      //      VACUOUS "focused before=false" in a flaky run — the clause below
+      //      has to observe a genuine true before it can mean anything about
+      //      the false after.
       {
         await railGoTo(LINK_A)
+        const boxWake = await panelBox(LINK_A)
+        if (boxWake) await clickAt(boxWake.cx, boxWake.cy)
+        await waitUntil(async () => !!(await wc.executeJavaScript(
+          `!!document.querySelector('[data-panel-id="${LINK_A}"] .panel__slot')`)), 4000)
+        const boxFocus = await panelBox(LINK_A)
+        if (boxFocus) await clickAt(boxFocus.cx, boxFocus.cy)
+        const focusedBefore127 = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
         const mid = await wc.executeJavaScript(`(() => {
           const el = document.querySelector('.link-layer [data-link]')
           if (!el) return null
@@ -8931,15 +8971,19 @@ app.whenReady().then(async () => {
         })()`)
         let before = null
         let after = null
+        let focusedAfter127 = null
         if (mid) {
           before = await selectedId()
           await clickAt(mid.x, mid.y)
           after = await selectedId()
+          focusedAfter127 = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
         }
-        ok('127 a click on a link still reaches the background handler beneath it, and .link-layer itself still takes no pointer events',
-          mid !== null && before !== null && after === null && layerPointerEvents === 'none',
+        ok('127 a click on a link still reaches the background handler beneath it, releases focusedId, and .link-layer itself still takes no pointer events',
+          mid !== null && before !== null && after === null && layerPointerEvents === 'none' &&
+            focusedBefore127 === true && focusedAfter127 === false,
           `mid=${JSON.stringify(mid)} selected ${JSON.stringify(before)} -> ${JSON.stringify(after)} ` +
-          `layerPointerEvents=${JSON.stringify(layerPointerEvents)}`)
+          `layerPointerEvents=${JSON.stringify(layerPointerEvents)} ` +
+          `focused ${focusedBefore127} -> ${focusedAfter127}`)
       }
 
       // 128. THE SECOND ONE WORTH KNOWING BY NUMBER. Closing the target

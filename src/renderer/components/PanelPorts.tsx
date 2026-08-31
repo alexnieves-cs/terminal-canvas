@@ -62,11 +62,17 @@ const SIDES: LinkSide[] = ['n', 'e', 's', 'w']
  *      component does not compile without it. verify:panels 179.
  *   4. `readOnly={merged}` at the Canvas.tsx call site. `readOnly` is
  *      optional-with-a-default on every non-terminal kind, so omitting it
- *      compiles clean and renders ports in the merged view, where a drag
- *      writes addLink into the ACTIVE workspace's record naming a FOREIGN
- *      panel id — persisted, then invisible, because buildLinkSegments prunes
- *      it. onCommit's own mergedRef guard is the structural backstop for
- *      that; see its comment in Canvas.tsx.
+ *      compiles clean and renders ports in the merged view. Corrected in the
+ *      M24 final review: a dropped guard does NOT write a foreign panel id
+ *      into layout.json — addLink (panels.ts, frozen) refuses unless both
+ *      ids are already in the array it is handed, which is always the active
+ *      workspace's own panels, never the merged/lane-translated display
+ *      array. What it DOES let through is a real write of an ordinary link
+ *      between two panels the active workspace already owns, drawn while
+ *      the merged view happens to be showing them in a foreign lane — a
+ *      read-only violation, not a corrupted record. onCommit's own
+ *      mergedRef guard is the structural backstop that closes it anyway;
+ *      see its comment in Canvas.tsx.
  */
 function PanelPortsImpl({
   panelId,

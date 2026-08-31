@@ -1254,11 +1254,25 @@ export function Canvas({
       // `readOnly` is OPTIONAL WITH A DEFAULT on all four non-terminal kinds,
       // so a missed or dropped `readOnly={merged}` at any of the five call
       // sites compiles clean and renders ports in the merged view with
-      // nothing red anywhere. A drag there writes addLink into the ACTIVE
-      // workspace's record naming a FOREIGN panel id: persisted, and then
-      // invisible, because buildLinkSegments prunes a link naming a panel this
-      // canvas does not hold. The user sees a gesture that appeared to work
-      // and produced nothing, and layout.json carries a link nothing renders.
+      // nothing red anywhere.
+      //
+      // Corrected in the M24 final review: an earlier draft of this comment
+      // claimed that drag would addLink a FOREIGN panel id into the active
+      // workspace's record, persisted and then silently pruned by
+      // buildLinkSegments. That path is not reachable — addLink (panels.ts,
+      // frozen) refuses unless BOTH ids are already in the array it is
+      // handed, and that array is always `current` from this component's own
+      // `panels` state (the active workspace's own array), never
+      // `displayPanels` (the merged, lane-translated one the ports would
+      // actually render against). A foreign endpoint on either side returns
+      // the SAME array: nothing written, no history entry, nothing persisted.
+      //
+      // What a dropped readOnly DOES reach is a drag between two panels both
+      // already in the active workspace, while the merged view happens to be
+      // showing them in a foreign lane — a real write of an ordinary, valid
+      // link, which is a "the merged view is read-only" violation rather than
+      // a corrupted record.
+      //
       // linkDraw.end() at toggleMerged stands down an in-flight draw; this
       // stands down a commit that reaches here by any other route.
       //

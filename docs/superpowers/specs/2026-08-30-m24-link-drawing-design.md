@@ -43,8 +43,12 @@ Three specific gaps:
   targets are visible rather than guessed at.
 - **Snapping**: a panel you release over wins; otherwise the nearest panel
   within a screen-space radius.
-- Links render as a **tapered cubic bezier** leaving each border
-  perpendicular, with a solid arrowhead at the target end.
+- Links render as a **cubic bezier** leaving each border perpendicular, with a
+  solid arrowhead at the target end. (Dropped during implementation: the
+  shipped stroke is a uniform `stroke-width: 2px`, never variable-width —
+  found stale at the M24 final review, corrected here rather than implemented
+  after the fact, since a taper is new design at the end of a milestone and
+  no check anywhere touches width.)
 - **Hover an edge** to reveal a `×` badge at its midpoint that removes it.
 
 ## What does not ship

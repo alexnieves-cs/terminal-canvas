@@ -211,8 +211,24 @@ function LinkLayerImpl({
               // measurement and no DOM — a getPointAtLength call here would
               // make the label position depend on a laid-out element and
               // would not survive the first render.
+              //
+              // The Y is nudged UP by 16 world units off that exact point,
+              // never the badge's — the badge (below) sits ON the midpoint
+              // deliberately, since it is the click target for a link the
+              // user is pointing at, and moving IT off-curve to dodge the
+              // label would be moving the more mechanically important of the
+              // two. The label is the one with nothing anchoring it to the
+              // midpoint besides "somewhere on the line", so it is the one
+              // that moves. 16 clears the badge's r=9 circle plus its 1px
+              // stroke with room to spare, and it is in the same WORLD units
+              // as everything else in this layer, so the label stays clear
+              // of the badge at every zoom level rather than only at one.
+              // Fixed rather than hover-gated: it does not need to track
+              // `hovered`, and a label that only moved while hovered would
+              // itself jump on every mouseenter/mouseleave, which is a worse
+              // visual defect than the one this offset removes.
               x={(s.x1 + 3 * s.c1x + 3 * s.c2x + s.x2) / 8}
-              y={(s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8}
+              y={(s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8 - 16}
               textAnchor="middle"
             >
               {s.label}

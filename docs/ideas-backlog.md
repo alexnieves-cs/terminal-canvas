@@ -2217,6 +2217,64 @@ package" is how a placeholder becomes permanent.
 - **Nearest existing entry: none.** Distribution is absent from the original backlog; #74
   is the only other M5c-adjacent entry and it covers updates, not appearance.
 
+## 77. M24 link drawing — four items Task 8 was assigned and dropped
+
+M24's plan assigned a Task 8 to sweep up loose ends the earlier tasks left
+behind; it did not land, and the final whole-branch review found the four
+items it would have covered. None blocks the milestone. Recorded here rather
+than left to be rediscovered.
+
+- **The badge/label overlap.** A labelled link's `×` remove badge and its
+  `<text>` label both sat at the identical closed-form cubic midpoint in
+  `LinkLayer.tsx`, and the label painted after the badge — SVG paint order —
+  so hovering a labelled link showed a `×` with the label text on top of it.
+  **Fixed** by the M24 final review's own fix round: the label is now offset
+  16 world units above the midpoint, leaving the badge exactly where its
+  click target belongs. **Unverified by any check** — this is a visual
+  property the harness cannot judge (the same limit this repo already states
+  for the link layer's paint order and for every other pixel-only claim in
+  `CLAUDE.md`) and belongs on the by-hand checklist rather than in
+  `npm run verify`.
+- **`paletteActions` re-renders `LinkLayer` on every palette open.**
+  `paletteActions` depends on `palette.capturedId`, so opening the palette
+  changes `onRemove`'s identity, and `LinkLayer`'s own `memo` comment names "a
+  palette open" as a case it is supposed to stop. It does not, today — the
+  comment states an intent the dependency chain does not yet deliver. Purely
+  cosmetic (one extra re-render per gesture, not a 60Hz cascade), and a
+  `useCallback` wrapper around the link-removal callback, keyed on something
+  narrower than the whole captured-id object, would restore the comment's
+  literal truth. Not urgent; recorded so the comment is not read as already
+  true.
+- **A CORRECTION, not a defect: armed link-mode and the removal badge do not
+  double-fire.** It was believed during the milestone that clicking a badge
+  while the older, keyboard-reachable link-mode (M13's click-then-click path)
+  is armed would fire BOTH the completing handler and the removal — one
+  gesture, two effects, one of them presumably wrong. Checked and it does
+  not: `onLinkModeMouseDownCapture` is a React CAPTURE-phase handler on
+  `.canvas` that calls `stopPropagation()`, and React's synthetic event
+  dispatch checks `isPropagationStopped()` between nodes on the way down —
+  so a capture-phase stop at `.canvas` prevents every descendant handler from
+  ever running, `PanelPorts`' and the badge's included. While armed: pressing
+  a port completes the armed link and begins no drag; clicking a badge
+  completes the armed link and removes nothing. One gesture, one outcome,
+  always the armed-mode one. Worth recording precisely because the belief was
+  reasonable and wrong, and a future reader tracing the same two handlers
+  should not re-open this as a bug.
+- **`onContextPasted`'s inline arrow already defeats `TerminalPanel`'s memo,
+  on every Canvas render, pre-existing and out of M24's scope.** `Canvas.tsx`
+  passes an inline arrow function as `onContextPasted` to every terminal
+  panel, which is a new prop identity on every render regardless of what
+  changed — the exact prop-identity cascade `TerminalPanel`'s `memo` and
+  `version()` exist to block, described at length in `CLAUDE.md`'s "`version`
+  exists only so `memo` can see a mutation" and neighbouring entries. That
+  means the careful `onBeginLink`/`linkTarget` memo discipline M24 observes
+  for its own two new props does not yet buy what its own comments claim,
+  because a different, older prop on the same component is already breaking
+  the memo it is trying to protect. Pre-existing, not introduced by M24, and
+  out of scope for this milestone to fix — recorded here so the next reader
+  of M24's memo comments does not credit them with a guarantee the component
+  does not currently have.
+
 ## A note on sequencing for 41–75
 
 The section below was written for entries 1–40 and has **not** been re-ordered to include
