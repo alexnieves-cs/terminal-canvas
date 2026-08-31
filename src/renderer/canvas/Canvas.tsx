@@ -17,6 +17,10 @@ import { marqueeRect, marqueeSelection } from './marquee'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
 import { usePanelDrag } from './usePanelDrag'
+import { GroupLayer } from '@renderer/groups/GroupLayer'
+import { applyGroupDrag, groupDragState, pruneGroups, raiseGroup, removeGroup, type CanvasGroup } from '@renderer/groups/groups'
+import { useGroupDrag } from '@renderer/groups/useGroupDrag'
+import { GROUP_COLOURS } from '@shared/groups'
 import type { DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
@@ -244,6 +248,13 @@ export function Canvas({
   const [panels, setPanels] = useState<Panel[]>(() =>
     initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
   )
+  const [groups, setGroups] = useState<CanvasGroup[]>(() => initial.groups ?? [])
+  const nextGroupIdRef = useRef(
+    (initial.groups ?? []).reduce((next, group) => {
+      const match = /^g(\d+)$/.exec(group.id)
+      return match ? Math.max(next, Number(match[1]) + 1) : next
+    }, 1)
+  )
   /**
    * M14's merged view: every workspace's panels on one canvas, in lanes.
    *
@@ -315,6 +326,11 @@ export function Canvas({
     [displayPanels]
   )
   const terminalRects = useMemo(() => terminalPanels.map((p) => p.rect), [terminalPanels])
+  // A collapsed group is a presentation request, never a lifecycle command:
+  // its panels remain in the registry and merely receive lod.ts's cheap card.
+  const collapsedPanelIds = useMemo(() => new Set(
+    groups.filter((group) => group.collapsed).flatMap((group) => group.panelIds)
+  ), [groups])
   // hitTest returns the LAST match, so paint order and pick order agree only
   // if the array it receives is in paint order. Paint order is z now, not
   // array position — see the note on Panel.z.
@@ -685,6 +701,7 @@ export function Canvas({
       }
     }
     setPanels(next.present)
+    setGroups((current) => pruneGroups(current, ids))
     setDormantIds((current) => {
       const merged = new Set([...current].filter((id) => ids.has(id)))
       for (const panel of next.present) {
@@ -725,6 +742,15 @@ export function Canvas({
   // install once, but panels changes on every frame of a drag.
   const panelsRef = useRef(panels)
   panelsRef.current = panels
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
+  // Panels can disappear through close, undo, reset, or a workspace move.
+  // Repair membership in one place so none of those paths leave a group
+  // pointing at a vanished rect.
+  useEffect(() => {
+    const ids = new Set(panels.map((panel) => panel.rect.id))
+    setGroups((current) => pruneGroups(current, ids))
+  }, [panels])
 
   /**
    * The same mirror for the merged view's two facts, and the split between
@@ -1245,6 +1271,7 @@ export function Canvas({
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
+    setGroups([])
     setDormantIds(new Set())
     selectOnly(null)
     setFocusedId(null)
@@ -1390,6 +1417,7 @@ export function Canvas({
         }
         const outgoing: CanvasState = {
           panels: fromPanels(panelsRef.current),
+          groups: groupsRef.current,
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -1460,6 +1488,7 @@ export function Canvas({
         // here, so nothing is lost by discarding the outgoing workspace's
         // entries.
         setPanels(next)
+        setGroups(result.state.groups ?? [])
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)
@@ -1964,6 +1993,47 @@ export function Canvas({
     }, [commitHistory])
   })
 
+  const beginGroupDrag = useGroupDrag({
+    hostRef,
+    viewportRef,
+    onDrag: useCallback((state, world) => {
+      setPanels((current) => applyGroupDrag(current, state, world))
+    }, []),
+    onCommit: useCallback(() => {
+      setPanels((current) => {
+        commitHistory(current)
+        return current
+      })
+    }, [commitHistory])
+  })
+
+  const onBeginGroupDrag = useCallback((group: CanvasGroup, event: MouseEvent<HTMLElement>) => {
+    if (mergedRef.current) return
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const origin = screenToWorld(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewportRef.current
+    )
+    // Raising is part of the one group gesture and only rewrites Panel.z;
+    // member array order remains untouched, so live terminal hosts stay put.
+    setPanels((current) => raiseGroup(current, group))
+    beginGroupDrag(groupDragState(group, panelsRef.current, origin))
+  }, [beginGroupDrag])
+
+  const toggleGroupCollapsed = useCallback((id: string) => {
+    setGroups((current) => current.map((group) => {
+      if (group.id !== id) return group
+      if (!group.collapsed) return { ...group, collapsed: true }
+      const next = { ...group }
+      delete next.collapsed
+      return next
+    }))
+  }, [])
+  const onRemoveGroup = useCallback((id: string) => {
+    setGroups((current) => removeGroup(current, id))
+  }, [])
+
   const onBeginDrag = useCallback(
     (state: DragState) => {
       // GEOMETRY IS READ-ONLY WHILE MERGED, and this is the authoritative
@@ -2231,7 +2301,8 @@ export function Canvas({
       size: { width: bounds.width, height: bounds.height },
       focusedId,
       lastFocusedAt: registry.lastFocusedAt(),
-      dormantIds
+      dormantIds,
+      cardIds: collapsedPanelIds
     })
     tiersRef.current = tiers
 
@@ -2287,7 +2358,7 @@ export function Canvas({
       heldSinceRef.current.clear()
       registry.applyTiers(tiersRef.current)
     }, DEMOTE_DELAY_MS)
-  }, [terminalRects, viewport, focusedId, version, dormantIds])
+  }, [terminalRects, viewport, focusedId, version, dormantIds, collapsedPanelIds])
 
   // Persist on every change. Unthrottled on purpose, including the ~60/sec a
   // drag produces: main coalesces to one write per 500ms and keeps only the
@@ -2322,11 +2393,12 @@ export function Canvas({
     const before = preMergeRef.current
     void window.canvas.layout.save({
       panels: fromPanels(panels),
+      groups,
       camera: merged && before ? before.camera : viewport,
       selectedId: merged && before ? before.selectedId : selectedId,
       focusedId: merged && before ? before.focusedId : focusedId
     })
-  }, [panels, viewport, selectedId, focusedId, merged])
+  }, [panels, groups, viewport, selectedId, focusedId, merged])
 
   const toWorld = (event: MouseEvent<HTMLDivElement>): Point | null => {
     const host = hostRef.current
@@ -3948,6 +4020,30 @@ export function Canvas({
       if (cwd === '') return
       openToolboxPanel(cwd, railLabel(panel, registry.get(panelId)?.status), worldCentre())
     },
+    beginCreateGroup: (panelIds) => {
+      if (mergedRef.current) return
+      const present = panelIds.filter((id) => panelsRef.current.some((panel) => panel.rect.id === id))
+      if (present.length < 2) return
+      setInputMode({
+        kind: 'text',
+        label: `Name this ${present.length}-panel group…`,
+        initial: '',
+        submit: (value) => {
+          const label = value.trim()
+          if (label === '') { setInputMode(null); return }
+          const number = nextGroupIdRef.current++
+          setGroups((current) => [...current, {
+            id: `g${number}`,
+            label,
+            colour: GROUP_COLOURS[(number - 1) % GROUP_COLOURS.length],
+            panelIds: present
+          }])
+          selectOnly(null)
+          setInputMode(null)
+        }
+      })
+      palette.openPalette()
+    },
     movePanelsToWorkspace,
     beginMovePanelsToNewWorkspace: (panelIds) => {
       setInputMode({
@@ -4707,6 +4803,14 @@ export function Canvas({
           className="world"
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
+          <GroupLayer
+            groups={merged ? [] : groups}
+            panels={displayPanels}
+            readOnly={merged}
+            onBeginDrag={onBeginGroupDrag}
+            onToggle={toggleGroupCollapsed}
+            onRemove={onRemoveGroup}
+          />
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels, and it takes no pointer

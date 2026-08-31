@@ -37,6 +37,8 @@ export interface TierInput {
    * is NEVER promoted — see the precedence note in assignTiers.
    */
   dormantIds?: ReadonlySet<string>
+  /** A collapsed group asks to card its members without ending their session. */
+  cardIds?: ReadonlySet<string>
 }
 
 function intersectsViewport(rect: WorldRect, vp: Viewport, size: Size): boolean {
@@ -59,6 +61,7 @@ export function assignTiers(input: TierInput): Record<string, Tier> {
   const { rects, viewport, size, focusedId, lastFocusedAt } = input
   const budget = input.budget ?? LIVE_BUDGET
   const dormant = input.dormantIds ?? new Set<string>()
+  const forcedCards = input.cardIds ?? new Set<string>()
 
   const tiers: Record<string, Tier> = {}
   for (const rect of rects) tiers[rect.id] = 'card'
@@ -67,6 +70,7 @@ export function assignTiers(input: TierInput): Record<string, Tier> {
     (rect) =>
       rect.id !== focusedId &&
       !dormant.has(rect.id) &&
+      !forcedCards.has(rect.id) &&
       viewport.scale >= LIVE_MIN_SCALE &&
       intersectsViewport(rect, viewport, size)
   )
@@ -86,7 +90,7 @@ export function assignTiers(input: TierInput): Record<string, Tier> {
   // first frame. Restored focus therefore comes back as a highlight and a
   // Cmd+C routing target only.
   let slots = budget
-  if (focusedId && tiers[focusedId] !== undefined && !dormant.has(focusedId)) {
+  if (focusedId && tiers[focusedId] !== undefined && !dormant.has(focusedId) && !forcedCards.has(focusedId)) {
     tiers[focusedId] = 'live'
     slots -= 1
   }
