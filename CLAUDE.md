@@ -987,6 +987,39 @@ canary's config-less server had no `pane-died` hook and the exit code fell
 through to the client's. A stale server does not merely cost you sessions — it
 makes one specific check lie.
 
+**`TC_VERIFY_SUFFIX` separates the SOCKETS and nothing separates the
+PROCESSES, so a cleanup `pkill` from one worktree kills every worktree's run.**
+The entry above fixed two concurrent runs sharing a tmux server; it left the
+other half of the same problem open, and M23a paid for it twice in one
+session. `pkill -f "verify-panels.cjs"` is the obvious way to clear the
+orphaned tmux clients a killed run leaves behind — and `-f` matches the whole
+command line, in which the script's own name appears identically no matter
+which worktree it was launched from. So the pattern that clears your leftovers
+also SIGKILLs a healthy run in the checkout next door, which is the same
+mutual destruction `TC_VERIFY_SUFFIX` was added to prevent, arriving through
+processes rather than through a socket.
+
+**What it costs is worse than a lost run, because the damage does not look
+like damage.** Measured, both directions, in one session: an M23a run was
+SIGKILLed at check 101 and reported `exit=137` with no summary line at all —
+which reads as a hang or a crash in the code under test, not as an outside
+kill; and the run before it survived but reported checks 8 and 22 RED from CPU
+contention alone, which reads as two real regressions in keystroke delivery
+and undo. Neither failure names the other session anywhere, and both are
+reproducible only by whoever happens to be running at the time. The tell is
+the leftovers: `ps aux | grep "[v]erify-panels"` showing tmux clients whose
+`-L` socket carries a suffix that is not yours (`…-m24t4pre3` while you are
+`m23wt`) is another checkout's run, not your own debris.
+
+Two habits follow, and the first is not optional. **Kill by PID, never by
+pattern** — read `ps aux | grep "[v]erify-panels"`, confirm each pid is yours
+(`lsof -p <pid> | grep cwd` names the worktree), and kill those. **And do not
+start a run while another worktree's is in flight**: the suites are separated
+on disk and not on the CPU, and this file's own fixtures are timing-sensitive
+enough that contention alone turns early checks red. Waiting is cheaper than
+the debugging round a false RED costs — that round is what produced this
+entry.
+
 **The verify suites must never touch the production socket.** Every argv
 builder in `tmux-args.ts` takes the socket as a *defaulted* parameter for this
 reason alone; `TMUX_SOCKET` stays the production value and `verify:tmux` 9 still
