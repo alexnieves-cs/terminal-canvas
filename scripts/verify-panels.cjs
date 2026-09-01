@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, rmSync, realpathSync, renameSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow, ipcMain } = require('electron')
@@ -6702,14 +6702,28 @@ app.whenReady().then(async () => {
     //     When a later milestone legitimately adds a dispose call site this
     //     goes red, and the number is then updated DELIBERATELY with the
     //     reason in the commit message. That is the whole mechanism.
+    //
+    //     The dispose half reads the whole canvas DIRECTORY, not Canvas.tsx
+    //     alone. M28 split that file along its hook seams and carried the
+    //     workspace-delete call site out into usePaletteActions.ts; scoping
+    //     the count to one filename would have turned a pure code move into a
+    //     RED, and — worse — a later split could have quietly moved a site
+    //     into a file this check never reads, dropping the count to four and
+    //     passing for the wrong reason the moment somebody "fixed" the
+    //     literal. The invariant was never "Canvas.tsx contains five"; it is
+    //     "the canvas layer performs exactly five disposes, and every one of
+    //     them routes through registry.dispose rather than pty.kill".
     {
       const registrySrc = readFileSync(
         join(__dirname, '..', 'src', 'renderer', 'session', 'session-registry.ts'), 'utf8')
-      const canvasSrc = readFileSync(
-        join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+      const canvasDir = join(__dirname, '..', 'src', 'renderer', 'canvas')
+      const canvasSrc = readdirSync(canvasDir)
+        .filter((name) => name.endsWith('.ts') || name.endsWith('.tsx'))
+        .map((name) => readFileSync(join(canvasDir, name), 'utf8'))
+        .join('\n')
       const kills = (registrySrc.match(/bridge\.pty\.kill\(/g) ?? []).length
       const disposes = (canvasSrc.match(/registry\.dispose\(/g) ?? []).length
-      ok('94 pty.kill still has exactly two callers, and Canvas has five dispose sites',
+      ok('94 pty.kill still has exactly two callers, and the canvas layer has five dispose sites',
         kills === 2 && disposes === 5, `kills=${kills} disposes=${disposes}`)
     }
 

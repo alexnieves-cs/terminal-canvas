@@ -224,6 +224,29 @@ src/renderer/canvas/
                     the tier-assignment effect, and the one Cmd+C/Cmd+V subscription
   CanvasHud.tsx     zoom % and world-space cursor — the fastest way to see the math misbehave
 
+  The seven below were split out of Canvas.tsx (M28) with no behaviour change.
+  Each replaces a CONTIGUOUS run of hook calls at exactly the position it used
+  to occupy: several refs in this component are created above a block and
+  assigned below it, so moving a call re-orders a create-then-assign pair and
+  the ref reads null for the life of the effect, silently. Each takes one
+  `Deps` object, destructures it on entry, and names the DESTRUCTURED members
+  in its dependency arrays — never `deps`, which the caller rebuilds every
+  render.
+  canvas-constants.ts    module-scope constants + retainSelection/panelLabel. Must stay
+                         module scope: a fresh [] or Set() per render is re-render churn
+  usePaletteActions.ts   the one `actions` object the palette, top bar, rail and inspector
+                         share. ONE useMemo — splitting it breaks Palette's command memo
+  useWorkspaceVerbs.ts   switch / merged view / move-panels. Holds the await-before-commit
+                         orderings; also owns deleteWorkspaceRef and reloadWorkspacesRef
+  useCanvasPointer.ts    the host's mouse gestures. Four handlers stay PLAIN functions —
+                         memoizing them would be a behaviour change, not a cleanup
+  useRailModels.ts       the built/signature/useMemo triples that freeze rail and inspector
+                         row identity against a drag's 60Hz rect churn
+  useFileTree.ts         the tree column. Roots on SELECTED, pastes into FOCUSED
+  useInspectorDetail.ts  the inspector's async Changes/Toolbox/summary sections, each a
+                         three-state result
+  useCanvasTestHooks.ts  the window.__m4a* surface verify:panels drives the renderer through
+
 src/renderer/palette/
   fuzzy.ts          pure subsequence match + score + match positions — no DOM, no React
   palette-model.ts  SECTIONS (ordered data, not a union), the Command shape, section-first

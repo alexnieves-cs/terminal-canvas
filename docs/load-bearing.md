@@ -110,10 +110,11 @@ running agent with no error anywhere. `pty.kill` has exactly two callers, both i
 has ever spawned: main's `PtyManager.kill` reaches `backend.destroy(panelId)` even for an id it
 has no local session for, because under tmux a never-spawned panel can still own a surviving
 session (off-screen or over `LIVE_BUDGET`), and skipping the kill there would leak it forever.
-`dispose(id)` has five call sites in `Canvas.tsx` — close button, undo/redo removing a panel,
-canvas reset, workspace delete, and restart-in-place — and every one keeps the `pty.kill` count
+`dispose(id)` has five call sites in the canvas layer — close button, undo/redo removing a
+panel, canvas reset, and restart-in-place in `Canvas.tsx`, plus workspace delete, which M28
+carried out into `canvas/usePaletteActions.ts` — and every one keeps the `pty.kill` count
 at two precisely by routing through `dispose(id)` instead of calling it directly; re-derive
-this count from source (`grep -n "registry.dispose" Canvas.tsx` / count `pty.kill` callers in
+this count from source (`grep -rn "registry.dispose" src/renderer/canvas/` / count `pty.kill` callers in
 `session-registry.ts`) rather than trusting a stale number here — `verify:panels` 94 pins both
 counts by reading the source text for exactly this reason. `dispose(id)` itself also sends
 `pty.kill` even when this renderer holds no LOCAL session for that id — the identical shape one
@@ -358,11 +359,11 @@ sixty times as the pointer moves; pushing an undo entry there makes one drag tak
 `Cmd+Z` presses to unwind. History is pushed once, on commit, not per intermediate update.
 
 **Undo removing a panel must dispose its session, and the call-site count only moves by
-addition (`Canvas.tsx`, `session-registry.ts`).** `registry.dispose` has five call sites in
-`Canvas.tsx` today — close button, undo/redo removing a panel, canvas reset, workspace delete,
-and restart-in-place — and adding a new one that forgets to route through `dispose()` (calling
+addition (`src/renderer/canvas/`, `session-registry.ts`).** `registry.dispose` has five call
+sites in the canvas LAYER today — close button, undo/redo removing a panel, canvas reset and
+restart-in-place in `Canvas.tsx`, workspace delete in `usePaletteActions.ts` — and adding a new one that forgets to route through `dispose()` (calling
 `pty.kill` directly, say) breaks the two-caller invariant `session-registry.ts` depends on.
-Re-derive the count from `grep -n "registry.dispose" Canvas.tsx` rather than trusting a number
+Re-derive the count from `grep -rn "registry.dispose" src/renderer/canvas/` rather than a number
 written down here — this file has gone stale on this exact count before, inside the very commit
 that recorded it, which is why `verify:panels` 94 pins both counts by reading source text
 instead. Workspace delete disposes rather than demotes (the one workspace-switch path where
@@ -551,14 +552,14 @@ subscribes to the same two events and inserts at the caret. The copy half is asy
 a selection inside an `<input>` is not part of `window.getSelection()` in Chromium — the palette
 reads `selectionStart`/`selectionEnd` off the input instead.
 
-**A prompt insert is `paste()`, never `write()` (`Canvas.tsx`'s `insertPrompt`).** `term.paste`
+**A prompt insert is `paste()`, never `write()` (`canvas/usePaletteActions.ts`'s `insertPrompt`).** `term.paste`
 wraps the payload in bracketed-paste markers and normalises LF to CR, delivering a multi-line
 prompt as ONE input; a raw write submits every newline separately, firing incomplete fragments.
 Every prompt worth saving is multi-line, so this affects the whole feature. `verify:panels` 40
 is the only check that can tell the two apart, since its fixture panel deliberately enables
 bracketed paste itself.
 
-**Navigating must not wake (`Canvas.tsx`'s `goToPanel`).** Waking hangs off *selection*
+**Navigating must not wake (`canvas/usePaletteActions.ts`'s `goToPanel`).** Waking hangs off *selection*
 (`onSelectPanel` clears the dormant id and calls `registry.wake`), so reusing it for the
 switcher would spawn an agent as a side effect of navigating — on a restored twelve-panel canvas
 that's twelve CLIs launched by a keyboard tour. `goToPanel` factors out just the select-and-raise
@@ -819,7 +820,7 @@ text (`panelLabel`) still reads `spec.cwd` and always will, because "where this 
 makes no present-tense claim to go stale.
 
 **A workspace switch is a second boot, but the undo stack and dormancy calculation must not lag
-behind it (`Canvas.tsx`'s `switchWorkspace`).** Everything derived from starting state is
+behind it (`canvas/useWorkspaceVerbs.ts`'s `switchWorkspace`).** Everything derived from starting state is
 RE-DERIVED (id counter, camera, selection); the undo stack is CLEARED outright, for the same
 reason a workspace MOVE clears it too (see below) — applying a stale history entry from before
 the switch would `dispose` a session that now belongs to a different, no-longer-active
@@ -894,7 +895,7 @@ visibly move. `useShellChrome` takes a `settingsSignal` and re-reads on it — t
 anything that renders a setting.
 
 **The rail is always MOUNTED, so its rows are frozen on a signature, not a memo key
-(`shell/rail-rows.ts`, `Canvas.tsx`'s `railRows`).** Collapsing the rail is a CSS class
+(`shell/rail-rows.ts`, `canvas/useRailModels.ts`'s `railRows`).** Collapsing the rail is a CSS class
 (`.shell--rail-collapsed`, `display: none` on the list) — `Canvas.tsx` renders `<SideRail>`
 unconditionally, so every row stays mounted and reconciled while invisible, and a memo keyed on
 `chrome.railOpen` would be keyed on a value that changes nothing about what React has to build.
@@ -1403,7 +1404,7 @@ must not turn 94 or 95 red; if it does, the check was written with literals
 after all and that is the bug.
 
 **The completing click for a link is intercepted in the CAPTURE phase, or it wakes a panel
-(`Canvas.tsx`'s `onLinkModeMouseDownCapture`).** Every panel's chrome `stopPropagation`s its own
+(`canvas/useCanvasPointer.ts`'s `onLinkModeMouseDownCapture`).** Every panel's chrome `stopPropagation`s its own
 mousedown, so a bubble-phase listener never sees a click on a panel — which is every click that
 can complete a link — and letting one through reaches `onSelectPanel`, which wakes a dormant
 panel: completing a link would spawn an agent as a side effect of drawing an arrow. The mode is
@@ -1698,7 +1699,7 @@ deliberately not the rail's OWN `workspaceSignature` (which also folds in waitin
 would refire on every bell).
 
 **A move touches no session and pushes no history, and the history-clearing half is the one the
-original design got wrong (`Canvas.tsx`'s `movePanelsToWorkspace`).** No session/registry call in
+original design got wrong (`canvas/useWorkspaceVerbs.ts`'s `movePanelsToWorkspace`).** No session/registry call in
 the move loop, confirmed by the same `pty.kill`-caller-count regex the rest of the file relies
 on. "Push no undo entry" is necessary and NOT sufficient: leaving the PRE-move history intact
 meant one `Cmd+Z` after a move stepped back to a state that still listed the moved panel and
@@ -1709,7 +1710,7 @@ EARLIER gesture in the canvas un-undoable after a move, with no inverse gesture 
 the panels back by hand.
 
 **The marquee starts only where `hitTest` finds nothing, never merely "the background handler
-ran" (`Canvas.tsx`'s `onMouseDown`).** A CARDED (demoted) panel has no chrome handler of its own,
+ran" (`canvas/useCanvasPointer.ts`'s `onMouseDown`).** A CARDED (demoted) panel has no chrome handler of its own,
 so its press falls through to the background path exactly like empty space — and once
 `LIVE_BUDGET` is spent, cards are most of the canvas. Arming the marquee unconditionally in the
 background handler would rubber-band every time a user clicks a card, which is the ordinary
@@ -1747,7 +1748,7 @@ must treat a refused switch as an ABORT rather than proceeding to remove the wor
 proceeding would remove the still-active record without ever having left it.
 
 **The inspector's Save reads what's DISPLAYED, not what's stored, and this is the one place the
-read-only/write-only split runs the other way (`Canvas.tsx`'s `savePanelAsPreset`).** Everything
+read-only/write-only split runs the other way (`canvas/usePaletteActions.ts`'s `savePanelAsPreset`).** Everything
 that acts on what's SAVED reads the stored panel array; everything that acts on what's DISPLAYED
 reads the merged/lane-shifted one — Save was on the wrong side of that split, so saving a preset
 from a foreign panel while merged silently found nothing and did nothing, an affordance that
@@ -1757,7 +1758,7 @@ a preset is a pure READ (it writes no workspace record, moves no session, and th
 refused.
 
 **A move captures `focusedId` BEFORE its own IPC await — a live, unfixed instance of the trap the
-marquee entry above exists to prevent (`Canvas.tsx`'s `movePanelsToWorkspace`).** If focus moves
+marquee entry above exists to prevent (`canvas/useWorkspaceVerbs.ts`'s `movePanelsToWorkspace`).** If focus moves
 onto one of the panels being moved DURING the round trip, `focusedId` is left naming a panel this
 canvas no longer holds — held live by `assignTiers` forever, with no rect and no row anywhere on
 screen to reveal it. The fix (re-read `focusedIdRef.current` after the await, the same pattern
@@ -1787,7 +1788,7 @@ own, with no rename prompt required) — a wider, easier-to-hit door to the same
 collision.
 
 **The tree roots on the SELECTED panel and pastes into the FOCUSED one, deliberately different
-panels (`Canvas.tsx`'s `treeRoot`/`insertPath`).** A rail-row click selects without focusing (see
+panels (`canvas/useFileTree.ts`'s `treeRoot`/`insertPath`).** A rail-row click selects without focusing (see
 "The rail navigates" above), so a user routinely has one panel selected (browsing) and a
 different one focused (holding DOM focus, the `Cmd+C`/paste target) — the tree roots on
 SELECTED (browsing shouldn't require re-focusing its terminal) while a paste has to land where a
