@@ -100,6 +100,21 @@ buildSync({
   external: ['node-pty', 'electron']
 })
 const { createDirectBackend, createTmuxBackend } = require(OUT_BACKEND)
+
+// M38. The quit sequence lives in its own import-free module so THIS suite
+// can run it against the real server above; absent until Task 2 lands, and
+// the checks guard on that rather than throwing.
+const OUT_QUIT = join(__dirname, '..', 'out', 'verify', 'quit.cjs')
+let runQuit
+try {
+  buildSync({
+    entryPoints: [join(__dirname, '..', 'src', 'main', 'quit.ts')],
+    outfile: OUT_QUIT, bundle: true, platform: 'node', format: 'cjs', external: ['node-pty', 'electron']
+  })
+  runQuit = require(OUT_QUIT).runQuit
+} catch {
+  runQuit = undefined
+}
 const DIRECT = createDirectBackend('verify: direct by default')
 
 // M17 fix-round checks 32/33 need the REAL readFrom — the function that
@@ -855,6 +870,62 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
         `reattached=${second.reattached}`)
       h2.manager.kill('n-reattach')
       await sleep(300)
+    }
+
+    // M38 — keep-on-quit.1/.2. THE QUIT SEQUENCE, against the real server on
+    //     the verify socket, because app.on('before-quit') is unreachable from
+    //     any suite and this is the only place "quit keeps the agent" can be
+    //     proven rather than argued.
+    //
+    //     .1: keep. The session is still listed after runQuit, flush ran
+    //     exactly once, shutdown was never called, and a FRESH manager's
+    //     create() at the same id answers reattached:true with the SAME pane
+    //     pid — the pid is the one observable that separates "kept" from
+    //     "killed and quietly respawned" (check 20's rule).
+    //     .2: end. The order is killAll, flush, shutdown — teardown before the
+    //     flush because kill() schedules store writes the flush has to carry —
+    //     and the session and the server are both gone.
+    {
+      const Q = typeof runQuit === 'function' ? runQuit : null
+      const h = makeHarness(tmuxBackend)
+      const made = await h.manager.create(spec('q1'))
+      await sleep(700)
+      const pidBefore = h.manager.list().find((r) => r.panelId === 'q1')?.pid
+      const calls = []
+      const spyBackend = { ...tmuxBackend, kind: tmuxBackend.kind, shutdown: () => { calls.push('shutdown'); tmuxBackend.shutdown() } }
+      if (Q) {
+        Q({
+          keep: true,
+          manager: { killAll: () => { calls.push('killAll'); h.manager.killAll() }, detachAll: () => { calls.push('detachAll'); h.manager.detachAll() } },
+          backend: spyBackend,
+          flush: () => { calls.push('flush') }
+        })
+      }
+      await sleep(500)
+      const listedAfterKeep = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      const h2 = makeHarness(tmuxBackend)
+      const again = Q ? await h2.manager.create(spec('q1')) : null
+      await sleep(700)
+      const pidAfter = h2.manager.list().find((r) => r.panelId === 'q1')?.pid
+      ok('keep-on-quit.1 keep: the session survives runQuit, flush ran once, no shutdown, and a fresh manager reattaches at the same pid',
+        Q !== null && made.pid > 0 && listedAfterKeep.includes('q1') &&
+          JSON.stringify(calls) === JSON.stringify(['detachAll', 'flush']) &&
+          again !== null && again.reattached === true && pidBefore !== undefined && pidAfter === pidBefore,
+        JSON.stringify({ calls, listedAfterKeep: listedAfterKeep.trim(), again: again && again.reattached, pidBefore, pidAfter }))
+      const calls2 = []
+      if (Q) {
+        Q({
+          keep: false,
+          manager: { killAll: () => { calls2.push('killAll'); h2.manager.killAll() }, detachAll: () => { calls2.push('detachAll'); h2.manager.detachAll() } },
+          backend: { ...tmuxBackend, shutdown: () => { calls2.push('shutdown'); tmuxBackend.shutdown() } },
+          flush: () => { calls2.push('flush') }
+        })
+      }
+      await sleep(500)
+      const listedAfterEnd = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+      ok('keep-on-quit.2 end: killAll, then flush, then shutdown — and the session and server are gone',
+        Q !== null && JSON.stringify(calls2) === JSON.stringify(['killAll', 'flush', 'shutdown']) && listedAfterEnd.trim() === '',
+        JSON.stringify({ calls2, listedAfterEnd: listedAfterEnd.trim() }))
     }
 
     // 15. destroy() ends the session, and shutdown() takes the server with it.

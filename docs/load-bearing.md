@@ -2239,3 +2239,28 @@ with no `--force`, for the reason `review:commit` runs no `--no-verify`: a dirty
 refused with git's own sentence and the directory survives. The branch is never deleted by
 this app — deleting an unmerged branch is the one irreversible act in the feature, and it is
 the user's, in git, once they have merged.
+
+**Quit survival is opt-in, and the flush sits between teardown and shutdown in BOTH arms
+(`main/quit.ts`'s `runQuit`, `shared/settings-schema.ts`'s `session.keepOnQuit`).** M38 made
+`before-quit` a choice: `end` (the default) is `killAll()`, `flushSync()`, `shutdown()` —
+exactly M4c's sequence — and `keep` is `detachAll()`, `flushSync()`, and NO `shutdown()`, so
+the clients die, every tmux session stays on the socket, and the next launch's boot
+reconciliation (which already reattaches every session whose panel the layout knows) brings
+the agents back. Two things are load-bearing. **The default is OFF**, decided rather than
+defaulted into: a person who quits an app expects its processes to stop, and an agent left
+burning tokens behind a quit is the surprise the setting's own description names; the author
+who wants the opposite is one palette row away. **The flush stays AFTER the teardown in both
+arms, and the keep arm has its own reason**: the boot orphan-killer ends any session whose
+panel the layout does not know, so a flush that ran before a store write landed would be an
+agent killed at the next launch for not having been written down yet. `detachAll()` schedules
+no writes today; `flushSync` after it keeps that true by construction. The setting is read AT
+quit time, never captured at boot — a captured value would freeze the toggle until the next
+launch, which is the "setting that silently does nothing" shape this repo has paid for before.
+`runQuit` takes its collaborators injected because `app.on('before-quit')` is unreachable from
+any suite; `verify:pty-manager` `keep-on-quit.1`/`.2` run the real sequence against a real
+server on the verify socket, and `.1`'s discriminating clause is the pane pid: a kept session
+reattaches at the SAME pid, where a killed-and-respawned one would not (check 20's rule).
+Two limits stay as they were and are recorded rather than fixed: `firstSpawnedAt` after a
+relaunch falls back to now, so a kept `claude` panel's subagent nodes are unclaimable until
+its next spawn; and a reattached session's detector starts at `starting`, so a kept agent that
+is mid-question shows no `wants-you` until its next bell.

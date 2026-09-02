@@ -17,6 +17,7 @@ import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
+import { runQuit } from './quit'
 import { FileWatchers } from './file-watch'
 import { ToolboxCache } from './toolbox-cache'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -651,37 +652,25 @@ app.on('before-quit', () => {
   // writes a store this process never loaded. Both are total and silent.
   if (!hasInstanceLock) return
 
-  // Teardown FIRST, flush SECOND, and the order is the whole point. killAll ->
-  // kill(id) -> dropBaseline(id) -> layoutStore.dropBaseline -> scheduleWrite,
-  // a 500ms debounce on a process that is quitting: flushing before the
-  // teardown loses every one of those writes silently, so memory says the
-  // baselines are gone while layout.json says they are not, and layout.json
-  // wins at the next launch. There is nothing to race — kill() is synchronous
-  // all the way down to the backend's execFileSync.
-  //
-  // Wrapped so the flush still runs if the teardown throws. An exception in
-  // before-quit can wedge the quit before the window is allowed to close, and
-  // losing the flush would ALSO be the very bug this reordering fixes.
-  // flushSync itself is safe to leave bare: writeNow catches its own errors
-  // and says so in its comment.
+  // The file watchers are the renderer's, not a session's, and go either way.
   try {
-    ptyManager.killAll()
     fileWatchers.closeAll()
   } catch (error) {
-    console.warn('[pty] killAll failed during quit', error)
+    console.warn('[files] closeAll failed during quit', error)
   }
-  layoutStore.flushSync()
-  // Quit is the one teardown where sessions are NOT meant to survive. M4c's
-  // scope is reload survival: agents never outlive the app, so there is no
-  // process left burning tokens behind a closed window.
-  try {
-    backend.shutdown()
-  } catch (error) {
-    // Never throw here. An exception in before-quit can wedge the quit before
-    // the window is allowed to close — the same rule layoutStore.flushSync
-    // follows.
-    console.warn('[tmux] shutdown failed', error)
-  }
+  // M38. Whether quitting ENDS the agents (M4c's sequence, the default) or
+  // KEEPS them on the socket for the next launch to reattach is the
+  // `session.keepOnQuit` setting — read HERE, at quit time, never captured
+  // at boot, or the toggle would silently do nothing until the next launch.
+  // The direct backend has no sessions to keep, so it always ends. The
+  // ordering inside each arm lives in quit.ts with its reasons, where
+  // verify:pty-manager can run it against a real server.
+  runQuit({
+    keep: layoutStore.getSetting('session.keepOnQuit') === true && backend.kind === 'tmux',
+    manager: ptyManager,
+    backend,
+    flush: () => layoutStore.flushSync()
+  })
 })
 
 app.on('window-all-closed', () => {

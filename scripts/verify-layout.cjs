@@ -2785,6 +2785,20 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify(found))
 }
 
+// M38 — keep-on-quit.1. The setting exists in the one schema, is a boolean,
+//      and ships OFF: a person who quits an app expects its processes to stop,
+//      and the author who wants the opposite is one palette row away. The
+//      category is the exported constant so the menu and the palette cannot
+//      drift on a typo.
+{
+  const def = L.settingDef('session.keepOnQuit')
+  ok('keep-on-quit.1 session.keepOnQuit is a boolean setting, off by default, in the Sessions category',
+    def !== undefined && def.type === 'boolean' && def.default === false &&
+      typeof L.SESSION_CATEGORY === 'string' && def.category === L.SESSION_CATEGORY &&
+      L.resolveSetting({}, 'session.keepOnQuit') === false && /tmux/i.test(def.description),
+    JSON.stringify(def))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

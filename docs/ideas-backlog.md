@@ -51,6 +51,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #43 Unicode 11 widths | M36 | "xterm measures widths against Unicode 11, loaded in `createTerminal` before `open()`" |
 | #58 backpressure on a runaway panel | M36 | "The flush is capped by bytes and the cap keeps the TAIL" |
 | #50 git worktree per panel | M37 | "A worktree record OUTLIVES its panel, and attachment is COMPUTED, never stored", "The worktree decides the cwd BEFORE the baseline is captured" |
+| #56 agents that outlive the app | M38 | "Quit survival is opt-in, and the flush sits between teardown and shutdown in BOTH arms" |
 
 Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
@@ -1669,25 +1670,6 @@ is what keeps presets for the things you actually repeat.
 - **Nearest existing entry: #34 (panel templates)** and **#29**, both about *repeating* a
   spawn. This is about a spawn worth zero ceremony.
 
-## 56. Agents that outlive the app — detach on quit, reattach on launch
-
-`before-quit` calls `killAll()` then `shutdown()`, i.e. `kill-server`, with an explicit
-comment that agents never outlive the app. That is a deliberate M4c scope line, not a
-technical limit: the substrate that already survives `Cmd+R` survives `Cmd+Q` for free,
-because `detachAll()` and `new-session -A` are the same two calls in a different order. An
-opt-in "keep agents running when I quit" reverses one call and lets the existing boot
-reconcile do the rest.
-
-- **Constraint: it makes the boot orphan-killer a correctness pair with the coalesced write.**
-  Boot kills any session with no saved panel. With quit-survival on, a layout write that has
-  not landed means an agent is killed for not being written down yet.
-- **Constraint: `RestoreSettings` is the right home, and this is the first setting that
-  breaks its shape.** Every existing setting affects only what the renderer is handed at boot.
-  This one changes what main *does to processes*, so `settings()` stops being
-  renderer-facing-only.
-- **Nearest existing entry: #29 (restart in place),** which is about deliberately ending and
-  recreating one process. This is about not ending any of them, and it is the only entry in
-  this file that changes what quitting means.
 ## 57. `tc` — a CLI and a URL scheme, so the canvas is drivable from outside
 
 One binary and one `terminal-canvas://` handler: `tc open --preset claude --cwd ~/repo` spawns

@@ -20,3 +20,4 @@ copy here is deleted.
 | [00-reconciliation.md](00-reconciliation.md) | The milestone table repaired, the 1.0 scope decided | finished |
 | [m36-hardening.md](m36-hardening.md) | M36 — Hardening for 1.0 | finished |
 | [m37-worktree-per-panel.md](m37-worktree-per-panel.md) | M37 — A git worktree per panel | finished |
+| [m38-agents-outlive-the-app.md](m38-agents-outlive-the-app.md) | M38 — Agents that outlive the app | finished |

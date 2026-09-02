@@ -31,6 +31,9 @@ export const SHELL_CATEGORY = 'Shell'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const FILES_CATEGORY = 'Files'
 
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const SESSION_CATEGORY = 'Sessions'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -192,6 +195,23 @@ export const SETTINGS: readonly SettingDef[] = [
     // anything a user can toggle lives in this one schema.
     default: false,
     category: FILES_CATEGORY
+  },
+  {
+    id: 'session.keepOnQuit',
+    label: 'Keep agents running after quit',
+    // Says what it DOES and what it NEEDS. The direct backend has no sessions
+    // to keep, and a toggle that is silently ignored is worse than one that
+    // names its precondition.
+    description:
+      'Keep every panel’s process running after you quit, and reattach on the next launch. Needs tmux; without it processes end with the app either way.',
+    keywords: ['quit', 'keep', 'running', 'survive', 'outlive', 'detach', 'reattach', 'tmux', 'background', 'agents', 'exit'],
+    type: 'boolean',
+    // OFF by default, and decided rather than defaulted into (M38's spec): a
+    // person who quits an app expects its processes to stop, and an agent
+    // left burning tokens behind a quit is the surprise this description
+    // has to name. The author who wants the opposite is one palette row away.
+    default: false,
+    category: SESSION_CATEGORY
   }
 ]
 
