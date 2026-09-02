@@ -16,6 +16,8 @@ export interface EnvReport {
   layout: { path: string; backupWritten: boolean }
   /** Sorted key names of the resolved login environment. Names, never values. */
   envKeys: string[]
+  /** M54. The control socket and the `tc` launcher; null when this instance owns no door. */
+  control: { socket: string; cliPath: string } | null
 }
 
 /** For harnesses that register the handler without a real probe behind it. */
@@ -26,5 +28,6 @@ export const INERT_ENV_REPORT: EnvReport = {
   clis: REPORTED_CLIS.map((name) => ({ name, path: null })),
   tmux: { kind: 'direct', reason: 'not probed', path: null },
   layout: { path: '', backupWritten: false },
-  envKeys: []
+  envKeys: [],
+  control: null
 }

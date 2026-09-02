@@ -24,6 +24,7 @@ export interface EnvReportFacts {
   layoutPath: string
   backupWritten: boolean
   now: number
+  control: { socket: string; cliPath: string } | null
 }
 
 export function buildEnvReport(f: EnvReportFacts): EnvReport {
@@ -37,6 +38,7 @@ export function buildEnvReport(f: EnvReportFacts): EnvReport {
     clis: REPORTED_CLIS.map((name) => ({ name, path: f.which(name) })),
     tmux: { kind: f.backend.kind, reason: f.backend.reason, path: f.backend.tmuxPath },
     layout: { path: f.layoutPath, backupWritten: f.backupWritten },
-    envKeys: Object.keys(f.env).sort()
+    envKeys: Object.keys(f.env).sort(),
+    control: f.control
   }
 }

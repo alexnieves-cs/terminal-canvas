@@ -10,7 +10,9 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/main/index.ts') }
+        // M54. The tc CLI is a second main-process entry: out/main/tc.js,
+        // run by the launcher as node. It must never import electron.
+        input: { index: resolve(__dirname, 'src/main/index.ts'), tc: resolve(__dirname, 'src/cli/tc-main.ts') }
       }
     },
     resolve: {

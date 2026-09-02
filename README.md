@@ -57,6 +57,14 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **Drivable from outside.** `tc open --preset claude --cwd ~/repo` spawns a
+  panel on the running canvas from a shell, a script, a git hook — or from an
+  agent inside a panel, where `tc` is already on PATH with nothing installed.
+  `tc list`, `tc focus <id>`, `tc ping`; `terminal-canvas://open?preset=…` is
+  the same verb from a link. A local socket main owns, mode 0600, no network;
+  a preset and a directory are all either door accepts, never a command.
+  `Environment…` in `⌘K` shows the launcher's path and the one line that puts
+  it on your PATH outside the app.
 - **Command boundaries the app can see.** A login shell is decorated at spawn
   with OSC 133 marks (zsh through a `ZDOTDIR` shim that sources your own
   files first, bash through `--rcfile`), so every command gets a gutter mark

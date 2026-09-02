@@ -336,6 +336,13 @@ export interface RunsDeps {
   ledger: RunLedger | null
   integrationDir: string | null
   now: () => number
+  /**
+   * M54. The control socket and the launcher dir, put into EVERY spawn's
+   * environment (not only a login shell's): an agent CLI's own subprocess
+   * shell must find `tc` too. Absent or null means no door — a harness that
+   * never asks, or the losing instance of the single-instance lock.
+   */
+  control?: { socket: string; binDir: string } | null
 }
 
 export class PtyManager {
@@ -627,6 +634,15 @@ export class PtyManager {
 
     const loginEnv = await resolveShellEnv()
     const env = buildPtyEnv(loginEnv, spec.env)
+    // M54. Before the shell integration reads `env`, so both the login shell
+    // and its decorated copy carry the door. PATH is PREPENDED so `tc`
+    // resolves with nothing installed, and a user's own `tc` (unlikely, but
+    // a name that short is not ours alone) is shadowed only inside a panel.
+    const control = this.runs.control ?? null
+    if (control !== null) {
+      env['TC_CONTROL_SOCKET'] = control.socket
+      env['PATH'] = env['PATH'] === undefined || env['PATH'] === '' ? control.binDir : `${control.binDir}:${env['PATH']}`
+    }
 
     // M37. The worktree decides the cwd BEFORE the baseline is captured
     // below, so the snapshot is taken in the worktree — which is the whole

@@ -77,6 +77,8 @@ const {
   createBaselineCapture,
   createReviewCommitter,
   createReviewDiscarder,
+  createControlServer,
+  createControlHandler,
   FileWatchers,
   ToolboxCache,
   readFrom,
@@ -14727,6 +14729,63 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // control.1 (M54). THE DOOR, end to end: a real Unix socket in a scratch
+    //   dir, the same handler index.ts wires (over this harness's store,
+    //   templateOf and a PRESET_SPAWN send), a client speaking one JSON line
+    //   — and the canvas gains a panel. Then a bad preset adds nothing and
+    //   says why, `list` answers, and `focus` reaches the renderer. Counted
+    //   off the DOM, never off the reply: a reply of ok with no panel is the
+    //   silent failure a main-only check could not see. Watched red by
+    //   FAULT_NO_SPAWN (the handler answered ok, the canvas did not grow).
+    {
+      const sockDir = mkdtempSync(join(tmpdir(), 'tc panels control '))
+      const sockPath = join(sockDir, 'control.sock')
+      const FAULT_NO_SPAWN = false
+      const handler = createControlHandler({
+        presets: () => layoutStore.presets(),
+        defaultId: () => layoutStore.defaultPresetId(),
+        spawn: (preset, cwd) => {
+          if (FAULT_NO_SPAWN) return
+          const template = templateOf(preset)
+          if (cwd !== undefined) template.cwd = cwd
+          wc.send(IPC_EVENTS.PRESET_SPAWN, template)
+        },
+        list: () => ptyManager.list().map((r) => ({ panelId: r.panelId, pid: r.pid, cwd: r.cwd, command: r.command })),
+        focus: (id) => { wc.send(IPC_EVENTS.ATTENTION_JUMP, id); return true }
+      })
+      const server = await createControlServer({ path: sockPath, handle: handler })
+      const ask = (line) => new Promise((resolve) => {
+        const sock = require('node:net').createConnection(sockPath)
+        let buf = ''
+        sock.setEncoding('utf8')
+        sock.on('data', (d) => { buf += d })
+        sock.on('end', () => resolve(buf.trim()))
+        sock.on('error', (e) => resolve(`ERR ${e.code}`))
+        sock.write(`${line}\n`)
+      })
+      const presets = layoutStore.presets()
+      const presetName = presets[0] ? presets[0].name : null
+      const before = await panelCount(wc)
+      const opened = presetName ? await ask(JSON.stringify({ verb: 'open', preset: presetName, cwd: tmpdir() })) : ''
+      const grew = await waitUntil(async () => (await panelCount(wc)) === before + 1, 6000)
+      const after = await panelCount(wc)
+      const bad = await ask(JSON.stringify({ verb: 'open', preset: 'no-such-preset-zz' }))
+      await settle()
+      const stillAfter = await panelCount(wc)
+      const listed = await ask('{"verb":"list"}')
+      const target = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)[0] || null`)
+      const focused = target ? await ask(JSON.stringify({ verb: 'focus', id: target })) : ''
+      await settle()
+      await server.close()
+      const parse = (t) => { try { return JSON.parse(t || '{}') } catch { return {} } }
+      ok('control.1 an open over the real socket adds a panel to the canvas, a bad preset adds nothing and says why, list answers, and focus reaches the renderer',
+        presetName !== null && parse(opened).ok === true && grew === true && after === before + 1 &&
+          parse(bad).ok === false && /no-such-preset-zz/.test(parse(bad).error || '') && stillAfter === after &&
+          parse(listed).ok === true && Array.isArray(parse(listed).sessions) && parse(focused).ok === true,
+        JSON.stringify({ presetName, opened, before, after, grew, bad, stillAfter, listed: (listed || '').slice(0, 120), target, focused }))
+      rmSync(sockDir, { recursive: true, force: true })
+    }
+
     // M52 — OSC 133 and the run ledger, end to end. A LOGIN-SHELL panel
     // (command absent) is decorated by main; true and false produce a gutter
     // mark each with the shell's exit status; the Work tab lists the runs;
