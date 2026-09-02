@@ -1412,7 +1412,7 @@ ok('74 a panel with no kind is not a review panel',
     `note=${JSON.stringify(note.source)} plain=${JSON.stringify(plain.source)}`)
 }
 // ---------------------------------------------------------------------------
-// M24. Drawing links. The pure half: which side each anchor sits on, and the
+// M35. Drawing links. The pure half: which side each anchor sits on, and the
 // bezier built from that. See docs/superpowers/specs/2026-08-30-m24-link-drawing-design.md
 // ---------------------------------------------------------------------------
 

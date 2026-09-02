@@ -1253,7 +1253,7 @@ body {
    segment is outside both rects.
 
    pointer-events: none on the LAYER, not a hit test anyone has to remember —
-   but M24 Task 6 narrows that surgically rather than removing it: exactly two
+   but M35 Task 6 narrows that surgically rather than removing it: exactly two
    descendants opt back in, `.link-layer__hit` (below) with
    `pointer-events: stroke` and `.link-layer__badge` with `pointer-events:
    all`. Nothing else in this layer is hit-testable. The invariant this
@@ -1261,7 +1261,7 @@ body {
    this layer can be hit": the hit stroke's own handlers must never call
    stopPropagation, so a mousedown on it still bubbles to Canvas's background
    handler and clears focusedId exactly as a click on bare canvas does. See
-   verify:panels 127 (rewritten in M24) and 178. */
+   verify:panels 127 (rewritten in M35) and 178. */
 .link-layer {
   position: absolute;
   top: 0;
@@ -1379,7 +1379,7 @@ body {
   font-weight: 600;
 }
 
-/* M24. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
+/* M35. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
    path fills the region its curve encloses by default, so without it every
    link paints as a solid crescent over the canvas. It was harmless on the
    <line> this replaced, which has no interior to fill. */
@@ -1394,7 +1394,7 @@ body {
   fill: var(--line-strong);
 }
 
-/* M24 Task 6. The hover target. Transparent and wide, and it opts back INTO
+/* M35 Task 6. The hover target. Transparent and wide, and it opts back INTO
    pointer events where .link-layer opts out — `stroke` rather than `all`, so
    only the stroked band is hittable and the path's notional interior is not.
 
@@ -1436,7 +1436,7 @@ body {
   fill: none;
 }
 
-/* M24 Task 5 fix round 1. The ghost's OWN arrowhead: an SVG marker does not
+/* M35 Task 5 fix round 1. The ghost's OWN arrowhead: an SVG marker does not
    inherit the referencing path's stroke, so pointing the ghost at
    `link-arrow`'s head painted a solid `--line-strong` tip on a dashed iris
    curve — a committed-link colour on a path whose whole job is to say "not
@@ -1457,7 +1457,7 @@ body {
   stroke-width: 4px;
 }
 
-/* M24 Task 5. The in-flight preview. Dashed so it reads as provisional rather
+/* M35 Task 5. The in-flight preview. Dashed so it reads as provisional rather
    than as a link that already exists — the whole point of the preview is
    that it says what WOULD happen, and a solid ghost is indistinguishable
    from a committed link that failed to attach. */
@@ -1561,7 +1561,7 @@ body {
   box-shadow: 0 0 0 1px var(--blue), var(--e-3);
 }
 
-/* M24 Task 5. The panel a release right now would link to. A ring rather
+/* M35 Task 5. The panel a release right now would link to. A ring rather
    than a fill: a fill would hide the agent output this app exists to show,
    on the one panel the user is currently looking at.
 
@@ -3253,7 +3253,7 @@ body {
 .inspector__toolbox-scope { flex: none; color: var(--fg-4); }
 .inspector__toolbox-state { flex: none; color: var(--amber); }
 
-/* M24. The four link handles. Children of .panel, so they ride .world's
+/* M35. The four link handles. Children of .panel, so they ride .world's
    transform with the rest of the panel — the same placement .panel__resize
    already has, and for the same reason: a handle sized in screen pixels would
    drift away from its own border on every zoom.
@@ -3292,7 +3292,7 @@ body {
   border-color: var(--fg);
 }
 
-/* M24 (Fix round 1). PORT_MIN_SCALE's own comment (PanelPorts.tsx) states why
+/* M35 (Fix round 1). PORT_MIN_SCALE's own comment (PanelPorts.tsx) states why
    this is a CANVAS-HOST CLASS rather than a `scale` prop threaded through
    TerminalPanel: `viewport.scale` changes on every zoom frame, and a prop
    would defeat that component's memo on every one of them. `display: none`

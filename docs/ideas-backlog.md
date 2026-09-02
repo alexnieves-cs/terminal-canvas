@@ -43,6 +43,11 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #1 Cmd-held navigation grid | M11 | "The nav grid is the first held-modifier state in this app" |
 | #3 file tree / codebase browser | M20 | "Every file row mounts `shellControl`, and here that is not a convention" |
 | #52 multi-select | M26 | "A group drag is N origin-based drags and one history gesture", "Selection stays inside the active workspace" |
+| #18 what the canvas costs the machine | M29 | "`machine:sample` is polled by the RENDERER against pids the renderer already holds" |
+| #35 groups | M30 | "A group owns panel IDS, never panel records, and a collapse is a presentation request" |
+| #21 broadcast input | M31 | `session-registry.ts`'s broadcast verb and the palette's broadcast rows; `verify:registry` and `verify:palette` carry its checks |
+| #75 a diagnostics overlay and a scrubbed bundle | M32 | "The diagnostics bundle is scrubbed by its TYPE, not by a runtime filter" |
+| #68 space-drag and middle-drag pan | M34 | "The pan-drag design" entries — one narrow verb, `beginPanDrag`, beside the wheel listener |
 
 Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
@@ -99,10 +104,10 @@ changes have reached GitHub or are still local.
   they already carry the resolved-by-absolute-path rule, the per-call timeout, and the
   `not-a-repo` / `repo-unreadable` split this feature would otherwise rediscover.
 
-## 8. Chat-box mode and model choice — M20 shipped part (1); parts (2) and (3) are what is left
+## 8. Chat-box mode and model choice — M23 shipped part (1); parts (2) and (3) are what is left
 
 This entry called itself **"three features wearing one coat"** and recommended doing (1)
-alone first. M20 did exactly that, so what follows is the entry rewritten down to the two
+alone first. M23 did exactly that, so what follows is the entry rewritten down to the two
 parts that are still open — the file's own rule for a milestone that ships most of an entry
 and stops somewhere deliberate.
 
@@ -114,7 +119,7 @@ compound **"Restart in \<mode\>"** palette gesture. `CLAUDE.md` records the mech
 one worth knowing before extending this is that the compound gesture is what makes the
 display honest, because tmux `new-session -A` ignores the argv on a reattach.
 
-**Still open — (2) model choice ACROSS VENDORS.** M20 ships `--model`, but only as a flag on
+**Still open — (2) model choice ACROSS VENDORS.** M23 ships `--model`, but only as a flag on
 `claude`. The cross-vendor version is still a presets problem: a preset is a command, its
 args, its env and a label, and a second vendor needs a second `AgentKind` before its flags
 can be validated or emitted at all. That is the concrete trigger recorded in
@@ -584,50 +589,6 @@ surface that works when this app is not the thing you are looking at.
   added no IPC channel" for why the obvious snapshot channel was declined twice — and note
   that a badge is the first customer that might genuinely change the answer.
 
-## 18. What the canvas costs the machine — landed
-
-A per-panel readout of CPU and memory, and a canvas-wide total. Twelve agents is twelve
-process trees, each of which may be running a compiler.
-
-- **Why it fits:** `LIVE_BUDGET` is the only resource ceiling in the app, and it rations
-  exactly one resource — WebGL contexts — because that is the one with a hard cliff near
-  16 and a permanent failure mode (`create-terminal.ts` sets `webglDisabled` after a
-  dropped context). Nothing rations, or even reports, the resource the user actually runs
-  out of first. A canvas that invites twenty agents should be able to say what twenty
-  agents cost.
-- **The handle already exists.** `PanelStatus` carries `{ kind: 'running'; pid: number }`,
-  so the renderer already knows every panel's process id. The work is main-side sampling
-  of that pid *and its children* — an agent CLI's cost is mostly its subprocesses, not
-  itself — on a slow timer, over a new IPC channel. Anything sampled per-frame here is
-  a bug, not a feature.
-- **Constraint:** a new channel means a new entry in `shared/ipc-contract.ts` and a
-  handler in main, or `verify:ipc` fails. That is the intended pressure; do not route it
-  through an existing channel to avoid the check.
-- **Constraint:** the readout must not bump `registry.version()` — same rule as #5 and
-  #17. A number that changes every two seconds must not be a reason to re-render every
-  panel.
-- **Constraint:** it must render on the **card**, not just the live panel, for the same
-  reason #5's glow must: the tier you are looking at when you have many panels is the
-  card tier.
-- **Open question, and it is a product question:** does this stay a readout, or does it
-  become a *governor*? "Do not promote a panel while the machine is already saturated"
-  is a coherent rule and a genuinely different feature — it would make `assignTiers`
-  depend on a runtime measurement, which today it deliberately does not (it is pure, and
-  `verify:viewport` runs it under plain node). Keeping the measurement out of the tiering
-  function and applying any governor at the `Canvas.tsx` apply step — where the budget
-  re-check already lives — is the shape that preserves that.
-- **Related:** #11 lists `LIVE_BUDGET`, `DEMOTE_DELAY_MS` and `CULL_MARGIN_PX` as
-  tuning constants a settings pane might expose, and warns that a performance knob invites
-  a user to break the app. A cost readout is the honest companion to any such knob: it is
-  what makes a number the user is turning mean something.
-
-Landed as `machine:sample`: the renderer requests one `ps` snapshot every two seconds for
-the running terminal PIDs in its active canvas. Main walks every descendant process, returns
-per-panel CPU/RSS and a de-duplicated canvas total, and the renderer keeps it in a separate
-per-panel store so the changing readout never bumps `registry.version()`. The card tier shows
-each process tree's CPU/RAM; the HUD shows the canvas total. This stays a readout — it does
-not change tier assignment or promotion.
-
 ## 19. Token and dollar accounting — landed in M17; the open half is history, a second adapter, the un-pinned panel and aggregate totals
 
 M17 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
@@ -699,42 +660,6 @@ the same world, or a different workspace (#2) entirely.
   certainly right, which means the viewport is per-window state and must *not* go in the
   shared saved layout as a single value — a detail M4b's format should be checked against
   now, while it is cheap.
-
-## 21. Broadcast input to a selection
-
-Select several panels and type once — the keystrokes go to all of them. `git pull` in six
-repos; the same prompt to four agents to compare how they answer it.
-
-- **Why it fits:** it is tmux's `synchronize-panes`, and it is one of the few features
-  where the spatial layout is *the selection UI*. "These four, the ones in this cluster"
-  is a gesture on a canvas and a config file anywhere else. Sending one prompt to four
-  different models side by side is also the cheapest possible version of #8's
-  multi-model ambition — no API, no key, no new panel kind, just four CLIs and one
-  keystroke.
-- **Almost all the machinery exists, and since M18 the selection does too.** `pty:write`
-  already takes a panel id, so broadcast is a loop, not a channel. Multi-selection was the
-  missing half and this entry used to say so outright; `Canvas.tsx` now tracks
-  `selectedIds: Set<string>`, built by a rubber-band marquee, and the move-to-workspace
-  rows are the first consumer. M26 completed #52's shift-click and group-drag half, so a
-  selection can now be built incrementally as well as swept; broadcast still needs only its
-  safety mode and routing contract.
-- **Constraint, and it is the dangerous one:** input routing today is *unambiguous* —
-  keystrokes go to the focused session, and exactly one panel is focused. Broadcast makes
-  the destination of a keystroke a mode, and a mode you can forget you are in. Typing
-  `rm -rf build` into six shells you did not mean to select is a real, unrecoverable
-  outcome. This wants a loud, permanent indicator while it is active, an obvious exit, and
-  probably a confirmation the first time — not a quiet toggle in a menu.
-- **Constraint:** `Cmd`-gated to enter and leave, like every other canvas shortcut, since
-  bare keys belong to the TUI.
-- **Constraint:** broadcast must never wake a **dormant** panel. A dormant panel has no
-  PTY; "send this to all six" where two of them are dormant either spawns two agents the
-  user did not ask for — the exact decision dormancy exists to avoid making on their
-  behalf — or silently drops the input. Skip-and-say is the honest answer.
-- **Open question:** does broadcast go to the PTY (raw bytes, so a TUI sees keystrokes) or
-  is it a higher-level "submit this prompt" action? For shells the first is right; for
-  agent CLIs the second is what the user means, and the two differ by whether a trailing
-  newline is sent. Probably per-panel, decided by whatever #8's per-model configuration
-  knows about the CLI.
 
 ## 22. Semantic zoom — a card that changes with distance
 
@@ -809,15 +734,15 @@ The universal "maximise this" gesture.
 **The decorative half is now complete, in two milestones.** M13 built the
 MODEL: a directed, optionally labelled line from one panel to another, which
 persists, survives a reload, and leaves in the same undoable step as either
-endpoint. M24 built the ERGONOMICS, which is what made the model findable —
+endpoint. M35 built the ERGONOMICS, which is what made the model findable —
 four port handles revealed on hover, a drag with a live ghost curve and a ring
 on the prospective target, snapping to a panel within a screen-space radius,
 edges rendered as bezier curves that leave each border perpendicular, and an
 `×` badge on hover that removes one. M13 shipped links that worked and that
-almost nobody would find (arm a mode from the palette, then click); M24 is the
+almost nobody would find (arm a mode from the palette, then click); M35 is the
 milestone that made linking a thing you do by pointing at the two panels. See
 `CLAUDE.md`'s "The code says `link`, and `edge` already means something else"
-and the entries after it — including M24's own, beginning at "The link layer's
+and the entries after it — including M35's own, beginning at "The link layer's
 guarantee moved from STRUCTURAL to CONVENTIONAL" — and both specs:
 [`m13-panel-links-design.md`](superpowers/specs/2026-08-30-m13-panel-links-design.md)
 and
@@ -846,7 +771,7 @@ PTY writer.
 - **What M13 leaves ready.** The primitive is built generally rather than as a
   private detail of #7's subagent visualisation, which is what #24 asked for:
   same renderer, same z-order answer, same persistence. #7's parent-to-subagent
-  edges can render on `LinkLayer` without inventing a second scheme. **M24 adds
+  edges can render on `LinkLayer` without inventing a second scheme. **M35 adds
   to that inventory**: `linkPath`/`linkControls` (a bezier from two anchors,
   pure and plain-node checkable), `nearestLinkTarget` (a drop resolver that
   prefers containment and excludes its own source), and `PanelPorts` (one
@@ -864,12 +789,12 @@ PTY writer.
 - **Constraint the functional half inherits:** a functional edge would have to
   survive the same rule the decorative one does — the completing gesture must
   never wake a dormant panel — `verify:panels` 126 for M13's armed click, and
-  175 for M24's port drag, which holds it by CONSTRUCTION (waking hangs off
+  175 for M35's port drag, which holds it by CONSTRUCTION (waking hangs off
   `onSelectPanel`, which fires from mousedown, and the port consumed ours) and
   is checked anyway, because "holds by construction" is exactly the claim a
   later refactor breaks silently. A rule that *fires* on a dormant panel is a
   harder version of the same question, and neither milestone answers it.
-- **Constraint the functional half inherits, added by M24:** the layer's
+- **Constraint the functional half inherits, added by M35:** the layer's
   pointer guarantee is no longer structural. It was one CSS declaration
   (`pointer-events: none` on `.link-layer` and everything in it) and is now a
   convention — two descendants opt back in, and hold the invariant only because
@@ -877,19 +802,19 @@ PTY writer.
   inherits the same obligation and the same silent failure; `CLAUDE.md`'s entry
   and `verify:panels` 127 are the authority.
 - **Deliberately still absent, and each is a decision rather than an
-  oversight:** link SELECTION on the canvas — M24 gave a link a hover hit
+  oversight:** link SELECTION on the canvas — M35 gave a link a hover hit
   target and a remove badge, so removing one is no longer a trip to the
   inspector, but there is still no selected-edge state, no `Delete` key owner
   and no relabel-by-keyboard, because a hairline at `MIN_SCALE` (0.1) is a
   sub-pixel target and edge selection would have to coexist with panel
-  selection and the marquee; ROUTING, in the sense of avoidance — M24 replaced
+  selection and the marquee; ROUTING, in the sense of avoidance — M35 replaced
   the straight segment with a bezier that leaves each border perpendicular, and
   a curve still passes under intervening panels because nothing routes around
   them; PERSISTED PORT SIDES, so an edge does not remember it left A's right
   side and re-derives its anchors from the live centre-to-centre bearing every
   frame (`linkAnchors` reserves an unused third parameter for the milestone
   that changes that, and taking it grows `PanelLink`, both parsers and
-  `layout-adapt`'s round trip — which is exactly the scope M24 saved by
+  `layout-adapt`'s round trip — which is exactly the scope M35 saved by
   declining it); culling and any bound on link count; and cross-workspace
   links, which are representable — `PanelId` is global — and render as nothing.
 
@@ -1336,42 +1261,6 @@ two that were never about naming a spawn:
 - **Open question, unchanged: does capturing a running panel capture its environment?** M8c
   proved the spec half is free, because it is already on the session. The env is not free,
   because capturing a running panel's env captures its secrets — #31.
-
-## 35. Groups — a labelled region that owns what is inside it — **done, M25**
-
-M25 makes a marquee selection into a named, coloured region from the command palette. The
-region persists as group membership plus presentation state, rather than nesting panels or
-inventing a second process owner: its box is derived from the member rects, so a resize or
-ordinary panel drag keeps the label honest. Its header moves the region and
-its members together; the `card` control is the deliberate collapsed state, and `×` removes
-only the grouping.
-
-- **Why it fits:** this is the middle scale the app is missing. A panel is one process; a
-  workspace (#2) is a whole canvas. "These four panels are the auth refactor" is neither,
-  and it is the unit people actually think in. It is also the cheapest way to make a
-  twelve-panel canvas legible, because the labelling is spatial rather than a list.
-- **Dragging is `applyDrag` N times, from N immutable origin rects.** `groups.ts` carries one
-  `DragState` per member and applies the current cursor point to each, rather than accumulating
-  a delta from the previous frame. The group therefore cannot shear at low zoom or when the
-  camera zooms during the drag; `verify:groups` check 2 pins the shared origin delta.
-- **It never touches panel array order.** Bringing a group forward rewrites the members'
-  `Panel.z` values and preserves their array positions, so React never detaches a live terminal
-  host. `verify:groups` check 3 asserts both halves.
-- **Collapsing is a tier hint, never a kill.** `assignTiers` now accepts forced card ids; group
-  membership supplies them and no path reaches `dispose`. It even outranks focus, so collapse
-  means card consistently while the PTY and `PanelSession` remain alive. `verify:groups` check
-  4 pins that specific non-kill boundary.
-- **Persistence repairs, rather than discards, a partly stale group.** A closed or moved-away
-  member is pruned; a group with no surviving members disappears. The parser rejects malformed
-  labels/colours and validates membership against the surviving panel set, while pre-M25 files
-  simply read as `groups: []`.
-- **Merged view deliberately omits group regions for now.** Lanes translate panel rects into a
-  synthetic coordinate system, so rendering the active workspace's un-translated groups there
-  would lie. The mode remains read-only and group creation is disabled until a merged group
-  placement design exists.
-- **Open question: is a group a workspace you can see?** If groups exist, #2's "move
-  selection to a new workspace" becomes "promote this group", and the two features start
-  looking like one feature at two zoom levels. Worth deciding rather than discovering.
 
 ## 36. Panel typography — font size, and why it is a resize wearing a hat
 
@@ -2070,36 +1959,6 @@ explicitly cannot take back is reset.
   switches between. This is the same canvas at earlier times, nobody names it, and it exists
   because the machinery is already written.
 
-## 68. Space-drag and middle-drag — landed
-
-There is no way to pan with a mouse button at all. A user with no trackpad can only pan by
-wheel: no middle-drag, no space-hold-drag, no right-drag marquee. Add the vocabulary every
-canvas app has.
-
-**Landed.** Middle-drag pans anywhere, claimed in the CAPTURE phase (composed with
-`onLinkModeMouseDownCapture` on `.canvas`) because no panel chrome handler in this codebase
-checks `event.button`, so an unguarded middle-press over a panel's chrome would otherwise start
-a panel drag instead of a camera pan. Space-drag is gated on `document.activeElement` being
-genuinely nothing (`useSpaceHeld.ts`) — the DOM's own answer to "nothing focused," which
-subsumes the four app-state checks (`focusedId`, the palette, a review/file draft) a hand-built
-equivalent would need to get right separately — and is armed only in the marquee's own
-background-press branch of `onMouseDown`, so the two are two interpretations of one press,
-never both. Both gestures share one narrow verb, `useViewport.ts`'s `beginPanDrag`, next to the
-wheel listener's own pan logic rather than a second, competing gesture layer — see CLAUDE.md's
-entries on the pan-drag design for the reasoning in full. `verify:panels` 174-177.
-
-- **Constraint: "Cmd is required for every canvas shortcut", and space is a bare key.** Bare
-  keys belong to the agent TUI. So space-drag is legal only while the pointer is over the
-  background with nothing focused, or it must be dropped for a Cmd-family chord — and that
-  constraint is the whole design problem here, worth writing down before someone copies
-  Figma's keymap wholesale. **Middle-drag has no such conflict and is the free half.**
-- **Constraint: a drag-pan must be arbitrated by the same focus question, in the same place,**
-  as the capture-phase wheel listener — not by a second competing listener, which is how the
-  double-handling defect that listener fixed got introduced the first time.
-- **Nearest existing entry: #32 (keyboard-first canvas),** which is about keyboard traversal and
-  a11y. This is about the pointer, and specifically about the mouse-only user the current design
-  has no answer for.
-
 ## 69. A gesture-history HUD line
 
 `CanvasHud` renders four facts and is described as "the fastest way to see the math misbehave".
@@ -2226,28 +2085,6 @@ prompt destroys every running agent, the exact outcome M4c exists to prevent.
 - **Nearest existing entry: none of the forty** — distribution is absent from the original
   backlog. #28 is nearest and covers identity, not delivery.
 
-## 75. A diagnostics overlay, and a scrubbed bundle to hand a maintainer
-
-The HUD shows zoom and cursor. Almost every hard-won invariant in this codebase fails
-*silently*, and none of them are visible: held demotions, the live count against
-`LIVE_BUDGET`, each session's `{dormant, spawned, pid, tier}`, the backend kind and its
-fallback reason, the IPC message rate. A `Cmd`-gated overlay reading the registry, plus an
-"export diagnostics" writing a scrubbed bundle the user can inspect before sending, is the
-cheapest available reduction in the cost of every future silent bug — and it needs no server,
-so it collects nothing.
-
-- **The overlay half answers "which invariant just broke",** which no entry above does. This
-  file and `CLAUDE.md` together document roughly thirty failures whose defining property is
-  that nothing appears in any log; the overlay is the one surface where several of them would
-  be visible at a glance.
-- **Constraint: it must not bump `registry.version()`** — a diagnostics readout that re-renders
-  the canvas at 60Hz on a chatty agent is the exact cost the memo design exists to avoid.
-  Sixth entry to record it.
-- **Constraint: the export half is squarely under #31's standing rule,** since `layout.json`
-  holds preset commands and a main log may hold agent output.
-- **Nearest existing entry: #18** and **#39.** #18 measures what the *machine* spends and is
-  aimed at the user; #39 exports work product. This exports *app state*, for debugging.
-
 ## 76. An app icon
 
 M5c ships with Electron's default icon. That is a deliberate deferral, not an oversight:
@@ -2261,9 +2098,9 @@ package" is how a placeholder becomes permanent.
 - **Nearest existing entry: none.** Distribution is absent from the original backlog; #74
   is the only other M5c-adjacent entry and it covers updates, not appearance.
 
-## 77. M24 link drawing — four items Task 8 was assigned and dropped
+## 77. M35 link drawing — four items Task 8 was assigned and dropped
 
-M24's plan assigned a Task 8 to sweep up loose ends the earlier tasks left
+M35's plan assigned a Task 8 to sweep up loose ends the earlier tasks left
 behind; it did not land, and the final whole-branch review found the four
 items it would have covered. None blocks the milestone. Recorded here rather
 than left to be rediscovered.
@@ -2272,7 +2109,7 @@ than left to be rediscovered.
   `<text>` label both sat at the identical closed-form cubic midpoint in
   `LinkLayer.tsx`, and the label painted after the badge — SVG paint order —
   so hovering a labelled link showed a `×` with the label text on top of it.
-  **Fixed** by the M24 final review's own fix round: the label is now offset
+  **Fixed** by the M35 final review's own fix round: the label is now offset
   16 world units above the midpoint, leaving the badge exactly where its
   click target belongs. **Unverified by any check** — this is a visual
   property the harness cannot judge (the same limit this repo already states
@@ -2305,18 +2142,18 @@ than left to be rediscovered.
   reasonable and wrong, and a future reader tracing the same two handlers
   should not re-open this as a bug.
 - **`onContextPasted`'s inline arrow already defeats `TerminalPanel`'s memo,
-  on every Canvas render, pre-existing and out of M24's scope.** `Canvas.tsx`
+  on every Canvas render, pre-existing and out of M35's scope.** `Canvas.tsx`
   passes an inline arrow function as `onContextPasted` to every terminal
   panel, which is a new prop identity on every render regardless of what
   changed — the exact prop-identity cascade `TerminalPanel`'s `memo` and
   `version()` exist to block, described at length in `CLAUDE.md`'s "`version`
   exists only so `memo` can see a mutation" and neighbouring entries. That
-  means the careful `onBeginLink`/`linkTarget` memo discipline M24 observes
+  means the careful `onBeginLink`/`linkTarget` memo discipline M35 observes
   for its own two new props does not yet buy what its own comments claim,
   because a different, older prop on the same component is already breaking
-  the memo it is trying to protect. Pre-existing, not introduced by M24, and
+  the memo it is trying to protect. Pre-existing, not introduced by M35, and
   out of scope for this milestone to fix — recorded here so the next reader
-  of M24's memo comments does not credit them with a guarantee the component
+  of M35's memo comments does not credit them with a guarantee the component
   does not currently have.
 
 ## A note on sequencing for 41–75
@@ -2400,9 +2237,9 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    workspaces, self-contained once #2 (M7) gave it destinations. The other two candidates
    the original entry left open - viewport quadrants and saved bookmarks - were rejected
    in the design spec; see #42 for the bookmark half.
-17. **#21 broadcast input** - the loop is trivial, and M18's marquee has since supplied
-   the multi-selection this line called the work; what is left is entirely the safety
-   story around a mode you can forget you are in.
+17. ~~**#21 broadcast input**~~ — **done, M31.** M18's marquee and M26's shift-click
+   supplied the selection; the loop over `pty:write` is what shipped, with the safety
+   story (a loud armed state, an obvious exit) as the milestone's whole design cost.
 18. **#15 annotations — sticky notes and world-anchored ink first.** Unusually high
    feel-per-effort: SVG in the `.world` layer inherits pan/zoom for free, and no process,
    API, or token is involved. Ink and panel-anchored annotations follow once the mode
@@ -2412,17 +2249,17 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    rather than inherited from an annotation layer that still does not exist. The functional
    flavour is what #24 has been rewritten down to, and it remains much later and much more
    dangerous.
-20. **#35 groups** — world-space rects plus membership, and the second-cleanest candidate
-   for the panel-kind union after #14. Its two real constraints (recompute drags from the
-   origin rects; never touch array order) are both already written down.
+20. ~~**#35 groups**~~ — **done, M30**, and NOT as a panel kind: a group owns panel ids
+   and derives its rect from its members, so tiering, the registry, the rail, undo and
+   persistence each needed zero code of their own. Both recorded constraints held.
 21. ~~**#11 settings surface**~~ — **done, M6b**, at exactly the point this item names,
    and the prediction held: every toggle since has been a `SettingDef` and nothing else.
 22. **#31 secrets — the standing rule** — costs nothing to state and must be stated before
    #30, #16, #39, or #28 move a single byte of terminal output off the panel. Write it
    down here; implement it inside whichever of those ships first.
-23. **#18 machine cost readout** — the pid is already in `PanelStatus`; the work is
-   main-side sampling on a slow timer. Worth having before #11 exposes any WebGL-budget
-   knob, since it is what makes such a knob mean something.
+23. ~~**#18 machine cost readout**~~ — **done, M29**: one `ps` snapshot per two-second
+   tick, requested by the renderer for the pids it already holds, aggregated recursively
+   over each process tree and totalled as a union so nothing is counted twice.
 24. **#10 light/dark** — chrome is easy; the real work is xterm's `theme` option fanned
    across the registry plus a readable light ANSI palette.
 25. **#36 panel typography** — commit-on-release like a resize, because a font change is a

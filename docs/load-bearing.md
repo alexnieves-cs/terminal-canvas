@@ -1107,7 +1107,7 @@ viewport-pinned pip must NOT zoom away). Zero-sized because `.world` is a positi
 no width/height and world coordinates are freely negative — a percentage size would clip every
 link out of existence with correct-looking geometry still in the DOM. `pointer-events: none` on
 the layer is what stops a link swallowing a click meant for a panel or the background (which
-clears `focusedId`). **As of M24 the clause "and everything in it" is no longer true** — two
+clears `focusedId`). **As of M35 the clause "and everything in it" is no longer true** — two
 descendants opt back in, and the entry below ("The link layer's guarantee moved from STRUCTURAL
 to CONVENTIONAL") is the authority on what replaced it. That the layer actually PAINTS was verified with a real pixel probe against
 the built renderer, not a DOM assertion — clipping changes neither geometry nor layout, so
@@ -1119,10 +1119,10 @@ does.
 
 **The link layer's guarantee moved from STRUCTURAL to CONVENTIONAL, and the new
 one looks entirely reasonable to break (`styles.css`'s `.link-layer`,
-`.link-layer__hit`, `.link-layer__badge`).** Until M24 the rule was one CSS
+`.link-layer__hit`, `.link-layer__badge`).** Until M35 the rule was one CSS
 declaration — `pointer-events: none` on the layer *and everything in it* — and
 it was impossible to violate by accident, because there was nothing in the
-layer that could be hit at all. M24 needed a link to be hoverable (to reveal
+layer that could be hit at all. M35 needed a link to be hoverable (to reveal
 the `×` badge that removes it) and traded that away. **The layer is still
 `pointer-events: none`; exactly two descendants opt back in** —
 `.link-layer__hit` at `pointer-events: stroke` (the transparent 18px hover
@@ -1149,7 +1149,7 @@ explain any of it.
 
 `verify:panels` **127 is the guard, and it was REWRITTEN in place from a
 structural claim to a behavioural one.** It used to assert that
-`elementFromPoint` at a link's midpoint returned the CANVAS, which M24 makes
+`elementFromPoint` at a link's midpoint returned the CANVAS, which M35 makes
 false by design. It now drives a real `sendInputEvent` click at a link's
 midpoint and asserts the SELECTION moved to `null` — read from
 `.panel--selected`'s own `data-panel-id`, never from `__m4aSelection`, which is
@@ -1170,7 +1170,7 @@ parametric crossings and scale the whole ray by that one `t`, never clamp the
 axes independently, which is `edgeIndicator`'s documented mistake and which
 corners every diagonal while still rendering something that looks like a
 working feature (`verify:viewport` 84, with its deliberately shallow diagonal).
-What M24 adds is a READ of a decision that clip already makes: whichever of
+What M35 adds is a READ of a decision that clip already makes: whichever of
 `tx`/`ty` bound the crossing says whether the anchor sits on a vertical or a
 horizontal border, and the sign of `dx`/`dy` says which one. It is new output,
 not new arithmetic, which is why checks 83-88 stay green beside it. The
@@ -1178,7 +1178,7 @@ not new arithmetic, which is why checks 83-88 stay green beside it. The
 border deterministically — either answer is defensible, and picking one in code
 rather than leaving it to float comparison is what keeps `linkPath`
 reproducible frame to frame. The `sides` third parameter is RESERVED and
-unused: M24's decision 2 chose derived anchors, which is the entire reason
+unused: M35's decision 2 chose derived anchors, which is the entire reason
 `shared/layout-schema.ts` did not move in that milestone, and the parameter is
 there so the deferred half — an edge that REMEMBERS which side it left from —
 can be taken later without rewriting the module.
@@ -1260,7 +1260,7 @@ are what reproduced it.
 
 **`linkTarget` is REQUIRED on all five kinds, and requiredness protects only
 the components that DECLARE it (`PanelPorts.tsx` and the five call sites).**
-`onBeginLink` survived M24's fix rounds by a stronger mechanism than a required
+`onBeginLink` survived M35's fix rounds by a stronger mechanism than a required
 prop: `<PanelPorts>` does not compile without it, so a kind that mounted the
 ports had to pass it. `linkTarget` has no such forcing function — it is
 consumed by the panel's own root element as `data-link-target`, and **a
@@ -1277,7 +1277,7 @@ ring.
 
 **A SIXTH panel kind needs FOUR edits for links, not one (`PanelPorts.tsx`'s
 own doc comment carries the same list, and is the copy that will actually be
-read).** Three of the four are exactly what M24's fix rounds found missing
+read).** Three of the four are exactly what M35's fix rounds found missing
 after the first cut, so this is a measured list rather than a careful one:
 
 1. **`isTerminalPanel`'s negation** in `panels.ts` — the standing rule since
@@ -1293,7 +1293,7 @@ after the first cut, so this is a measured list rather than a careful one:
 4. **`readOnly={merged}` at the call site in `Canvas.tsx`.** `readOnly` is
    optional-with-a-default on every non-terminal kind, so omitting it compiles
    clean and renders ports in the merged view; see the entry below for what a
-   drag there actually writes — corrected in the M24 final review from an
+   drag there actually writes — corrected in the M35 final review from an
    earlier draft of this note that overstated the damage.
 
 **The merged view refuses links at the VERB now, not only at the affordance
@@ -1342,7 +1342,7 @@ merged) for a file panel and a terminal panel; Review, Jira and Toolbox are
 argued from the identity of one conditional expression, not observed.
 
 **A draw held across an ordinary WORKSPACE SWITCH — not a merge — is safe for
-a reason M24 does not own and did not build (`Canvas.tsx`'s
+a reason M35 does not own and did not build (`Canvas.tsx`'s
 `switchWorkspace`, `panels.ts`'s `addLink`, frozen).** `toggleMerged` calls
 `linkDraw.end()` synchronously, before its first await, precisely so an
 in-flight draw cannot survive entering or leaving the merged view (see the
@@ -1354,11 +1354,11 @@ from, to)` runs with `current` now B's own panel array and `from` naming a
 panel that belongs to A — a foreign id at the SOURCE end this time, the
 mirror image of the merged-view case above. The whole of what stops that
 becoming a real cross-workspace write is `addLink`'s own both-endpoint guard
-in the FROZEN `panels.ts`, a module M24 deliberately did not touch and does
+in the FROZEN `panels.ts`, a module M35 deliberately did not touch and does
 not own: refuse unless BOTH `from` and `to` are already in the array handed
 to it. **A future milestone that relaxes that guard — to allow a link across
 workspaces on purpose, say — turns this into a genuine corruption, and
-nothing in M24 would notice**, because M24 built no defence of its own here
+nothing in M35 would notice**, because M35 built no defence of its own here
 and the safety is entirely borrowed. While the draw is held across the
 switch, `.canvas--linking` stays on (`linkDraw.state !== null` does not care
 which workspace is displayed), so every panel in the ARRIVING workspace
@@ -1397,7 +1397,7 @@ probe, the `--session-id` transcript filename rule and `agent.idleAfterMs`'s
 1500ms default: **provisional stand-ins that let the feature ship and let the
 checks exercise a real number, not evidence that any of them sits where the
 design intends.** Unlike those three, this one has not even been observed once
-— the hand pass is written down as a numbered checklist in M24's task-8 report
+— the hand pass is written down as a numbered checklist in M35's task-8 report
 and nobody has run it. A future task replacing any of the four with a value
 chosen after actually watching a drag is expected, not a regression. Tuning
 must not turn 94 or 95 red; if it does, the check was written with literals

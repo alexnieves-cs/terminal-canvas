@@ -21,7 +21,7 @@ export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(
         onSpawn={props.onSpawn} onWritten={load}
       />) : <p className="jira-node__note">{result.reason}</p>}
     </div>
-    {/* M24 (Task 7). The same block TerminalPanel carries, and for the
+    {/* M35 (Task 7). The same block TerminalPanel carries, and for the
         same reasons: `links` lives on PanelBase, so this kind is already a
         valid endpoint and the gesture should reach it too. Suppressed
         under readOnly (the merged view). The PORT_MIN_SCALE cutoff is a

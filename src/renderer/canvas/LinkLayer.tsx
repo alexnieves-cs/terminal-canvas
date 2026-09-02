@@ -28,7 +28,7 @@ import type { LinkDrawState } from './useLinkDraw'
  *
  * pointer-events: none on the LAYER itself, which is still a property of the
  * layer rather than a hit-test anyone has to remember for the ordinary case.
- * M24 Task 6 narrows that surgically rather than removing it: a link's own
+ * M35 Task 6 narrows that surgically rather than removing it: a link's own
  * `.link-layer__hit` opts back in with `pointer-events: stroke` so it can be
  * hovered and removed, and `.link-layer__badge` opts in with `pointer-events:
  * all` so it can be clicked — and that is the exhaustive list. Everything
@@ -41,7 +41,7 @@ import type { LinkDrawState } from './useLinkDraw'
  * of the run, and what keeps it from interfering with the capture-phase
  * palette dismissal on .shell. The badge is the ONE element here that DOES
  * consume a click, deliberately, so removing a link does not also deselect
- * the canvas underneath it. See verify:panels 127 (rewritten in M24) and 178.
+ * the canvas underneath it. See verify:panels 127 (rewritten in M35) and 178.
  *
  * NOT culled and no viewport intersection test added for the hit stroke or
  * badge either: this milestone adds nothing at all to shouldYieldWheel.
@@ -135,7 +135,7 @@ function LinkLayerImpl({
               and hitTest and never reads event.target, so a mousedown here
               bubbles to it and behaves identically to a click on bare canvas:
               selection clears, focusedId clears, a marquee begins. That is the
-              whole mechanism by which M24 keeps M13's guarantee while making
+              whole mechanism by which M35 keeps M13's guarantee while making
               a link hoverable, and verify:panels 127 is what fails if it is
               broken. A stopPropagation added here would look entirely
               reasonable in review and would pin a panel live for the rest of

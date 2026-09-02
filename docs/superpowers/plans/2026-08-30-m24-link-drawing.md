@@ -1,4 +1,4 @@
-# M24 — Drawing Links Implementation Plan
+# M35 — Drawing Links Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -89,7 +89,7 @@ Append to `scripts/verify-viewport.cjs`, immediately **before** the `console.log
 
 ```js
 // ---------------------------------------------------------------------------
-// M24. Drawing links. The pure half: which side each anchor sits on, and the
+// M35. Drawing links. The pure half: which side each anchor sits on, and the
 // bezier built from that. See docs/superpowers/specs/2026-08-30-m24-link-drawing-design.md
 // ---------------------------------------------------------------------------
 
@@ -246,7 +246,7 @@ export function linkAnchors(
   from: WorldRect,
   to: WorldRect,
   /**
-   * RESERVED and unused. M24's design decision 2 chose derived anchors, which
+   * RESERVED and unused. M35's design decision 2 chose derived anchors, which
    * is what kept shared/layout-schema.ts out of that milestone entirely. This
    * parameter exists so the deferred half — an edge that REMEMBERS which side
    * it left from — can be taken later without rewriting this module. Nothing
@@ -357,7 +357,7 @@ an implementation that never reads the side at all.
 
 95 pins BOTH clamps, because a one-sided clamp passes a one-sided check.
 
-The reserved `_sides` parameter is unused and documented as such: M24 chose
+The reserved `_sides` parameter is unused and documented as such: M35 chose
 derived anchors, which is what kept shared/layout-schema.ts out of the
 milestone entirely, and this is the door back to the other half.
 
@@ -406,7 +406,7 @@ export interface LinkSegment {
    * The cubic's control points, carried so a consumer can find the CURVE's own
    * midpoint without measuring a laid-out path element.
    *
-   * The label and (from M24's task 6) the remove badge both sit at t = 0.5,
+   * The label and (from M35's task 6) the remove badge both sit at t = 0.5,
    * where a cubic reduces to (P0 + 3C1 + 3C2 + P3) / 8 — a closed form needing
    * no DOM. The alternative, getPointAtLength, makes the position depend on a
    * laid-out element and so cannot be computed on the first render at all.
@@ -487,7 +487,7 @@ The control points this reads are already on `LinkSegment` from Step 1.
 In `src/renderer/styles.css`, replace the `.link-layer__line` rule. `fill: none` is now load-bearing rather than incidental — a `<path>` with a default fill paints the region the curve encloses as a solid blob:
 
 ```css
-/* M24. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
+/* M35. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
    path fills the region its curve encloses by default, so without it every
    link paints as a solid crescent over the canvas. It was harmless on the
    <line> this replaced, which has no interior to fill. */
@@ -792,7 +792,7 @@ Append to `scripts/verify-panels.cjs`, immediately before the file's final summa
 
 ```js
       // ---------------------------------------------------------------------
-      // M24. Drawing a link by dragging from a port handle.
+      // M35. Drawing a link by dragging from a port handle.
       // ---------------------------------------------------------------------
 
       const portBox = (id, side) => wc.executeJavaScript(`(() => {
@@ -990,7 +990,7 @@ export interface LinkDraw {
 }
 
 /**
- * The drag that draws a link (M24).
+ * The drag that draws a link (M35).
  *
  * Modelled line for line on usePanelDrag: state in a ref, a depsRef mirroring
  * the callbacks so the document listeners are installed once and never torn
@@ -1135,7 +1135,7 @@ export const PORT_MIN_SCALE = 0.4
 const SIDES: LinkSide[] = ['n', 'e', 's', 'w']
 
 /**
- * The four link handles on a panel's border (M24).
+ * The four link handles on a panel's border (M35).
  *
  * Children of .panel, so they ride .world's single translate()/scale() exactly
  * as .panel__resize does — placing them in screen pixels instead would make
@@ -1188,7 +1188,7 @@ export const PanelPorts = memo(PanelPortsImpl)
 Append to `src/renderer/styles.css`:
 
 ```css
-/* M24. The four link handles. Children of .panel, so they ride .world's
+/* M35. The four link handles. Children of .panel, so they ride .world's
    transform with the rest of the panel — the same placement .panel__resize
    already has, and for the same reason: a handle sized in screen pixels would
    drift away from its own border on every zoom.
@@ -1242,7 +1242,7 @@ import { PanelPorts, PORT_MIN_SCALE } from './PanelPorts'
 ```
 
 ```tsx
-      {/* M24. Suppressed under readOnly exactly as the resize handles are —
+      {/* M35. Suppressed under readOnly exactly as the resize handles are —
           that is the merged view, whose geometry is read-only, and addLink
           there would write to a workspace record this canvas does not own.
           Suppressed below PORT_MIN_SCALE because a 14px dot is under two
@@ -1259,7 +1259,7 @@ Add `scale: number` and `onBeginLink: (panelId: string, event: ReactMouseEvent) 
 Near the existing `const linkMode = useLinkMode()` (around line 320), add:
 
 ```tsx
-  // M24. The drag half of link creation. linkMode (the armed click-then-click
+  // M35. The drag half of link creation. linkMode (the armed click-then-click
   // path the palette and inspector use) is UNCHANGED and stays: it is the
   // keyboard-reachable route, verify:palette 76/77 pin it, and ports are an
   // additional entry point rather than a replacement.
@@ -1487,7 +1487,7 @@ In `Canvas.tsx`, at the `TerminalPanel` call site, pass the flag and set an attr
 And style it:
 
 ```css
-/* M24. The panel a release right now would link to. A ring rather than a fill:
+/* M35. The panel a release right now would link to. A ring rather than a fill:
    a fill would hide the agent output this app exists to show, on the one panel
    the user is currently looking at. */
 .panel[data-link-target] {
@@ -1574,12 +1574,12 @@ Replace the body of check 127 in `scripts/verify-panels.cjs`. The `elementFromPo
 
 ```js
       // 127. A click on a link still behaves exactly as a click on bare
-      //      canvas. REWRITTEN in M24, and the rewrite is a strengthening
+      //      canvas. REWRITTEN in M35, and the rewrite is a strengthening
       //      rather than a relaxation.
       //
       //      It used to assert elementFromPoint at a link's midpoint returns
       //      the CANVAS — a structural read of `.link-layer { pointer-events:
-      //      none }`. M24 gives each link a transparent hit stroke so it can
+      //      none }`. M35 gives each link a transparent hit stroke so it can
       //      be hovered, so that read is now false by design and says nothing
       //      about whether anything broke.
       //
@@ -1591,7 +1591,7 @@ Replace the body of check 127 in `scripts/verify-panels.cjs`. The `elementFromPo
       //      click on empty canvas does.
       //
       //      This is the check that fails if a stray stopPropagation ever
-      //      lands on the hit path. That is the whole of what M24 traded away:
+      //      lands on the hit path. That is the whole of what M35 traded away:
       //      the invariant moved from "nothing in this layer can be hit" (one
       //      CSS declaration, impossible to violate by accident) to "things
       //      that can be hit do not consume", which looks entirely reasonable
@@ -1721,7 +1721,7 @@ Inside the `segments.map`, **immediately BEFORE the visible `<path>`** from Task
               and hitTest and never reads event.target, so a mousedown here
               bubbles to it and behaves identically to a click on bare canvas:
               selection clears, focusedId clears, a marquee begins. That is the
-              whole mechanism by which M24 keeps M13's guarantee while making
+              whole mechanism by which M35 keeps M13's guarantee while making
               a link hoverable, and verify:panels 127 is what fails if it is
               broken. A stopPropagation added here would look entirely
               reasonable in review and would pin a panel live for the rest of
@@ -1763,7 +1763,7 @@ Note the badge sits at the **curve's** midpoint using the same closed form the l
 - [ ] **Step 5: Style them**
 
 ```css
-/* M24. The hover target. Transparent and wide, and it opts back INTO pointer
+/* M35. The hover target. Transparent and wide, and it opts back INTO pointer
    events where .link-layer opts out — `stroke` rather than `all`, so only the
    stroked band is hittable and the path's notional interior is not.
 
@@ -1974,7 +1974,7 @@ import { PanelPorts, PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
 ```
 
 ```tsx
-      {/* M24. The same block TerminalPanel carries, and for the same reasons:
+      {/* M35. The same block TerminalPanel carries, and for the same reasons:
           `links` lives on PanelBase, so this kind is already a valid endpoint
           and the gesture should reach it too. Suppressed under readOnly (the
           merged view, whose geometry and links are read-only) and below
@@ -2100,12 +2100,12 @@ Also update the `verify:viewport`, `verify:panels` and `verify:styles` rows of t
 Add the milestone row after M23:
 
 ```
-| M24 | Drawing links: port handles, snapping, and bezier edges | ✅ done |
+| M35 | Drawing links: port handles, snapping, and bezier edges | ✅ done |
 ```
 
 - [ ] **Step 5: Update docs/ideas-backlog.md**
 
-Entry #24's decorative half is now complete. Rewrite its opening so it says the *ergonomics* shipped in M24 alongside the model in M13, and leave the functional half — an edge that pipes or restarts — exactly as it is, including its open question about whether a rule visible only as a line on the canvas is auditable. Add M24's spec to the "see also" links beside M13's.
+Entry #24's decorative half is now complete. Rewrite its opening so it says the *ergonomics* shipped in M35 alongside the model in M13, and leave the functional half — an edge that pipes or restarts — exactly as it is, including its open question about whether a rule visible only as a line on the canvas is auditable. Add M35's spec to the "see also" links beside M13's.
 
 - [ ] **Step 6: Full verification and commit**
 

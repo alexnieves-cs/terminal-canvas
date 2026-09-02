@@ -348,7 +348,7 @@ app.on('window-all-closed', () => {})
 // come up costs ~20s of nothing rather than failing fast. That converts a
 // fixture flake into "the suite hangs" and it is what tripped the old bound
 // three runs in four. The real fix is bounding those fixtures — or splitting
-// this file, which is over 12,000 lines and rising (measured at the M24 final
+// this file, which is over 12,000 lines and rising (measured at the M35 final
 // review: 12,469 before that review's own fix round, more again after it) —
 // and a bigger number only buys room for the next milestone to hit the same
 // wall.
@@ -8892,12 +8892,12 @@ app.whenReady().then(async () => {
       }
 
       // 127. A click on a link still behaves exactly as a click on bare
-      //      canvas. REWRITTEN in M24, and the rewrite is a strengthening
+      //      canvas. REWRITTEN in M35, and the rewrite is a strengthening
       //      rather than a relaxation.
       //
       //      It used to assert elementFromPoint at a link's midpoint returns
       //      the CANVAS — a structural read of `.link-layer { pointer-events:
-      //      none }`. M24 gives each link a transparent hit stroke so it can
+      //      none }`. M35 gives each link a transparent hit stroke so it can
       //      be hovered, so that read is now false by design and says nothing
       //      about whether anything broke.
       //
@@ -8909,7 +8909,7 @@ app.whenReady().then(async () => {
       //      click on empty canvas does.
       //
       //      This is the check that fails if a stray stopPropagation ever
-      //      lands on the hit path. That is the whole of what M24 traded away:
+      //      lands on the hit path. That is the whole of what M35 traded away:
       //      the invariant moved from "nothing in this layer can be hit" (one
       //      CSS declaration, impossible to violate by accident) to "things
       //      that can be hit do not consume", which looks entirely reasonable
@@ -8936,11 +8936,11 @@ app.whenReady().then(async () => {
       //      element (there is no elementFromPoint anywhere in src/), so that
       //      specific regression is inert today — but it is still worth
       //      pinning, since "inert today" is not "inert forever". This
-      //      restores the STRUCTURAL claim without restoring the part M24
+      //      restores the STRUCTURAL claim without restoring the part M35
       //      makes false by design (that NOTHING in the layer is hit-testable
       //      — two descendants now are, on purpose).
       //
-      //      Fix round 2 (M24 final review) adds the `focusedId` clause
+      //      Fix round 2 (M35 final review) adds the `focusedId` clause
       //      success criterion 4 always named and this check never asserted:
       //      "a plain click on a link behaves exactly as a click on bare
       //      canvas: selection clears, focusedId clears, a marquee begins."
@@ -12318,7 +12318,7 @@ app.whenReady().then(async () => {
         // fakes installed would have been silently harmless — but that is
         // exactly the condition under which an obligation gets forgotten,
         // not a reason to skip writing it down. It has since stopped being
-        // harmless: M24's link-drawing merge appended link-draw.1-6 AFTER
+        // harmless: M35's link-drawing merge appended link-draw.1-6 AFTER
         // this block, and they run against production Jira behaviour
         // exactly as 173 did precisely because this block restores the real
         // JIRA_* handlers before it returns control — nothing to check on
@@ -12348,7 +12348,7 @@ app.whenReady().then(async () => {
           outcome === 'comment added',
         `minted=${minted} row=${row} sent=${JSON.stringify(jiraSent)} outcome=${outcome}`)
 }
-    // M24. Drawing a link by dragging from a port handle. This is the
+    // M35. Drawing a link by dragging from a port handle. This is the
     // enclosing block for the WHOLE milestone, not just this task's two
     // checks: tasks 5, 6 and 7 append further checks INSIDE these braces so
     // they can see the consts declared here (portBox, dragPortTo, m24Links,
@@ -12844,7 +12844,7 @@ app.whenReady().then(async () => {
         //
         // A file panel opens at the CURRENT viewport's world centre
         // (__m13Open -> worldCentre()), which after the M13 block's own
-        // railGoTo(M24_B) is right on top of the whole tight 260-unit M24
+        // railGoTo(M24_B) is right on top of the whole tight 260-unit M35
         // A/B/C/dormant cluster — and the file panel's default size (640x520
         // here) is large enough to cover all four of them entirely. Minted
         // AFTER them, it also paints ABOVE them, so a raw mousedown at
