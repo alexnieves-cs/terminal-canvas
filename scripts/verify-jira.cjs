@@ -195,6 +195,30 @@ void (async () => {
       readDown?.kind === 'unavailable',
     `read=${readMissing?.kind} write=${writeMissing?.kind} down=${readDown?.kind}`)
 
+  // types.1. THE THREE RESULT TYPES ARE DECLARED ONCE, pinned as source text
+  //     because drift between two copies has no runtime symptom: ipcMain.handle
+  //     is not typed by the contract, so renaming a field in jira-client.ts
+  //     alone compiles clean and the renderer reads `undefined` — an empty
+  //     transition list, indistinguishable from a ticket with no legal moves.
+  //     M24's own final fix round had to edit the same three-line type in two
+  //     files and confirm the match by reading a diff. Comment-stripped, since
+  //     both files discuss the very names that must not be re-declared.
+  {
+    const { readFileSync } = require('node:fs')
+    const { join } = require('node:path')
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    const client = strip(readFileSync(join(__dirname, '..', 'src', 'main', 'jira-client.ts'), 'utf8'))
+    const contract = strip(readFileSync(join(__dirname, '..', 'src', 'shared', 'ipc-contract.ts'), 'utf8'))
+    const names = ['JiraListResult', 'JiraTransitionsResult', 'JiraWriteResult']
+    const declaredInClient = names.filter((n) => new RegExp(`export type ${n}\\b`).test(client))
+    const importsFromContract = names.every((n) =>
+      new RegExp(`import type \\{[^}]*\\b${n}\\b[^}]*\\} from '\\.\\./shared/ipc-contract'`).test(client))
+    const onceInContract = names.every((n) => (contract.match(new RegExp(`export type ${n}\\b`, 'g')) || []).length === 1)
+    ok('types.1 the three Jira result types are declared once, in the contract, and imported by the client',
+      declaredInClient.length === 0 && importsFromContract && onceInContract,
+      `redeclared=${JSON.stringify(declaredInClient)} imports=${importsFromContract} once=${onceInContract}`)
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)

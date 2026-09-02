@@ -2140,3 +2140,48 @@ draft's own bubble-phase `stopPropagation` cannot touch them, and neither can
 `useNavGrid`'s capture-phase listener, which is why the `.jira-node__comment-form`
 entry above covers the keydown half thoroughly and this half not at all. All
 four gate on `shouldIgnoreKeys()`, which is `palette.isOpen() || navGrid.isOpen`
+
+**The flush is capped by bytes and the cap keeps the TAIL (`main/pty-manager.ts`'s
+`FLUSH_MAX_BYTES`, `enqueue`, `flush`).** Batching solved message COUNT — thousands of
+reads become one send per 16ms — and did nothing about message SIZE, so `yes`, `find /`
+or an agent `cat`ing a large file joined a multi-megabyte string every frame and stalled
+the renderer in exactly the way the batcher exists to prevent. Three rules, each with its
+own silent failure. **Whole chunks are dropped from the HEAD**, and only a single chunk
+larger than the whole cap is sliced (to its last cap characters): a chunk boundary is where
+node-pty already cut, and a cut inside one lands mid-escape-sequence. **The tail survives**,
+because the flush-before-exit rule exists so the last lines a dying process prints — the
+error explaining the exit — are not lost, and a head-preserving cap drops precisely those;
+`verify:pty-manager` `backpressure.2` is the guard. **The elision is TOLD to the user in the
+stream**, as one `[terminal-canvas: N KB of output elided]` line prepended to the next flush
+with attributes reset first — a user debugging missing output otherwise has no way to learn
+bytes were dropped, which is the same silent failure every entry in this file is written
+against; `backpressure.1`. The scan for bells runs on every byte BEFORE buffering, so a bell
+in a dropped chunk was still counted. The cap is a constructor parameter with the constant
+as its default so the suite can force it low; against the real 256 KB cap a 180 KB fixture
+elides nothing on a fast read and everything on a slow one, which is a check that passes or
+fails by the weather.
+
+**xterm measures widths against Unicode 11, loaded in `createTerminal` before `open()`
+(`renderer/terminal/create-terminal.ts`).** The built-in table is Unicode 6, under which
+every emoji status glyph and post-6 box character an agent TUI draws is one column narrower
+than the shell believes — the frame drifts a column per wide glyph and compounds down the
+pane, in a way that reads as the TUI's own fault, which is why backlog #43 sat unattributed.
+It loads in the one place a `Terminal` is constructed, before `open()`, and never later:
+changing the width table after the fact is a re-measure of every buffered line that would
+need `attachTerminal`'s `refresh(0, rows - 1)` treatment. Nothing about the grid moves — no
+`pty:resize`, no SIGWINCH — which is the whole difference between this and a font change.
+`verify:xterm` `unicode.1` asserts the cursor advances TWO cells after one grinning face;
+`activeVersion` alone would pass against an addon that was loaded and never activated.
+
+**`onContextPasted` and `LinkLayer`'s `onRemove` are stable identities, and the memo they
+protect has no runtime symptom when broken (`canvas/Canvas.tsx`).** `onContextPasted` was an
+inline arrow on every `TerminalPanel` — a new function on every Canvas render, and Canvas
+renders on every mousemove — so every panel's memo re-rendered at 60Hz regardless of
+`version`, `title`, `glow` and M35's `onBeginLink`/`linkTarget` discipline, every one of which
+exists to protect that memo. `onRemove` was `paletteActions.removeLink`, whose identity
+follows the palette's captured id, so the link layer re-rendered on every palette open
+despite its own comment naming that as a case the memo stops. Nothing throws and nothing
+looks wrong; the app gets heavy while a panel is dragged. Both are `useCallback`s with empty
+dependency lists — the second reads `paletteActions` through a ref — and `verify:panels`
+`memo-stable.1` pins the JSX as source text, because that is the only place the defect is
+visible.

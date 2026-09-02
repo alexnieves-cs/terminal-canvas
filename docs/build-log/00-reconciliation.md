@@ -49,4 +49,7 @@ marquee — rather than a rule M26 replaced.
 - The five landed backlog entries (#18, #21, #35, #68, #75) moved to the
   file's gone table, per its own rule.
 - The 1.0 scope, including every backlog entry cut and why, is
-  `docs/superpowers/specs/2026-09-01-v1-scope-decision.md`.
+  `docs/superpowers/specs/2026-09-01-v1-scope-decision.md`. Its §7 amendment
+  (same day, after M36 began) adds five required features and re-sequences
+  the run to twenty-five milestones, M36–M60; the table in §7 is the one in
+  force.

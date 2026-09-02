@@ -97,6 +97,19 @@ app.whenReady().then(async () => {
       probe.canvasesAfterReattach.height > 0,
     `while attached: ${JSON.stringify(probe.canvasesWhileAttached)} / after reattach: ${JSON.stringify(probe.canvasesAfterReattach)}`)
 
+  // unicode.1. The width table is Unicode 11, in the terminal createTerminal
+  //     actually builds. Under the built-in Unicode 6 table every emoji
+  //     status glyph and post-6 box character an agent TUI draws is one
+  //     column narrower than the shell believes, so the frame drifts one
+  //     column per wide glyph and compounds down the pane — a defect that
+  //     reads as the TUI's own fault (backlog #43). The cursor column after
+  //     one grinning face is the discriminating clause: 2 under v11, 1 under
+  //     v6. activeVersion alone would pass against an addon that was loaded
+  //     and never activated.
+  ok('unicode.1 createTerminal measures widths against Unicode 11 — a wide glyph is two cells',
+    probe.unicode && probe.unicode.activeVersion === '11' && probe.unicode.cursorX === 2,
+    JSON.stringify(probe.unicode))
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)

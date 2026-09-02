@@ -53,6 +53,20 @@ import {
 const FLUSH_INTERVAL_MS = 16
 
 /**
+ * M36 (backlog #58). The most one flush may carry. Batching solved message
+ * COUNT and did nothing about message SIZE: `yes`, `find /`, or an agent
+ * `cat`ing a large file produces multi-megabyte strings crossing IPC every
+ * frame, and the renderer stalls in exactly the way the batcher exists to
+ * prevent. 256 KB is comfortably more than a full 16ms of a chatty TUI and
+ * comfortably less than what stalls a frame. Measured in UTF-16 code units
+ * (`string.length`), which is bytes for the ASCII that runaway output
+ * overwhelmingly is; the name says bytes because that is the budget it
+ * stands in for. A constructor parameter with this default, so
+ * verify:pty-manager can force it low and make the elision deterministic.
+ */
+export const FLUSH_MAX_BYTES = 256 * 1024
+
+/**
  * The idleness tick. A SEPARATE timer from the flush, and one per manager
  * rather than per session, because the flush timer only runs when there IS
  * pending data — it structurally cannot observe the absence of data, which is
@@ -251,6 +265,15 @@ interface Session {
   proc: pty.IPty
   /** Pending output chunks awaiting the next flush. */
   buffer: string[]
+  /** Sum of `buffer`'s lengths, kept so the cap costs no join to enforce. */
+  pendingChars: number
+  /**
+   * Characters dropped from the head of `buffer` since the last flush. The
+   * next flush announces them in the stream: an elision the user is not told
+   * about is missing output with no explanation anywhere, which is the same
+   * silent failure every note in CLAUDE.md is written against.
+   */
+  elidedChars: number
   flushTimer: NodeJS.Timeout | null
   /** Set by kill(), so the resulting exit is not reported as news. */
   killed: boolean
@@ -459,7 +482,9 @@ export class PtyManager {
     private readonly readFrom: (
       path: string,
       offset: number
-    ) => { bytes: Buffer; size: number } | undefined = realReadFrom
+    ) => { bytes: Buffer; size: number } | undefined = realReadFrom,
+    /** See FLUSH_MAX_BYTES. Overridden only by verify:pty-manager. */
+    private readonly flushMaxBytes: number = FLUSH_MAX_BYTES
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -572,6 +597,8 @@ export class PtyManager {
       panelId: spec.panelId,
       proc,
       buffer: [],
+      pendingChars: 0,
+      elidedChars: 0,
       flushTimer: null,
       killed: false,
       command,
@@ -1151,6 +1178,27 @@ export class PtyManager {
     }
 
     session.buffer.push(data)
+    session.pendingChars += data.length
+    // The cap keeps the TAIL. Whole chunks go first, from the head, because a
+    // chunk boundary is where node-pty already cut and a cut inside one can
+    // land mid-escape-sequence; only a single chunk larger than the whole cap
+    // is sliced, and then to its LAST cap characters. Head-preserving
+    // truncation would drop exactly the bytes the flush-before-exit rule
+    // exists to protect — the error that explains an exit is the last thing
+    // a dying process prints. The scan above already ran over every byte, so
+    // a bell in a dropped chunk was still counted.
+    while (session.pendingChars > this.flushMaxBytes && session.buffer.length > 1) {
+      const dropped = session.buffer.shift() as string
+      session.pendingChars -= dropped.length
+      session.elidedChars += dropped.length
+    }
+    if (session.pendingChars > this.flushMaxBytes) {
+      const only = session.buffer[0] as string
+      const keep = only.slice(only.length - this.flushMaxBytes)
+      session.elidedChars += only.length - keep.length
+      session.buffer[0] = keep
+      session.pendingChars = keep.length
+    }
     if (session.flushTimer) return
     session.flushTimer = setTimeout(() => this.flush(session), FLUSH_INTERVAL_MS)
   }
@@ -1161,8 +1209,17 @@ export class PtyManager {
       session.flushTimer = null
     }
     if (session.buffer.length === 0) return
-    const data = session.buffer.join('')
+    let data = session.buffer.join('')
     session.buffer.length = 0
+    session.pendingChars = 0
+    if (session.elidedChars > 0) {
+      // Told in the stream, on its own line, with attributes reset first so a
+      // drop that landed mid-SGR cannot paint the notice in the agent's
+      // colours. Rounded UP so a small elision never reads as "0 KB".
+      const kb = Math.max(1, Math.ceil(session.elidedChars / 1024))
+      data = `\r\n\x1b[0m[terminal-canvas: ${kb} KB of output elided]\r\n` + data
+      session.elidedChars = 0
+    }
     this.send(IPC_EVENTS.PTY_DATA, { panelId: session.panelId, data })
   }
 

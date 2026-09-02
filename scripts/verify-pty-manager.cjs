@@ -234,7 +234,11 @@ function makeHarness(backend, options = {}) {
     // only checks 32/33 substitute these, to drive pollUsage against a
     // transcript this harness controls rather than a real ~/.claude/projects.
     options.resolveTranscript,
-    options.readFrom
+    options.readFrom,
+    // The flush byte cap. Undefined falls through to FLUSH_MAX_BYTES; only
+    // backpressure.1/.2 force it low, so the elision they assert on is
+    // deterministic rather than a race between the shell and the flush timer.
+    options.flushMaxBytes
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -574,6 +578,47 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
 
   // 11-15 need a real tmux. Skipping is reported, never silent: a suite that
   // quietly covers nothing is worse than one that says it covered nothing.
+  // backpressure.1/.2. THE FLUSH IS CAPPED BY BYTES, AND THE CAP KEEPS THE
+  //     TAIL. Batching (FLUSH_INTERVAL_MS) solved message COUNT and did
+  //     nothing about message SIZE: an uncapped buffer joined every 16ms
+  //     turns `yes` or a `cat` of a large file into multi-megabyte strings
+  //     crossing IPC every frame, and the renderer stalls in exactly the way
+  //     the batcher exists to prevent. The cap is forced LOW here so the
+  //     elision is deterministic rather than a timing accident — a real
+  //     256 KB cap against a 180 KB fixture would elide nothing on a fast
+  //     read and everything on a slow one.
+  //
+  //     Two checks because each clause guards a different silent failure.
+  //     .1 is the cap and the MARKER: an elision the user is not told about
+  //     is missing output with no explanation anywhere. .2 is the TAIL: the
+  //     flush-before-exit rule exists so the last lines a dying process
+  //     prints — usually the error — are not lost, and a head-preserving
+  //     truncation drops precisely those. A sentinel printed LAST must reach
+  //     the renderer in the LAST payload.
+  {
+    const CAP = 4096
+    const h = makeHarness(undefined, { flushMaxBytes: CAP })
+    const script =
+      'i=0; while [ $i -lt 4000 ]; do echo "line $i padding padding padding padding"; i=$((i+1)); done; echo TC-END'
+    await h.manager.create(spec('bp1', '/bin/sh', ['-c', script]))
+    await waitFor(() => h.exits().some((e) => e.payload.panelId === 'bp1'), 15000)
+    const payloads = h.events.filter((e) => e.channel === 'pty:data' && e.payload.panelId === 'bp1')
+      .map((e) => e.payload.data)
+    // One marker line at most per flush, and its text is bounded.
+    const MARKER_MAX = 96
+    const largest = payloads.reduce((m, d) => Math.max(m, d.length), 0)
+    const marked = payloads.filter((d) => d.includes('[terminal-canvas:')).length
+    const total = payloads.reduce((n, d) => n + d.length, 0)
+    ok('backpressure.1 no pty:data payload exceeds the cap plus one marker, and elision is announced in the stream',
+      payloads.length > 0 && largest <= CAP + MARKER_MAX && marked >= 1,
+      `payloads=${payloads.length} largest=${largest} cap=${CAP} marked=${marked} totalDelivered=${total}`)
+    const last = payloads[payloads.length - 1] ?? ''
+    ok('backpressure.2 the tail survives — the sentinel printed last reaches the last payload',
+      last.includes('TC-END'),
+      `last=${JSON.stringify(last.slice(-80))}`)
+    h.manager.killAll()
+  }
+
   const TMUX = findTmux()
   if (!TMUX) {
     ok('11-15 tmux backend (SKIPPED — no tmux binary found)', true, 'install tmux to cover these')

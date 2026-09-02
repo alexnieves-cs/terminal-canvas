@@ -1,6 +1,7 @@
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 
 /**
  * Central xterm factory. Every panel goes through here so theme, font metrics,
@@ -76,6 +77,20 @@ export function createTerminal(): TerminalHandles {
 
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
+
+  // M36 (backlog #43). Without this xterm measures character widths against
+  // its built-in Unicode 6 table, and every emoji status glyph and post-6
+  // box character an agent TUI draws is one column narrower than the shell
+  // believes it is: the frame drifts one column per wide glyph and the
+  // corruption compounds down the pane, in a way that reads as the TUI's own
+  // fault. Loaded HERE, before open(), and never later: changing the width
+  // table after the fact is a re-measure of every line already in the
+  // buffer, which would need the refresh(0, rows - 1) treatment attachTerminal
+  // carries for re-attach. Nothing about the grid changes — no resize, no
+  // SIGWINCH — which is what makes this a one-line defect fix rather than
+  // the resize-wearing-a-hat that a font change is. verify:xterm unicode.1.
+  term.loadAddon(new Unicode11Addon())
+  term.unicode.activeVersion = '11'
   return { term, fitAddon, webgl: null, rendererKind: 'dom', opened: false, webglDisabled: false }
 }
 
