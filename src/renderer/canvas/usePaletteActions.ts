@@ -24,6 +24,8 @@ import type { CapturedPanel, SettingRow, WorktreeListRow } from '@shared/ipc-con
 import { railLabel } from '../shell/rail-rows'
 import type { LinkMode } from './useLinkMode'
 import type { Point, WorldRect } from './viewport'
+import type { Viewport } from './viewport'
+import type { PersistedBookmark } from '@shared/layout-schema'
 
 export interface PaletteActionsDeps {
   registry: Registry
@@ -43,6 +45,13 @@ export interface PaletteActionsDeps {
   resetViewport: () => void
   centreOn: (rect: WorldRect) => void
   worldCentre: () => Point
+  /** M56. The camera's named verbs and the bookmark state, read through refs. */
+  goToViewport: (vp: Viewport) => void
+  cameraBack: () => void
+  cameraForward: () => void
+  bookmarksRef: RefObject<PersistedBookmark[]>
+  setBookmarks: Dispatch<SetStateAction<PersistedBookmark[]>>
+  viewportRef: RefObject<Viewport>
   selectAndRaise: (id: string, additive?: boolean) => void
   selectOnly: (id: string | null) => void
   onSelectPanel: (id: string, additive?: boolean) => void
@@ -105,6 +114,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
+    goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote,
     restartWithSpec, commitHistory, switchWorkspace,
@@ -405,6 +415,31 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
     zoomToFit: () => resetViewport(),
+    // M56. Bookmarks and the trail. Names are minted as "View N" over the
+    // current count; a rename is a later milestone's, and a place with a
+    // number is still a place.
+    addBookmark: () => {
+      const camera = viewportRef.current
+      const id = `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+      setBookmarks((current) => [...current, { id, name: `View ${current.length + 1}`, camera: { x: camera.x, y: camera.y, scale: camera.scale } }])
+    },
+    goToBookmark: (id) => {
+      const found = bookmarksRef.current.find((b) => b.id === id)
+      if (found) goToViewport(found.camera)
+    },
+    deleteBookmark: (id, name) => {
+      // Gated like deletePreset: a delete row one Enter away from a place
+      // the user chose to keep, styled like "Go to".
+      setInputMode({
+        kind: 'confirm',
+        label: `Delete bookmark \u201c${name}\u201d?`,
+        initial: '',
+        submit: () => { setBookmarks((current) => current.filter((b) => b.id !== id)) }
+      })
+      palette.openPalette()
+    },
+    cameraBack: () => cameraBack(),
+    cameraForward: () => cameraForward(),
     toggleSetting: (id, value) => {
       // Main owns the store, so the write goes there and the row list is
       // reloaded from the answer rather than updated optimistically: an
@@ -1186,5 +1221,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, reloadWorktrees,
-       worktreeRows, setInputMode])
+       worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef])
 }

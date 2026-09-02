@@ -2849,3 +2849,39 @@ that missing the other reopened the duplicate-id defect; a third copy for recove
 been a third door). Recovery goes through `commitHistory` like a spawn, so `Cmd+Z` un-adopts —
 which disposes the sessions, and that is right: the user was asked and said yes, then said no.
 The dialog itself is manual-only; no suite drives `showMessageBox`.
+
+**Every DISCRETE camera jump is a flight through one path, no gesture ever is, and tiering
+waits for the flight to land (`canvas/flight.ts`, `useViewport.ts`'s `flyTo`/`jump`,
+`Canvas.tsx`'s tier effect).** `centreOn`, `fitAll`, `resetViewport`, `goToViewport` and the
+trail all go through `jump` → `flyTo`; the wheel and the pan drag call `setViewport` directly
+and `cancelFlight()` first, landing their own math on the CURRENT frame — the user grabbed
+the camera mid-air and it must stay where it is, never snap to a target they can no longer
+see the reason for. Scale interpolates in LOG space and is CLAMPED at every frame: a linear
+scale tween lurches, and an unclamped intermediate is `verify:viewport` check 3's sideways
+drift reappearing mid-flight. Translation is chosen so the world point under the screen
+centre moves in a straight line. **The tier-assignment effect returns early while `flying`**,
+which is STATE rather than a ref on purpose: a flight across the canvas would otherwise create
+and destroy a dozen WebGL contexts for panels the user never stopped at, and a ref could not
+re-run the effect when the flight settles. `prefers-reduced-motion` collapses every flight to
+one frame, and the harness's override of it is persisted in localStorage because the harness
+reloads the renderer many times in one run — a module-level override lapsed at the first
+reload and every later check sampled a camera still in the air, which read as "centreOn
+does nothing" (observed: nine reds with the camera unchanged, all after a reload). The
+harness runs with reduced motion ON by default, as a user who set the preference would, and
+turns it off for exactly one jump; it also disables background throttling, because a hidden
+window pauses `requestAnimationFrame` and a flight driven by it never lands.
+
+**The trail is a SECOND `History<Viewport>`, pushed on discrete jumps only, and a workspace
+switch starts a new one (`useViewport.ts`).** Never the panels' history: `applyHistory`
+reaches `registry.dispose`, so folding the camera in would walk the session-disposal path to
+undo a pan. `present` is re-read from the live camera at push time because gestures move
+the camera without telling the trail — a trail that trusted its own `present` would step
+back to where the camera was before the last GESTURE, not the last jump. `restoreCamera` (a
+workspace switch, a boot) replaces the trail rather than pushing: the previous workspace's
+places are not this one's. `Cmd+[` / `Cmd+]` are matched on `event.code` for the reason the
+shifted workspace pair already records, and the unshifted pair is checked AFTER the shifted
+block so a held Shift never reaches the trail. Bookmarks persist beside the camera on
+`CanvasState` (`bookmarks`, absent on every earlier file, parsed as `[]` with no warning,
+malformed entries dropped per entry, a zero-scale camera dropping the bookmark rather than
+pointing it at the origin), are saved UNGATED by the restore settings (a place is not
+layout), and travel with a workspace switch exactly as groups do.

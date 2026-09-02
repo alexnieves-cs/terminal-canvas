@@ -7,7 +7,7 @@ import type { CanvasGroup } from '@renderer/groups/groups'
 import { createHistory, type History } from '@renderer/panels/history'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import type { PaletteActions } from '@renderer/palette/commands'
-import type { CanvasState } from '@shared/layout-schema'
+import type { CanvasState, PersistedBookmark } from '@shared/layout-schema'
 import type { ActivateResult, MergedWorkspace } from '@shared/ipc-contract'
 import { EMPTY_SELECTION, retainSelection } from './canvas-constants'
 import type { LinkDraw } from './useLinkDraw'
@@ -29,6 +29,8 @@ export interface WorkspaceVerbsDeps {
   } | null>
   panelsRef: RefObject<Panel[]>
   groupsRef: RefObject<CanvasGroup[]>
+  /** M56. Bookmarks travel with the workspace exactly as groups do. */
+  bookmarksRef: RefObject<PersistedBookmark[]>
   viewportRef: RefObject<Viewport>
   nextIdRef: RefObject<number>
   toggleMergedImplRef: RefObject<() => void>
@@ -39,6 +41,7 @@ export interface WorkspaceVerbsDeps {
   linkDraw: LinkDraw
   setPanels: Dispatch<SetStateAction<Panel[]>>
   setGroups: Dispatch<SetStateAction<CanvasGroup[]>>
+  setBookmarks: Dispatch<SetStateAction<PersistedBookmark[]>>
   setDormantIds: Dispatch<SetStateAction<ReadonlySet<string>>>
   setFocusedId: Dispatch<SetStateAction<string | null>>
   setSelectedIds: Dispatch<SetStateAction<ReadonlySet<string>>>
@@ -90,9 +93,9 @@ export interface WorkspaceVerbs {
  */
 export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
   const {
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData
   } = deps
@@ -204,6 +207,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         const outgoing: CanvasState = {
           panels: fromPanels(panelsRef.current),
           groups: groupsRef.current,
+          bookmarks: bookmarksRef.current,
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -275,6 +279,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         // entries.
         setPanels(next)
         setGroups(result.state.groups ?? [])
+        setBookmarks(result.state.bookmarks ?? [])
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)

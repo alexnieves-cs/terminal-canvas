@@ -66,7 +66,7 @@ async function boot(): Promise<void> {
     // Empty panels, not a constructed fallback: Canvas already knows what an
     // empty canvas means (firstRunPanels()), so this reuses that path instead
     // of inventing a second "what does no data look like" decision.
-    initial = { panels: [], groups: [], camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null }
+    initial = { panels: [], groups: [], camera: { ...DEFAULT_CAMERA }, selectedId: null, focusedId: null, bookmarks: [] }
   }
   // Which panels already have a process behind them.
   //

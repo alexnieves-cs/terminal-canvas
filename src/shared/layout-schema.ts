@@ -279,6 +279,15 @@ export interface CanvasState {
   camera: PersistedCamera
   selectedId: string | null
   focusedId: string | null
+  /** M56. Named cameras. Optional on disk for every layout written before bookmarks existed. */
+  bookmarks: PersistedBookmark[]
+}
+
+/** M56. A place to come back to: three numbers and a name. */
+export interface PersistedBookmark {
+  id: string
+  name: string
+  camera: PersistedCamera
 }
 
 /**
@@ -352,7 +361,8 @@ export function defaultWorkspace(): Workspace {
     groups: [],
     camera: { ...DEFAULT_CAMERA },
     selectedId: null,
-    focusedId: null
+    focusedId: null,
+    bookmarks: []
   }
 }
 
@@ -1214,8 +1224,42 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     groups: parseGroups(raw.groups, surviving, warnings),
     camera: parseCamera(raw.camera, warnings),
     selectedId: pick(raw.selectedId),
-    focusedId: pick(raw.focusedId)
+    focusedId: pick(raw.focusedId),
+    bookmarks: parseBookmarks(raw.bookmarks, warnings)
   }
+}
+
+/**
+ * M56. Absent for every earlier file and warns nothing; a malformed entry
+ * costs that entry with a warning, never the list. The camera goes through
+ * parseCamera's own rule — a zero scale is a dead canvas, not a cosmetic
+ * defect — but a REPLACED camera here is a dropped bookmark rather than a
+ * bookmark at the default: a bookmark that silently points at the origin is
+ * a place the user never saved.
+ */
+function parseBookmarks(raw: unknown, warnings: string[]): PersistedBookmark[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a bookmarks field that was not an array')
+    return []
+  }
+  const out: PersistedBookmark[] = []
+  const seen = new Set<string>()
+  for (const entry of raw) {
+    if (!isRecord(entry) || !isStr(entry.id) || !isStr(entry.name) || seen.has(entry.id)) {
+      warnings.push('dropped a malformed bookmark')
+      continue
+    }
+    const cameraWarnings: string[] = []
+    const camera = parseCamera(entry.camera, cameraWarnings)
+    if (cameraWarnings.length > 0) {
+      warnings.push(`dropped bookmark ${entry.name}: unusable camera`)
+      continue
+    }
+    seen.add(entry.id)
+    out.push({ id: entry.id, name: entry.name, camera })
+  }
+  return out
 }
 
 function parseSettings(raw: unknown): RestoreSettings {

@@ -3,6 +3,7 @@ import { normalizeWheel } from './canvas-input'
 import {
   centreOn as centreOnRect,
   fitTo,
+  clampScale,
   panBy,
   restoreCamera as restoreCameraExact,
   screenToWorld,
@@ -11,6 +12,8 @@ import {
   type Viewport,
   type WorldRect
 } from './viewport'
+import { easeInOut, flightDuration, interpolateViewport } from './flight'
+import { canRedo, canUndo, createHistory, pushHistory, redoHistory, undoHistory, type History } from '@renderer/panels/history'
 import type { JumpDirection } from './attention'
 
 const INITIAL: Viewport = { x: 120, y: 120, scale: 1 }
@@ -85,6 +88,18 @@ export interface ViewportControls {
    */
   fitAll: () => void
   /**
+   * M56. The named verbs behind bookmarks and the trail. Same stability
+   * requirement as every verb above: each sits in Canvas.tsx's paletteActions
+   * dep array. `flying` is STATE, not a ref: the tier-assignment effect has
+   * to re-run when it turns false, or a flight that ends on new panels
+   * leaves them carded until the next unrelated render.
+   */
+  goToViewport: (vp: Viewport) => void
+  cameraBack: () => void
+  cameraForward: () => void
+  trail: { back: boolean; forward: boolean }
+  flying: boolean
+  /**
    * Arms a camera drag-pan from a mousedown's screen coordinates — backlog
    * #68's middle-drag and space-drag. The seventh narrow verb, after
    * resetViewport/worldCentre/centreOn/restoreCamera/zoomBy/fitAll: the
@@ -110,6 +125,40 @@ export interface ViewportControls {
  * move the camera, and exporting it would invite panel code to reach past
  * the gesture layer.
  */
+/**
+ * M56. prefers-reduced-motion, with a test override: the harness cannot set
+ * the OS preference, and the flight check needs BOTH answers in one run.
+ * Module-level rather than a hook dep so a hook instance created before the
+ * override is set still honours it at the next flight.
+ */
+let reducedMotionOverride: boolean | null = null
+const OVERRIDE_KEY = 'tc.reducedMotionOverride'
+/**
+ * Backed by localStorage as well as the module variable: the harness reloads
+ * the renderer many times in one run, and a module variable dies with the
+ * page, so an override set once would silently lapse at the first reload —
+ * every check after it would sample a camera still in the air. The test
+ * hook is the only writer; production never sets the key.
+ */
+export function setReducedMotionOverride(value: boolean | null): void {
+  reducedMotionOverride = value
+  try {
+    if (value === null) window.localStorage.removeItem(OVERRIDE_KEY)
+    else window.localStorage.setItem(OVERRIDE_KEY, value ? 'true' : 'false')
+  } catch { /* storage unavailable: the module variable still holds for this page */ }
+}
+const prefersReducedMotion = (): boolean => {
+  if (reducedMotionOverride !== null) return reducedMotionOverride
+  try {
+    const stored = window.localStorage.getItem(OVERRIDE_KEY)
+    if (stored === 'true') return true
+    if (stored === 'false') return false
+  } catch { /* fall through to the media query */ }
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false
+}
+
 export function useViewport(
   hostRef: RefObject<HTMLElement | null>,
   rects: WorldRect[],
@@ -177,6 +226,78 @@ export function useViewport(
   const rectsRef = useRef(rects)
   rectsRef.current = rects
 
+  // M56. One animated path behind every DISCRETE jump. A gesture cancels a
+  // flight and lands its own math on the CURRENT frame, never on the target
+  // — the user grabbed the camera mid-air and it must stay where it is.
+  const [flying, setFlying] = useState(false)
+  const flightRef = useRef<number | null>(null)
+  const cancelFlight = useCallback(() => {
+    if (flightRef.current !== null) {
+      cancelAnimationFrame(flightRef.current)
+      flightRef.current = null
+      setFlying(false)
+    }
+  }, [])
+  const flyTo = useCallback((target: Viewport) => {
+    cancelFlight()
+    const host = hostRef.current
+    const bounds = host ? host.getBoundingClientRect() : { width: 800, height: 600 }
+    const size = { width: bounds.width, height: bounds.height }
+    const from = viewportRef.current
+    const duration = flightDuration(from, target, size, prefersReducedMotion())
+    if (duration === 0) { setViewport(target); return }
+    const centre = { x: size.width / 2, y: size.height / 2 }
+    const started = performance.now()
+    setFlying(true)
+    const step = (now: number): void => {
+      const t = Math.min(1, (now - started) / duration)
+      if (t >= 1) {
+        flightRef.current = null
+        setViewport(target)
+        setFlying(false)
+        return
+      }
+      setViewport(interpolateViewport(from, target, easeInOut(t), centre))
+      flightRef.current = requestAnimationFrame(step)
+    }
+    flightRef.current = requestAnimationFrame(step)
+  }, [cancelFlight, hostRef])
+  useEffect(() => () => { if (flightRef.current !== null) cancelAnimationFrame(flightRef.current) }, [])
+
+  // M56. The trail: a SECOND History<Viewport>, never the panels' — that
+  // one's applyHistory reaches registry.dispose. Pushed on discrete jumps
+  // only; `present` is re-read from the live camera at push time because
+  // gestures move the camera without telling the trail.
+  const trailRef = useRef<History<Viewport>>(createHistory<Viewport>(initialViewport ?? INITIAL))
+  const [trail, setTrail] = useState({ back: false, forward: false })
+  const syncTrail = useCallback((h: History<Viewport>): void => {
+    trailRef.current = h
+    setTrail({ back: canUndo(h), forward: canRedo(h) })
+  }, [])
+  const jump = useCallback((target: Viewport) => {
+    const here = viewportRef.current
+    if (here.x === target.x && here.y === target.y && here.scale === target.scale) return
+    syncTrail(pushHistory({ ...trailRef.current, present: here }, target))
+    flyTo(target)
+  }, [flyTo, syncTrail])
+  const cameraBack = useCallback(() => {
+    if (!canUndo(trailRef.current)) return
+    const h = undoHistory(trailRef.current)
+    syncTrail(h)
+    flyTo(h.present)
+  }, [flyTo, syncTrail])
+  const cameraForward = useCallback(() => {
+    if (!canRedo(trailRef.current)) return
+    const h = redoHistory(trailRef.current)
+    syncTrail(h)
+    flyTo(h.present)
+  }, [flyTo, syncTrail])
+  const goToViewport = useCallback((vp: Viewport) => {
+    jump({ x: vp.x, y: vp.y, scale: clampScale(vp.scale) })
+  }, [jump])
+  // Declared HERE, above the keydown effect that binds Cmd+0 to it.
+  const resetViewport = useCallback(() => jump(INITIAL), [jump])
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -214,6 +335,7 @@ export function useViewport(
       // not throw, it silently does nothing.
       event.preventDefault()
 
+      cancelFlight()
       const bounds = host.getBoundingClientRect()
       const anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
       const intent = normalizeWheel(event)
@@ -232,7 +354,7 @@ export function useViewport(
     // gesture that itself triggers re-renders.
     host.addEventListener('wheel', onWheel, { passive: false, capture: true })
     return () => host.removeEventListener('wheel', onWheel, { capture: true })
-  }, [hostRef, shouldYieldWheel])
+  }, [hostRef, shouldYieldWheel, cancelFlight])
 
   /**
    * Zoom about the CENTRE of the host, not about a pointer: there is no
@@ -263,8 +385,8 @@ export function useViewport(
     // rectsRef, not `rects`: read at press time, so the fit frames what is on
     // the canvas NOW without the array's per-frame identity churn reaching a
     // dep list. Same reason the keydown effect reads it through the ref.
-    setViewport(fitTo(rectsRef.current, { width: bounds.width, height: bounds.height }))
-  }, [hostRef])
+    jump(fitTo(rectsRef.current, { width: bounds.width, height: bounds.height }))
+  }, [hostRef, jump])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -328,6 +450,15 @@ export function useViewport(
       // so a latch would stick "down" after the first Cmd+N and the shortcut
       // would be dead for the rest of the run — a silent dead key traded for
       // a loud bug, which is the worse of the two failures.
+      // M56. The trail, on the UNSHIFTED brackets (the shifted pair is the
+      // workspace step above). event.code for the same reason.
+      if (event.code === 'BracketLeft' || event.code === 'BracketRight') {
+        event.preventDefault()
+        if (event.repeat) return
+        if (event.code === 'BracketLeft') cameraBack()
+        else cameraForward()
+        return
+      }
       if (event.repeat && !REPEATABLE_KEYS.has(event.key)) return
 
       const host = hostRef.current
@@ -338,7 +469,7 @@ export function useViewport(
       switch (event.key) {
         case '0':
           event.preventDefault()
-          setViewport(INITIAL)
+          resetViewport()
           break
         // These three call the named verbs rather than repeating the
         // arithmetic, so the chord and the top bar's button are provably the
@@ -386,7 +517,7 @@ export function useViewport(
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     hostRef, onSpawn, shouldIgnoreKeys, onJumpAttention, onStepWorkspace, onToggleMerged,
-    zoomBy, fitAll
+    zoomBy, fitAll, resetViewport, cameraBack, cameraForward
   ])
 
   // The SETTER stays private — nothing outside should move the camera — but a
@@ -410,7 +541,6 @@ export function useViewport(
   // on every mousemove over .canvas (setCursor), so an unstable identity here
   // means nudging the mouse silently moves the palette's highlighted row out
   // from under the user's arrow keys, and Enter runs the wrong command.
-  const resetViewport = useCallback(() => setViewport(INITIAL), [])
 
   // Same referential-stability reasoning as resetViewport/worldCentre above:
   // this sits in Canvas.tsx's paletteActions dep array, and a fresh identity
@@ -423,8 +553,8 @@ export function useViewport(
     // host, never from a normal palette action.
     if (!host) return
     const bounds = host.getBoundingClientRect()
-    setViewport((vp) => centreOnRect(vp, rect, { width: bounds.width, height: bounds.height }))
-  }, [hostRef])
+    jump(centreOnRect(viewportRef.current, rect, { width: bounds.width, height: bounds.height }))
+  }, [hostRef, jump])
 
   /**
    * The fourth verb that asks by name, after resetViewport, worldCentre and
@@ -445,8 +575,12 @@ export function useViewport(
    * running the wrong command.
    */
   const restoreCamera = useCallback((camera: Viewport) => {
-    setViewport(restoreCameraExact(camera))
-  }, [])
+    cancelFlight()
+    const exact = restoreCameraExact(camera)
+    setViewport(exact)
+    // A workspace switch is a new trail, not a jump the old trail can undo.
+    syncTrail(createHistory<Viewport>(exact))
+  }, [cancelFlight, syncTrail])
 
   /**
    * Backlog #68: middle-drag and space-drag pan. `panDragRef` holds the
@@ -503,6 +637,7 @@ export function useViewport(
 
   return {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
-    beginPanDrag, panning
+    beginPanDrag, panning,
+    goToViewport, cameraBack, cameraForward, trail, flying
   }
 }

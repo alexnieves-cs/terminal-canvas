@@ -181,6 +181,12 @@ export interface PaletteActions {
   jumpPrompt(id: string, direction: -1 | 1): void
   /** M52. Copy the lines between the last command's start and end marks. */
   copyLastOutput(id: string): void
+  /** M56. Bookmarks and the camera trail. */
+  addBookmark: () => void
+  goToBookmark: (id: string) => void
+  deleteBookmark: (id: string, name: string) => void
+  cameraBack: () => void
+  cameraForward: () => void
   /**
    * Set this panel's permission mode AND restart it, as ONE gesture.
    *
@@ -349,6 +355,9 @@ export interface PaletteContext {
   envReport?: EnvReport | null
   /** M49. The global terminal font size, for the font rows' titles. */
   globalFontSize?: number
+  /** M56. This workspace's bookmarks, and whether the camera trail can step each way. */
+  bookmarks?: readonly { id: string; name: string }[]
+  cameraTrail?: { back: boolean; forward: boolean }
   workspaces: WorkspaceRow[]
   /**
    * Metadata only, from window.canvas.credential.list() — never a token, and
@@ -1060,6 +1069,45 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   }
 
   // --- Environment (M48) -----------------------------------------------------
+  // --- Bookmarks (M56) ---------------------------------------------------------
+  out.push({
+    id: 'bookmark.add',
+    title: 'Bookmark this view',
+    subtitle: 'save where the camera is, to come back to',
+    searchText: 'bookmark save view camera place',
+    group: 'bookmark',
+    run: () => actions.addBookmark()
+  })
+  for (const b of ctx.bookmarks ?? []) {
+    out.push({
+      id: `bookmark.go.${b.id}`,
+      title: `Go to “${b.name}”`,
+      searchText: `bookmark go ${b.name}`,
+      group: 'bookmark',
+      run: () => actions.goToBookmark(b.id)
+    })
+    out.push({
+      id: `bookmark.delete.${b.id}`,
+      title: `Delete bookmark “${b.name}”…`,
+      searchText: `bookmark delete remove ${b.name}`,
+      group: 'bookmark',
+      hiddenAtRest: true,
+      destructive: true,
+      run: () => actions.deleteBookmark(b.id, b.name)
+    })
+  }
+  const trail = ctx.cameraTrail ?? { back: false, forward: false }
+  out.push(
+    withReason(
+      { id: 'camera.back', title: 'Camera: back', subtitle: '⌘[ — where the camera was before the last jump', searchText: 'camera back previous view undo', group: 'bookmark', run: () => actions.cameraBack() },
+      trail.back ? undefined : 'nothing to go back to'
+    ),
+    withReason(
+      { id: 'camera.forward', title: 'Camera: forward', subtitle: '⌘] — the jump that was undone', searchText: 'camera forward redo view', group: 'bookmark', run: () => actions.cameraForward() },
+      trail.forward ? undefined : 'nothing to go forward to'
+    )
+  )
+
   out.push(...buildEnvironmentRows(ctx.envReport ?? null))
 
   // --- Credentials -----------------------------------------------------------

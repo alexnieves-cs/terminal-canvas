@@ -1774,6 +1774,56 @@ console.log('\n' + '='.repeat(60))
     can && seeded === 41 && untouched === 12, JSON.stringify({ seeded, untouched }))
 }
 
+// M56 — flights. A tween that interpolates scale linearly, or derives its
+// translation from an UNCLAMPED intermediate, reproduces check 3's sideways
+// drift in the middle of every flight instead of at a pinch limit; and a
+// duration that ignores prefers-reduced-motion is the one motion rule this
+// app has, broken on the one surface it was written for.
+{
+  const can = typeof V.interpolateViewport === 'function' && typeof V.flightDuration === 'function' && typeof V.easeInOut === 'function'
+  const from = { x: 0, y: 0, scale: V.MIN_SCALE }
+  const to = { x: -5000, y: -3000, scale: V.MAX_SCALE }
+  const at = (t) => (can ? V.interpolateViewport(from, to, t) : null)
+  const start = at(0)
+  const end = at(1)
+  const mid = at(0.5)
+  const samples = can ? Array.from({ length: 21 }, (_, i) => at(i / 20)) : []
+  const clamped = samples.every((v) => v.scale >= V.MIN_SCALE - 1e-9 && v.scale <= V.MAX_SCALE + 1e-9)
+  const logMid = Math.sqrt(V.MIN_SCALE * V.MAX_SCALE)
+  // The world point under the screen centre must move in a straight line:
+  // with the centre at (400, 300), the midpoint's world-centre is the average
+  // of the endpoints' world-centres.
+  const size = { width: 800, height: 600 }
+  const wc = (v) => V.screenToWorld({ x: 400, y: 300 }, v)
+  const wcMid = can ? wc(mid) : null
+  const wcAvg = can ? { x: (wc(from).x + wc(to).x) / 2, y: (wc(from).y + wc(to).y) / 2 } : null
+  ok('flight.1 endpoints exact, scale clamped at every frame, log-space scale midpoint, and the screen-centre world point flies straight',
+    can && start.x === from.x && start.y === from.y && start.scale === from.scale &&
+      end.x === to.x && end.y === to.y && end.scale === to.scale && clamped &&
+      Math.abs(mid.scale - logMid) < 1e-9 &&
+      Math.abs(wcMid.x - wcAvg.x) < 1e-6 && Math.abs(wcMid.y - wcAvg.y) < 1e-6,
+    can ? JSON.stringify({ start, end, mid, clamped, logMid, wcMid, wcAvg }) : 'flight exports are missing')
+  const near = can ? V.flightDuration({ x: 0, y: 0, scale: 1 }, { x: -50, y: 0, scale: 1 }, size, false) : -1
+  const far = can ? V.flightDuration({ x: 0, y: 0, scale: 1 }, { x: -50000, y: -50000, scale: 0.2 }, size, false) : -1
+  const reduced = can ? V.flightDuration({ x: 0, y: 0, scale: 1 }, { x: -50000, y: 0, scale: 1 }, size, true) : -1
+  const same = can ? V.flightDuration({ x: 0, y: 0, scale: 1 }, { x: 0, y: 0, scale: 1 }, size, false) : -1
+  ok('flight.2 reduced motion is 0ms, an identical target is 0ms, and a far flight is longer than a near one within the 160–320ms band',
+    can && reduced === 0 && same === 0 && near >= 160 && near <= 320 && far >= 160 && far <= 320 && far > near &&
+      Math.abs(V.easeInOut(0)) < 1e-9 && Math.abs(V.easeInOut(1) - 1) < 1e-9 && V.easeInOut(0.25) < 0.25 && V.easeInOut(0.75) > 0.75,
+    JSON.stringify({ near, far, reduced, same }))
+  // trail.1 — the camera trail is a SECOND History<Viewport>; the generic
+  // module steps both ways and never disposes anything.
+  const canH = typeof V.createHistory === 'function'
+  let h = canH ? V.createHistory({ x: 0, y: 0, scale: 1 }) : null
+  if (h) { h = V.pushHistory(h, { x: -10, y: 0, scale: 1 }); h = V.pushHistory(h, { x: -20, y: 0, scale: 1 }) }
+  const back = h ? V.undoHistory(h) : null
+  const fwd = back ? V.redoHistory(back) : null
+  ok('trail.1 a History<Viewport> steps back to the previous camera and forward again, and reports both ends',
+    canH && back.present.x === -10 && fwd.present.x === -20 && V.canUndo(h) === true && V.canRedo(h) === false &&
+      V.canRedo(back) === true,
+    canH ? JSON.stringify({ back: back.present, fwd: fwd.present }) : 'history is not bundled')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

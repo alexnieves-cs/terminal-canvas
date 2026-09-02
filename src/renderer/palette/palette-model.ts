@@ -11,6 +11,7 @@ export type SectionId =
   | 'spawn'
   | 'prompt'
   | 'workspace'
+  | 'bookmark'
   | 'canvas'
   | 'setting'
   | 'credential'
@@ -39,6 +40,9 @@ export const SECTIONS: readonly SectionDef[] = [
   { id: 'spawn', label: 'New panel' },
   { id: 'prompt', label: 'Prompts' },
   { id: 'workspace', label: 'Workspaces' },
+  // M56. Between Workspaces and Canvas: a bookmark is a place, like a
+  // workspace, and narrower than the canvas verbs below it.
+  { id: 'bookmark', label: 'Bookmarks' },
   { id: 'canvas', label: 'Canvas' },
   { id: 'setting', label: 'Settings' },
   { id: 'credential', label: 'Credentials' },

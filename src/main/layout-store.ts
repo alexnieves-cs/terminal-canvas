@@ -354,7 +354,10 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       groups,
       camera: camera ? { ...w.camera } : { ...defaultWorkspace().camera },
       selectedId: keepSelection ? w.selectedId : null,
-      focusedId: keepSelection ? w.focusedId : null
+      focusedId: keepSelection ? w.focusedId : null,
+      // M56. Bookmarks are places, not layout: they survive `restore.layout`
+      // off, since a bookmark on an empty canvas still names where to look.
+      bookmarks: (w.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } }))
     }
   }
 
@@ -385,6 +388,8 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       w.focusedId = incoming.focusedId
     }
     if (camera) w.camera = { ...incoming.camera }
+    // M56. Ungated: a bookmark is a place, kept whatever the restore settings say.
+    w.bookmarks = (incoming.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } }))
     scheduleWrite()
   }
 

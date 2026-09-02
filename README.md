@@ -57,6 +57,12 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **A camera that flies, remembers, and keeps places.** Every discrete jump —
+  a rail row, a search hit, a notification, `⌘1`, `⌘0`, a bookmark — is a
+  short eased flight instead of a teleport, unless the system asks for
+  reduced motion, in which case it is one frame. `⌘[` and `⌘]` walk the
+  camera's own trail, separate from `⌘Z`, which never touches it.
+  `Bookmark this view` in `⌘K` names where you are; `Go to` flies back.
 - **Nothing recovered is thrown away unasked.** A session the app finds at
   launch with no panel in any canvas — the agent that was mid-run when the
   machine died between a spawn and the save — is offered back by name:

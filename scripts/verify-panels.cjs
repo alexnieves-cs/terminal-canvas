@@ -371,6 +371,11 @@ app.whenReady().then(async () => {
     height: 900,
     webPreferences: {
       preload: join(__dirname, '..', 'out', 'preload', 'index.js'),
+      // M56. A hidden window pauses requestAnimationFrame, and a camera
+      // flight is driven by it: without this a flight never settles, the
+      // tier gate stays shut, and every panel stays a card. Production
+      // windows are visible; this is the harness's own condition.
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -1187,6 +1192,12 @@ app.whenReady().then(async () => {
 
     // Shells must actually spawn; wait for the first live terminal rather
     // than guessing how long that takes.
+    // M56. Reduced motion ON for the whole run: every check below reads the
+    // camera right after a jump, and a flight in the air is a camera that is
+    // not there yet. flight.1 turns it off for its one jump and turns it back
+    // on. The same choice a user who set the OS preference has made.
+    await waitUntil(() => wc.executeJavaScript(`typeof window.__m56ReducedMotion === 'function'`), 6000)
+    await wc.executeJavaScript(`window.__m56ReducedMotion(true)`)
     await waitUntil(async () => (await liveCount(wc)) > 0, 6000)
 
     const live = await liveCount(wc)
@@ -3800,7 +3811,7 @@ app.whenReady().then(async () => {
         // loads the built renderer rather than bundling palette-model.ts, so
         // reaching the real SECTIONS value here would mean adding plumbing
         // this task was told not to add.
-        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Canvas', 'Settings', 'Credentials', 'Manage']
+        const ORDER = ['Panels', 'New panel', 'Prompts', 'Workspaces', 'Bookmarks', 'Canvas', 'Settings', 'Credentials', 'Manage']
         const unique = headers.length === new Set(headers).size
         const ordered = headers.join(',') ===
           ORDER.filter((label) => headers.includes(label)).join(',')
@@ -14729,6 +14740,84 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // flight.1 / trail.1 / bookmark.1 (M56). The camera's discrete jumps
+    //   are FLIGHTS unless reduced motion says otherwise; the trail steps
+    //   back to exactly where the camera was; a bookmark saved through the
+    //   palette reaches the store and `Go to` lands on it. The reduced-motion
+    //   answer comes through the __m56ReducedMotion override because the
+    //   harness cannot set the OS preference and needs both answers in one
+    //   run. Red for flight.1 is by fault (flightDuration forced to 0: every
+    //   jump lands in one frame and the mid-flight sample equals the target).
+    {
+      const vp = () => wc.executeJavaScript(`JSON.stringify(window.__m4aViewport())`).then((t) => JSON.parse(t))
+      const same = (a, b) => a.x === b.x && a.y === b.y && a.scale === b.scale
+      const cmd = (key, code) => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, code: ${JSON.stringify(code)}, metaKey: true, bubbles: true }))`)
+      const clickRow = (id) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-rail-row=' + JSON.stringify(${JSON.stringify(id)}) + '] .rail-row__main')
+        if (!el) return false
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return true })()`)
+      const firstRow = await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-rail-row]')
+        return el ? el.getAttribute('data-rail-row') : null })()`)
+      await wc.executeJavaScript(`window.__m56ReducedMotion(true)`)
+      await cmd('0', 'Digit0')
+      await settle()
+      // Pan away so the target is never where the camera already is.
+      await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { deltaX: 420, deltaY: 310, deltaMode: 0, bubbles: true, cancelable: true }))`)
+      await settle()
+      const start = await vp()
+      const clicked = firstRow ? await clickRow(firstRow) : false
+      await settle()
+      const target = await vp()
+      await cmd('[', 'BracketLeft')
+      await settle()
+      const back = await vp()
+      ok('trail.1 Cmd+[ returns the camera exactly to where it was before the jump',
+        clicked === true && !same(start, target) && same(back, start), JSON.stringify({ firstRow, start, target, back }))
+      await wc.executeJavaScript(`window.__m56ReducedMotion(false)`)
+      await clickRow(firstRow)
+      await sleep(60)
+      const mid = await vp()
+      const landed = await waitUntil(async () => same(await vp(), target), 3000)
+      ok('flight.1 the same jump without reduced motion is a multi-frame flight that lands on the identical target',
+        clicked === true && !same(mid, start) && !same(mid, target) && landed === true,
+        JSON.stringify({ start, mid, target, landed }))
+      await wc.executeJavaScript(`window.__m56ReducedMotion(true)`)
+      // bookmark: save HERE (the target), move away, come back by name.
+      const openP = async () => {
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      }
+      const runRow = async (rowId) => {
+        const opened = await openP()
+        if (opened !== true) return 'no palette'
+        return wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify(rowId)}) + ']')
+          if (!el) return 'no row'
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          return true })()`)
+      }
+      const added = await runRow('bookmark.add')
+      await settle()
+      const stored = await waitUntil(async () => {
+        const b = layoutStore.initial().bookmarks || []
+        return b.length > 0 ? b : false
+      }, 3000)
+      const bookmarkId = stored && stored[0] ? stored[0].id : null
+      await cmd('0', 'Digit0')
+      await settle()
+      const away = await vp()
+      const went = bookmarkId ? await runRow(`bookmark.go.${bookmarkId}`) : 'no id'
+      await settle()
+      const arrived = await vp()
+      ok('bookmark.1 Bookmark this view reaches the store with the camera, and Go to lands on it after the camera moved',
+        added === true && stored && stored.length === 1 && stored[0].name === 'View 1' && same(stored[0].camera, target) &&
+          !same(away, target) && went === true && same(arrived, target),
+        JSON.stringify({ added, stored, away, went, arrived, target }))
+      await wc.executeJavaScript(`window.__m56ReducedMotion(true)`)
+    }
+
     // recover.1 (M55). A session that exists in NO layout — spawned straight
     //   through the manager under an id the renderer never minted — then
     //   main's `session:recover` sent to the renderer, as a Restore answer

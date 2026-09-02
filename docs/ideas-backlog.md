@@ -1424,7 +1424,7 @@ one, so a panel that `cd`'d into a second repository is still reviewed against t
 The stored baseline sha lives in that first repository, so correcting it needs a
 recapture-or-refuse policy — a design of its own, and the natural successor to M12.
 
-## 42. Camera bookmarks — named viewports, saved and jumped to
+## 42. Camera bookmarks — named viewports, saved and jumped to — DONE, M56
 
 The camera is a first-class object — `Viewport` is `{x, y, scale}` and is already persisted
 into the layout — yet nobody can *name* one. Save "where I am looking right now" as a named
@@ -1449,7 +1449,7 @@ numbers, which makes this the best value-per-byte item in the canvas layer.
   palette group, with no hold-to-reveal overlay at all. The nav grid's hard part was the
   gesture; this one has none.
 
-## 45. Camera undo — a back button for the viewport
+## 45. Camera undo — a back button for the viewport — DONE, M56
 
 `History<T>` is generic and is instantiated at `History<Panel[]>` only, so `Cmd+Z` unwinds
 panel geometry and nothing about where you were looking. The camera is exactly the state a
@@ -1721,7 +1721,7 @@ write — it destroys it. "N sessions from a previous run: restore or discard?" 
   layouts. This is about the sessions that exist with *no* layout at all — a state only main
   can see, and today only main destroys.
 
-## 62. Camera animation — tweened flights, and where they fight tiering
+## 62. Camera animation — tweened flights, and where they fight tiering — DONE, M56
 
 Every camera change today is an instantaneous jump: reset, `fitTo`, and the palette's
 go-to-panel. A teleport destroys spatial continuity, which is the one thing a spatial
