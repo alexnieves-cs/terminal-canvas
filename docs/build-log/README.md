@@ -44,3 +44,4 @@ copy here is deleted.
 | [m59-dead-end-audit.md](m59-dead-end-audit.md) | M59 — The dead-end audit | finished |
 | [m60-ship.md](m60-ship.md) | M60 — Ship | finished |
 | [m61-visual-loop.md](m61-visual-loop.md) | M61 — The visual loop, and three post-1.0 defects | finished |
+| [m62-design-brief.md](m62-design-brief.md) | M62 — The design brief and the 1.x scope decision | finished |
