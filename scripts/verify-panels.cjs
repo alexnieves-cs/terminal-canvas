@@ -13711,6 +13711,134 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M45 — the visual language. theme.1: switching the setting to dark
+    // stamps data-theme on <html>, the xterm option theme changes on a LIVE
+    // and a DETACHED session, and the card's slot background is the theme's
+    // --well. targets.1: every icon control measures >= 24x24 (WCAG 2.5.8).
+    // reveal.1: a rail row's close control is invisible at rest and visible
+    // on :focus-within, and the dormant start control is visible at rest.
+    // -------------------------------------------------------------------
+    {
+      const vLog = []
+      const onV = (_e, level, message) => { if (level >= 2) vLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onV)
+      const IDS = [
+        'theme.1 switching to dark stamps data-theme, retunes the xterm theme on a live AND a detached session, and the card slot follows',
+        'targets.1 every icon control measures at least 24x24',
+        'reveal.1 a rail row\'s close control is hidden at rest and revealed on :focus-within, and the dormant start control is always visible'
+      ]
+      try {
+        backend = createDirectBackend('verify: direct (m45 visual)')
+        const home = require('node:os').homedir()
+        const vP = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 300, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] } })
+        // vA on screen (goes live when focused); vB 40,000 world units away —
+        // never on screen, so it stays a card and its terminal stays
+        // detached. Both start DORMANT (nothing spawns until clicked).
+        layoutStore.save({ panels: fromPanels([vP('vA', 60), vP('vB', 40000)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        // Start from LIGHT, not `system`: the harness machine may be in dark
+        // mode, in which case `system` already resolves to dark and a switch
+        // to dark would change nothing — the check would pass or fail for the
+        // OS's reason rather than the app's.
+        layoutStore.setPreference('appearance.theme', 'light')
+        layoutStore.flushSync()
+        const reV = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reV
+        await waitUntil(async () => wc.executeJavaScript(
+          `['vA', 'vB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        // Wake vA so it has a LIVE terminal: click its card.
+        await wc.executeJavaScript(`(() => {
+          const card = document.querySelector('.panel[data-panel-id="vA"] .panel__card')
+          if (card) card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); return !!card })()`)
+        await waitUntil(async () => (await sessionMap(wc)).has('vA'), 10000)
+        await settle()
+        const themeOf = (id) => wc.executeJavaScript(`window.__m45TerminalTheme ? window.__m45TerminalTheme(${JSON.stringify(id)}) : null`)
+        // The CARD's own ground (a card has no .panel__slot — that is the live
+        // tier's element), against the probe of the token it should equal.
+        const cardBg = () => wc.executeJavaScript(`(() => {
+          const panel = document.querySelector('.panel[data-panel-id="vB"]')
+          const probe = document.createElement('div'); probe.style.color = 'var(--panel-bg)'; document.body.appendChild(probe)
+          const want = getComputedStyle(probe).color; probe.remove()
+          return { got: panel ? getComputedStyle(panel).backgroundColor : null, want } })()`)
+        const before = {
+          attr: await wc.executeJavaScript(`document.documentElement.dataset.theme ?? null`),
+          a: await themeOf('vA'), b: await themeOf('vB'), card: await cardBg()
+        }
+        // The switch, through the same invoke the palette row and the menu
+        // use — NOT a direct DOM stamp, which would prove nothing about the
+        // path a user's click takes.
+        await wc.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'dark')`)
+        const stamped = await waitUntil(async () => wc.executeJavaScript(`document.documentElement.dataset.theme === 'dark'`), 5000)
+        await settle()
+        const after = {
+          attr: await wc.executeJavaScript(`document.documentElement.dataset.theme ?? null`),
+          a: await themeOf('vA'), b: await themeOf('vB'), card: await cardBg()
+        }
+        ok(IDS[0],
+          stamped && after.attr === 'dark' && before.attr === 'light' &&
+            before.a === '#ffffff' && after.a === '#14161c' &&
+            before.b === '#ffffff' && after.b === '#14161c' &&
+            before.card.got === before.card.want && after.card.got === after.card.want &&
+            before.card.got !== after.card.got,
+          JSON.stringify({ before, after }))
+
+        // targets.1. Measured, not declared: getBoundingClientRect on every
+        //      icon control present, at camera scale 1. .rail-row__start is
+        //      present because vB is dormant.
+        const targets = await wc.executeJavaScript(`(() => {
+          const sel = ['.rail-row__start', '.rail-row__rename', '.rail-row__close', '.panel__close',
+            '.shell__settings', '.shell__zoom-in', '.shell__zoom-out', '.shell__region-add',
+            '.shell__tree-toggle', '.shell__rail-toggle', '.shell__inspector-toggle']
+          const out = []
+          for (const s of sel) {
+            // A 0x0 rect is an element display:none'd by a collapsed column
+            // (the tree is closed by default), not a small target; skip it,
+            // but every selector must still have at least one RENDERED match.
+            const els = [...document.querySelectorAll(s)]
+              .map((el) => el.getBoundingClientRect())
+              .filter((r) => r.width > 0 || r.height > 0)
+            if (els.length === 0) { out.push({ s, missing: true }); continue }
+            for (const r of els) out.push({ s, w: Math.round(r.width), h: Math.round(r.height) })
+          }
+          return out })()`)
+        const small = targets.filter((t) => t.missing || t.w < 24 || t.h < 24)
+        ok(IDS[1], targets.length > 0 && small.length === 0, JSON.stringify(small.slice(0, 8)))
+
+        // reveal.1. Computed opacity, which is what a person sees. Focus is
+        //      put on the control itself so :focus-within on the row applies;
+        //      the window is focused first, because :focus needs a focused
+        //      frame to match.
+        wc.focus()
+        const reveal = await wc.executeJavaScript(`(() => {
+          const rowA = document.querySelector('.rail-row[data-rail-row="vA"]')
+          const rowB = document.querySelector('.rail-row[data-rail-row="vB"]')
+          const closeA = rowA && rowA.querySelector('.rail-row__close')
+          const startB = rowB && rowB.querySelector('.rail-row__start')
+          const rest = { close: closeA ? getComputedStyle(closeA).opacity : null, start: startB ? getComputedStyle(startB).opacity : null }
+          if (closeA) closeA.focus()
+          return { rest, active: document.activeElement === closeA } })()`)
+        // Read AFTER the --dur-1 opacity transition, not in the same tick as
+        // focus(): a computed opacity mid-transition is still 0.
+        await settle()
+        const revealed = await wc.executeJavaScript(`(() => {
+          const closeA = document.querySelector('.rail-row[data-rail-row="vA"] .rail-row__close')
+          return closeA ? getComputedStyle(closeA).opacity : null })()`)
+        reveal.focused = { close: revealed, active: reveal.active }
+        ok(IDS[2],
+          reveal.rest.close === '0' && reveal.rest.start === '1' && reveal.focused.active && reveal.focused.close === '1',
+          JSON.stringify(reveal))
+        // Restore the setting so later checks (and the next run) start light.
+        await wc.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'system')`)
+        await settle()
+      } catch (vErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr) + ' | renderer: ' + (vLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onV)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

@@ -5,6 +5,7 @@ import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
 import { PanelPorts } from '@renderer/components/PanelPorts'
+import { Close, Pencil, Refresh } from '@renderer/icons'
 
 /**
  * The conflict banner's wording.
@@ -531,11 +532,11 @@ function FileNodeImpl({
             capturedFocusRef.current = focusedId
           }}
         >
-          ✎
+          <Pencil />
         </button>
         <button
           type="button"
-          className="file-node__refresh"
+          className="file-node__refresh icon-button"
           title="Read this file again"
           onMouseDown={(event) => {
             // preventDefault is what keeps DOM focus off this button and on
@@ -547,7 +548,7 @@ function FileNodeImpl({
             setRefreshToken((n) => n + 1)
           }}
         >
-          ⟳
+          <Refresh />
         </button>
         {/* Arms only while a draft is DIRTY. This comment used to say there
             was "nothing to kill here" and that "the same gesture reopens the
@@ -558,7 +559,7 @@ function FileNodeImpl({
             one click, because a clean panel really does have nothing to lose. */}
         <button
           type="button"
-          className={`panel__close${closeArmed ? ' panel__close--arming' : ''}`}
+          className={`panel__close icon-button${closeArmed ? ' panel__close--arming' : ''}`}
           data-file-node-close
           title={closeArmed ? 'Click again to close and lose your unsaved changes' : 'Close this file'}
           onMouseDown={(event) => {
@@ -572,7 +573,7 @@ function FileNodeImpl({
             arm('close')
           }}
         >
-          {closeArmed ? 'lose edits?' : '×'}
+          {closeArmed ? 'lose edits?' : <Close />}
         </button>
       </header>
 

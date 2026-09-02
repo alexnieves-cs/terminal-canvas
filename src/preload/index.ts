@@ -117,7 +117,8 @@ const bridge: CanvasBridge = {
   },
   settings: {
     list: () => ipcRenderer.invoke(IPC.SETTINGS_LIST),
-    set: (id: string, value: SettingValue) => ipcRenderer.invoke(IPC.SETTINGS_SET, id, value)
+    set: (id: string, value: SettingValue) => ipcRenderer.invoke(IPC.SETTINGS_SET, id, value),
+    onChanged: (listener) => subscribe<string>(IPC_EVENTS.SETTINGS_CHANGED, listener)
   },
   agent: {
     onState: (listener) => subscribe<AgentStateUpdate>(IPC_EVENTS.AGENT_STATE, listener),

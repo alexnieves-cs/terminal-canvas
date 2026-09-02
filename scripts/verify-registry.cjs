@@ -791,6 +791,32 @@ console.log('\n' + '='.repeat(60))
       JSON.stringify({ p1: p1.options, p2: p2.options, p3: p3.options }))
   }
 
+  // M45 — theme.1. The terminal follows the theme through the SAME fan-out:
+  //     a `theme` option reaches a session that was attached and then
+  //     DETACHED (its terminal object outlives its host, so the option lands
+  //     on the object and paints on the next attach), as well as one that has
+  //     never been attached. A fan-out that walked only live sessions would
+  //     leave every carded panel's terminal in the old theme until it was
+  //     next promoted — visible only as a panel that goes live in the wrong
+  //     colours for one frame, then repaints.
+  {
+    const { registry, factory } = setup()
+    registry.ensure('t1', { ...SPEC, panelId: 't1' })
+    registry.ensure('t2', { ...SPEC, panelId: 't2' })
+    registry.attachSlot('t1')
+    await tick()
+    registry.detachSlot('t1')
+    const LIGHT = { background: '#ffffff', foreground: '#1b1e26' }
+    registry.applyTerminalOptions({ theme: LIGHT })
+    const t1 = factory.made.get('t1')
+    const t2 = factory.made.get('t2')
+    ok('theme.1 a theme change reaches an attached-then-detached session and a never-attached one',
+      t1 !== undefined && t2 !== undefined && !t1.attached &&
+        t1.options.theme && t1.options.theme.background === '#ffffff' &&
+        t2.options.theme && t2.options.theme.background === '#ffffff',
+      JSON.stringify({ t1: { attached: t1 && t1.attached, options: t1 && t1.options }, t2: t2 && t2.options }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

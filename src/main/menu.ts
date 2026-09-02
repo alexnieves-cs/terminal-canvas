@@ -1,12 +1,12 @@
 import { BrowserWindow, Menu, app, clipboard, type MenuItemConstructorOptions } from 'electron'
 import { IPC_EVENTS } from '../shared/ipc-contract'
-import { RESTORE_CATEGORY, settingsInCategory, type SettingValue } from '../shared/settings-schema'
+import { APPEARANCE_CATEGORY, RESTORE_CATEGORY, settingsInCategory, type SettingValue } from '../shared/settings-schema'
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
   /** Resolved current values, keyed by SettingDef.id. */
   settingValue(id: string): SettingValue
-  onToggleSetting(id: string, value: boolean): void
+  onToggleSetting(id: string, value: SettingValue): void
   onReset(): void
   /** Built-ins and user presets together, each already resolved for availability. */
   presets: PresetAvailability[]
@@ -51,6 +51,21 @@ export function buildAppMenu(options: AppMenuOptions): void {
             // which is exactly why they need no IPC event of their own.
             click: (item) => options.onToggleSetting(def.id, item.checked)
           }))
+        },
+        {
+          label: APPEARANCE_CATEGORY,
+          // M45. One radio group per enum setting, derived from the schema
+          // the same way the Restore submenu is. `checked` is the setting's
+          // current value, so a change made in the palette redraws here on
+          // the rebuild settings:set already triggers.
+          submenu: settingsInCategory(APPEARANCE_CATEGORY).flatMap((def) =>
+            (def.values ?? []).map((value) => ({
+              label: `${def.label}: ${value}`,
+              type: 'radio' as const,
+              checked: options.settingValue(def.id) === value,
+              click: () => options.onToggleSetting(def.id, value)
+            }))
+          )
         },
         {
           label: 'Reset canvas…',

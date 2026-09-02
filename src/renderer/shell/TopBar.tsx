@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import { shellControl } from './shell-control'
+import { Gear, Layers, Minus, Plus, Search } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -72,15 +73,15 @@ export function TopBar({
         title={preferred ? `New ${preferred.name} panel (⌘N)` : 'No preset is available'}
         {...shellControl(() => { if (preferred) onSpawnPreset(preferred.id) })}
       >
-        + New panel
+        New panel <kbd>⌘N</kbd>
       </button>
 
       <div className="shell__zoom" role="group" aria-label="Zoom">
-        <button type="button" className="shell__zoom-out" title="Zoom out (⌘−)"
-          aria-label="Zoom out" {...shellControl(() => onZoomBy(1 / ZOOM_STEP))}>−</button>
+        <button type="button" className="shell__zoom-out icon-button" title="Zoom out (⌘−)"
+          aria-label="Zoom out" {...shellControl(() => onZoomBy(1 / ZOOM_STEP))}><Minus /></button>
         <span className="shell__zoom-readout">{Math.round(scale * 100)}%</span>
-        <button type="button" className="shell__zoom-in" title="Zoom in (⌘=)"
-          aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}>+</button>
+        <button type="button" className="shell__zoom-in icon-button" title="Zoom in (⌘=)"
+          aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
         <button type="button" className="shell__fit" title="Fit everything (⌘1)"
           {...shellControl(onFit)}>Fit</button>
       </div>
@@ -98,15 +99,15 @@ export function TopBar({
         title={merged ? 'Back to this workspace' : 'Show every workspace at once'}
         {...shellControl(onToggleMerged)}
       >
-        {merged ? 'Merged ✓' : 'Merged'}
+        <Layers /> {merged ? 'Merged ✓' : 'Merged'}
       </button>
 
       <div className="shell__spacer" />
 
       <button type="button" className="shell__search" title="Search commands (⌘K)"
-        {...shellControl(onSearch)}>Search ⌘K</button>
-      <button type="button" className="shell__settings" title="Settings"
-        aria-label="Settings" {...shellControl(onSettings)}>⚙</button>
+        {...shellControl(onSearch)}><Search /> Search <kbd>⌘K</kbd></button>
+      <button type="button" className="shell__settings icon-button" title="Settings"
+        aria-label="Settings" {...shellControl(onSettings)}><Gear /></button>
     </header>
   )
 }

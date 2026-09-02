@@ -5,6 +5,7 @@ import type { ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { buildReviewNodeModel } from './review-node-model'
 import { PanelPorts } from '@renderer/components/PanelPorts'
+import { Close, Commit, Refresh } from '@renderer/icons'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -323,7 +324,7 @@ function ReviewNodeImpl({
         <span className="panel__title">{model.heading}</span>
         <button
           type="button"
-          className="review-node__refresh"
+          className="review-node__refresh icon-button"
           title="Read this repository again"
           onMouseDown={(event) => {
             event.stopPropagation()
@@ -331,7 +332,7 @@ function ReviewNodeImpl({
             setRefreshToken((n) => n + 1)
           }}
         >
-          ⟳
+          <Refresh />
         </button>
         {model.commit.kind !== 'none' && (
           <button
@@ -358,7 +359,7 @@ function ReviewNodeImpl({
               setDraft((d) => d ?? '')
             }}
           >
-            {committing ? 'committing…' : '⌦'}
+            {committing ? 'committing…' : <><Commit /> commit</>}
           </button>
         )}
         {/* No arming step, unlike a terminal panel's ×: there is no process
@@ -367,15 +368,16 @@ function ReviewNodeImpl({
         {!readOnly && (
           <button
             type="button"
-            className="panel__close"
+            className="panel__close icon-button"
             title="Close this review"
+            aria-label="Close this review"
             onMouseDown={(event) => {
               event.stopPropagation()
               event.preventDefault()
               onClose(rect.id)
             }}
           >
-            ×
+            <Close />
           </button>
         )}
       </header>

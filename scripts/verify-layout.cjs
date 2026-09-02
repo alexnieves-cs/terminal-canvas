@@ -2912,6 +2912,30 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify(def))
 }
 
+// M45 — theme.1. The schema's first ENUM: `appearance.theme` is one of
+//      system | light | dark, default `system`, and parsePreferences REJECTS
+//      a value outside the set exactly as it rejects an out-of-range number —
+//      dropped with a warning, never coerced. The M23-era 'enum' member was
+//      removed as a customer-free abstraction; this is its customer. A
+//      stray value that survived here would reach useTheme, which would stamp
+//      `data-theme="blue"`, matching no block, and the app would render bare
+//      :root's light values while the row said "blue".
+{
+  const def = L.settingDef('appearance.theme')
+  const w = []
+  const good = L.parsePreferences({ 'appearance.theme': 'dark' }, w)
+  const bad = L.parsePreferences({ 'appearance.theme': 'blue' }, w)
+  const wrongType = L.parsePreferences({ 'appearance.theme': true }, w)
+  ok('theme.1 appearance.theme is an enum of system|light|dark, default system, and a stray value is dropped with a warning',
+    def !== undefined && def.type === 'enum' &&
+      JSON.stringify(def.values) === JSON.stringify(['system', 'light', 'dark']) &&
+      def.default === 'system' && L.resolveSetting({}, 'appearance.theme') === 'system' &&
+      good['appearance.theme'] === 'dark' &&
+      bad['appearance.theme'] === undefined && wrongType['appearance.theme'] === undefined &&
+      w.length === 2 && w.every((m) => /appearance\.theme/.test(m)),
+    JSON.stringify({ def, good, bad, wrongType, w }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

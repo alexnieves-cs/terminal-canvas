@@ -85,6 +85,13 @@ export interface SessionHandle {
    * a terminal that has never been opened (the object outlives its host).
    */
   configure(options: TerminalOptions): void
+  /**
+   * M45. The options this session's terminal currently holds — the merged
+   * result of every configure() so far, whether or not a Terminal exists yet.
+   * Exists so a check can read which theme a DETACHED session's terminal
+   * carries; nothing in production reads it.
+   */
+  options(): TerminalOptions
   /** Buffer position of the first occurrence of `word`, or null. */
   locate(word: string): { col: number; row: number } | null
   /** Cell metrics in CSS pixels — transform-blind, like xterm's own. */

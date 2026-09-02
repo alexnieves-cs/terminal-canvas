@@ -8,6 +8,7 @@ import { useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
+import { Close } from '@renderer/icons'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -285,11 +286,12 @@ function TerminalPanelImpl({
         {!readOnly && (
           <button
             type="button"
-            className={`panel__close${arming ? ' panel__close--arming' : ''}`}
+            className={`panel__close icon-button${arming ? ' panel__close--arming' : ''}`}
             onMouseDown={handleClose}
             title={arming ? 'Click again to kill this process' : 'Close panel'}
+            aria-label={arming ? 'Click again to kill this process' : 'Close panel'}
           >
-            {arming ? 'kill?' : '×'}
+            {arming ? 'kill?' : <Close />}
           </button>
         )}
       </header>

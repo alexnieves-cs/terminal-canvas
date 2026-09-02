@@ -4,6 +4,7 @@ import type { RailAttention, RailWorkspace } from './rail-sections'
 import { RailPanelRow } from './RailPanelRow'
 import { RailWorkspaceRow } from './RailWorkspaceRow'
 import { shellControl } from './shell-control'
+import { ChevronLeft, Plus } from '@renderer/icons'
 
 export interface SideRailProps {
   onToggle: () => void
@@ -54,12 +55,12 @@ function SideRailImpl({
     <aside className="shell__rail" aria-label="Side rail">
       <button
         type="button"
-        className="shell__rail-toggle"
+        className="shell__rail-toggle icon-button"
         title="Hide the side rail (⌘\)"
         aria-label="Hide the side rail"
         {...shellControl(onToggle)}
       >
-        ‹
+        <ChevronLeft />
       </button>
 
       {/*
@@ -72,12 +73,12 @@ function SideRailImpl({
         <span>Workspaces</span>
         <button
           type="button"
-          className="shell__region-add"
+          className="shell__region-add icon-button"
           title="New workspace"
           aria-label="New workspace"
           {...shellControl(onCreateWorkspace)}
         >
-          +
+          <Plus />
         </button>
       </div>
       <ul className="rail-list rail-list--workspaces" aria-label="Workspaces">

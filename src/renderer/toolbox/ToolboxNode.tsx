@@ -4,6 +4,7 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import { applyToolbox, useToolbox } from '@renderer/session/toolbox-store'
 import { buildToolboxNodeModel } from './toolbox-node-model'
 import { PanelPorts } from '@renderer/components/PanelPorts'
+import { Close, Refresh } from '@renderer/icons'
 
 export interface ToolboxNodeProps {
   panel: ToolboxPanel
@@ -136,7 +137,7 @@ function ToolboxNodeImpl({
         <span className="toolbox-node__summary" data-toolbox-summary>{model.summary}</span>
         <button
           type="button"
-          className="toolbox-node__refresh"
+          className="toolbox-node__refresh icon-button"
           title="Read this directory's config again"
           onMouseDown={(event) => {
             // preventDefault keeps DOM focus off this button and on whatever
@@ -147,19 +148,20 @@ function ToolboxNodeImpl({
             setRefreshToken((n) => n + 1)
           }}
         >
-          ⟳
+          <Refresh />
         </button>
         <button
           type="button"
-          className="panel__close"
+          className="panel__close icon-button"
           title="Close this toolbox"
+          aria-label="Close this toolbox"
           onMouseDown={(event) => {
             event.stopPropagation()
             event.preventDefault()
             onClose(id)
           }}
         >
-          ×
+          <Close />
         </button>
       </header>
 

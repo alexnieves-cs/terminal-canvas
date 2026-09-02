@@ -1,6 +1,7 @@
 import { memo, type JSX } from 'react'
 import type { FileRow } from './file-tree-model'
 import { shellControl } from './shell-control'
+import { ChevronLeft, Refresh } from '@renderer/icons'
 
 export interface FileTreeProps {
   onToggle: () => void
@@ -49,12 +50,12 @@ function FileTreeImpl({
     <aside className="shell__tree" aria-label="File tree">
       <button
         type="button"
-        className="shell__tree-toggle"
+        className="shell__tree-toggle icon-button"
         title="Hide the file tree (⌘B)"
         aria-label="Hide the file tree"
         {...shellControl(onToggle)}
       >
-        ‹
+        <ChevronLeft />
       </button>
 
       <div className="shell__region-title shell__region-title--action">
@@ -70,12 +71,12 @@ function FileTreeImpl({
         </span>
         <button
           type="button"
-          className="shell__region-add"
+          className="shell__region-add icon-button"
           title="Re-read this directory"
           aria-label="Refresh the file tree"
           {...shellControl(onRefresh)}
         >
-          ⟳
+          <Refresh />
         </button>
       </div>
 

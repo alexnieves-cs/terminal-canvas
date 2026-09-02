@@ -283,7 +283,12 @@ export function registerIpcHandlers(
       // Passed through so the palette can reject an out-of-range edit before
       // it ever reaches this process's own (silent) range check below.
       min: def.min,
-      max: def.max
+      max: def.max,
+      // Copied, not passed by reference: the row crosses the bridge as a
+      // clone anyway, and an absent field must stay ABSENT (a boolean row
+      // has no values), so the spread-with-undefined trap is avoided by
+      // building the field only when the schema has one.
+      ...(def.values ? { values: [...def.values] } : {})
     }))
   )
   ipcMain.handle(IPC.SETTINGS_SET, (_event, id: string, value: SettingValue) => {
@@ -292,6 +297,10 @@ export function registerIpcHandlers(
     // toggle made in the palette has to redraw it or the two surfaces disagree
     // until the next unrelated rebuild.
     rebuildMenu()
+    // M45. And the renderer re-reads, for the same reason in the other
+    // direction: the theme applies the moment it is written, not on the next
+    // palette open.
+    getWindow()?.webContents.send(IPC_EVENTS.SETTINGS_CHANGED, id)
   })
 
   // Straight through to the store, with no PaletteHandlers indirection: unlike

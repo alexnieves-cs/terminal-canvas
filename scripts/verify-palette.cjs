@@ -808,6 +808,34 @@ const SETTING = {
     c.actions.calls[0][1] === 'restore.camera' &&
     c.actions.calls[0][2] === false)
 }
+// M45 — theme.1. An enum setting renders as a CYCLE row: the title names
+//     the current value, and running it writes the NEXT value in the enum's
+//     order, wrapping. Before M45 an enum fell through to nothing pushed —
+//     the row was silently missing, which is the exact trap "a row that
+//     disappears is indistinguishable from a feature that was never built"
+//     names.
+{
+  const THEME = {
+    id: 'appearance.theme', label: 'Theme',
+    description: 'Follow the system, or force light or dark.',
+    keywords: ['dark', 'light', 'appearance'], type: 'enum', value: 'system',
+    values: ['system', 'light', 'dark'], category: 'Appearance'
+  }
+  const c = ctx({ settings: [THEME] })
+  const row = byId(P.buildCommands(c), 'setting.appearance.theme')
+  // Guarded: a missing row must read as RED, not throw and abort every
+  // check below this one.
+  if (row) row.run()
+  const last = ctx({ settings: [{ ...THEME, value: 'dark' }] })
+  const lastRow = byId(P.buildCommands(last), 'setting.appearance.theme')
+  if (lastRow) lastRow.run()
+  ok('theme.1 an enum setting is a cycle row naming its value, and running it writes the next value, wrapping',
+    row !== undefined && row.title === 'Theme: system' && row.group === 'setting' &&
+      c.actions.calls[0][0] === 'toggleSetting' && c.actions.calls[0][1] === 'appearance.theme' &&
+      c.actions.calls[0][2] === 'light' &&
+      last.actions.calls.length > 0 && last.actions.calls[0][2] === 'system',
+    JSON.stringify({ title: row && row.title, calls: c.actions.calls, wrap: last.actions.calls }))
+}
 {
   const off = { ...SETTING, value: false }
   const row = byId(P.buildCommands(ctx({ settings: [off] })), 'setting.restore.camera')

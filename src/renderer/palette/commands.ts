@@ -948,9 +948,32 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       })
       continue
     }
-    // An enum (or any future type) has no row yet — building the input mode
-    // for a type with no customer would repeat the trap ideas-backlog #11
-    // warns about for the schema itself. Falls through to nothing pushed.
+    if (setting.type === 'enum') {
+      // M45. A CYCLE, not a submenu: the palette has one row shape, and a
+      // three-value setting is one press per step. The title names the
+      // current value so the user knows what they are stepping from, and
+      // the write is the NEXT value in the schema's order, wrapping — through
+      // toggleSetting, which is a plain write of a SettingValue and never
+      // cared that its value was a boolean.
+      const values = setting.values ?? []
+      const current = typeof setting.value === 'string' ? setting.value : String(setting.value)
+      const at = values.indexOf(current)
+      const next = values.length === 0 ? current : values[(at + 1) % values.length]
+      out.push({
+        id: `setting.${setting.id}`,
+        title: `${setting.label}: ${current}`,
+        subtitle: setting.description,
+        searchText: setting.keywords.join(' '),
+        group: 'setting',
+        scope: 'settings',
+        hiddenAtRest: true,
+        run: () => actions.toggleSetting(setting.id, next)
+      })
+      continue
+    }
+    // Any future type has no row yet — building a mode for a type with no
+    // customer would repeat the trap ideas-backlog #11 warns about for the
+    // schema itself. Falls through to nothing pushed.
   }
 
   // --- Credentials -----------------------------------------------------------

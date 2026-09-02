@@ -2,8 +2,11 @@
 
 **Created:** 2026-08-29, out of the M10 visual-system design
 (`superpowers/specs/2026-08-29-m10-visual-system-design.md`).
-**Status:** none of this is scheduled. This file exists so it is not
-re-discovered from scratch in three months.
+**Status:** items 1–7 are DONE, M45 (2026-09-02) — the visual-language
+milestone took the whole list in one considered pass: mono inspector values,
+`kbd` chips, the visible dot grid, 24×24 targets, the SVG icon set,
+hover/focus-revealed row controls, and the bundled face RETIRED rather than
+self-hosted (the system UI stack is the face). Item 8 stays open; see it.
 
 M10 is deliberately values-only: one file (`src/renderer/styles.css`), no
 `.tsx`, no class renames, no new dependency. That boundary was chosen because
@@ -17,7 +20,7 @@ three each need their own verification story.
 
 ---
 
-## 1. Inspector values set as code — the cheapest item on this list
+## 1. Inspector values set as code — the cheapest item on this list — DONE, M45
 
 **Why:** the pane's stated purpose is answering *"why does this panel say
 login shell"*. Its `command`, `asked for` and `cwd` fields are paths and argv
@@ -42,7 +45,7 @@ like a settings sheet.
 
 ---
 
-## 2. Visible shortcut chips in the top bar
+## 2. Visible shortcut chips in the top bar — DONE, M45
 
 **Why:** `⌘N`, `⌘K`, `⌘1` and `⌘\` live in `title` attributes and nowhere
 else. The two most-used shortcuts in the app are discoverable only by
@@ -59,7 +62,7 @@ confirm before assuming.
 
 ---
 
-## 3. The dot grid decision
+## 3. The dot grid decision — DONE, M45
 
 **Why:** currently `#1c2030` on `#0b0c11` = **1.21:1**. Not subtle —
 imperceptible. It is a compositing cost buying nothing.
@@ -75,7 +78,7 @@ if answered in time.
 
 ---
 
-## 4. Pointer targets under 24 CSS px
+## 4. Pointer targets under 24 CSS px — DONE, M45
 
 **Why:** WCAG 2.2 SC 2.5.8 asks for 24×24. Current sizes:
 
@@ -98,7 +101,7 @@ rail scrolls anyway.
 
 ---
 
-## 5. SVG icon set, replacing HTML entity glyphs
+## 5. SVG icon set, replacing HTML entity glyphs — DONE, M45
 
 **Why:** the app ships `&times;`, `&#9654;`, `&#9998;`, `⚙`, `⟳`, `−`, `+`,
 `‹`, `›` as text. Three distinct problems:
@@ -125,7 +128,7 @@ moves a selector. Do not assume either way.
 
 ---
 
-## 6. Hover-revealed row controls — the biggest decluttering win
+## 6. Hover-revealed row controls — the biggest decluttering win — DONE, M45
 
 **Why:** every rail row shows its `×` permanently. On a twelve-panel canvas
 that is twelve close buttons competing for attention with the twelve panel
@@ -156,7 +159,7 @@ how a check clicks.
 
 ---
 
-## 7. Self-hosted type
+## 7. Self-hosted type — DONE, M45 (by retiring the face, not hosting it)
 
 **Why:** the app is on `-apple-system, BlinkMacSystemFont, "SF Pro Text"`. SF
 is a good face and it is also *the default*, which is what makes an app read
