@@ -1513,7 +1513,18 @@ export function buildEnvironmentRows(report: EnvReport | null): Command[] {
   rows.push(info('env.layout',
     report.layout.backupWritten ? 'Layout file: a newer file was preserved as .bak' : 'Layout file',
     report.layout.path || '(not yet written)', 'layout file json bak'))
-  rows.push(info('env.probed', `Read at ${new Date(report.probedAt).toLocaleTimeString()}`,
+  // M54. The door. The launcher is on PATH inside every panel already; the
+  // subtitle is the one line that puts it on PATH outside.
+  // `?? null`: a report built by an older main (or a fixture) has no key at
+  // all, and absent reads as null rather than as a crash.
+  const control = report.control ?? null
+  rows.push(info('env.tc',
+    control === null ? 'tc: not available in this instance' : `tc: ${control.cliPath}`,
+    control === null
+      ? 'another instance of this build owns the control socket'
+      : `on PATH inside every panel; outside, export PATH="${control.cliPath.replace(/\/tc$/, '')}:$PATH" — or open terminal-canvas://open?preset=…`,
+    'tc cli command line socket url scheme'))
+    rows.push(info('env.probed', `Read at ${new Date(report.probedAt).toLocaleTimeString()}`,
     'once, at launch — a CLI installed since is not seen until relaunch', 'probed at time relaunch'))
   return rows
 }

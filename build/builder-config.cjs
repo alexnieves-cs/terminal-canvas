@@ -65,6 +65,11 @@ function buildConfig(opts) {
 
     asar: true,
 
+    // M54. The URL scheme, declared into Info.plist. Without this the
+    // packaged app never receives `open-url`, and terminal-canvas:// works
+    // only in the dev build — on the author's machine and nowhere else.
+    protocols: [{ name: 'Terminal Canvas', schemes: ['terminal-canvas'] }],
+
     // THE LOAD-BEARING LINE. node-pty is a native module and a .node binary
     // cannot be required out of an asar archive. Without this the app launches,
     // renders the canvas, shows its first panel, and dies at the first
@@ -73,7 +78,10 @@ function buildConfig(opts) {
     // Anchored with '**/' rather than at the root so it keeps matching if npm
     // ever hoists node-pty to a nested depth — a root-anchored pattern would
     // stop matching silently, months later, with no code change to blame.
-    asarUnpack: ['**/node_modules/node-pty/**'],
+    asarUnpack: ['**/node_modules/node-pty/**',
+      // M54. The tc CLI is run as node OUTSIDE the app process, where asar is
+      // not readable; see verify:package cli.1.
+      '**/out/main/tc.js'],
 
     mac: {
       category: 'public.app-category.developer-tools',

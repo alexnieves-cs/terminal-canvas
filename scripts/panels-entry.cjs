@@ -205,6 +205,8 @@ module.exports = {
      deps can close over that file's own scratch directory. */
   createReviewCommitter: require('../src/main/review-commit').createReviewCommitter,
   createReviewDiscarder: require('../src/main/review-discard').createReviewDiscarder,
+  createControlServer: require('../src/main/control-server').createControlServer,
+  createControlHandler: require('../src/main/control-handler').createControlHandler,
   /* M37. The worktree manager, for the same reason createReviewEngine is
      exported rather than stubbed: worktree.1 spawns a panel through
      preset:spawn-by-id and reads the branch back out of the inspector, and

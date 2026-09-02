@@ -119,3 +119,13 @@ than fail). The fix is always the same two lines (the `@shared`/`@renderer` alia
 one `buildSync` call), and it does not transfer between bundles — each `buildSync` call is its
 own esbuild invocation with its own config, so a fix to one does not cover a sibling that
 reuses the same source file through a *different* entry point. **The only reliable way to know
+
+## `verify:control` (M54)
+
+Plain node, and the server checks bind a REAL Unix socket in a temp dir — node's own
+`net`, no Electron — because the failures that matter are properties of the filesystem: a
+stale socket file refusing the bind, a world-readable socket. `protocol.1` is the one to
+re-read before touching the parser: `command` is refused THERE, for both doors at once.
+`cli.1` drives the CLI through an injected connect, so its three exit codes are pinned
+without a running app. `launcher.1` writes into a temp dir through an injected writer and
+asserts the second identical write is skipped.

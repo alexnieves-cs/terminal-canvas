@@ -1638,7 +1638,7 @@ is what keeps presets for the things you actually repeat.
 - **Nearest existing entry: #34 (panel templates)** and **#29**, both about *repeating* a
   spawn. This is about a spawn worth zero ceremony.
 
-## 57. `tc` — a CLI and a URL scheme, so the canvas is drivable from outside
+## 57. `tc` — a CLI and a URL scheme, so the canvas is drivable from outside — DONE, M54
 
 One binary and one `terminal-canvas://` handler: `tc open --preset claude --cwd ~/repo` spawns
 a panel on the running canvas, from a shell, a script, a git hook, or a launcher. Everything

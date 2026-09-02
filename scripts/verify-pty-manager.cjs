@@ -1763,6 +1763,30 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
   }
 
   // -------------------------------------------------------------------
+  // M54 — the control socket reaches EVERY spawn's environment, not only a
+  //      login shell's: an agent CLI's own subprocess shell must find `tc`
+  //      too, since "an agent inside a panel can open its own panel" is the
+  //      milestone's point. TC_CONTROL_SOCKET names the socket, and the
+  //      launcher dir is FIRST on PATH so `tc` resolves with nothing installed.
+  // -------------------------------------------------------------------
+  {
+    let bytes = ''
+    const h = makeHarness(DIRECT, {
+      runs: { ledger: null, integrationDir: null, now: () => Date.now(), control: { socket: '/tmp/tc-control-test.sock', binDir: '/tmp/tc-bin-test' } },
+      onSend: (channel, payload) => { if (channel === 'pty:data') bytes += payload.data }
+    })
+    let created = null
+    try {
+      created = await h.manager.create(spec('ctl1', '/bin/sh', ['-c', 'echo S=$TC_CONTROL_SOCKET; echo P=$PATH; sleep 30']))
+    } catch (e) { created = { error: String(e) } }
+    const seen = await waitFor(() => /S=\/tmp\/tc-control-test\.sock/.test(bytes) && /P=\/tmp\/tc-bin-test:/.test(bytes), 6000)
+    ok('control.1 every spawn sees TC_CONTROL_SOCKET and the launcher dir first on PATH',
+      created && !created.error && seen === true,
+      JSON.stringify({ created: created && (created.error ?? created.panelId), seen, tail: bytes.slice(-200) }))
+    h.manager.kill('ctl1')
+  }
+
+  // -------------------------------------------------------------------
   // M43 — attention beyond the window. Scoped ids. An injected AttentionSink,
   // driven by a real bell, with focus/enabled answers the harness controls.
   // -------------------------------------------------------------------

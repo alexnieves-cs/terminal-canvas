@@ -119,6 +119,25 @@ const config = buildConfig()
 }
 
 console.log('\n' + '='.repeat(60))
+// protocol.1 (M54). The URL scheme is DECLARED in the bundle's Info.plist
+// through this config; without it `open-url` never fires for the packaged
+// app, and the door exists only in the dev build — a feature that works on
+// the author's machine and nowhere else.
+{
+  const protocols = [].concat(config.protocols ?? [])
+  const declared = protocols.some((p) => Array.isArray(p.schemes) && p.schemes.includes('terminal-canvas'))
+  ok('protocol.1 the terminal-canvas URL scheme is declared', declared, JSON.stringify(protocols))
+}
+
+// cli.1 (M54). The tc CLI runs as NODE over the app binary, outside the
+// app's own process — and a file inside app.asar is not readable there. It
+// must be unpacked, or the launcher main writes points at a path that does
+// not exist on disk and `tc` dies with ENOENT on every machine but the dev one.
+{
+  const unpack = [].concat(config.asarUnpack ?? [])
+  ok('cli.1 the tc CLI is unpacked from the asar', unpack.some((p) => /tc\.js$/.test(p)), JSON.stringify(unpack))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

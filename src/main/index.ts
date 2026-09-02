@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync, unlinkSync, statSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
@@ -19,6 +19,10 @@ import { createSafeStorageCrypto } from './credential-crypto'
 import { createReviewEngine } from './review-engine'
 import { createReviewCommitter } from './review-commit'
 import { createReviewDiscarder } from './review-discard'
+import { createControlServer, type ControlServer } from './control-server'
+import { createControlHandler } from './control-handler'
+import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
+import { launcherScript, writeLauncher } from './launcher'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
@@ -206,6 +210,11 @@ const dropBaseline = (panelId: string): void => {
  */
 const runLedger = createRunLedger({ file: join(app.getPath('userData'), 'runs.jsonl') })
 
+// M54. Declared ABOVE the manager, which carries them into every spawn's env.
+const controlSocketPath = join(app.getPath('userData'), 'control.sock')
+const launcherDir = join(app.getPath('userData'), 'bin')
+let controlServer: ControlServer | null = null
+
 const ptyManager = new PtyManager(
   () => mainWindow?.webContents ?? null,
   () => backend,
@@ -267,7 +276,7 @@ const ptyManager = new PtyManager(
   // M52. The run ledger (an append stream beside layout.json) and the
   // shell-integration directory the rc files are written under. Declared
   // above this construction because they are values, not getters.
-  { ledger: runLedger, integrationDir: join(app.getPath('userData'), 'shell-integration'), now: () => Date.now() }
+  { ledger: runLedger, integrationDir: join(app.getPath('userData'), 'shell-integration'), now: () => Date.now(), control: { socket: controlSocketPath, binDir: launcherDir } }
 )
 
 /**
@@ -423,6 +432,53 @@ async function savePresetFromFocusedPanel(): Promise<void> {
   layoutStore.addPreset(preset)
   rebuildMenu()
 }
+
+/**
+ * M54. ONE handler behind both doors — the socket below and the URL scheme —
+ * over the same store, the same templateOf and the same PRESET_SPAWN send a
+ * menu pick uses. A request may arrive with the window closed (darwin keeps
+ * the app running) or still loading (a launch-time URL), so the send waits
+ * for the renderer rather than sending into a page that is not there yet.
+ */
+const sendToRenderer = (channel: string, payload: unknown): void => {
+  if (mainWindow === null || mainWindow.isDestroyed()) createWindow()
+  const win = mainWindow
+  if (win === null) return
+  const wc = win.webContents
+  if (wc.isLoading()) wc.once('did-finish-load', () => wc.send(channel, payload))
+  else wc.send(channel, payload)
+  if (win.isMinimized()) win.restore()
+  win.show()
+}
+const controlHandler = createControlHandler({
+  presets: () => allPresets(layoutStore.presets()),
+  defaultId: () => layoutStore.defaultPresetId() || null,
+  spawn: (preset, cwd) => {
+    const template = templateOf(preset)
+    if (cwd !== undefined) template.cwd = cwd
+    sendToRenderer(IPC_EVENTS.PRESET_SPAWN, template)
+  },
+  list: () => ptyManager.list().map((r) => ({ panelId: r.panelId, pid: r.pid, command: r.command, cwd: r.cwd })),
+  // Running sessions only: a dormant card has no session here, and `list`
+  // says so in its note.
+  focus: (id) => {
+    if (!ptyManager.list().some((r) => r.panelId === id)) return false
+    sendToRenderer(IPC_EVENTS.ATTENTION_JUMP, id)
+    return true
+  }
+})
+
+// M54. The URL door. Registered at module scope because macOS delivers a
+// launch-time URL before whenReady's body runs. The URL never reaches the
+// renderer — this is not a navigation, and will-navigate /
+// setWindowOpenHandler stay exactly as they are.
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  if (!hasInstanceLock) return
+  const parsed = parseControlUrl(url)
+  if (parsed.kind === 'bad') { console.warn(`[control] refused URL ${url}: ${parsed.error}`); return }
+  void controlHandler(parsed.req).then((r) => { if (!r.ok) console.warn(`[control] URL refused — ${r.error ?? ''}`) })
+})
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -731,7 +787,8 @@ app.whenReady().then(async () => {
       backend: { kind: backend.kind, reason: backend.reason, tmuxPath: backend.kind === 'tmux' ? (which('tmux') ?? null) : null },
       layoutPath: join(app.getPath('userData'), 'layout.json'),
       backupWritten: layoutStore.backupWritten(),
-      now: probedAt
+      now: probedAt,
+      control: { socket: controlSocketPath, cliPath: join(launcherDir, 'tc') }
     }),
     // M51. The only place a Cmd-clicked link opens. The resolution is pure
     // (link-open.ts); this does the two shell calls and turns their outcomes
@@ -753,6 +810,26 @@ app.whenReady().then(async () => {
     reviewDiscard
   )
   createWindow()
+
+  // M54. The door, on the winning side of the lock only (the gate above),
+  // and the launcher that reaches it. The CLI file is read as NODE outside
+  // this process, where app.asar is not readable — hence the unpacked path.
+  void createControlServer({ path: controlSocketPath, handle: controlHandler })
+    .then((server) => { controlServer = server })
+    .catch((error: unknown) => console.warn(`[control] could not listen on ${controlSocketPath}: ${String(error)}`))
+  try {
+    const appPath = app.isPackaged ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked') : app.getAppPath()
+    writeLauncher({
+      dir: launcherDir,
+      script: launcherScript({ execPath: process.execPath, cliPath: join(appPath, 'out', 'main', 'tc.js') }),
+      writeFile: (p, content) => { writeFileSync(p, content); chmodSync(p, 0o755) }
+    })
+  } catch (error: unknown) {
+    console.warn(`[control] could not write the tc launcher: ${String(error)}`)
+  }
+  // Only the packaged build registers itself: the dev binary would register
+  // Electron.app as the handler for every terminal-canvas:// link on the Mac.
+  if (app.isPackaged) app.setAsDefaultProtocolClient(CONTROL_SCHEME)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -779,6 +856,10 @@ app.on('before-quit', () => {
   // -> shutdown() is kill-server on a socket the WINNER owns, while flushSync
   // writes a store this process never loaded. Both are total and silent.
   if (!hasInstanceLock) return
+
+  // M54. Unlink the socket on the way out; a stale file is replaced at the
+  // next listen anyway, but a clean quit should not leave a door on disk.
+  void controlServer?.close()
 
   // The file watchers are the renderer's, not a session's, and go either way.
   try {

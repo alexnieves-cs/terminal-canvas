@@ -2784,3 +2784,45 @@ never removed, and the ARMED state is the disclosure — which of two sentences 
 ("restore to spawn" or "did not exist at spawn — delete") is chosen by `untracked`, and the
 outcome line then names what actually happened, so the node never claims a restore it did
 not do.
+
+**One parser behind both doors, and `command` is refused in the PARSER (`main/control-protocol.ts`,
+`main/control-server.ts`, `main/control-handler.ts`, `index.ts`).** The socket and the URL
+scheme yield the same `ControlRequest` and reach the same handler, so a verb or a field
+accepted at one door is accepted at the other — which is exactly why an arbitrary command is
+refused in `fromFields` rather than at a door: a URL can arrive from a web page or another
+app, and a parser that took a command from the socket would be one edit away from taking it
+from the URL. The preset system answers "what to run"; the doors answer "where, and which".
+The URL door accepts ONLY `open` (its host is the verb) — a URL that could `list` is a URL
+that could probe. The socket is a Unix domain socket in `userData`, unlinked before listen (a
+stale file from a crashed instance refuses the bind, and the app would come up without its
+door and no symptom) and chmod'd 0600 after (a Unix socket honours file permissions on
+darwin; the default would let any local user open panels). There is no port and no way to
+add one without changing the single listen call. A malformed line is ANSWERED and the server
+keeps listening; a client that can take the door down with a typo is a client that can take
+the app's control surface down. **Only the winning side of the single-instance lock listens
+or writes the launcher** — the losing instance quits through the same gate that keeps it off
+the tmux socket and the layout file. `open` answers "reached the canvas", never a panel id,
+because main does not have one to give: the renderer alone mints ids (the duplicate-id defect
+whose symptom is two panels rendering as one). `focus` and `list` see RUNNING sessions only;
+a dormant card has no session in main, and the reply's `note` says so rather than the id
+silently failing to match.
+
+**The control socket and the launcher dir reach EVERY spawn's environment, and the launcher
+runs the app binary as node over an UNPACKED file (`pty-manager.ts`'s `RunsDeps.control`,
+`main/launcher.ts`, `build/builder-config.cjs`).** Injected in `create()` on the env BEFORE
+the shell integration reads it, so a login shell, its decorated copy and an agent CLI's own
+subprocess shell all find `tc` — "an agent inside a panel can open its own panel" is the
+milestone's point, and an injection limited to login shells would leave the agent, the one
+caller that matters, without it. PATH is PREPENDED so `tc` resolves with nothing installed.
+The launcher is a two-line `sh` script main writes into `userData/bin` (compare-then-write,
+so a launch is not a write) that `exec`s `process.execPath` with `ELECTRON_RUN_AS_NODE=1`
+over `out/main/tc.js`, both paths quoted because the packaged app lives under "Terminal
+Canvas.app". That file must be in `asarUnpack`: the CLI runs as node OUTSIDE the app process,
+where `app.asar` is not readable, so a packed path is a launcher that dies with ENOENT on
+every machine but the dev one — `verify:package cli.1` pins it, beside `protocol.1` for the
+scheme, which without its `protocols` entry works only in the dev build. The dev binary never
+calls `setAsDefaultProtocolClient`: it would register `Electron.app` as the handler for every
+`terminal-canvas://` link on the Mac. The CLI itself (`src/cli/tc.ts`) is pure over an
+injected connect and exits 0 / 1 / 2 for ok / refused / not running — three answers, because
+"the app said no" and "there is no app" need different fixes and a script must tell them
+apart without parsing prose.
