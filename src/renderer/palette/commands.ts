@@ -177,6 +177,10 @@ export interface PaletteActions {
   setPanelFontSize(id: string, size: number | undefined): void
   /** M50. Arrange these panels compactly, one undoable step, never reordering. */
   tidyPanels(ids: string[]): void
+  /** M52. Scroll the focused terminal to the previous or next prompt mark. */
+  jumpPrompt(id: string, direction: -1 | 1): void
+  /** M52. Copy the lines between the last command's start and end marks. */
+  copyLastOutput(id: string): void
   /**
    * Set this panel's permission mode AND restart it, as ONE gesture.
    *
@@ -940,6 +944,24 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       searchText: 'tidy arrange compact grid align clean up layout',
       run: () => actions.tidyPanels(ids)
     }, ctx.panels.length < 2 ? REASON_TIDY_NEEDS_TWO : undefined))
+  }
+
+  // --- Prompts (M52) ---------------------------------------------------------
+  //
+  // Navigation over the shell's own marks, on the focused terminal. A panel
+  // with no shell integration (an agent CLI, an undecorated shell) has no
+  // marks; the rows stay, and the action answers with nothing to jump to.
+  {
+    const target = ctx.capturedId === null ? undefined : ctx.panels.find((p) => p.id === ctx.capturedId)
+    const reason = ctx.capturedId === null || target === undefined
+      ? REASON_NO_FOCUS
+      : (target.kind === 'terminal' ? undefined : REASON_NOT_TERMINAL)
+    out.push(withReason({ id: 'panel.prompt.previous', title: 'Previous prompt', subtitle: 'scroll to the command before this one', group: 'panel', searchText: 'prompt previous up jump command mark', hiddenAtRest: true,
+      run: () => { if (target !== undefined) actions.jumpPrompt(target.id, -1) } }, reason))
+    out.push(withReason({ id: 'panel.prompt.next', title: 'Next prompt', subtitle: 'scroll to the command after this one', group: 'panel', searchText: 'prompt next down jump command mark', hiddenAtRest: true,
+      run: () => { if (target !== undefined) actions.jumpPrompt(target.id, 1) } }, reason))
+    out.push(withReason({ id: 'panel.copy-last-output', title: 'Copy last command’s output', subtitle: 'the lines between its start and end marks', group: 'panel', searchText: 'copy last output command result clipboard', hiddenAtRest: true,
+      run: () => { if (target !== undefined) actions.copyLastOutput(target.id) } }, reason))
   }
 
   // --- Typography (M49) ------------------------------------------------------

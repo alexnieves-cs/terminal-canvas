@@ -92,6 +92,14 @@ export interface SessionHandle {
    * carries; nothing in production reads it.
    */
   options(): TerminalOptions
+  /**
+   * M52. Scroll the viewport to the previous (-1) or next (+1) prompt mark,
+   * from the marks the shell emitted (OSC 133 A). False when there is none
+   * that way — a panel with no shell integration has no marks at all.
+   */
+  jumpPrompt(direction: -1 | 1): boolean
+  /** M52. The lines between the last command's start and end marks, or null. */
+  lastCommandOutput(): string | null
   /** Buffer position of the first occurrence of `word`, or null. */
   locate(word: string): { col: number; row: number } | null
   /** Cell metrics in CSS pixels — transform-blind, like xterm's own. */

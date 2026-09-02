@@ -1,3 +1,4 @@
+import type { RunRow } from './run-ledger'
 import type { EnvReport } from './env-report'
 /**
  * Single source of truth for the IPC surface.
@@ -387,7 +388,9 @@ export const IPC = {
   /** M48. The environment report: what main found at startup, key names only. */
   ENV_REPORT: 'env:report',
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
-  LINK_OPEN: 'link:open'
+  LINK_OPEN: 'link:open',
+  /** M52. A panel's recent runs from the ledger, newest first. */
+  LEDGER_LIST: 'ledger:list'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -918,6 +921,10 @@ export interface CanvasBridge {
   files: {
     /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
     list: (path: string) => Promise<DirResult>
+  }
+  ledger: {
+    /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
+    list(panelId: string, limit: number): Promise<RunRow[]>
   }
   links: {
     /** M51. The text the terminal underlined and the panel it came from; main resolves and opens, or refuses with a reason. */

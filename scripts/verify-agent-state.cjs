@@ -210,6 +210,32 @@ ok(11, A.initialDetector(0).state === 'starting', 'fresh detector starts at star
   ok(24, d.state === 'exited' && afterBell.state === 'exited', 'exited is terminal')
 }
 
+// M52 — osc133.1/.2. scanChunk is scanForBell with a POSITION rather than a
+//      bare state (the OSC body has to be carried across a chunk boundary),
+//      yielding OSC 133 marks beside the bell count: A (prompt start), B
+//      (prompt end), C;<command> (command start — the command line, percent-
+//      encoded, which the standard does not carry and the ledger needs) and
+//      D;<exit>. A mark's BEL terminator is NOT a bell — that is the whole
+//      trap scanForBell exists for, and it must hold for the marks too.
+{
+  const has = typeof A.scanChunk === 'function' && A.INITIAL_POS !== undefined
+  const text = 'x' + ESC + ']133;A' + BEL + '$ ' + ESC + ']133;B' + BEL + ESC + ']133;C;ls%20-la' + BEL + 'out' + BEL + ESC + ']133;D;1' + ST + 'tail'
+  const whole = has ? A.scanChunk(A.INITIAL_POS, text) : null
+  ok('osc133.1 scanChunk yields A/B/C(command)/D(exit) marks and counts only the genuine bell',
+    has && whole.bells === 1 && JSON.stringify(whole.marks) === JSON.stringify([
+      { kind: 'A' }, { kind: 'B' }, { kind: 'C', command: 'ls -la' }, { kind: 'D', exit: 1 }]) && whole.pos.state === 'text',
+    JSON.stringify(whole))
+  // One byte at a time: every mark must still arrive whole, exactly once.
+  let pos = has ? A.INITIAL_POS : null
+  const marks = []
+  let bells = 0
+  if (has) for (const ch of text) { const r = A.scanChunk(pos, ch); pos = r.pos; marks.push(...r.marks); bells += r.bells }
+  ok('osc133.2 a mark split across chunk boundaries completes on the next chunk, once',
+    has && bells === 1 && JSON.stringify(marks) === JSON.stringify([
+      { kind: 'A' }, { kind: 'B' }, { kind: 'C', command: 'ls -la' }, { kind: 'D', exit: 1 }]),
+    JSON.stringify({ bells, marks }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

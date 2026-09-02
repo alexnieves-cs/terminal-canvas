@@ -9,11 +9,13 @@ import {
   readFileSync,
   readSync,
   readdirSync,
-  statSync
+  statSync,
+  mkdirSync,
+  writeFileSync
 } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { configStamps as readConfigStamps, resolveToolboxHome } from './toolbox-read'
-import { join, resolve } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import type { WebContents } from 'electron'
 import type * as pty from 'node-pty'
@@ -27,7 +29,9 @@ import type {
   SubagentUpdate,
   WorktreeOutcome
 } from '../shared/types'
-import { initialDetector, nextState, scanForBell, type AgentEvent, type Detector } from './agent-state'
+import { initialDetector, nextState, scanChunk, type AgentEvent, type Detector } from './agent-state'
+import { shellIntegrationFor } from './shell-integration'
+import type { RunLedger } from './run-ledger'
 import type { SessionBackend } from './session-backend'
 import { SubagentWatch, type WatchDeps } from './subagent-watch'
 import { buildPtyEnv, resolveShellEnv } from './shell-env'
@@ -323,6 +327,15 @@ interface Session {
    * chooseSession's own comment in subagent-scan.ts.
    */
   spawnedAt: number
+  /** M52. The command in flight, from OSC 133 C to D. */
+  run: { command: string; startedAt: number } | null
+}
+
+/** M52. The run ledger and the shell-integration directory, injected. */
+export interface RunsDeps {
+  ledger: RunLedger | null
+  integrationDir: string | null
+  now: () => number
 }
 
 export class PtyManager {
@@ -540,7 +553,14 @@ export class PtyManager {
     private readonly attentionSink: AttentionSink = {
       notify: () => {}, badge: () => {}, beep: () => {},
       windowFocused: () => true, notifyEnabled: () => false, soundEnabled: () => false
-    }
+    },
+    /**
+     * M52. The run ledger and the shell-integration directory. Inert by
+     * default: no ledger means command ends are not recorded, no directory
+     * means no shell is decorated — every existing fixture spawns exactly as
+     * before. `now` is injected so a check can pin durations.
+     */
+    private readonly runs: RunsDeps = { ledger: null, integrationDir: null, now: () => Date.now() }
   ) {
     // nothing to construct; fields are the injected dependencies.
   }
@@ -641,6 +661,28 @@ export class PtyManager {
 
     const command = resolveCommand(spec, loginEnv)
 
+    // M52. OSC 133 for a LOGIN SHELL only (an absent `command`): main is the
+    // only party that knows which shell it resolved. The rc files are
+    // written once per launch, idempotently; the env and args the
+    // integration returns are what the backend spawns with.
+    let spawnEnv = env
+    let spawnArgs: string[] | null = null
+    if (spec.command === undefined && this.runs.integrationDir !== null) {
+      const integration = shellIntegrationFor({ command, absentCommand: true, args: spec.args, env, dir: this.runs.integrationDir })
+      if (integration.shell !== null) {
+        for (const f of integration.files) {
+          try {
+            mkdirSync(dirname(f.path), { recursive: true })
+            if (!existsSync(f.path) || readFileSync(f.path, 'utf8') !== f.content) writeFileSync(f.path, f.content)
+          } catch (error: unknown) {
+            console.warn(`[shell-integration] could not write ${f.path}: ${String(error)}`)
+          }
+        }
+        spawnEnv = integration.env
+        spawnArgs = integration.args
+      }
+    }
+
     // Pin an agent session id, and pass it as a flag so the transcript this
     // panel writes is one we can find later.
     //
@@ -669,14 +711,14 @@ export class PtyManager {
       sessionId = randomUUID()
       this.setPinnedSession(spec.panelId, sessionId)
     }
-    const args = agentArgs(spec, sessionId ?? '')
+    const args = spawnArgs ?? agentArgs(spec, sessionId ?? '')
 
     // BEFORE the spawn, not after. `new-session -A` creates the session if it
     // is missing, so a probe taken afterwards answers true unconditionally and
     // every panel — including one on a cold start — claims to have reattached.
     const reattached = this.getBackend().hasSession(spec.panelId)
 
-    const proc = this.getBackend().spawn({ ...spec, args }, command, cwd, env)
+    const proc = this.getBackend().spawn({ ...spec, args }, command, cwd, spawnEnv)
 
     // A genuinely NEW session's spawnedAt is now, recorded in firstSpawnedAt
     // for the life of this manager (or until kill()). A REATTACHED one
@@ -729,6 +771,7 @@ export class PtyManager {
       cwd,
       reattached,
       detector: initialDetector(Date.now()),
+      run: null,
       spawnedAt
     }
     this.sessions.set(spec.panelId, session)
@@ -1292,11 +1335,27 @@ export class PtyManager {
     //
     // Scanning happens BEFORE the buffering, so a bell is seen on the read
     // that carried it rather than up to 16ms later when the flush runs.
-    const scanned = scanForBell(session.detector.scan, data)
+    const scanned = scanChunk(session.detector.scan, data)
     // The scanner's position must be written back, or an OSC body straddling
     // a flush boundary is re-entered as ordinary text on the next chunk and a
     // window title ending in BEL rings a bell — intermittently, under load.
-    session.detector = { ...session.detector, scan: scanned.state }
+    session.detector = { ...session.detector, scan: scanned.pos }
+    // M52. The marks: a command start opens a run, a command end closes it
+    // into the ledger — a per-command event at human speed, from a scan that
+    // already runs on every chunk. Never bumps anything higher-frequency.
+    for (const mark of scanned.marks) {
+      if (mark.kind === 'C') session.run = { command: mark.command, startedAt: this.runs.now() }
+      else if (mark.kind === 'D') {
+        const run = session.run
+        session.run = null
+        if (run && this.runs.ledger) {
+          void this.runs.ledger.append({
+            panelId: session.panelId, command: run.command, cwd: session.cwd,
+            startedAt: run.startedAt, endedAt: this.runs.now(), exitCode: mark.exit
+          })
+        }
+      }
+    }
     // Output BEFORE bell, for this chunk. A panel's very first bytes may
     // contain a bell; bell-then-output would leave the machine in 'busy',
     // because the output event would overwrite the bell's state. This order

@@ -348,6 +348,13 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // would be set on a palette that is already gone.
       palette.openPalette()
     },
+    jumpPrompt: (id, direction) => {
+      registry.get(id)?.handle.jumpPrompt(direction)
+    },
+    copyLastOutput: (id) => {
+      const text = registry.get(id)?.handle.lastCommandOutput()
+      if (text !== null && text !== undefined) void navigator.clipboard.writeText(text)
+    },
     tidyPanels: (ids) => {
       // ONE history entry for the whole arrangement — twenty panels moving is
       // one gesture to undo, not twenty. Sizes never change (tidyPanels'

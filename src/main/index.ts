@@ -12,6 +12,7 @@ import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, shellProbeOutcome, whichFromEnv } from './shell-env'
 import { buildEnvReport } from './env-report'
 import { resolveLinkOpen } from './link-open'
+import { createRunLedger } from './run-ledger'
 import { createLayoutStore } from './layout-store'
 import { createCredentialStore } from './credential-store'
 import { createSafeStorageCrypto } from './credential-crypto'
@@ -188,6 +189,12 @@ const dropBaseline = (panelId: string): void => {
 // captured reference keeps it correct across window reloads. The backend is a
 // getter for the same reason — the probe that chooses it is async and has not
 // run when this module is evaluated.
+/**
+ * M52. What each panel ran and how it ended — one JSON line per command end,
+ * through its own append writer, capped. No output bytes: metadata only.
+ */
+const runLedger = createRunLedger({ file: join(app.getPath('userData'), 'runs.jsonl') })
+
 const ptyManager = new PtyManager(
   () => mainWindow?.webContents ?? null,
   () => backend,
@@ -245,7 +252,11 @@ const ptyManager = new PtyManager(
     windowFocused: () => mainWindow?.isFocused() ?? false,
     notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,
     soundEnabled: () => layoutStore.getSetting('attention.sound') === true
-  }
+  },
+  // M52. The run ledger (an append stream beside layout.json) and the
+  // shell-integration directory the rc files are written under. Declared
+  // above this construction because they are values, not getters.
+  { ledger: runLedger, integrationDir: join(app.getPath('userData'), 'shell-integration'), now: () => Date.now() }
 )
 
 /**
@@ -725,7 +736,9 @@ app.whenReady().then(async () => {
         }
         return { kind: 'refused', reason: r.reason }
       }
-    }
+    },
+    // M52. The ledger's read half.
+    (panelId, limit) => runLedger.list(panelId, limit)
   )
   createWindow()
 

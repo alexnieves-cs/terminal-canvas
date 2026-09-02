@@ -7,6 +7,7 @@ import type { LinkAutomation } from '@shared/handoff'
 import { shellControl } from './shell-control'
 import { Close, Pencil, RotateCw } from '@renderer/icons'
 import type { ContextTab } from './useShellChrome'
+import type { RunRow } from '@shared/run-ledger'
 
 /**
  * M45. Fields whose value is a path, an argv or a pid take the mono face, so
@@ -131,6 +132,39 @@ function InspectorImpl({
 }
 
 export const Inspector = memo(InspectorImpl)
+
+/**
+ * M52. The run ledger's rows for this panel — what it ran and how each
+ * ended, newest first. Re-read when the panel changes and whenever the Work
+ * tab is switched to (a run that ends while you look is visible live in the
+ * terminal's own gutter marks; the list catches up on the next switch).
+ * Hidden entirely when there are none: an undecorated shell and an agent
+ * panel are the same absence, and a heading over nothing reads as broken.
+ */
+function RunsSection({ panelId, active }: { panelId: string; active: boolean }): JSX.Element | null {
+  const [rows, setRows] = useState<RunRow[]>([])
+  useEffect(() => {
+    let live = true
+    void window.canvas.ledger.list(panelId, 20).then((r) => { if (live) setRows(r) }).catch(() => {})
+    return () => { live = false }
+  }, [panelId, active])
+  if (rows.length === 0) return null
+  return (
+    <section className="inspector__section" data-runs-section>
+      <h3 className="inspector__section-heading">Runs</h3>
+      <ul className="inspector__review-files">
+        {rows.map((r, i) => (
+          <li key={`${r.endedAt}-${i}`} className="inspector__review-file" data-run-row data-run-exit={r.exitCode ?? ''}>
+            <span className="inspector__review-path inspector__value--mono">{r.command}</span>
+            <span className="inspector__review-counts">
+              {r.exitCode === 0 ? 'ok' : `exit ${r.exitCode ?? '?'}`} · {Math.max(0, Math.round((r.endedAt - r.startedAt) / 100) / 10)}s
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
 
 /** The audit surface #24 requires: rules are readable without tracing lines. */
 function AutomationList({
@@ -498,6 +532,7 @@ function InspectorPanel({
           )}
         </section>
       )}
+      {model.kind === 'terminal' && <RunsSection panelId={model.id} active={tab === 'work'} />}
       {(review === null || review.hidden) && model.usage.hidden && (
         <p className="inspector__review-note" data-context-empty="work">
           {model.kind === 'terminal'

@@ -73,6 +73,7 @@ const {
   createGitRunner,
   createWorktreeManager,
   createScrollbackLog,
+  createRunLedger,
   createBaselineCapture,
   createReviewCommitter,
   FileWatchers,
@@ -428,6 +429,10 @@ app.whenReady().then(async () => {
   const knownUsageSessionIds = new Set()
   const usageFixtureDir = mkdtempSync(join(tmpdir(), 'tc panels usage '))
   const usageFixtureFile = join(usageFixtureDir, 'sess.jsonl')
+  // M52. Declared ABOVE the manager: it is a value the manager's runs deps
+  // hold, not a getter, and a const below it is a TDZ throw at construction
+  // (watched: the whole suite hung before its first check).
+  const runLedger = createRunLedger({ file: join(mkdtempSync(join(tmpdir(), 'tc panels ledger ')), 'runs.jsonl') })
   const ptyManager = new PtyManager(
     () => win.webContents,
     () => backend,
@@ -476,7 +481,13 @@ app.whenReady().then(async () => {
       append: (panelId, data) => { void scrollbackLog.append(panelId, data) },
       drop: (panelId) => { void scrollbackLog.drop(panelId) },
       enabled: () => true
-    }
+    },
+    // M43's attention sink keeps its inert default here.
+    undefined,
+    // M52. A real ledger in a scratch file and a scratch shell-integration
+    // directory, so a login-shell panel spawned by a check emits the marks and
+    // its commands become rows the context pane can list.
+    { ledger: runLedger, integrationDir: join(mkdtempSync(join(tmpdir(), 'tc panels shell-integration ')), 'si'), now: () => Date.now() }
   )
 
   /**
@@ -931,7 +942,9 @@ app.whenReady().then(async () => {
   // developer's browser or editor. The renderer's half — the corrected
   // hover, the Cmd-only activation, the request's shape — is what the
   // checks are about.
-  { open: (req) => { linkOpens.push(req); return { kind: 'opened' } } })
+  { open: (req) => { linkOpens.push(req); return { kind: 'opened' } } },
+  // M52. The ledger's read half, over the scratch ledger the manager writes.
+  (panelId, limit) => runLedger.list(panelId, limit))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -14644,6 +14657,81 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onL)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M52 — OSC 133 and the run ledger, end to end. A LOGIN-SHELL panel
+    // (command absent) is decorated by main; true and false produce a gutter
+    // mark each with the shell's exit status; the Work tab lists the runs;
+    // Previous prompt scrolls the viewport back to an earlier mark.
+    // -------------------------------------------------------------------
+    {
+      const oLog = []
+      const onO = (_e, level, message) => { if (level >= 2) oLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onO)
+      const IDS = [
+        'osc133.1 a decorated login shell paints a gutter mark per command with the shell\'s exit status, and the Work tab lists the runs',
+        'osc133.2 Previous prompt scrolls the viewport back to an earlier prompt mark'
+      ]
+      try {
+        backend = createDirectBackend('verify: direct (m52 osc133)')
+        const home = require('node:os').homedir()
+        // No command: the login shell, which is what main decorates.
+        layoutStore.save({ panels: fromPanels([{ kind: 'terminal', rect: { id: 'oA', x: 60, y: 60, w: 640, h: 360 }, z: 1, spec: { panelId: 'oA', cwd: home, args: ['-l'] } }]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reO
+        await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="oA"]') !== null`), 10000)
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="oA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const woke = await waitUntil(async () => (await sessionMap(wc)).has('oA'), 10000)
+        const marks = (exit) => wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id="oA"] .cmd-mark[data-cmd-exit="' + ${JSON.stringify(exit)} + '"]').length`)
+        // Wait for the first prompt mark before typing, so the shell is up.
+        await sleep(1500)
+        ptyManager.write('oA', 'true\r')
+        const ok0 = await waitUntil(async () => (await marks('0')) > 0, 10000)
+        ptyManager.write('oA', 'false\r')
+        const ok1 = await waitUntil(async () => (await marks('1')) > 0, 10000)
+        // The Work tab: select through the rail, pin the context open, switch.
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="oA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        const ctxHidden = await wc.executeJavaScript(`(document.querySelector('.shell__inspector')?.getBoundingClientRect().width ?? 0) === 0`)
+        if (ctxHidden) { await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__inspector-toggle'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`); await settle() }
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
+        const runs = await waitUntil(async () => {
+          const r = await wc.executeJavaScript(`[...document.querySelectorAll('[data-run-row]')].map((el) => ({ exit: el.dataset.runExit, text: el.textContent }))`)
+          return r.length >= 2 ? r : false
+        }, 6000)
+        ok(IDS[0],
+          woke === true && ok0 === true && ok1 === true && runs !== false &&
+            runs.some((r) => /false/.test(r.text) && r.exit === '1') && runs.some((r) => /true/.test(r.text) && r.exit === '0'),
+          JSON.stringify({ woke, ok0, ok1, runs }))
+
+        // osc133.2. Enough output to scroll, then Previous prompt from the
+        //           palette: viewportY moves back to an earlier mark's line.
+        ptyManager.write('oA', 'seq 1 120\r')
+        await sleep(1500)
+        const yBefore = await wc.executeJavaScript(`window.__m4aScrollY('oA')`)
+        // Focus the panel so the row targets it.
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="oA"] .panel__slot'); if (s) s.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); return !!s })()`)
+        await settle()
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'Previous prompt'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        const rowTitle = await wc.executeJavaScript(`document.querySelector('.palette__row--selected .palette__title')?.textContent ?? null`)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        await settle()
+        const yAfter = await wc.executeJavaScript(`window.__m4aScrollY('oA')`)
+        ok(IDS[1], typeof rowTitle === 'string' && /Previous prompt/.test(rowTitle) && typeof yBefore === 'number' && typeof yAfter === 'number' && yAfter < yBefore,
+          JSON.stringify({ rowTitle, yBefore, yAfter }))
+      } catch (oErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(oErr && oErr.message || oErr) + ' | renderer: ' + (oLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onO)
       }
     }
 

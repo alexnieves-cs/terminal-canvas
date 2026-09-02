@@ -403,7 +403,6 @@ const ok = (n, pass, detail) => {
 }
 
 console.log('\n' + '='.repeat(60))
-const failed = results.filter((r) => !r.pass)
 // M48 — env.1. The environment report is built from facts main already
 //      holds, by a PURE builder: the resolved PATH's entries, each CLI's path
 //      or absence, the shell probe's outcome and reason, tmux's choice and
@@ -457,6 +456,51 @@ const failed = results.filter((r) => !r.pass)
     JSON.stringify({ url, bad, file, rel, tilde, missing, abs }))
 }
 
+// M52 — shell-integration.1. Injection is decided by the RESOLVED shell,
+//      for a panel whose command was absent (a login shell): zsh gets
+//      ZDOTDIR pointed at the integration directory, whose rc files source
+//      the user's own (from the ORIGINAL ZDOTDIR, else $HOME) BEFORE the
+//      hooks; bash gets --rcfile; an agent command gets nothing and loses
+//      nothing. Pure: it returns the env and args to spawn with and the files
+//      to write, and PtyManager does the writing.
+{
+  const can = typeof T.shellIntegrationFor === 'function'
+  const dir = '/tmp/ud/shell-integration'
+  const zsh = can ? T.shellIntegrationFor({ command: '/bin/zsh', absentCommand: true, args: ['-l'], env: { HOME: '/Users/x', PATH: '/bin' }, dir }) : null
+  const zshCustom = can ? T.shellIntegrationFor({ command: '/opt/homebrew/bin/zsh', absentCommand: true, args: [], env: { HOME: '/Users/x', ZDOTDIR: '/Users/x/.config/zsh' }, dir }) : null
+  const bash = can ? T.shellIntegrationFor({ command: '/bin/bash', absentCommand: true, args: ['-l'], env: { HOME: '/Users/x' }, dir }) : null
+  const agent = can ? T.shellIntegrationFor({ command: '/opt/homebrew/bin/claude', absentCommand: false, args: ['--resume'], env: { HOME: '/Users/x' }, dir }) : null
+  const fish = can ? T.shellIntegrationFor({ command: '/opt/homebrew/bin/fish', absentCommand: true, args: ['-l'], env: { HOME: '/Users/x' }, dir }) : null
+  const zrc = zsh && zsh.files.find((f) => f.path === dir + '/zsh/.zshrc')
+  const brc = bash && bash.files.find((f) => f.path === dir + '/bash/bashrc')
+  const sourcesBeforeHooks = (content, needle) => content.indexOf(needle) >= 0 && content.indexOf(needle) < content.indexOf('133;A')
+  ok('shell-integration.1 zsh gets ZDOTDIR and rc files that source the user\'s own before the hooks, bash gets --rcfile, an agent or an unknown shell gets nothing',
+    can && zsh.env.ZDOTDIR === dir + '/zsh' && zsh.env.TC_ORIG_ZDOTDIR === '/Users/x' && zsh.args.join(' ') === '-l' &&
+      zrc !== undefined && sourcesBeforeHooks(zrc.content, '.zshrc') && /precmd|preexec/.test(zrc.content) && /133;D;%s/.test(zrc.content) &&
+      zshCustom.env.TC_ORIG_ZDOTDIR === '/Users/x/.config/zsh' &&
+      bash.env.ZDOTDIR === undefined && bash.args.join(' ') === '--rcfile ' + dir + '/bash/bashrc -l' &&
+      brc !== undefined && sourcesBeforeHooks(brc.content, '.bashrc') && /PROMPT_COMMAND/.test(brc.content) &&
+      agent.files.length === 0 && agent.env.ZDOTDIR === undefined && agent.args.join(' ') === '--resume' &&
+      fish.files.length === 0 && fish.args.join(' ') === '-l',
+    JSON.stringify({ zsh: zsh && { env: zsh.env, args: zsh.args, files: zsh.files.map((f) => f.path) }, bash: bash && { args: bash.args, files: bash.files.map((f) => f.path) }, agent, fish }))
+}
+
+  // shell-integration.2 — a spec with NO args at all (the harnesses' seed
+  // panels, and `ptyManager.create({ panelId, cwd })` anywhere) must inject
+  // rather than throw. Watched: the unguarded spread of `args` hung
+  // verify:panels before its first check, because setup awaits that seed
+  // create ahead of the watchdog.
+  let noArgs = null
+  let noArgsThrew = null
+  try {
+    noArgs = T.shellIntegrationFor({ command: '/bin/zsh', absentCommand: true, args: undefined, env: { HOME: '/Users/x' }, dir: '/tmp/tc-si' })
+  } catch (error) { noArgsThrew = String(error) }
+  ok('shell-integration.2 a spec with no args injects without throwing',
+    noArgsThrew === null && noArgs !== null && noArgs.shell === 'zsh' && Array.isArray(noArgs.args),
+    noArgsThrew ?? JSON.stringify(noArgs && noArgs.args))
+
+
+const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
 process.exit(failed.length ? 1 : 0)
