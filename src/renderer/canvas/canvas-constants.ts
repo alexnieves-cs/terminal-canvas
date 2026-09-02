@@ -3,7 +3,7 @@ import {
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 import type { CredentialMeta } from '@shared/credential-schema'
-import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { FileRow } from '../shell/file-tree-model'
 
 /**
@@ -38,6 +38,7 @@ export const EMPTY_WORKSPACES: WorkspaceRow[] = []
 // boot would fire it against verify-canvas.cjs's stub registerIpcHandlers
 // wiring, which has no credential store to answer it.
 export const EMPTY_CREDENTIALS: CredentialMeta[] = []
+export const EMPTY_WORKTREES: WorktreeListRow[] = []
 
 // The no-selection case for the file tree: no panel selected, or a selected
 // panel with no cwd to root on. A fresh [] each render would defeat FileTree's

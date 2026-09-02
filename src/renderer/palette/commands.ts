@@ -6,7 +6,7 @@ import type { Command } from './palette-model'
 // different matter and this comment used to be read as covering it: waitingCount
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
-import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'
@@ -44,6 +44,8 @@ export interface PresetRow {
   isDefault: boolean
   /** cwd, and the command if there is one. Searchable via filterCommands. */
   subtitle: string
+  /** M37. Spawns in a fresh worktree. Absent means no. */
+  worktree?: boolean
 }
 
 export interface PromptRow {
@@ -283,6 +285,15 @@ export interface PaletteActions {
    * unmarked confirm is a question the user did not expect to be asked.
    */
   beginDeleteCredential(service: string): void
+  /** M37. Flag or clear a user preset's worktree isolation; main refuses a built-in. */
+  setPresetWorktree(id: string, on: boolean): void
+  /**
+   * M37. Confirm-gated, like deletePreset and beginDeleteCredential: the row
+   * is destructive and a destructive row still runs on one Enter.
+   */
+  beginRemoveWorktree(id: string): void
+  /** M37. Open the worktree's directory in Finder. */
+  revealWorktree(id: string): void
   /**
    * Put a local file on the canvas. Opens main's native file dialog and mints
    * a file panel on a non-null reply.
@@ -324,6 +335,11 @@ export interface PaletteContext {
    * is the design rather than an omission.
    */
   credentials: readonly CredentialMeta[]
+  /**
+   * M37. Every worktree this app created, from window.canvas.worktree.list(),
+   * loaded on palette open beside `credentials` and for the same reason.
+   */
+  worktrees: readonly WorktreeListRow[]
   /**
    * Panel ids currently in wants-you, from the renderer's own attention set.
    * Intersected with each row's panelIds — which is why WORKSPACE_LIST returns
@@ -382,6 +398,10 @@ export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
 export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_ALREADY_DEFAULT = 'already the default'
+/** M37. Three distinct reasons, never one shared "unavailable". */
+export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
+export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
+export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 export const REASON_NOT_STARTED = 'that panel has not started'
@@ -1039,6 +1059,72 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
       )
     )
+    // M37. A toggle that names its CURRENT state rather than a pair of rows:
+    // two rows (turn on / turn off) with one always disabled would be two
+    // rows describing one fact. A built-in stays visible and refuses with a
+    // reason that says what to do instead.
+    out.push(
+      withReason(
+        {
+          id: `preset.worktree.${preset.id}`,
+          title: `Spawn ${preset.name} in a fresh worktree: ${preset.worktree === true ? 'on' : 'off'}`,
+          group: 'manage',
+          scope: 'presets',
+          hiddenAtRest: true,
+          searchText: 'worktree isolate branch git',
+          run: () => actions.setPresetWorktree(preset.id, preset.worktree !== true)
+        },
+        preset.builtIn ? REASON_BUILT_IN_WORKTREE : undefined
+      )
+    )
+  }
+
+  // M37. The worktree door and its rows. The door is present at rest and
+  // disabled with a reason when there are none: a door that vanished would
+  // read as a feature that was never built, the rule every other door here
+  // already obeys.
+  out.push(
+    withReason(
+      {
+        id: 'manage.worktrees',
+        title: 'Manage worktrees…',
+        subtitle: `${ctx.worktrees.length} worktree${ctx.worktrees.length === 1 ? '' : 's'}`,
+        group: 'manage',
+        entersScope: 'worktrees',
+        searchText: 'worktree branch git isolate',
+        run: () => {}
+      },
+      ctx.worktrees.length === 0 ? REASON_NO_WORKTREES : undefined
+    )
+  )
+  for (const wt of ctx.worktrees) {
+    const who = wt.attached ? ` — ${wt.panelTitle ?? wt.panelId} is in it` : ''
+    out.push(
+      withReason(
+        {
+          id: `worktree.remove.${wt.id}`,
+          title: `Remove worktree ${wt.branch}`,
+          subtitle: `${wt.path}${who}`,
+          group: 'manage',
+          scope: 'worktrees',
+          hiddenAtRest: true,
+          destructive: true,
+          searchText: `worktree remove delete ${wt.path} ${wt.root}`,
+          run: () => actions.beginRemoveWorktree(wt.id)
+        },
+        wt.attached ? REASON_WORKTREE_ATTACHED : undefined
+      )
+    )
+    out.push({
+      id: `worktree.reveal.${wt.id}`,
+      title: `Reveal worktree ${wt.branch} in Finder`,
+      subtitle: wt.path,
+      group: 'manage',
+      scope: 'worktrees',
+      hiddenAtRest: true,
+      searchText: `worktree reveal open finder ${wt.path} ${wt.root}`,
+      run: () => actions.revealWorktree(wt.id)
+    })
   }
 
   for (const prompt of ctx.prompts) {

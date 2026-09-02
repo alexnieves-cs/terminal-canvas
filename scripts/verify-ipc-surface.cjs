@@ -86,7 +86,8 @@ app.whenReady().then(() => {
     requestReset: () => {},
     listPrompts: () => [],
     savePrompt: () => {},
-    removePrompt: () => false
+    removePrompt: () => false,
+    setWorktree: () => false
   }
   // Never invoked here — this suite only asserts every channel is REGISTERED,
   // never drives review:panel — but registerIpcHandlers' body reaches into it
@@ -190,7 +191,12 @@ app.whenReady().then(() => {
   // did not — git reported no conflict on the number itself, only on the
   // comments above it. Recompute from Object.values(IPC), never by adding
   // your own branch's delta to whatever this line last said.
-  const EXPECTED_CHANNELS = 52
+  // 56 = 52 plus M37's four: preset:set-worktree (flag a user preset), and
+  // worktree:list / worktree:remove / worktree:reveal. The worktree handlers
+  // are an OPTIONAL trailing parameter with an inert default, which is why
+  // this harness passes nothing for them and every one of the four still has
+  // a handler: an install with no worktrees lists nothing and answers unknown.
+  const EXPECTED_CHANNELS = 56
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

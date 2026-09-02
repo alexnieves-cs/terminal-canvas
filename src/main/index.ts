@@ -16,6 +16,7 @@ import { createReviewEngine } from './review-engine'
 import { createReviewCommitter } from './review-commit'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
+import { createWorktreeManager } from './worktree-manager'
 import { FileWatchers } from './file-watch'
 import { ToolboxCache } from './toolbox-cache'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -194,8 +195,35 @@ const ptyManager = new PtyManager(
   dropBaseline,
   (panelId) => layoutStore.session(panelId),
   (panelId, sessionId) => layoutStore.setSession(panelId, sessionId),
-  (panelId) => layoutStore.dropSession(panelId)
+  (panelId) => layoutStore.dropSession(panelId),
+  // The real transcript reader and the flush cap keep their defaults.
+  undefined,
+  undefined,
+  undefined,
+  // M37. Closes over worktreeManager, declared below — the same forward
+  // closure captureBaseline already relies on; never called before a real
+  // pty:create lands.
+  (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd)
 )
+
+/**
+ * M37. Worktrees live under userData, never inside the repository — inside it
+ * they would be untracked files in the main checkout's own `git status` and
+ * in every review of a panel spawned there. Records live in layout.json
+ * beside baselines and sessions; the manager reads and writes them through
+ * the store so a relaunch finds them.
+ */
+const worktreeManager = createWorktreeManager({
+  run: gitRunner,
+  resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
+  worktreesDir: join(app.getPath('userData'), 'worktrees'),
+  records: {
+    forPanel: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
+    add: (record) => layoutStore.addWorktree(record),
+    drop: (id) => layoutStore.dropWorktree(id),
+    list: () => layoutStore.worktrees()
+  }
+})
 
 // One instance for the app's whole lifetime, alongside ptyManager: both are
 // per-panel-id lifecycle managers with the same two teardown seams (a
@@ -553,6 +581,13 @@ app.whenReady().then(async () => {
         layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
         rebuildMenu()
       },
+      setWorktree: (id, on) => {
+        const changed = layoutStore.setPresetWorktree(id, on)
+        // The template Cmd+N holds carries the flag, so a change has to
+        // re-push it — the same reason setDefault goes through afterPresetChange.
+        if (changed) afterPresetChange()
+        return changed
+      },
       requestReset: () => {
         void confirmReset()
       },
@@ -576,7 +611,17 @@ app.whenReady().then(async () => {
     fileWatchers,
     () => mainWindow,
     toolboxCache,
-    join(app.getPath('userData'), 'diagnostics')
+    join(app.getPath('userData'), 'diagnostics'),
+    {
+      list: () => layoutStore.worktrees(),
+      remove: (id) => worktreeManager.remove(id),
+      reveal: (id) => {
+        const found = layoutStore.worktrees().find((w) => w.id === id)
+        if (found === undefined) return false
+        shell.showItemInFolder(found.path)
+        return true
+      }
+    }
   )
   createWindow()
 

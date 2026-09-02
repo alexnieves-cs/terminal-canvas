@@ -26,7 +26,7 @@ import {
   type PresetRow,
   type PromptRow
 } from './commands'
-import type { SettingRow, WorkspaceRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 
@@ -97,6 +97,8 @@ export interface PaletteProps {
   workspaces: WorkspaceRow[]
   /** Metadata only — see PaletteContext.credentials in commands.ts. */
   credentials: readonly CredentialMeta[]
+  /** M37. See PaletteContext.worktrees. */
+  worktrees: readonly WorktreeListRow[]
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
@@ -118,6 +120,7 @@ const SCOPE_LABEL: Record<PaletteScope, string> = {
   settings: 'Settings',
   workspaces: 'Workspaces',
   credentials: 'Credentials',
+  worktrees: 'Worktrees',
   'agent-mode': 'Permission mode'
 }
 
@@ -162,6 +165,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         settings: props.settings,
         workspaces: props.workspaces,
         credentials: props.credentials,
+        worktrees: props.worktrees,
         noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
@@ -173,7 +177,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
-     props.credentials, props.attentionIds, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.attentionIds, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])

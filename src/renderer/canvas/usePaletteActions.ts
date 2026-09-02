@@ -18,7 +18,7 @@ import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/com
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { InputMode } from '@renderer/palette/Palette'
 import { findService } from '@shared/credential-schema'
-import type { CapturedPanel, SettingRow } from '@shared/ipc-contract'
+import type { CapturedPanel, SettingRow, WorktreeListRow } from '@shared/ipc-contract'
 import { railLabel } from '../shell/rail-rows'
 import type { LinkMode } from './useLinkMode'
 import type { Point, WorldRect } from './viewport'
@@ -62,6 +62,10 @@ export interface PaletteActionsDeps {
   reloadPrompts: (capturedId: string | null) => void
   reloadSettings: () => void
   reloadCredentials: () => void
+  /** M37. The worktree list, reloaded after a remove. */
+  reloadWorktrees: () => void
+  /** M37. The palette's current worktree rows, so a confirm can name the branch. */
+  worktreeRows: readonly WorktreeListRow[]
   reloadWorkspaces: () => void
   setPanels: Dispatch<SetStateAction<Panel[]>>
   setGroups: Dispatch<SetStateAction<CanvasGroup[]>>
@@ -103,7 +107,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
-    reloadSettings, reloadCredentials, reloadWorkspaces, setPanels, setGroups,
+    reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput
   } = deps
 
@@ -1068,12 +1072,49 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       })
     },
     openJira: () => openJiraPanel(),
-    newNote: () => beginNewNote()
+    newNote: () => beginNewNote(),
+    setPresetWorktree: (id, on) => {
+      // Main owns the store and refuses a built-in; the reload is what makes
+      // the toggle row's own title flip.
+      void window.canvas.preset.setWorktree(id, on).then(reloadPresets)
+    },
+    beginRemoveWorktree: (id) => {
+      // Gated, for deletePreset's reason. The question names the BRANCH,
+      // because that is what the user would recognise; the path is in the
+      // row's subtitle they just read. A dirty tree is refused by git itself
+      // and the refusal comes back as a note in the palette's input mode
+      // rather than as silence.
+      const row = worktreeRows.find((w) => w.id === id)
+      const branch = row?.branch ?? id
+      setInputMode({
+        kind: 'confirm',
+        label: `Remove worktree “${branch}”? Its branch stays; git refuses if the tree is dirty.`,
+        initial: '',
+        submit: () => {
+          void window.canvas.worktree.remove(id).then((result) => {
+            reloadWorktrees()
+            if (result.kind === 'refused' || result.kind === 'failed') {
+              // Shown, never swallowed: a remove that did nothing and said
+              // nothing reads as the row being broken. Input mode is the one
+              // surface the palette already has for a sentence the user must
+              // read; `submit` closes it.
+              setInputMode({ kind: 'confirm', label: `Not removed — ${result.reason}`, initial: '', submit: () => {} })
+              palette.openPalette()
+            }
+          })
+        }
+      })
+      palette.openPalette()
+    },
+    revealWorktree: (id) => {
+      void window.canvas.worktree.reveal(id)
+    }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
-       openFilePanel, openJiraPanel, worldCentre, beginNewNote])
+       openFilePanel, openJiraPanel, worldCentre, beginNewNote, reloadWorktrees,
+       worktreeRows, setInputMode])
 }

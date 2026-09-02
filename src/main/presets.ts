@@ -52,7 +52,21 @@ export const BUILT_IN_PRESETS: Preset[] = [
     // permission checks as a default affordance.
     agentOptions: { permissionMode: 'plan' }
   },
-  { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [], agent: 'codex' }
+  { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [], agent: 'codex' },
+  // M37. The feature's door without a preset editor: presets are captured
+  // from panels and there is no form, so a built-in is how a new user finds
+  // "spawn in a fresh worktree" at all. `~` is the same cwd every built-in
+  // has; a panel spawned from here in a directory that is not a repository is
+  // refused a worktree and SAYS so in the inspector rather than failing.
+  {
+    id: 'claude-worktree',
+    name: 'Claude in a fresh worktree',
+    cwd: '~',
+    command: 'claude',
+    args: [],
+    agent: 'claude-code',
+    worktree: true
+  }
 ]
 
 /** Built-ins first, so the menu order is stable as the user adds their own. */
@@ -86,6 +100,7 @@ export function templateOf(preset: {
   h?: number
   agent?: AgentKind
   agentOptions?: AgentOptions
+  worktree?: boolean
 }): PresetTemplate {
   const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
   if (preset.command !== undefined) template.command = preset.command
@@ -93,6 +108,8 @@ export function templateOf(preset: {
   if (preset.h !== undefined) template.h = preset.h
   if (preset.agent !== undefined) template.agent = preset.agent
   if (preset.agentOptions !== undefined) template.agentOptions = preset.agentOptions
+  // M37. Same absent-stays-absent rule as every field above it.
+  if (preset.worktree !== undefined) template.worktree = preset.worktree
   return template
 }
 
@@ -180,7 +197,11 @@ export function presetFromCapture(user: Preset[], captured: CapturedPanel): Pres
     w: captured.w,
     h: captured.h,
     ...(captured.agent !== undefined ? { agent: captured.agent } : {}),
-    ...(captured.agentOptions !== undefined ? { agentOptions: captured.agentOptions } : {})
+    ...(captured.agentOptions !== undefined ? { agentOptions: captured.agentOptions } : {}),
+    // M37. A panel that asked for a worktree saves as a preset that asks for
+    // one — its cwd is the repository cwd, never the worktree path (see
+    // PersistedTerminalPanel.worktree), so the preset spawns a NEW worktree.
+    ...(captured.worktree !== undefined ? { worktree: captured.worktree } : {})
   }
 }
 
@@ -238,6 +259,9 @@ export function presetRows(entries: PresetAvailability[], defaultId: string): Pr
     isDefault: preset.id === defaultId,
     // "the user's login shell" spelled out, because only main can resolve an
     // absent command and the renderer must not guess (it would get zsh).
-    subtitle: `${preset.command ?? 'login shell'} — ${preset.cwd}`
+    subtitle: `${preset.command ?? 'login shell'} — ${preset.cwd}`,
+    // M37. Absent stays absent, so the palette's toggle row can say "off"
+    // for a preset that never asked and "on" for one that did.
+    ...(preset.worktree !== undefined ? { worktree: preset.worktree } : {})
   }))
 }

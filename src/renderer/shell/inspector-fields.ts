@@ -472,6 +472,20 @@ export function buildInspectorModel(
     // an accident.
     { key: 'pid', label: 'pid', value: running === undefined ? '—' : String(running.pid) }
   ]
+  // M37. Three states, and the third renders NOTHING: a panel that never
+  // asked for a worktree gets no row, by the Cost section's rule against a
+  // confident nothing. Active is two rows — the branch is what the user
+  // types into `git merge`, the path is what they cd into — and a refusal is
+  // one row carrying git's or the engine's own sentence, because a worktree
+  // the user asked for and did not get must never be silent.
+  if (running?.worktree !== undefined) {
+    if (running.worktree.kind === 'active') {
+      fields.push({ key: 'worktree', label: 'worktree', value: running.worktree.branch })
+      fields.push({ key: 'worktree-path', label: 'worktree path', value: running.worktree.path })
+    } else {
+      fields.push({ key: 'worktree', label: 'worktree', value: `refused — ${running.worktree.reason}` })
+    }
+  }
   // The agent knobs, each rendered only when SET. An absent knob renders no
   // row rather than the word "default": a login shell can never have one, and
   // a row that says "default" on every panel is the confident-nothing this

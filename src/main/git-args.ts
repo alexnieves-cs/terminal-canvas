@@ -66,6 +66,26 @@ export function buildObjectExistsArgs(root: string, sha: string): string[] {
   return ['-C', root, 'cat-file', '-e', sha]
 }
 
+/**
+ * M37. A fresh worktree on a NEW branch at the current commit. `-b` rather
+ * than an existing branch: two panels asking for the same branch would be two
+ * checkouts of one branch, which git refuses anyway, and the point of the
+ * feature is that each panel has a branch of its own.
+ */
+export function buildWorktreeAddArgs(root: string, branch: string, path: string): string[] {
+  return ['-C', root, 'worktree', 'add', '-b', branch, path, 'HEAD']
+}
+
+/**
+ * M37. NO `--force`, for the reason buildCommitArgs carries no `--no-verify`:
+ * git refuses to remove a worktree with uncommitted changes, and a tool that
+ * quietly discarded an agent's work would be worth less than one that
+ * refused. The refusal is reported verbatim and the directory survives.
+ */
+export function buildWorktreeRemoveArgs(root: string, path: string): string[] {
+  return ['-C', root, 'worktree', 'remove', path]
+}
+
 export function buildNumstatArgs(root: string, baseline: string): string[] {
   return ['-C', root, 'diff', '--numstat', '-z', baseline]
 }

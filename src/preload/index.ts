@@ -93,6 +93,7 @@ const bridge: CanvasBridge = {
     remove: (id: string) => ipcRenderer.invoke(IPC.PRESET_DELETE, id),
     setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id),
     spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id),
+    setWorktree: (id: string, on: boolean) => ipcRenderer.invoke(IPC.PRESET_SET_WORKTREE, id, on),
     savePanel: (captured: CapturedPanel) => ipcRenderer.invoke(IPC.PRESET_SAVE_PANEL, captured)
   },
   prompt: {
@@ -140,6 +141,11 @@ const bridge: CanvasBridge = {
     at: (subject: ReviewSubject) => ipcRenderer.invoke(IPC.REVIEW_AT, subject),
     diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req),
     commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req)
+  },
+  worktree: {
+    list: () => ipcRenderer.invoke(IPC.WORKTREE_LIST),
+    remove: (id: string) => ipcRenderer.invoke(IPC.WORKTREE_REMOVE, id),
+    reveal: (id: string) => ipcRenderer.invoke(IPC.WORKTREE_REVEAL, id)
   },
   credential: {
     list: () => ipcRenderer.invoke(IPC.CREDENTIAL_LIST),

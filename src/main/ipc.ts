@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
@@ -63,6 +63,8 @@ export interface PaletteHandlers {
    * main/index.ts's.
    */
   savePanel(captured: CapturedPanel): void
+  /** M37. See IPC.PRESET_SET_WORKTREE. */
+  setWorktree(id: string, on: boolean): boolean
   requestReset(): void
   listPrompts(cwd: string | null): PromptListRow[]
   savePrompt(name: string, body: string): void
@@ -70,6 +72,19 @@ export interface PaletteHandlers {
 }
 
 /** Registers the whole renderer -> main surface. One place, one call. */
+/** M37. What main hands the worktree channels; see createWorktreeManager. */
+export interface WorktreeHandlers {
+  list(): Omit<WorktreeListRow, 'attached' | 'panelTitle'>[]
+  remove(id: string): Promise<WorktreeRemoveResult>
+  reveal(id: string): boolean
+}
+
+const INERT_WORKTREES: WorktreeHandlers = {
+  list: () => [],
+  remove: async () => ({ kind: 'unknown' }),
+  reveal: () => false
+}
+
 export function registerIpcHandlers(
   ptyManager: PtyManager,
   layoutStore: LayoutStore,
@@ -119,9 +134,34 @@ export function registerIpcHandlers(
    * way layoutStore's and credentialStore's own file paths are — appended
    * last, like every collaborator above it.
    */
-  diagnosticsDir: string
+  diagnosticsDir: string,
+  /**
+   * M37. The worktree verbs. Optional with an inert default, so the harnesses
+   * that construct this positionally keep compiling and every channel still
+   * has a handler (verify:ipc): the default lists nothing and answers
+   * `unknown`, which is what an install with no worktrees looks like.
+   */
+  worktrees: WorktreeHandlers = INERT_WORKTREES
 ): void {
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
+
+  // M37. `attached` is computed HERE, at list time, from the layout: a
+  // record's panelId is in some workspace's panel list or it is not. Never
+  // stored — see WorktreeRecord in layout-schema.ts.
+  ipcMain.handle(IPC.WORKTREE_LIST, (): WorktreeListRow[] => {
+    const titles = new Map<string, string | undefined>()
+    for (const ws of layoutStore.mergedWorkspaces()) {
+      for (const panel of ws.panels) titles.set(panel.id, panel.title)
+    }
+    return worktrees.list().map((w) => ({
+      ...w,
+      attached: titles.has(w.panelId),
+      ...(titles.get(w.panelId) === undefined ? {} : { panelTitle: titles.get(w.panelId) })
+    }))
+  })
+  ipcMain.handle(IPC.WORKTREE_REMOVE, (_event, id: string) => worktrees.remove(id))
+  ipcMain.handle(IPC.WORKTREE_REVEAL, (_event, id: string) => worktrees.reveal(id))
+  ipcMain.handle(IPC.PRESET_SET_WORKTREE, (_event, id: string, on: boolean) => palette.setWorktree(id, on))
 
   ipcMain.handle(IPC.PTY_WRITE, (_event, req: PtyWriteRequest) => {
     ptyManager.write(req.panelId, req.data)

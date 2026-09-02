@@ -27,4 +27,12 @@ module.exports = {
   // commit transaction can be driven here against a fake runner, with no real
   // git and no real repository, in the cheapest tier the repo has.
   ...require('../src/main/review-commit'),
+  // M37. The pure half of the worktree feature: naming and path derivation.
+  // Import-free, so it costs this tier nothing; the git-running half is
+  // worktree-manager.ts, which takes its runner injected and joins below it.
+  ...require('../src/main/worktree'),
+  // The git-running half. Its runner, resolver and record store are all
+  // injected, so verify:review drives it against a real temporary repository
+  // and an in-memory record list — no Electron, no real userData.
+  ...require('../src/main/worktree-manager'),
 }

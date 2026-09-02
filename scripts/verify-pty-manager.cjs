@@ -238,7 +238,10 @@ function makeHarness(backend, options = {}) {
     // The flush byte cap. Undefined falls through to FLUSH_MAX_BYTES; only
     // backpressure.1/.2 force it low, so the elision they assert on is
     // deterministic rather than a race between the shell and the flush timer.
-    options.flushMaxBytes
+    options.flushMaxBytes,
+    // M37. The worktree resolver; undefined means "no worktrees", as in a
+    // harness that never asks. Only worktree.1-.3 pass one.
+    options.worktreeFor
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -616,6 +619,40 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     ok('backpressure.2 the tail survives — the sentinel printed last reaches the last payload',
       last.includes('TC-END'),
       `last=${JSON.stringify(last.slice(-80))}`)
+    h.manager.killAll()
+  }
+
+  // M37 — worktree.1-.3. The manager's part is small and injected: it asks
+  //     `worktreeFor` ONLY when the spec says so, spawns in the answer's path
+  //     when the answer is `active`, spawns in the requested cwd when it is
+  //     `refused`, and carries the outcome on the result either way. The
+  //     git-running half is verify:review's; this is the seam.
+  {
+    const wt = mkdtempSync(join(tmpdir(), 'tc wt dir '))
+    const asked = []
+    const h = makeHarness(undefined, {
+      worktreeFor: async (panelId, cwd) => {
+        asked.push({ panelId, cwd })
+        return panelId === 'wt-yes'
+          ? { kind: 'active', branch: 'tc/wt-yes-20260901-1432', path: wt, root: '/r' }
+          : { kind: 'refused', reason: 'not inside a git repository' }
+      }
+    })
+    const yes = await h.manager.create({ ...spec('wt-yes'), worktree: true })
+    const no = await h.manager.create({ ...spec('wt-no'), worktree: true })
+    const plain = await h.manager.create(spec('wt-plain'))
+    const realWt = realpathSync(wt)
+    ok('worktree.1 a spec asking for a worktree spawns in the path the resolver answers, and the result says so',
+      asked.some((a) => a.panelId === 'wt-yes') && realpathSync(yes.cwd) === realWt &&
+        yes.worktree !== undefined && yes.worktree.kind === 'active' && yes.worktree.branch === 'tc/wt-yes-20260901-1432',
+      JSON.stringify({ cwd: yes.cwd, worktree: yes.worktree }))
+    ok('worktree.2 a refused worktree spawns in the requested cwd AND carries the refusal',
+      asked.some((a) => a.panelId === 'wt-no') && realpathSync(no.cwd) === realpathSync(os.homedir()) &&
+        no.worktree !== undefined && no.worktree.kind === 'refused' && /repository/.test(no.worktree.reason),
+      JSON.stringify({ cwd: no.cwd, worktree: no.worktree }))
+    ok('worktree.3 a spec that never asked never consults the resolver and carries no outcome',
+      !asked.some((a) => a.panelId === 'wt-plain') && plain.worktree === undefined,
+      JSON.stringify({ asked, worktree: plain.worktree }))
     h.manager.killAll()
   }
 

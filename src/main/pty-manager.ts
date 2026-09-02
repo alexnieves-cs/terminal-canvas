@@ -24,7 +24,8 @@ import type {
   PanelSpec,
   PtyCreateResult,
   SubagentRecord,
-  SubagentUpdate
+  SubagentUpdate,
+  WorktreeOutcome
 } from '../shared/types'
 import { initialDetector, nextState, scanForBell, type AgentEvent, type Detector } from './agent-state'
 import type { SessionBackend } from './session-backend'
@@ -484,7 +485,18 @@ export class PtyManager {
       offset: number
     ) => { bytes: Buffer; size: number } | undefined = realReadFrom,
     /** See FLUSH_MAX_BYTES. Overridden only by verify:pty-manager. */
-    private readonly flushMaxBytes: number = FLUSH_MAX_BYTES
+    private readonly flushMaxBytes: number = FLUSH_MAX_BYTES,
+    /**
+     * M37. Answers "where should this panel's worktree be" — creating it,
+     * reusing it, or refusing. Injected for captureBaseline's reason: the
+     * git-running half lives in worktree-manager.ts and is driven under plain
+     * node in verify:review; this manager only has to spawn where it is told
+     * and carry the answer. Undefined (every harness that never asks) means a
+     * panel asking for a worktree is refused with a reason rather than
+     * silently spawned in place.
+     */
+    private readonly worktreeFor: (panelId: PanelId, cwd: string) => Promise<WorktreeOutcome> =
+      async () => ({ kind: 'refused', reason: 'worktrees are not available in this build' })
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -495,7 +507,18 @@ export class PtyManager {
     const loginEnv = await resolveShellEnv()
     const env = buildPtyEnv(loginEnv, spec.env)
 
-    const cwd = resolveCwd(spec.cwd)
+    // M37. The worktree decides the cwd BEFORE the baseline is captured
+    // below, so the snapshot is taken in the worktree — which is the whole
+    // reason the review engine needs no change: it sees an ordinary
+    // repository root. A refusal spawns in the requested cwd as an ordinary
+    // panel and is carried on the result, never swallowed: a worktree the
+    // user asked for and did not get must not be silent.
+    let cwd = resolveCwd(spec.cwd)
+    let worktree: WorktreeOutcome | undefined
+    if (spec.worktree === true) {
+      worktree = await this.worktreeFor(spec.panelId, cwd)
+      if (worktree.kind === 'active') cwd = worktree.path
+    }
 
     // Fire-and-forget: the baseline must never delay or fail a spawn. It is
     // taken BEFORE the process starts so the snapshot precedes the agent's
@@ -705,7 +728,16 @@ export class PtyManager {
         `${spec.cols}x${spec.rows} cwd=${cwd}`
     )
 
-    return { panelId: spec.panelId, pid: proc.pid, command, cwd, reattached }
+    return {
+      panelId: spec.panelId,
+      pid: proc.pid,
+      command,
+      cwd,
+      reattached,
+      // Absent stays absent: a spread of `undefined` would survive IPC as a
+      // present key and read as an outcome.
+      ...(worktree === undefined ? {} : { worktree })
+    }
   }
 
   /**

@@ -50,6 +50,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #68 space-drag and middle-drag pan | M34 | "The pan-drag design" entries — one narrow verb, `beginPanDrag`, beside the wheel listener |
 | #43 Unicode 11 widths | M36 | "xterm measures widths against Unicode 11, loaded in `createTerminal` before `open()`" |
 | #58 backpressure on a runaway panel | M36 | "The flush is capped by bytes and the cap keeps the TAIL" |
+| #50 git worktree per panel | M37 | "A worktree record OUTLIVES its panel, and attachment is COMPUTED, never stored", "The worktree decides the cwd BEFORE the baseline is captured" |
 
 Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
@@ -1574,32 +1575,6 @@ refuses to start a gesture) and a **pin** (the panel is always live, exempt from
   **#29**, which is about a panel's process rather than its geometry. Neither proposes
   user-controlled exemption from the tiering rules.
 
-## 50. Git worktree per panel — isolation for agents that share a repo
-
-The app's premise is many agents at once, and nothing in the codebase *or in the forty
-entries above* coordinates two of them editing the same checkout. A preset should be able to
-declare "spawn in a fresh worktree of this repo on a new branch", so four agents on one repo
-are four working trees and four branches, merged deliberately.
-
-- **This is the largest correctness gap in the product thesis.** The canvas actively
-  encourages the one configuration that silently corrupts work: two agents, one checkout,
-  both editing. Every other entry in this file makes the app better at something; this one
-  stops it being wrong at the thing it is *for*.
-- **Constraint: a `cwd`/worktree field is a fifth layer for the absent-`command` rule.**
-  "An absent `command` must stay absent through four layers" is already the most expensive
-  invariant in the preset path, and each of those four rebuilds its object field by field
-  rather than spreading. A worktree field inherits that discipline exactly.
-- **Constraint: it adds a fourth `registry.dispose` consumer's worth of cleanup.** Closing a
-  panel has to decide whether its worktree is removed — and `CLAUDE.md` says the dispose
-  call-site count is a number to re-derive from the code rather than trust, because it has
-  already gone stale once.
-- **Open question: what happens on undo?** `Cmd+N` then `Cmd+Z` must dispose the session, per
-  the note that entry exists for. If it also removes a worktree, undo becomes destructive to
-  files on disk, which nothing in this app currently is.
-- **Nearest existing entry: #4's separable git-status badge** and **#12's ticket→branch→panel
-  flow.** Both of those *display* or *source* git state. This one owns write isolation, and
-  it is the prerequisite that makes #12's "four tickets in flight" not a merge disaster.
-
 ## 51. Discard — the half of per-panel review that writes in the other direction
 
 M9a–M9c shipped the review layer: a baseline captured once per session at spawn and dropped
@@ -1713,7 +1688,6 @@ reconcile do the rest.
 - **Nearest existing entry: #29 (restart in place),** which is about deliberately ending and
   recreating one process. This is about not ending any of them, and it is the only entry in
   this file that changes what quitting means.
-
 ## 57. `tc` — a CLI and a URL scheme, so the canvas is drivable from outside
 
 One binary and one `terminal-canvas://` handler: `tc open --preset claude --cwd ~/repo` spawns
@@ -2080,11 +2054,10 @@ these. Three observations that would change it if it were:
   M26. Both belonged near the front of any real ordering.
 - **#43 is a defect, not a feature,** and #70's drift finding was a second. #49 was a third
   and is fixed. Defects should be fixed rather than scheduled.
-- **#50 (worktree isolation) is the one entry here that changes what the product is for.**
-  Everything else in this file makes the canvas better at something. That one stops it being
-  wrong at the thing it exists to do — and its cost is real, because it lands on the
-  absent-`command` rule and on the dispose call-site count, the two most expensive invariants
-  in the app.
+- **#50 (worktree isolation) was the one entry here that changed what the product is for,
+  and it shipped in M37.** Its cost landed where this note predicted — the absent-`command`
+  rule gained a fifth field — and where it did not: the dispose call-site count never moved,
+  because a worktree record outlives its panel and no close removes anything from disk.
 
 ## Rough sequencing, if these were ever scheduled
 

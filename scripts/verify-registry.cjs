@@ -714,7 +714,57 @@ const tick = () => new Promise((r) => setImmediate(r))
       JSON.stringify(bridge.calls.write))
   }
 
-  console.log('\n' + '='.repeat(60))
+  // M37 — the registry's pty:create request is the FIFTH copy site of the
+// absent-stays-absent rule, and it was the one nobody had pinned. It is built
+// field by field, so a field the spec carries that this call does not name
+// never reaches main — with no error, no warning, and a chrome that keeps
+// rendering the spec as though it had. Scoped ids.
+//
+// worktree.1. `worktree: true` on the spec reaches the request; a spec without
+//      it produces a request WITHOUT the key (tested with `in`, never a
+//      truthiness test — `worktree: undefined` survives IPC and reads as
+//      present to main).
+{
+  const { bridge, registry } = setup()
+  registry.ensure('wt-a', { ...SPEC, panelId: 'wt-a', worktree: true })
+  registry.ensure('wt-b', { ...SPEC, panelId: 'wt-b' })
+  registry.applyTiers({ 'wt-a': 'live', 'wt-b': 'live' })
+  registry.attachSlot('wt-a')
+  registry.attachSlot('wt-b')
+  await tick()
+  const reqA = bridge.calls.create.find((c) => c.panelId === 'wt-a')
+  const reqB = bridge.calls.create.find((c) => c.panelId === 'wt-b')
+  ok('worktree.1 the create request carries the spec\'s worktree flag, and keeps absence absent',
+    reqA !== undefined && reqB !== undefined && reqA.worktree === true && !('worktree' in reqB),
+    JSON.stringify({ reqA, reqB }))
+}
+
+// copy-site.1. FOUND WHILE PINNING THE ABOVE, and older than this milestone:
+//      the request never carried `agentOptions` either. M23's permission mode,
+//      effort and model rendered in the chrome and the inspector — both read
+//      the renderer's own spec — while main's agentArgs saw an absent record
+//      and emitted no flag, so a "plan mode" panel spawned in the CLI's
+//      default mode with a chip on it saying otherwise. verify:panels 172
+//      asserts the two renderings agree with each other; nothing asserted
+//      that the request agreed with them. Now something does.
+{
+  const { bridge, registry } = setup()
+  registry.ensure('ao-a', { ...SPEC, panelId: 'ao-a', command: 'claude', agent: 'claude-code', agentOptions: { permissionMode: 'plan', effort: 'high' } })
+  registry.ensure('ao-b', { ...SPEC, panelId: 'ao-b' })
+  registry.applyTiers({ 'ao-a': 'live', 'ao-b': 'live' })
+  registry.attachSlot('ao-a')
+  registry.attachSlot('ao-b')
+  await tick()
+  const reqA = bridge.calls.create.find((c) => c.panelId === 'ao-a')
+  const reqB = bridge.calls.create.find((c) => c.panelId === 'ao-b')
+  ok('copy-site.1 the create request carries the spec\'s agentOptions, and keeps absence absent',
+    reqA !== undefined && reqB !== undefined &&
+      reqA.agentOptions !== undefined && reqA.agentOptions.permissionMode === 'plan' && reqA.agentOptions.effort === 'high' &&
+      !('agentOptions' in reqB),
+    JSON.stringify({ reqA, reqB }))
+}
+
+console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

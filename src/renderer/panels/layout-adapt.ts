@@ -71,6 +71,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
         // And again for the knobs beside it. One record rather than three
         // fields is what keeps this ONE conditional line instead of three.
         ...(p.agentOptions === undefined ? {} : { agentOptions: p.agentOptions }),
+        ...(p.worktree === undefined ? {} : { worktree: p.worktree }),
         args: [...p.args]
       }
     }
@@ -125,6 +126,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       ...(panel.spec.command === undefined ? {} : { command: panel.spec.command }),
       ...(panel.spec.agent === undefined ? {} : { agent: panel.spec.agent }),
       ...(panel.spec.agentOptions === undefined ? {} : { agentOptions: panel.spec.agentOptions }),
+      ...(panel.spec.worktree === undefined ? {} : { worktree: panel.spec.worktree }),
       args: [...panel.spec.args]
     }
   })

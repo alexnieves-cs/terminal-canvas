@@ -493,14 +493,23 @@ must tear down (dropping baselines) BEFORE it flushes the store, wrapped in a `t
 there can't also lose the flush — flushing first would lose every dropped-baseline write on a
 process that's about to exit.
 
-**An absent `command` must stay absent through four layers (`shared/layout-schema.ts`'s
+**An absent `command` must stay absent through FIVE layers (`shared/layout-schema.ts`'s
 `parsePresets`, `main/presets.ts`'s `templateOf`, the `PRESET_SPAWN`/`PRESET_DEFAULT` payloads,
-and `Canvas.tsx`'s `onSpawn`/`onCapture`).** Each rebuilds its object field by field rather
-than spreading, because spreading carries `command: undefined` across the IPC structured clone
-— where `'command' in template` then reads **true**, a different fact from the key being
-absent. The failure is total and silent: every command-less preset (the built-in login shell,
-and any user preset saved from one) would spawn a hardcoded shell instead of the user's actual
-one. `verify:layout` 34, `verify:panels` 31.
+`Canvas.tsx`'s `onSpawn`/`onCapture`, and `session-registry.ts`'s `pty.create` request).** Each
+rebuilds its object field by field rather than spreading, because spreading carries
+`command: undefined` across the IPC structured clone — where `'command' in template` then
+reads **true**, a different fact from the key being absent. The failure is total and silent:
+every command-less preset (the built-in login shell, and any user preset saved from one) would
+spawn a hardcoded shell instead of the user's actual one. `verify:layout` 34, `verify:panels`
+31. **The fifth layer cuts the other way, and it was found in M37**: a field-by-field copy also
+DROPS any field it does not name, with no error and a chrome that keeps rendering the spec as
+though the copy had carried it. The registry's request carried `agent` and not `agentOptions`
+from M23 until M37, so a "plan mode" panel wore its chip and its inspector rows — both read the
+renderer's own spec — while main's `agentArgs` saw an absent record and spawned the CLI in its
+default mode. `verify:panels` 172 asserted the two renderings agreed with each other; nothing
+asserted the request agreed with them. `verify:registry` `copy-site.1` and `worktree.1` now
+read the request itself, and every optional spec field added from here owes that site a line
+and a check.
 
 **`Cmd+N` stays a renderer keybinding, not a menu accelerator (`useViewport.ts`).** Moving it
 to `main/menu.ts` would be architecturally tidier but breaks every `verify:panels` check that
@@ -2185,3 +2194,48 @@ looks wrong; the app gets heavy while a panel is dragged. Both are `useCallback`
 dependency lists — the second reads `paletteActions` through a ref — and `verify:panels`
 `memo-stable.1` pins the JSX as source text, because that is the only place the defect is
 visible.
+
+**A worktree record OUTLIVES its panel, and attachment is COMPUTED, never stored
+(`shared/layout-schema.ts`'s `WorktreeRecord`, `main/ipc.ts`'s `worktree:list`).** M37's
+records are a sibling of `baselines` and `sessions`, keyed by their own id and carrying the
+panel id that spawned them, and NOTHING clears that panel id on close. Two paths depend on
+it. Restart-in-place is dispose-then-ensure at the SAME id, so a `kill()`-time detach would
+hand the restarted panel a brand-new worktree and quietly abandon the branch it was on.
+Undoing a close restores the same id, which must land back in its own worktree. Whether a
+record is attached is therefore answered at list time — its `panelId` is in some workspace's
+panel list or it is not — and the manager's `forPanel(panelId, root)` reuses a detached
+record for the same id in the same `root`. The `root` clause is the guard: a recycled panel
+id in a DIFFERENT repository creates a new worktree, so no panel is ever spawned into a
+stranger's branch. A closed panel's worktree is thus a directory with a branch on it, listed
+in the palette as detached, which is exactly what "merged deliberately" needs.
+
+**The worktree decides the cwd BEFORE the baseline is captured, and that is why the review
+engine needed no change (`main/pty-manager.ts`'s `create()`, `main/worktree-manager.ts`).**
+`worktreeFor` runs first, `cwd` becomes the worktree path, and everything downstream —
+`captureBaseline`, `configStamps`, the spawn itself, `PtyCreateResult.cwd` — sees an ordinary
+directory inside an ordinary repository root. `resolveRepo(worktreePath)` answers the
+worktree's own root (`rev-parse --show-toplevel` does), `stash create` runs there, and
+`baselinePeers` counts by root, so two panels in two worktrees of one repository are two
+ATTRIBUTABLE answers where they used to be `shared`. The panel's `spec.cwd` stays the
+REPOSITORY cwd the preset asked for; the worktree path lives on `PtyCreateResult`, which is
+the inspector's existing `asked for` / `cwd` split. Move the worktree resolution below the
+baseline capture and the snapshot is taken in the main checkout while the agent works in the
+worktree — every review of that panel then reports the wrong tree's changes, confidently.
+
+**The worktree lives under `userData`, never inside the repository (`main/worktree.ts`'s
+`worktreePath`).** Inside it, the worktree would be untracked files in the main checkout's own
+`git status`, and the review engine's `ls-files --others` would list a sibling agent's whole
+worktree as THIS agent's new files. The parent directory carries a hash of the root so two
+repositories sharing a basename get different parents, and the leaf is the branch with `/`
+replaced, because a path component cannot hold one.
+
+**A worktree is refused loudly, and removed only without `--force` (`main/worktree-manager.ts`,
+`renderer/shell/inspector-fields.ts`).** A panel that asked for a worktree and could not get
+one — not a repository, an unborn HEAD, git unreachable — spawns in its requested cwd AND
+carries the refusal on `PtyCreateResult.worktree`, which the inspector renders as one row
+reading `refused — <reason>`; the three states (never asked, active, refused) render three
+different things, and the first renders nothing. `worktree:remove` runs `git worktree remove`
+with no `--force`, for the reason `review:commit` runs no `--no-verify`: a dirty tree is
+refused with git's own sentence and the directory survives. The branch is never deleted by
+this app — deleting an unmerged branch is the one irreversible act in the feature, and it is
+the user's, in git, once they have merged.
