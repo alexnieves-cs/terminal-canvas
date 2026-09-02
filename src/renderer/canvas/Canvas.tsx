@@ -418,6 +418,17 @@ export function Canvas({
     [commitHistory]
   )
   const [openingContexts, setOpeningContexts] = useState<Map<string, string>>(() => new Map())
+  // A STABLE identity, and the reason is TerminalPanel's memo. This was an
+  // inline arrow on every terminal panel — a new function on every Canvas
+  // render, and Canvas renders on every mousemove — so every panel's memo
+  // re-rendered at 60Hz regardless of `version`, `title`, `glow` and M35's
+  // `onBeginLink`/`linkTarget` discipline, all of which exist to protect it.
+  // Nothing threw and nothing looked wrong; the app just got heavy while a
+  // panel was dragged. Closes over a setter only, so the list is empty.
+  // verify:panels memo-stable.1 pins the JSX.
+  const onContextPasted = useCallback((id: string) => {
+    setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })
+  }, [])
   const spawnJiraTicket = useCallback((item: WorkItem) => {
     const id = `n${nextIdRef.current}`
     setOpeningContexts((current) => new Map(current).set(id, `Jira ticket ${item.id}: ${item.title}\n\n${item.description}`))
@@ -2615,6 +2626,17 @@ export function Canvas({
     reloadSettings, reloadCredentials, reloadWorkspaces, setPanels, setGroups,
     setInputMode, setBroadcastInput
   })
+  // The link layer's remover, with an identity that outlives the palette's
+  // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
+  // changes, so handing `paletteActions.removeLink` straight to LinkLayer
+  // re-rendered the whole layer on every palette open — the exact case its
+  // own memo comment names as one it stops. Read through a ref so the wrapper
+  // never goes stale and never changes. verify:panels memo-stable.1.
+  const paletteActionsRef = useRef(paletteActions)
+  paletteActionsRef.current = paletteActions
+  const removeLinkStable = useCallback((from: string, to: string) => {
+    paletteActionsRef.current.removeLink(from, to)
+  }, [])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2781,7 +2803,7 @@ export function Canvas({
           <LinkLayer
             panels={displayPanels}
             draw={linkDraw.state}
-            onRemove={merged ? undefined : paletteActions.removeLink}
+            onRemove={merged ? undefined : removeLinkStable}
           />
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
@@ -2878,7 +2900,7 @@ export function Canvas({
                 glow={glowEnabled}
                 readOnly={merged}
                 openingContext={openingContexts.get(panel.rect.id)}
-                onContextPasted={(id) => setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })}
+                onContextPasted={onContextPasted}
                 entering={enteringPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
                 onBeginLink={onBeginLink}

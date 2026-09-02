@@ -1,5 +1,13 @@
 import { request } from 'node:https'
 import type { CredentialMeta } from '../shared/credential-schema'
+// ONE declaration, in the contract, and this module imports it. Each of these
+// used to be declared here AND in ipc-contract.ts; ipcMain.handle is not typed
+// by the contract, so the copies drifted with tsc silent, and the failure was
+// the renderer reading `undefined` — an empty transition list, which is what a
+// ticket with no legal moves also looks like. `import type` is erased by
+// esbuild, so the plain-node verify:jira bundle is untouched. verify:jira
+// types.1 pins the arrangement.
+import type { JiraListResult, JiraTransitionsResult, JiraWriteResult } from '../shared/ipc-contract'
 import type { WorkItem, WorkItemTransition } from '../shared/work-item'
 import type { CredentialStore } from './credential-store'
 
@@ -25,10 +33,6 @@ export interface JiraRequest {
 export type JiraRequester = (request: JiraRequest) => Promise<{ status: number; body: string }>
 export interface JiraDeps { store: CredentialStore; requester: JiraRequester }
 export type JiraVerifyResult = { ok: true; meta: CredentialMeta } | { ok: false; reason: string }
-export type JiraListResult =
-  | { kind: 'items'; items: WorkItem[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
-
 /**
  * The store holds one opaque string, and this parser is its only reader.
  *
@@ -129,10 +133,6 @@ export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListRes
   } catch { return { kind: 'malformed', reason: 'Jira returned a response this app could not read.' } }
 }
 
-export type JiraTransitionsResult =
-  | { kind: 'transitions'; transitions: WorkItemTransition[] }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
-
 /**
  * `refused` is this milestone's one new arm and is NOT a flavour of
  * `unavailable`. It is review-commit.ts's refused/failed split: a workflow
@@ -141,10 +141,6 @@ export type JiraTransitionsResult =
  * network when their board is what said no. On a correctly configured,
  * fully reachable Jira, `refused` is the arm that happens routinely.
  */
-export type JiraWriteResult =
-  | { kind: 'done' }
-  | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'refused' | 'unavailable' | 'malformed'; reason: string }
-
 function issueUrl(c: JiraCredential, itemId: string, suffix: string): string {
   return `${c.site}/rest/api/3/issue/${encodeURIComponent(itemId)}${suffix}`
 }

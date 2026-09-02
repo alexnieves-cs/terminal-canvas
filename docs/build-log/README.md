@@ -18,3 +18,4 @@ copy here is deleted.
 | File | Milestone | Status |
 |---|---|---|
 | [00-reconciliation.md](00-reconciliation.md) | The milestone table repaired, the 1.0 scope decided | finished |
+| [m36-hardening.md](m36-hardening.md) | M36 — Hardening for 1.0 | finished |

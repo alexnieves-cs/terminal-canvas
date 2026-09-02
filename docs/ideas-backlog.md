@@ -48,6 +48,8 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #21 broadcast input | M31 | `session-registry.ts`'s broadcast verb and the palette's broadcast rows; `verify:registry` and `verify:palette` carry its checks |
 | #75 a diagnostics overlay and a scrubbed bundle | M32 | "The diagnostics bundle is scrubbed by its TYPE, not by a runtime filter" |
 | #68 space-drag and middle-drag pan | M34 | "The pan-drag design" entries — one narrow verb, `beginPanDrag`, beside the wheel listener |
+| #43 Unicode 11 widths | M36 | "xterm measures widths against Unicode 11, loaded in `createTerminal` before `open()`" |
+| #58 backpressure on a runaway panel | M36 | "The flush is capped by bytes and the cap keeps the TAIL" |
 
 Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
@@ -292,20 +294,10 @@ so a transition into such a screen is refused with Jira's own sentence rather th
 
 What's still open:
 
-- **One declaration for the three Jira result types.** `JiraListResult`,
-  `JiraTransitionsResult` and `JiraWriteResult` are each declared TWICE — in
-  `main/jira-client.ts` and again in `shared/ipc-contract.ts` — because that is how M19
-  left `JiraListResult` and M24 followed the established pattern rather than making the
-  new pair the odd ones out. `ipcMain.handle` is not typed by the contract, so the two
-  copies can drift with `tsc` silent, and the failure is one-directional and quiet:
-  rename a field in `jira-client.ts` alone and the renderer reads `undefined`, rendering
-  an empty transition list — indistinguishable from a ticket with no legal moves, which
-  is a routine state. The fix is small (`import type` is erased by esbuild, so the
-  plain-node verify tier is untouched) and the evidence for it is a measurement rather
-  than a principle: M24's own final fix round had to edit the same three-line type in two
-  files and confirm the match by reading a diff, which nothing enforces. Unify all three
-  at once — fixing only the new pair recreates the asymmetry that produced this.
-  **`listAssignedWorkItems` is where the same drift recurs next**: it still maps HTTP
+- ~~**One declaration for the three Jira result types.**~~ **Done, M36**: all three are
+  declared in `shared/ipc-contract.ts` alone and `main/jira-client.ts` imports them, pinned
+  by `verify:jira` `types.1`. What is still open from that note:
+  **`listAssignedWorkItems` is where the same drift recurs next** — it still maps HTTP
   statuses inline rather than through `statusFailure`, correctly for now (a different
   union answering a different question), and the day it grows a `refused` arm is the day
   that inline copy has to agree with a mapping it does not share.
@@ -1495,26 +1487,6 @@ numbers, which makes this the best value-per-byte item in the canvas layer.
   palette group, with no hold-to-reveal overlay at all. The nav grid's hard part was the
   gesture; this one has none.
 
-## 43. Unicode 11 widths — a silent misalignment nobody has attributed yet
-
-`createTerminal` sets `allowProposedApi: true` but loads no `@xterm/addon-unicode11`, so
-xterm measures character widths against its built-in Unicode 6 table. Modern agent CLIs draw
-box frames, spinners and emoji status glyphs whose widths changed after Unicode 6 — the
-frame drifts one column per wide glyph, and because the shell believes the cursor is
-somewhere the screen does not show it, the corruption compounds down the pane.
-
-- **This is a defect, not a preference.** It is one addon and one
-  `term.unicode.activeVersion = '11'`, in the one place a `Terminal` is constructed. It is
-  in this file rather than fixed on the spot only because it wants a check alongside it.
-- **Constraint: it must be set before `open()`.** `create-terminal.ts` is "the only place a
-  `Terminal` is constructed" for exactly this class of reason. Changing the width table
-  after the fact is a re-measure that would need the same `refresh(0, rows - 1)` treatment
-  `attachTerminal` already carries on re-attach.
-- **Why it is cheap: nothing about the grid changes.** No `pty:resize`, no SIGWINCH, no
-  refit. That is the difference between this and #36.
-- **Nearest existing entry: #36 (panel typography),** which changes font *size* — a grid
-  change wearing a hat, in that entry's own words. This changes nothing about the grid.
-
 ## 45. Camera undo — a back button for the viewport
 
 `History<T>` is generic and is instantiated at `History<Panel[]>` only, so `Cmd+Z` unwinds
@@ -1767,25 +1739,6 @@ makes the canvas something agents extend rather than only something a human arra
   itself here.
 - **Nearest existing entry: #21** and **#12**, both of which are gestures *inside* the app.
   This is the app's first external control surface.
-
-## 58. Backpressure on a runaway panel
-
-`enqueue` pushes every chunk into a per-session buffer with no cap and flushes the whole join
-every 16ms. The batching solves message *count*; it does nothing about message *size*. A
-`yes`, a `find /`, or an agent dumping a large file produces multi-megabyte strings crossing
-IPC every frame, and the UI locks up in exactly the way the batcher exists to prevent — the
-measured 33,198-reads-to-105-messages win says nothing about bytes.
-
-- **Constraint: an eliding cap must keep the tail.** The pending buffer is flushed *before*
-  `pty:exit` is announced precisely because the last lines are usually the error explaining
-  the exit. A naive head-preserving truncation drops exactly the bytes that note exists to
-  protect.
-- **Constraint: elision is a lie the panel must be told about.** `[N MB elided]` written into
-  the stream, or a user debugging missing output has no way to learn bytes were dropped —
-  which is the same silent-failure shape every note in `CLAUDE.md` is written against.
-- **Nearest existing entry: #18 (what the canvas costs the machine).** #18 reports what the
-  machine is spending. This is a *control* that stops one panel taking the app down with it,
-  and it lives in the batcher rather than in a new sampler.
 
 ## 59. OSC 133 shell integration — command boundaries as first-class objects
 
@@ -2098,63 +2051,24 @@ package" is how a placeholder becomes permanent.
 - **Nearest existing entry: none.** Distribution is absent from the original backlog; #74
   is the only other M5c-adjacent entry and it covers updates, not appearance.
 
-## 77. M35 link drawing — four items Task 8 was assigned and dropped
+## 77. M35 link drawing — what Task 8 left, rewritten down after M36
 
-M35's plan assigned a Task 8 to sweep up loose ends the earlier tasks left
-behind; it did not land, and the final whole-branch review found the four
-items it would have covered. None blocks the milestone. Recorded here rather
-than left to be rediscovered.
+M35's plan assigned a Task 8 to sweep up loose ends; it did not land, and the
+final review found four items. M36 closed the two that were code — the
+`onContextPasted` inline arrow that defeated every terminal panel's memo, and
+`LinkLayer`'s `onRemove` re-rendering the layer on every palette open — both
+pinned by `verify:panels` `memo-stable.1`. Two remain, and neither is work:
 
-- **The badge/label overlap.** A labelled link's `×` remove badge and its
-  `<text>` label both sat at the identical closed-form cubic midpoint in
-  `LinkLayer.tsx`, and the label painted after the badge — SVG paint order —
-  so hovering a labelled link showed a `×` with the label text on top of it.
-  **Fixed** by the M35 final review's own fix round: the label is now offset
-  16 world units above the midpoint, leaving the badge exactly where its
-  click target belongs. **Unverified by any check** — this is a visual
-  property the harness cannot judge (the same limit this repo already states
-  for the link layer's paint order and for every other pixel-only claim in
-  `CLAUDE.md`) and belongs on the by-hand checklist rather than in
-  `npm run verify`.
-- **`paletteActions` re-renders `LinkLayer` on every palette open.**
-  `paletteActions` depends on `palette.capturedId`, so opening the palette
-  changes `onRemove`'s identity, and `LinkLayer`'s own `memo` comment names "a
-  palette open" as a case it is supposed to stop. It does not, today — the
-  comment states an intent the dependency chain does not yet deliver. Purely
-  cosmetic (one extra re-render per gesture, not a 60Hz cascade), and a
-  `useCallback` wrapper around the link-removal callback, keyed on something
-  narrower than the whole captured-id object, would restore the comment's
-  literal truth. Not urgent; recorded so the comment is not read as already
-  true.
+- **The badge/label overlap** was fixed by M35's own final review (the label
+  sits 16 world units above the midpoint, leaving the `×` badge on its click
+  target) and is **unverified by any check** — a visual property the harness
+  cannot judge, on the by-hand checklist rather than in `npm run verify`.
 - **A CORRECTION, not a defect: armed link-mode and the removal badge do not
-  double-fire.** It was believed during the milestone that clicking a badge
-  while the older, keyboard-reachable link-mode (M13's click-then-click path)
-  is armed would fire BOTH the completing handler and the removal — one
-  gesture, two effects, one of them presumably wrong. Checked and it does
-  not: `onLinkModeMouseDownCapture` is a React CAPTURE-phase handler on
-  `.canvas` that calls `stopPropagation()`, and React's synthetic event
-  dispatch checks `isPropagationStopped()` between nodes on the way down —
-  so a capture-phase stop at `.canvas` prevents every descendant handler from
-  ever running, `PanelPorts`' and the badge's included. While armed: pressing
-  a port completes the armed link and begins no drag; clicking a badge
-  completes the armed link and removes nothing. One gesture, one outcome,
-  always the armed-mode one. Worth recording precisely because the belief was
-  reasonable and wrong, and a future reader tracing the same two handlers
-  should not re-open this as a bug.
-- **`onContextPasted`'s inline arrow already defeats `TerminalPanel`'s memo,
-  on every Canvas render, pre-existing and out of M35's scope.** `Canvas.tsx`
-  passes an inline arrow function as `onContextPasted` to every terminal
-  panel, which is a new prop identity on every render regardless of what
-  changed — the exact prop-identity cascade `TerminalPanel`'s `memo` and
-  `version()` exist to block, described at length in `CLAUDE.md`'s "`version`
-  exists only so `memo` can see a mutation" and neighbouring entries. That
-  means the careful `onBeginLink`/`linkTarget` memo discipline M35 observes
-  for its own two new props does not yet buy what its own comments claim,
-  because a different, older prop on the same component is already breaking
-  the memo it is trying to protect. Pre-existing, not introduced by M35, and
-  out of scope for this milestone to fix — recorded here so the next reader
-  of M35's memo comments does not credit them with a guarantee the component
-  does not currently have.
+  double-fire.** `onLinkModeMouseDownCapture` is a React CAPTURE-phase handler
+  on `.canvas` that calls `stopPropagation()`, and React checks
+  `isPropagationStopped()` between nodes on the way down, so while armed a
+  press on a port or a badge completes the armed link and does nothing else.
+  Recorded because the belief was reasonable and wrong, so nobody re-opens it.
 
 ## A note on sequencing for 41–75
 

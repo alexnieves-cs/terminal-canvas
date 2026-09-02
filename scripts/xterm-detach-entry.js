@@ -3,6 +3,9 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+// The REAL factory, not a hand-built Terminal: unicode.1 asserts a property
+// of what createTerminal returns, which is the one place a Terminal is built.
+import { createTerminal, attachTerminal } from '../src/renderer/terminal/create-terminal'
 
 const readRows = (term) => {
   const buf = term.buffer.active
@@ -134,6 +137,25 @@ window.__probe = (async () => {
 
   out.control.domTextAfterReattach = (host2.querySelector('.xterm-rows')?.textContent || '').trim()
   term2.dispose()
+
+  // unicode.1's probe. A grinning face is width 1 in xterm's built-in
+  // Unicode 6 table and width 2 under the Unicode 11 addon, so the cursor
+  // column after writing it is the one observable that separates the two.
+  out.unicode = {}
+  try {
+    const host3 = document.createElement('div')
+    host3.style.cssText = 'width: 640px; height: 400px;'
+    document.body.appendChild(host3)
+    const handles = createTerminal()
+    attachTerminal(handles, host3)
+    handles.term.write('\u{1F600}')
+    await new Promise((r) => setTimeout(r, 200))
+    out.unicode.activeVersion = handles.term.unicode.activeVersion
+    out.unicode.cursorX = handles.term.buffer.active.cursorX
+    handles.term.dispose()
+  } catch (error) {
+    out.unicode.error = String(error)
+  }
 
   return out
 })()

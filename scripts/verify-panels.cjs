@@ -6727,6 +6727,31 @@ app.whenReady().then(async () => {
         kills === 2 && disposes === 5, `kills=${kills} disposes=${disposes}`)
     }
 
+    // memo-stable.1. TWO CALLBACKS WHOSE IDENTITY DEFEATS A MEMO, pinned as
+    //     source text because the failure has no runtime symptom: nothing
+    //     throws, nothing looks wrong, the app just gets heavy while a panel
+    //     is dragged. `onContextPasted` was an inline arrow on every
+    //     TerminalPanel — a new function identity on every Canvas render,
+    //     and Canvas renders on every mousemove — so every terminal panel's
+    //     memo re-rendered at 60Hz regardless of `version`, `title`, `glow`
+    //     and M35's `onBeginLink`/`linkTarget` discipline, all of which
+    //     exist to protect that memo. LinkLayer's `onRemove` was
+    //     `paletteActions.removeLink`, whose identity follows the palette's
+    //     captured id, so the layer re-rendered on every palette open
+    //     despite its own comment naming that as a case the memo stops.
+    //     Asserted on the JSX: the prop values must be bare identifiers.
+    {
+      const canvasSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+      const pasted = canvasSrc.match(/onContextPasted=\{([^}]*)\}/)
+      const pastedStable = pasted !== null && /^\s*[A-Za-z_$][\w$]*\s*$/.test(pasted[1])
+      const layer = canvasSrc.match(/<LinkLayer[\s\S]*?onRemove=\{([^}]*)\}/)
+      const layerValue = layer ? layer[1] : ''
+      const layerStable = layer !== null && !/=>/.test(layerValue) && !/paletteActions\./.test(layerValue)
+      ok('memo-stable.1 onContextPasted and LinkLayer onRemove are passed as stable identifiers',
+        pastedStable && layerStable,
+        `onContextPasted=${JSON.stringify(pasted && pasted[1])} onRemove=${JSON.stringify(layerValue)}`)
+    }
+
     // ---------------------------------------------------------------------
     // M8d — the rail's Workspaces and Attention sections.
     // ---------------------------------------------------------------------
@@ -9978,6 +10003,18 @@ app.whenReady().then(async () => {
       await zoomTo(wc, '-')
       await zoomTo(wc, '-')
       await sleep(400)
+      // The selection 142 built is CLEARED first, and not as tidying up. M26
+      // made a press on an already-selected member KEEP the selection, so a
+      // completed marquee can begin a group drag — so with 142's nineteen
+      // panels still selected, the card press below would (correctly) keep
+      // all nineteen and this check would fail while both features behaved.
+      // That is exactly how main carried a red 143 for three merges: 142 and
+      // M26 were each green alone, and nobody ran them in sequence. Clearing
+      // here makes the check assert its own claim — a press on an UNSELECTED
+      // card selects it and draws no marquee — rather than a rule M26 replaced.
+      const cleared143 = await clickEmptyCanvas(wc)
+      if (!cleared143) throw new Error('143: found no background point to clear the selection at')
+      await sleep(100)
       const card = await wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas')
         if (!host) return null
@@ -10126,27 +10163,96 @@ app.whenReady().then(async () => {
         wc.sendInputEvent({ type: 'mouseUp', x: empty144b.x, y: empty144b.y, button: 'left', clickCount: 1 })
       }
       await sleep(150)
-
-      const exposedChrome = async (except = null) => wc.executeJavaScript(`(() => {
+      // Two fresh panels, so this check OWNS its fixture rather than inheriting
+      // whatever geometry the checks above happened to leave. Until M36 it
+      // did inherit: 143 (pre-repair) kept a nineteen-panel selection through
+      // its card press, so its drag moved all nineteen together, and the
+      // exposed-chrome search below found a second panel only because of
+      // where that drag left everything. The moment 143 was repaired to
+      // select the card alone, no second chrome was exposed, `second144b`
+      // came back null, and this check went red for a change that touched
+      // nothing it asserts. Cmd+N cascades each new panel 48 world units
+      // down-right of the last and paints it topmost, which leaves the
+      // previous one's whole chrome bar uncovered — so two presses guarantee
+      // two exposed chromes regardless of the canvas underneath.
+      const panelIds144b = () => wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      const idsBefore144b = await panelIds144b()
+      // Two fresh SMALL panels, spawned through main's own PRESET_SPAWN push
+      // (the path Cmd+N takes), so this check OWNS its fixture rather than
+      // inheriting whatever geometry the checks above happened to leave.
+      // Until M36 it did inherit: 143 (pre-repair) kept a nineteen-panel
+      // selection through its card press, its drag moved all nineteen, and an
+      // exposed-chrome search over the whole document only found a second
+      // panel because of where that drag left everything. Small, because the
+      // canvas here is ~680px wide with the tree, rail and inspector all open,
+      // and two default-size panels cannot both have an exposed chrome in it.
+      for (let i = 0; i < 2; i++) {
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require("node:os").homedir(), command: "/bin/sh", args: [], w: 300, h: 200 })
+        await sleep(400)
+      }
+      await settle()
+      const fresh144b = (await panelIds144b()).filter((id) => !idsBefore144b.includes(id))
+      // Addressed BY ID, never by "the first exposed chrome in the document":
+      // the two panels this check just made are the two it acts on. Four
+      // sample points along the chrome, and the detail records what
+      // elementFromPoint actually hit when none is usable, so a red here says
+      // which element was in the way rather than merely "null".
+      const chromePoint = async (id) => wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas')
-        if (!host) return null
+        const panel = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']')
+        const chrome = panel && panel.querySelector('.panel__chrome')
+        if (!host || !chrome) return { id: ${JSON.stringify(id)}, missing: true }
         const b = host.getBoundingClientRect()
-        for (const chrome of document.querySelectorAll('.panel__chrome')) {
-          const panel = chrome.closest('.panel')
-          if (!panel || panel.dataset.panelId === ${JSON.stringify(except)}) continue
-          const r = chrome.getBoundingClientRect()
-          for (const fx of [0.15, 0.35, 0.65]) {
-            const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height / 2)
-            if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
-            const hit = document.elementFromPoint(x, y)
-            if (hit && hit.closest('.panel__chrome') === chrome && !hit.closest('button')) {
-              return { id: panel.dataset.panelId, x, y }
+        const r = chrome.getBoundingClientRect()
+        const hits = []
+        for (const fx of [0.15, 0.35, 0.65, 0.85]) {
+          const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height / 2)
+          if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) { hits.push('offscreen'); continue }
+          const hit = document.elementFromPoint(x, y)
+          if (hit && hit.closest('.panel__chrome') === chrome && !hit.closest('button')) {
+            return { id: ${JSON.stringify(id)}, x, y }
+          }
+          hits.push(hit ? (hit.className || hit.tagName) + '@' + (hit.closest('.panel') ? hit.closest('.panel').dataset.panelId : '-') : 'none')
+        }
+        return { id: ${JSON.stringify(id)}, hits }
+      })()`)
+      // cascadeCentre steps down-right only while a slot is free and WRAPS
+      // otherwise, so on a crowded canvas the second panel can land up-left
+      // of the first, covering its chrome. The second panel is topmost and
+      // therefore exposed by construction; if it overlaps the first's chrome
+      // row, drag it down until its top clears that row — a real drag, on
+      // the machinery the rest of this check already trusts.
+      if (fresh144b.length === 2) {
+        const rects = await wc.executeJavaScript(`(() => {
+          const get = (id) => {
+            const p = document.querySelector('.panel[data-panel-id=' + JSON.stringify(id) + ']')
+            const c = p && p.querySelector('.panel__chrome')
+            return p && c ? { p: p.getBoundingClientRect().toJSON(), c: c.getBoundingClientRect().toJSON() } : null
+          }
+          return { a: get(${JSON.stringify(fresh144b[0])}), b: get(${JSON.stringify(fresh144b[1])}) }
+        })()`)
+        if (rects.a && rects.b) {
+          const overlapsX = rects.b.p.left < rects.a.c.right && rects.b.p.right > rects.a.c.left
+          const overlapsY = rects.b.p.top < rects.a.c.bottom && rects.b.p.bottom > rects.a.c.top
+          if (overlapsX && overlapsY) {
+            const grab = await chromePoint(fresh144b[1])
+            if (grab.x !== undefined) {
+              const dy = Math.round(rects.a.c.bottom + 12 - rects.b.p.top)
+              const to = { x: grab.x, y: grab.y + dy }
+              wc.sendInputEvent({ type: 'mouseDown', x: grab.x, y: grab.y, button: 'left', clickCount: 1 })
+              for (let i = 1; i <= 4; i++) {
+                wc.sendInputEvent({ type: 'mouseMove', x: grab.x, y: Math.round(grab.y + dy * i / 4), button: 'left', modifiers: ['leftButtonDown'] })
+              }
+              wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+              await settle()
             }
           }
         }
-        return null
-      })()`)
-      const first144b = await exposedChrome()
+      }
+      const firstProbe = fresh144b.length === 2 ? await chromePoint(fresh144b[0]) : { missing: true }
+      const secondProbe = fresh144b.length === 2 ? await chromePoint(fresh144b[1]) : { missing: true }
+      const first144b = firstProbe.x !== undefined ? firstProbe : null
       const clickChrome = async (point, shift = false) => {
         const modifiers = shift ? ['shift'] : []
         wc.sendInputEvent({ type: 'mouseDown', x: point.x, y: point.y, button: 'left', clickCount: 1, modifiers })
@@ -10154,7 +10260,7 @@ app.whenReady().then(async () => {
         await sleep(150)
       }
       if (first144b) await clickChrome(first144b)
-      const second144b = first144b ? await exposedChrome(first144b.id) : null
+      const second144b = first144b && secondProbe.x !== undefined ? secondProbe : null
       if (second144b) await clickChrome(second144b, true)
       const selected144b = await wc.executeJavaScript(
         `Array.from(document.querySelectorAll('.panel--selected')).map((p) => p.dataset.panelId)`)
@@ -10171,8 +10277,8 @@ app.whenReady().then(async () => {
       // The second press is non-shifted on purpose. Selection must survive it
       // long enough for onBeginDrag to snapshot BOTH origin rects.
       if (selectionReady144b) {
-        const dragPoint = await exposedChrome(first144b.id)
-        if (dragPoint && dragPoint.id === second144b.id) {
+        const dragPoint = await chromePoint(second144b.id)
+        if (dragPoint && dragPoint.x !== undefined) {
           const to = { x: dragPoint.x + 96, y: dragPoint.y - 64 }
           wc.sendInputEvent({ type: 'mouseDown', x: dragPoint.x, y: dragPoint.y, button: 'left', clickCount: 1 })
           for (let i = 1; i <= 4; i++) {
@@ -10211,7 +10317,8 @@ app.whenReady().then(async () => {
       }, 3000)
       ok('144b shift-click adds selection; one group drag moves and one undo restores both',
         selectionReady144b && movedTogether144b && undone144b === true,
-        `selected=${JSON.stringify(selected144b)} moved=${movedTogether144b} undone=${undone144b}`)
+        `fresh=${JSON.stringify(fresh144b)} first=${JSON.stringify(firstProbe)} second=${JSON.stringify(secondProbe)} ` +
+          `selected=${JSON.stringify(selected144b)} moved=${movedTogether144b} undone=${undone144b}`)
     }
 
     // ---------------------------------------------------------------------
