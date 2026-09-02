@@ -17,5 +17,7 @@ module.exports = {
   /* M39: the per-panel append log, same tier and same reason. */
   ...require('../src/main/scrollback-log.ts'),
   /* M52: the run ledger, an append stream beside layout.json, same tier. */
-  ...require('../src/main/run-ledger.ts')
+  ...require('../src/main/run-ledger.ts'),
+  ...require('../src/main/export.ts'),
+  ...require('../src/shared/redact.ts')
 }

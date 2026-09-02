@@ -57,6 +57,12 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **Work that can leave.** `Export panel output…` writes everything a
+  panel's durable log holds, ANSI stripped and secrets scrubbed, to a file
+  you choose — and tells you how many secrets it replaced. `Export canvas as
+  PNG…` writes the window as it is, live terminals and cards alike,
+  composited by the main process (a DOM capture would draw every terminal
+  blank).
 - **Cards that become less as you pull away.** Above a third zoom a card is
   a terminal tail; between that and a tenth it is a summary — the panel's
   name, its agent's state, one last line, the cost; below a tenth it is a
@@ -303,6 +309,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        fs:list
                        toolbox:read / toolbox:permissions
                        diagnostics:sample / diagnostics:export
+                       export:panel-text / export:canvas-png
                        env:report / link:open / ledger:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state

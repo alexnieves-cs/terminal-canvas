@@ -24,6 +24,7 @@ import { createControlHandler } from './control-handler'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
+import { createExporters } from './export'
 import type { OrphanRow } from '../shared/orphans'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
@@ -828,7 +829,24 @@ app.whenReady().then(async () => {
     },
     // M52. The ledger's read half.
     (panelId, limit) => runLedger.list(panelId, limit),
-    reviewDiscard
+    reviewDiscard,
+    // M58. The save dialog and the composited frame are main's; the arms and
+    // the scrubbing live in export.ts, plain-node tested. A written file is
+    // revealed in the Finder, which is the only "done" the palette can show.
+    createExporters({
+      log: scrollbackLog,
+      persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
+      askPath: async (suggested) => {
+        const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
+        const options = { defaultPath: join(app.getPath('downloads'), suggested) }
+        const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+        return r.canceled || !r.filePath ? null : r.filePath
+      },
+      capture: async () => {
+        if (mainWindow === null || mainWindow.isDestroyed()) throw new Error('no window to capture')
+        return (await mainWindow.webContents.capturePage()).toPNG()
+      }
+    })
   )
   createWindow()
 

@@ -207,6 +207,7 @@ module.exports = {
   createReviewDiscarder: require('../src/main/review-discard').createReviewDiscarder,
   createControlServer: require('../src/main/control-server').createControlServer,
   createControlHandler: require('../src/main/control-handler').createControlHandler,
+  createExporters: require('../src/main/export').createExporters,
   /* M37. The worktree manager, for the same reason createReviewEngine is
      exported rather than stubbed: worktree.1 spawns a panel through
      preset:spawn-by-id and reads the branch back out of the inspector, and

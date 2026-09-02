@@ -11,6 +11,7 @@ import type {
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
 import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
+import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
@@ -172,7 +173,9 @@ export function registerIpcHandlers(
   /** M52. The run ledger's read half, inert by default. */
   ledgerList: (panelId: string, limit: number) => Promise<RunRow[]> = async () => [],
   /** M53. Inert by default: a harness that does not wire discard gets a refusal, never a write. */
-  reviewDiscard: (req: ReviewDiscardRequest) => Promise<ReviewDiscardResult> = async () => ({ kind: 'refused', detail: 'discard is not wired' })
+  reviewDiscard: (req: ReviewDiscardRequest) => Promise<ReviewDiscardResult> = async () => ({ kind: 'refused', detail: 'discard is not wired' }),
+  /** M58. Inert by default: a harness that does not wire export gets `failed`, never a dialog. */
+  exporters: Exporters = INERT_EXPORTERS
 ): void {
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
@@ -251,6 +254,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
   ipcMain.handle(IPC.ENV_REPORT, () => envReport())
+  ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, panelId: string) => exporters.panelText(panelId))
+  ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
   ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))

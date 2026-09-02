@@ -187,6 +187,9 @@ export interface PaletteActions {
   deleteBookmark: (id: string, name: string) => void
   cameraBack: () => void
   cameraForward: () => void
+  /** M58. The two doors out; main owns the dialog and the write. */
+  exportPanelText: (panelId: string) => void
+  exportCanvasPng: () => void
   /**
    * Set this panel's permission mode AND restart it, as ONE gesture.
    *
@@ -440,6 +443,8 @@ export const REASON_NOT_ON_PATH = 'not found on PATH'
 export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
 /** M50. One panel has nothing to be tidied against. */
 export const REASON_TIDY_NEEDS_TWO = 'needs two panels on the canvas'
+export const REASON_NOT_TERMINAL_OUTPUT = 'only a terminal panel has output to export'
+export const REASON_SCROLLBACK_OFF = 'durable scrollback is off — turn on scrollback.persist in Settings'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
@@ -971,6 +976,34 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => { if (target !== undefined) actions.jumpPrompt(target.id, 1) } }, reason))
     out.push(withReason({ id: 'panel.copy-last-output', title: 'Copy last command’s output', subtitle: 'the lines between its start and end marks', group: 'panel', searchText: 'copy last output command result clipboard', hiddenAtRest: true,
       run: () => { if (target !== undefined) actions.copyLastOutput(target.id) } }, reason))
+  }
+
+  // --- Export (M58) -----------------------------------------------------------
+  //
+  // The panel row reads the DURABLE log, so scrollback off is its own reason
+  // (a different fix from "focus a panel"); the xterm buffer is never a
+  // fallback, because that is a truncation the user cannot see.
+  {
+    const target = ctx.capturedId === null ? undefined : ctx.panels.find((p) => p.id === ctx.capturedId)
+    const reason = ctx.capturedId === null || target === undefined
+      ? REASON_NO_FOCUS
+      : (target.kind !== 'terminal' ? REASON_NOT_TERMINAL_OUTPUT : (ctx.scrollbackEnabled === false ? REASON_SCROLLBACK_OFF : undefined))
+    out.push(withReason({
+      id: 'panel.export-text',
+      title: 'Export panel output…',
+      subtitle: 'everything the durable log holds (2 MB), ANSI stripped, secrets scrubbed, to a file',
+      searchText: 'export save output text transcript file panel',
+      group: 'panel',
+      run: () => { if (target !== undefined) actions.exportPanelText(target.id) }
+    }, reason))
+    out.push({
+      id: 'canvas.export-png',
+      title: 'Export canvas as PNG…',
+      subtitle: 'the window as it is — live terminals and cards alike — to an image',
+      searchText: 'export save screenshot png image picture canvas',
+      group: 'canvas',
+      run: () => actions.exportCanvasPng()
+    })
   }
 
   // --- Typography (M49) ------------------------------------------------------

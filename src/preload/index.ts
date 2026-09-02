@@ -114,6 +114,10 @@ const bridge: CanvasBridge = {
   links: {
     open: (req: { panelId: string; target: string }) => ipcRenderer.invoke(IPC.LINK_OPEN, req)
   },
+  export: {
+    panelText: (panelId: PanelId) => ipcRenderer.invoke(IPC.EXPORT_PANEL_TEXT, panelId),
+    canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG)
+  },
   diagnostics: {
     sample: () => ipcRenderer.invoke(IPC.DIAGNOSTICS_SAMPLE),
     export: (snapshot: DiagnosticsSnapshot) => ipcRenderer.invoke(IPC.DIAGNOSTICS_EXPORT, snapshot)

@@ -40,3 +40,4 @@ copy here is deleted.
 | [m55-orphans.md](m55-orphans.md) | M55 — Recover an orphan session | finished |
 | [m56-camera.md](m56-camera.md) | M56 — The camera: flights, a trail, bookmarks | finished |
 | [m57-semantic-zoom.md](m57-semantic-zoom.md) | M57 — Semantic zoom | finished |
+| [m58-export.md](m58-export.md) | M58 — Export | finished |

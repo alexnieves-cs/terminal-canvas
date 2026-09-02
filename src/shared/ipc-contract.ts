@@ -1,5 +1,6 @@
 import type { RunRow } from './run-ledger'
 import type { OrphanRow } from './orphans'
+import type { PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
 /**
  * Single source of truth for the IPC surface.
@@ -392,6 +393,10 @@ export const IPC = {
    * decides what's safe" and "who writes the file".
    */
   DIAGNOSTICS_EXPORT: 'diagnostics:export',
+  /** M58. A panel's durable log as text, stripped and scrubbed, through a save dialog. */
+  EXPORT_PANEL_TEXT: 'export:panel-text',
+  /** M58. The composited frame as PNG, through a save dialog. */
+  EXPORT_CANVAS_PNG: 'export:canvas-png',
   /** M48. The environment report: what main found at startup, key names only. */
   ENV_REPORT: 'env:report',
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
@@ -946,6 +951,10 @@ export interface CanvasBridge {
   env: {
     /** M48. The startup probe's facts — PATH entries, each CLI found or absent, tmux, the layout file. Names, never values. */
     report(): Promise<EnvReport>
+  }
+  export: {
+    panelText(panelId: PanelId): Promise<PanelTextExportResult>
+    canvasPng(): Promise<CanvasPngExportResult>
   }
   diagnostics: {
     /** Main's own numbers only — the IPC send rate. Everything else in the
