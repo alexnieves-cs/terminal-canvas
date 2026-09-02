@@ -212,6 +212,21 @@ export const SETTINGS: readonly SettingDef[] = [
     // has to name. The author who wants the opposite is one palette row away.
     default: false,
     category: SESSION_CATEGORY
+  },
+  {
+    id: 'scrollback.persist',
+    label: 'Keep recent output on disk',
+    // The cap and the caveat, both: the cap is what bounds the disk, and the
+    // caveat is backlog #31's rule stated where the switch is — agents print
+    // secrets, and this is the honest reason a user would turn it off.
+    description:
+      'Keep each panel’s recent output on disk (up to 2 MB per panel) so a restored panel can show it and search can find it. Agents print secrets; turn this off if that worries you.',
+    keywords: ['scrollback', 'history', 'log', 'output', 'persist', 'disk', 'search', 'secrets', 'restore'],
+    type: 'boolean',
+    // ON by default: a restored canvas whose every panel shows nothing is the
+    // failure M39 exists to end, and the description says the cost plainly.
+    default: true,
+    category: SESSION_CATEGORY
   }
 ]
 

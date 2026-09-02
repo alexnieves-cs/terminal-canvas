@@ -503,6 +503,13 @@ const { tmpdir } = require('node:os')
     JSON.stringify({ a, b }))
 }
 
+// worktree.11. The branch probe: `rev-parse --verify --quiet refs/heads/<b>`,
+//      whose exit status is the whole answer.
+ok('worktree.11 the branch-exists argv',
+  typeof R.buildBranchExistsArgs === 'function' &&
+    JSON.stringify(R.buildBranchExistsArgs('/r', 'tc/b')) === JSON.stringify(['-C', '/r', 'rev-parse', '--verify', '--quiet', 'refs/heads/tc/b']),
+  typeof R.buildBranchExistsArgs === 'function' ? JSON.stringify(R.buildBranchExistsArgs('/r', 'tc/b')) : 'absent')
+
 // worktree.3. The two argv builders. `add -b <branch> <path> HEAD` branches
 //      from the current commit; `remove` carries NO --force, for the reason
 //      review-commit carries no --no-verify: a tool that quietly discarded an
@@ -676,6 +683,26 @@ if (!GIT) {
       cleanResult !== null && cleanResult.kind === 'removed' && made && !require('node:fs').existsSync(made.path) &&
         records.length === 1 && git('branch', '--list', made.branch).trim() !== '' && listWorktrees() === treesBefore,
       JSON.stringify({ cleanResult, records: records.length, trees: listWorktrees() - treesBefore }))
+    // worktree.10. The directory deleted by hand (the M37 verifier's one
+    //      untested branch): the record is stale, so ensureForPanel drops it
+    //      and mints a FRESH worktree rather than answering a path that is
+    //      not there — a stale `active` would spawn the panel in a cwd
+    //      resolveCwd falls back from to $HOME, silently.
+    let recovered = null
+    if (mgr && elsewhere && elsewhere.kind === 'active') {
+      require('node:fs').rmSync(elsewhere.path, { recursive: true, force: true })
+      const before = records.length
+      recovered = await mgr.ensureForPanel('p1', otherRepo)
+      recovered = { ...recovered, sameRecordCount: records.length === before, staleGone: !records.some((w) => w.path === elsewhere.path) }
+    }
+    // The clock here is FIXED, so the stale branch and the fresh one would
+    // share a name; the manager probes and suffixes, which is exactly the
+    // same-minute recycle case in production. `-2` is the observable.
+    ok('worktree.10 a hand-deleted worktree directory yields a fresh, suffixed worktree and drops the stale record',
+      recovered !== null && recovered.kind === 'active' && recovered.path !== elsewhere.path &&
+        recovered.branch === elsewhere.branch + '-2' &&
+        require('node:fs').existsSync(recovered.path) && recovered.sameRecordCount && recovered.staleGone,
+      JSON.stringify(recovered))
     try { require('node:fs').rmSync(worktreesDir, { recursive: true, force: true }) } catch { /* best effort */ }
     try { require('node:fs').rmSync(otherRepo, { recursive: true, force: true }) } catch { /* best effort */ }
   }

@@ -2799,6 +2799,18 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify(def))
 }
 
+// M39 — scrollback.1. The persistence switch: a boolean in the Sessions
+//      category, ON by default (a restored panel that shows nothing is the
+//      failure the whole milestone exists for), whose description names the
+//      cap and the reason to turn it off — agents print secrets.
+{
+  const def = L.settingDef('scrollback.persist')
+  ok('scrollback.1 scrollback.persist is a boolean setting, on by default, naming the cap and the secrets caveat',
+    def !== undefined && def.type === 'boolean' && def.default === true && def.category === L.SESSION_CATEGORY &&
+      /MB/.test(def.description) && /secret/i.test(def.description),
+    JSON.stringify(def))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

@@ -5,6 +5,7 @@ import type { PanelMachineCost } from '@shared/machine-cost'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
+import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
 
@@ -350,6 +351,11 @@ function PanelCard({ session, agentState, cost }: {
   cost?: PanelMachineCost
 }): JSX.Element {
   const lines = session.spawned ? session.handle.tail(CARD_LINES) : []
+  // M39. A DORMANT panel has no buffer — that is every panel on the canvas the
+  // moment the app relaunches — so its card asks main for the durable log's
+  // tail, once, through a store that never bumps registry.version(). A
+  // spawned panel keeps reading its own xterm buffer, the live truth.
+  const recorded = useScrollbackTail(session.id, !session.spawned && session.dormant)
   return (
     <div
       // The card carries the state too. A glow that reached only live panels
@@ -363,12 +369,23 @@ function PanelCard({ session, agentState, cost }: {
           <div className="panel__card-line" key={i}>{line}</div>
         ))
       ) : (
-        // A dormant panel is a restored one waiting for permission, not an
-        // unvisited one waiting for the camera. Saying "not started" for both
-        // would hide the only affordance the restored canvas has.
-        <div className="panel__card-idle">
-          {session.dormant ? 'click to start' : 'not started'}
-        </div>
+        <>
+          {/* What the panel showed before the app last quit, above the
+              affordance rather than instead of it: the lines say what this
+              panel was doing, the prompt says how to resume it. Nothing
+              renders while the tail is unanswered or empty, so a card never
+              flashes a blank block. */}
+          {session.dormant && recorded !== undefined && recorded.length > 0 &&
+            recorded.map((line, i) => (
+              <div className="panel__card-line panel__card-line--recorded" key={`r${i}`} data-recorded>{line}</div>
+            ))}
+          {/* A dormant panel is a restored one waiting for permission, not an
+              unvisited one waiting for the camera. Saying "not started" for
+              both would hide the only affordance the restored canvas has. */}
+          <div className="panel__card-idle">
+            {session.dormant ? 'click to start' : 'not started'}
+          </div>
+        </>
       )}
       {cost !== undefined && (
         <div className="panel__card-cost" data-machine-cost>

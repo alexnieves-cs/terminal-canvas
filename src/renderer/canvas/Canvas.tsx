@@ -57,6 +57,7 @@ import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import { applyUsage, clearUsage } from '@renderer/session/usage-store'
 import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
+import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState } from '@shared/layout-schema'
 import type { MachineCostTarget } from '@shared/machine-cost'
@@ -639,6 +640,7 @@ export function Canvas({
         clearSubagents(panel.rect.id)
         clearUsage(panel.rect.id)
         clearMachineCost(panel.rect.id)
+        clearScrollbackTail(panel.rect.id)
       }
     }
     setPanels(next.present)
@@ -1248,6 +1250,7 @@ export function Canvas({
       clearSubagents(panel.rect.id)
       clearUsage(panel.rect.id)
       clearMachineCost(panel.rect.id)
+      clearScrollbackTail(panel.rect.id)
     }
     const fresh = firstRunPanels()
     setPanels(fresh)
@@ -1575,6 +1578,7 @@ export function Canvas({
     clearSubagents(id)
     clearUsage(id)
     clearMachineCost(id)
+    clearScrollbackTail(id)
     setPanels((current) => {
       const next = removePanel(current, id)
       commitHistory(next)
@@ -2468,6 +2472,7 @@ export function Canvas({
       clearSubagents(id)
       clearUsage(id)
       clearMachineCost(id)
+      clearScrollbackTail(id)
       void registry.dispose(id).then(() => {
         // RE-CHECKED, never captured: the await is a real gap and the panel
         // can be closed inside it.

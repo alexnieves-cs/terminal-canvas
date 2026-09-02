@@ -30,7 +30,7 @@ export type TmuxSocket = string
 /**
  * The packaged app's socket. A packaged build and a dev build are two separate
  * installations of the same program, and they must not share a tmux server:
- * before-quit calls shutdown(), which is kill-server, so a shared socket means
+ * before-quit's default arm calls shutdown(), which is kill-server, so a shared socket means
  * quitting either one destroys the other's running agents — the exact outcome
  * M4c exists to prevent. Nothing before M5c made two simultaneous instances
  * plausible, which is why this arrives with packaging rather than with tmux.

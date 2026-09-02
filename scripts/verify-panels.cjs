@@ -72,6 +72,7 @@ const {
   createReviewEngine,
   createGitRunner,
   createWorktreeManager,
+  createScrollbackLog,
   createBaselineCapture,
   createReviewCommitter,
   FileWatchers,
@@ -468,7 +469,14 @@ app.whenReady().then(async () => {
     // The flush cap keeps its default; M37's worktree resolver closes over the
     // manager built below, the same forward closure main/index.ts uses.
     undefined,
-    (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd)
+    (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd),
+    // M39. The durable log's sink, always on here; the setting's gate is
+    // main/index.ts's and verify:pty-manager's business.
+    {
+      append: (panelId, data) => { void scrollbackLog.append(panelId, data) },
+      drop: (panelId) => { void scrollbackLog.drop(panelId) },
+      enabled: () => true
+    }
   )
 
   /**
@@ -711,6 +719,8 @@ app.whenReady().then(async () => {
   // M37. Real git, real records, a scratch worktrees directory under $TMPDIR
   // (spaced, this repo's rule). Records go through the harness's own
   // layoutStore so worktree.1 can read them back over worktree:list.
+  // M39. A scratch log directory, spaced like every fixture path here.
+  const scrollbackLog = createScrollbackLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels scrollback ')), 'scrollback') })
   const WORKTREES_DIR = join(mkdtempSync(join(tmpdir(), 'tc panels worktrees ')), 'worktrees')
   const worktreeManager = createWorktreeManager({
     run: realGitRunner,
@@ -888,6 +898,11 @@ app.whenReady().then(async () => {
     list: () => layoutStore.worktrees(),
     remove: (id) => worktreeManager.remove(id),
     reveal: () => true
+  },
+  // M39. Real tail/clear over the log above.
+  {
+    tail: (panelId, lines) => scrollbackLog.tail(panelId, lines),
+    clear: () => scrollbackLog.clearAll()
   })
   ipcMain.handle = realIpcMainHandle
 
@@ -13121,6 +13136,54 @@ app.whenReady().then(async () => {
             `record=${JSON.stringify(record)} listed=${JSON.stringify(listed)} dirSurvived=${dirSurvived}`)
         try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
       }
+    }
+
+    // -------------------------------------------------------------------
+    // M39 — durable scrollback, end to end. Scoped id.
+    // -------------------------------------------------------------------
+
+    // scrollback.1. A panel prints a sentinel; the renderer reloads on the
+    //      DIRECT backend, so the process dies and the panel restores DORMANT
+    //      — the state every panel is in the moment the app relaunches — and
+    //      the dormant card shows the sentinel from the log. Before M39 that
+    //      card read "click to start" and nothing else; a restored canvas was
+    //      twelve blank cards.
+    {
+      backend = createDirectBackend('verify: direct (m39 scrollback)')
+      const idsBefore = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, {
+        cwd: require('node:os').homedir(), command: '/bin/sh',
+        args: ['-c', 'echo SCROLLBACK-SENTINEL-4471; exec sleep 30'], w: 400, h: 300
+      })
+      const fresh = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        const diff = now.filter((id) => !idsBefore.includes(id))
+        return diff.length === 1 ? diff[0] : false
+      }, 8000)
+      // Let the sentinel reach the log: one flush, one append, one queued write.
+      const logged = fresh
+        ? await waitUntil(async () => (await scrollbackLog.tail(fresh, 3)).some((l) => l.includes('SCROLLBACK-SENTINEL-4471')), 8000)
+        : false
+      // Persist the layout so the reload restores this panel, then reload.
+      layoutStore.flushSync()
+      const reloaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload()
+      await reloaded
+      const restored = fresh ? await waitUntil(async () => wc.executeJavaScript(
+        `document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .panel__card') !== null`), 10000) : false
+      const card = fresh ? await waitUntil(async () => {
+        const text = await wc.executeJavaScript(
+          `(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .panel__card'); return c ? c.textContent : null })()`)
+        return text && text.includes('SCROLLBACK-SENTINEL-4471') ? text : false
+      }, 6000) : false
+      const dormant = fresh ? await wc.executeJavaScript(
+        `(window.__m4aSessions().find((s) => s.id === ${JSON.stringify(fresh)}) || {}).dormant === true`) : false
+      ok('scrollback.1 after a reload on the direct backend, the dormant card shows the sentinel the panel printed',
+        typeof fresh === 'string' && logged === true && restored === true && dormant === true &&
+          typeof card === 'string' && card.includes('click to start'),
+        `fresh=${fresh} logged=${logged} restored=${restored} dormant=${dormant} card=${JSON.stringify(card)}`)
     }
 
   } catch (error) {

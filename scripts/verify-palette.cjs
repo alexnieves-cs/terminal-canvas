@@ -227,6 +227,8 @@ const spyActions = () => {
     setPresetWorktree: record('setPresetWorktree'),
     beginRemoveWorktree: record('beginRemoveWorktree'),
     revealWorktree: record('revealWorktree'),
+    // M39. The clear-scrollback verb, confirm-gated in the action.
+    beginClearScrollback: record('beginClearScrollback'),
     // M13. beginLink is reached from panel.link; the other two are the
     // inspector's own, reached from no Command row — kept here anyway so the
     // fixture stays honest about the full PaletteActions shape, the reason
@@ -698,15 +700,17 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     shown('panel.rename') && shown('canvas.fit'))
 }
 
-// 47. Both deletes are marked destructive, and NOTHING else is. The flag
+// 47. The deletes are marked destructive, and NOTHING else is. The flag
 //     drives red styling and the confirm gate, so a flag that spread to a
 //     benign row would put a confirm step in front of spawning a panel.
+//     M39 added the third: clearing every panel's recorded output from disk
+//     is exactly the kind of row this flag exists for.
 {
   const rows = P.buildCommands(ctx({ presets: [MINE], prompts: [{ id: 'p1', name: 'r', source: 'saved' }],
     capturedId: 'n1', panels: [{ id: 'n1', label: 'n1' }] }))
   const marked = rows.filter((r) => r.destructive === true).map((r) => r.id).sort()
-  ok('47 exactly the two delete rows are destructive',
-    marked.join(',') === 'preset.delete.u1,prompt.delete.p1', marked.join(','))
+  ok('47 exactly the three delete rows are destructive',
+    marked.join(',') === 'canvas.clear-scrollback,preset.delete.u1,prompt.delete.p1', marked.join(','))
 }
 
 // 48. The Cmd+N hint, on the DEFAULT preset's spawn row and no other. This is
@@ -1620,6 +1624,24 @@ const WS = [
       /repo-abc/.test(row.searchText ?? '') &&
       c.actions.calls.some((k) => k[0] === 'revealWorktree' && k[1] === 'w1'),
     JSON.stringify({ row, calls: c.actions.calls }))
+}
+
+// M39 — scrollback.1. The one verb the durable log adds to the palette: a
+//      destructive, hidden-at-rest row in the Canvas group that routes through
+//      the confirm-gated action, never straight to the invoke. Findable by
+//      typing "scrollback", "history" or "clear".
+{
+  const c = ctx()
+  const rows = P.buildCommands(c)
+  const row = byId(rows, 'canvas.clear-scrollback')
+  const resting = P.filterCommands(rows, '').map((r) => r.id)
+  const typed = P.filterCommands(rows, 'scrollback').map((r) => r.id)
+  if (row) row.run()
+  ok('scrollback.1 a destructive, hidden-at-rest Clear scrollback row routes through the confirm-gated action',
+    row !== undefined && row.group === 'canvas' && row.destructive === true && row.hiddenAtRest === true &&
+      !resting.includes('canvas.clear-scrollback') && typed.includes('canvas.clear-scrollback') &&
+      c.actions.calls.some((k) => k[0] === 'beginClearScrollback'),
+    JSON.stringify({ row, resting: resting.includes('canvas.clear-scrollback'), typed: typed.includes('canvas.clear-scrollback'), calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

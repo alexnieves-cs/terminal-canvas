@@ -305,6 +305,69 @@ const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + 
     `n1=${U.usageFor(st, 'n1').turns} n2=${U.usageFor(st, 'n2').turns}`)
 }
 
+// M39 — the two pure text helpers the log, the card and (later) search and
+// export share. Scoped ids.
+//
+// ansi.1. stripAnsi removes SGR, CSI cursor moves, an OSC title (BEL- and
+//      ST-terminated) and a bare BEL, and keeps the text between them. The
+//      OSC case is the one worth having: a title's BODY is text too, and a
+//      stripper that only knew SGR would leak "0;claude — ~/repo" into the
+//      card as though the agent had printed it.
+{
+  const fn = typeof U.stripAnsi === 'function' ? U.stripAnsi : null
+  const raw = '\x1b[32mgreen\x1b[0m \x1b[2K\x1b[1;5Hmoved \x1b]0;a title\x07after \x1b]0;st title\x1b\\end\x07!'
+  const out = fn ? fn(raw) : null
+  ok('ansi.1 stripAnsi drops SGR, CSI, both OSC terminators and a bare BEL, and keeps the text',
+    out === 'green moved after end!', JSON.stringify(out))
+}
+
+// redact.1. Each well-known token shape is replaced by a placeholder that
+//      NAMES ITS KIND and shares no character run with the original — a
+//      placeholder that echoed the token's tail would be a partial leak — and
+//      the count equals the number of replacements.
+{
+  const fn = typeof U.redactSecrets === 'function' ? U.redactSecrets : null
+  const samples = {
+    aws: 'AKIAIOSFODNN7EXAMPLE',
+    github: 'ghp_abcdefghijklmnopqrstuvwxyz0123456789',
+    sk: 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJ',
+    bearer: 'Authorization: Bearer eyJabc.DEFghi.JKLmno_pqr',
+    slack: 'xoxb-1234567890-abcdefghijklmnop'
+  }
+  const text = Object.values(samples).join('\n')
+  const out = fn ? fn(text) : null
+  const leaked = out ? Object.values(samples).filter((t) => out.text.includes(t.slice(-12))) : ['unrun']
+  ok('redact.1 every known token shape is replaced by a kind-named placeholder, counted, with no tail leaked',
+    out !== null && out.count === 5 && leaked.length === 0 &&
+      /\[redacted aws/.test(out.text) && /\[redacted github/.test(out.text) && /\[redacted api key/.test(out.text) &&
+      /\[redacted bearer/.test(out.text) && /\[redacted slack/.test(out.text),
+    JSON.stringify({ out, leaked }))
+}
+
+// redact.2. A private-key block is one replacement, header to footer, not a
+//      line-by-line mangling that leaves the base64 body intact.
+{
+  const fn = typeof U.redactSecrets === 'function' ? U.redactSecrets : null
+  const key = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n-----END OPENSSH PRIVATE KEY-----'
+  const out = fn ? fn(`before\n${key}\nafter`) : null
+  ok('redact.2 a private-key block is one replacement and its body is gone',
+    out !== null && out.count === 1 && !out.text.includes('b3BlbnNzaC') && /\[redacted private key\]/.test(out.text) &&
+      out.text.startsWith('before\n') && out.text.endsWith('\nafter'),
+    JSON.stringify(out))
+}
+
+// redact.3. Ordinary developer text is untouched: a 40-hex git sha, a UUID, a
+//      path, a URL with no token, a short "token" word. Over-matching is its
+//      own failure — an export that redacts a commit sha is an export nobody
+//      can act on.
+{
+  const fn = typeof U.redactSecrets === 'function' ? U.redactSecrets : null
+  const text = 'commit 3f2a1b4c5d6e7f8091a2b3c4d5e6f708192a3b4c\nid 123e4567-e89b-12d3-a456-426614174000\n/Users/x/repo/token.ts https://example.com/path?x=1\nthe token was rotated'
+  const out = fn ? fn(text) : null
+  ok('redact.3 ordinary text — a sha, a UUID, a path, a URL, the word token — is untouched with count 0',
+    out !== null && out.count === 0 && out.text === text, JSON.stringify(out))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

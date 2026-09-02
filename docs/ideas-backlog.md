@@ -52,6 +52,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #58 backpressure on a runaway panel | M36 | "The flush is capped by bytes and the cap keeps the TAIL" |
 | #50 git worktree per panel | M37 | "A worktree record OUTLIVES its panel, and attachment is COMPUTED, never stored", "The worktree decides the cwd BEFORE the baseline is captured" |
 | #56 agents that outlive the app | M38 | "Quit survival is opt-in, and the flush sits between teardown and shutdown in BOTH arms" |
+| #30 durable scrollback | M39 | "The scrollback log is an append stream written from the flush", "A dormant card reads the log; a spawned card reads its buffer" |
 
 Twelve more entries were rewritten rather than removed, because a milestone shipped most
 of each and stopped somewhere deliberate: **#12** (M19 left writes, Server/Data Center,
@@ -1055,55 +1056,14 @@ library — is associated with the account and restored on any machine they sign
 - **Where the UI goes:** the standing rule (#11) applies — this is a settings entry with
   an account section, not a launch-time modal and not a new home of its own.
 
-## 30. Durable scrollback — the thing #16 is actually gated on
+## 31. Secrets in agent output — a standing rule; the scrubber shipped in M39, its customers are next
 
-Terminal output that survives the panel being restarted, the app being relaunched, and the
-renderer being reloaded. A per-panel log on disk, and a way to look back through it.
-
-- **#16 already says search is "gated on durable scrollback, a bigger question than search
-  itself". This is that question, costed on its own** — which is what that entry asked for
-  and what nothing here currently provides.
-- **The problem is sharper than "we would like history", because of dormancy.** The
-  closing section of this file states it: a restored panel's xterm buffer is empty, so
-  `tail()` returns nothing and anything reading terminal content reads nothing at all on a
-  freshly relaunched canvas. Every panel on the canvas is in that state the moment the app
-  starts. Durable scrollback is the only thing that makes a restored canvas show what it
-  showed yesterday, and without it #22's far-zoom card, #16's index, and #39's export are
-  all blank on exactly the run where the user most wants them.
-- **Where it gets written is already decided, and it is not the renderer.** `pty-manager.ts`
-  already coalesces thousands of reads/sec into a flush every `FLUSH_INTERVAL_MS`. The log
-  write belongs *in that flush* — one append per flush, main-side, next to the IPC send.
-  Writing per read is the same flood the batching exists to prevent, and writing from the
-  renderer means the bytes cross IPC before being written back down to the same disk.
-- **Constraint: this is an append stream, not `layout-store.ts`'s pattern.** The layout
-  store's write-temp-then-`renameSync` is exactly right for a few kilobytes of state
-  written twice a minute, and exactly wrong for a byte stream from twelve processes. Copying
-  it here rewrites the whole log every 16ms. Different data, different mechanism — and this
-  is the third "state that survives a relaunch" in the app, so #27's warning about three
-  independent implementations of atomic writes applies in reverse: **this one is
-  legitimately different and should say so where someone will read it.**
-- **Constraint: retention and caps are the feature, not a footnote.** An agent building a
-  project can emit hundreds of megabytes in an afternoon, and twelve panels do it in
-  parallel. A ring buffer per panel with a byte cap, plus an age cap, plus a visible total
-  in #18's cost readout, is the shippable shape. Unbounded is not a v1 with a to-do; it is
-  a disk-full bug with a delay fuse.
-- **Constraint: this is where #31 stops being theoretical.** Everything an agent prints,
-  including whatever it echoed from a `.env`, becomes a file on disk that outlives the
-  session. Redaction and an explicit retention setting are part of shipping this, not a
-  follow-up.
-- **Two different logs are being conflated across this file, and it is worth separating
-  them now.** Raw PTY bytes (this entry) are what a terminal showed. The agent CLI's own
-  transcript — the JSON the vendors already write — is what the agent *did*, and it is what
-  #7's subagent visualisation and #19's token accounting actually want. They are different
-  sources with different fidelity and different vendor coupling. Build the byte log for
-  display and search; build the transcript watcher, once, for structure.
-- **Open question: is there a timeline UI, or only search?** Scrubbing a panel back through
-  its own history — "show me this panel twenty minutes ago" — is the thing an infinite
-  canvas could do that a terminal cannot. It is also much more than a log file, since
-  replaying bytes into a terminal to reconstruct a past frame is a real emulator problem.
-  Note the ceiling; ship the log.
-
-## 31. Secrets in agent output — a standing rule, like the settings one
+> **M39 wrote `shared/redact.ts`** — the pattern-based scrubber this entry asks
+> for, with kind-named placeholders and a count, plain-node checked — and
+> applied it to NOTHING, per this entry's own guidance: redact what leaves the
+> machine, mark what stays, never touch the live terminal. The local log is
+> marked by `scrollback.persist`'s description. What is still open is the
+> application: M48's text export and the diagnostics bundle.
 
 **Cross-cutting.** Agents print API keys. They `cat` a `.env` to check it, echo a token in
 a curl command, or paste an error containing a session cookie. Today that text lives in one
@@ -1604,7 +1564,15 @@ app would have that destroys work.
   inherits `verify:rail` 57's rule: the set of paths comes from the *result*, never from the
   display-capped rows on screen.
 
-## 53. Cards that show the last real screen, not a text tail
+## 53. Cards that show the last real screen — the dormant half landed in M39; the live-tier half is what is left
+
+> **M39 made the DORMANT card honest**: a restored panel's card shows the
+> tail of its durable log above "click to start", which is the half of this
+> entry the log makes free. What is left is the other half — a spawned
+> panel's card is still `handle.tail(6)`, the colour-stripped fragments this
+> entry opens with — and the `serialize`-at-detach source that would fix it.
+> `capture-pane` on a surviving session is no longer needed for the restore
+> case and is not planned.
 
 `PanelCard` renders `handle.tail(6)`, and `tail()` unshifts only non-empty, trimmed lines — so
 a full-screen agent TUI's card is six fragments of a box frame with the colour stripped and

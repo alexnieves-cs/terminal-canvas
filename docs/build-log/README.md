@@ -21,3 +21,4 @@ copy here is deleted.
 | [m36-hardening.md](m36-hardening.md) | M36 — Hardening for 1.0 | finished |
 | [m37-worktree-per-panel.md](m37-worktree-per-panel.md) | M37 — A git worktree per panel | finished |
 | [m38-agents-outlive-the-app.md](m38-agents-outlive-the-app.md) | M38 — Agents that outlive the app | finished |
+| [m39-durable-scrollback.md](m39-durable-scrollback.md) | M39 — Durable scrollback | finished |

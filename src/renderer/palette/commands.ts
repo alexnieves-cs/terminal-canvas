@@ -294,6 +294,8 @@ export interface PaletteActions {
   beginRemoveWorktree(id: string): void
   /** M37. Open the worktree's directory in Finder. */
   revealWorktree(id: string): void
+  /** M39. Confirm-gated, like every destructive verb here: removes every panel's durable log. */
+  beginClearScrollback(): void
   /**
    * Put a local file on the canvas. Opens main's native file dialog and mints
    * a file panel on a non-null reply.
@@ -1078,6 +1080,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       )
     )
   }
+
+  // M39. The durable log's one verb. Hidden at rest and destructive, like
+  // the credential and preset deletes: a row that clears every panel's
+  // recorded output must not sit beside "Go to n1" under a query aimed
+  // elsewhere, and a user who wants it types "scrollback" or "clear".
+  out.push({
+    id: 'canvas.clear-scrollback',
+    title: 'Clear scrollback logs',
+    subtitle: 'removes every panel’s recorded output from disk',
+    group: 'canvas',
+    hiddenAtRest: true,
+    destructive: true,
+    searchText: 'scrollback history log output clear delete disk',
+    run: () => actions.beginClearScrollback()
+  })
 
   // M37. The worktree door and its rows. The door is present at rest and
   // disabled with a reason when there are none: a door that vanished would

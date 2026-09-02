@@ -82,6 +82,17 @@ export function buildWorktreeAddArgs(root: string, branch: string, path: string)
  * quietly discarded an agent's work would be worth less than one that
  * refused. The refusal is reported verbatim and the directory survives.
  */
+/**
+ * M37/M39. Does this branch exist? `rev-parse --verify --quiet` exits 1 and
+ * prints nothing for a missing ref, so the runner's `ok` is the answer.
+ * Probed before `worktree add -b`, because a branch a hand-deleted worktree
+ * left behind — or a same-minute recycle of a panel id — makes `-b` refuse,
+ * and the refusal must become a suffixed name rather than no worktree.
+ */
+export function buildBranchExistsArgs(root: string, branch: string): string[] {
+  return ['-C', root, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]
+}
+
 export function buildWorktreeRemoveArgs(root: string, path: string): string[] {
   return ['-C', root, 'worktree', 'remove', path]
 }
