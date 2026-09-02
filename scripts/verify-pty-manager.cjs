@@ -741,9 +741,18 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     const lateSends = h.events.slice(sendsBefore).filter((e) => e.channel === 'pty:data' && e.payload.panelId === 'ef1' && e.payload.data.includes('LATE-TAIL-77'))
     const lateAppends = appends.slice(appendsBefore).filter((a) => a.id === 'ef1' && a.data.includes('LATE-TAIL-77'))
     const freshArrived = h.events.slice(sendsBefore).some((e) => e.channel === 'pty:data' && e.payload.panelId === 'ef1' && e.payload.data.includes('fresh'))
-    ok('exit-flush.1 a killed session\'s trailing bytes reach neither the recreated panel nor its dropped log',
-      drops.includes('ef1') && freshArrived && lateSends.length === 0 && lateAppends.length === 0,
-      JSON.stringify({ dropped: drops.includes('ef1'), freshArrived, lateSends: lateSends.length, lateAppends: lateAppends.length }))
+    // THE CONTROL CASE, so the assertion above cannot pass for the wrong
+    // reason: the same trap on a session that exits NATURALLY must deliver
+    // its marker — proving the shell runs the trap and the 1200ms window is
+    // long enough — and that is also the flush-before-announce rule itself
+    // (the last line a dying process prints reaches the renderer and the log).
+    // A gate that dropped every exiting session's tail would fail HERE.
+    await h.manager.create(spec('ef2', '/bin/sh', ['-c', 'trap "echo LATE-TAIL-77" EXIT; echo ready; sleep 0.3']))
+    const naturalArrived = await waitFor(() => h.events.some((e) => e.channel === 'pty:data' && e.payload.panelId === 'ef2' && e.payload.data.includes('LATE-TAIL-77')), 5000)
+    const naturalLogged = appends.some((a) => a.id === 'ef2' && a.data.includes('LATE-TAIL-77'))
+    ok('exit-flush.1 a killed session\'s trailing bytes reach neither the recreated panel nor its dropped log, while a natural exit\'s still arrive',
+      drops.includes('ef1') && freshArrived && lateSends.length === 0 && lateAppends.length === 0 && naturalArrived === true && naturalLogged,
+      JSON.stringify({ dropped: drops.includes('ef1'), freshArrived, lateSends: lateSends.length, lateAppends: lateAppends.length, naturalArrived, naturalLogged }))
     h.manager.killAll()
   }
 

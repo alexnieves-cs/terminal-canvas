@@ -330,10 +330,25 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // saw it (M61's first render). Any rule that sets `display` on a class the
 // renderer also toggles with `hidden` must carry a `[hidden]` reset.
 {
-  const hiddenClasses = ['context__panel', 'dock__badge']
-  const bad = hiddenClasses.filter((c) => new RegExp(`\\.${c}\\s*\\{[^}]*display\\s*:`).test(bare) && !new RegExp(`\\.${c}\\[hidden\\]`).test(bare))
+  // Derived from the renderer's own JSX rather than a hand list: every
+  // element that carries `hidden=` is collected with the first class it
+  // names, so a fourth toggled class is covered the day it is written.
+  // The lookbehind keeps `aria-hidden=` out: that attribute hides from a
+  // screen reader, not from paint, and matched on the first run.
+  const { readdirSync, statSync, readFileSync } = require('node:fs')
+  const { join } = require('node:path')
+  const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : (p.endsWith('.tsx') ? [p] : []) })
+  const toggled = new Set()
+  for (const file of walk(join(__dirname, '..', 'src', 'renderer'))) {
+    const text = readFileSync(file, 'utf8')
+    for (const tag of text.match(/<[a-z][^>]*(?<![a-z-])hidden=[^>]*>/g) ?? []) {
+      const cls = /className=[{]?[`"']([A-Za-z0-9_-]+)/.exec(tag)
+      if (cls) toggled.add(cls[1])
+    }
+  }
+  const bad = [...toggled].filter((c) => new RegExp(`\\.${c}\\s*\\{[^}]*display\\s*:`).test(bare) && !new RegExp(`\\.${c}\\[hidden\\]`).test(bare))
   ok('hidden.1', 'every class that sets display and is toggled with the hidden attribute carries a [hidden] reset',
-    bad.length === 0, bad.length ? `no [hidden] rule for: ${bad.join(', ')}` : 'ok')
+    toggled.size >= 2 && bad.length === 0, bad.length ? `no [hidden] rule for: ${bad.join(', ')}` : `toggled classes: ${[...toggled].join(', ')}`)
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

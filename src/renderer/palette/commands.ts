@@ -10,6 +10,7 @@ import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } f
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import type { EnvReport } from '@shared/env-report'
+import type { CanvasGroup } from '@renderer/groups/groups'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
 // of credential-holding services, and credential-schema.ts imports nothing —
@@ -444,7 +445,7 @@ export interface PaletteContext {
    * panel. Optional only for the checks' older contexts: an absent list is
    * "no groups", which is a real state, not a hole.
    */
-  groups?: readonly { id: string; label: string; collapsed?: boolean; panelIds: readonly string[] }[]
+  groups?: readonly CanvasGroup[]
   actions: PaletteActions
 }
 
