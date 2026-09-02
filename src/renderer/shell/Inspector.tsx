@@ -1,7 +1,9 @@
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import { agentStateLabel, KIND_NOUN } from './inspector-fields'
+import { agentStateLabel, handoffControl, KIND_NOUN } from './inspector-fields'
+import { nextHandoffState } from '@renderer/panels/panels'
+import type { LinkAutomation } from '@shared/handoff'
 import { shellControl } from './shell-control'
 
 export interface AutomationRow {
@@ -10,6 +12,10 @@ export interface AutomationRow {
   source: string
   target: string
   enabled: boolean
+  /** M41: the rule itself, so the list's toggle re-sets it with `enabled` flipped and nothing else changed. */
+  automation: LinkAutomation
+  /** describeAutomation's sentence, built where the rows are. */
+  sentence: string
 }
 
 export interface InspectorProps {
@@ -26,6 +32,8 @@ export interface InspectorProps {
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
   onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  /** M41: set or replace the one rule on a link — the handoff control's verb, and the list toggle's. */
+  onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
   /** Ephemeral evidence of what a functional link most recently did. */
   automationResults: ReadonlyMap<string, string>
   automations: AutomationRow[]
@@ -73,7 +81,7 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, automationResults, automations, review, toolbox, onOpenToolbox
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   return (
     <aside className="shell__inspector" aria-label="Inspector">
@@ -87,7 +95,7 @@ function InspectorImpl({
         ›
       </button>
       <div className="shell__region-title">Panel</div>
-      <AutomationList rows={automations} results={automationResults} onSetRestartOnExit={onSetRestartOnExit} />
+      <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
       {model === null
         ? <InspectorEmpty summary={summary} />
         : <InspectorPanel
@@ -105,6 +113,7 @@ function InspectorImpl({
             onRelabelLink={onRelabelLink}
             onSetRestartOnExit={onSetRestartOnExit}
             automationResults={automationResults}
+            onSetLinkAutomation={onSetLinkAutomation}
           />}
     </aside>
   )
@@ -114,11 +123,11 @@ export const Inspector = memo(InspectorImpl)
 
 /** The audit surface #24 requires: rules are readable without tracing lines. */
 function AutomationList({
-  rows, results, onSetRestartOnExit
+  rows, results, onSetLinkAutomation
 }: {
   rows: AutomationRow[]
   results: ReadonlyMap<string, string>
-  onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
 }): JSX.Element | null {
   if (rows.length === 0) return null
   return (
@@ -128,16 +137,16 @@ function AutomationList({
         const key = `${row.from}:${row.to}`
         return (
           <div className="inspector__link" key={key} data-automation={key}>
-            <span className="inspector__link-title">{row.source} exits → restart {row.target}</span>
+            <span className="inspector__link-title">{row.source} → {row.target}: {row.sentence}</span>
             <button
               type="button"
               className="inspector__link-action"
               title={row.enabled ? 'Disable this automation' : 'Enable this automation'}
-              {...shellControl(() => onSetRestartOnExit(row.from, row.to, !row.enabled))}
+              {...shellControl(() => onSetLinkAutomation(row.from, row.to, { ...row.automation, enabled: !row.enabled }))}
             >
               {row.enabled ? 'on' : 'off'}
             </button>
-            {results.get(key) !== undefined && <span className="inspector__link-label">{results.get(key)}</span>}
+            {results.get(key) !== undefined && <span className="inspector__link-label" data-automation-result={key}>{results.get(key)}</span>}
           </div>
         )
       })}
@@ -184,7 +193,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, automationResults
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults
 }: {
   model: InspectorModel
   review: ReviewFieldModel | null
@@ -199,6 +208,8 @@ function InspectorPanel({
   onRemoveLink: (from: string, to: string) => void
   onRelabelLink: (from: string, to: string, current: string) => void
   onSetRestartOnExit: (from: string, to: string, enabled: boolean) => void
+  /** M41: set or replace the one rule on a link — the handoff control's verb, and the list toggle's. */
+  onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
   automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
   const state = useAgentState(model.id)
@@ -272,7 +283,23 @@ function InspectorPanel({
                     {link.restartOnExit ? '↻ on' : '↻'}
                   </button>
                 )}
-                {link.direction === 'out' && link.restartOnExit && automationResults.get(`${from}:${to}`) !== undefined && (
+                {/* M41. The handoff control: a three-state cycle beside the
+                    restart toggle, its title naming the NEXT state. One rule
+                    per link, so pressing it on a restart link converts the
+                    rule — nextHandoffState's own comment. */}
+                {link.direction === 'out' && (
+                  <button
+                    type="button"
+                    className="inspector__link-action"
+                    data-link-handoff={`${from}:${to}`}
+                    disabled={!link.canRestartOnExit}
+                    title={link.canRestartOnExit ? handoffControl(link.handoff).title : 'A handoff requires two terminal panels'}
+                    {...shellControl(() => onSetLinkAutomation(from, to, nextHandoffState(link.automation)))}
+                  >
+                    {handoffControl(link.handoff).label}
+                  </button>
+                )}
+                {link.direction === 'out' && link.automation?.enabled === true && automationResults.get(`${from}:${to}`) !== undefined && (
                   <span className="inspector__link-label" data-link-automation-result={`${from}:${to}`}>
                     {automationResults.get(`${from}:${to}`)}
                   </span>

@@ -28,10 +28,28 @@ function notify(panelId: PanelId): void {
 
 /** Called by the one IPC subscription in Canvas.tsx. */
 export function applyAgentState(panelId: PanelId, state: AgentState): void {
-  if (states.get(panelId) === state) return
+  const prev = states.get(panelId)
+  if (prev === state) return
   states.set(panelId, state)
   notify(panelId)
   syncAttention(panelId, state)
+  for (const listener of transitionListeners) listener(panelId, state, prev)
+}
+
+/**
+ * M41. A fan-out of every state CHANGE, with the previous state — for the
+ * handoff hook, which needs two transitions no per-id subscription serves:
+ * busy -> idle (a completed turn) and "left starting" (a woken target can now
+ * receive a paste). It rides applyAgentState, the ONE IPC subscription, so it
+ * adds no second `agent.onState` and stays a pure in-renderer fan-out — the
+ * same rule the per-id `subscribe` and the attention set already obey.
+ */
+type TransitionListener = (panelId: PanelId, state: AgentState, prev: AgentState | undefined) => void
+const transitionListeners = new Set<TransitionListener>()
+
+export function onAgentTransition(listener: TransitionListener): () => void {
+  transitionListeners.add(listener)
+  return () => transitionListeners.delete(listener)
 }
 
 /**

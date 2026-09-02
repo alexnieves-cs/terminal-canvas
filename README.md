@@ -45,6 +45,11 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **A review layer.** Each panel is diffed against the snapshot taken when its
   agent started, so you can see what that agent — specifically that one —
   changed, and commit it without leaving the canvas.
+- **Edges that hand off work.** Draw a link from one panel to another and set
+  it to hand off: when the source finishes — its process exits, or its agent's
+  turn ends — the target is started with the source's last output pasted in as
+  context. A dormant target is woken for it; the inspector says what happened,
+  in a sentence, every time.
 - **Output that survives a relaunch.** Each panel's recent output is kept on
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank

@@ -2332,3 +2332,37 @@ reversible with one key, and a confirm on every arming would cost the four-agent
 whole point. `verify:panels` `broadcast.1` is the end-to-end proof, read from the M39 log
 rather than any renderer hook — a keystroke into the focused member lands in BOTH panels'
 logs, a real click on Stop ends the mode, and the next keystroke lands in one.
+
+**A handoff edge WAKES its target, and that overrules M25's refusal for this one kind, in
+writing (`renderer/canvas/useHandoff.ts`, `shared/handoff.ts`).** M25's restart-on-exit
+refuses to wake a dormant target on purpose: a saved rule must not launch an agent merely
+because another panel exited while the user was away. A handoff rule is the opposite ask —
+the user drew the link and chose "when A completes, hand B its output", so STARTING B is the
+rule's whole meaning. `useHandoff` therefore calls `registry.wake` (dormant/never-spawned) or
+`restartWithSpec` (exited) for a handoff target, and restart-on-exit keeps its refusal
+untouched beside it. Four consequences are load-bearing. **The payload is a bracketed
+`handle.paste`, never `write`** — the fourth surface to reach this rule after the file panel,
+the review commit draft and the Jira comment: a raw write submits every newline as a separate
+line into the agent, firing fragments before the context arrives. **Delivery waits for a
+target that can RECEIVE, not merely one that is running**: a woken target has no fitted
+terminal until tiering promotes it (the fit-before-spawn rule), and pasting into a `claude`
+that has not left `starting` loses the paste — so the payload is queued in a ref and delivered
+by the agent-state transition listener when the target leaves `starting`, plus one short
+settle. **The queue is never persisted**, for the reason the broadcast mode is not: it is
+in-flight state, and a saved queue would re-deliver a stale payload on the next launch; an
+entry older than `HANDOFF_QUEUE_MS` (5 min) is dropped with its own sentence. **Both bounds
+are named where the rule is made** — the inspector row states `last 200 lines`, because a user
+must never learn the cap from a silently truncated paste. The idle trigger rides a new
+`onAgentTransition` fan-out on the agent-state store rather than a second `agent.onState` IPC
+subscription — the single-subscription rule the store already enforces for its per-id and
+attention readers.
+
+**One automation per link, and a handoff REPLACES a restart rule rather than stacking beside
+it (`shared/handoff.ts`, `panels.ts` `setLinkAutomation`).** `PanelLink.automation` is a union
+of the two kinds, not a collection: a link is a directed pair and carries one meaning, so the
+mutator `setLinkAutomation` (which `setRestartOnExit` is now a thin call into) sets or replaces
+the one rule, and the cycle check reaches across BOTH kinds together — a handoff A→B on `idle`
+plus a restart B→A is an infinite ping-pong, refused at creation and stripped on load exactly
+as a same-kind cycle is. A `nextHandoffState` three-state cycle (off → on exit → on idle → off)
+drives the inspector's handoff control, whose title names the NEXT state because a cycle button
+labelled only with its current state leaves the user guessing what a press does.

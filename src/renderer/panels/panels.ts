@@ -3,6 +3,7 @@ import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
 import type { ToolboxSource } from '@shared/toolbox'
+import type { LinkAutomation } from '@shared/handoff'
 
 export type { ReviewSubject }
 
@@ -36,7 +37,7 @@ export interface PanelLink {
    * the same thing. `enabled` is explicit because a rule that can fire while
    * its owner is away must have a visible, durable off switch.
    */
-  automation?: { kind: 'restart-on-exit'; enabled: boolean }
+  automation?: LinkAutomation
 }
 
 export interface PanelBase {
@@ -498,46 +499,67 @@ function wouldCycle(panels: Panel[], from: string, to: string): boolean {
     seen.add(id)
     const panel = panels.find((p) => p.rect.id === id)
     return panel !== undefined && linksOf(panel).some(
-      (link) => link.automation?.kind === 'restart-on-exit' && link.automation.enabled && visit(link.to)
+      (link) => link.automation !== undefined && link.automation.enabled && visit(link.to)
     )
   }
   return visit(to)
 }
 
 /**
- * Enable or disable the restart-on-exit action on one existing link.
+ * Set or replace THE automation on one existing link — M41's one mutator for
+ * both kinds, which setRestartOnExit below is a thin call into. One rule per
+ * link, so a handoff replaces a restart rule rather than stacking beside it.
  *
- * A cycle is refused rather than rate-limited: a limit merely turns a
- * configured loop into a delayed surprise, while refusing it leaves the
- * canvas in a state a user can reason about. Returns the identical array for
- * a missing link, a sessionless endpoint, or a cyclic enable so callers do
- * not create a no-op undo entry.
+ * A cycle across BOTH kinds is refused rather than rate-limited: a limit
+ * merely turns a configured loop into a delayed surprise, while refusing it
+ * leaves the canvas in a state a user can reason about. Returns the identical
+ * array for a missing link, a sessionless endpoint, a cyclic enable, and a
+ * no-op (the same rule already there, or "off" on a link that has no rule),
+ * so callers do not create a no-op undo entry.
  */
-export function setRestartOnExit(
+export function setLinkAutomation(
   panels: Panel[],
   from: string,
   to: string,
-  enabled: boolean
+  automation: LinkAutomation
 ): Panel[] {
   const source = panels.find((p) => p.rect.id === from)
   const target = panels.find((p) => p.rect.id === to)
   if (!source || !target || !isTerminalPanel(source) || !isTerminalPanel(target)) return panels
   const link = linksOf(source).find((candidate) => candidate.to === to)
   if (!link) return panels
-  const current = link.automation?.kind === 'restart-on-exit' && link.automation.enabled
-  if (current === enabled) return panels
-  if (enabled && wouldCycle(panels, from, to)) return panels
+  if (!automation.enabled && link.automation === undefined) return panels
+  if (JSON.stringify(link.automation) === JSON.stringify(automation)) return panels
+  if (automation.enabled && wouldCycle(panels, from, to)) return panels
   return mapPanel(panels, from, (panel) => ({
     ...panel,
-    links: linksOf(panel).map((candidate) => candidate.to !== to
-      ? candidate
-      : {
-          ...candidate,
-          ...(enabled
-            ? { automation: { kind: 'restart-on-exit' as const, enabled: true } }
-            : { automation: { kind: 'restart-on-exit' as const, enabled: false } })
-        })
+    links: linksOf(panel).map((candidate) => candidate.to !== to ? candidate : { ...candidate, automation })
   }))
+}
+
+/**
+ * The inspector's three-state cycle for the handoff control: off -> on exit
+ * -> on idle -> off. From no rule, a disabled rule, or a RESTART rule the
+ * next state is "on exit" — pressing the handoff control on a restart link
+ * converts it, which is the one-rule-per-link decision made visible.
+ */
+export function nextHandoffState(current: LinkAutomation | undefined): LinkAutomation {
+  if (current?.kind === 'handoff' && current.enabled) {
+    return current.trigger === 'exit'
+      ? { kind: 'handoff', enabled: true, trigger: 'idle' }
+      : { kind: 'handoff', enabled: false, trigger: 'idle' }
+  }
+  return { kind: 'handoff', enabled: true, trigger: 'exit' }
+}
+
+/** Enable or disable the restart-on-exit action on one existing link. See setLinkAutomation. */
+export function setRestartOnExit(
+  panels: Panel[],
+  from: string,
+  to: string,
+  enabled: boolean
+): Panel[] {
+  return setLinkAutomation(panels, from, to, { kind: 'restart-on-exit', enabled })
 }
 
 /** Raise by z, never by array position — see the note on Panel.z. */

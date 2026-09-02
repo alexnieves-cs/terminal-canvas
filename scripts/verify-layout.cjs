@@ -1966,6 +1966,77 @@ const reviewPanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ links, other, warnings: r.warnings }))
 }
 
+// M41 — handoff edges: the second automation kind on the same link. Scoped ids.
+const reviewOnDisk = (id, subjectId) => ({
+  id, x: 0, y: 0, w: 640, h: 520, z: 1, kind: 'review',
+  subject: { subjectId, repoRoot: '/r', baselineSha: 'abc', label: 'claude' }
+})
+const handoffLayout = (panels) => L.parseLayout(file({
+  workspaces: [{ id: 'w1', name: 'Canvas', panels, camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }]
+}))
+
+// handoff.1. Both kinds parse and survive the durable door with their fields
+//      intact: a handoff rule keeps its trigger (exit AND idle), and the
+//      restart rule beside it is untouched — the union widened, nothing
+//      narrowed.
+{
+  const r = handoffLayout([
+    panel({ id: 'a', links: [{ to: 'b', label: 'feeds', automation: { kind: 'handoff', enabled: true, trigger: 'exit' } }] }),
+    panel({ id: 'b', links: [{ to: 'c', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] }),
+    panel({ id: 'c', links: [{ to: 'd', automation: { kind: 'restart-on-exit', enabled: true } }] }),
+    panel({ id: 'd' })
+  ])
+  const ps = active(r.snapshot).panels
+  const ab = ps[0].links?.[0], bc = ps[1].links?.[0], cd = ps[2].links?.[0]
+  ok('handoff.1 a handoff rule parses with its trigger (exit and idle) beside an untouched restart rule',
+    ab?.automation?.kind === 'handoff' && ab.automation.enabled === true && ab.automation.trigger === 'exit' && ab.label === 'feeds' &&
+      bc?.automation?.kind === 'handoff' && bc.automation.trigger === 'idle' &&
+      cd?.automation?.kind === 'restart-on-exit' && cd.automation.enabled === true &&
+      r.warnings.length === 0,
+    JSON.stringify({ ab, bc, cd, warnings: r.warnings }))
+}
+
+// handoff.2. Malformed drops the AUTOMATION and keeps the LINK, with a
+//      warning naming the link: an unknown trigger, a missing trigger, and a
+//      handoff naming a sessionless endpoint (a review node cannot receive a
+//      paste) each cost the rule and never the relation.
+{
+  const r = handoffLayout([
+    panel({ id: 'a', links: [
+      { to: 'b', label: 'x', automation: { kind: 'handoff', enabled: true, trigger: 'never' } },
+      { to: 'c', automation: { kind: 'handoff', enabled: true } },
+      { to: 'r1', automation: { kind: 'handoff', enabled: true, trigger: 'exit' } }
+    ] }),
+    panel({ id: 'b' }), panel({ id: 'c' }), reviewOnDisk('r1', 'b')
+  ])
+  const links = active(r.snapshot).panels[0].links ?? []
+  ok('handoff.2 a malformed or sessionless handoff drops the automation, keeps the link, and warns by name',
+    links.length === 3 && links.every((l) => l.automation === undefined) && links[0].label === 'x' &&
+      r.warnings.filter((w) => /a -> b.*malformed/.test(w)).length === 1 &&
+      r.warnings.filter((w) => /a -> c.*malformed/.test(w)).length === 1 &&
+      r.warnings.some((w) => /a -> r1.*terminal panels/.test(w)),
+    JSON.stringify({ links, warnings: r.warnings }))
+}
+
+// handoff.3. The cycle rule covers BOTH kinds together: a handoff a->b on
+//      idle plus a restart b->a is an infinite ping-pong between two
+//      interactive agents, and exactly one of the two survives the load with
+//      a warning that says cycle. A DISABLED rule does not close a cycle.
+{
+  const r = handoffLayout([
+    panel({ id: 'a', links: [{ to: 'b', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] }),
+    panel({ id: 'b', links: [{ to: 'a', automation: { kind: 'restart-on-exit', enabled: true } }] }),
+    panel({ id: 'c', links: [{ to: 'd', automation: { kind: 'handoff', enabled: false, trigger: 'exit' } }] }),
+    panel({ id: 'd', links: [{ to: 'c', automation: { kind: 'handoff', enabled: true, trigger: 'exit' } }] })
+  ])
+  const ps = active(r.snapshot).panels
+  const survivingAB = [ps[0].links?.[0]?.automation?.enabled === true, ps[1].links?.[0]?.automation?.enabled === true].filter(Boolean).length
+  ok('handoff.3 a mixed-kind cycle is stripped on load with a cycle warning; a disabled rule does not close one',
+    survivingAB === 1 && r.warnings.filter((w) => /cycle/.test(w)).length === 1 &&
+      ps[2].links?.[0]?.automation?.enabled === false && ps[3].links?.[0]?.automation?.enabled === true,
+    JSON.stringify({ ps: ps.map((p) => p.links), warnings: r.warnings }))
+}
+
 const filePanelOnDisk = (id, over = {}) => ({
   id, x: 1, y: 2, w: 640, h: 520, z: 3, kind: 'file', source: { path: '/tmp/a b/c.txt' }, ...over
 })

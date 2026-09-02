@@ -1295,6 +1295,45 @@ ok('74 a panel with no kind is not a review panel',
     JSON.stringify(V.linksOf(bToC[0])))
 }
 
+// M41 — handoff.1. One mutator for both kinds. setLinkAutomation(panels,
+//      from, to, automation) sets or replaces THE rule on a link (one
+//      automation per link, so a handoff replaces a restart rather than
+//      stacking beside it), refuses a sessionless endpoint and a cycle across
+//      both kinds, and returns the identical array for every refusal and for
+//      a no-op. nextHandoffState is the inspector's cycle: off -> exit ->
+//      idle -> off, and from a restart rule -> exit.
+{
+  const set = typeof V.setLinkAutomation === 'function' ? V.setLinkAutomation : null
+  const next = typeof V.nextHandoffState === 'function' ? V.nextHandoffState : null
+  const term = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const file = { kind: 'file', rect: { id: 'f', x: 0, y: 0, w: 10, h: 10 }, z: 1, source: { path: '/tmp/f' } }
+  const base = [term('a', [{ to: 'b', label: 'feeds' }, { to: 'f' }]), term('b', [{ to: 'c' }]), term('c', [{ to: 'a' }]), file]
+  const exit = { kind: 'handoff', enabled: true, trigger: 'exit' }
+  const idle = { kind: 'handoff', enabled: true, trigger: 'idle' }
+  const aToB = set ? set(base, 'a', 'b', exit) : null
+  const aToBIdle = set && aToB ? set(aToB, 'a', 'b', idle) : null
+  const bToC = set && aToBIdle ? set(aToBIdle, 'b', 'c', { kind: 'restart-on-exit', enabled: true }) : null
+  const refusedCycle = set && bToC ? set(bToC, 'c', 'a', exit) : null
+  const refusedKind = set && bToC ? set(bToC, 'a', 'f', exit) : null
+  const noop = set && bToC ? set(bToC, 'a', 'b', idle) : null
+  const replaced = set && bToC ? set(bToC, 'b', 'c', exit) : null
+  const off = set && bToC ? set(bToC, 'a', 'b', { kind: 'handoff', enabled: false, trigger: 'idle' }) : null
+  const link = (ps, i) => V.linksOf(ps[i])[0]
+  ok('handoff.1 setLinkAutomation sets, retriggers, replaces a restart rule, refuses a sessionless endpoint and a mixed-kind cycle, and nextHandoffState cycles',
+    set !== null && next !== null &&
+      link(aToB, 0).automation?.kind === 'handoff' && link(aToB, 0).automation.trigger === 'exit' && link(aToB, 0).label === 'feeds' &&
+      link(aToBIdle, 0).automation?.trigger === 'idle' &&
+      refusedCycle === bToC && refusedKind === bToC && noop === bToC &&
+      link(replaced, 1).automation?.kind === 'handoff' && link(replaced, 1).automation.trigger === 'exit' &&
+      link(off, 0).automation?.enabled === false &&
+      JSON.stringify(next(undefined)) === JSON.stringify(exit) &&
+      JSON.stringify(next(exit)) === JSON.stringify(idle) &&
+      next(idle).enabled === false &&
+      JSON.stringify(next({ kind: 'restart-on-exit', enabled: true })) === JSON.stringify(exit) &&
+      JSON.stringify(next({ kind: 'handoff', enabled: false, trigger: 'idle' })) === JSON.stringify(exit),
+    JSON.stringify({ has: [set !== null, next !== null], aToB: aToB && V.linksOf(aToB[0]), replaced: replaced && V.linksOf(replaced[1]) }))
+}
+
 // M16 (originally numbered 79-80b under this branch's own M13, which
 // collided with main's own DIFFERENT M13 — "links between panels", which
 // independently claimed 79-88 in this file. See the milestone-wide

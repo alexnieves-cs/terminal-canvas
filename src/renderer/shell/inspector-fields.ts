@@ -3,6 +3,7 @@ import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
 import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
+import { HANDOFF_MAX_LINES, type LinkAutomation } from '@shared/handoff'
 import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
@@ -76,6 +77,41 @@ export interface InspectorLinkRow {
   /** #24: only a terminal -> terminal outgoing link can restart on exit. */
   canRestartOnExit: boolean
   restartOnExit: boolean
+  /** M41: the handoff rule's state as a NAMED value; 'off' for an in-link and for a restart rule. */
+  handoff: HandoffState
+  /** The rule as stored, for the control to compute its next state from. Absent stays absent. */
+  automation?: LinkAutomation
+}
+
+export type HandoffState = 'off' | 'exit' | 'idle'
+
+export function handoffStateOf(automation: LinkAutomation | undefined): HandoffState {
+  return automation?.kind === 'handoff' && automation.enabled ? automation.trigger : 'off'
+}
+
+/**
+ * The automation list's sentence: what fires, and — for a handoff — the
+ * bound, named where the rule is made so a user never learns the cap from a
+ * truncated paste.
+ */
+export function describeAutomation(automation: LinkAutomation): string {
+  if (automation.kind === 'restart-on-exit') return 'restart on exit'
+  return automation.trigger === 'exit'
+    ? `handoff on exit · last ${HANDOFF_MAX_LINES} lines`
+    : `handoff after a turn · last ${HANDOFF_MAX_LINES} lines`
+}
+
+/**
+ * The handoff control's label and title. The label says the CURRENT state;
+ * the title says what a press does next — a three-state cycle button whose
+ * label alone would leave the user guessing what a press does.
+ */
+export function handoffControl(state: HandoffState): { label: string; title: string } {
+  switch (state) {
+    case 'off': return { label: 'handoff: off', title: 'Hand this panel\'s output to the target when it exits (next: on exit)' }
+    case 'exit': return { label: 'handoff: exit', title: 'Next: hand off after each completed turn instead (idle)' }
+    case 'idle': return { label: 'handoff: idle', title: 'Next: turn the handoff off' }
+  }
 }
 
 export interface InspectorSummary {
@@ -205,7 +241,8 @@ export function buildLinkRows(panel: Panel, panels: Panel[]): InspectorLinkRow[]
       ...(label === undefined ? {} : { label }),
       title: railLabel(other, undefined),
       canRestartOnExit: false,
-      restartOnExit: false
+      restartOnExit: false,
+      handoff: 'off'
     })
   }
   for (const link of linksOf(panel)) {
@@ -217,7 +254,9 @@ export function buildLinkRows(panel: Panel, panels: Panel[]): InspectorLinkRow[]
       ...(link.label === undefined ? {} : { label: link.label }),
       title: railLabel(other, undefined),
       canRestartOnExit: isTerminalPanel(panel) && isTerminalPanel(other),
-      restartOnExit: link.automation?.kind === 'restart-on-exit' && link.automation.enabled
+      restartOnExit: link.automation?.kind === 'restart-on-exit' && link.automation.enabled,
+      handoff: handoffStateOf(link.automation),
+      ...(link.automation === undefined ? {} : { automation: link.automation })
     })
   }
   for (const source of panels) {

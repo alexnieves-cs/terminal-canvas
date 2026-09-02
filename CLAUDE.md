@@ -291,7 +291,7 @@ entry names its own module in backticks, so `grep -n 'pty-manager' docs/load-bea
 the reliable way in. The subsystem keyword clusters worth knowing are
 `pty-manager`/`tmux`/`shell-env`, `Canvas.tsx`/`viewport`/`lod`, `panels.ts`/panel kinds,
 `palette`, `layout-store`/`layout-schema`, `review-`/`git-`, `rail-`/`inspector-`,
-`credential`, `file-`, `toolbox`, `usage`/`pricing`, `subagent`, `groups`, and `-store.ts`.
+`credential`, `file-`, `toolbox`, `usage`/`pricing`, `subagent`, `groups`, `handoff`/`useHandoff`, and `-store.ts`.
 Searching the SYMPTOM ("panel is blank") mostly fails, because the entries are written from
 the cause.
 

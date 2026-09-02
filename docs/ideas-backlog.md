@@ -2160,9 +2160,15 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 41. **#40 the read-only remote view** — after M4c for the same reason #4 is, and a better
    argument for #28's accounts than sync is.
 42. **#14 tier 2 (`.xlsx` rendering)** — after tier 1 proves the panel kind.
-43. ~~**#24, the functional flavour**~~ — **done, M25.** Restart-on-exit is
-   guarded by the Inspector's automation list; output piping remains a separate
-   future design rather than an un-audited expansion of the rule.
+43. ~~**#24, the functional flavour**~~ — **done, M25 then M41.** Restart-on-exit
+   is guarded by the Inspector's automation list; M41 added the OTHER half #24
+   named — a handoff edge that starts the target with the source's recorded
+   output as context — on the same audit surface. Both bounds (200 lines,
+   16 KiB) are named in the row where the rule is made, the payload is a
+   bracketed paste of main's own scrollback tail (never a raw write), and the
+   rule overrules M25's no-wake refusal for its own kind in writing, because
+   "start B with A's output" is what the user configured. Nothing in #24 is
+   left open.
 44. **#14 tier 3 (web panels)** — only with an answer to the transform collision.
     Tier 4 (embedding a native app's real window) is a **no**, not a later.
 
