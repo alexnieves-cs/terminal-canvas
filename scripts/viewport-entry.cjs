@@ -11,6 +11,8 @@ module.exports = {
   ...require('../src/renderer/panels/panels'),
   // M49. toPanels/fromPanels: the sixth absent-stays-absent copy site.
   ...require('../src/renderer/panels/layout-adapt'),
+  // M50. Snapping and tidy: pure rect math over applyDrag's output.
+  ...require('../src/renderer/canvas/placement'),
   /* M13: the link geometry. Pure — its only value import is linksOf from
      panels.ts, which is already in this bundle — so it belongs in the cheapest
      tier beside viewport.ts and lod.ts. Note that this import is what forced

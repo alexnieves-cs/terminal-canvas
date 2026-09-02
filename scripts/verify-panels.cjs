@@ -767,6 +767,13 @@ app.whenReady().then(async () => {
   // main/index.ts calls this at whenReady; without it the store would start
   // from defaultSnapshot() and the seeded presets above would never be read.
   layoutStore.load()
+  // M50. Snapping OFF (AFTER load(), which replaces the snapshot from disk) for the harness: every drag check before M50 pins the
+  // exact arithmetic of applyDrag (10 zooms mid-drag; 19 reads the saved
+  // rect; 144b compares a group's two deltas), and a snap is a deliberate
+  // departure from that arithmetic. The M50 block turns it on for its own
+  // gesture and back off after — the setting exists so a user can align by
+  // eye, and a check pinning arithmetic is a user aligning by eye.
+  layoutStore.setPreference('placement.snap', false)
   const flushLayoutStore = () => layoutStore.flushSync()
 
   // Seed the store with the twelve-panel fixture BEFORE the window loads.
@@ -14470,6 +14477,88 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(tErr && tErr.message || tErr) + ' | renderer: ' + (tLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onT)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M50 — placement. snap.1: a REAL drag ending 5 screen px short of
+    // another panel's left edge lands its right edge exactly ON it, and a
+    // guide was in the DOM mid-drag. tidy.1: the palette's Tidy arranges the
+    // selection in ONE undoable step.
+    // -------------------------------------------------------------------
+    {
+      const pLog = []
+      const onP = (_e, level, message) => { if (level >= 2) pLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onP)
+      const IDS = [
+        'snap.1 a real drag ending within the threshold of another panel\'s edge lands on it, with a guide drawn mid-drag',
+        'tidy.1 the palette\'s Tidy arranges the selection compactly in one undoable step'
+      ]
+      const rectOf = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(id)} + '"]'); return p ? { x: Number(p.style.left.replace('px', '')), y: Number(p.style.top.replace('px', '')), w: Number(p.style.width.replace('px', '')), h: Number(p.style.height.replace('px', '')) } : null })()`)
+      try {
+        backend = createDirectBackend('verify: direct (m50 placement)')
+        const home = require('node:os').homedir()
+        layoutStore.setPreference('placement.snap', true)
+        const P = (id, x, y) => ({ kind: 'terminal', rect: { id, x, y, w: 300, h: 200 }, z: 1, spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] } })
+        // pA at x 100 (right edge 400); pB at x 620 — a 220px gap. pC/pD for tidy.
+        layoutStore.save({ panels: fromPanels([P('pA', 100, 100), P('pB', 620, 100), P('pC', 100, 500), P('pD', 700, 560)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reP = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reP
+        await waitUntil(async () => wc.executeJavaScript(`['pA', 'pB', 'pC', 'pD'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        await settle()
+        // Drag pB's chrome LEFT so its left edge ends 5px right of pA's right
+        // edge (world 405): dx = 405 - 620 = -215 at scale 1.
+        const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pB"] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
+        let guideSeen = false
+        if (chrome) {
+          const to = { x: chrome.x - 215, y: chrome.y }
+          wc.sendInputEvent({ type: 'mouseDown', x: chrome.x, y: chrome.y, button: 'left', clickCount: 1 })
+          for (let i = 1; i <= 6; i++) {
+            // leftButtonDown, or the drag hook reads buttons === 0 as a release.
+            wc.sendInputEvent({ type: 'mouseMove', x: Math.round(chrome.x + (to.x - chrome.x) * i / 6), y: chrome.y, button: 'left', modifiers: ['leftButtonDown'] })
+            await sleep(40)
+          }
+          await sleep(120)
+          guideSeen = await wc.executeJavaScript(`document.querySelectorAll('[data-snap-guide]').length > 0`)
+          wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+        }
+        await settle()
+        const after = await rectOf('pB')
+        const guideGone = await wc.executeJavaScript(`document.querySelectorAll('[data-snap-guide]').length === 0`)
+        ok(IDS[0], chrome !== null && after !== null && after.x === 400 && guideSeen === true && guideGone === true,
+          JSON.stringify({ chrome, after, guideSeen, guideGone }))
+
+        // tidy.1. Select pC and pD (rail click then shift-click on chrome is
+        //         the M18 gesture; the harness's marquee is heavier) through
+        //         the test hook, open the palette, run Tidy, read the rects,
+        //         then ONE undo restores both.
+        const before = { c: await rectOf('pC'), d: await rectOf('pD') }
+        await wc.executeJavaScript(`window.__m50Select ? window.__m50Select(['pC', 'pD']) : null`)
+        await settle()
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'Tidy the selection'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        const rowTitle = await wc.executeJavaScript(`document.querySelector('.palette__row--selected .palette__title')?.textContent ?? null`)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        await settle()
+        const tidied = { c: await rectOf('pC'), d: await rectOf('pD') }
+        await wc.executeJavaScript(`window.__m4bUndo()`)
+        await settle()
+        const undone = { c: await rectOf('pC'), d: await rectOf('pD') }
+        ok(IDS[1],
+          typeof rowTitle === 'string' && /Tidy the selection/.test(rowTitle) &&
+            tidied.c.x === 100 && tidied.c.y === 500 && tidied.d.x === 100 + 300 + 24 && tidied.d.y === 500 &&
+            undone.c.x === before.c.x && undone.d.x === before.d.x && undone.d.y === before.d.y,
+          JSON.stringify({ rowTitle, before, tidied, undone }))
+      } catch (pErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(pErr && pErr.message || pErr) + ' | renderer: ' + (pLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onP)
+        layoutStore.setPreference('placement.snap', false)
       }
     }
 

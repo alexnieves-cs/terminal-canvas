@@ -281,6 +281,15 @@ export const SETTINGS: readonly SettingDef[] = [
     category: HINTS_CATEGORY
   },
   {
+    id: 'placement.snap',
+    label: 'Snap panels while dragging',
+    description: 'Snap a dragged panel’s edges and centre to nearby panels, with a guide line. Off, you align by eye.',
+    keywords: ['snap', 'snapping', 'align', 'guides', 'grid', 'placement', 'drag'],
+    type: 'boolean',
+    default: true,
+    category: SHELL_CATEGORY
+  },
+  {
     id: 'files.treeOpen',
     label: 'Show the file tree',
     // Says what it DOES, not what it is. M46: the tree is the navigator's

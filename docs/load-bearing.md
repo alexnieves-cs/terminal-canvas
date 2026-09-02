@@ -2025,6 +2025,33 @@ four named fields and so silently dropped its `links` too — every link a renam
 gone on the next save. Both ride along now; a new optional field on `Panel` has to be added to
 rename's arms as well as the adapter's.
 
+**Snapping is a pure function over `applyDrag`'s OUTPUT, and its threshold is SCREEN pixels
+over the scale (`canvas/placement.ts`'s `snapRect`, `SNAP_PX`, `Canvas.tsx`'s `snapNow`).**
+`applyDrag` is the single place a drag resolves to a rect, and it stays pure; `snapRect` takes
+its result, every OTHER panel's rect, and a world-unit threshold the caller derives as
+`SNAP_PX / viewport.scale` — the same `1/k` relationship `applyDrag` embodies and
+`verify:viewport` 27 pins. A world-unit threshold is huge zoomed out and invisible zoomed in,
+and both failures look like "snapping is flaky". Nothing snaps to itself (the caller may pass
+the whole list); a resize snaps only its growing edges and REFUSES a snap that would take the
+size under `MIN_PANEL_W`/`MIN_PANEL_H` rather than clamping into a different size — the shared
+validator rejects such a rect, and a canvas holding one cannot be saved. A group snaps as ONE
+rect (its members' bounding rect) and the delta shifts the cursor's world point, so every member
+moves by the same amount: snapping members individually would shear them apart mid-gesture, the
+failure `applyGroupDrag`'s own entry names. Guides live in `.world`, like the link layer, so they
+ride the one transform; they are cleared on commit. `placement.snap` turns the whole thing off,
+because a user aligning by eye against a snap is fighting the app.
+
+**Tidy compacts WITHOUT reordering and WITHOUT resizing, in ONE undoable step
+(`placement.ts`'s `tidyPanels`, `usePaletteActions.ts`'s `tidyPanels`).** Rows are formed by
+the panels' current vertical overlap, ordered top to bottom, and packed left to right from the
+selection's origin — a panel that was left of another stays left of it. A tidy that sorted by id
+would destroy exactly the information the canvas was carrying (panels grouped by project), and
+one that resized could produce a rect under the floor. Sizes are the input's, so the floor is
+structurally safe, and the result is idempotent (`verify:viewport` `tidy.1`). One
+`commitHistory` for the whole arrangement: twenty panels moving is one gesture to undo, not
+twenty — the same rule a drag and a rename follow. The palette row acts on the selection when
+two or more are selected and on everything otherwise, disabled with a reason on a lone panel.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

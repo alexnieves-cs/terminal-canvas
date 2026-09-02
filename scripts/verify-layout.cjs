@@ -3004,6 +3004,16 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ def, a, b, c, warnings: parsed.warnings, w }))
 }
 
+// M50 — placement.1. Snapping is a setting, on by default: a user aligning
+//      by eye against a snap is fighting the app.
+{
+  const def = L.settingDef('placement.snap')
+  ok('placement.1 placement.snap is a boolean, on by default, in the Shell category',
+    def !== undefined && def.type === 'boolean' && def.default === true && def.category === L.SHELL_CATEGORY &&
+      L.resolveSetting({}, 'placement.snap') === true,
+    JSON.stringify(def))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

@@ -1,5 +1,6 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
+import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
@@ -346,6 +347,25 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // overlay BEFORE running a row's command, so without reopening, the mode
       // would be set on a palette that is already gone.
       palette.openPalette()
+    },
+    tidyPanels: (ids) => {
+      // ONE history entry for the whole arrangement — twenty panels moving is
+      // one gesture to undo, not twenty. Sizes never change (tidyPanels'
+      // contract), so no rect can fall under the floor the validator
+      // rejects; order never changes, so the arrangement keeps its meaning.
+      setPanels((prev) => {
+        const wanted = new Set(ids)
+        const chosen = prev.filter((p) => wanted.has(p.rect.id))
+        if (chosen.length < 2) return prev
+        const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
+        const next = prev.map((p) => {
+          const r = tidied.get(p.rect.id)
+          return r === undefined || (r.x === p.rect.x && r.y === p.rect.y) ? p : { ...p, rect: r }
+        })
+        if (next.every((p, i) => p === prev[i])) return prev
+        commitHistory(next)
+        return next
+      })
     },
     setPanelFontSize: (id, size) => {
       // A COMMIT, one history entry, the rule a drag and a rename follow. The

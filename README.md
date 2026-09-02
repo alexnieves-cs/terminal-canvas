@@ -61,6 +61,10 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   output contains it, newest match first, each a row that flies the camera to
   that panel. The wall-of-terminals answered as a retrieval question — which
   of these twelve printed the stack trace.
+- **Panels that line up.** Drag a panel near another and its edges and
+  centre snap, with a guide line, at a distance that stays the same on screen
+  whatever the zoom; `Tidy` in the palette compacts the selection (or
+  everything) without reordering it, as one undo.
 - **Terminal type you can read from across the room.** A global font size
   (9–24) and a per-panel override from the palette — three commit rows, no
   slider, because a size change is a resize and a resize is a SIGWINCH to the

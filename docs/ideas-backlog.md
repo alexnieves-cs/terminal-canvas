@@ -813,7 +813,7 @@ PTY writer.
   declining it); culling and any bound on link count; and cross-workspace
   links, which are representable — `PanelId` is global — and render as nothing.
 
-## 25. Where a new panel goes — placement, snapping, and tidy
+## 25. Where a new panel goes — placement, snapping, and tidy — DONE, M50 (snapping and tidy; spawn placement landed in M6)
 
 Spawn placement landed in M6 (below); what is still missing is everything that keeps the
 result legible once panels are created and destroyed at will — alignment guides while

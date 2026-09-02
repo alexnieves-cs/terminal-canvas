@@ -265,7 +265,8 @@ const spyActions = () => {
     // milestone's own original 70 — main's credential checks claimed 70-72
     // first) — same reason as restartPanel and openReview above.
     openFile: record('openFile'),
-    setPanelFontSize: record('setPanelFontSize')
+    setPanelFontSize: record('setPanelFontSize'),
+    tidyPanels: record('tidyPanels')
   }
 }
 
@@ -888,6 +889,27 @@ const SETTING = {
       none !== undefined && none.disabledReason !== undefined &&
       sessionless !== undefined && sessionless.disabledReason !== undefined,
     JSON.stringify({ larger, none: none && none.disabledReason, sessionless: sessionless && sessionless.disabledReason, calls: withFocus.actions.calls }))
+}
+// M50 — placement.1. Tidy: on a selection of two or more it arranges the
+//     selection; with fewer selected it arranges everything; on exactly one
+//     panel on the canvas it is disabled with a reason — one panel has
+//     nothing to be tidied against.
+{
+  const rows = (c) => P.buildCommands(c)
+  const two = ctx({ panels: [{ id: 'n1', label: 'a', kind: 'terminal', restartable: false }, { id: 'n2', label: 'b', kind: 'terminal', restartable: false }, { id: 'n3', label: 'c', kind: 'terminal', restartable: false }], selectedIds: ['n1', 'n2'] })
+  const sel = byId(rows(two), 'panel.tidy')
+  if (sel) sel.run()
+  const all = ctx({ panels: [{ id: 'n1', label: 'a', kind: 'terminal', restartable: false }, { id: 'n2', label: 'b', kind: 'terminal', restartable: false }], selectedIds: [] })
+  const everything = byId(rows(all), 'panel.tidy')
+  if (everything) everything.run()
+  const one = byId(rows(ctx({ panels: [{ id: 'n1', label: 'a', kind: 'terminal', restartable: false }], selectedIds: [] })), 'panel.tidy')
+  ok('placement.1 the Tidy row arranges the selection when two or more are selected, everything otherwise, and is disabled on a lone panel',
+    sel !== undefined && sel.disabledReason === undefined && /selection|2 panels/.test(sel.title) &&
+      two.actions.calls.some((c) => c[0] === 'tidyPanels' && JSON.stringify(c[1]) === JSON.stringify(['n1', 'n2'])) &&
+      everything !== undefined && everything.disabledReason === undefined && /everything|all/i.test(everything.title) &&
+      all.actions.calls.some((c) => c[0] === 'tidyPanels' && JSON.stringify(c[1]) === JSON.stringify(['n1', 'n2'])) &&
+      one !== undefined && one.disabledReason !== undefined,
+    JSON.stringify({ sel, everything, one: one && one.disabledReason, calls: two.actions.calls }))
 }
 {
   const off = { ...SETTING, value: false }
