@@ -254,7 +254,7 @@ export function Canvas({
     () => [...displayPanels].sort((a, b) => a.z - b.z).map((p) => p.rect),
     [displayPanels]
   )
-  // M24. Read through a ref because hitOrder is a fresh array on every frame
+  // M35. Read through a ref because hitOrder is a fresh array on every frame
   // of a panel drag, and useLinkDraw's document listeners are installed once.
   // Declared here, immediately after hitOrder itself, rather than beside the
   // other display-time refs further down (displayPanelsRef's neighbourhood):
@@ -1278,7 +1278,7 @@ export function Canvas({
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
 
-  // M24. The drag half of link creation. linkMode (declared above, the armed
+  // M35. The drag half of link creation. linkMode (declared above, the armed
   // click-then-click path the palette and inspector use) is UNCHANGED and
   // stays: it is the keyboard-reachable route, verify:palette 76/77 pin it,
   // and ports are an additional entry point rather than a replacement.
@@ -1305,7 +1305,7 @@ export function Canvas({
       // sites compiles clean and renders ports in the merged view with
       // nothing red anywhere.
       //
-      // Corrected in the M24 final review: an earlier draft of this comment
+      // Corrected in the M35 final review: an earlier draft of this comment
       // claimed that drag would addLink a FOREIGN panel id into the active
       // workspace's record, persisted and then silently pruned by
       // buildLinkSegments. That path is not reachable — addLink (panels.ts,
@@ -1329,7 +1329,7 @@ export function Canvas({
       // while merged, so the gesture cannot be driven through the UI there,
       // and a check that reached past the UI to call onCommit directly would
       // be asserting against a fixture rather than against the feature. See
-      // the M24 task-8 report for the declined check 180.
+      // the M35 task-8 report for the declined check 180.
       if (mergedRef.current) return
       setPanels((current) => {
         const next = addLink(current, from, to)
@@ -2721,7 +2721,7 @@ export function Canvas({
         onClosePanel={paletteActions.closePanel}
         attention={railAttention}
       />
-      {/* M24 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
+      {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
           are hidden below PORT_MIN_SCALE — a 14px dot is under two screen
           pixels at MIN_SCALE (0.1) — but `viewport.scale` changes on every
@@ -2759,7 +2759,7 @@ export function Canvas({
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels. The LAYER itself still takes
-              no pointer events; M24 Task 6 opts each link's own hit stroke
+              no pointer events; M35 Task 6 opts each link's own hit stroke
               and remove badge back in individually so a link can be hovered
               and removed without the layer as a whole ever swallowing a
               click. See LinkLayer.

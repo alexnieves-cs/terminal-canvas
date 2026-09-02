@@ -77,7 +77,7 @@ export interface TerminalPanelProps {
    */
   glow: boolean
   /**
-   * Begins a link drag from one of this panel's four port handles (M24).
+   * Begins a link drag from one of this panel's four port handles (M35).
    * PORT_MIN_SCALE visibility is NOT gated here by a `scale` prop — see
    * PanelPorts.tsx's own comment and the `.canvas--ports-hidden` class in
    * styles.css. Threading `viewport.scale` through this memoized component
@@ -88,7 +88,7 @@ export interface TerminalPanelProps {
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   /**
    * Whether an in-flight link draw would land on THIS panel if released now
-   * (M24). A prop, computed once in Canvas from `linkDraw.state?.target`,
+   * (M35). A prop, computed once in Canvas from `linkDraw.state?.target`,
    * for the same reason `glow`/`version`/`title` all are: memo's shallow
    * compare has to SEE it change, or the ring would stick to whichever panel
    * happened to be the target when this component last rendered for some
@@ -329,7 +329,7 @@ function TerminalPanelImpl({
           }}
         />
       ))}
-      {/* M24. Suppressed under readOnly exactly as the resize handles are —
+      {/* M35. Suppressed under readOnly exactly as the resize handles are —
           that is the merged view, whose geometry is read-only, and addLink
           there would write to a workspace record this canvas does not own.
           Rendered UNCONDITIONALLY otherwise: the PORT_MIN_SCALE cutoff is a

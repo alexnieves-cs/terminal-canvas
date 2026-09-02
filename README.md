@@ -593,6 +593,7 @@ price of not killing something.
 | M9a | The review engine: what each agent changed, in the inspector | ✅ done |
 | M9b | The panel kind: a review node on the canvas | ✅ done |
 | M9c | Commit: a review node's work becomes a commit | ✅ done |
+| M10 | The visual system: a token layer split into structure and theme, later repainted as the "soft machine" | ✅ done |
 | M11 | The navigation grid: Cmd+G, a workspace per cell, release to jump | ✅ done |
 | M12 | Live cwd and live command: a panel says where it actually is | ✅ done |
 | M13 | Links between panels: a directed, labelled line that means something | ✅ done |
@@ -601,43 +602,50 @@ price of not killing something.
 | M16 | File panels: a local file on the canvas, watched | ✅ done |
 | M17 | Token and dollar accounting: what each panel's agent has spent | ✅ done |
 | M18 | Workspace extras: a merged view, a marquee, moving panels between canvases | ✅ done |
-| M19 | Jira context: assigned tickets and ticket-to-session handoff | ✅ done |
+| M19 | Jira context: assigned tickets and ticket-to-session handoff (built as "M17") | ✅ done |
 | M20 | The file tree: a codebase browser rooted on the selected panel | ✅ done |
 | M21 | The agent's toolbox: what each panel's agent can actually do, read-only | ✅ done |
-| M23 | Agent modes: permission mode, effort and model, per panel | ✅ done |
+| M22 | Editable file panels: a save that refuses when the disk has moved (built as "M17") | ✅ done |
+| M23 | Agent modes: permission mode, effort and model, per panel (built as "M18") | ✅ done |
 | M24 | Jira writes: comment on and transition a ticket, from the panel | ✅ done |
+| M25 | Functional links: restart a terminal when a linked one exits, listed in the inspector | ✅ done |
 | M26 | Complete multi-select: additive shift-click and origin-based group drag | ✅ done |
 | M27 | Notes: a place on the canvas to write a sentence, backed by a real `.md` | ✅ done |
-| M24 | Drawing links: port handles, snapping, and bezier edges | ✅ done |
+| M28 | `Canvas.tsx` split into seven hooks, with no behaviour change | ✅ done |
+| M29 | Machine cost: per-panel CPU and memory, and a canvas total (backlog #18) | ✅ done |
+| M30 | Groups: a named, coloured region that owns panel ids (backlog #35) | ✅ done |
+| M31 | Broadcast input: type once into every selected panel (backlog #21) | ✅ done |
+| M32 | Diagnostics overlay, and a scrubbed bundle to hand a maintainer (backlog #75) | ✅ done |
+| M33 | Codex agent launch: a second `AgentKind`, with its own flags | ✅ done |
+| M34 | Space-drag and middle-drag pan (backlog #68; built as "M26") | ✅ done |
+| M35 | Drawing links: port handles, snapping, and bezier edges (built as "M24") | ✅ done |
 
-The table's order is CLAIM order, not build order. M10 (the visual system) is
-claimed by a separate concurrent track and is not yet in this table; M11
-through M20 each landed on their own branch and merged in sequence. A gap in
-the numbers here is a milestone someone else is holding,
-not one that was skipped. Four of those rows carry a number nobody used while
-the work was being done, and the reason is the same one every time. M15, M16,
-M17 and M18 were each built and reviewed entirely as something else — main had
-already claimed that number, and then claimed it again through each earlier
-renumbering, by the time each of them tried to merge — so each moved to the
-next free number on merge rather than at any point during its own development.
-M15 and M16 were both built as "M13": M15 became M15 because both the real M13
-and M14 were already claimed while it was in flight, and M16 became M16 because
-by the time it tried to merge, M13, M14 AND M15 were all claimed. M17 (token
-and dollar accounting) was built and reviewed as "M15" — a different M15
-(subagent nodes) had already claimed that number, and M16 (file panels) claimed
-the next one, both while it was in flight — so it moved to the next free number
-on merge, the identical story one level further down the chain. M18 was built
-as "M13" too and renumbered FOUR times on the way in — past the credential
-boundary, past the subagent nodes, past the file panels, and past the usage
-accounting — because all four reached `main` while it was in flight. The rule
-those renumberings settle is worth stating plainly, since it is the one this
-table is for: **the number belongs to whichever milestone reaches `main`
-first**, and the branch that arrives later renames itself — never the row that
-is already here, which other documents are already citing. M20 (the file
-tree) is the fifth instance: it was built and reviewed entirely as "M13", and
-by the time it tried to merge the real M13 ("links between panels", above)
-had already landed — so it renamed itself to the next free number, which by
-then was 20.
+The table's order is CLAIM order, not build order. Several rows carry a number
+nobody used while the work was being done, and the reason is the same one
+every time: the work was built and reviewed on a branch as "the next number",
+main claimed that number through some other merge while it was in flight, and
+the branch renamed itself on merge. **The number belongs to whichever milestone
+reaches `main` first**, and the branch that arrives later renames itself —
+never the row that is already here, which other documents are already citing.
+M15, M16, M17 and M18 were each renumbered at least once on the way in (M18
+four times); M19, M22 and M23 were built as "M17", "M17" and "M18"; M34 was
+built as "M26" after M26 (multi-select) had already landed; and M35 was built
+as "M24" and merged eleven hours after M24 (Jira writes) had taken that number.
+
+The table was repaired on 2026-09-01 from the git history, and the repair is
+recorded here so nobody re-derives it. Before the repair, M24 appeared on two
+rows (Jira writes and drawing links), and eight shipped milestones had no row
+at all: M10, M22, M25 and M28 were described in `CLAUDE.md` and never listed,
+and five features had merged with no number of any kind — machine cost,
+groups, broadcast input, the diagnostics overlay and the Codex launch — which
+are M29 through M33 here, numbered in the order they reached `main`. One
+milestone-shaped design document, the interface-architecture spec in
+`docs/superpowers/specs/`, still calls itself "M23"; it was written after M23
+(agent modes) had merged and has not been built, so it holds no number in this
+table and takes the next free one if it ever does. Two branches remain
+unmerged in local worktrees (`worktree-m23-interface-architecture`,
+`worktree-m24-github-work-panel`); neither has a row because neither has
+reached `main`.
 
 Unscheduled ideas — none of them a commitment — live in [`docs/ideas-backlog.md`](docs/ideas-backlog.md),
 each recorded next to the load-bearing invariant it would have to survive.

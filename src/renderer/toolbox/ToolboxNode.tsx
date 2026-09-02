@@ -30,7 +30,7 @@ export interface ToolboxNodeProps {
    */
   readOnly?: boolean
   /**
-   * Begins a link drag from one of this node's four port handles (M24,
+   * Begins a link drag from one of this node's four port handles (M35,
    * Task 7). Required on TerminalPanel's own `onBeginLink`'s precedent: an
    * optional prop here compiles clean on a missed wiring and produces "the
    * ring never appears for toolbox nodes" — a feature that reads as
@@ -39,7 +39,7 @@ export interface ToolboxNodeProps {
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   /**
    * Whether an in-flight link draw would land on THIS node if released now
-   * (M24, Task 7 fix round 1). Required on TerminalPanel's own `linkTarget`
+   * (M35, Task 7 fix round 1). Required on TerminalPanel's own `linkTarget`
    * precedent: an optional prop here compiles clean on a missed wiring and
    * produces "the ring never appears for toolbox nodes" — the exact gap a
    * required `onBeginLink` did not itself catch, because a component that
@@ -281,7 +281,7 @@ function ToolboxNodeImpl({
           }}
         />
       ))}
-      {/* M24 (Task 7). The same block TerminalPanel carries, and for the
+      {/* M35 (Task 7). The same block TerminalPanel carries, and for the
           same reasons: `links` lives on PanelBase, so this kind is
           already a valid endpoint and the gesture should reach it too.
           Suppressed under readOnly (the merged view). The PORT_MIN_SCALE

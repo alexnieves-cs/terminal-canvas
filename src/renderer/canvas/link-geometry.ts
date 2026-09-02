@@ -50,7 +50,7 @@ export interface LinkSegment {
    * The cubic's control points, carried so a consumer can find the CURVE's own
    * midpoint without measuring a laid-out path element.
    *
-   * The label and (from M24's task 6) the remove badge both sit at t = 0.5,
+   * The label and (from M35's task 6) the remove badge both sit at t = 0.5,
    * where a cubic reduces to (P0 + 3C1 + 3C2 + P3) / 8 — a closed form needing
    * no DOM. The alternative, getPointAtLength, makes the position depend on a
    * laid-out element and so cannot be computed on the first render at all.
@@ -117,7 +117,7 @@ export function linkAnchors(
   from: WorldRect,
   to: WorldRect,
   /**
-   * RESERVED and unused. M24's design decision 2 chose derived anchors, which
+   * RESERVED and unused. M35's design decision 2 chose derived anchors, which
    * is what kept shared/layout-schema.ts out of that milestone entirely. This
    * parameter exists so the deferred half — an edge that REMEMBERS which side
    * it left from — can be taken later without rewriting this module. Nothing

@@ -28,7 +28,7 @@ export const PORT_MIN_SCALE = 0.4
 const SIDES: LinkSide[] = ['n', 'e', 's', 'w']
 
 /**
- * The four link handles on a panel's border (M24).
+ * The four link handles on a panel's border (M35).
  *
  * Children of .panel, so they ride .world's single translate()/scale() exactly
  * as .panel__resize does — placing them in screen pixels instead would make
@@ -43,7 +43,7 @@ const SIDES: LinkSide[] = ['n', 'e', 's', 'w']
  * non-terminal kinds.
  *
  * A SIXTH KIND NEEDS FOUR EDITS FOR LINKS, NOT ONE. Three of the four are
- * exactly what M24's fix rounds found missing after the first cut, so this is
+ * exactly what M35's fix rounds found missing after the first cut, so this is
  * a measured list rather than a careful one:
  *
  *   1. isTerminalPanel's negation in panels.ts — M16's standing rule, and the
@@ -63,7 +63,7 @@ const SIDES: LinkSide[] = ['n', 'e', 's', 'w']
  *   4. `readOnly={merged}` at the Canvas.tsx call site. `readOnly` is
  *      optional-with-a-default on every non-terminal kind, so omitting it
  *      compiles clean and renders ports in the merged view. Corrected in the
- *      M24 final review: a dropped guard does NOT write a foreign panel id
+ *      M35 final review: a dropped guard does NOT write a foreign panel id
  *      into layout.json — addLink (panels.ts, frozen) refuses unless both
  *      ids are already in the array it is handed, which is always the active
  *      workspace's own panels, never the merged/lane-translated display

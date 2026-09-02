@@ -42,7 +42,7 @@ export interface LinkDraw {
 }
 
 /**
- * The drag that draws a link (M24).
+ * The drag that draws a link (M35).
  *
  * Modelled line for line on usePanelDrag: a depsRef mirroring the callbacks
  * so the document listeners are installed once and never torn down, and

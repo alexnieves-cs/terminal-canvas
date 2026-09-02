@@ -1,4 +1,4 @@
-# M24 — Drawing links: ports, snapping, and a curve that reads as deliberate
+# M35 — Drawing links: ports, snapping, and a curve that reads as deliberate
 
 **Status:** design, approved 2026-08-30. Not yet planned.
 
@@ -46,7 +46,7 @@ Three specific gaps:
 - Links render as a **cubic bezier** leaving each border perpendicular, with a
   solid arrowhead at the target end. (Dropped during implementation: the
   shipped stroke is a uniform `stroke-width: 2px`, never variable-width —
-  found stale at the M24 final review, corrected here rather than implemented
+  found stale at the M35 final review, corrected here rather than implemented
   after the fact, since a taper is new design at the end of a milestone and
   no check anywhere touches width.)
 - **Hover an edge** to reveal a `×` badge at its midpoint that removes it.
