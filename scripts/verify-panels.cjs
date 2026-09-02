@@ -3873,7 +3873,7 @@ app.whenReady().then(async () => {
             stillOpen: document.querySelector('.palette') !== null,
             chipGone: document.querySelector('.palette__scope') === null,
             backAtTop: [...document.querySelectorAll('.palette__row')]
-              .some((r) => r.textContent.includes('Go to'))
+              .some((r) => (r.getAttribute('data-command-id') || '').startsWith('panel.goto.'))
           }
         } catch (e) { return { error: String(e && e.message || e) } } })()`)
         ok('49 a drill-in narrows to its own rows and Escape pops back without closing',
@@ -3927,7 +3927,7 @@ app.whenReady().then(async () => {
             stillOpen: document.querySelector('.palette') !== null,
             chipGone: document.querySelector('.palette__scope') === null,
             backAtTop: [...document.querySelectorAll('.palette__row')]
-              .some((r) => r.textContent.includes('Go to'))
+              .some((r) => (r.getAttribute('data-command-id') || '').startsWith('panel.goto.'))
           }
         } catch (e) { return { error: String(e && e.message || e) } } })()`)
         ok('49b ArrowRight enters a drill-in and ArrowLeft pops back without closing',
@@ -15254,9 +15254,11 @@ app.whenReady().then(async () => {
           const rail = document.querySelector('.rail-row[data-rail-row="${id}"] .rail-row__tail')
           const pill = pf && pf.querySelector('[data-state-word]')
           const card = pf && pf.querySelector('.panel__card-state')
-          const edge = pf && getComputedStyle(pf, '::before')
+          // The edge is the frame's left BORDER (a border, not an overlay,
+          // so the terminal's first cell is never painted over).
+          const edge = pf && getComputedStyle(pf)
           return { tone: pf && pf.getAttribute('data-tone'), rail: rail && rail.textContent, pill: pill && pill.textContent, card: card && card.textContent,
-            edgeBg: edge && edge.backgroundColor, edgeImg: edge && edge.backgroundImage, edgeW: edge && edge.width,
+            edgeBg: edge && edge.borderLeftColor, edgeImg: edge && edge.borderLeftStyle, edgeW: edge && edge.borderLeftWidth,
             amber: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(),
             lineStrong: getComputedStyle(document.documentElement).getPropertyValue('--line-strong').trim() }
         })()`)
@@ -15282,7 +15284,11 @@ app.whenReady().then(async () => {
           const r = s.getBoundingClientRect(); s.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
         await settle()
         ptyManager.write('svA', String.fromCharCode(7) + String.fromCharCode(13))
-        const needs = await waitUntil(async () => { const w = await words('svA'); return w.rail === 'needs you' ? w : false }, 6000)
+        const needsFirst = await waitUntil(async () => { const w = await words('svA'); return w.rail === 'needs you' ? w : false }, 6000)
+        // The frame's border-color eases over --dur-2; read the edge after
+        // the transition has landed, not mid-tween.
+        await sleep(400)
+        const needs = needsFirst === false ? false : await words('svA')
         // Re-select svA so the inspector's label is read for the same panel.
         await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="svA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
         await settle()

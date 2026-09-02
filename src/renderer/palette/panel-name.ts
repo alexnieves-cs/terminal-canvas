@@ -20,7 +20,13 @@ export function shortPath(path: string, keep = 2): string {
   const trimmed = path.replace(/\/+$/, '')
   const parts = trimmed.split('/').filter((s) => s !== '')
   if (parts.length <= keep) return trimmed
-  return `…/${parts.slice(-keep).join('/')}`
+  // The LEFTMOST kept segment must not be a one-letter fragment: `…/T/tc
+  // shot` opens on macOS's temp `T` and says nothing. Drop it rather than
+  // reach past it — the segment before `T` is a 30-character hash, and the
+  // repository name is what has to survive.
+  let n = keep
+  while (n > 1 && parts[parts.length - n].length < 2) n -= 1
+  return `…/${parts.slice(-n).join('/')}`
 }
 
 /** What a row leads with: the user's title, else the honest name without path or id. */

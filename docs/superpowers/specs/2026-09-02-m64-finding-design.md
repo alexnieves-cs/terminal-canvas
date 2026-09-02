@@ -19,18 +19,21 @@ five; the author named "finding a panel" as one of the three things they touch c
 
 ### The Go-to row
 
-`Go to <name>` where `<name>` is `nameOf(panel)`: the user's title if set, else the honest
+The title is `<name>` — no `Go to` prefix (amended after the critic: ten rows under a
+PANELS heading repeating a verb push identity right; the verb lives in the footer's `↵ go
+to` and in the row's searchText, so typing `go to` still lists every panel) — where `<name>`
+is `panelName(panel)`: the user's title if set, else the honest
 label without its path or id — `sh`, `claude`, `review: claude — api`, `server.ts`,
-`plan.md`, `toolbox: repo`, `Jira tickets`. The row's hint (right column) is the **state
-word** in its tone followed by the **path**, left-truncated to its last two segments with a
-leading `…/` so the repository name survives (`idle · …/fixtures/repo`). A sessionless kind
-shows its kind word and, for a file, its directory.
+`plan.md`, `toolbox: repo`, `Jira tickets`. The row then carries the **state word** in its
+own column, in its tone, rendered LIVE by the palette from the row's `state` input and the
+agent-state store (the rows are frozen on open; the word is not), and the **path** as its
+hint, left-truncated so the cut lands on a real segment and the repository name survives
+(`…/fixtures/repo`). A sessionless kind shows no state word and, for a file, its directory.
+Title, path and hit lines are in the mono face.
 
 `PanelRow` gains `name`, `path` (the spec cwd, the file's directory, the toolbox cwd; absent
-for a review or Jira panel) and `state: StateInput`; the row's word is computed at build time
-from `getAgentState(id)` — the palette's rows are frozen while it is open by design, and a
-state that moved while the overlay was up is the same accepted staleness `restartable`
-already has. The id is no longer in the row's text; `verify:panels` 39 selects the row by
+for a review or Jira panel), `state: StateInput` and `stateWord` (the word at build time,
+used only as the `state:` query's key and order). The id is no longer in the row's text; `verify:panels` 39 selects the row by
 `data-command-id` instead of by id-in-text.
 
 ### Matching
@@ -49,7 +52,8 @@ the rest (`state:needs`, `state:idle`, `state:asleep`) and orders them needs-you
 working, idle, starting, exited, not started, asleep. With nothing after the colon it lists
 every panel in that order — the "who needs me" list in four keystrokes. Implemented in
 `filterCommands` over a `stateWord`/`statePriority` the Go-to rows carry, so it is plain-node
-checked; the footer names the prefix while it is active.
+checked. (A footer hint for the prefix was promised here and struck: the rows' own state
+column says what the prefix did.)
 
 ### Search hits and the empty state
 
@@ -73,8 +77,8 @@ before. The empty state is one row: `No matches for “term”`, no duplicated h
 
 ## Checks
 
-- `verify:palette find.1` — a Go-to row's title is `Go to <name>`, its hint carries the word
-  and the left-truncated path, and neither contains the id; `find.2` — `pathText` matches
+- `verify:palette find.1` — a Go-to row's title is `<name>`, its hint is the left-truncated
+  path, it carries its state input, and neither contains the id; `find.2` — `pathText` matches
   only contiguously (`repo` finds, `rpo` does not, and the title still fuzzy-matches);
   `find.3` — `state:needs` lists only needs-you rows and `state:` orders by priority;
   `find.4` — the search empty row names the term once and a hit row's title is the name.

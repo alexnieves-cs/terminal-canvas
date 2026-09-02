@@ -663,20 +663,18 @@ body {
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
 [data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
 
-/* THE STATE EDGE. A 3px column on every frame's left, in the tone — the
+/* THE STATE EDGE. A 3px left BORDER on every frame, in the tone — the
    app's one signature mark, legible at 100% and at 10%, in both themes and
    in a thumbnail. On the frame rather than the card so it survives the tier
-   change; the card's own left rule (below) is retired in its favour. */
-.pf::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--tone);
-  border-radius: var(--r-lg) 0 0 var(--r-lg);
-  pointer-events: none;
-  z-index: 1;
-}
+   change; the card's own left rule (below) is retired in its favour. A
+   border, not an overlaid pseudo-element: the first cut painted a 3px
+   column OVER the body and ate the terminal's first cell (`$ claude` read
+   `aiting for input`); a border is outside the content box, so the slot
+   xterm fits against is exactly the box it sees. */
+/* The rule itself sits at the END of the panel block (search "STATE EDGE,
+   the last word"): .panel's own border shorthand and every .panel--agent-*
+   and .panel--selected border-color rule are declared later than this
+   comment and would reset the left side, as the first cut found. */
 
 .rail-row__dot {
   flex: none;
@@ -1694,6 +1692,19 @@ body {
 .panel--selected.panel--agent-wants-you {
   border-color: var(--amber);
   box-shadow: 0 0 0 2px var(--amber), var(--e-3);
+}
+
+/* STATE EDGE, the last word (M63/M64). Declared AFTER every rule above that
+   writes `border-color` — .panel's shorthand, the five .panel--agent-*
+   tints, the selected combinations — so the LEFT side is always the tone.
+   Specificity (0,2,0) ties the selected combinations; source order decides,
+   and this is why it must stay the last border rule in the file. A wants-
+   you panel's left edge is amber either way; a selected idle panel reads
+   iris on three sides and green on the left: selection is the ring, state
+   is the edge. */
+.panel.pf {
+  border-left-width: 3px;
+  border-left-color: var(--tone);
 }
 
 .panel__chrome {
@@ -2854,6 +2865,22 @@ body {
   color: var(--iris);
   font-weight: 600;
 }
+
+/* M64. A row that names a thing the machine knows — a panel, a search hit —
+   quotes the well: mono title and mono hint (brief §5, Type). The hint is
+   the path or the matching line, anchored LEFT in its column so ten paths
+   line up as a column rather than ragging on their state word's width. */
+.palette__row--mono .palette__title { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 600; }
+.palette__row--mono .palette__hint { font-family: var(--font-mono); font-size: var(--t-sm); text-align: left; width: 42%; max-width: 42%; }
+/* The state word: its own column, fixed width, in its tone. */
+.palette__state {
+  flex: none;
+  width: 7em;
+  font-size: var(--t-sm);
+  font-family: var(--font-mono);
+  color: var(--tone);
+}
+.palette__state[data-tone="asleep"], .palette__state[data-tone="none"], .palette__state[data-tone="starting"], .palette__state[data-tone="kind"] { color: var(--fg-3); }
 
 .palette__hint {
   flex: none;

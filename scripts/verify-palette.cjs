@@ -1962,18 +1962,24 @@ const WS = [
 {
   const st = (kind, status, dormant) => ({ kind, status, dormant })
   const panels = [
-    { id: 'p1', label: 'sh — /Users/me/work/api (p1)', kind: 'terminal', restartable: true, agent: false, name: 'sh', path: '/Users/me/work/api', state: st('terminal', { kind: 'running', pid: 1, command: 'sh', cwd: '/x', reattached: false }, false), stateWord: 'needs you', statePriority: 0 },
-    { id: 'p2', label: 'claude — /Users/me/work/web (p2)', kind: 'terminal', restartable: true, agent: true, name: 'claude', title: 'web front', path: '/Users/me/work/web', state: st('terminal', { kind: 'running', pid: 2, command: 'claude', cwd: '/x', reattached: false }, false), stateWord: 'idle', statePriority: 2 },
-    { id: 'p3', label: 'sh — /Users/me/work/api (p3)', kind: 'terminal', restartable: false, agent: false, name: 'sh', path: '/Users/me/work/api', state: st('terminal', undefined, true), stateWord: 'asleep', statePriority: 6 },
-    { id: 'r1', label: 'review: claude (r1)', kind: 'review', restartable: false, agent: false, name: 'review: claude', state: st('review', undefined, false), stateWord: 'review', statePriority: 7 }
+    // No statePriority on the rows: the order must come from the vocabulary's
+    // own statePriority(), not from numbers a fixture hands over.
+    { id: 'p1', label: 'sh — /Users/me/work/api (p1)', kind: 'terminal', restartable: true, agent: false, name: 'sh', path: '/Users/me/work/api', state: st('terminal', { kind: 'running', pid: 1, command: 'sh', cwd: '/x', reattached: false }, false), stateWord: 'needs you' },
+    { id: 'p2', label: 'claude — /Users/me/work/web (p2)', kind: 'terminal', restartable: true, agent: true, name: 'claude', title: 'web front', path: '/Users/me/work/web', state: st('terminal', { kind: 'running', pid: 2, command: 'claude', cwd: '/x', reattached: false }, false), stateWord: 'idle' },
+    { id: 'p3', label: 'sh — /Users/me/work/api (p3)', kind: 'terminal', restartable: false, agent: false, name: 'sh', path: '/Users/me/work/api', state: st('terminal', undefined, true), stateWord: 'asleep' },
+    { id: 'r1', label: 'review: claude (r1)', kind: 'review', restartable: false, agent: false, name: 'review: claude', state: st('review', undefined, false), stateWord: 'review' }
   ]
   const rows = P.buildCommands(ctx({ panels }))
   const g1 = byId(rows, 'panel.goto.p1'), g2 = byId(rows, 'panel.goto.p2'), g3 = byId(rows, 'panel.goto.p3'), gr = byId(rows, 'panel.goto.r1')
-  ok('find.1 a Go-to row leads with the name, hints the state word and a left-truncated path, and never shows the id',
-    g1 && g1.title === 'Go to sh' && g1.subtitle === 'needs you · …/work/api' && g1.pathText === '/Users/me/work/api' &&
-      g2 && g2.title === 'Go to web front' && g2.subtitle === 'idle · …/work/web' &&
-      g3 && g3.subtitle === 'asleep · …/work/api' &&
-      gr && gr.title === 'Go to review: claude' && gr.subtitle === 'review' &&
+  // The row's TITLE is the name (no verb prefix — the footer and searchText
+  // carry "go to"), its hint is the left-truncated path alone, and the state
+  // rides as `state` for the palette to render live in its tone.
+  ok('find.1 a Go-to row leads with the name, hints the left-truncated path, carries its state input, and never shows the id',
+    g1 && g1.title === 'sh' && g1.subtitle === '…/work/api' && g1.pathText === '/Users/me/work/api' && g1.state && g1.state.id === 'p1' && g1.mono === true &&
+      g2 && g2.title === 'web front' && g2.subtitle === '…/work/web' &&
+      g3 && g3.subtitle === '…/work/api' && g3.state.input.dormant === true &&
+      gr && gr.title === 'review: claude' && gr.subtitle === undefined && gr.state.input.kind === 'review' &&
+      P.filterCommands(rows, 'go to').filter((r) => r.id.startsWith('panel.goto.')).length === 4 &&
       [g1, g2, g3, gr].every((r) => !/\(p\d\)|\(r1\)/.test(r.title + (r.subtitle ?? ''))),
     JSON.stringify([g1, g2, g3, gr].map((r) => r && [r.title, r.subtitle])))
 

@@ -793,6 +793,7 @@ price of not killing something.
 | M61 | The visual loop: `npm run shot`, a fresh-context critic, and three post-1.0 defects fixed with checks | ✅ done |
 | M62 | The design brief and the 1.x scope decision — documents only | ✅ done |
 | M63 | The state vocabulary: one word and one tone per panel, the state edge, iris selection | ✅ done |
+| M64 | Finding a panel: rows lead with the name, `state:` queries, contiguous path matching, the empty search names its term | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

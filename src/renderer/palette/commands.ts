@@ -12,7 +12,7 @@ import type { SettingValue } from '@shared/settings-schema'
 import type { EnvReport } from '@shared/env-report'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import { shortPath } from './panel-name'
-import { statePriority } from '@renderer/panels/panel-state'
+import { statePriority, type StateInput } from '@renderer/panels/panel-state'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
 // of credential-holding services, and credential-schema.ts imports nothing —
@@ -76,8 +76,10 @@ export interface PanelRow {
    */
   name?: string
   path?: string
+  /** The vocabulary's input, so the row can render the word live in its tone. */
+  state?: StateInput
+  /** The word at build time — the `state:` query's key and order. */
   stateWord?: string
-  statePriority?: number
   /**
    * isRestartable(status) — computed in Canvas, where the registry is, and
    * passed in as plain data like everything else this module reads.
@@ -463,7 +465,7 @@ export interface PaletteContext {
 
 // Reasons are exported so the checks assert the same strings the user reads,
 // rather than a paraphrase that can drift away from the UI.
-export const REASON_NO_FOCUS = 'no focused panel'
+export const REASON_NO_FOCUS = 'click into a panel first'
 export const REASON_NO_SELECTION = 'select some text in a panel first'
 export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
 export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
@@ -638,15 +640,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // typing "group" no longer lights g…o…u…p across /private/var. The
     // user's title and the name are the searchText, so a title still finds
     // its row.
+    // No "Go to" prefix (M64, after the critic): ten rows under a PANELS
+    // heading repeating the verb pushed identity six characters right. The
+    // verb lives in the footer ("↵ go to") and in searchText, so typing
+    // "go to" still lists every panel. The state word is rendered LIVE by
+    // the palette from `state` + the store, in its tone; the build-time
+    // `stateWord` is only the `state:` query's key.
     const name = panel.title ?? panel.name ?? panel.label
-    const hint = [panel.stateWord, panel.path === undefined ? undefined : shortPath(panel.path)].filter((x): x is string => x !== undefined).join(' · ')
     out.push({
       id: `panel.goto.${panel.id}`,
-      title: `Go to ${name}`,
-      ...(hint === '' ? {} : { subtitle: hint }),
-      ...(panel.path === undefined ? {} : { pathText: panel.path }),
-      ...(panel.stateWord === undefined ? {} : { stateWord: panel.stateWord, statePriority: panel.statePriority ?? statePriority(panel.stateWord) }),
-      searchText: panel.title !== undefined ? `${panel.title} ${panel.name ?? ''}` : (panel.name ?? ''),
+      title: name,
+      mono: true,
+      ...(panel.path === undefined ? {} : { subtitle: shortPath(panel.path), pathText: panel.path }),
+      ...(panel.state === undefined ? {} : { state: { id: panel.id, input: panel.state } }),
+      ...(panel.stateWord === undefined ? {} : { stateWord: panel.stateWord, statePriority: statePriority(panel.stateWord) }),
+      searchText: `go to ${panel.title !== undefined ? `${panel.title} ${panel.name ?? ''}` : (panel.name ?? '')}`,
       group: 'panel',
       run: () => actions.goToPanel(panel.id)
     })
@@ -1598,6 +1606,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         out.push({
           id: `search.hit.${hit.panelId}.${hit.lineIndex}`,
           title: labelOf.get(hit.panelId) ?? hit.panelId,
+          mono: true,
           // The matched line, and the haystack: the palette's own filter runs
           // over title+subtitle+searchText, so typing narrows the hits too.
           subtitle: hit.line,

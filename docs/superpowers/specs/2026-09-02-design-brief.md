@@ -130,6 +130,9 @@ Two faces, unchanged in family, changed in role.
     pill and the far-zoom block, nowhere else.
   - **Iris is the only interface accent.** The focused panel's ring moves from `--blue` to
     `--iris`; group frame colours stay theirs (they are user-chosen labels, not state).
+  - **Red has one second meaning, stated (amended 2026-09-02 after M64): a destructive verb
+    in the palette.** It never appears on a panel with that meaning, so a red frame is
+    always `exited`.
 - **The ground loses the dot grid.** A dotted grid is a whiteboard's promise that you will
   draw; this canvas is for reading. The ground is flat `--s-0`; the sense of panning comes
   from the panels moving, the HUD's coordinates, and the minimap. (Overrules M45's "dot grid

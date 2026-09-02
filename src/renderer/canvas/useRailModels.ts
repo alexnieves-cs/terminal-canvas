@@ -5,7 +5,7 @@ import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
 import { isFilePanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
-import { panelState, statePriority } from '@renderer/panels/panel-state'
+import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { panelName, panelPath } from '@renderer/palette/panel-name'
 import type { PanelRow } from '@renderer/palette/commands'
@@ -55,18 +55,20 @@ export interface RailModelsDeps {
  * with the freeze silently removed.
  */
 /**
- * M64. The Go-to row's name, path and state word. Computed once when the
- * palette opens, like `restartable`: the row's state may go stale while the
- * overlay is up, which is the same accepted trade — recomputing on
- * registry.version() would re-seat the selected row under the user.
+ * M64. The Go-to row's name, path and state input. Built when the palette
+ * opens (this memo is keyed on palette.open, like `restartable`); the WORD
+ * the row shows is rendered live by the palette from `state` and the store,
+ * so a panel that flips to needs-you while the overlay is up still reads
+ * needs-you. Only the `state:` query's ORDER uses the build-time word.
  */
-function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>): { name: string; path?: string; stateWord: string; statePriority: number } {
+function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>): { name: string; path?: string; state: StateInput; stateWord: string } {
   const status = registry.get(p.rect.id)?.status
   const resolved = status?.kind === 'running' ? status.command : undefined
   const tailKind = isFilePanel(p) && p.source.prose === true ? 'note' : p.kind
-  const { word } = panelState({ kind: tailKind, status, dormant: isTerminalPanel(p) && dormantIds.has(p.rect.id) }, getAgentState(p.rect.id))
+  const state: StateInput = { kind: tailKind, status, dormant: isTerminalPanel(p) && dormantIds.has(p.rect.id) }
+  const { word } = panelState(state, getAgentState(p.rect.id))
   const path = panelPath(p)
-  return { name: panelName(p, resolved), ...(path === undefined ? {} : { path }), stateWord: word, statePriority: statePriority(word) }
+  return { name: panelName(p, resolved), ...(path === undefined ? {} : { path }), state, stateWord: word }
 }
 
 function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedAt: Record<string, number>): Panel[] {

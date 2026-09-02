@@ -1,3 +1,4 @@
+import type { StateInput } from '@renderer/panels/panel-state'
 import { fuzzyMatch } from './fuzzy'
 
 /**
@@ -97,6 +98,10 @@ export interface Command {
   /** M64. The Go-to row's state word and its `state:` order (needs-you first). */
   stateWord?: string
   statePriority?: number
+  /** M64. The panel whose state the row renders LIVE, in its tone. */
+  state?: { id: string; input: StateInput }
+  /** M64. Title and hint in the mono face: the row names a thing the machine knows. */
+  mono?: true
   /**
    * A transient count the VIEW composes into what it renders — never baked
    * into `title`. A workspace's waiting count is the case today: it changes
