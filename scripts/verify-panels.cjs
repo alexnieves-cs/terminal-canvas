@@ -5236,19 +5236,19 @@ app.whenReady().then(async () => {
       const geom = await wc.executeJavaScript(`(() => {
         const shell = document.querySelector('.shell')
         const canvas = document.querySelector('.canvas')
-        const tree = document.querySelector('.shell__tree')
+        // M46: dock | navigator | canvas | context. The identity is still
+        // the clause that discriminates — an element pushed out of view
+        // reports its width exactly as a visible one does, so every looser
+        // bound survives the min-width:auto failure this check exists for.
+        const dock = document.querySelector('.shell__dock')
         const rail = document.querySelector('.shell__rail')
         const inspector = document.querySelector('.shell__inspector')
-        if (!shell || !canvas || !tree || !rail || !inspector) return null
+        if (!shell || !canvas || !dock || !rail || !inspector) return null
         const c = canvas.getBoundingClientRect()
         return {
           canvasWidth: c.width,
           windowWidth: window.innerWidth,
-          // M20: a THIRD inset region. The identity is still the clause that
-          // discriminates — an element pushed out of view reports its width
-          // exactly as a visible one does, so every looser bound survives the
-          // min-width:auto failure this check exists for.
-          treeWidth: tree.getBoundingClientRect().width,
+          dockWidth: dock.getBoundingClientRect().width,
           railWidth: rail.getBoundingClientRect().width,
           inspectorWidth: inspector.getBoundingClientRect().width,
           canvasLeft: c.left
@@ -5257,9 +5257,9 @@ app.whenReady().then(async () => {
       const live = await wc.executeJavaScript(
         `document.querySelectorAll('.panel .xterm').length`)
       ok('73 the shell frame insets the canvas and leaves a panel promoted',
-        geom !== null && geom.treeWidth > 15 && geom.railWidth > 40 && geom.inspectorWidth > 40 &&
+        geom !== null && geom.dockWidth > 40 && geom.railWidth > 40 &&
           geom.canvasWidth < geom.windowWidth - 80 &&
-          geom.canvasLeft >= geom.treeWidth + geom.railWidth - 1 &&
+          geom.canvasLeft >= geom.dockWidth + geom.railWidth - 1 &&
           // The EXACT inset, and it is the clause that does the discriminating.
           // Every bound above it is loose enough to survive the one CSS failure
           // the frame's own comment names: drop `min-width: 0` from the canvas
@@ -5280,7 +5280,7 @@ app.whenReady().then(async () => {
           // 22px strip rather than the full 220px column — measured, not
           // assumed, the same rule check 125 states for its own open read.
           Math.abs(geom.canvasWidth -
-            (geom.windowWidth - geom.treeWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
+            (geom.windowWidth - geom.dockWidth - geom.railWidth - geom.inspectorWidth)) <= 1 &&
           live > 0,
         JSON.stringify(geom) + ` live=${live}`)
       // The state this check LEAVES BEHIND, in the same spirit as 71's own
@@ -5578,19 +5578,19 @@ app.whenReady().then(async () => {
     {
       const start = await wc.executeJavaScript(`window.__m4aScale()`)
       await wc.executeJavaScript(`
-        document.querySelector('.shell__zoom-in').dispatchEvent(
+        document.querySelector('[data-hud-zoom-in]')?.dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
       await sleep(120)
       const zoomedIn = await wc.executeJavaScript(`window.__m4aScale()`)
       await wc.executeJavaScript(`
-        document.querySelector('.shell__zoom-out').dispatchEvent(
+        document.querySelector('[data-hud-zoom-out]')?.dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
       await sleep(120)
       const backOut = await wc.executeJavaScript(`window.__m4aScale()`)
       await wc.executeJavaScript(`
-        document.querySelector('.shell__fit').dispatchEvent(
+        document.querySelector('[data-hud-fit]')?.dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
       await sleep(200)
@@ -5599,7 +5599,7 @@ app.whenReady().then(async () => {
       // between the two clicks, so a real fitAll must land on exactly the
       // scale it just landed on — and a stepper cannot.
       await wc.executeJavaScript(`
-        document.querySelector('.shell__fit').dispatchEvent(
+        document.querySelector('[data-hud-fit]')?.dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
       await sleep(200)
@@ -6830,6 +6830,12 @@ app.whenReady().then(async () => {
     const activeWorkspaceId = () => wc.executeJavaScript(
       `window.canvas.workspace.list().then((r) => (r.find((w) => w.active) || {}).id)`)
 
+    // M46: the navigator shows ONE pane, and these four checks read the
+    // Workspaces list — so show it, the way a user would, and put Panels back
+    // after 96 for everything below.
+    const dockTo = (name) => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="' + ${JSON.stringify(name)} + '"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+    await dockTo('workspaces'); await settle()
+
     // 95. SWITCHING FROM THE RAIL IS THE SAME SWITCH, WITH THE SAME PIDS.
     //     Check 64 makes this claim for the palette's switcher and explains
     //     why the pid is the only observable that can make it: every other
@@ -7027,6 +7033,7 @@ app.whenReady().then(async () => {
       ok('96 a hidden workspace with a waiting panel says so on its rail row',
         tail !== null && tail.includes('1 waiting'), `tail=${JSON.stringify(tail)}`)
     }
+    await dockTo('panels'); await settle()
 
     // 97. A WAITING PANEL APPEARS IN THE QUEUE, AND CLICKING IT NAVIGATES
     //     WITHOUT ACKNOWLEDGING.
@@ -7072,6 +7079,9 @@ app.whenReady().then(async () => {
       // since this one is block-scoped to check 97.
       const attentionRowSel =
         `.rail-attention[data-rail-attention=${JSON.stringify(attentionPanelId)}]`
+      // M46: the rows are in the dock's Attention popover, opened by its icon.
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await settle()
       const rowAppeared = await waitUntil(() => wc.executeJavaScript(
         `document.querySelector(${JSON.stringify(attentionRowSel)}) !== null`), 4000)
 
@@ -7159,10 +7169,16 @@ app.whenReady().then(async () => {
     // section header with a void under it reads as a broken list rather than
     // as "nobody needs you".
     {
+      // M46: open the Attention popover first — it is where the list lives —
+      // and close it again with Escape so nothing below finds it up.
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await settle()
       const empty = await wc.executeJavaScript(`(() => {
         const el = document.querySelector('.rail-list--attention .rail-empty')
         return el ? el.textContent : null
       })()`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))`)
+      await settle()
       ok('98b an empty attention queue says so rather than rendering nothing',
         typeof empty === 'string' && empty.trim().length > 0, `empty=${JSON.stringify(empty)}`)
     }
@@ -9519,7 +9535,8 @@ app.whenReady().then(async () => {
         // Open the column. It defaults CLOSED (files.treeOpen's schema
         // default), so every check below needs this, and check 73's own
         // collapsed measurement ran long before this block and is unaffected.
-        if (await readTreeCollapsed()) { await dispatchClick('.shell__tree-toggle'); await settle() }
+        // M46: the tree is the Files NAVIGATOR pane; its dock icon shows it.
+        if (await readTreeCollapsed()) { await dispatchClick('[data-dock="files"]'); await settle() }
 
         // 156. The exact FOUR-column inset, tree OPEN this time — check 73's
         //      argument with a third region, complementing its collapsed
@@ -9533,18 +9550,22 @@ app.whenReady().then(async () => {
           const m = await wc.executeJavaScript(`(() => {
             const canvas = document.querySelector('.canvas')
             const tree = document.querySelector('.shell__tree')
+            const dock = document.querySelector('.shell__dock')
             const rail = document.querySelector('.shell__rail')
             const inspector = document.querySelector('.shell__inspector')
-            if (!canvas || !tree || !rail || !inspector) return null
+            if (!canvas || !tree || !dock || !rail || !inspector) return null
             return {
               canvasWidth: canvas.getBoundingClientRect().width,
               windowWidth: window.innerWidth,
               treeWidth: tree.getBoundingClientRect().width,
+              dockWidth: dock.getBoundingClientRect().width,
               railWidth: rail.getBoundingClientRect().width,
               inspectorWidth: inspector.getBoundingClientRect().width
             }
           })()`)
-          const expected = m ? m.windowWidth - m.treeWidth - m.railWidth - m.inspectorWidth : NaN
+          // M46: the tree is INSIDE the navigator column, so it is not a
+          // fourth term — dock + navigator + context is the whole inset.
+          const expected = m ? m.windowWidth - m.dockWidth - m.railWidth - m.inspectorWidth : NaN
           // The xterm clause is not tautological the way "the canvas got
           // narrower" is: a smaller canvas is a smaller cull region, and a
           // frame that quietly demoted the panel the user was looking at
@@ -9731,7 +9752,16 @@ app.whenReady().then(async () => {
         {
           const id2 = await spawnAt(treeDir2)
           if (id2) await waitUntil(async () => (await sessionMap(wc)).has(id2), 8000)
-          const switched = id2 ? await dispatchClick(`[data-rail-row="${id2}"] .rail-row__main`) : false
+          // M46: the rail rows are the Panels pane's; Files is showing. Select
+          // through Panels and come back — the one-pane cost, paid where the
+          // user would pay it.
+          const viaPanels = async (fn) => {
+            await dispatchClick('[data-dock="panels"]'); await settle()
+            const r = await fn()
+            await dispatchClick('[data-dock="files"]'); await settle()
+            return r
+          }
+          const switched = id2 ? await viaPanels(() => dispatchClick(`[data-rail-row="${id2}"] .rail-row__main`)) : false
           await settle()
           const read = await wc.executeJavaScript(`(() => {
             const sel = document.querySelector('.panel--selected')
@@ -9871,7 +9901,11 @@ app.whenReady().then(async () => {
           const id3 = await spawnAt(treeDir3)
           if (id3) await waitUntil(async () => (await sessionMap(wc)).has(id3), 8000)
           const switched3 = id3
-            ? await dispatchClick(`[data-rail-row="${id3}"] .rail-row__main`)
+            ? await (async () => {
+                await dispatchClick('[data-dock="panels"]'); await settle()
+                const r = await dispatchClick(`[data-rail-row="${id3}"] .rail-row__main`)
+                await dispatchClick('[data-dock="files"]'); await settle()
+                return r })()
             : false
           await settle()
           if (switched3) {
@@ -9922,6 +9956,12 @@ app.whenReady().then(async () => {
         try { rmSync(treeDir2, { recursive: true, force: true }) } catch { /* best effort */ }
       }
     }
+
+    // M46: the tree block above leaves the Files pane showing, and the
+    // navigator shows ONE pane — so every [data-rail-row] read below would
+    // find nothing. Back to Panels, the way a user would: the dock icon.
+    await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+    await settle()
 
     // ---------------------------------------------------------------------
     // 142-144. M18: THE RUBBER-BAND MARQUEE, in a real renderer.
@@ -10181,8 +10221,46 @@ app.whenReady().then(async () => {
       // length — so an unfindable target degrades into clicking the first
       // slot, which lets this check fail on its own terms with its own
       // message instead of taking the rest of the suite down with it.
-      const focusedBefore = focusTarget144
-        ? await clickPanelAt(focusTarget144.x, focusTarget144.y)
+      // M46: the shell changed the canvas's width and so the tiering
+      // fixture underneath this check — with no live slot on screen, WAKE a
+      // visible card with a real click (the hit test needs real coordinates)
+      // and look again. The claim is about focus release; the fixture just
+      // has to put a live, focusable panel under the cursor first.
+      let target144 = focusTarget144
+      let framed144 = null
+      if (!target144) {
+        // M46: the shell's width changed which panels the cull region holds,
+        // and with LIVE_BUDGET already spent on live panels just off screen
+        // a card clicked here is woken but never promoted (its slot never
+        // appears — watched, not assumed). So FRAME a panel that is already
+        // live, through its rail row (goToPanel: frame, select, raise, never
+        // wake), and look again. The claim is about focus release; the
+        // fixture only has to put a live, focusable panel under the cursor.
+        const liveIds = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].filter((p) => p.querySelector('.xterm')).map((p) => p.dataset.panelId)`)
+        for (const id of liveIds) {
+          const rowed = await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row=' + ${JSON.stringify(JSON.stringify(id))} + '] .rail-row__main'); if (!row) return false; row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+          if (!rowed) continue
+          await settle()
+          target144 = await wc.executeJavaScript(`(() => {
+            const s = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] .panel__slot')
+            if (!s) return null
+            const r = s.getBoundingClientRect()
+            const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+            const el = document.elementFromPoint(x, y)
+            return el && el.closest('.panel__slot') === s ? { id: ${JSON.stringify(id)}, x, y, framed: true } : null })()`)
+          if (target144) { framed144 = id; break }
+        }
+      }
+      const diag144 = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
+        const cx = Math.round(b.left + b.width / 2), cy = Math.round(b.top + b.height / 2)
+        const el = document.elementFromPoint(cx, cy)
+        return { scale: window.__m4aScale(), slots: document.querySelectorAll('.panel__slot').length,
+          cards: document.querySelectorAll('.panel__card').length, xterms: document.querySelectorAll('.panel .xterm').length,
+          centre: el ? (el.tagName + '.' + String(el.className).slice(0, 40)) : null, canvas: { l: b.left, t: b.top, w: b.width, h: b.height },
+          shell: document.querySelector('.shell').className, overlays: [...document.querySelectorAll('.palette, .navgrid, .diagnostics-overlay, .dock__popover')].map((o) => o.className) } })()`)
+      const focusedBefore = target144
+        ? await clickPanelAt(target144.x, target144.y)
         : await clickPanelBody('.panel__slot')
       const insideBefore = await wc.executeJavaScript(
         `!!(document.activeElement && document.activeElement.closest('.panel'))`)
@@ -10209,7 +10287,8 @@ app.whenReady().then(async () => {
       }))()`)
       ok('144 a marquee releases focus, the job the background click already had',
         insideBefore === true && released.inPanel === false && released.grid === null,
-        `focused before=${insideBefore} (${focusedBefore.active}), after inPanel=${released.inPanel} ` +
+        `focused before=${insideBefore} (${focusedBefore.active}, reachedXterm=${focusedBefore.reachedXterm}, ` +
+          `target=${JSON.stringify(target144)} framed=${framed144} diag=${JSON.stringify(diag144)}), after inPanel=${released.inPanel} ` +
           `grid=${JSON.stringify(released.grid)}`)
     }
 
@@ -10325,8 +10404,12 @@ app.whenReady().then(async () => {
           }
         }
       }
-      const firstProbe = fresh144b.length === 2 ? await chromePoint(fresh144b[0]) : { missing: true }
-      const secondProbe = fresh144b.length === 2 ? await chromePoint(fresh144b[1]) : { missing: true }
+      // The NEWER panel first (it is on top, so its chrome is exposed), then
+      // shift-click the older one: raising the newer covers everything of
+      // the older except its chrome row, which is what the second probe
+      // needs. The other order leaves the older panel covering the newer's
+      // chrome, whose right half is off the canvas at this width (M46).
+      const firstProbe = fresh144b.length === 2 ? await chromePoint(fresh144b[1]) : { missing: true }
       const first144b = firstProbe.x !== undefined ? firstProbe : null
       const clickChrome = async (point, shift = false) => {
         const modifiers = shift ? ['shift'] : []
@@ -10335,10 +10418,18 @@ app.whenReady().then(async () => {
         await sleep(150)
       }
       if (first144b) await clickChrome(first144b)
+      // Probed AFTER the first click: selecting raises, so the first panel
+      // now covers part of the second's chrome, and chromePoint hit-tests
+      // for an exposed point at probe time — probed before, it found one the
+      // raise then covered (M46, when a narrower canvas moved the cascade).
+      const secondProbe = fresh144b.length === 2 ? await chromePoint(fresh144b[0]) : { missing: true }
       const second144b = first144b && secondProbe.x !== undefined ? secondProbe : null
       if (second144b) await clickChrome(second144b, true)
       const selected144b = await wc.executeJavaScript(
         `Array.from(document.querySelectorAll('.panel--selected')).map((p) => p.dataset.panelId)`)
+      const under144b = second144b ? await wc.executeJavaScript(`(() => {
+        const el = document.elementFromPoint(${second144b.x}, ${second144b.y})
+        return el ? (el.tagName + '.' + String(el.className).slice(0, 40) + ' in ' + (el.closest('.panel')?.dataset.panelId ?? '-')) : null })()`) : null
       const selectionReady144b = first144b !== null && second144b !== null &&
         selected144b.includes(first144b.id) && selected144b.includes(second144b.id) && selected144b.length === 2
 
@@ -10393,7 +10484,7 @@ app.whenReady().then(async () => {
       ok('144b shift-click adds selection; one group drag moves and one undo restores both',
         selectionReady144b && movedTogether144b && undone144b === true,
         `fresh=${JSON.stringify(fresh144b)} first=${JSON.stringify(firstProbe)} second=${JSON.stringify(secondProbe)} ` +
-          `selected=${JSON.stringify(selected144b)} moved=${movedTogether144b} undone=${undone144b}`)
+          `selected=${JSON.stringify(selected144b)} under=${JSON.stringify(under144b)} moved=${movedTogether144b} undone=${undone144b}`)
     }
 
     // ---------------------------------------------------------------------
@@ -13687,7 +13778,9 @@ app.whenReady().then(async () => {
         //      with an aria-label, and the rail's Attention list is aria-live.
         const roles = await wc.executeJavaScript(`(() => {
           const p = document.querySelector('.panel[data-panel-id="kA"]')
-          const att = document.querySelector('.rail-list--attention')
+          // M46: Attention is a dock badge plus a popover; the always-mounted
+          // live region is the badge.
+          const att = document.querySelector('[data-dock-badge]')
           const host = document.querySelector('.canvas[role="application"]')
           return {
             role: p && p.getAttribute('role'),
@@ -13749,10 +13842,16 @@ app.whenReady().then(async () => {
         await waitUntil(async () => wc.executeJavaScript(
           `['vA', 'vB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         // Wake vA so it has a LIVE terminal: click its card.
+        // The mousedown carries the card's CENTRE: a dispatched event with no
+        // clientX/Y reaches Canvas's hit test at screen (0,0) and wakes
+        // nothing — which is how this block's first cut ran with vA never
+        // live and its "live AND detached" clause half-vacuous.
         await wc.executeJavaScript(`(() => {
           const card = document.querySelector('.panel[data-panel-id="vA"] .panel__card')
-          if (card) card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); return !!card })()`)
-        await waitUntil(async () => (await sessionMap(wc)).has('vA'), 10000)
+          if (!card) return false
+          const r = card.getBoundingClientRect()
+          card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const vAWoke = await waitUntil(async () => (await sessionMap(wc)).has('vA'), 10000)
         await settle()
         const themeOf = (id) => wc.executeJavaScript(`window.__m45TerminalTheme ? window.__m45TerminalTheme(${JSON.stringify(id)}) : null`)
         // The CARD's own ground (a card has no .panel__slot — that is the live
@@ -13777,7 +13876,7 @@ app.whenReady().then(async () => {
           a: await themeOf('vA'), b: await themeOf('vB'), card: await cardBg()
         }
         ok(IDS[0],
-          stamped && after.attr === 'dark' && before.attr === 'light' &&
+          vAWoke === true && stamped && after.attr === 'dark' && before.attr === 'light' &&
             before.a === '#ffffff' && after.a === '#14161c' &&
             before.b === '#ffffff' && after.b === '#14161c' &&
             before.card.got === before.card.want && after.card.got === after.card.want &&
@@ -13787,10 +13886,11 @@ app.whenReady().then(async () => {
         // targets.1. Measured, not declared: getBoundingClientRect on every
         //      icon control present, at camera scale 1. .rail-row__start is
         //      present because vB is dormant.
-        const targets = await wc.executeJavaScript(`(() => {
-          const sel = ['.rail-row__start', '.rail-row__rename', '.rail-row__close', '.panel__close',
-            '.shell__settings', '.shell__zoom-in', '.shell__zoom-out', '.shell__region-add',
-            '.shell__tree-toggle', '.shell__rail-toggle', '.shell__inspector-toggle']
+        // M46: two passes, because the navigator shows ONE pane — the
+        // dormant start control lives in Panels, the rename and add controls
+        // in Workspaces.
+        const measure = (sel) => wc.executeJavaScript(`(() => {
+          const sel = ${JSON.stringify(sel)}
           const out = []
           for (const s of sel) {
             // A 0x0 rect is an element display:none'd by a collapsed column
@@ -13803,6 +13903,14 @@ app.whenReady().then(async () => {
             for (const r of els) out.push({ s, w: Math.round(r.width), h: Math.round(r.height) })
           }
           return out })()`)
+        const dockClickT = (name) => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="' + ${JSON.stringify(name)} + '"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        const targetsA = await measure(['.rail-row__start', '.rail-row__close', '.panel__close',
+          '.shell__settings', '[data-hud-zoom-in]', '[data-hud-zoom-out]',
+          '[data-dock]', '.shell__rail-toggle', '.shell__inspector-toggle', '.shell__merge'])
+        await dockClickT('workspaces'); await settle()
+        const targetsB = await measure(['.rail-row__rename', '.shell__region-add'])
+        await dockClickT('panels'); await settle()
+        const targets = [...targetsA, ...targetsB]
         const small = targets.filter((t) => t.missing || t.w < 24 || t.h < 24)
         ok(IDS[1], targets.length > 0 && small.length === 0, JSON.stringify(small.slice(0, 8)))
 
@@ -13836,6 +13944,234 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr) + ' | renderer: ' + (vLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onV)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M46 — the interface architecture: dock | one navigator | canvas |
+    // context. shell.1: at the Standard breakpoint, with nothing persisted,
+    // the canvas is the window less the dock and one pane, and a panel is
+    // still promoted. shell.2: switching navigator panes spawns nothing,
+    // through REAL clicks that move no focus, and the Attention icon carries
+    // the waiting count. drawer.1: below Compact the navigator is a drawer
+    // dismissed by Escape and by an outside click, and a wheel over it moves
+    // no camera. ctx.1/ctx.2: the context pane's pinned header with every
+    // tab, and the gated Close. hud.1: the zoom cluster in the HUD. empty.1:
+    // the Panels pane's empty state.
+    // -------------------------------------------------------------------
+    {
+      const sLog = []
+      const onS = (_e, level, message) => { if (level >= 2) sLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onS)
+      const IDS = [
+        'shell.1 at Standard with nothing persisted the canvas is the window less the dock and one navigator pane, and a panel is still promoted',
+        'shell.2 switching navigator panes through real clicks spawns nothing and moves no focus, and the Attention icon carries the waiting count',
+        'drawer.1 below Compact the navigator is a drawer: opened from the dock, dismissed by Escape and by an outside click, and a wheel over it moves no camera',
+        'ctx.1 the identity header is on screen with each of the three tabs active, and inactive tabs stay rendered but hidden',
+        'ctx.2 Close in the context pane is destructive and gated: one click arms, the second closes, read back from the panel list',
+        'hud.1 the zoom cluster lives in the HUD, a wheel over it moves no camera, and Merged is an icon toggle with aria-pressed',
+        'empty.1 the Panels pane with no panels says so rather than rendering nothing'
+      ]
+      const dockClick = (name) => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="' + ${JSON.stringify(name)} + '"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+      // Block-scoped, like every other block's: the one at ~4133 is not
+      // reachable here.
+      const panelIds = () => wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.dataset.panelId)`)
+      const frame = () => wc.executeJavaScript(`(() => {
+        const g = (sel) => { const el = document.querySelector(sel); return el ? el.getBoundingClientRect().width : null }
+        return { window: window.innerWidth, bp: document.querySelector('.shell')?.dataset.bp ?? null,
+          dock: g('.shell__dock'), nav: g('.shell__rail'), ctx: g('.shell__inspector'), canvas: g('.canvas'),
+          live: document.querySelectorAll('.panel .xterm').length } })()`)
+      try {
+        backend = createDirectBackend('verify: direct (m46 shell)')
+        const home = require('node:os').homedir()
+        const sP = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 300, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] } })
+        layoutStore.save({ panels: fromPanels([sP('sA', 60), sP('sB', 460)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        // NOTHING persisted for the shell: "absent means the breakpoint
+        // decides" is the claim, so the store must not carry what earlier
+        // checks toggled.
+        for (const id of ['shell.railOpen', 'shell.inspectorOpen', 'shell.navigator', 'shell.contextTab', 'files.treeOpen']) layoutStore.clearPreference(id)
+        layoutStore.flushSync()
+        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reS
+        const seeded = await waitUntil(async () => wc.executeJavaScript(
+          `['sA', 'sB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        // Wake sA so a LIVE panel sits under the reclaimed width.
+        const carded = await wc.executeJavaScript(`(() => {
+          const card = document.querySelector('.panel[data-panel-id="sA"] .panel__card')
+          if (!card) return false
+          const r = card.getBoundingClientRect()
+          card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const woke = await waitUntil(async () => (await sessionMap(wc)).has('sA'), 10000)
+        await settle()
+        const f1 = await frame()
+        const diag = await wc.executeJavaScript(`({ ids: [...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.dataset.panelId), sessions: window.__m4aSessions ? window.__m4aSessions() : null })`)
+        ok(IDS[0],
+          seeded === true && f1.bp === 'standard' && f1.dock !== null && Math.abs(f1.dock - 48) <= 1 &&
+            f1.nav !== null && Math.abs(f1.nav - 260) <= 1 && f1.ctx === 0 &&
+            Math.abs(f1.canvas - (f1.window - f1.dock - f1.nav)) <= 1 && f1.live > 0,
+          JSON.stringify({ seeded, carded, woke, f1, diag }))
+
+        // shell.2. Real clicks on the dock (sendInputEvent, the only kind that
+        //          can move DOM focus), the session map scoped to the two
+        //          fixture ids, and the badge after a bell.
+        const focusProbe = () => wc.executeJavaScript(`!!(document.activeElement && document.activeElement.closest('.panel'))`)
+        // A REAL click: DOM focus is a browser default action, which a
+        // dispatched event never performs (check 75c's reason).
+        const slotPt = await wc.executeJavaScript(`(() => {
+          const slot = document.querySelector('.panel[data-panel-id="sA"] .panel__slot')
+          if (!slot) return null
+          const r = slot.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (slotPt) {
+          wc.sendInputEvent({ type: 'mouseDown', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 })
+        }
+        await settle()
+        const focusBefore = await focusProbe()
+        const sessionsBefore = await sessionMap(wc)
+        const realDock = async (name) => {
+          const r = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="' + ${JSON.stringify(name)} + '"]'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })()`)
+          if (!r) return false
+          wc.sendInputEvent({ type: 'mouseDown', x: Math.round(r.x), y: Math.round(r.y), button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: Math.round(r.x), y: Math.round(r.y), button: 'left', clickCount: 1 })
+          await settle()
+          return true
+        }
+        const pressed = async () => wc.executeJavaScript(`[...document.querySelectorAll('[data-dock]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.dock)`)
+        await realDock('workspaces'); const p1 = await pressed()
+        await realDock('files'); const p2 = await pressed()
+        await realDock('panels'); const p3 = await pressed()
+        const focusAfter = await focusProbe()
+        const sessionsAfter = await settledSessionMap(wc, 3000)
+        ptyManager.write('sA', "printf '\\007'\n")
+        const badge = await waitUntil(async () => {
+          const t = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock-badge]'); return b ? b.textContent.trim() : null })()`)
+          return t === '1' ? t : false
+        }, 6000)
+        ok(IDS[1],
+          focusBefore === true && focusAfter === true &&
+            JSON.stringify(p1) === '["workspaces"]' && JSON.stringify(p2) === '["files"]' && JSON.stringify(p3) === '["panels"]' &&
+            sessionsBefore.has('sA') && sessionsAfter.has('sA') && !sessionsBefore.has('sB') && !sessionsAfter.has('sB') &&
+            badge === '1',
+          JSON.stringify({ focusBefore, focusAfter, p1, p2, p3, sA: sessionsAfter.has('sA'), sB: sessionsAfter.has('sB'), badge }))
+
+        // drawer.1. Compact by RESIZING THE WINDOW — the one thing the
+        //           renderer must never measure directly; the shell measures
+        //           itself. The drawer overlays the canvas (its rect intersects
+        //           the canvas rect), a wheel over it leaves the camera alone,
+        //           Escape closes it, an outside mousedown closes it.
+        const bw = wc.getOwnerBrowserWindow()
+        bw.setSize(1000, 900)
+        const compact = await waitUntil(async () => (await frame()).bp === 'compact', 5000)
+        await settle()
+        const closedAtCompact = await frame()
+        await dockClick('panels'); await settle()
+        const open = await wc.executeJavaScript(`(() => {
+          const shell = document.querySelector('.shell'); const rail = document.querySelector('.shell__rail'); const canvas = document.querySelector('.canvas')
+          if (!rail || !canvas) return null
+          const r = rail.getBoundingClientRect(), c = canvas.getBoundingClientRect()
+          return { drawer: shell.classList.contains('shell--nav-drawer'), width: r.width, overlaps: r.left < c.right && r.right > c.left && r.width > 100 } })()`)
+        const vpBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
+        await wc.executeJavaScript(`(() => { const list = document.querySelector('.shell__rail .rail-list'); if (!list) return false
+          return list.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })) })()`)
+        await settle()
+        const vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))`)
+        await settle()
+        const afterEscape = await wc.executeJavaScript(`document.querySelector('.shell').classList.contains('shell--nav-drawer')`)
+        await dockClick('panels'); await settle()
+        const reopened = await wc.executeJavaScript(`document.querySelector('.shell').classList.contains('shell--nav-drawer')`)
+        await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: c.getBoundingClientRect().right - 10, clientY: c.getBoundingClientRect().bottom - 10 })); return true })()`)
+        await settle()
+        const afterOutside = await wc.executeJavaScript(`document.querySelector('.shell').classList.contains('shell--nav-drawer')`)
+        bw.setSize(1400, 900)
+        await waitUntil(async () => (await frame()).bp === 'standard', 5000)
+        await settle()
+        ok(IDS[2],
+          compact === true && closedAtCompact.nav === 0 && Math.abs(closedAtCompact.canvas - (closedAtCompact.window - closedAtCompact.dock)) <= 1 &&
+            open !== null && open.drawer === true && open.overlaps === true &&
+            vpAfter.x === vpBefore.x && vpAfter.y === vpBefore.y && vpAfter.scale === vpBefore.scale &&
+            afterEscape === false && reopened === true && afterOutside === false,
+          JSON.stringify({ compact, closedAtCompact, open, vpBefore, vpAfter, afterEscape, reopened, afterOutside }))
+
+        // ctx.1. Select sA through the rail, pin the context open through the
+        //        top bar's toggle, then every tab.
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="sA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        const ctxHidden = (await frame()).ctx === 0
+        if (ctxHidden) { await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__inspector-toggle'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`); await settle() }
+        const tabs = {}
+        for (const tab of ['detail', 'work', 'tools']) {
+          await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="' + ${JSON.stringify(tab)} + '"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
+          await settle()
+          tabs[tab] = await wc.executeJavaScript(`(() => {
+            const pane = document.querySelector('.shell__inspector'); const h = document.querySelector('[data-inspector-heading]')
+            const t = document.querySelector('[data-context-tab="' + ${JSON.stringify(tab)} + '"]')
+            if (!pane || !h || !t) return null
+            const p = pane.getBoundingClientRect(), r = h.getBoundingClientRect()
+            const panels = [...document.querySelectorAll('[data-context-panel]')].map((el) => ({ id: el.dataset.contextPanel, hidden: el.hidden }))
+            return { selected: t.getAttribute('aria-selected'), headingVisible: r.height > 0 && r.top >= p.top - 1 && r.bottom <= p.bottom + 1, panels } })()`)
+        }
+        const tabOk = (t) => tabs[t] && tabs[t].selected === 'true' && tabs[t].headingVisible &&
+          tabs[t].panels.length === 3 && tabs[t].panels.every((p) => p.hidden === (p.id !== t))
+        ok(IDS[3], tabOk('detail') && tabOk('work') && tabOk('tools'), JSON.stringify(tabs))
+
+        // ctx.2. Close sB (dormant, so nothing dies) from the pinned bar.
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="sB"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        const idsBefore = await panelIds()
+        const closeClick = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="close"]'); if (!b) return null; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        // Read the armed attribute AFTER React has rendered it, not in the
+        // click's own tick.
+        const armedNow = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="close"]'); return b ? { armed: b.hasAttribute('data-close-armed') } : null })()`)
+        await closeClick(); await settle()
+        const first = await armedNow()
+        const idsArmed = await panelIds()
+        const second = (await closeClick()) === true ? first : null; await settle()
+        const idsAfter = await waitUntil(async () => { const ids = await panelIds(); return ids.includes('sB') ? false : ids }, 5000)
+        ok(IDS[4],
+          idsBefore.includes('sB') && first !== null && first.armed === true && idsArmed.length === idsBefore.length &&
+            second !== null && idsAfter !== false && !idsAfter.includes('sB') && idsAfter.length === idsBefore.length - 1,
+          JSON.stringify({ idsBefore, first, idsArmed, second, idsAfter }))
+
+        // hud.1.
+        const hud = await wc.executeJavaScript(`(() => ({
+          inTopBar: document.querySelectorAll('.shell__top .shell__zoom-in, .shell__top .shell__zoom-out, .shell__top .shell__fit, .shell__top [data-hud-zoom-in]').length,
+          inHud: !!document.querySelector('.canvas-hud [data-hud-zoom-in]') && !!document.querySelector('.canvas-hud [data-hud-zoom-out]') && !!document.querySelector('.canvas-hud [data-hud-fit]'),
+          mergePressed: document.querySelector('.shell__merge')?.getAttribute('aria-pressed') ?? null,
+          mergeText: (document.querySelector('.shell__merge')?.textContent ?? 'x').trim() }))()`)
+        const scaleBefore = await wc.executeJavaScript(`window.__m4aScale()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-hud-zoom-in]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await sleep(150)
+        const scaleAfter = await wc.executeJavaScript(`window.__m4aScale()`)
+        const vpH1 = await wc.executeJavaScript(`window.__m4aViewport()`)
+        await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas-hud [data-hud-zoom-in]'); return h.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })) })()`)
+        await settle()
+        const vpH2 = await wc.executeJavaScript(`window.__m4aViewport()`)
+        ok(IDS[5],
+          hud.inTopBar === 0 && hud.inHud === true && scaleAfter > scaleBefore &&
+            vpH1.x === vpH2.x && vpH1.y === vpH2.y && vpH1.scale === vpH2.scale &&
+            hud.mergePressed === 'false' && hud.mergeText === '',
+          JSON.stringify({ hud, scaleBefore, scaleAfter, vpH1, vpH2 }))
+
+        // empty.1. Close the last panel through the rail; the pane must say so.
+        await dockClick('panels'); await settle()
+        for (let i = 0; i < 4; i++) {
+          const closed = await wc.executeJavaScript(`(() => { const b = document.querySelector('.rail-list--panels .rail-row .rail-row__close'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+          if (!closed) break
+          await settle()
+        }
+        const emptyText = await waitUntil(async () => {
+          const t = await wc.executeJavaScript(`(() => { const rows = document.querySelectorAll('.rail-list--panels .rail-row').length; const e = document.querySelector('.rail-list--panels .rail-empty'); return rows === 0 && e ? e.textContent : null })()`)
+          return t === null ? false : t
+        }, 5000)
+        ok(IDS[6], typeof emptyText === 'string' && /no panels/.test(emptyText) && /⌘N/.test(emptyText), JSON.stringify(emptyText))
+      } catch (sErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onS)
+        try { wc.getOwnerBrowserWindow().setSize(1400, 900) } catch {}
       }
     }
 

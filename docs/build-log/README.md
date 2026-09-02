@@ -28,3 +28,4 @@ copy here is deleted.
 | [m43-attention-beyond-the-window.md](m43-attention-beyond-the-window.md) | M43 — Attention beyond the window | finished |
 | [m44-keyboard-first-canvas.md](m44-keyboard-first-canvas.md) | M44 — A keyboard-first canvas | finished |
 | [m45-visual-language.md](m45-visual-language.md) | M45 — The visual language | finished |
+| [m46-interface-architecture.md](m46-interface-architecture.md) | M46 — The interface architecture | finished |

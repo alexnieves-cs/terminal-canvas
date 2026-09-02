@@ -2936,6 +2936,26 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ def, good, bad, wrongType, w }))
 }
 
+// M46 — shell.1. The dock's navigator and the context pane's tab are enum
+//      settings — through M45's 'enum', so a stray value is dropped with a
+//      warning on both doors — in the Shell category beside the two booleans
+//      that already live there. `files.treeOpen` stays a boolean: the Files
+//      pane is the tree's own toggle, so the palette row it already mints
+//      keeps meaning what it says.
+{
+  const nav = L.settingDef('shell.navigator')
+  const tab = L.settingDef('shell.contextTab')
+  const w = []
+  const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
+  ok('shell.1 shell.navigator (workspaces|panels, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces']) &&
+      nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
+      tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
+      tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&
+      stray['shell.navigator'] === undefined && stray['shell.contextTab'] === 'work' && w.length === 1,
+    JSON.stringify({ nav, tab, stray, w }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

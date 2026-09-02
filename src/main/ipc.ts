@@ -279,6 +279,7 @@ export function registerIpcHandlers(
       keywords: [...def.keywords],
       type: def.type,
       value: layoutStore.getSetting(def.id),
+      persisted: def.id in layoutStore.preferences(),
       category: def.category,
       // Passed through so the palette can reject an out-of-range edit before
       // it ever reaches this process's own (silent) range check below.

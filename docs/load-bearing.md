@@ -878,8 +878,8 @@ hidden workspace holds a higher id.
 ends short of it. `verify:panels` 73 pins the exact inset identity (not a loose bound) because a
 missing `min-width: 0` on the canvas grid cell would let the canvas overflow while
 `getBoundingClientRect` still reports plausible widths for everything. **A known, deliberately
-unfixed limitation, now with four buttons on it (rail, inspector, file tree, and whatever comes
-next)**: nothing observes the canvas host's SIZE, so opening/closing any of these regions
+unfixed limitation, now with a dock on it (M46: the navigator's three panes, the context pane,
+and whatever comes next)**: nothing observes the canvas host's SIZE, so opening/closing any of these regions
 re-tiers NOTHING — a panel just pushed outside the narrower cull region stays live and one just
 revealed stays a card until the next pan/zoom/focus change. This is pre-existing (a window
 resize has always had this effect); these buttons just make it reachable in one click. The fix,
@@ -1873,6 +1873,66 @@ is a dormant panel's only affordance and a control that disappears is indistingu
 feature that is missing. `reveal.1` reads computed opacity AFTER the `--dur-1` transition: a
 read in the same tick as `focus()` is still `0`, which is how the check's first cut went red for
 the wrong reason.
+
+**The shell's breakpoint is measured on `.shell`, never on the window, and it is stamped, not
+queried (`shell/useShellBreakpoint.ts`, `styles.css`'s `.shell[data-bp]`).** A ResizeObserver
+on the shell element names the breakpoint (`compact` < 1100 ≤ `standard` < 1600 ≤ `wide`) as a
+`data-bp` attribute; the stylesheet keys its column widths on it and the chrome hook keys the
+presence rule on it — ONE source of truth for the thresholds. The spec's most dangerous line
+still holds: nothing reads `window.innerWidth`, because `useViewport`, `Canvas` and
+`EdgeIndicators` all measure the `.canvas` host at event time, and a window-derived layout
+would aim every edge pip at the window's edge while the canvas ends short of it, with nothing
+thrown. The observer is on the SHELL, and it touches nothing but chrome state — it is not the
+canvas-host observer the tiering note above declines, and adding one "on the way past" here
+would still be the wrong place.
+
+**A resident region is a grid COLUMN of real width, and a hidden one is a zero-width column,
+never `display: none` and never an overlay (`styles.css`'s `.shell`, `shell/Navigator.tsx`,
+`shell/Inspector.tsx`).** Only Compact's transient drawers overlay the canvas, and the
+distinction is DWELL: a drawer is dismissed by Escape and by an outside mousedown exactly as
+the palette is, while a RESIDENT overlay would put panels permanently under chrome and make
+every world coordinate the canvas reports a lie. Zero width rather than `display: none` is
+what keeps every pane MOUNTED — its rows stay reconciled and frozen on their signatures
+(`railSignature`, `treeSignature`, `inspectorSignature`), and `verify:panels` 73/156 read the
+column widths as the inset identity. The navigator shows ONE pane at a time, so
+`[data-rail-row]` rows exist only while the Panels pane is up; a check that navigates through
+the rail after showing Files has to switch back through the dock, which the tree block does.
+
+**Absent means the breakpoint decides; present means the user won at every width
+(`shell/useShellChrome.ts`, `SettingRow.persisted`, `LayoutStore.clearPreference`).** The
+preferences map is sparse, so `shell.railOpen` and `shell.inspectorOpen` each have THREE states
+without a tri-state type: absent (the navigator is resident at Standard and Wide, the context
+pane only at Wide), true, false. `persisted` — "the map holds a key for it" — is what carries
+absence across the bridge; a row's `value` alone is the schema default and cannot tell the two
+apart. Compact consults neither boolean: both panes are drawers there, opened from the dock or
+the chord and dismissed like the palette. `clearPreference` exists so the never-touched state
+is reachable again — `verify:panels shell.1` needs it, since every earlier check that toggled
+a region left a key behind.
+
+**`inspectorSignature` covers the WHOLE model, hidden tabs included, and inactive tabs are
+rendered `hidden` rather than unmounted (`shell/Inspector.tsx`, `verify:rail` 86).** Narrowing
+the signature to the visible tab is the obvious optimisation and it freezes hidden tabs stale:
+switching to Work would show the totals from whenever the user last looked at Work — plausible,
+current-looking, and wrong, the freeze `verify:rail` 75/86 exist to catch reintroduced through
+a new door. Keeping the tabs in the DOM is the other half: a hidden panel's figures are as
+current as the visible one's the instant it is switched to, and the checks that read
+`[data-review-*]`/`[data-usage-*]` off a selected panel still find them whichever tab is up.
+
+**A transient shell surface composes into `shouldIgnoreKeys` — one predicate, never a copy
+(`Canvas.tsx`'s `chromeTransientRef`).** A Compact drawer or the Attention popover stands the
+canvas's shortcuts down exactly as the palette and the nav grid do; without it `Cmd+N` spawns a
+panel behind an open drawer. The outside-click dismissal is the `.shell` capture handler the
+palette already uses, with the dock excluded because its icons toggle these surfaces
+themselves.
+
+**Close in the context pane is armed, not confirmed (`shell/Inspector.tsx`).** The panel's own
+× and this button share one gesture: first click arms (`data-close-armed`, "close?"), second
+closes, and a selection change disarms — an armed Close carried to the NEXT panel would close a
+panel the user never armed. Never a modal: this app has one modal-shaped surface and keeps it
+that way. The M8b reasoning that the inspector's Close needed no gate ("the user aimed at a
+labelled control") held for one of five identical buttons a scroll away and does not hold for
+a button pinned at a fixed corner, which is a mis-click target. `verify:panels ctx.2` reads the
+gate back from the panel list, not off the button.
 
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything

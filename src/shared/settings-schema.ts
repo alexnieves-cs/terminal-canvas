@@ -224,10 +224,31 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
+    id: 'shell.navigator',
+    label: 'Navigator pane',
+    description: 'Which list the navigator shows: your panels, or your workspaces. The Files pane is its own toggle (⌘B).',
+    keywords: ['navigator', 'rail', 'sidebar', 'panels', 'workspaces', 'dock', 'pane', 'shell'],
+    type: 'enum',
+    values: ['panels', 'workspaces'],
+    default: 'panels',
+    category: SHELL_CATEGORY
+  },
+  {
+    id: 'shell.contextTab',
+    label: 'Context tab',
+    description: 'Which tab the context pane opens on: Detail (what this panel is), Work (what it did and cost), or Tools (what it can do).',
+    keywords: ['context', 'inspector', 'tab', 'detail', 'work', 'tools', 'shell'],
+    type: 'enum',
+    values: ['detail', 'work', 'tools'],
+    default: 'detail',
+    category: SHELL_CATEGORY
+  },
+  {
     id: 'files.treeOpen',
     label: 'Show the file tree',
-    // Says what it DOES, not what it is.
-    description: 'Keep the file tree open on the far left, beside the rail.',
+    // Says what it DOES, not what it is. M46: the tree is the navigator's
+    // Files pane, so ON shows it in place of the panels/workspaces list.
+    description: 'Show the file tree in the navigator pane, in place of the panel list.',
     // A user who wants this has no vocabulary for "tree". They will type
     // "files", "explorer", "sidebar" or "browser" — so a setting findable only
     // by its own label is a setting most users will not find. The rail's own

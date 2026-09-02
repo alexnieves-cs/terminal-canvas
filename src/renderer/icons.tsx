@@ -88,3 +88,22 @@ export const Link = (p: IconProps): JSX.Element => (
 export const Commit = (p: IconProps): JSX.Element => (
   <Svg {...p}><circle cx="8" cy="8" r="2.25" /><path d="M2 8h3.75M10.25 8H14" /></Svg>
 )
+/** M46. The dock's four navigators and the context pane's toggle. */
+export const Grid = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></Svg>
+)
+export const Folder = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z" /></Svg>
+)
+export const Bell = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3z" /><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" /></Svg>
+)
+export const PanelRight = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M10 3v10" /></Svg>
+)
+export const More = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" /><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" /></Svg>
+)
+export const Maximize = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" /></Svg>
+)

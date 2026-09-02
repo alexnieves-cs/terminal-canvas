@@ -242,36 +242,71 @@ body {
   height: 100%;
 }
 
-/* M8a. The frame. The rail and inspector are grid COLUMNS with real width,
-   so .canvas is genuinely narrower rather than partly hidden under an
-   overlay — which is what keeps every getBoundingClientRect() in the canvas
-   honest. Nothing in the canvas measures the window (useViewport, Canvas and
+/* M46. The frame: dock | navigator | canvas | context.
+   The dock is the only permanently resident chrome besides the top bar; the
+   navigator shows ONE pane at a time; the context pane follows the
+   selection. Every resident region is a grid COLUMN with real width, so
+   .canvas is genuinely narrower rather than partly hidden under an overlay —
+   which is what keeps every getBoundingClientRect() in the canvas honest.
+   Nothing in the canvas measures the window (useViewport, Canvas and
    EdgeIndicators all measure the .canvas host at event time), which is the
    whole reason insetting is safe; a future window measurement breaks this
-   silently. The column widths are read by verify:panels (73/125/156) and are
-   M46's to change, not this milestone's. */
+   silently.
+
+   THE BREAKPOINT is `data-bp`, stamped by useShellBreakpoint from a
+   ResizeObserver on THIS element — one source of truth for the thresholds
+   (1100 / 1600), shared with the chrome hook that decides what a persisted
+   toggle means at each width. Compact: no resident pane; both panes are
+   transient DRAWERS over the canvas (the .shell--*-drawer rules below),
+   dismissed by Escape and an outside click like the palette — legitimate
+   because of dwell: a drawer is a surface the user opened and is about to
+   close, where a RESIDENT overlay would put panels permanently under chrome
+   and make every world coordinate a lie. Standard: the navigator is a
+   column; the context pane is a column only once the user has said so.
+   Wide: both. The column widths are 0 when a region is not resident, so the
+   region stays MOUNTED (its rows stay reconciled and frozen on their
+   signatures) and measures 0 — which is what verify:panels 73/156 read. */
 .shell {
-  --shell-tree-w: 220px;
-  --shell-rail-w: 240px;
-  --shell-inspector-w: 260px;
+  --shell-dock-w: 48px;
+  --shell-nav-w: 260px;
+  --shell-ctx-w: 260px;
+  --shell-top-h: 56px;
+  position: relative;
   display: grid;
   height: 100%;
-  grid-template-columns: var(--shell-tree-w) var(--shell-rail-w) 1fr var(--shell-inspector-w);
-  /* One band that absorbs the titlebar clearance and the bar's own controls.
-     The traffic lights are NOT vertically centred in it (hiddenInset pins
-     them near the top edge), so the bar's controls are centred and the
-     lights sit above-left of them. */
-  --shell-top-h: 56px;
+  grid-template-columns: var(--shell-dock-w) var(--shell-nav-w) 1fr var(--shell-ctx-w);
   grid-template-rows: var(--shell-top-h) 1fr;
   grid-template-areas:
     "top top top top"
-    "tree rail canvas inspector";
+    "dock nav canvas context";
 }
+/* Not resident: a zero-width column, never display:none (see above). The
+   hairline goes with it — a 1px border on a 0px column is a 1px column, and
+   verify:panels shell.1 reads the width as exactly 0. */
+.shell--rail-collapsed { --shell-nav-w: 0px; }
+.shell--inspector-collapsed { --shell-ctx-w: 0px; }
+.shell--rail-collapsed .shell__rail { border-right: 0; }
+.shell--inspector-collapsed .shell__inspector { border-left: 0; }
+/* Compact: nothing but the dock is resident. The chrome hook never lets a
+   persisted toggle produce a column here; the drawer classes are the only
+   way a pane appears, and they OVERLAY. */
+.shell[data-bp="compact"] { --shell-nav-w: 0px; --shell-ctx-w: 0px; }
+.shell--nav-drawer .shell__rail,
+.shell--ctx-drawer .shell__inspector {
+  position: absolute;
+  top: var(--shell-top-h);
+  bottom: 0;
+  width: 260px;
+  z-index: 900;
+  box-shadow: var(--e-3);
+}
+.shell--nav-drawer .shell__rail { left: var(--shell-dock-w); border-right: 1px solid var(--line); }
+.shell--ctx-drawer .shell__inspector { right: 0; border-left: 1px solid var(--line); }
 
 .shell__top { grid-area: top; }
-.shell__tree { grid-area: tree; }
-.shell__rail { grid-area: rail; }
-.shell__inspector { grid-area: inspector; }
+.shell__dock { grid-area: dock; }
+.shell__rail { grid-area: nav; }
+.shell__inspector { grid-area: context; }
 .canvas { grid-area: canvas; }
 
 /* min-width/min-height 0 on the canvas cell: a grid item defaults to
@@ -284,12 +319,72 @@ body {
 }
 
 .shell__top,
-.shell__tree,
+.shell__dock,
 .shell__rail,
 .shell__inspector {
   color: var(--text);
   overflow: hidden;
 }
+
+/* The dock. 48px, always resident, one icon per navigator; the badge sits on
+   the Attention icon and the popover opens beside it. */
+.shell__dock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+  background: var(--s-2);
+  border-right: 1px solid var(--line);
+}
+.dock__button {
+  width: 32px;
+  height: 32px;
+  color: var(--fg-3);
+}
+.dock__button--on {
+  color: var(--iris);
+  background: var(--iris-dim);
+}
+.dock__attention {
+  position: relative;
+  margin-top: auto;
+}
+.dock__badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-full);
+  background: var(--amber);
+  color: var(--s-3);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+/* The popover: raised, beside the dock, over the canvas — transient, like
+   the palette, and dismissed the same two ways. */
+.dock__popover {
+  position: fixed;
+  left: calc(var(--shell-dock-w) + var(--sp-2));
+  bottom: var(--sp-3);
+  width: 260px;
+  max-height: 50vh;
+  overflow: auto;
+  z-index: 950;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--s-3);
+  box-shadow: var(--e-3);
+  padding-bottom: var(--sp-2);
+}
+.navigator__header { align-items: center; }
+.navigator__header-actions { display: inline-flex; align-items: center; gap: var(--sp-1); }
 
 /* Persistent chrome: one flat surface with a hairline against the canvas.
    -webkit-app-region: drag makes the whole bar a window drag handle, which it
@@ -372,16 +467,6 @@ body {
   border-color: var(--line);
   box-shadow: none;
 }
-.shell__zoom { display: flex; align-items: center; gap: var(--sp-2); }
-/* tabular-nums and a min-width so the readout does not shift the buttons
-   beside it as the percentage changes width mid-gesture. */
-.shell__zoom-readout {
-  min-width: 40px;
-  color: var(--muted);
-  font-size: var(--t-sm);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
 .shell__spacer { flex: 1; }
 
 /* M45. A shortcut chip, on exactly the two top-bar buttons whose shortcut
@@ -406,7 +491,6 @@ body {
    one list claim a fixed slice of it. Panels is the section that grows;
    Workspaces and Attention are short by construction and are capped so a long
    workspace list cannot push the panel outline off screen. */
-.shell__tree,
 .shell__rail {
   background: var(--s-2);
   border-right: 1px solid var(--line);
@@ -414,42 +498,20 @@ body {
   flex-direction: column;
   min-height: 0;
 }
+/* The Files pane fills the navigator column. */
+.shell__tree { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .shell__inspector {
   background: var(--s-2);
   border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-/* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
-   to stay clickable or the region is unreachable without the chord. */
-.shell--tree-collapsed { --shell-tree-w: 22px; }
-.shell--rail-collapsed { --shell-rail-w: 22px; }
-.shell--inspector-collapsed { --shell-inspector-w: 22px; }
-
-.shell--tree-collapsed .shell__tree .rail-list,
-.shell--tree-collapsed .shell__tree .shell__region-title,
-.shell--rail-collapsed .shell__rail .rail-list,
-.shell--rail-collapsed .shell__rail .shell__region-title,
-.shell--inspector-collapsed .shell__inspector .shell__region-title,
-.shell--inspector-collapsed .shell__inspector .inspector__body {
-  display: none;
-}
-
-.shell__tree-toggle,
-.shell__rail-toggle,
-.shell__inspector-toggle {
-  width: 100%;
-  min-height: 24px;
-  padding: var(--sp-2) 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--t-sm);
-}
-.shell__tree-toggle:hover,
-.shell__rail-toggle:hover,
-.shell__inspector-toggle:hover { color: var(--fg); background: var(--s-4); }
+/* M46: the region toggles are .icon-buttons now (the navigator's chevron in
+   its header, the context pane's in the top bar). The pressed context
+   toggle reads like a pressed dock icon. */
+.shell__inspector-toggle--on { color: var(--iris); background: var(--iris-dim); }
 
 /* NO width transition. What an animated collapse would cost is a pip-layer
    re-render on every frame of the transition (EdgeIndicators' ResizeObserver
@@ -514,9 +576,10 @@ body {
 /* min-height: 0 or the flex item refuses to shrink below its content and the
    list scrolls the whole rail instead of itself — the same min-width:0 trap
    the canvas grid cell documents one screenful up. */
-.rail-list--panels { flex: 1 1 auto; min-height: 0; }
+.rail-list--panels,
 .rail-list--workspaces,
-.rail-list--attention { flex: 0 1 auto; max-height: 26%; }
+.rail-list--tree { flex: 1 1 auto; min-height: 0; }
+.rail-list--attention { flex: 0 1 auto; }
 
 /* M45. Rows are 28px: tall enough for a 24px control (WCAG 2.5.8) with 2px
    of air, and fewer rows fit before the list scrolls — which it does. */
@@ -686,14 +749,64 @@ body {
   flex: none;
 }
 
-/* The inspector's body. Scrolls on its own for the same reason .rail-list
-   does: a long cwd plus an error message can exceed the pane's height, and a
-   body that grew would push the collapse toggle off screen — the one control
-   that is the way back from a collapse. */
+/* The context pane (M46): a PINNED identity header, a tab strip, ONE
+   scrolling body, and a PINNED action bar. Identity never scrolls away, so a
+   figure is never on screen without its subject. */
+.context { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.context__header {
+  flex: none;
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.inspector__pid { margin-left: auto; color: var(--fg-3); font-size: var(--t-xs); }
+.context__tabs {
+  flex: none;
+  display: flex;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.context__tab {
+  flex: 1;
+  min-height: 28px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.context__tab:hover { color: var(--fg); background: var(--s-4); }
+.context__tab--on { color: var(--fg); border-bottom-color: var(--iris); }
+.context__panel { display: block; }
+.context__actions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--line);
+  margin-top: 0;
+}
+/* Three ranks. Primary keeps the full control; secondary shrinks to a text
+   chip; destructive sits at the right and goes red the moment it is armed. */
+.context__actions [data-inspector-action="restart"] { flex: 1 1 100%; background: var(--s-3); font-weight: 600; }
+.inspector__action--secondary { flex: 1 1 auto; font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
+.inspector__action--destructive { flex: 0 0 auto; margin-left: auto; font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
+.inspector__action--destructive:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
+.inspector__action--armed { color: var(--red); border-color: var(--red); background: var(--red-dim); }
+
+/* The pane's body. Scrolls on its own: a long cwd plus an error message can
+   exceed the pane's height, and a body that grew would push the pinned
+   action bar off screen. */
 .inspector__body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--sp-2) var(--sp-5) var(--sp-5);
   overflow-y: auto;
-  max-height: calc(100% - 60px);
 }
 
 /* The pane's title — the third reader of M6a's honest chain. It must never
@@ -1715,6 +1828,19 @@ body {
   font-variant-numeric: tabular-nums;
   user-select: none;
   pointer-events: none;
+  align-items: center;
+}
+/* M46. The zoom cluster: the one pointer surface in the HUD. */
+.canvas-hud__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  pointer-events: auto;
+}
+.canvas-hud__readout {
+  min-width: 40px;
+  text-align: center;
+  color: var(--fg-2);
 }
 
 .canvas-hud__cost {

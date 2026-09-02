@@ -584,7 +584,7 @@ surface that works when this app is not the thing you are looking at.
   added no IPC channel" for why the obvious snapshot channel was declined twice — and note
   that a badge is the first customer that might genuinely change the answer.
 
-## 19. Token and dollar accounting — landed in M17; the open half is history, a second adapter, the un-pinned panel and aggregate totals
+## 19. Token and dollar accounting — landed in M17; aggregate totals landed in M46 (the context pane's no-selection summary); the open half is history, a second adapter and the un-pinned panel
 
 M17 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
 transcript on its own tick, deduped, and an inspector Cost section rendering three states
