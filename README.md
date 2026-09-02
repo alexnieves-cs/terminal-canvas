@@ -61,6 +61,12 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   output contains it, newest match first, each a row that flies the camera to
   that panel. The wall-of-terminals answered as a retrieval question — which
   of these twelve printed the stack trace.
+- **A shell that gives the canvas the window.** A 48px dock, ONE navigator pane
+  (Panels, Workspaces or Files — the whole column tall), the canvas, and a
+  context pane for the selected panel with a pinned identity header and three
+  tabs (Detail, Work, Tools). Under 1100px both panes become drawers; over
+  1600px both are resident; between, the navigator is and the context pane is
+  once you have asked for it. Attention is a count on the dock, and a popover.
 - **A git worktree per panel.** A preset can spawn its agent in a fresh
   worktree of the repository on its own `tc/` branch, so four agents on one
   codebase are four working trees, merged deliberately. The built-in *Claude in
@@ -120,8 +126,10 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+0` | Reset the camera |
 | `Cmd+1` | Fit every panel on screen |
 | `Cmd+=` / `Cmd+-` | Zoom in / out |
-| `Cmd+\` | Toggle the side rail |
-| `Cmd+Shift+\` | Toggle the inspector |
+| `Cmd+\` | Toggle the navigator pane (Panels, Workspaces or Files — the dock chooses which) |
+| `Cmd+Shift+\` | Toggle the context pane |
+| `Cmd+B` | The Files pane, in the navigator |
+| `Escape` | Close a Compact-width drawer or the Attention popover |
 | `Cmd+Shift+[` / `Cmd+Shift+]` | Previous / next workspace |
 | `Cmd+Shift+A` | Every workspace at once, side by side |
 | `Cmd+Shift+I` | Broadcast keystrokes to every selected terminal (again to stop) |

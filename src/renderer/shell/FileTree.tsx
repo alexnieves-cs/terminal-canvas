@@ -28,7 +28,7 @@ export interface FileTreeProps {
 }
 
 /**
- * The file tree column: the fourth region of the shell.
+ * The file tree: the navigator's Files pane (M46) — a body, not a column.
  *
  * Presentational by construction, like SideRail — every prop is derived data
  * or a callback. memo'd, and `rows` is frozen upstream on treeSignature:
@@ -36,29 +36,16 @@ export interface FileTreeProps {
  * drag, so an unfrozen array defeats this memo outright and the symptom is
  * invisible on a small tree.
  *
- * Rendered UNCONDITIONALLY, exactly as SideRail and Inspector are: collapsing
- * is a CSS width change to a 22px strip holding the toggle and nothing else,
- * because that toggle is the only way back for a user who does not know the
- * chord. That is also why the rows need the signature freeze rather than a
- * memo keyed on treeOpen — they stay mounted and reconciled while nobody can
- * see them, so there is no closed state to key on.
+ * Rendered by Navigator only while it is the chosen pane; the rows still
+ * arrive frozen on treeSignature, because Canvas re-renders on every
+ * mousemove whether or not this pane is up.
  */
 function FileTreeImpl({
   onToggle, rootPath, rootLabel, rows, rootPending, onToggleDir, onInsertPath, onRefresh
 }: FileTreeProps): JSX.Element {
   return (
-    <aside className="shell__tree" aria-label="File tree">
-      <button
-        type="button"
-        className="shell__tree-toggle icon-button"
-        title="Hide the file tree (⌘B)"
-        aria-label="Hide the file tree"
-        {...shellControl(onToggle)}
-      >
-        <ChevronLeft />
-      </button>
-
-      <div className="shell__region-title shell__region-title--action">
+    <div className="shell__tree" aria-label="File tree" data-file-tree>
+      <div className="shell__region-title shell__region-title--action navigator__header">
         {/* The root's basename, never the whole path: the column is 220px and
             a home-rooted absolute path would wrap to three lines. rootPath —
             the FULL path — is the title attribute, which is where a long
@@ -69,15 +56,29 @@ function FileTreeImpl({
         <span className="shell__tree-root" title={rootPath ?? undefined}>
           {rootLabel ?? 'Files'}
         </span>
-        <button
-          type="button"
-          className="shell__region-add icon-button"
-          title="Re-read this directory"
-          aria-label="Refresh the file tree"
-          {...shellControl(onRefresh)}
-        >
-          <Refresh />
-        </button>
+        <span className="navigator__header-actions">
+          <button
+            type="button"
+            className="shell__region-add icon-button"
+            title="Re-read this directory"
+            aria-label="Refresh the file tree"
+            {...shellControl(onRefresh)}
+          >
+            <Refresh />
+          </button>
+          {/* M46: the Files pane is one of the navigator's panes, so its
+              collapse control is the navigator's (⌘\), and ⌘B is what
+              returns the list. */}
+          <button
+            type="button"
+            className="shell__rail-toggle icon-button"
+            title="Hide the navigator (⌘\\)"
+            aria-label="Hide the navigator"
+            {...shellControl(onToggle)}
+          >
+            <ChevronLeft />
+          </button>
+        </span>
       </div>
 
       <ul className="rail-list rail-list--tree" aria-label="Files">
@@ -139,7 +140,7 @@ function FileTreeImpl({
           })
         )}
       </ul>
-    </aside>
+    </div>
   )
 }
 

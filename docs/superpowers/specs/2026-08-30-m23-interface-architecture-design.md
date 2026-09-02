@@ -13,9 +13,11 @@
 > **Read the Diagnosis first.** Every proposal below is an answer to a measured
 > number in it, and a proposal read without its number reads as taste.
 
-**Status:** design approved 2026-08-30. Not yet planned; see
-[Sequencing](#10-sequencing) for the six phases and which of them are
-independently shippable.
+**Status:** design approved 2026-08-30; **built as M45 (Phase 0's enum and
+widened style suite, Phase 5), M46 (Phases 1–2: the dock, one navigator, the
+context pane, the breakpoints) and M47 (Phase 3: `PanelFrame`)**, under the
+amendments `2026-09-01-m46-interface-architecture-design.md` lists. Phase 4
+is M48. See [Sequencing](#10-sequencing) for the phases as designed.
 
 ---
 

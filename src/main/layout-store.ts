@@ -68,6 +68,14 @@ export interface LayoutStore {
   /** Resolved: the persisted value if there is one, else the schema default. */
   getSetting(id: string): SettingValue
   setPreference(id: string, value: SettingValue): void
+  /**
+   * M46. Forget a preference, so it reads as ABSENT again — which is a
+   * different state from "set to the default": the sparse map's absence
+   * means "the breakpoint decides" for the shell's regions. Nothing in the
+   * palette calls this yet; verify:panels does, to put the store back into
+   * the never-touched state its shell checks are about.
+   */
+  clearPreference(id: string): void
   /** User-created presets only; the built-ins live in main/presets.ts. */
   presets(): Preset[]
   /** Append one and schedule a write. Ids are minted by the caller. */
@@ -437,6 +445,11 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     },
 
     preferences: () => ({ ...snapshot.preferences }),
+    clearPreference(id) {
+      if (!(id in snapshot.preferences)) return
+      delete snapshot.preferences[id]
+      scheduleWrite()
+    },
 
     getSetting: (id) => resolveSetting(snapshot.preferences, id),
 

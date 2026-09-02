@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
 import { useAgentState } from '@renderer/session/agent-state-store'
+import { getUsage } from '@renderer/session/usage-store'
 import { isTerminalPanel, isToolboxPanel, type Panel } from '@renderer/panels/panels'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { ToolInventoryResult } from '@shared/toolbox'
@@ -164,8 +165,10 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
   // Frozen on its three numbers for the same reason: a fresh object every
   // render defeats Inspector's memo on its own, whatever the model does.
   const summaryBuilt = buildInspectorSummary(
-    panels, (id) => registry.get(id)?.status, waitingIds)
-  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}`
+    panels, (id) => registry.get(id)?.status, waitingIds, getUsage)
+  // M46: the canvas-wide totals join the signature, so a usage tick moves
+  // the summary the way it moves a selected panel's Cost section.
+  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}`
   const inspectorSummary = useMemo(() => summaryBuilt, [summarySig])
 
   // Cheap, and read once per render of the palette: getSelection() is a string

@@ -97,11 +97,12 @@ import { JiraNode } from '@renderer/jira/JiraNode'
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
-import { SideRail } from '../shell/SideRail'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
-import { FileTree } from '../shell/FileTree'
 import { useShellChrome } from '../shell/useShellChrome'
+import { useShellBreakpoint } from '../shell/useShellBreakpoint'
+import { Dock } from '../shell/Dock'
+import { Navigator } from '../shell/Navigator'
 import { railLabel } from '../shell/rail-rows'
 import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
@@ -844,6 +845,12 @@ export function Canvas({
     // palette is open, every other canvas gesture stands down.
     if (target?.closest?.('.palette')) return true
 
+    // 1b. M46. The HUD's zoom cluster is the ONE pointer surface in the HUD:
+    // a wheel over the buttons a user is about to press must not pan the
+    // world underneath them. The rest of the HUD is pointer-events: none and
+    // never becomes a target, so this rule fires only over the cluster.
+    if (target?.closest?.('.canvas-hud')) return true
+
     // 2. A zoom gesture is otherwise always the camera's, never a terminal
     // scroll, regardless of what is under the cursor. Both spellings are
     // claimed because canvas-input.ts treats both as a zoom intent: a trackpad
@@ -951,7 +958,7 @@ export function Canvas({
   // tear that listener down and reinstall it on every mousemove over the
   // canvas (Canvas re-renders on setCursor).
   const shouldIgnoreKeys = useCallback(
-    () => palette.isOpen() || navGridIsOpenRef.current(),
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current,
     [palette.isOpen]
   )
 
@@ -2229,7 +2236,20 @@ export function Canvas({
   // for each, and without the dependency a palette toggle would persist while
   // the rail never moved. See useShellChrome's own doc comment and
   // verify:panels 78.
-  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows })
+  // M46. The shell measures ITSELF for its breakpoint (never the window —
+  // useShellBreakpoint's own comment), and the chrome hook turns the
+  // persisted booleans into what they mean at this width.
+  const shellRef = useRef<HTMLDivElement>(null)
+  const shellBp = useShellBreakpoint(shellRef)
+  const chrome = useShellChrome({ paletteIsOpen: palette.isOpen, settingsSignal: settingRows, bp: shellBp })
+  // A transient surface (a Compact drawer, the Attention popover) stands the
+  // canvas's shortcuts down exactly as the palette does — ONE predicate,
+  // composed below, never a copy (spec §7.6). Read through a ref so
+  // shouldIgnoreKeys keeps its identity.
+  const chromeTransientRef = useRef(false)
+  chromeTransientRef.current = chrome.navDrawer || chrome.ctxDrawer || chrome.attentionOpen
+  const chromeRef = useRef(chrome)
+  chromeRef.current = chrome
 
   // Backlog #75's diagnostics overlay toggle. Ephemeral, unlike chrome above:
   // this is a debug view, not a persisted preference.
@@ -2894,37 +2914,51 @@ export function Canvas({
 
   return (
     <div
-      className={`shell${chrome.railOpen ? '' : ' shell--rail-collapsed'}${
-        chrome.inspectorOpen ? '' : ' shell--inspector-collapsed'}${
-        chrome.treeOpen ? '' : ' shell--tree-collapsed'}`}
-      onMouseDownCapture={onMouseDownCapture}
+      ref={shellRef}
+      // M46. `shell--rail-collapsed` / `shell--inspector-collapsed` /
+      // `shell--tree-collapsed` keep their M8a/M20 meanings (the region is
+      // not on screen); the drawer classes say a transient overlay is up at
+      // Compact; data-bp is what the stylesheet keys its columns on.
+      className={`shell${chrome.navVisible ? '' : ' shell--rail-collapsed'}${
+        chrome.ctxVisible ? '' : ' shell--inspector-collapsed'}${
+        chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
+        chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}`}
+      data-bp={chrome.bp}
+      onMouseDownCapture={(event) => {
+        onMouseDownCapture(event)
+        // A transient surface is dismissed by a mousedown OUTSIDE it — the
+        // palette's own rule, on the drawers and the popover. The dock is
+        // excluded because its icons toggle these surfaces themselves.
+        if (!chromeTransientRef.current) return
+        const t = event.target as HTMLElement | null
+        if (t?.closest('.shell__dock, .dock__popover, .shell--nav-drawer .shell__rail, .shell--ctx-drawer .shell__inspector')) return
+        chromeRef.current.dismissTransient()
+      }}
     >
-      {/* FIRST child, before TopBar: grid areas place every region regardless
-          of DOM order, but a screen reader walks DOM order, and the tree is
-          the leftmost region on screen. */}
-      <FileTree
-        onToggle={chrome.toggleTree}
-        rootPath={treeRoot}
-        rootLabel={treeRootLabel}
-        rows={treeRows}
-        rootPending={treeRootPending}
-        onToggleDir={toggleDir}
-        onInsertPath={insertPath}
-        onRefresh={refreshTree}
+      {/* DOM order is screen order for a screen reader: dock, then the top
+          bar, then the navigator. */}
+      <Dock
+        navigator={chrome.navigator}
+        navVisible={chrome.navVisible}
+        onChoose={chrome.chooseNavigator}
+        attention={railAttention}
+        attentionOpen={chrome.attentionOpen}
+        onToggleAttention={chrome.toggleAttention}
+        onGoToPanel={paletteActions.goToPanel}
       />
       <TopBar
         presets={presetRows}
-        scale={viewport.scale}
         onSpawnPreset={paletteActions.spawnPreset}
-        onZoomBy={zoomBy}
-        onFit={fitAll}
         onSearch={palette.openPalette}
         onSettings={openSettingsScope}
         merged={merged}
         onToggleMerged={toggleMerged}
+        contextOpen={chrome.ctxVisible}
+        onToggleContext={chrome.toggleContext}
       />
-      <SideRail
-        onToggle={chrome.toggleRail}
+      <Navigator
+        navigator={chrome.navigator}
+        onToggle={chrome.toggleNavigator}
         workspaces={railWorkspaces}
         onSwitchWorkspace={paletteActions.switchWorkspace}
         onCreateWorkspace={paletteActions.beginCreateWorkspace}
@@ -2935,7 +2969,13 @@ export function Canvas({
         onGoToPanel={paletteActions.goToPanel}
         onStartPanel={paletteActions.startPanel}
         onClosePanel={paletteActions.closePanel}
-        attention={railAttention}
+        treeRootPath={treeRoot}
+        treeRootLabel={treeRootLabel}
+        treeRows={treeRows}
+        treeRootPending={treeRootPending}
+        onToggleDir={toggleDir}
+        onInsertPath={insertPath}
+        onRefreshTree={refreshTree}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
@@ -3173,6 +3213,8 @@ export function Canvas({
           selectedId={selectedId}
           backend={backendInfo}
           machineCost={machineCostTotal}
+          onZoomBy={zoomBy}
+          onFit={fitAll}
         />
         {palette.open && (
           <Palette
@@ -3205,7 +3247,9 @@ export function Canvas({
         )}
       </div>
       <Inspector
-        onToggle={chrome.toggleInspector}
+        onToggle={chrome.toggleContext}
+        tab={chrome.contextTab}
+        onSelectTab={chrome.setContextTab}
         model={inspectorModel}
         summary={inspectorSummary}
         onRename={paletteActions.beginRenamePanel}

@@ -244,6 +244,29 @@ ok('17 isRunning counts starting as running, and nothing else as running',
     s.waiting === 1, JSON.stringify(s))
 }
 
+// M46 — summary.1. The no-selection summary carries the CANVAS-WIDE token
+//      and dollar totals (backlog #19's aggregate half): the sum over every
+//      panel's usage, priced per model exactly as one panel is, so a panel
+//      whose model has no price makes the TOTAL unpriceable (undefined) rather
+//      than silently smaller. A fourth argument, `usageOf`, and nothing else
+//      changes for the three counts.
+{
+  const panels = [panel('n1'), panel('n2'), panel('n3')]
+  const st = statuses({})
+  const u = (input, output, model) => ({
+    totals: { input, output, cacheWrite: 0, cacheRead: 0 },
+    byModel: { [model]: { input, output, cacheWrite: 0, cacheRead: 0 } }, turns: 1, subagentTurns: 0 })
+  const usage = { n1: u(1000, 100, 'claude-sonnet-5'), n2: u(500, 50, 'claude-sonnet-5') }
+  const s = R.buildInspectorSummary(panels, st, [], (id) => usage[id])
+  const bad = R.buildInspectorSummary(panels, st, [], (id) => id === 'n3' ? u(1, 1, 'nobody-knows-this-model') : usage[id])
+  const none = R.buildInspectorSummary(panels, st, [])
+  ok('summary.1 the summary totals tokens and list-price dollars across every panel, and an unpriceable panel makes the total undefined',
+    s.tokens === 1650 && typeof s.cost === 'number' && s.cost > 0 &&
+      bad.tokens === 1652 && bad.cost === undefined &&
+      none.tokens === 0 && none.cost === 0,
+    JSON.stringify({ s, bad, none }))
+}
+
 // 20. The heading is the SAME honest chain the rail and the header walk.
 //     Two labels for one panel differing only in the common case is the defect
 //     railLabel's own comment describes; the inspector must not reopen it.

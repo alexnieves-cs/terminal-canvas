@@ -806,6 +806,13 @@ export interface SettingRow {
   /** The legal values of an `enum` setting, in cycle order. Absent for other types. */
   values?: string[]
   /**
+   * M46. Whether the user has ever SET this — the sparse map holds a key for
+   * it — as against `value` merely being the schema default. The shell's
+   * regions read it: absent means the breakpoint decides, present means the
+   * user won at every width.
+   */
+  persisted: boolean
+  /**
    * Inclusive bounds for a `number` setting, mirrored from `SettingDef`.
    * Absent for a boolean. The palette needs these to reject an out-of-range
    * edit BEFORE sending it — main's own range check in `setPreference` is the

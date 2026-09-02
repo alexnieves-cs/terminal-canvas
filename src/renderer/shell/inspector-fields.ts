@@ -121,6 +121,10 @@ export interface InspectorSummary {
   panels: number
   running: number
   waiting: number
+  /** M46. Every panel's tokens, summed. */
+  tokens: number
+  /** M46. Every panel's list price, summed per model; undefined if any panel's model is unpriced. */
+  cost: number | undefined
 }
 
 /** Rendered when the spec asked for nothing and main has not answered yet. */
@@ -624,13 +628,34 @@ export function buildInspectorModel(
 export function buildInspectorSummary(
   panels: readonly Panel[],
   statusOf: (id: string) => PanelStatus | undefined,
-  waitingIds: readonly string[]
+  waitingIds: readonly string[],
+  /** M46. Per-panel usage for the canvas-wide totals; absent means none. */
+  usageOf: (id: string) => PanelUsage | undefined = () => undefined
 ): InspectorSummary {
   const ids = new Set(panels.map((p) => p.rect.id))
+  // The totals are priced PER MODEL, exactly as one panel's Cost section is
+  // (buildUsageFields): a flat token total cannot be priced once a session
+  // has changed model, and a panel whose model has no price makes the whole
+  // total unpriceable rather than silently smaller — the same "$0 beside a
+  // working agent is a confident wrong answer" rule, at canvas scale.
+  let tokens = 0
+  let cost: number | undefined = 0
+  for (const p of panels) {
+    const u = usageOf(p.rect.id)
+    if (!u) continue
+    tokens += u.totals.input + u.totals.output + u.totals.cacheWrite + u.totals.cacheRead
+    for (const [model, totals] of Object.entries(u.byModel)) {
+      const c = costOf(totals, model)
+      if (c === undefined) cost = undefined
+      else if (cost !== undefined) cost += c
+    }
+  }
   return {
     panels: panels.length,
     running: panels.filter((p) => isRunning(statusOf(p.rect.id))).length,
-    waiting: waitingIds.filter((id) => ids.has(id)).length
+    waiting: waitingIds.filter((id) => ids.has(id)).length,
+    tokens,
+    cost
   }
 }
 

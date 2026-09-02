@@ -1,11 +1,12 @@
-import { memo, type JSX } from 'react'
+import { memo, useEffect, useState, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import { agentStateLabel, handoffControl, KIND_NOUN } from './inspector-fields'
 import { nextHandoffState } from '@renderer/panels/panels'
 import type { LinkAutomation } from '@shared/handoff'
 import { shellControl } from './shell-control'
-import { ChevronRight, Close, Pencil, RotateCw } from '@renderer/icons'
+import { Close, Pencil, RotateCw } from '@renderer/icons'
+import type { ContextTab } from './useShellChrome'
 
 /**
  * M45. Fields whose value is a path, an argv or a pid take the mono face, so
@@ -29,6 +30,9 @@ export interface AutomationRow {
 
 export interface InspectorProps {
   onToggle: () => void
+  /** M46. The active tab of the context pane, persisted as shell.contextTab. */
+  tab: ContextTab
+  onSelectTab: (tab: ContextTab) => void
   /** null when nothing is selected — the launch state, and every background click. */
   model: InspectorModel | null
   summary: InspectorSummary
@@ -89,25 +93,23 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
+  // M46. The toggle lives in the top bar now (there is no pane to hold it
+  // while the pane is hidden); the prop stays so the wiring reads the same.
   return (
-    <aside className="shell__inspector" aria-label="Inspector">
-      <button
-        type="button"
-        className="shell__inspector-toggle icon-button"
-        title="Hide the inspector (⇧⌘\)"
-        aria-label="Hide the inspector"
-        {...shellControl(onToggle)}
-      >
-        <ChevronRight />
-      </button>
-      <div className="shell__region-title">Panel</div>
-      <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
+    <aside className="shell__inspector" aria-label="Context">
       {model === null
-        ? <InspectorEmpty summary={summary} />
+        ? <>
+            <div className="shell__region-title">Canvas</div>
+            <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
+            <InspectorEmpty summary={summary} />
+          </>
         : <InspectorPanel
+            tab={tab}
+            onSelectTab={onSelectTab}
+            automations={automations}
             model={model}
             review={review}
             toolbox={toolbox}
@@ -185,6 +187,18 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
           <dt className="inspector__label">waiting</dt>
           <dd className="inspector__value" data-summary="waiting">{summary.waiting}</dd>
         </div>
+        {/* M46 (#19's aggregate half). Every panel's tokens and list price,
+            summed — the two figures no single panel can answer. `cost`
+            undefined is "a panel's model has no price", rendered as a dash
+            rather than as a smaller number that looks complete. */}
+        <div className="inspector__field">
+          <dt className="inspector__label">tokens</dt>
+          <dd className="inspector__value" data-summary="tokens">{summary.tokens.toLocaleString()}</dd>
+        </div>
+        <div className="inspector__field">
+          <dt className="inspector__label">list price</dt>
+          <dd className="inspector__value" data-summary="cost">{summary.cost === undefined ? '—' : `$${summary.cost.toFixed(2)}`}</dd>
+        </div>
       </dl>
     </div>
   )
@@ -201,9 +215,13 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
+  tab, onSelectTab, automations,
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults
 }: {
+  tab: ContextTab
+  onSelectTab: (tab: ContextTab) => void
+  automations: AutomationRow[]
   model: InspectorModel
   review: ReviewFieldModel | null
   toolbox: ToolboxFieldModel | null
@@ -222,8 +240,25 @@ function InspectorPanel({
   automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
   const state = useAgentState(model.id)
+  // M46. Close is DESTRUCTIVE and gated by the same one-click arming the
+  // panel's own × uses (never a modal — this app has one modal-shaped surface
+  // and keeps it that way). A button pinned at a fixed corner of the pane is
+  // a mis-click target in a way a mid-scroll button was not, which is why
+  // the M8b reasoning ("the user aimed at a labelled control") no longer
+  // holds here. Disarms when the selection changes: an armed Close carried
+  // to the NEXT panel would close a panel the user never armed.
+  const [closeArmed, setCloseArmed] = useState(false)
+  useEffect(() => { setCloseArmed(false) }, [model.id])
+  const pid = model.fields.find((f) => f.key === 'pid')?.value
+  const TABS: Array<{ id: ContextTab; label: string }> = [
+    { id: 'detail', label: 'Detail' }, { id: 'work', label: 'Work' }, { id: 'tools', label: 'Tools' }
+  ]
   return (
-    <div className="inspector__body">
+    <div className="context">
+      {/* PINNED, never scrolls: "which panel is this" is the question that
+          qualifies every other section's answer, and the Cost figure must
+          never be on screen without its subject (spec §4.2). */}
+      <div className="context__header">
       <div className="inspector__heading" data-inspector-heading>{model.heading}</div>
       <div className="inspector__state">
         {/*
@@ -243,7 +278,33 @@ function InspectorPanel({
           */
           <span className="inspector__badge" data-inspector-badge="reattached">reattached</span>
         )}
+        {pid !== undefined && pid !== '—' && <span className="inspector__pid inspector__value--mono">pid {pid}</span>}
       </div>
+      </div>
+      {/* Tabs, grouped by QUESTION rather than by feature: Detail (what is
+          this panel), Work (what has it done and cost), Tools (what can it
+          do). Inactive tabs stay RENDERED and hidden rather than unmounted:
+          the model is frozen on the WHOLE inspectorSignature, so a hidden
+          tab's figures are as current as the visible one's the instant it is
+          switched to — narrowing the signature to the visible tab is the
+          obvious optimisation and it freezes hidden tabs stale (§4.3). */}
+      <div className="context__tabs" role="tablist" aria-label="Context">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            className={`context__tab${tab === t.id ? ' context__tab--on' : ''}`}
+            data-context-tab={t.id}
+            aria-selected={tab === t.id}
+            {...shellControl(() => onSelectTab(t.id))}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="inspector__body context__body">
+      <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
       <dl className="inspector__fields">
         {model.fields.map((field) => (
           <div className="inspector__field" key={field.key} data-inspector-field={field.key}>
@@ -339,7 +400,159 @@ function InspectorPanel({
           })}
         </div>
       )}
-      <div className="inspector__actions">
+      </section>
+      <section className="context__panel" data-context-panel="work" role="tabpanel" hidden={tab !== 'work'}>
+      {review !== null && !review.hidden && (
+        /*
+          `hidden` (not-a-repo, or the invoke hasn't resolved yet) renders
+          nothing at all rather than an empty section — see ReviewFieldModel's
+          own doc comment in inspector-fields.ts: a permanent placeholder on
+          most panels (most cwds are not repositories) teaches the user to
+          stop reading this part of the pane.
+        */
+        <section className="inspector__section">
+          <h3 className="inspector__section-heading">Changes</h3>
+          <p className="inspector__review-summary" data-review-summary>{review.summary}</p>
+          {review.note !== undefined && (
+            <p className="inspector__review-note" data-review-note>{review.note}</p>
+          )}
+          {/*
+            Inside the section rather than beside Restart, so it sits with the
+            thing it acts on — but the SECTION IS NOT THE GATE. `hidden`
+            answers "is this panel in a repository", which is a different
+            question from "is there anything to open": `never-started` is by
+            far the commonest unopenable arm. So it gates on `restartable` —
+            the SAME field the palette's panel.review row gates on — disabled
+            with a reason rather than hidden (verify:palette 31's rule). A
+            review NODE never reaches here: Canvas leaves `review` null for
+            one (verify:panels 112).
+          */}
+          <button
+            type="button"
+            className="inspector__action"
+            data-inspector-action="review"
+            disabled={!model.restartable}
+            title={model.restartable
+              ? `Open a review node for ${model.heading}`
+              : `${model.heading} has not started yet, so there is no baseline to review against`}
+            {...shellControl(() => onOpenReview(model.id))}
+          >
+            Open review
+          </button>
+          <ul className="inspector__review-files">
+            {review.files.map((f) => (
+              <li key={f.path} className="inspector__review-file" data-review-file={f.path}>
+                <span className="inspector__review-path">{f.path}</span>
+                <span className="inspector__review-counts">
+                  {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {review.more > 0 && <p className="inspector__review-more">+{review.more} more</p>}
+        </section>
+      )}
+      {!model.usage.hidden && (
+        /*
+          `hidden` is a panel whose preset declared no agent — a login shell,
+          most panels — and it renders NOTHING, the same "$0.00 beside a
+          working agent is a confident wrong answer" rule the Changes section
+          above states for not-a-repo. Everything else (pinned) always renders
+          the section, even with nothing to show yet.
+        */
+        <section className="inspector__section" data-usage-section>
+          <h3 className="inspector__section-heading">Cost</h3>
+          {model.usage.note !== undefined && (
+            <p className="inspector__usage-note" data-usage-note>{model.usage.note}</p>
+          )}
+          {model.usage.rows.length > 0 && (
+            <>
+              {/* FOUR figures, never one sum: a single total is unanswerable
+                  when the user asks why it is large. */}
+              <ul className="inspector__usage-rows">
+                {model.usage.rows.map((row) => (
+                  <li key={row.label} className="inspector__usage-row" data-usage-row={row.label}>
+                    <span className="inspector__usage-label">{row.label}</span>
+                    <span
+                      className="inspector__usage-tokens"
+                      {...(row.label === 'output' ? { 'data-usage-output': true } : {})}
+                    >
+                      {row.tokens.toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="inspector__usage-turns" data-usage-turns>
+                {model.usage.turns} turns
+                {model.usage.subagentTurns > 0 ? `, ${model.usage.subagentTurns} by subagents` : ''}
+              </p>
+              {model.usage.cost !== undefined && (
+                <p className="inspector__usage-cost" data-usage-cost title={model.usage.costLabel}>
+                  ${model.usage.cost.toFixed(2)}{' '}
+                  <span className="inspector__usage-cost-suffix">list price</span>
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+      {(review === null || review.hidden) && model.usage.hidden && (
+        <p className="inspector__review-note" data-context-empty="work">
+          {model.kind === 'terminal'
+            ? 'No changes to show: this panel is not in a repository, and no agent is pinned for cost.'
+            : `${KIND_NOUN[model.kind]} does no work of its own to report.`}
+        </p>
+      )}
+      </section>
+      <section className="context__panel" data-context-panel="tools" role="tabpanel" hidden={tab !== 'tools'}>
+      <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
+      {toolbox !== null && !toolbox.hidden && (
+        <section className="inspector__section">
+          <h3 className="inspector__section-heading">Toolbox</h3>
+          <p className="inspector__review-summary" data-toolbox-summary>{toolbox.summary}</p>
+          {toolbox.note !== undefined && (
+            <p className="inspector__review-note" data-toolbox-note>{toolbox.note}</p>
+          )}
+          <ul className="inspector__toolbox-list">
+            {toolbox.rows.map((row) => (
+              <li className="inspector__toolbox-row" key={row.id} data-toolbox-row={row.name}>
+                <span className="inspector__toolbox-name">{row.name}</span>
+                <span className="inspector__toolbox-scope">{row.scope}</span>
+                {row.state !== 'active' && (
+                  <span className="inspector__toolbox-state">{row.state}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {toolbox.more > 0 && (
+            <p className="inspector__review-more" data-toolbox-more>+{toolbox.more} more</p>
+          )}
+          {/* Present and ENABLED whenever the section renders, because a
+              toolbox needs only a DIRECTORY. */}
+          <button
+            type="button"
+            className="inspector__action"
+            data-toolbox-open
+            {...shellControl(() => { onOpenToolbox(model.id) })}
+          >
+            Open toolbox
+          </button>
+        </section>
+      )}
+      {(toolbox === null || toolbox.hidden) && automations.length === 0 && (
+        <p className="inspector__review-note" data-context-empty="tools">
+          {toolbox === null
+            ? `${model.kind === 'terminal' ? 'This panel' : KIND_NOUN[model.kind]} has no directory, so there is no toolbox to read.`
+            : 'No skills, commands or MCP servers configured in this directory.'}
+        </p>
+      )}
+      </section>
+      </div>
+      {/* PINNED action bar, three ranks: primary (Restart), secondary
+          (Rename, Save as preset, Link), destructive (Close, gated). Every
+          verb stays VISIBLE and disabled-with-a-reason where it does not
+          apply — a control that vanishes reads as a feature never built. */}
+      <div className="inspector__actions context__actions">
         {/*
           FIRST, and DISABLED rather than absent when the panel never started:
           a control that vanished would read as a feature that was never
@@ -377,7 +590,7 @@ function InspectorPanel({
         </button>
         <button
           type="button"
-          className="inspector__action"
+          className="inspector__action inspector__action--secondary"
           data-inspector-action="rename"
           title={`Rename ${model.heading}`}
           {...shellControl(() => onRename(model.id, model.title ?? ''))}
@@ -386,7 +599,7 @@ function InspectorPanel({
         </button>
         <button
           type="button"
-          className="inspector__action"
+          className="inspector__action inspector__action--secondary"
           data-inspector-action="save-preset"
           disabled={model.kind !== 'terminal'}
           title={model.kind === 'terminal'
@@ -405,7 +618,7 @@ function InspectorPanel({
         */}
         <button
           type="button"
-          className="inspector__action"
+          className="inspector__action inspector__action--secondary"
           data-inspector-action="link"
           title={`Link ${model.heading} to another panel`}
           {...shellControl(() => onLink(model.id))}
@@ -414,175 +627,17 @@ function InspectorPanel({
         </button>
         <button
           type="button"
-          className="inspector__action"
+          className={`inspector__action inspector__action--destructive${closeArmed ? ' inspector__action--armed' : ''}`}
           data-inspector-action="close"
-          title={`Close ${model.heading}`}
-          {...shellControl(() => onClose(model.id))}
+          {...(closeArmed ? { 'data-close-armed': '' } : {})}
+          title={closeArmed ? `Click again to close ${model.heading}` : `Close ${model.heading} (click twice)`}
+          {...shellControl(() => {
+            if (closeArmed) { setCloseArmed(false); onClose(model.id) } else setCloseArmed(true)
+          })}
         >
-          Close panel
+          {closeArmed ? 'close?' : 'Close'}
         </button>
       </div>
-      {toolbox !== null && !toolbox.hidden && (
-        /*
-          Same hiding policy as Changes above, and the same reason: a section
-          that renders an empty body on most panels most of the time teaches
-          the user to stop reading this part of the pane. The IN-FLIGHT state
-          is deliberately NOT hidden — it renders "reading…" — because an
-          empty gap for the duration of every selection reads as broken.
-        */
-        <section className="inspector__section">
-          <h3 className="inspector__section-heading">Toolbox</h3>
-          <p className="inspector__review-summary" data-toolbox-summary>{toolbox.summary}</p>
-          {toolbox.note !== undefined && (
-            <p className="inspector__review-note" data-toolbox-note>{toolbox.note}</p>
-          )}
-          <ul className="inspector__toolbox-list">
-            {toolbox.rows.map((row) => (
-              <li className="inspector__toolbox-row" key={row.id} data-toolbox-row={row.name}>
-                <span className="inspector__toolbox-name">{row.name}</span>
-                <span className="inspector__toolbox-scope">{row.scope}</span>
-                {row.state !== 'active' && (
-                  <span className="inspector__toolbox-state">{row.state}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-          {toolbox.more > 0 && (
-            <p className="inspector__review-more" data-toolbox-more>+{toolbox.more} more</p>
-          )}
-          {/*
-            Present and ENABLED whenever the section renders, because a
-            toolbox needs only a DIRECTORY — unlike Open review beside it,
-            which needs a baseline and so is disabled for a panel that never
-            spawned. A row that vanished would read as a feature that was
-            never built (verify:palette 31's rule).
-          */}
-          <button
-            type="button"
-            className="inspector__action"
-            data-toolbox-open
-            {...shellControl(() => { onOpenToolbox(model.id) })}
-          >
-            Open toolbox
-          </button>
-        </section>
-      )}
-      {review !== null && !review.hidden && (
-        /*
-          `hidden` (not-a-repo, or the invoke hasn't resolved yet) renders
-          nothing at all rather than an empty section — see ReviewFieldModel's
-          own doc comment in inspector-fields.ts: an empty-but-present section
-          is a visible blank gap in a 260px pane, and a permanent placeholder
-          on most panels (most cwds are not repositories) teaches the user to
-          stop reading this part of the pane.
-        */
-        <section className="inspector__section">
-          <h3 className="inspector__section-heading">Changes</h3>
-          <p className="inspector__review-summary" data-review-summary>{review.summary}</p>
-          {review.note !== undefined && (
-            <p className="inspector__review-note" data-review-note>{review.note}</p>
-          )}
-          {/*
-            Inside the section rather than beside Restart, so it sits with the
-            thing it acts on — but the SECTION IS NOT THE GATE, and reading it
-            as one is what shipped a dead button. `hidden` answers "is this
-            panel in a repository", which is a different question from "is
-            there anything to open": several of ReviewResult's visible arms
-            are unopenable, and `never-started` is by far the commonest of
-            them — a panel with no session has no baseline, so openReview
-            correctly returns on the null and the button does nothing, ever.
-
-            So it gates on `restartable` — the SAME field the palette's
-            panel.review row gates on, and the same one Restart above gates
-            on, deliberately not a second boolean. "Has this panel ever
-            spawned" is one fact, and it is exactly the question both verbs
-            ask. Disabled with a reason rather than hidden, the rule
-            verify:palette 31 states for rows: a control that vanishes reads
-            as a feature that was never built, and this one sits where a user
-            has just been told there are changes.
-
-            A review NODE never reaches here at all — Canvas leaves `review`
-            null for one, so the section does not render (verify:panels 112).
-          */}
-          <button
-            type="button"
-            className="inspector__action"
-            data-inspector-action="review"
-            disabled={!model.restartable}
-            title={model.restartable
-              ? `Open a review node for ${model.heading}`
-              : `${model.heading} has not started yet, so there is no baseline to review against`}
-            {...shellControl(() => onOpenReview(model.id))}
-          >
-            Open review
-          </button>
-          <ul className="inspector__review-files">
-            {review.files.map((f) => (
-              <li key={f.path} className="inspector__review-file" data-review-file={f.path}>
-                <span className="inspector__review-path">{f.path}</span>
-                <span className="inspector__review-counts">
-                  {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {review.more > 0 && <p className="inspector__review-more">+{review.more} more</p>}
-        </section>
-      )}
-      {!model.usage.hidden && (
-        /*
-          `hidden` is a panel whose preset declared no agent — a login shell,
-          most panels — and it renders NOTHING, the same "$0.00 beside a
-          working agent is a confident wrong answer" rule the Changes section
-          above states for not-a-repo. Everything else (pinned) always
-          renders the section, even with nothing to show yet, the same
-          `clean` rule: a heading with an empty body would read as broken for
-          the first seconds of every pinned panel's life.
-        */
-        <section className="inspector__section" data-usage-section>
-          <h3 className="inspector__section-heading">Cost</h3>
-          {model.usage.note !== undefined && (
-            <p className="inspector__usage-note" data-usage-note>{model.usage.note}</p>
-          )}
-          {model.usage.rows.length > 0 && (
-            <>
-              {/*
-                FOUR figures, never one sum: "the inspector shows the links,
-                not the answer" applied to a third pair. A single total is
-                unanswerable when the user asks why it is large, and cache
-                reads are usually most of it.
-              */}
-              <ul className="inspector__usage-rows">
-                {model.usage.rows.map((row) => (
-                  <li key={row.label} className="inspector__usage-row" data-usage-row={row.label}>
-                    <span className="inspector__usage-label">{row.label}</span>
-                    <span
-                      className="inspector__usage-tokens"
-                      {...(row.label === 'output' ? { 'data-usage-output': true } : {})}
-                    >
-                      {row.tokens.toLocaleString()}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="inspector__usage-turns" data-usage-turns>
-                {model.usage.turns} turns
-                {model.usage.subagentTurns > 0 ? `, ${model.usage.subagentTurns} by subagents` : ''}
-              </p>
-              {model.usage.cost !== undefined && (
-                // `title` carries the disclaimer (never a bare figure — a Max
-                // or Pro subscriber is charged nothing per token) AND a
-                // visible suffix repeats it, so the caveat survives without a
-                // hover.
-                <p className="inspector__usage-cost" data-usage-cost title={model.usage.costLabel}>
-                  ${model.usage.cost.toFixed(2)}{' '}
-                  <span className="inspector__usage-cost-suffix">list price</span>
-                </p>
-              )}
-            </>
-          )}
-        </section>
-      )}
     </div>
   )
 }

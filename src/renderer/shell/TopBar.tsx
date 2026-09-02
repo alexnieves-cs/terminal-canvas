@@ -1,30 +1,21 @@
 import type { JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import { shellControl } from './shell-control'
-import { Gear, Layers, Minus, Plus, Search } from '@renderer/icons'
+import { Gear, Layers, PanelRight, Search } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
-  scale: number
   onSpawnPreset: (id: string) => void
-  onZoomBy: (factor: number) => void
-  onFit: () => void
   onSearch: () => void
   onSettings: () => void
   /** Whether M14's merged view is currently showing. */
   merged: boolean
   onToggleMerged: () => void
+  /** M46. The context pane is on screen (a column, or a Compact drawer). */
+  contextOpen: boolean
+  onToggleContext: () => void
 }
 
-/**
- * The step the +/- buttons take. Restated here rather than imported because
- * useViewport's KEYBOARD_ZOOM_STEP is module-private; if a later task exports
- * it, import it and delete this constant. What must NOT be restated is the
- * zoom itself — the buttons call onZoomBy, i.e. useViewport's named verb, so
- * Cmd+= and + are provably the same gesture rather than two copies of the
- * same arithmetic.
- */
-const ZOOM_STEP = 1.2
 
 /**
  * The visible verbs. Every one of them already existed as a chord or a palette
@@ -44,7 +35,7 @@ const ZOOM_STEP = 1.2
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, scale, onSpawnPreset, onZoomBy, onFit, onSearch, onSettings, merged, onToggleMerged
+  presets, onSpawnPreset, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -76,15 +67,9 @@ export function TopBar({
         New panel <kbd>⌘N</kbd>
       </button>
 
-      <div className="shell__zoom" role="group" aria-label="Zoom">
-        <button type="button" className="shell__zoom-out icon-button" title="Zoom out (⌘−)"
-          aria-label="Zoom out" {...shellControl(() => onZoomBy(1 / ZOOM_STEP))}><Minus /></button>
-        <span className="shell__zoom-readout">{Math.round(scale * 100)}%</span>
-        <button type="button" className="shell__zoom-in icon-button" title="Zoom in (⌘=)"
-          aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
-        <button type="button" className="shell__fit" title="Fit everything (⌘1)"
-          {...shellControl(onFit)}>Fit</button>
-      </div>
+      {/* M46: the zoom cluster moved to the canvas HUD — a VIEW control
+          belongs with the view readout, in the corner that already holds
+          one. */}
 
       {/* The merged view's discoverable door. `aria-pressed` and the --on
           modifier both carry the same fact, because the two audiences are
@@ -94,12 +79,13 @@ export function TopBar({
           pair for the reason PaletteActions.toggleMerged is one. */}
       <button
         type="button"
-        className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
+        className={`shell__merge icon-button${merged ? ' shell__merge--on' : ''}`}
         aria-pressed={merged}
+        aria-label={merged ? 'Back to this workspace' : 'Show every workspace at once'}
         title={merged ? 'Back to this workspace' : 'Show every workspace at once'}
         {...shellControl(onToggleMerged)}
       >
-        <Layers /> {merged ? 'Merged ✓' : 'Merged'}
+        <Layers />
       </button>
 
       <div className="shell__spacer" />
@@ -108,6 +94,13 @@ export function TopBar({
         {...shellControl(onSearch)}><Search /> Search <kbd>⌘K</kbd></button>
       <button type="button" className="shell__settings icon-button" title="Settings"
         aria-label="Settings" {...shellControl(onSettings)}><Gear /></button>
+      {/* M46. The context pane's toggle lives here, not in the pane: when
+          the pane is hidden there is no pane to hold it, and the old 22px
+          strip was a column of nothing. aria-pressed names the state. */}
+      <button type="button" className={`shell__inspector-toggle icon-button${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
+        title={contextOpen ? 'Hide the context pane (⇧⌘\\)' : 'Show the context pane (⇧⌘\\)'}
+        aria-label={contextOpen ? 'Hide the context pane' : 'Show the context pane'}
+        aria-pressed={contextOpen} {...shellControl(onToggleContext)}><PanelRight /></button>
     </header>
   )
 }
