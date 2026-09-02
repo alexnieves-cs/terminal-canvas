@@ -37,3 +37,4 @@ copy here is deleted.
 | [m52-osc133.md](m52-osc133.md) | M52 — OSC 133 shell integration and the run ledger | finished |
 | [m53-discard.md](m53-discard.md) | M53 — Discard, per file | finished |
 | [m54-tc-cli.md](m54-tc-cli.md) | M54 — `tc`: a CLI and a URL scheme | finished |
+| [m55-orphans.md](m55-orphans.md) | M55 — Recover an orphan session | finished |

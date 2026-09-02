@@ -57,6 +57,11 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **Nothing recovered is thrown away unasked.** A session the app finds at
+  launch with no panel in any canvas — the agent that was mid-run when the
+  machine died between a spawn and the save — is offered back by name:
+  restore it as a panel where it keeps running, or discard it. A dead pane is
+  never offered, and a panel in a hidden canvas is never mistaken for one.
 - **Drivable from outside.** `tc open --preset claude --cwd ~/repo` spawns a
   panel on the running canvas from a shell, a script, a git hook — or from an
   agent inside a panel, where `tc` is already on PATH with nothing installed.
@@ -291,6 +296,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
+                       session:recover
                        settings:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset

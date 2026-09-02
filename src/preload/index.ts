@@ -24,6 +24,7 @@ import type {
   SubagentUpdate
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
+import type { OrphanRow } from '../shared/orphans'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
 import type { MachineCostTarget } from '../shared/machine-cost'
@@ -120,6 +121,7 @@ const bridge: CanvasBridge = {
   session: {
     info: () => ipcRenderer.invoke(IPC.SESSION_BACKEND),
     onLive: (listener) => subscribe<LiveSessionUpdate>(IPC_EVENTS.SESSION_LIVE, listener),
+    onRecover: (listener) => subscribe<OrphanRow[]>(IPC_EVENTS.SESSION_RECOVER, listener),
     onSubagents: (listener) => subscribe<SubagentUpdate>(IPC_EVENTS.SUBAGENT_STATE, listener),
     onUsage: (listener) =>
       subscribe<{ panelId: PanelId; usage: PanelUsage }>(IPC_EVENTS.USAGE_PANEL, listener)

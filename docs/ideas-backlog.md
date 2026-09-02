@@ -1702,7 +1702,7 @@ a constant screen size while the terminal body scales normally.
   zoom. This is the opposite question — what stays constant regardless of zoom — and it
   applies to the *live* tier that #22 explicitly does not touch. They compose.
 
-## 61. Recover an orphan session instead of killing it
+## 61. Recover an orphan session instead of killing it — DONE, M55
 
 At boot, any tmux session whose panel id is not in the saved layout is killed outright, with a
 comment saying adoption was rejected because it would mint geometry the user never chose. That

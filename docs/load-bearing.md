@@ -2826,3 +2826,26 @@ calls `setAsDefaultProtocolClient`: it would register `Electron.app` as the hand
 injected connect and exits 0 / 1 / 2 for ok / refused / not running — three answers, because
 "the app said no" and "there is no app" need different fixes and a script must tell them
 apart without parsing prose.
+
+**An orphan session is ASKED about, never adopted silently, and "known" means every workspace
+(`main/orphans.ts`, `index.ts`'s boot block, `renderer/panels/recover.ts`, `session:recover`).**
+Three rules, each with a quiet failure. **The known set is every workspace's ids**
+(`layoutStore.workspaces()`), not `initial().panels`: the latter is the active workspace only,
+and until M55 a session kept across quit (M38's keep arm) for a panel in a HIDDEN workspace was
+killed as an orphan at the next launch — the user saw a dormant card where a running agent had
+been, with a `[tmux] orphan` line in a log nobody reads. `verify:tmux orphan.1` pins the set
+by drawing known ids from two workspaces. **`findOrphans` adds no dead-pane filter**: it is fed
+by `ptyManager.list()`, whose tmux rows have been through `parseListOutput`'s `dead !== '0'`
+drop, so a corpse is never a candidate by construction; a second filter here would be a second
+opinion that could disagree with the first, and offering to restore a corpse is worse than
+killing it silently. **No dialog, no send**: `session:recover` goes out only after a Restore
+answer, and the stale-baseline sweep counts restored ids as surviving, since a baseline dropped
+for a session the user just chose to keep would diff its next edit against nothing. On the
+renderer side a recovered panel takes **the session's own id** — tmux names the session by it,
+and `new-session -A` reattaching by that name is the entire mechanism — and the id counter
+moves PAST every adopted id through `seedAfter`, which is now the ONE seeding rule
+`Canvas.tsx` and `switchWorkspace` share (two inline copies of the `[nrfjt]` class each warned
+that missing the other reopened the duplicate-id defect; a third copy for recovery would have
+been a third door). Recovery goes through `commitHistory` like a spawn, so `Cmd+Z` un-adopts —
+which disposes the sessions, and that is right: the user was asked and said yes, then said no.
+The dialog itself is manual-only; no suite drives `showMessageBox`.
