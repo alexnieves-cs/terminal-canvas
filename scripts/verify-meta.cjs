@@ -471,6 +471,20 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
       if (computed > 1) collisions.push(`${f}:${id}×${computed}`)
     }
   }
+  // M48 — claude-md.1. CLAUDE.md is a COPY of the IPC diagram and of every
+  //       load-bearing pointer, and it is edited by scripts. A script that
+  //       opened it for writing before reading it emptied the whole file in
+  //       the M47 commit, and nothing here noticed: 19 pins README's diagram,
+  //       not this one. So: every invoke channel in the contract appears in
+  //       CLAUDE.md's diagram too, which is only true of a file that exists.
+  {
+    const claudeMd = readFileSync(join(ROOT, 'CLAUDE.md'), 'utf8')
+    const missing = channels.filter((ch) => !claudeMd.includes(ch))
+    ok('claude-md.1 CLAUDE.md carries every invoke channel in its copy of the IPC diagram',
+      claudeMd.length > 10000 && missing.length === 0,
+      `length=${claudeMd.length} missing: ${missing.slice(0, 6).join(' ')}`)
+  }
+
   ok('22 no two computed checks in one suite share an id',
     collisions.length === 0 && scanned > 900,
     collisions.length ? collisions.join(' ') : `${scanned} ids scanned, none collide`)
