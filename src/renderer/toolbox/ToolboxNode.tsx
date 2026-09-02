@@ -3,8 +3,8 @@ import type { ToolboxPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { applyToolbox, useToolbox } from '@renderer/session/toolbox-store'
 import { buildToolboxNodeModel } from './toolbox-node-model'
-import { PanelPorts } from '@renderer/components/PanelPorts'
-import { Close, Refresh } from '@renderer/icons'
+import { PanelFrame } from '@renderer/components/PanelFrame'
+import { Refresh } from '@renderer/icons'
 
 export interface ToolboxNodeProps {
   panel: ToolboxPanel
@@ -109,32 +109,21 @@ function ToolboxNodeImpl({
   }, [id, cwd, refreshToken])
 
   return (
-    <div
-      className={`panel${selected ? ' panel--selected' : ''}`}
-      data-panel-id={id}
-      // The kind as an attribute rather than a class, the rule FileNode
-      // states: verify:panels reads it to tell a toolbox node apart from a
-      // terminal panel in a canvas where both are just `.panel`.
-      data-panel-kind="toolbox"
-      data-link-target={linkTarget ? '' : undefined}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
-    >
-      <header
-        className="panel__chrome"
-        onMouseDown={(event: ReactMouseEvent) => {
-          event.stopPropagation()
-          event.preventDefault()
-          onSelect(id, event.shiftKey)
-          onBeginDrag({
-            panelId: id,
-            mode: { kind: 'move' },
-            originRect: rect,
-            originWorld: { x: event.clientX, y: event.clientY }
-          })
-        }}
-      >
-        <span className="panel__title">{model.heading}</span>
-        <span className="toolbox-node__summary" data-toolbox-summary>{model.summary}</span>
+    <PanelFrame
+      id={id}
+      kind="toolbox"
+      rect={rect}
+      z={z}
+      selected={selected}
+      linkTarget={linkTarget}
+      readOnly={readOnly}
+      title={model.heading}
+      onSelect={onSelect}
+      onBeginDrag={onBeginDrag}
+      onBeginLink={onBeginLink}
+      close={readOnly ? null : { armed: false, title: 'Close this toolbox', armedText: '', onMouseDown: (event) => { event.stopPropagation(); event.preventDefault(); onClose(id) } }}
+      chrome={<>
+        <span className="pf__summary toolbox-node__summary" data-toolbox-summary>{model.summary}</span>
         <button
           type="button"
           className="toolbox-node__refresh icon-button"
@@ -150,23 +139,12 @@ function ToolboxNodeImpl({
         >
           <Refresh />
         </button>
-        <button
-          type="button"
-          className="panel__close icon-button"
-          title="Close this toolbox"
-          aria-label="Close this toolbox"
-          onMouseDown={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            onClose(id)
-          }}
-        >
-          <Close />
-        </button>
-      </header>
+      </>}
+    >
+
 
       <div
-        className="toolbox-node__body"
+        className="pf__body pf__body--text toolbox-node__body"
         // The element that actually scrolls carries the marker, which is why
         // shouldYieldWheel needed no edit for this kind.
         data-scroll-host
@@ -189,7 +167,7 @@ function ToolboxNodeImpl({
         )}
 
         {model.note !== undefined && (
-          <p className="toolbox-node__note" data-toolbox-note>{model.note}</p>
+          <p className="pf__note toolbox-node__note" data-toolbox-note>{model.note}</p>
         )}
 
         {model.groups.map((group) => (
@@ -214,7 +192,7 @@ function ToolboxNodeImpl({
             {group.more > 0 && (
               // COUNTED and reported, never a list that silently stops — the
               // rule REVIEW_FILE_CAP already states.
-              <p className="toolbox-node__more">+{group.more} more</p>
+              <p className="pf__more toolbox-node__more">+{group.more} more</p>
             )}
           </section>
         ))}
@@ -266,34 +244,7 @@ function ToolboxNodeImpl({
         )}
       </div>
 
-      {(['e', 's', 'se'] as const).map((edge) => (
-        <div
-          key={edge}
-          className={`panel__resize panel__resize--${edge}`}
-          onMouseDown={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            onSelect(id)
-            onBeginDrag({
-              panelId: id,
-              mode: { kind: 'resize', edge },
-              originRect: rect,
-              originWorld: { x: event.clientX, y: event.clientY }
-            })
-          }}
-        />
-      ))}
-      {/* M35 (Task 7). The same block TerminalPanel carries, and for the
-          same reasons: `links` lives on PanelBase, so this kind is
-          already a valid endpoint and the gesture should reach it too.
-          Suppressed under readOnly (the merged view). The PORT_MIN_SCALE
-          cutoff is a canvas-host CLASS (`.canvas--ports-hidden`), never a
-          `scale` prop threaded through this memoized component — see
-          PanelPorts.tsx's own comment. */}
-      {!readOnly && (
-        <PanelPorts panelId={id} onBeginLink={onBeginLink} />
-      )}
-    </div>
+    </PanelFrame>
   )
 }
 

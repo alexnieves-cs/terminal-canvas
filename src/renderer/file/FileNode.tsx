@@ -4,8 +4,8 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
-import { PanelPorts } from '@renderer/components/PanelPorts'
-import { Close, Pencil, Refresh } from '@renderer/icons'
+import { PanelFrame } from '@renderer/components/PanelFrame'
+import { Pencil, Refresh } from '@renderer/icons'
 
 /**
  * The conflict banner's wording.
@@ -449,41 +449,41 @@ function FileNodeImpl({
   }
 
   return (
-    <div
-      className={`panel${selected ? ' panel--selected' : ''}`}
-      data-panel-id={id}
-      // The kind, as an attribute rather than as a class the styles happen to
-      // use: verify:panels reads it to tell a file panel apart from a terminal
-      // one in a canvas where both are just `.panel`. There is no `.file-node`
-      // class and no bare `data-file-node` marker beside it — both were
-      // redundant with this attribute and neither was read by any CSS rule
-      // or selector.
-      data-panel-kind="file"
-      data-link-target={linkTarget ? '' : undefined}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
-    >
-      <header
-        className="panel__chrome"
-        onMouseDown={(event: ReactMouseEvent) => {
+    <PanelFrame
+      id={id}
+      kind="file"
+      rect={rect}
+      z={z}
+      selected={selected}
+      linkTarget={linkTarget}
+      readOnly={readOnly}
+      title={model.heading}
+      onSelect={onSelect}
+      onBeginDrag={onBeginDrag}
+      onBeginLink={onBeginLink}
+      // Arms only while a draft is DIRTY: an unsaved draft is unrecoverable
+      // state, exactly like a running process, and reopening the file brings
+      // back what is on DISK. A clean panel still closes on one click.
+      close={readOnly ? null : {
+        armed: closeArmed,
+        title: closeArmed ? 'Click again to close and lose your unsaved changes' : 'Close this file',
+        armedText: 'lose edits?',
+        attrs: { 'data-file-node-close': '' },
+        onMouseDown: (event) => {
           event.stopPropagation()
           event.preventDefault()
-          onSelect(id, event.shiftKey)
-          onBeginDrag({
-            panelId: id,
-            mode: { kind: 'move' },
-            originRect: rect,
-            originWorld: { x: event.clientX, y: event.clientY }
-          })
-        }}
-      >
-        <span className="panel__title">{model.heading}</span>
+          if (!dirty || closeArmed) { disarm(); onClose(id); return }
+          arm('close')
+        }
+      }}
+      chrome={<>
         {/* Short by construction ("2 KB · 40 lines", "not found"), so it sits
             in the chrome row. The DIRECTORY is an absolute path and would
             squash the heading out of a one-line header, so it renders at the
             top of the body instead — still its own field rather than spliced
             into the heading, which is the rule the inspector's own file arm
             states. */}
-        <span className="file-node__summary" data-file-node-summary>{model.summary}</span>
+        <span className="pf__summary file-node__summary" data-file-node-summary>{model.summary}</span>
         {dirty && (
           // Visible unsaved-work marker. An editor that gives no sign of a
           // pending, un-persisted draft is its own defect — the user has no
@@ -550,35 +550,12 @@ function FileNodeImpl({
         >
           <Refresh />
         </button>
-        {/* Arms only while a draft is DIRTY. This comment used to say there
-            was "nothing to kill here" and that "the same gesture reopens the
-            file" — true while this panel was read-only, and false the moment
-            it grew an editor: an unsaved draft is unrecoverable state, exactly
-            like a running process, and reopening the file brings back what is
-            on DISK, not what the user had typed. A clean panel still closes on
-            one click, because a clean panel really does have nothing to lose. */}
-        <button
-          type="button"
-          className={`panel__close icon-button${closeArmed ? ' panel__close--arming' : ''}`}
-          data-file-node-close
-          title={closeArmed ? 'Click again to close and lose your unsaved changes' : 'Close this file'}
-          onMouseDown={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            if (!dirty || closeArmed) {
-              disarm()
-              onClose(id)
-              return
-            }
-            arm('close')
-          }}
-        >
-          {closeArmed ? 'lose edits?' : <Close />}
-        </button>
-      </header>
+      </>}
+    >
+
 
       <div
-        className="file-node__body"
+        className="pf__body pf__body--text file-node__body"
         // The marker shouldYieldWheel looks for. It is an ATTRIBUTE on the
         // element that actually scrolls, so "does this panel own its wheel" is
         // answered by what the KIND renders rather than by a branch inside the
@@ -626,12 +603,12 @@ function FileNodeImpl({
                 )}
               </div>
             )}
-            {saveError !== null && <p className="file-node__note" data-file-node-save-error>{saveError}</p>}
+            {saveError !== null && <p className="pf__note file-node__note" data-file-node-save-error>{saveError}</p>}
             {discardArmed && (
               // The arming has to be VISIBLE or it is just a key that stopped
               // working: a first Escape that silently does nothing reads as a
               // broken editor, which is worse than the discard it prevents.
-              <p className="file-node__note" data-file-node-discard-armed>
+              <p className="pf__note file-node__note" data-file-node-discard-armed>
                 Press Escape again to discard your unsaved changes.
               </p>
             )}
@@ -677,7 +654,7 @@ function FileNodeImpl({
             </button>
           </>
         ) : model.note !== undefined ? (
-          <p className="file-node__note" data-file-node-note>{model.note}</p>
+          <p className="pf__note file-node__note" data-file-node-note>{model.note}</p>
         ) : model.prose ? (
           /* M27. A note renders as WRAPPED PROSE with no gutter. It is the
              same `model.lines` the code view uses, joined back — the model
@@ -702,38 +679,11 @@ function FileNodeImpl({
           </pre>
         )}
         {model.truncatedNote !== undefined && (
-          <p className="file-node__more" data-file-node-truncated>{model.truncatedNote}</p>
+          <p className="pf__more file-node__more" data-file-node-truncated>{model.truncatedNote}</p>
         )}
       </div>
 
-      {(['e', 's', 'se'] as const).map((edge) => (
-        <div
-          key={edge}
-          className={`panel__resize panel__resize--${edge}`}
-          onMouseDown={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            onSelect(id)
-            onBeginDrag({
-              panelId: id,
-              mode: { kind: 'resize', edge },
-              originRect: rect,
-              originWorld: { x: event.clientX, y: event.clientY }
-            })
-          }}
-        />
-      ))}
-      {/* M35 (Task 7). The same block TerminalPanel carries, and for the
-          same reasons: `links` lives on PanelBase, so this kind is
-          already a valid endpoint and the gesture should reach it too.
-          Suppressed under readOnly (the merged view). The PORT_MIN_SCALE
-          cutoff is a canvas-host CLASS (`.canvas--ports-hidden`), never a
-          `scale` prop threaded through this memoized component — see
-          PanelPorts.tsx's own comment. */}
-      {!readOnly && (
-        <PanelPorts panelId={id} onBeginLink={onBeginLink} />
-      )}
-    </div>
+    </PanelFrame>
   )
 }
 

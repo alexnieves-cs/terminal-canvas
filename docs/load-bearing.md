@@ -1934,6 +1934,37 @@ labelled control") held for one of five identical buttons a scroll away and does
 a button pinned at a fixed corner, which is a mis-click target. `verify:panels ctx.2` reads the
 gate back from the panel list, not off the button.
 
+**One panel frame, and the DOM contract is kept as ALIASES (`components/PanelFrame.tsx`,
+`styles.css`'s `.pf-*`, `verify:styles` `frame.1`).** M47 replaced five hand-rolled headers with
+`PanelFrame`: a kind supplies its title, its chrome controls, its body and its close arming
+rule; the frame owns the box, the chrome row, the close control, the resize handles and the link
+ports. Roughly two hundred end-to-end checks select on `.panel`, `.panel__chrome`,
+`.panel__title`, `.panel__close`, `.panel__slot`, `.panel__card`, `.panel__resize` and the
+`review-node__*`/`file-node__*`/`toolbox-node__*`/`jira-node__*` hooks, so every frame element
+carries its `.pf__*` class AND the alias — the duplicates were deleted from the STYLESHEET, never
+from the DOM. `frame.1` counts the five families (`__summary`/`__refresh`/`__note`/`__more`/
+`__body`) over stylesheet selectors and fails if a kind namespace declares one again; a kind's
+element that needs the style takes `.pf__note`/`.pf__summary`/`.pf__more`/`.pf__body--text`
+beside its alias. Deleting an alias class "because nothing styles it" turns a dozen checks red
+at once, which is the loud version; the quiet version is renaming one and watching a single
+check pass vacuously.
+
+**`.pf__body` is never transformed (`PanelFrame.tsx`, `styles.css`, `verify:panels`
+`frame.2`).** A transform on the subtree hosting xterm changes what `getBoundingClientRect()`
+reports while xterm's cell metrics stay transform-blind — exactly the arithmetic
+`pointer-correct.ts` compensates for — and every click in that panel then lands on the wrong
+cell with nothing thrown. Zoom-independent chrome (#60) was cut for 1.0; if it returns it
+counter-scales `.pf__chrome` and `.pf__handle` and NOTHING below them. `frame.2` reads the
+stylesheet for a transform on any `.pf__body` rule and measures a cell through
+`__m4aCellToScreen` at scale 0.5, and is written to stay green: it is the guard for whoever
+tries.
+
+**One status dot (`.status-dot`, `styles.css`).** The rail's dot, the context pane's dot and the
+frame's `.pf__state` share one rule set keyed on `data-agent-state`; the four state colours used
+to be repeated across five selector lists, and a fifth copy is how one surface ends up
+disagreeing with the panel border about what an agent is doing. `.panel--agent-wants-you` still
+keeps `border-color: var(--amber)` untransformed (`verify:panels` 62/97).
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

@@ -267,7 +267,7 @@ function InspectorPanel({
           answer to "what is that agent doing" — the same split check 54 draws
           for the panel itself and RailPanelRow draws for its dot.
         */}
-        <span className="inspector__dot" data-agent-state={state ?? 'none'} aria-hidden="true" />
+        <span className="inspector__dot status-dot" data-agent-state={state ?? 'none'} aria-hidden="true" />
         <span className="inspector__state-label">{agentStateLabel(state)}</span>
         {model.reattached && (
           /*

@@ -4,8 +4,8 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { buildReviewNodeModel } from './review-node-model'
-import { PanelPorts } from '@renderer/components/PanelPorts'
-import { Close, Commit, Refresh } from '@renderer/icons'
+import { PanelFrame } from '@renderer/components/PanelFrame'
+import { Commit, Refresh } from '@renderer/icons'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -295,33 +295,25 @@ function ReviewNodeImpl({
   }
 
   return (
-    <div
-      className={`panel review-node${selected ? ' panel--selected' : ''}`}
-      data-panel-id={rect.id}
-      data-review-node
-      // Named explicitly for the same reason TerminalPanel's own
-      // data-panel-kind="terminal" is: a selector meaning "the terminal
-      // panel" must not be spelled as "not a file panel", which a review
-      // node also satisfies with no marker of its own.
-      data-panel-kind="review"
-      data-link-target={linkTarget ? '' : undefined}
-      style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }}
-    >
-      <header
-        className="panel__chrome"
-        onMouseDown={(event: ReactMouseEvent) => {
-          event.stopPropagation()
-          event.preventDefault()
-          onSelect(rect.id, event.shiftKey)
-          onBeginDrag({
-            panelId: rect.id,
-            mode: { kind: 'move' },
-            originRect: rect,
-            originWorld: { x: event.clientX, y: event.clientY }
-          })
-        }}
-      >
-        <span className="panel__title">{model.heading}</span>
+    <PanelFrame
+      id={rect.id}
+      kind="review"
+      rect={rect}
+      z={z}
+      selected={selected}
+      linkTarget={linkTarget}
+      readOnly={readOnly}
+      className="review-node"
+      rootAttrs={{ 'data-review-node': '' }}
+      title={model.heading}
+      onSelect={onSelect}
+      onBeginDrag={onBeginDrag}
+      onBeginLink={onBeginLink}
+      // No arming step, unlike a terminal panel's ×: there is no process to
+      // lose. Closing a review node throws away a query, and the same button
+      // reopens it.
+      close={readOnly ? null : { armed: false, title: 'Close this review', armedText: '', onMouseDown: (event) => { event.stopPropagation(); event.preventDefault(); onClose(rect.id) } }}
+      chrome={<>
         <button
           type="button"
           className="review-node__refresh icon-button"
@@ -362,28 +354,12 @@ function ReviewNodeImpl({
             {committing ? 'committing…' : <><Commit /> commit</>}
           </button>
         )}
-        {/* No arming step, unlike a terminal panel's ×: there is no process
-            to lose. Closing a review node throws away a query, and the same
-            button reopens it. */}
-        {!readOnly && (
-          <button
-            type="button"
-            className="panel__close icon-button"
-            title="Close this review"
-            aria-label="Close this review"
-            onMouseDown={(event) => {
-              event.stopPropagation()
-              event.preventDefault()
-              onClose(rect.id)
-            }}
-          >
-            <Close />
-          </button>
-        )}
-      </header>
+      </>}
+    >
+
 
       <div
-        className="review-node__body"
+        className="pf__body pf__body--text review-node__body"
         // The marker shouldYieldWheel looks for. It is an ATTRIBUTE on the
         // element that actually scrolls, so "does this panel own its wheel"
         // is answered by what the KIND renders rather than by a branch inside
@@ -422,10 +398,10 @@ function ReviewNodeImpl({
         {outcome !== null && (
           <p className="review-node__commit-outcome" data-review-node-commit-outcome>{outcome}</p>
         )}
-        <p className="review-node__summary" data-review-node-summary>{model.summary}</p>
+        <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
         <p className="review-node__root">{model.root}</p>
         {model.note !== undefined && (
-          <p className="review-node__note" data-review-node-note>{model.note}</p>
+          <p className="pf__note review-node__note" data-review-node-note>{model.note}</p>
         )}
         <ul className="review-node__files">
           {model.files.map((f) => (
@@ -449,37 +425,10 @@ function ReviewNodeImpl({
             </li>
           ))}
         </ul>
-        {model.more > 0 && <p className="review-node__more">+{model.more} more files</p>}
+        {model.more > 0 && <p className="pf__more review-node__more">+{model.more} more files</p>}
       </div>
 
-      {(readOnly ? [] : (['e', 's', 'se'] as const)).map((edge) => (
-        <div
-          key={edge}
-          className={`panel__resize panel__resize--${edge}`}
-          onMouseDown={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            onSelect(rect.id)
-            onBeginDrag({
-              panelId: rect.id,
-              mode: { kind: 'resize', edge },
-              originRect: rect,
-              originWorld: { x: event.clientX, y: event.clientY }
-            })
-          }}
-        />
-      ))}
-      {/* M35 (Task 7). The same block TerminalPanel carries, and for the
-          same reasons: `links` lives on PanelBase, so this kind is already
-          a valid endpoint and the gesture should reach it too. Suppressed
-          under readOnly (the merged view) exactly as the resize handles
-          are; the PORT_MIN_SCALE cutoff is a canvas-host CLASS
-          (`.canvas--ports-hidden`), never a `scale` prop threaded through
-          this memoized component — see PanelPorts.tsx's own comment. */}
-      {!readOnly && (
-        <PanelPorts panelId={rect.id} onBeginLink={onBeginLink} />
-      )}
-    </div>
+    </PanelFrame>
   )
 }
 

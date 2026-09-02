@@ -29,3 +29,4 @@ copy here is deleted.
 | [m44-keyboard-first-canvas.md](m44-keyboard-first-canvas.md) | M44 — A keyboard-first canvas | finished |
 | [m45-visual-language.md](m45-visual-language.md) | M45 — The visual language | finished |
 | [m46-interface-architecture.md](m46-interface-architecture.md) | M46 — The interface architecture | finished |
+| [m47-panel-frame.md](m47-panel-frame.md) | M47 — One panel frame | finished |

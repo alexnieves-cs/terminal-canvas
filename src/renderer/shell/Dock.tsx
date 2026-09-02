@@ -92,7 +92,7 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
                       title={`Go to ${row.label}`}
                       {...shellControl(() => onGoToPanel(row.id))}
                     >
-                      <span className="rail-row__dot" data-agent-state="wants-you" aria-hidden="true" />
+                      <span className="rail-row__dot status-dot" data-agent-state="wants-you" aria-hidden="true" />
                       <span className="rail-row__label">{row.label}</span>
                     </button>
                   </li>
