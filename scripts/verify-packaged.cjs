@@ -134,8 +134,31 @@ process.on('exit', cleanup)
   // Wait for both signals, or 60s. A packaged first launch does real work —
   // resolveShellEnv runs $SHELL -ilc env, probeTmux starts a server, and the
   // renderer has to boot and put a panel live before anything spawns.
+  //
+  // Since M48 a FIRST run shows the launcher on an empty canvas, so nothing
+  // spawns until a user acts. The harness acts through the door M54 built —
+  // the packaged app's OWN userData/bin/tc launcher over its control socket —
+  // which is also the one place the launcher under a packaged app (the
+  // app.asar.unpacked path) is exercised at all.
   const deadline = Date.now() + 60_000
-  const seen = () => /\[startup\] /.test(out) && /\[pty\] spawned /.test(out)
+  const booted = () => /\[startup\] packaged=/.test(out)
+  const launcher = join(USER_DATA, 'bin', 'tc')
+  const controlSocket = join(USER_DATA, 'control.sock')
+  const doorUp = () => existsSync(launcher) && existsSync(controlSocket)
+  while (Date.now() < deadline && !(booted() && doorUp()) && exitedEarly === null) {
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  let tcReply = ''
+  let tcError = null
+  if (doorUp()) {
+    try {
+      tcReply = execFileSync(launcher, ['open'], {
+        env: { PATH: STRIPPED_PATH, HOME: process.env.HOME, TC_CONTROL_SOCKET: controlSocket },
+        encoding: 'utf8', timeout: 20_000
+      })
+    } catch (error) { tcError = `${error.status ?? ''} ${error.stdout ?? ''} ${error.stderr ?? ''} ${error.message}`.trim() }
+  }
+  const seen = () => /\[pty\] spawned /.test(out)
   while (Date.now() < deadline && !seen() && exitedEarly === null) {
     await new Promise((r) => setTimeout(r, 500))
   }
@@ -194,6 +217,12 @@ process.on('exit', cleanup)
     ok('8 a backend was chosen and says why',
       match !== null && match[2].trim().length > 0, startup)
   }
+
+  // tc.1 (M60). The packaged app's own launcher — ELECTRON_RUN_AS_NODE over the
+  // packaged binary and the UNPACKED tc.js — opened a panel over the socket.
+  // A launcher pointing into the archive dies with ENOENT here.
+  ok('tc.1 userData/bin/tc open answers ok through the packaged launcher',
+    tcError === null && /"ok":true/.test(tcReply), tcError ?? tcReply)
 
   // 9. THE END-TO-END PROOF. A real PTY, spawned by a real packaged app, with
   // node-pty's native binding loaded out of the UNPACKED asar. Everything

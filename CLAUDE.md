@@ -19,13 +19,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **M1 through M9c have landed** — the PTY layer, the canvas, their
-merge, persistence and tmux-backed session survival (M4), presets (M5a), the Cmd+K command
-palette (M5b), and electron-builder packaging into a real, launchable `.app` (M5c). The three that shaped the architecture are worth keeping in mind: M1 is the PTY layer, M2 is the
-canvas and its coordinate math — deliberately built apart so that a blank panel had exactly
-one possible cause in each. M3 merges them: `Canvas.tsx` now renders real terminal panels
-instead of M2's placeholder rectangles, with level-of-detail tiering and viewport culling so
-the canvas can hold more panels than the browser can afford live WebGL contexts for.
+running a coding-agent CLI. **This is 1.0 (M60).** The run from M36 to M60 hardened the beta,
+gave every panel a worktree, let agents outlive the app, made scrollback durable and
+searchable, added attention, keyboard reach, a visual language with two themes, a
+shell with a dock and a context pane, a first run, typography, placement, links, OSC 133
+command boundaries and a run ledger, per-file discard, the `tc` CLI and URL scheme, orphan
+recovery, camera flights with a trail and bookmarks, semantic zoom, export, and a dead-end
+audit — each with its spec, plan, build log and checks. The three milestones that shaped the
+architecture are still worth keeping in mind: M1 is the PTY layer, M2 is the canvas and its
+coordinate math — deliberately built apart so that a blank panel had exactly one possible
+cause in each. M3 merged them: `Canvas.tsx` renders real terminal panels with level-of-detail
+tiering and viewport culling so the canvas can hold more panels than the browser can afford
+live WebGL contexts for.
 
 The milestone table in `README.md` is the roadmap contract — several modules are
 deliberately shaped for a milestone that has not landed yet, and the code comments say so.
@@ -71,8 +76,8 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:control` | plain node | 7 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
 | `verify:styles` | plain node | 16 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
-| `verify:package` | plain node | 12 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
-| `verify:packaged` | real Electron, **not in `npm run verify`** | 11 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped PATH, a throwaway `--user-data-dir`, and a scratch |
+| `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
+| `verify:packaged` | real Electron, **not in `npm run verify`** | 12 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped PATH, a throwaway `--user-data-dir`, and a scratch |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 61 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
