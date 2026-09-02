@@ -1,7 +1,7 @@
 import type { PanelId, PtyCreateResult, PtyDataChunk, PtyExitInfo } from '@shared/types'
 import type { AgentKind } from '@shared/cost'
 import type { Tier } from '@renderer/canvas/lod'
-import type { PanelSession, PanelSpecTemplate, SessionFactory } from './panel-session'
+import type { PanelSession, PanelSpecTemplate, SessionFactory, TerminalOptions } from './panel-session'
 
 /**
  * Owns every panel's session for the lifetime of the renderer.
@@ -61,6 +61,13 @@ export interface Registry {
    */
   wake(id: PanelId): void
   version(): number
+  /**
+   * M44. Fan a partial of xterm options across every session's terminal —
+   * live and detached — and store it so sessions created later inherit it.
+   * The shared mechanism the accessibility screen-reader toggle, M45's theme
+   * and M49's font size all use rather than each writing a one-off loop.
+   */
+  applyTerminalOptions(options: TerminalOptions): void
   /**
    * Advance version() and notify, and do nothing else.
    *
@@ -154,6 +161,11 @@ export function createRegistry(deps: RegistryDeps): Registry {
   const listeners = new Set<() => void>()
   const exitListeners = new Set<(info: PtyExitInfo) => void>()
   let inputTargets = new Set<PanelId>()
+  // M44. The current xterm options, accumulated across applyTerminalOptions
+  // calls and applied to every session created afterwards — so the fan-out is
+  // a genuine "all terminals, present and future", the shape M45's theme and
+  // M49's font size both reuse.
+  let terminalOptions: TerminalOptions = {}
   let version = 0
 
   /**
@@ -264,10 +276,13 @@ export function createRegistry(deps: RegistryDeps): Registry {
     ensure(id, spec, options) {
       const existing = sessions.get(id)
       if (existing) return existing
+      const handle = factory.create(id)
+      // A session born after applyTerminalOptions inherits the current options.
+      if (Object.keys(terminalOptions).length > 0) handle.configure(terminalOptions)
       const session: PanelSession = {
         id,
         spec,
-        handle: factory.create(id),
+        handle,
         status: { kind: 'idle' },
         tier: 'card',
         spawned: false,
@@ -382,6 +397,11 @@ export function createRegistry(deps: RegistryDeps): Registry {
       // attachSlot will spawn on the way in.
       if (session.tier === 'live' && !session.spawned) spawn(session)
       else bump()
+    },
+
+    applyTerminalOptions(options) {
+      Object.assign(terminalOptions, options)
+      for (const session of sessions.values()) session.handle.configure(options)
     },
 
     version: () => version,

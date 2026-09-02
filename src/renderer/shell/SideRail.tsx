@@ -119,7 +119,7 @@ function SideRailImpl({
       </ul>
 
       <div className="shell__region-title">Attention</div>
-      <ul className="rail-list rail-list--attention" aria-label="Attention">
+      <ul className="rail-list rail-list--attention" aria-label="Attention" aria-live="polite">
         {attention.length === 0 ? (
           // Not an absent list. This section is empty nearly all the time, and
           // a header with a void under it reads as a broken list rather than

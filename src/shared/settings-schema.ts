@@ -33,6 +33,7 @@ export const FILES_CATEGORY = 'Files'
 
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const SESSION_CATEGORY = 'Sessions'
+export const ACCESSIBILITY_CATEGORY = 'Accessibility'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -139,6 +140,16 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: false,
     category: AGENT_CATEGORY
+  },
+  {
+    id: 'accessibility.screenReaderMode',
+    label: 'Screen reader mode',
+    description:
+      'Let a screen reader read each live terminal by keeping a text mirror of its buffer. Off by default — the mirror is costly, and a carded or off-screen panel has none to read.',
+    keywords: ['screen', 'reader', 'accessibility', 'a11y', 'voiceover', 'aria', 'blind', 'sr'],
+    type: 'boolean',
+    default: false,
+    category: ACCESSIBILITY_CATEGORY
   },
   {
     id: 'agent.idleAfterMs',

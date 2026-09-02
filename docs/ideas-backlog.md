@@ -1099,7 +1099,7 @@ somewhere else, and each does so silently.
   redact-on-export — and a plain-language sentence about what each does. Not a security
   dashboard.
 
-## 32. A keyboard-first canvas — and the accessibility that comes with it
+## 32. A keyboard-first canvas — and the accessibility that comes with it — DONE, M44
 
 Move between panels, place them, and drive the camera without the mouse — and make the
 result usable by someone who cannot use a trackpad, cannot see the glow in #5, or needs the
@@ -1741,7 +1741,7 @@ jumps legible rather than disorienting.
   is the feature — and the tiering interaction, which #32 does not mention, is the expensive
   half.
 
-## 63. Spatial ordering the LOD already knows
+## 63. Spatial ordering the LOD already knows — DONE, M44
 
 `assignTiers` computes `intersectsViewport` for every panel on every viewport change, and
 `lastFocusedAt` already records recency per panel. That is a live, sorted answer to "which
@@ -2059,7 +2059,7 @@ Ordered by (value × confidence) ÷ effort, not by preference:
 11. **#25 placement, snapping, tidy** — three small pieces of world-space arithmetic in
    code that already exists (`applyDrag`, `viewport.ts`), and the best available test of
    M4b's undo stack.
-12. **#32 keyboard-first navigation** — nearest-panel-in-a-direction is plain-node math over
+12. ~~**#32 keyboard-first navigation**~~ — **done, M44.** Nearest-panel-in-a-direction is plain-node math over
    the same rects. The design work is the rule that traversal moves *selection*, not focus,
    so arrowing across a canvas does not spawn everything it passes.
 13. ~~**#2 workspaces**~~ — **done, M7 and M18**, and not free: the switch had to become a

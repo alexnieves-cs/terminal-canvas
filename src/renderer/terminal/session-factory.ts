@@ -1,5 +1,5 @@
 import type { PanelId } from '@shared/types'
-import type { SessionFactory, SessionHandle } from '@renderer/session/panel-session'
+import type { SessionFactory, SessionHandle, TerminalOptions } from '@renderer/session/panel-session'
 import {
   attachTerminal,
   createTerminal,
@@ -21,9 +21,17 @@ function createHandle(id: PanelId): SessionHandle {
   host.dataset.panelId = id
 
   let handles: TerminalHandles | null = null
+  // M44. Options set through configure() BEFORE the terminal is created — a
+  // carded panel that has never gone live. Applied when createTerminal first
+  // runs, so configure never forces an early Terminal (and its addons) into
+  // existence just to set a font size.
+  let pendingOptions: TerminalOptions = {}
 
   const ensure = (): TerminalHandles => {
-    if (!handles) handles = createTerminal()
+    if (!handles) {
+      handles = createTerminal()
+      if (Object.keys(pendingOptions).length > 0) Object.assign(handles.term.options, pendingOptions)
+    }
     return handles
   }
 
@@ -117,6 +125,15 @@ function createHandle(id: PanelId): SessionHandle {
     },
     scrollPosition() {
       return handles?.term.buffer.active.viewportY ?? 0
+    },
+    configure(options) {
+      // Object.assign onto term.options is xterm's supported mutate path and
+      // works before open() (the options live on the Terminal, not the DOM) —
+      // but do NOT ensure(): a carded panel that never went live must not get
+      // a Terminal built just to configure it. Merge into pending and apply
+      // live only if the terminal already exists.
+      Object.assign(pendingOptions, options)
+      if (handles) Object.assign(handles.term.options, options)
     },
     dispose() {
       if (handles) disposeTerminal(handles)

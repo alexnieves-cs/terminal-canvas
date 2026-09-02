@@ -1703,6 +1703,23 @@ const WS = [
     JSON.stringify(searchRows.map((r) => ({ id: r.id, scope: r.scope }))))
 }
 
+// M44 — keyboard.1. buildCommands emits the panel goto rows in the ORDER
+//      ctx.panels is given, so Canvas's orderPanels (on-screen first, then by
+//      focus recency) decides the palette's panel-list order rather than the
+//      command builder imposing one of its own.
+{
+  const panels = [
+    { id: 'n3', label: 'third (n3)' },
+    { id: 'n1', label: 'first (n1)' },
+    { id: 'n2', label: 'second (n2)' }
+  ]
+  const rows = P.buildCommands(ctx({ panels }))
+  const gotoOrder = rows.filter((r) => r.id.startsWith('panel.goto.')).map((r) => r.id.replace('panel.goto.', ''))
+  ok('keyboard.1 panel goto rows keep the order the context gives them',
+    JSON.stringify(gotoOrder) === JSON.stringify(['n3', 'n1', 'n2']),
+    JSON.stringify(gotoOrder))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

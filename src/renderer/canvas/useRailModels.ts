@@ -1,4 +1,6 @@
 import { useMemo, type RefObject } from 'react'
+import type { Viewport } from './viewport'
+import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
@@ -20,6 +22,7 @@ export interface RailModelsDeps {
   palette: PaletteController
   /** Read out of a ref, never off `panels` — see panelRows' own comment. */
   panelsRef: RefObject<Panel[]>
+  viewportRef: RefObject<Viewport>
   panels: Panel[]
   displayPanels: Panel[]
   dormantIds: ReadonlySet<string>
@@ -46,11 +49,19 @@ export interface RailModelsDeps {
  * memo keyed on the built object rather than its signature is the same code
  * with the freeze silently removed.
  */
+function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedAt: Record<string, number>): Panel[] {
+  if (viewport === null) return panels
+  const byId = new Map(panels.map((p) => [p.rect.id, p]))
+  const order = orderPanels(panels.map((p) => p.rect), viewport, { w: window.innerWidth, h: window.innerHeight }, lastFocusedAt)
+  const out: Panel[] = []
+  for (const id of order) { const p = byId.get(id); if (p !== undefined) out.push(p) }
+  return out
+}
+
 export function useRailModels(deps: RailModelsDeps) {
   const {
     registry, palette, panelsRef, panels, displayPanels, dormantIds,
-    workspaceRows, waitingIds, selectedId
-  } = deps
+    workspaceRows, waitingIds, selectedId, viewportRef } = deps
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -62,7 +73,9 @@ export function useRailModels(deps: RailModelsDeps) {
   // or remove a panel close it first, so recomputing at open is enough.
   const panelRows = useMemo<PanelRow[]>(
     () => (palette.open
-      ? panelsRef.current.map((p) =>
+      // M44. Spatial order: on-screen panels first (nearest the camera centre),
+      // then the rest by focus recency. Computed once on open, reading refs.
+      ? orderPanelsFor(panelsRef.current, viewportRef.current, registry.lastFocusedAt()).map((p) =>
           // Field-by-field, not a spread: an untitled panel must produce a
           // row with NO `title` key, not one holding `title: undefined`.
           // Renderer-internal only (no structured clone here to carry the
