@@ -105,6 +105,9 @@ export interface PaletteProps {
   envReport: EnvReport | null
   /** M49. See PaletteContext.globalFontSize. */
   globalFontSize: number
+  /** M56. This workspace's bookmarks and the trail's two ends. */
+  bookmarks: readonly { id: string; name: string }[]
+  cameraTrail: { back: boolean; forward: boolean }
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
@@ -182,6 +185,8 @@ export function Palette(props: PaletteProps): JSX.Element {
         worktrees: props.worktrees,
         envReport: props.envReport,
         globalFontSize: props.globalFontSize,
+        bookmarks: props.bookmarks,
+        cameraTrail: props.cameraTrail,
         noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
@@ -197,7 +202,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         scrollbackEnabled: props.scrollbackEnabled,
         actions: props.actions
       }),
-    [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
+    [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
      props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.scrollbackEnabled]

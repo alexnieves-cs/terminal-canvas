@@ -70,7 +70,7 @@ import { applyUsage, clearUsage } from '@renderer/session/usage-store'
 import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
-import type { CanvasState } from '@shared/layout-schema'
+import type { CanvasState, PersistedBookmark } from '@shared/layout-schema'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   CapturedPanel,
@@ -180,6 +180,11 @@ export function Canvas({
     initial.panels.length > 0 ? toPanels(initial.panels) : firstRunPanels()
   )
   const [groups, setGroups] = useState<CanvasGroup[]>(() => initial.groups ?? [])
+  // M56. Bookmarks: places, persisted beside the camera, per workspace.
+  const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
+  const bookmarksRef = useRef(bookmarks)
+  bookmarksRef.current = bookmarks
+  const bookmarkRows = useMemo(() => bookmarks.map((b) => ({ id: b.id, name: b.name })), [bookmarks])
   const nextGroupIdRef = useRef(
     (initial.groups ?? []).reduce((next, group) => {
       const match = /^g(\d+)$/.exec(group.id)
@@ -960,7 +965,8 @@ export function Canvas({
 
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
-    beginPanDrag, panning
+    beginPanDrag, panning,
+    goToViewport, cameraBack, cameraForward, trail, flying
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
@@ -1424,9 +1430,9 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData
   })
@@ -1845,6 +1851,11 @@ export function Canvas({
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    // M56. Not while a flight is in the air: every frame is a tiering
+    // input, and a 300ms flight across the canvas would create and destroy a
+    // dozen WebGL contexts for panels the user never stopped at. `flying` is
+    // state, so this effect re-runs the moment the flight settles.
+    if (flying) return
     const bounds = host.getBoundingClientRect()
     const tiers = assignTiers({
       // terminalRects, not rects: a review node has no tier at all, and this
@@ -1912,7 +1923,7 @@ export function Canvas({
       heldSinceRef.current.clear()
       registry.applyTiers(tiersRef.current)
     }, DEMOTE_DELAY_MS)
-  }, [terminalRects, viewport, focusedId, version, dormantIds, collapsedPanelIds])
+  }, [terminalRects, viewport, focusedId, version, dormantIds, collapsedPanelIds, flying])
 
   // Persist on every change. Unthrottled on purpose, including the ~60/sec a
   // drag produces: main coalesces to one write per 500ms and keeps only the
@@ -1950,9 +1961,10 @@ export function Canvas({
       groups,
       camera: merged && before ? before.camera : viewport,
       selectedId: merged && before ? before.selectedId : selectedId,
-      focusedId: merged && before ? before.focusedId : focusedId
+      focusedId: merged && before ? before.focusedId : focusedId,
+      bookmarks
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -2939,6 +2951,7 @@ export function Canvas({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
+    goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote,
     restartWithSpec, commitHistory, switchWorkspace,
@@ -3397,6 +3410,8 @@ export function Canvas({
             credentials={credentialRows}
             worktrees={worktreeRows}
             envReport={envReport}
+            bookmarks={bookmarkRows}
+            cameraTrail={trail}
             globalFontSize={globalFontSize}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are

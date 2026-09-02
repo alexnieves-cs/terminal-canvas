@@ -14,6 +14,7 @@ module.exports = {
   // M50. Snapping and tidy: pure rect math over applyDrag's output.
   ...require('../src/renderer/canvas/placement'),
   ...require('../src/renderer/panels/recover'),
+  ...require('../src/renderer/canvas/flight'),
   // M51. The link scanner, shared and pure.
   ...require('../src/shared/link-scan'),
   /* M13: the link geometry. Pure — its only value import is linksOf from

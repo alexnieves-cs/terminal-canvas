@@ -210,6 +210,11 @@ const spyActions = () => {
     deletePrompt: record('deletePrompt'),
     beginRenamePanel: record('beginRenamePanel'),
     resetCanvas: record('resetCanvas'),
+    addBookmark: record('addBookmark'),
+    goToBookmark: record('goToBookmark'),
+    deleteBookmark: record('deleteBookmark'),
+    cameraBack: record('cameraBack'),
+    cameraForward: record('cameraForward'),
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
@@ -1821,6 +1826,33 @@ const WS = [
   ok('keyboard.1 panel goto rows keep the order the context gives them',
     JSON.stringify(gotoOrder) === JSON.stringify(['n3', 'n1', 'n2']),
     JSON.stringify(gotoOrder))
+}
+
+// M56 — bookmarks and the trail in the palette. A section that exists in
+// SECTIONS order, one Go/Delete pair per bookmark, an add row always, and
+// back/forward DISABLED with a reason at the trail's ends rather than absent
+// (verify:palette 31's rule: a missing row reads as a feature never built).
+{
+  const c = ctx({ bookmarks: [{ id: 'b1', name: 'View 1' }, { id: 'b2', name: 'Inbox' }], cameraTrail: { back: false, forward: true } })
+  const cmds = P.buildCommands(c)
+  const section = P.SECTIONS.find((sec) => sec.id === 'bookmark')
+  const order = P.SECTIONS.map((sec) => sec.id)
+  const add = byId(cmds, 'bookmark.add')
+  const go = byId(cmds, 'bookmark.go.b2')
+  const del = byId(cmds, 'bookmark.delete.b1')
+  const back = byId(cmds, 'camera.back')
+  const fwd = byId(cmds, 'camera.forward')
+  if (go) go.run()
+  if (add) add.run()
+  const calls = c.actions.calls.map((x) => x[0])
+  ok('bookmark.1 a Bookmarks section between Workspaces and Canvas; add always; go/delete per bookmark; back disabled with a reason at the trail\'s start and forward enabled',
+    section !== undefined && order.indexOf('bookmark') > order.indexOf('workspace') && order.indexOf('bookmark') < order.indexOf('canvas') &&
+      add !== undefined && add.group === 'bookmark' && go !== undefined && /Inbox/.test(go.title) && go.group === 'bookmark' &&
+      del !== undefined && del.destructive === true && /View 1/.test(del.title) &&
+      back !== undefined && typeof back.disabledReason === 'string' && /back/.test(back.disabledReason) &&
+      fwd !== undefined && fwd.disabledReason === undefined &&
+      calls.includes('goToBookmark') && calls.includes('addBookmark'),
+    JSON.stringify({ section, add: add && add.title, go: go && go.title, del: del && del.title, back: back && back.disabledReason, fwd: fwd && fwd.disabledReason, calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

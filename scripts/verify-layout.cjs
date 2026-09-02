@@ -254,6 +254,9 @@ const CANVAS = {
   camera: { x: 1, y: 2, scale: 1.5 },
   selectedId: 'p1',
   focusedId: null
+  ,
+  // M56. The state shape gained bookmarks; a round trip carries the empty list.
+  bookmarks: []
 }
 
 // 16. A missing file is a first run, not an error.
@@ -3015,6 +3018,32 @@ const filePanelOnDisk = (id, over = {}) => ({
 }
 
 console.log('\n' + '='.repeat(60))
+// M56 — bookmark.1. `bookmarks` on a workspace: ABSENT on every file written
+//      before M56 and must warn nothing; a malformed entry costs that entry
+//      with a warning, never the list; a good one round-trips with its
+//      camera parsed by the same rule the workspace camera uses (a zero
+//      scale is unusable, not cosmetic).
+{
+  const absent = L.parseLayout(file())
+  const ws = active(absent.snapshot)
+  const mixed = L.parseLayout(file({ workspaces: [{
+    id: 'w1', name: 'Canvas', panels: [panel()], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+    bookmarks: [
+      { id: 'b1', name: 'Inbox', camera: { x: -100, y: -50, scale: 0.5 } },
+      { id: 'b2', name: 'Broken', camera: { x: 0, y: 0, scale: 0 } },
+      { id: 7, name: 'NotAnId', camera: { x: 0, y: 0, scale: 1 } },
+      'junk'
+    ]
+  }] }))
+  const mws = active(mixed.snapshot)
+  const kept = mws.bookmarks
+  ok('bookmark.1 absent bookmarks parse as [] silently; malformed entries are dropped with a warning and the good one round-trips',
+    Array.isArray(ws.bookmarks) && ws.bookmarks.length === 0 && absent.warnings.length === 0 &&
+      Array.isArray(kept) && kept.length === 1 && kept[0].id === 'b1' && kept[0].name === 'Inbox' && kept[0].camera.scale === 0.5 &&
+      mixed.warnings.some((w) => /bookmark/i.test(w)),
+    JSON.stringify({ absent: ws.bookmarks, absentWarnings: absent.warnings, kept, warnings: mixed.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

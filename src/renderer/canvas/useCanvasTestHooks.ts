@@ -1,4 +1,5 @@
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { setReducedMotionOverride } from './useViewport'
 import type { Registry } from '@renderer/session/session-registry'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { PaletteActions } from '@renderer/palette/commands'
@@ -121,6 +122,8 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
     }
     /** M50. Select exactly these panels — the M18 gesture's result, without the gesture. */
     w.__m50Select = (ids: string[]): void => { setSelectedIds(new Set(ids)) }
+    // M56. The harness cannot set the OS preference; this is the one override.
+    w.__m56ReducedMotion = (value: boolean | null): void => { setReducedMotionOverride(value) }
     /** M49. A session's own cell metrics (CSS px, transform-blind), by id. */
     w.__m49CellSize = (id: string): { width: number; height: number } | null => {
       const session = registry.get(id)
