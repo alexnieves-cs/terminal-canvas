@@ -190,6 +190,8 @@ export interface PaletteActions {
   /** M58. The two doors out; main owns the dialog and the write. */
   exportPanelText: (panelId: string) => void
   exportCanvasPng: () => void
+  /** M59. The audit's fix: a bookmark's name is editable, through the input mode presets use. */
+  beginRenameBookmark: (id: string, currentName: string) => void
   /**
    * Set this panel's permission mode AND restart it, as ONE gesture.
    *
@@ -1118,6 +1120,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       searchText: `bookmark go ${b.name}`,
       group: 'bookmark',
       run: () => actions.goToBookmark(b.id)
+    })
+    out.push({
+      id: `bookmark.rename.${b.id}`,
+      title: `Rename bookmark “${b.name}”…`,
+      searchText: `bookmark rename ${b.name}`,
+      group: 'bookmark',
+      hiddenAtRest: true,
+      run: () => actions.beginRenameBookmark(b.id, b.name)
     })
     out.push({
       id: `bookmark.delete.${b.id}`,

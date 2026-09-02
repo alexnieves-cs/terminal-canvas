@@ -8146,13 +8146,25 @@ app.whenReady().then(async () => {
           await selectPanel(subject)
         }
         const beforeIds = await panelIds()
+        // 15s, not 5s: the button appears once review:panel has ANSWERED, and
+        // that is a git call — under the full chain, with the panels suite
+        // last on a loaded machine, it took longer than 5s three runs out of
+        // four (M59's diagnostic below saw the button null at 5s and present
+        // a moment later). The same rule check 113 records for its own wait.
         const armed = await waitUntil(async () => wc.executeJavaScript(
-          `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
+          `document.querySelector('[data-inspector-action="review"]') !== null`), 15000)
+        // Diagnostic (M59): the button's own state before the click, and what
+        // appeared after it, so a failure names its cause.
+        const reviewButtonState = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('[data-inspector-action="review"]')
+          return b ? { disabled: b.disabled, title: b.getAttribute('title') } : null })()`)
         if (armed) await clickShell('[data-inspector-action="review"]')
+        let lastFresh = []
         const nodeId = armed
           ? await waitUntil(async () => {
               const ids = await panelIds()
               const fresh = ids.filter((id) => !beforeIds.includes(id))
+              lastFresh = fresh
               return fresh.length === 1 ? fresh[0] : false
             }, 8000)
           : false
@@ -8176,7 +8188,7 @@ app.whenReady().then(async () => {
         ok('112 a selected review node gets no Changes section and no dead review button',
           typeof nodeId === 'string' && selected === true && pane !== null &&
             pane.reviews === true && pane.reviewButton === false && pane.note === false,
-          `node=${nodeId} selected=${selected} pane=${JSON.stringify(pane)}`)
+          `node=${nodeId} selected=${selected} pane=${JSON.stringify(pane)} button=${JSON.stringify(reviewButtonState)} fresh=${JSON.stringify(lastFresh)}`)
       }
 
       // 113-115. THE WRITE VERB, END TO END: a real repository, a real agent
@@ -14751,6 +14763,55 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // drop.1 (M59). The drop door, hit-tested: a path dropped OVER a live
+    //   terminal panel is PASTED into it (bracketed, the same door Jira
+    //   context uses) and opens no file panel; the same path over empty
+    //   canvas opens a file panel; a drop with the palette open does
+    //   neither. Through __m59Drop, the same function the real handler
+    //   calls, because a real drop cannot be synthesised (File.path is gone
+    //   and webUtils needs a real file). Red first: no hook, no hit test.
+    {
+      const dropDir = mkdtempSync(join(tmpdir(), 'tc panels drop '))
+      const dropped = join(dropDir, 'notes file.md')
+      writeFileSync(dropped, '# dropped\n')
+      const liveId = await wc.executeJavaScript(`((window.__m4aSessions ? window.__m4aSessions() : []).find((s) => s.spawned) || {}).id || null`)
+      const box = liveId ? await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.panel[data-panel-id="${liveId}"] .panel__slot')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width } })()`) : null
+      // The paste is observed at the MANAGER's write — the renderer's pty:write
+      // lands here — rather than in the log tail, where a prompt line without
+      // its newline is not yet a line.
+      const writes = []
+      const origWrite = ptyManager.write.bind(ptyManager)
+      ptyManager.write = (id, data) => { if (id === liveId) writes.push(data); return origWrite(id, data) }
+      const off = () => { ptyManager.write = origWrite }
+      const filesBefore = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="file"]').length`)
+      const overPanel = box ? await wc.executeJavaScript(`typeof window.__m59Drop === 'function' ? window.__m59Drop(${JSON.stringify(dropped)}, ${box.x}, ${box.y}) : null`) : null
+      // The paste reaches the PTY as bracketed text; the shell echoes it.
+      const pasted = liveId ? await waitUntil(async () => writes.some((d) => d.includes('notes file.md')), 6000) : false
+      const filesAfterPanel = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="file"]').length`)
+      // Empty canvas: the top-left corner of the host is below the toolbar and
+      // outside every panel after Cmd+0 (panels sit at the seed rects).
+      const overCanvas = await wc.executeJavaScript(`typeof window.__m59Drop === 'function' ? window.__m59Drop(${JSON.stringify(dropped)}, 8, 8) : null`)
+      const fileOpened = await waitUntil(async () => (await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="file"]').length`)) > filesAfterPanel, 4000)
+      const filesAfterCanvas = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="file"]').length`)
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const withPalette = await wc.executeJavaScript(`typeof window.__m59Drop === 'function' ? window.__m59Drop(${JSON.stringify(dropped)}, 8, 8) : null`)
+      await settle()
+      const filesAfterOverlay = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="file"]').length`)
+      await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) { i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) } })()`)
+      if (off) off()
+      ok('drop.1 a path dropped over a live terminal is pasted into it and opens no file panel; over empty canvas it opens one; with the palette open it does nothing',
+        liveId !== null && box !== null && overPanel === 'pasted' && pasted === true && filesAfterPanel === filesBefore &&
+          overCanvas === 'opened' && fileOpened === true && filesAfterCanvas === filesBefore + 1 &&
+          withPalette === 'ignored' && filesAfterOverlay === filesAfterCanvas,
+        JSON.stringify({ liveId, box, overPanel, pasted, filesBefore, filesAfterPanel, overCanvas, fileOpened, filesAfterCanvas, withPalette, filesAfterOverlay }))
+      rmSync(dropDir, { recursive: true, force: true })
+    }
+
     // export.1 (M58). THE DOOR OUT, end to end: a sentinel echoed into a live
     //   panel reaches the durable log, the palette row asks main, main's
     //   exporters (over this harness's scratch "dialog") write a file that

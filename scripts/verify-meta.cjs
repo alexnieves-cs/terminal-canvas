@@ -576,6 +576,19 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 }
 
 console.log('\n' + '='.repeat(60))
+// audit.1 (M59). Every REASON_* constant in the palette is NAMED in the
+// audit document: a reason nobody wrote down is a reason nobody reviewed,
+// and the next row added with a fresh constant turns this red until the
+// audit says what the user does about it.
+{
+  const src = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+  const auditPath = join(__dirname, '..', 'docs', 'dead-end-audit.md')
+  const audit = existsSync(auditPath) ? readFileSync(auditPath, 'utf8') : ''
+  const names = [...new Set([...src.matchAll(/export const (REASON_[A-Z_]+) =/g)].map((m) => m[1]))]
+  const missing = names.filter((n) => !audit.includes(`\`${n}\``))
+  ok('audit.1 every palette REASON_* constant is named in docs/dead-end-audit.md', names.length >= 20 && missing.length === 0, JSON.stringify({ names: names.length, missing }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

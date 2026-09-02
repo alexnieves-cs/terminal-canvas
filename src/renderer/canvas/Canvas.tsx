@@ -37,8 +37,7 @@ import {
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
-  screenToWorld, type Point, type Viewport, type WorldRect
-} from './viewport'
+  screenToWorld, type Point, type Viewport, type WorldRect, hitTest } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -90,6 +89,7 @@ import {
 } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
+import { shellQuote } from '@renderer/shell/file-tree-model'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
@@ -2621,6 +2621,32 @@ export function Canvas({
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
   }, [])
+  /**
+   * M59. ONE function behind the real drop and the __m59Drop hook, so a check
+   * through the hook is evidence about the door a user reaches. Three
+   * answers, each the audit's: a drop while the palette or the nav grid is
+   * open is IGNORED (it used to mint a file panel unseen underneath the
+   * overlay); a drop OVER a live terminal panel PASTES the path into it —
+   * bracketed, shell-quoted, the same door Jira context and the file tree
+   * use, because a file dragged onto an agent's terminal means "give this to
+   * the agent"; anywhere else opens a file panel at the drop's own world
+   * point, as before.
+   */
+  const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
+    if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
+    const world = screenToWorld(screen, viewportRef.current)
+    const hit = hitTest(hitOrderRef.current, world)
+    if (hit !== null) {
+      const target = panelsRef.current.find((p) => p.rect.id === hit)
+      const session = registry.get(hit)
+      if (target !== undefined && target.kind === 'terminal' && session !== undefined && session.spawned) {
+        session.handle.paste(shellQuote(path))
+        return 'pasted'
+      }
+    }
+    openFilePanel(path, world)
+    return 'opened'
+  }, [openFilePanel, palette, registry])
   const onDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     // One file. A multi-file drop opening N panels at once is a decision to
@@ -2635,13 +2661,10 @@ export function Canvas({
     const path = window.canvas.file.pathForFile(file)
     if (!path) return
     const host = event.currentTarget.getBoundingClientRect()
-    // The DROP's own world point, so the panel lands under the cursor at every
-    // zoom rather than where the cursor would have been at 1:1.
-    openFilePanel(path, screenToWorld(
-      { x: event.clientX - host.left, y: event.clientY - host.top },
-      viewportRef.current
-    ))
-  }, [openFilePanel])
+    // The DROP's own screen point, so the panel lands under the cursor at
+    // every zoom rather than where the cursor would have been at 1:1.
+    dropPath(path, { x: event.clientX - host.left, y: event.clientY - host.top })
+  }, [dropPath])
 
   /**
    * verify:panels' route into the file-panel gesture, the same reason every
@@ -2661,6 +2684,8 @@ export function Canvas({
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
+    // M59. The drop door, by screen point — see dropPath.
+    w.__m59Drop = (path: string, x: number, y: number): string => dropPath(path, { x, y })
     // M21's mint, through the SAME openToolboxPanel the inspector button and
     // the palette row both call — so the hook proves the real path rather than
     // a parallel one, the rule __m13Open already obeys.
@@ -2670,7 +2695,7 @@ export function Canvas({
     // the hook proves the real gesture rather than a parallel mint, the rule
     // __m13Open and __m20Toolbox already obey.
     w.__m24Jira = (): void => openJiraPanel()
-  }, [openFilePanel, worldCentre, openJiraPanel])
+  }, [openFilePanel, worldCentre, openJiraPanel, dropPath])
 
   /**
    * A node committed. Advance ITS OWN stored baseline to the commit it just

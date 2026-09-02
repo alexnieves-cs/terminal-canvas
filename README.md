@@ -57,6 +57,11 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **No dead ends.** Every row and control that cannot work right now is
+  present and disabled with a reason that names the fix; the audit that
+  walked every surface is [docs/dead-end-audit.md](docs/dead-end-audit.md),
+  and a check keeps every reason written down there. A file dropped on an
+  agent's terminal is handed to the agent; dropped on the canvas it opens.
 - **Work that can leave.** `Export panel output…` writes everything a
   panel's durable log holds, ANSI stripped and secrets scrubbed, to a file
   you choose — and tells you how many secrets it replaced. `Export canvas as

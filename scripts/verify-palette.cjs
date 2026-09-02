@@ -217,6 +217,7 @@ const spyActions = () => {
     cameraForward: record('cameraForward'),
     exportPanelText: record('exportPanelText'),
     exportCanvasPng: record('exportCanvasPng'),
+    beginRenameBookmark: record('beginRenameBookmark'),
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
@@ -1878,6 +1879,42 @@ const WS = [
       row(none).disabledReason !== row(off).disabledReason &&
       png !== undefined && png.disabledReason === undefined && png.group === 'canvas' && calls.includes('exportCanvasPng'),
     JSON.stringify({ r: r && r.disabledReason, none: row(none) && row(none).disabledReason, wrong: row(wrongKind) && row(wrongKind).disabledReason, off: row(off) && row(off).disabledReason, png: png && png.group, calls }))
+}
+
+// M59 — the audit's two palette checks.
+{
+  // rename.1: a bookmark can be renamed, per bookmark, through the input
+  // mode presets use — "View 1" forever with delete as the only way out was
+  // the dead end the walk found.
+  const c = ctx({ bookmarks: [{ id: 'b1', name: 'View 1' }] })
+  const row = byId(P.buildCommands(c), 'bookmark.rename.b1')
+  if (row) row.run()
+  const call = c.actions.calls.find((x) => x[0] === 'beginRenameBookmark')
+  ok('rename.1 a Rename bookmark row exists per bookmark and begins the rename with its id and current name',
+    row !== undefined && /View 1/.test(row.title) && row.group === 'bookmark' && call !== undefined && call[1] === 'b1' && call[2] === 'View 1',
+    JSON.stringify({ row: row && row.title, call }))
+  // audit.1: across a matrix of contexts, every disabled row carries a
+  // non-empty reason (a disabled row with none is the dead end criterion 1
+  // forbids), and every row has a run function and a title.
+  const contexts = {
+    nothing: ctx({}),
+    sessionless: ctx({ panels: [{ id: 'r1', label: 'review', kind: 'review' }], capturedId: 'r1' }),
+    merged: ctx({ merged: true, selectedIds: ['n1'], panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1' }),
+    scrollbackOff: ctx({ scrollbackEnabled: false, panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1', searchQuery: 'x', searchResults: [] }),
+    noNoteRoot: ctx({ noteRoot: null }),
+    envMissing: ctx({ envReport: null })
+  }
+  const bad = []
+  let rows = 0
+  for (const [name, c2] of Object.entries(contexts)) {
+    for (const cmd of P.buildCommands(c2)) {
+      rows += 1
+      if (typeof cmd.title !== 'string' || cmd.title.trim() === '' || typeof cmd.run !== 'function') bad.push(`${name}:${cmd.id}:shape`)
+      if ('disabledReason' in cmd && (typeof cmd.disabledReason !== 'string' || cmd.disabledReason.trim() === '')) bad.push(`${name}:${cmd.id}:empty-reason`)
+    }
+  }
+  ok('audit.1 across six contexts every row has a title and a run, and every disabled row names a non-empty reason',
+    rows > 100 && bad.length === 0, JSON.stringify({ rows, bad: bad.slice(0, 8) }))
 }
 
 const failed = results.filter((r) => !r.pass)
