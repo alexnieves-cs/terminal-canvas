@@ -96,6 +96,25 @@ export const IPC = {
    */
   PRESET_SAVE_PANEL: 'preset:save-panel',
   /**
+   * M37. Flag a user preset to spawn in a fresh worktree, or clear it. An
+   * invoke for the reason PRESET_RENAME is one: the palette is the renderer's
+   * and main owns the store. False for a built-in, which is code.
+   */
+  PRESET_SET_WORKTREE: 'preset:set-worktree',
+  /**
+   * M37. Every worktree this app created, with whether a panel still owns
+   * it. Pull-only, read on palette open beside credential:list.
+   */
+  WORKTREE_LIST: 'worktree:list',
+  /**
+   * M37. `git worktree remove` with NO --force: a dirty tree is refused with
+   * git's own sentence and the directory survives. The branch is never
+   * deleted here — that is the user's, in git, once merged.
+   */
+  WORKTREE_REMOVE: 'worktree:remove',
+  /** M37. Open the worktree's directory in Finder. A path in a 260px pane is a path nobody can get at. */
+  WORKTREE_REVEAL: 'worktree:reveal',
+  /**
    * "Reset canvas…" asked for from the palette rather than the menu. Main owns
    * the confirmation dialog and the counts request, so the renderer asks main
    * to run the flow it already has instead of growing a second one.
@@ -604,6 +623,8 @@ export interface PresetTemplate {
   agent?: AgentKind
   /** The spawn-time knobs for that agent CLI (M20). */
   agentOptions?: AgentOptions
+  /** M37. Spawn in a fresh git worktree. Absent means no; see PanelSpec.worktree. */
+  worktree?: boolean
 }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
@@ -617,6 +638,8 @@ export interface CapturedPanel {
   agent?: AgentKind
   /** The spawn-time knobs for that agent CLI (M20). */
   agentOptions?: AgentOptions
+  /** M37. The captured panel asked for a worktree, so the preset it becomes does too. */
+  worktree?: boolean
 }
 
 /** One row of the palette's prompt list. Mirrors PromptListRow in main. */
@@ -706,7 +729,32 @@ export interface PresetListRow {
   builtIn: boolean
   isDefault: boolean
   subtitle: string
+  /** M37. Spawns in a fresh worktree. Absent means no. */
+  worktree?: boolean
 }
+
+/**
+ * M37. One worktree this app created, as the palette needs it. `attached` is
+ * COMPUTED by main at list time — the record's panelId is in some workspace's
+ * panel list — never stored; see WorktreeRecord for why a record outlives its
+ * panel. `panelTitle` is that panel's honest label when attached.
+ */
+export interface WorktreeListRow {
+  id: string
+  branch: string
+  path: string
+  root: string
+  createdAt: number
+  panelId: string
+  attached: boolean
+  panelTitle?: string
+}
+
+export type WorktreeRemoveResult =
+  | { kind: 'removed' }
+  | { kind: 'refused'; reason: string }
+  | { kind: 'failed'; reason: string }
+  | { kind: 'unknown' }
 
 /** A setting as the palette needs it: its declaration plus its current value. */
 export interface SettingRow {
@@ -792,6 +840,15 @@ export interface CanvasBridge {
     spawnById(id: string): Promise<void>
     /** Save THIS panel as a preset. See PRESET_SAVE_PANEL. */
     savePanel(captured: CapturedPanel): Promise<void>
+    /** M37. See PRESET_SET_WORKTREE. False for a built-in or an unknown id. */
+    setWorktree(id: string, on: boolean): Promise<boolean>
+  }
+  /** M37. See WORKTREE_LIST / WORKTREE_REMOVE / WORKTREE_REVEAL. */
+  worktree: {
+    list(): Promise<WorktreeListRow[]>
+    remove(id: string): Promise<WorktreeRemoveResult>
+    /** False when the id names nothing. */
+    reveal(id: string): Promise<boolean>
   }
   prompt: {
     list(cwd: string | null): Promise<PromptBridgeRow[]>

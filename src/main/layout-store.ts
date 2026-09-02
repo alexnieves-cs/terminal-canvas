@@ -10,7 +10,8 @@ import {
   type Preset,
   type Prompt,
   type RestoreSettings,
-  type Workspace
+  type Workspace,
+  type WorktreeRecord
 } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
@@ -166,6 +167,23 @@ export interface LayoutStore {
   session(panelId: string): string | undefined
   setSession(panelId: string, sessionId: string): void
   dropSession(panelId: string): void
+  /** M37. Every worktree this app created. Copied out, like presets(). */
+  worktrees(): WorktreeRecord[]
+  /**
+   * M37. The record a panel id should spawn into, if one exists for it IN THIS
+   * ROOT. The root clause is the whole guard: a recycled id in a different
+   * repository must never be spawned into a stranger's branch.
+   */
+  worktreeForPanel(panelId: string, root: string): WorktreeRecord | undefined
+  addWorktree(record: WorktreeRecord): void
+  /** By record id, not panel id: a panel's record outlives the panel. */
+  dropWorktree(id: string): boolean
+  /**
+   * M37. Flag a USER preset to spawn in a fresh worktree, or clear it. False
+   * for an unknown id — including every built-in, which is code and never on
+   * disk. Clearing writes ABSENCE, never `false`.
+   */
+  setPresetWorktree(id: string, on: boolean): boolean
 }
 
 const defaultSchedule = (fn: () => void, ms: number): Cancel => {
@@ -742,6 +760,39 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       if (snapshot.sessions[panelId] === undefined) return
       delete snapshot.sessions[panelId]
       scheduleWrite()
+    },
+    worktrees() {
+      return snapshot.worktrees.map((w) => ({ ...w }))
+    },
+    worktreeForPanel(panelId, root) {
+      const found = snapshot.worktrees.find((w) => w.panelId === panelId && w.root === root)
+      return found === undefined ? undefined : { ...found }
+    },
+    addWorktree(record) {
+      snapshot.worktrees = [...snapshot.worktrees.filter((w) => w.id !== record.id), { ...record }]
+      scheduleWrite()
+    },
+    dropWorktree(id) {
+      const before = snapshot.worktrees.length
+      snapshot.worktrees = snapshot.worktrees.filter((w) => w.id !== id)
+      if (snapshot.worktrees.length === before) return false
+      scheduleWrite()
+      return true
+    },
+    setPresetWorktree(id, on) {
+      const found = snapshot.presets.find((p) => p.id === id)
+      if (!found) return false
+      snapshot.presets = snapshot.presets.map((p) => {
+        if (p.id !== id) return p
+        // Rebuilt without the key rather than assigned `false`: absence is
+        // what every reader tests with `in`, and `false` on disk is a
+        // well-formed "no" that every parser would then have to keep
+        // normalising forever.
+        const { worktree: _dropped, ...rest } = p
+        return on ? { ...rest, worktree: true } : rest
+      })
+      scheduleWrite()
+      return true
     }
   }
 }

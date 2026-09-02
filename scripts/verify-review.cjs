@@ -472,6 +472,50 @@ const { execFileSync } = require('node:child_process')
 const { mkdtempSync, writeFileSync, appendFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
+// M37 — a git worktree per panel: the pure half. Scoped ids.
+//
+// worktree.1. The branch name carries the panel id (legible in `git branch`
+//      beside the canvas) AND a minute stamp (a recycled panel id must not
+//      collide with the branch a previous panel left behind).
+{
+  const name = typeof R.worktreeBranch === 'function'
+    ? R.worktreeBranch('n12', new Date(2026, 8, 1, 14, 32, 7))
+    : null
+  ok('worktree.1 worktreeBranch is tc/<panelId>-<yyyymmdd-HHMM>',
+    name === 'tc/n12-20260901-1432', String(name))
+}
+
+// worktree.2. The path lives under the app's own directory, never inside the
+//      repository (where it would be untracked files in every review); its
+//      LEAF has no slash (a branch name does); and two repositories that
+//      share a basename get different parents, or one's worktree would land
+//      inside the other's.
+{
+  const fn = typeof R.worktreePath === 'function' ? R.worktreePath : null
+  const a = fn ? fn('/ud/worktrees', '/Users/x/proj', 'tc/n12-20260901-1432') : ''
+  const b = fn ? fn('/ud/worktrees', '/Users/y/proj', 'tc/n12-20260901-1432') : ''
+  const leaf = a.split('/').pop()
+  const parentA = a.split('/').slice(0, -1).join('/')
+  const parentB = b.split('/').slice(0, -1).join('/')
+  ok('worktree.2 worktreePath: under the app dir, slash-free leaf, distinct parents for same-name repos',
+    a.startsWith('/ud/worktrees/proj-') && leaf === 'tc-n12-20260901-1432' && !leaf.includes('/') &&
+      parentA !== parentB && fn('/ud/worktrees', '/Users/x/proj', 'tc/z') .startsWith(parentA + '/'),
+    JSON.stringify({ a, b }))
+}
+
+// worktree.3. The two argv builders. `add -b <branch> <path> HEAD` branches
+//      from the current commit; `remove` carries NO --force, for the reason
+//      review-commit carries no --no-verify: a tool that quietly discarded an
+//      agent's uncommitted work is worth less than one that refuses.
+{
+  const add = typeof R.buildWorktreeAddArgs === 'function' ? R.buildWorktreeAddArgs('/r', 'tc/b', '/p') : null
+  const rm = typeof R.buildWorktreeRemoveArgs === 'function' ? R.buildWorktreeRemoveArgs('/r', '/p') : null
+  ok('worktree.3 worktree add/remove argv, and remove never forces',
+    JSON.stringify(add) === JSON.stringify(['-C', '/r', 'worktree', 'add', '-b', 'tc/b', '/p', 'HEAD']) &&
+      JSON.stringify(rm) === JSON.stringify(['-C', '/r', 'worktree', 'remove', '/p']),
+    JSON.stringify({ add, rm }))
+}
+
 let GIT = true
 try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT = false }
 
@@ -537,6 +581,104 @@ if (!GIT) {
   git('gc', '--prune=now', '-q')
   const lost = await engine.e.review('p1')
   ok('34 real gc produces baseline-lost', lost.kind === 'baseline-lost')
+
+  // M37 — the worktree manager against REAL git, in the same spaced fixture
+  // repository. Scoped ids. The records live in an in-memory list standing in
+  // for layout-store's, so nothing here touches a real layout.json.
+  {
+    const records = []
+    const store = {
+      forPanel: (panelId, root) => records.find((w) => w.panelId === panelId && w.root === root),
+      add: (rec) => { records.push(rec) },
+      drop: (id) => { const i = records.findIndex((w) => w.id === id); if (i < 0) return false; records.splice(i, 1); return true },
+      list: () => records.slice()
+    }
+    const worktreesDir = join(mkdtempSync(join(tmpdir(), 'tc worktrees ')), 'worktrees')
+    const mgr = typeof R.createWorktreeManager === 'function'
+      ? R.createWorktreeManager({
+          run: engine.runner, resolveRepo: (cwd) => engine.e.resolveRepo(cwd), worktreesDir, records: store,
+          now: () => new Date(2026, 8, 1, 14, 32), mintId: (() => { let n = 0; return () => `wt${++n}` })()
+        })
+      : null
+    const listWorktrees = () => git('worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).length
+    const treesBefore = listWorktrees()
+
+    // worktree.4. Creation: a directory on a NEW branch at HEAD, recorded.
+    const made = mgr ? await mgr.ensureForPanel('p1', repo) : null
+    const branchExists = made && made.kind === 'active'
+      ? git('branch', '--list', made.branch).trim() !== '' : false
+    ok('worktree.4 ensureForPanel creates a worktree on a tc/ branch at HEAD and records it',
+      made !== null && made.kind === 'active' && made.branch === 'tc/p1-20260901-1432' &&
+        require('node:fs').existsSync(made.path) && made.path.startsWith(worktreesDir) &&
+        branchExists && listWorktrees() === treesBefore + 1 &&
+        records.length === 1 && records[0].panelId === 'p1' && records[0].root === root,
+      JSON.stringify({ made, records, trees: listWorktrees() - treesBefore }))
+
+    // worktree.5. Reuse: a second call for the SAME panel in the SAME root
+    //      (a reload, a restart, an undone close) creates nothing and answers
+    //      the same record; the same panel id in a DIFFERENT root does not
+    //      reuse it — a recycled id must never land in a stranger's branch.
+    const again = mgr ? await mgr.ensureForPanel('p1', repo) : null
+    const otherRepo = mkdtempSync(join(tmpdir(), 'tc other repo '))
+    const gitOther = (...args) => execFileSync('git', ['-C', otherRepo, ...args], { encoding: 'utf8' })
+    gitOther('init', '-q', '.'); gitOther('config', 'user.email', 'v@e.com'); gitOther('config', 'user.name', 'v')
+    writeFileSync(join(otherRepo, 'o.txt'), 'o\n'); gitOther('add', '-A'); gitOther('commit', '-qm', 'o')
+    const elsewhere = mgr ? await mgr.ensureForPanel('p1', otherRepo) : null
+    ok('worktree.5 the same panel in the same root reuses its worktree; in another root it gets its own',
+      again !== null && again.kind === 'active' && made && again.path === made.path && listWorktrees() === treesBefore + 1 &&
+        elsewhere !== null && elsewhere.kind === 'active' && elsewhere.path !== made.path && records.length === 2,
+      JSON.stringify({ again, elsewhere, records: records.length }))
+
+    // worktree.6. The review engine needs no change: resolveRepo of the
+    //      worktree path answers the WORKTREE's root, and a baseline captured
+    //      there plus one edit there reports exactly that edit — the main
+    //      checkout's own dirt (a.txt has uncommitted lines above) is absent.
+    let wtReview = null
+    if (made && made.kind === 'active') {
+      const wtRoot = await engine.e.resolveRepo(made.path)
+      const wtSha = wtRoot.kind === 'root' ? await engine.e.captureBaseline(wtRoot.root) : null
+      writeFileSync(join(made.path, 'wt file.txt'), 'made in the worktree\n')
+      const engine2 = R.createReviewEngine({ run: engine.runner, baselineOf: () => ({ root: wtRoot.root, sha: wtSha }), peersInRepo: () => 0 })
+      const r = await engine2.review('p1')
+      wtReview = { rootKind: wtRoot.kind, sameAsRepo: wtRoot.kind === 'root' && wtRoot.root === root, kind: r.kind, files: r.files && r.files.map((f) => f.path) }
+    }
+    ok('worktree.6 a review inside the worktree sees the worktree\'s root and only the worktree\'s edits',
+      wtReview !== null && wtReview.rootKind === 'root' && wtReview.sameAsRepo === false &&
+        wtReview.kind === 'changes' && JSON.stringify(wtReview.files) === JSON.stringify(['wt file.txt']),
+      JSON.stringify(wtReview))
+
+    // worktree.7. Not a repository: the refused arm, with a reason, and no
+    //      record — the caller spawns in place and SAYS so.
+    const plain = mkdtempSync(join(tmpdir(), 'tc not a repo '))
+    const refused = mgr ? await mgr.ensureForPanel('p9', plain) : null
+    ok('worktree.7 a cwd outside any repository is refused with a reason and no record',
+      refused !== null && refused.kind === 'refused' && typeof refused.reason === 'string' && refused.reason.length > 0 &&
+        !records.some((w) => w.panelId === 'p9'),
+      JSON.stringify(refused))
+
+    // worktree.8. A DIRTY worktree's removal is refused with git's own
+    //      sentence, and the directory survives — no --force, ever.
+    const dirtyResult = mgr && made && made.kind === 'active' ? await mgr.remove(records[0].id) : null
+    ok('worktree.8 removing a dirty worktree is refused verbatim and the directory survives',
+      dirtyResult !== null && dirtyResult.kind === 'refused' && /modified|untracked|contains|dirty/i.test(dirtyResult.reason) &&
+        made && require('node:fs').existsSync(made.path) && records.length === 2,
+      JSON.stringify(dirtyResult))
+
+    // worktree.9. A CLEAN worktree is removed, its record dropped, and its
+    //      branch KEPT: deleting an unmerged branch is the one irreversible
+    //      act here and it is the user's, in git, once they have merged.
+    let cleanResult = null
+    if (mgr && made && made.kind === 'active') {
+      require('node:fs').rmSync(join(made.path, 'wt file.txt'))
+      cleanResult = await mgr.remove(records[0].id)
+    }
+    ok('worktree.9 a clean worktree is removed, its record dropped, and its branch kept',
+      cleanResult !== null && cleanResult.kind === 'removed' && made && !require('node:fs').existsSync(made.path) &&
+        records.length === 1 && git('branch', '--list', made.branch).trim() !== '' && listWorktrees() === treesBefore,
+      JSON.stringify({ cleanResult, records: records.length, trees: listWorktrees() - treesBefore }))
+    try { require('node:fs').rmSync(worktreesDir, { recursive: true, force: true }) } catch { /* best effort */ }
+    try { require('node:fs').rmSync(otherRepo, { recursive: true, force: true }) } catch { /* best effort */ }
+  }
 
   // The fixture repository is not free: one per run accumulated in $TMPDIR
   // for the life of the machine. Best-effort — a failure to clean up must

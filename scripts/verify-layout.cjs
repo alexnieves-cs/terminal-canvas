@@ -2599,6 +2599,192 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ agent: out[0].agent, options, warnings }))
 }
 
+// M37 — a git worktree per panel. Scoped ids, per the convention.
+//
+// worktree.1. The flag on a PRESET: absent stays absent (asserted with `in`,
+//      never a truthiness test — `worktree: undefined` survives IPC and reads
+//      as present), `true` survives, a present `false` is normalised to absent
+//      (a well-formed "no" is not worth a warning), and anything else drops the
+//      FIELD with a warning naming the preset, never the preset.
+{
+  const warnings = []
+  const out = L.parsePresets([
+    { id: 'a', name: 'A', cwd: '~', args: [] },
+    { id: 'b', name: 'B', cwd: '~', args: [], worktree: true },
+    { id: 'c', name: 'C', cwd: '~', args: [], worktree: false },
+    { id: 'd', name: 'D', cwd: '~', args: [], worktree: 'yes' }
+  ], warnings)
+  ok('worktree.1 a preset\'s worktree flag: absent, true, false-normalised, malformed-dropped',
+    out.length === 4 && !('worktree' in out[0]) && out[1].worktree === true &&
+      !('worktree' in out[2]) && !('worktree' in out[3]) &&
+      warnings.some((w) => w.includes('d') && w.includes('worktree')),
+    JSON.stringify({ out, warnings }))
+}
+
+// worktree.2. The SAME four cases through parsePanel, because two parsers for
+//      one format agree on the day they are written and drift the first time
+//      only one is edited — the gap M17's fix round found for `agent`.
+{
+  const { snapshot, warnings } = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas',
+      panels: [
+        panel({ id: 'p1' }),
+        panel({ id: 'p2', worktree: true }),
+        panel({ id: 'p3', worktree: false }),
+        panel({ id: 'p4', worktree: 1 })
+      ],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }]
+  }))
+  const ps = active(snapshot).panels
+  ok('worktree.2 a panel\'s worktree flag: absent, true, false-normalised, malformed-dropped',
+    ps.length === 4 && !('worktree' in ps[0]) && ps[1].worktree === true &&
+      !('worktree' in ps[2]) && !('worktree' in ps[3]) &&
+      warnings.some((w) => w.includes('p4') && w.includes('worktree')),
+    JSON.stringify({ ps, warnings }))
+}
+
+// worktree.3. The record list: absent on every file written before M37 and
+//      read as [] with NO warning; a non-array warns and yields []; one
+//      malformed entry (no branch) costs that entry and not its sibling.
+{
+  const w0 = []
+  const absent = typeof L.parseWorktrees === 'function' ? L.parseWorktrees(undefined, w0) : null
+  const w1 = []
+  const notArray = typeof L.parseWorktrees === 'function' ? L.parseWorktrees({ a: 1 }, w1) : null
+  const w2 = []
+  const good = { id: 'wt1', root: '/r', path: '/ud/worktrees/r-abc/tc-n1-20260901-1200', branch: 'tc/n1-20260901-1200', createdAt: 1, panelId: 'n1' }
+  const mixed = typeof L.parseWorktrees === 'function'
+    ? L.parseWorktrees([good, { id: 'wt2', root: '/r', path: '/p', createdAt: 1, panelId: 'n2' }], w2)
+    : null
+  ok('worktree.3 parseWorktrees: absent is [] silently, a non-array warns, one bad entry costs one entry',
+    Array.isArray(absent) && absent.length === 0 && w0.length === 0 &&
+      Array.isArray(notArray) && notArray.length === 0 && w1.length === 1 &&
+      Array.isArray(mixed) && mixed.length === 1 && mixed[0].id === 'wt1' && mixed[0].panelId === 'n1' &&
+      w2.length === 1,
+    JSON.stringify({ absent, w0, notArray, w1, mixed, w2 }))
+}
+
+// worktree.4. Round trip: a snapshot carrying all three (a worktree preset, a
+//      worktree panel, one record) survives serialise + parseLayout intact.
+{
+  const rec = { id: 'wt1', root: '/r', path: '/ud/worktrees/r-abc/tc-n1-20260901-1200', branch: 'tc/n1-20260901-1200', createdAt: 5, panelId: 'p1' }
+  const first = L.parseLayout(JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'w1',
+    workspaces: [{
+      id: 'w1', name: 'Canvas', panels: [panel({ worktree: true })],
+      camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+    }],
+    presets: [{ id: 'u1', name: 'U', cwd: '~', args: [], worktree: true }],
+    worktrees: [rec]
+  }))
+  const again = L.parseLayout(JSON.stringify(first.snapshot))
+  const s2 = again.snapshot
+  ok('worktree.4 a worktree preset, panel and record round-trip through the file',
+    active(s2).panels[0].worktree === true && s2.presets[0].worktree === true &&
+      Array.isArray(s2.worktrees) && s2.worktrees.length === 1 &&
+      JSON.stringify(s2.worktrees[0]) === JSON.stringify(rec) && again.warnings.length === 0,
+    JSON.stringify({ panel: active(s2).panels[0], preset: s2.presets[0], worktrees: s2.worktrees, warnings: again.warnings }))
+}
+
+// worktree.5. The store: add, find BY PANEL AND ROOT (a recycled id in a
+//      different repository must never be spawned into a stranger's branch),
+//      drop — and every write schedules a save.
+{
+  const clock = fakeClock()
+  const store = L.createLayoutStore({ filePath: tmp(), schedule: clock.schedule })
+  store.load()
+  const rec = { id: 'wt1', root: '/r', path: '/p', branch: 'tc/n1-20260901-1200', createdAt: 1, panelId: 'n1' }
+  const has = typeof store.addWorktree === 'function'
+  if (has) store.addWorktree(rec)
+  const found = has ? store.worktreeForPanel('n1', '/r') : undefined
+  const other = has ? store.worktreeForPanel('n1', '/elsewhere') : 'unset'
+  const listed = has ? store.worktrees() : []
+  if (has) store.dropWorktree('wt1')
+  const after = has ? store.worktrees() : ['unset']
+  ok('worktree.5 the store adds, finds by panel AND root, lists, drops, and schedules a write each time',
+    has && found !== undefined && found.id === 'wt1' && other === undefined &&
+      listed.length === 1 && after.length === 0 && clock.scheduled() >= 1,
+    JSON.stringify({ has, found, other, listed: listed.length, after: after.length, scheduled: has ? clock.scheduled() : null }))
+}
+
+// worktree.6. setPresetWorktree: a user preset takes the flag and drops it
+//      again to ABSENT (never `false` on disk); a built-in id returns false and
+//      writes nothing, because built-ins are code and never on disk.
+{
+  const clock = fakeClock()
+  const store = L.createLayoutStore({ filePath: tmp(), schedule: clock.schedule })
+  store.load()
+  store.addPreset({ id: 'u1', name: 'U', cwd: '~', args: [] })
+  const has = typeof store.setPresetWorktree === 'function'
+  const on = has ? store.setPresetWorktree('u1', true) : null
+  const flagged = store.presets().find((p) => p.id === 'u1')
+  const off = has ? store.setPresetWorktree('u1', false) : null
+  const cleared = store.presets().find((p) => p.id === 'u1')
+  const scheduledBefore = clock.scheduled()
+  const builtIn = has ? store.setPresetWorktree('claude', true) : null
+  ok('worktree.6 setPresetWorktree flags a user preset, clears to absent, and refuses a built-in',
+    on === true && flagged && flagged.worktree === true && off === true && cleared && !('worktree' in cleared) &&
+      builtIn === false && clock.scheduled() === scheduledBefore,
+    JSON.stringify({ on, flagged, off, cleared, builtIn }))
+}
+
+// worktree.7. The two main-side copy sites: templateOf (preset -> the
+//      template Cmd+N receives) and presetFromCapture (a captured panel -> a
+//      preset). Each carries `true` and keeps absence ABSENT, tested with
+//      `in` — a spread here would write `worktree: undefined`, which survives
+//      IPC and reads as present.
+{
+  const t1 = L.templateOf({ cwd: '~', args: [] })
+  const t2 = L.templateOf({ cwd: '~', args: [], worktree: true })
+  const c1 = L.presetFromCapture([], { cwd: '/x', args: [], w: 720, h: 460 })
+  const c2 = L.presetFromCapture([], { cwd: '/x', args: [], w: 720, h: 460, worktree: true })
+  ok('worktree.7 templateOf and presetFromCapture carry the flag and keep absence absent',
+    !('worktree' in t1) && t2.worktree === true && !('worktree' in c1) && c2.worktree === true,
+    JSON.stringify({ t1, t2, c1, c2 }))
+}
+
+// worktree.8. The renderer-side copy sites, both directions: a persisted panel
+//      with the flag becomes a Panel whose spec carries it, and back.
+{
+  const persisted = [
+    { ...panel({ id: 'p1' }) },
+    { ...panel({ id: 'p2' }), worktree: true }
+  ]
+  const panels = L.toPanels(persisted)
+  const back = L.fromPanels(panels)
+  ok('worktree.8 toPanels/fromPanels carry the flag both ways and keep absence absent',
+    panels.length === 2 && !('worktree' in panels[0].spec) && panels[1].spec.worktree === true &&
+      !('worktree' in back[0]) && back[1].worktree === true,
+    JSON.stringify({ specs: panels.map((p) => p.spec), back }))
+}
+
+// worktree.9. presetRows carries the flag to the palette's PresetListRow, so
+//      the toggle row can name its current state; absent stays absent.
+{
+  const rows = L.presetRows([
+    { preset: { id: 'a', name: 'A', cwd: '~', args: [] }, available: true },
+    { preset: { id: 'b', name: 'B', cwd: '~', args: [], worktree: true }, available: true }
+  ], 'a')
+  ok('worktree.9 presetRows carries the worktree flag to the palette row',
+    rows.length === 2 && !('worktree' in rows[0]) && rows[1].worktree === true,
+    JSON.stringify(rows))
+}
+
+// worktree.10. A built-in preset that spawns claude in a fresh worktree, so
+//      the feature has a door without a preset editor. Built-ins are code, so
+//      allPresets([]) is where it must appear.
+{
+  const found = L.allPresets([]).find((p) => p.id === 'claude-worktree')
+  ok('worktree.10 the claude-worktree built-in exists, runs claude, and asks for a worktree',
+    found !== undefined && found.command === 'claude' && found.agent === 'claude-code' && found.worktree === true,
+    JSON.stringify(found))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

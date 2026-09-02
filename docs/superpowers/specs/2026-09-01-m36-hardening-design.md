@@ -68,7 +68,7 @@ they land, because later milestones build on the modules they touch.
   TUI, comfortably less than what stalls a frame). When a session's pending
   bytes exceed it, whole chunks are dropped from the HEAD until it does not,
   and the number of dropped bytes accumulates on the session. The next flush
-  prepends one marker line, `\r\n[terminal-canvas: N KB of output elided]\r\n`,
+  prepends one marker line, `\r\n\x1b[0m[terminal-canvas: N KB of output elided]\r\n` (the SGR reset first, so a drop that landed mid-sequence cannot paint the notice in the agent's colours — added during implementation, recorded here 2026-09-01),
   and resets the count. Two properties are load-bearing and each is a
   separate check: the LAST bytes survive (the flush-before-exit rule exists
   so the error explaining an exit is not lost, and a head-preserving cap

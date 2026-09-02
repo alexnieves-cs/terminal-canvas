@@ -31,6 +31,12 @@ export interface PanelSpec {
    * so a changed value here does nothing until the panel is restarted.
    */
   agentOptions?: AgentOptions
+  /**
+   * M37. Spawn in a fresh git worktree of the repository at `cwd`, on a new
+   * branch. `cwd` stays the repository cwd; the worktree path main actually
+   * spawned in comes back on PtyCreateResult.cwd. Absent means no.
+   */
+  worktree?: boolean
 }
 
 export interface PtyExitInfo {
@@ -70,6 +76,16 @@ export interface PtyCreateResult {
    */
   reattached: boolean
   /**
+   * M37. Three states, never two: absent when the panel never asked for a
+   * worktree; `active` with the branch and path when it got one (or is back
+   * in the one it already had); `refused` with git's or the engine's own
+   * sentence when it asked and could not — not a repository, an unborn HEAD,
+   * a branch that already exists. A refusal spawns in the requested cwd as an
+   * ordinary panel AND says so here, because a worktree the user asked for
+   * and did not get must never be silent.
+   */
+  worktree?: WorktreeOutcome
+  /**
    * The program running in the pane NOW, when anything knows — only the tmux
    * backend's list() can answer it. OPTIONAL because this same type is what
    * create() returns, where there is no live answer yet, and because the
@@ -79,6 +95,11 @@ export interface PtyCreateResult {
    */
   currentCommand?: string
 }
+
+/** M37. See PtyCreateResult.worktree. */
+export type WorktreeOutcome =
+  | { kind: 'active'; branch: string; path: string; root: string }
+  | { kind: 'refused'; reason: string }
 
 /**
  * What a panel's agent is doing, derived in main from bytes and their absence.

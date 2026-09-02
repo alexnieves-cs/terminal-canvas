@@ -209,6 +209,14 @@ export function createRegistry(deps: RegistryDeps): Registry {
       }
     })
 
+    // THE FIFTH COPY SITE of the absent-stays-absent rule, built field by
+    // field like the four before it (layout-schema, templateOf,
+    // presetFromCapture, Canvas's onSpawn) — and the one that had never been
+    // pinned. A field the spec carries that this call does not name never
+    // reaches main, with no error and a chrome that keeps rendering the spec
+    // as though it had: `agentOptions` was missing here from M23 until M37,
+    // so a "plan mode" panel wore its chip and spawned in the CLI's default
+    // mode. verify:registry worktree.1 and copy-site.1 read this request.
     bridge.pty
       .create({
         panelId: session.id,
@@ -216,6 +224,8 @@ export function createRegistry(deps: RegistryDeps): Registry {
         command: session.spec.command,
         args: session.spec.args,
         agent: session.spec.agent,
+        ...(session.spec.agentOptions === undefined ? {} : { agentOptions: session.spec.agentOptions }),
+        ...(session.spec.worktree === undefined ? {} : { worktree: session.spec.worktree }),
         cols,
         rows
       })
@@ -225,7 +235,10 @@ export function createRegistry(deps: RegistryDeps): Registry {
           pid: result.pid,
           command: result.command,
           cwd: result.cwd,
-          reattached: result.reattached
+          reattached: result.reattached,
+          // M37. Absent stays absent — a spread of `undefined` would read as
+          // an outcome to the inspector's three-state row.
+          ...(result.worktree === undefined ? {} : { worktree: result.worktree })
         }
         bump()
       })

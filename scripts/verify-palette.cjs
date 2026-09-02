@@ -222,6 +222,11 @@ const spyActions = () => {
     // it is exactly how this omission surfaced: the suite reported nothing
     // rather than a red check.
     newNote: record('newNote'),
+    // M37. The three worktree verbs. Missing any one of them THROWS out of
+    // row.run() and takes the rest of the suite with it — newNote's own trap.
+    setPresetWorktree: record('setPresetWorktree'),
+    beginRemoveWorktree: record('beginRemoveWorktree'),
+    revealWorktree: record('revealWorktree'),
     // M13. beginLink is reached from panel.link; the other two are the
     // inspector's own, reached from no Command row — kept here anyway so the
     // fixture stays honest about the full PaletteActions shape, the reason
@@ -275,6 +280,9 @@ const ctx = (over = {}) => ({
   broadcastActive: false,
   actions: spyActions(),
   credentials: [],
+  // M37. Empty means "no worktrees yet"; the Manage worktrees door still
+  // renders, disabled with a reason, so the feature is findable.
+  worktrees: [],
   ...over
 })
 
@@ -744,7 +752,8 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   }))
   const inside = P.filterCommands(rows, '', 'presets').map((r) => r.id).sort()
   ok('50 a scope shows its own rows, hidden ones included, and nothing else',
-    inside.join(',') === 'preset.default.u1,preset.delete.u1,preset.rename.u1,preset.spawn.u1',
+    // M37 added preset.worktree.<id>, the per-preset isolation toggle.
+    inside.join(',') === 'preset.default.u1,preset.delete.u1,preset.rename.u1,preset.spawn.u1,preset.worktree.u1',
     inside.join(','))
 }
 
@@ -1536,6 +1545,81 @@ const WS = [
       row.disabledReason === P.REASON_NO_NOTE_ROOT &&
       P.REASON_NO_NOTE_ROOT !== P.REASON_NO_FOCUS,
     `reason=${JSON.stringify(row && row.disabledReason)}`)
+}
+
+// M37 — the worktree rows. Scoped ids.
+//
+// worktree.1. The presets scope carries a toggle row per preset that names its
+//      CURRENT state and flips it: "off" runs setPresetWorktree(id, true),
+//      "on" runs it with false. A built-in is disabled with its own reason —
+//      built-ins are code, and the row must stay visible so the feature is
+//      findable from the one place presets are managed.
+{
+  const c = ctx({ presets: [SHELL, MINE, { ...MINE, id: 'u2', name: 'iso', worktree: true }] })
+  const rows = P.buildCommands(c)
+  const off = byId(rows, 'preset.worktree.u1')
+  const on = byId(rows, 'preset.worktree.u2')
+  const builtIn = byId(rows, 'preset.worktree.shell')
+  if (off) off.run()
+  if (on) on.run()
+  ok('worktree.1 a per-preset toggle row names its state, flips it, and refuses a built-in with a reason',
+    off !== undefined && off.scope === 'presets' && off.hiddenAtRest === true && /off$/.test(off.title) &&
+      on !== undefined && /on$/.test(on.title) &&
+      builtIn !== undefined && builtIn.disabledReason === P.REASON_BUILT_IN_WORKTREE &&
+      c.actions.calls.some((k) => k[0] === 'setPresetWorktree' && k[1] === 'u1' && k[2] === true) &&
+      c.actions.calls.some((k) => k[0] === 'setPresetWorktree' && k[1] === 'u2' && k[2] === false),
+    JSON.stringify({ off, on, builtIn, calls: c.actions.calls }))
+}
+
+// worktree.2. The door: present at rest, its subtitle counting records, and
+//      disabled with a reason when there are none — a door that vanished would
+//      read as a feature that was never built (verify:palette 31's rule).
+{
+  const empty = byId(P.buildCommands(ctx()), 'manage.worktrees')
+  const two = byId(P.buildCommands(ctx({ worktrees: [
+    { id: 'w1', branch: 'tc/n1-1', path: '/p1', root: '/r', createdAt: 1, panelId: 'n1', attached: true, panelTitle: 'claude' },
+    { id: 'w2', branch: 'tc/n2-1', path: '/p2', root: '/r', createdAt: 2, panelId: 'n2', attached: false }
+  ] })), 'manage.worktrees')
+  ok('worktree.2 the Manage worktrees door counts records and is disabled with a reason when there are none',
+    empty !== undefined && empty.entersScope === 'worktrees' && empty.disabledReason === P.REASON_NO_WORKTREES &&
+      two !== undefined && two.disabledReason === undefined && /2 worktrees/.test(two.subtitle),
+    JSON.stringify({ empty, two }))
+}
+
+// worktree.3. Per record: a destructive remove row, DISABLED with a reason
+//      while a panel still owns the worktree (removing the directory under a
+//      running agent is not a palette gesture), and enabled once detached —
+//      routed through the confirm-gated action, never straight to the invoke.
+{
+  const c = ctx({ worktrees: [
+    { id: 'w1', branch: 'tc/n1-1', path: '/p1', root: '/r', createdAt: 1, panelId: 'n1', attached: true, panelTitle: 'claude' },
+    { id: 'w2', branch: 'tc/n2-1', path: '/p2', root: '/r', createdAt: 2, panelId: 'n2', attached: false }
+  ] })
+  const rows = P.buildCommands(c)
+  const attached = byId(rows, 'worktree.remove.w1')
+  const detached = byId(rows, 'worktree.remove.w2')
+  if (detached) detached.run()
+  ok('worktree.3 remove is destructive, refused with a reason while attached, and confirm-gated when detached',
+    attached !== undefined && attached.scope === 'worktrees' && attached.destructive === true &&
+      attached.disabledReason === P.REASON_WORKTREE_ATTACHED && attached.title.includes('tc/n1-1') &&
+      detached !== undefined && detached.disabledReason === undefined &&
+      c.actions.calls.some((k) => k[0] === 'beginRemoveWorktree' && k[1] === 'w2'),
+    JSON.stringify({ attached, detached, calls: c.actions.calls }))
+}
+
+// worktree.4. Per record: a reveal row, always enabled, naming the branch and
+//      carrying the path where the fuzzy matcher can find it.
+{
+  const c = ctx({ worktrees: [
+    { id: 'w1', branch: 'tc/n1-1', path: '/ud/worktrees/repo-abc/tc-n1-1', root: '/r', createdAt: 1, panelId: 'n1', attached: true, panelTitle: 'claude' }
+  ] })
+  const row = byId(P.buildCommands(c), 'worktree.reveal.w1')
+  if (row) row.run()
+  ok('worktree.4 a reveal row per record opens the directory and is searchable by path',
+    row !== undefined && row.disabledReason === undefined && row.title.includes('tc/n1-1') &&
+      /repo-abc/.test(row.searchText ?? '') &&
+      c.actions.calls.some((k) => k[0] === 'revealWorktree' && k[1] === 'w1'),
+    JSON.stringify({ row, calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

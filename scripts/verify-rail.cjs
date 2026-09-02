@@ -2048,6 +2048,50 @@ const session = (id, over = {}) => ({
   ok(115, Array.isArray(snap.sessions) && snap.sessions.length === 0, JSON.stringify(snap.sessions))
 }
 
+// M37 — the inspector's three worktree states. Scoped ids.
+//
+// worktree.1. A session spawned in a worktree renders the branch AND the path,
+//      as two rows: the branch is what the user types into `git merge`, the
+//      path is what they cd into, and one row holding both is a row too long
+//      for a 260px pane.
+{
+  const st = { ...running(48213, '/bin/zsh'), worktree: { kind: 'active', branch: 'tc/n1-20260901-1432', path: '/ud/worktrees/repo-abc/tc-n1-20260901-1432', root: '/Users/x/repo' } }
+  const m = R.buildInspectorModel(panel('n1'), st)
+  const branch = m.fields.find((f) => f.key === 'worktree')
+  const path = m.fields.find((f) => f.key === 'worktree-path')
+  ok('worktree.1 an active worktree renders its branch and its path',
+    branch !== undefined && branch.value === 'tc/n1-20260901-1432' &&
+      path !== undefined && path.value === '/ud/worktrees/repo-abc/tc-n1-20260901-1432',
+    JSON.stringify(m.fields))
+}
+
+// worktree.2. A REFUSED worktree renders one row saying so, with the reason —
+//      a worktree the user asked for and did not get must never be silent —
+//      and no path row, because there is no path.
+{
+  const st = { ...running(48213, '/bin/zsh'), worktree: { kind: 'refused', reason: '/Users/x is not inside a git repository' } }
+  const m = R.buildInspectorModel(panel('n1'), st)
+  const branch = m.fields.find((f) => f.key === 'worktree')
+  const path = m.fields.find((f) => f.key === 'worktree-path')
+  ok('worktree.2 a refused worktree renders one row carrying the refusal and no path',
+    branch !== undefined && /^refused — /.test(branch.value) && branch.value.includes('not inside a git repository') &&
+      path === undefined,
+    JSON.stringify(m.fields))
+}
+
+// worktree.3. A panel that never asked renders NEITHER row (the Cost section's
+//      rule: no confident nothing), and the signature moves between the three
+//      states — a frozen model would show a refusal that has since cleared.
+{
+  const none = R.buildInspectorModel(panel('n1'), running(48213, '/bin/zsh'))
+  const active = R.buildInspectorModel(panel('n1'), { ...running(48213, '/bin/zsh'), worktree: { kind: 'active', branch: 'tc/n1-1', path: '/p', root: '/r' } })
+  const refused = R.buildInspectorModel(panel('n1'), { ...running(48213, '/bin/zsh'), worktree: { kind: 'refused', reason: 'no' } })
+  const sigs = new Set([R.inspectorSignature(none), R.inspectorSignature(active), R.inspectorSignature(refused)])
+  ok('worktree.3 a panel that never asked renders no worktree row, and the signature separates the three states',
+    !none.fields.some((f) => f.key === 'worktree' || f.key === 'worktree-path') && sigs.size === 3,
+    JSON.stringify({ keys: none.fields.map((f) => f.key), sigs: sigs.size }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

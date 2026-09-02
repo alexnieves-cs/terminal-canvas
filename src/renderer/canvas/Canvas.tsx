@@ -19,7 +19,7 @@ import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { useInspectorDetail } from './useInspectorDetail'
 import {
-  DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS,
+  DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection
 } from './canvas-constants'
@@ -66,8 +66,7 @@ import type {
   PresetTemplate,
   SessionBackendInfo,
   SettingRow,
-  WorkspaceRow
-} from '@shared/ipc-contract'
+  WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
@@ -405,7 +404,9 @@ export function Canvas({
                   // exists to catch, because a key dropped here is legal
                   // TypeScript and produces a panel with no knobs, which
                   // looks exactly like a user who never asked for any.
-                  ...(chosen.agentOptions !== undefined ? { agentOptions: chosen.agentOptions } : {})
+                  ...(chosen.agentOptions !== undefined ? { agentOptions: chosen.agentOptions } : {}),
+                  // M37. The same rule, a fifth time.
+                  ...(chosen.worktree !== undefined ? { worktree: chosen.worktree } : {})
                 }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
@@ -1155,6 +1156,7 @@ export function Canvas({
       // login-shell preset, not as whatever this machine's shell happens to be.
       if (panel.spec.command !== undefined) captured.command = panel.spec.command
       if (panel.spec.agent !== undefined) captured.agent = panel.spec.agent
+      if (panel.spec.worktree !== undefined) captured.worktree = panel.spec.worktree
       // M20. Both capture surfaces carry it, never one — presetFromCapture is
       // the shared mint precisely so the menu's path and the inspector's
       // cannot disagree about what a saved preset is, and a knob added to one
@@ -1937,6 +1939,16 @@ export function Canvas({
   useEffect(() => {
     if (palette.open) reloadCredentials()
   }, [palette.open, reloadCredentials])
+  // M37. The worktree list, for the same reason and on the same trigger as
+  // credentials: main owns the records, the palette is the only reader, and
+  // reading at mount would surface a failure nowhere near this feature.
+  const [worktreeRows, setWorktreeRows] = useState<WorktreeListRow[]>(EMPTY_WORKTREES)
+  const reloadWorktrees = useCallback(() => {
+    void window.canvas.worktree.list().then(setWorktreeRows)
+  }, [])
+  useEffect(() => {
+    if (palette.open) reloadWorktrees()
+  }, [palette.open, reloadWorktrees])
 
   // The workspace list, reloaded after every mutation the palette's own
   // create/rename/delete commands drive below — the same "main is the only
@@ -2623,7 +2635,7 @@ export function Canvas({
     openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
-    reloadSettings, reloadCredentials, reloadWorkspaces, setPanels, setGroups,
+    reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput
   })
   // The link layer's remover, with an identity that outlives the palette's
@@ -2972,6 +2984,7 @@ export function Canvas({
             settings={settingRows}
             workspaces={workspaceRows}
             credentials={credentialRows}
+            worktrees={worktreeRows}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are
             // wants-you" as a set, only individual agent:state transitions,

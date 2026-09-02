@@ -71,6 +71,7 @@ const {
   IPC,
   createReviewEngine,
   createGitRunner,
+  createWorktreeManager,
   createBaselineCapture,
   createReviewCommitter,
   FileWatchers,
@@ -463,7 +464,11 @@ app.whenReady().then(async () => {
     // The real delta-reader. Safe to reuse verbatim: it takes a path, not a
     // directory to search, and the only path it is ever called with here is
     // the fenced fixture file immediately above.
-    readFrom
+    readFrom,
+    // The flush cap keeps its default; M37's worktree resolver closes over the
+    // manager built below, the same forward closure main/index.ts uses.
+    undefined,
+    (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd)
   )
 
   /**
@@ -703,6 +708,21 @@ app.whenReady().then(async () => {
     // the two apart — see review-engine.ts's own doc comment on this dep.
     notARepo: (panelId) => baselineCapture.isNotARepo(panelId)
   })
+  // M37. Real git, real records, a scratch worktrees directory under $TMPDIR
+  // (spaced, this repo's rule). Records go through the harness's own
+  // layoutStore so worktree.1 can read them back over worktree:list.
+  const WORKTREES_DIR = join(mkdtempSync(join(tmpdir(), 'tc panels worktrees ')), 'worktrees')
+  const worktreeManager = createWorktreeManager({
+    run: realGitRunner,
+    resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
+    worktreesDir: WORKTREES_DIR,
+    records: {
+      forPanel: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
+      add: (record) => layoutStore.addWorktree(record),
+      drop: (id) => layoutStore.dropWorktree(id),
+      list: () => layoutStore.worktrees()
+    }
+  })
   // main/index.ts's own baselineCapture, built the identical way: the guard
   // that fires captureBaseline exactly once per panel id (pty-manager.ts's
   // capturedBaselineIds) is a SEPARATE, in-memory guard one layer up, so this
@@ -861,7 +881,14 @@ app.whenReady().then(async () => {
   toolboxCache,
   // Backlog #75's export directory, scoped to this suite's own temp home so
   // an export check never writes into the running developer's real userData.
-  join(mkdtempSync(join(tmpdir(), 'tc-panels-diagnostics-')), 'diagnostics'))
+  join(mkdtempSync(join(tmpdir(), 'tc-panels-diagnostics-')), 'diagnostics'),
+  // M37. Real list/remove over the manager above; reveal is a no-op here
+  // because a Finder window is not something a hidden-window suite can open.
+  {
+    list: () => layoutStore.worktrees(),
+    remove: (id) => worktreeManager.remove(id),
+    reveal: () => true
+  })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -6746,7 +6773,10 @@ app.whenReady().then(async () => {
       const pastedStable = pasted !== null && /^\s*[A-Za-z_$][\w$]*\s*$/.test(pasted[1])
       const layer = canvasSrc.match(/<LinkLayer[\s\S]*?onRemove=\{([^}]*)\}/)
       const layerValue = layer ? layer[1] : ''
-      const layerStable = layer !== null && !/=>/.test(layerValue) && !/paletteActions\./.test(layerValue)
+      // A bare identifier, or the merged-view gate around one — never an arrow,
+      // never a member read of paletteActions (whose identity follows the
+      // palette's captured id), never a call.
+      const layerStable = layer !== null && /^\s*(?:merged\s*\?\s*undefined\s*:\s*)?[A-Za-z_$][\w$]*\s*$/.test(layerValue)
       ok('memo-stable.1 onContextPasted and LinkLayer onRemove are passed as stable identifiers',
         pastedStable && layerStable,
         `onContextPasted=${JSON.stringify(pasted && pasted[1])} onRemove=${JSON.stringify(layerValue)}`)
@@ -7621,8 +7651,11 @@ app.whenReady().then(async () => {
           // The subject's own session reattaching (tmux) is what keeps its
           // baseline alive in main, exactly the mechanism check 91 already
           // proves for the inspector's reattached badge.
+          // 15s, not 8: the reattach after a reload waits on the store load,
+          // pty:list and the tier pass, and this window flaked twice in five
+          // runs at 8s on an otherwise idle machine (M36/M37 build logs).
           const reattached = await waitUntil(
-            async () => (await sessionMap(wc)).has(subjectPanel), 8000)
+            async () => (await sessionMap(wc)).has(subjectPanel), 15000)
           if (reattached) {
             await selectPanel(subjectPanel)
             await waitUntil(async () => wc.executeJavaScript(
@@ -7634,7 +7667,7 @@ app.whenReady().then(async () => {
                 `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
               const fresh = ids.filter((id) => !idsAfterReload.includes(id))
               return fresh.length === 1 ? fresh[0] : false
-            }, 8000)
+            }, 15000)
           }
         }
         const finalIds = await wc.executeJavaScript(
@@ -13010,6 +13043,83 @@ app.whenReady().then(async () => {
           `fileId=${fileId} onFile=${JSON.stringify(onFile)} onTerminal=${JSON.stringify(onTerminal)} ` +
           `fileBox=${JSON.stringify(fileBox)} midGhost=${midGhost} midFileTarget=${midFileTarget} ` +
           `mergedFile=${JSON.stringify(mergedFile)} mergedTerminal=${JSON.stringify(mergedTerminal)}`)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M37 — a git worktree per panel, end to end. Scoped id.
+    // -------------------------------------------------------------------
+
+    // worktree.1. A user preset flagged `worktree: true` spawns, through the
+    //      real preset:spawn-by-id path, a panel whose inspector names a tc/
+    //      branch and a path that exists on disk; closing the panel leaves
+    //      the directory in place and worktree:list reports the record
+    //      DETACHED. Three claims, one gesture each. Gated on git, loudly.
+    {
+      let gitHere = true
+      try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { gitHere = false }
+      if (!gitHere) {
+        ok('worktree.1 a worktree preset spawns into a tc/ branch, and closing leaves it detached (SKIPPED — no git)', true, 'install git')
+      } else {
+        const repo = mkdtempSync(join(tmpdir(), 'tc panels wt repo '))
+        const g = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+        g('init', '-q', '.'); g('config', 'user.email', 'v@e.com'); g('config', 'user.name', 'v')
+        writeFileSync(join(repo, 'a.txt'), 'a\n'); g('add', '-A'); g('commit', '-qm', 'init')
+        layoutStore.addPreset({ id: 'u-wt', name: 'wt preset', cwd: repo, command: '/bin/sh', args: [], worktree: true })
+        const idsBefore = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        await wc.executeJavaScript(`window.canvas.preset.spawnById('u-wt')`)
+        const fresh = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          const diff = now.filter((id) => !idsBefore.includes(id))
+          return diff.length === 1 ? diff[0] : false
+        }, 8000)
+        const spawned = fresh ? await waitUntil(async () => (await sessionMap(wc)).has(fresh), 8000) : false
+        // Select it with a real click on its chrome, so the inspector follows.
+        let branch = null, path = null, rawField = null
+        if (spawned) {
+          const box = await wc.executeJavaScript(`(() => {
+            const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .panel__chrome')
+            if (!p) return null
+            const r = p.getBoundingClientRect()
+            return { x: Math.round(r.left + r.width * 0.3), y: Math.round(r.top + r.height / 2) }
+          })()`)
+          if (box) {
+            wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+            wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+          }
+          const read = (k) => wc.executeJavaScript(
+            `(() => { const el = document.querySelector('[data-inspector-field="${k}"] .inspector__value'); return el ? el.textContent : null })()`)
+          branch = await waitUntil(async () => { const v = await read('worktree'); return v && v.startsWith('tc/') ? v : false }, 6000)
+          path = await read('worktree-path')
+          rawField = await read('worktree')
+        }
+        const dirExisted = typeof path === 'string' && existsSync(path)
+        // Close it through the rail row's own close control, the gesture
+        // check 86 already trusts, and wait for the panel to leave the DOM.
+        if (fresh) {
+          await wc.executeJavaScript(`(() => {
+            const b = document.querySelector('.rail-row[data-rail-row=' + ${JSON.stringify(JSON.stringify(fresh))} + '] .rail-row__close')
+            if (b) { b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); b.dispatchEvent(new MouseEvent('click', { bubbles: true })) }
+            return b !== null
+          })()`)
+          await waitUntil(async () => !(await wc.executeJavaScript(
+            `document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(fresh))} + ']') !== null`)), 6000)
+        }
+        // worktree:list's `attached` reads the layout through
+        // mergedWorkspaces(); flushing makes the read deterministic rather
+        // than a race against the store's 500ms debounce.
+        layoutStore.flushSync()
+        const listed = await wc.executeJavaScript(`window.canvas.worktree.list()`)
+        const record = Array.isArray(listed) ? listed.find((w) => w.panelId === fresh) : undefined
+        const dirSurvived = typeof path === 'string' && existsSync(path)
+        ok('worktree.1 a worktree preset spawns into a tc/ branch, and closing leaves it detached with the directory intact',
+          typeof fresh === 'string' && spawned === true && typeof branch === 'string' && branch.startsWith('tc/' + fresh + '-') &&
+            dirExisted && record !== undefined && record.attached === false && record.branch === branch && dirSurvived,
+          `fresh=${fresh} spawned=${spawned} branch=${branch} rawField=${JSON.stringify(rawField)} path=${path} dirExisted=${dirExisted} ` +
+            `record=${JSON.stringify(record)} listed=${JSON.stringify(listed)} dirSurvived=${dirSurvived}`)
+        try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
       }
     }
 

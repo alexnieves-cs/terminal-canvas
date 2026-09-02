@@ -121,6 +121,16 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
    * defaults, which is every panel and preset written before M20.
    */
   agentOptions?: AgentOptions
+  /**
+   * M37. Spawn in a fresh git worktree of the repository at `cwd`, on a new
+   * branch. Absent means no, and only `true` is ever written; a present
+   * `false` is read as absent. `cwd` stays the REPOSITORY cwd the preset asked
+   * for — the worktree path is what main actually spawned in, and it arrives
+   * on PtyCreateResult, which is the `asked for` / `cwd` split the inspector
+   * already draws. Carried absent-stays-absent through every copy site, by
+   * the absent-`command` rule.
+   */
+  worktree?: boolean
 }
 
 export interface PersistedReviewPanel extends PersistedPanelBase {
@@ -198,6 +208,30 @@ export interface Preset {
    * defaults, which is every panel and preset written before M20.
    */
   agentOptions?: AgentOptions
+  /** M37. See PersistedTerminalPanel.worktree; the same field, the same rule. */
+  worktree?: boolean
+}
+
+/**
+ * M37. One worktree this app created, keyed by its own id rather than by the
+ * panel: a record OUTLIVES its panel. Whether it is attached is computed at
+ * read time (its `panelId` is in some workspace's panel list) and never
+ * cleared on close — restart-in-place is dispose-then-ensure at the same id,
+ * so a kill-time detach would hand the restarted panel a brand-new worktree,
+ * and undoing a close restores the same id, which must land back in its own
+ * branch. A sibling of `baselines` and `sessions` for the reason they are:
+ * PanelId is global.
+ */
+export interface WorktreeRecord {
+  id: string
+  /** The repository the worktree was created from — `rev-parse --show-toplevel` of the panel's cwd. */
+  root: string
+  /** Where the worktree lives: under the app's own directory, never inside `root`. */
+  path: string
+  branch: string
+  createdAt: number
+  /** The panel that spawned it. Reused by a later panel at the same id in the same `root`. */
+  panelId: string
 }
 
 /**
@@ -290,6 +324,8 @@ export interface LayoutSnapshot {
    * this is persisted rather than re-minted at each spawn.
    */
   sessions: Record<string, string>
+  /** M37. Every worktree this app created. See WorktreeRecord. */
+  worktrees: WorktreeRecord[]
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -327,7 +363,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     // snapshot is.
     preferences: {},
     baselines: {},
-    sessions: {}
+    sessions: {},
+    worktrees: []
   }
 }
 
@@ -466,7 +503,7 @@ function parsePanel(
     warnings.push('dropped a panel that was not an object')
     return null
   }
-  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions } = raw
+  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions, worktree } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a panel with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -562,7 +599,25 @@ function parsePanel(
   }
   const panelOptions = parseAgentOptions(agentOptions, `panel ${id}`, warnings)
   if (panelOptions !== undefined) panel.agentOptions = panelOptions
+  if (parseWorktreeFlag(worktree, `panel ${id}`, warnings)) panel.worktree = true
   return panel
+}
+
+/**
+ * M37. The worktree flag a panel or a preset carries, ONE function for both
+ * parsers for parseAgentOptions's reason: two parsers for one format agree on
+ * the day they are written and drift the first time only one is edited.
+ *
+ * Absent → absent. `true` → true. A present `false` is a well-formed "no" and
+ * reads as absent with no warning, so a file that spelled it out is not
+ * shouted at. Anything else drops the FIELD with a warning naming the record,
+ * never the record — parseLayout's individual-drop rule one level down.
+ */
+export function parseWorktreeFlag(raw: unknown, label: string, warnings: string[]): boolean {
+  if (raw === undefined || raw === false) return false
+  if (raw === true) return true
+  warnings.push(`${label} had a malformed worktree flag; dropped it`)
+  return false
 }
 
 /**
@@ -658,7 +713,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
     warnings.push('dropped a preset that was not an object')
     return null
   }
-  const { id, name, cwd, command, args, w, h, agent, agentOptions } = raw
+  const { id, name, cwd, command, args, w, h, agent, agentOptions, worktree } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -698,6 +753,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
   }
   const presetOptions = parseAgentOptions(agentOptions, `preset ${id}`, warnings)
   if (presetOptions !== undefined) preset.agentOptions = presetOptions
+  if (parseWorktreeFlag(worktree, `preset ${id}`, warnings)) preset.worktree = true
   return preset
 }
 
@@ -855,6 +911,39 @@ export function parseSessions(
       continue
     }
     out[id] = value
+  }
+  return out
+}
+
+/**
+ * M37. Every worktree this app created. Absent on every file written before
+ * M37 and read as [] with no warning, for the reason parseSessions gives; a
+ * malformed entry costs that entry, never its siblings.
+ */
+export function parseWorktrees(raw: unknown, warnings: string[]): WorktreeRecord[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('worktrees was not an array; ignoring it')
+    return []
+  }
+  const out: WorktreeRecord[] = []
+  const seen = new Set<string>()
+  for (const entry of raw) {
+    if (!isRecord(entry)) {
+      warnings.push('dropped a worktree record that was not an object')
+      continue
+    }
+    const { id, root, path, branch, createdAt, panelId } = entry
+    if (!isStr(id) || !ID_PATTERN.test(id) || seen.has(id)) {
+      warnings.push(`dropped a worktree record with an unusable or duplicate id: ${JSON.stringify(id)}`)
+      continue
+    }
+    if (!isStr(root) || !isStr(path) || !isStr(branch) || !isNum(createdAt) || !isStr(panelId) || !ID_PATTERN.test(panelId)) {
+      warnings.push(`dropped worktree record ${id}: a field was missing or malformed`)
+      continue
+    }
+    seen.add(id)
+    out.push({ id, root, path, branch, createdAt, panelId })
   }
   return out
 }
@@ -1172,7 +1261,8 @@ export function parseLayout(raw: string): {
       prompts: parsePrompts(parsed.prompts, warnings),
       preferences,
       baselines: parseBaselines(parsed.baselines, warnings),
-      sessions: parseSessions(parsed.sessions, warnings)
+      sessions: parseSessions(parsed.sessions, warnings),
+      worktrees: parseWorktrees(parsed.worktrees, warnings)
     },
     warnings,
     futureVersion: false

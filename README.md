@@ -39,6 +39,12 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **A review layer.** Each panel is diffed against the snapshot taken when its
   agent started, so you can see what that agent — specifically that one —
   changed, and commit it without leaving the canvas.
+- **A git worktree per panel.** A preset can spawn its agent in a fresh
+  worktree of the repository on its own `tc/` branch, so four agents on one
+  codebase are four working trees, merged deliberately. The built-in *Claude in
+  a fresh worktree* preset is the door; the inspector names the branch; closing
+  the panel keeps the worktree and its branch until you remove it from the
+  palette, which refuses while the tree is dirty.
 - **Project prompts.** `.claude/commands/*.md` in a panel's working directory
   are read and offered as insertable prompts, in Claude Code's own format, so
   they version-control with the project rather than with this app.
@@ -181,6 +187,8 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        session:backend
                        preset:list / preset:rename / preset:delete
                        preset:set-default / preset:spawn-by-id / preset:save-panel
+                       preset:set-worktree
+                       worktree:list / worktree:remove / worktree:reveal
                        prompt:list / prompt:save / prompt:delete
                        settings:list / settings:set
                        canvas:request-reset

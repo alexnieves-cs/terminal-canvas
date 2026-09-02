@@ -202,6 +202,14 @@ module.exports = {
      harness builds the committer itself so its tempIndexPath/removeTempIndex
      deps can close over that file's own scratch directory. */
   createReviewCommitter: require('../src/main/review-commit').createReviewCommitter,
+  /* M37. The worktree manager, for the same reason createReviewEngine is
+     exported rather than stubbed: worktree.1 spawns a panel through
+     preset:spawn-by-id and reads the branch back out of the inspector, and
+     a PtyManager whose worktreeFor is the inert default would REFUSE every
+     request — a green check against that would prove the refusal arm renders
+     and nothing about the feature. The harness builds it over its own git
+     runner, review engine and layout store, exactly as main/index.ts does. */
+  createWorktreeManager: require('../src/main/worktree-manager').createWorktreeManager,
   /* Task 10's checks 130-132 need PtyManager's usage-tick machinery reading
      a real path off real disk — the readFrom half is generic delta-file
      reading with no ~/.claude/projects anywhere in it (only resolveTranscript

@@ -1,4 +1,4 @@
-import type { PanelId, PanelSpec } from '@shared/types'
+import type { PanelId, PanelSpec, WorktreeOutcome } from '@shared/types'
 import type { Tier } from '@renderer/canvas/lod'
 
 /**
@@ -31,6 +31,12 @@ export type PanelStatus =
       cwd: string
       /** Attached to a session that was already running. See PtyCreateResult. */
       reattached: boolean
+      /**
+       * M37. The worktree main spawned this session in, or why it could not.
+       * Absent when the panel never asked. Copied from PtyCreateResult with
+       * the absent-stays-absent guard, like everything else in this arm.
+       */
+      worktree?: WorktreeOutcome
     }
   | { kind: 'exited'; code: number }
   | { kind: 'error'; message: string }

@@ -55,13 +55,13 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:viewport` | plain node | ~93 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
-| `verify:registry` | plain node | 31 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | ~154 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:registry` | plain node | 34 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
+| `verify:layout` | plain node | ~166 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
-| `verify:palette` | plain node | ~87 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~115 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
-| `verify:review` | plain node | ~76 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
+| `verify:palette` | plain node | ~94 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:rail` | plain node | ~124 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:review` | plain node | ~88 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
 | `verify:file` | plain node | 19 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
@@ -73,9 +73,9 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `verify:packaged` | real Electron, **not in `npm run verify`** | 11 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped PATH, a throwaway `--user-data-dir`, and a scratch |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
-| `verify:pty-manager` | Electron as node | 46 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
+| `verify:pty-manager` | Electron as node | 49 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 52 channels as of the newest milestone that added one — re-derive i |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 56 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | ~200 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -108,7 +108,8 @@ renderer --invoke--> layout:load / layout:save                                 -
 renderer --invoke--> session:backend                                          --> main
 renderer --invoke--> preset:list / preset:rename / preset:delete               --> main
 renderer --invoke--> preset:set-default / preset:spawn-by-id                   --> main
-renderer --invoke--> preset:save-panel                                         --> main
+renderer --invoke--> preset:save-panel / preset:set-worktree                  --> main
+renderer --invoke--> worktree:list / worktree:remove / worktree:reveal         --> main
 renderer --invoke--> prompt:list / prompt:save / prompt:delete                 --> main
 renderer --invoke--> settings:list / settings:set                              --> main
 renderer --invoke--> canvas:request-reset                                      --> main
@@ -180,6 +181,12 @@ check does not, and should not, cover it.
   included — runs under plain node in `verify:credentials`. Its `read()` is the one function
   in the app that returns a plaintext token, is main-internal by construction, and has exactly
   one caller: `credential-verify.ts`.
+- `src/main/worktree.ts` / `src/main/worktree-manager.ts` — M37. The pure half names a
+  worktree (`tc/<panelId>-<stamp>`) and places it under `userData/worktrees`; the manager
+  runs `git worktree add`/`remove` through the injected `GitRunner` and keeps records in
+  `layout.json` beside baselines. `PtyManager.create()` consults it BEFORE the baseline
+  capture, which is why the review engine needed no change. Records outlive their panel;
+  see "A worktree record OUTLIVES its panel" in `docs/load-bearing.md`.
 - `src/main/prompts.ts` — reads `.claude/commands/*.md` under a panel's cwd and merges them
   with the saved store. Read-only, capped, and plain-node testable; see "Project prompts are
   read, never written" below.

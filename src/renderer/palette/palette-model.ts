@@ -55,6 +55,8 @@ export type PaletteScope =
   | 'prompts'
   | 'settings'
   | 'workspaces'
+  /** M37. Every worktree this app created: remove and reveal. */
+  | 'worktrees'
   | 'credentials'
   | 'agent-mode'
 
