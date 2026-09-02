@@ -1,6 +1,7 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
+import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type {
   PanelId,
   PanelSpec,
@@ -164,7 +165,9 @@ export function registerIpcHandlers(
    */
   scrollback: ScrollbackHandlers = INERT_SCROLLBACK,
   /** M48. Appended last with an inert default, like every collaborator before it. */
-  envReport: () => EnvReport = () => INERT_ENV_REPORT
+  envReport: () => EnvReport = () => INERT_ENV_REPORT,
+  /** M51. Appended last with an inert default; the harness passes a recorder. */
+  links: LinkHandlers = INERT_LINKS
 ): void {
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
@@ -243,6 +246,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
   ipcMain.handle(IPC.ENV_REPORT, () => envReport())
+  ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))
   ipcMain.handle(IPC.DIAGNOSTICS_SAMPLE, () => ({
     ipcMessagesPerSecond: ptyManager.ipcMessageRate()
   }))

@@ -33,3 +33,4 @@ copy here is deleted.
 | [m48-first-run.md](m48-first-run.md) | M48 — First run, and every empty state | finished |
 | [m49-panel-typography.md](m49-panel-typography.md) | M49 — Panel typography | finished |
 | [m50-placement.md](m50-placement.md) | M50 — Placement: snapping and tidy | finished |
+| [m51-links.md](m51-links.md) | M51 — Cmd-click a path or URL | finished |

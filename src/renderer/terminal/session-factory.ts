@@ -1,3 +1,4 @@
+import { findLinks } from '@shared/link-scan'
 import type { PanelId } from '@shared/types'
 import type { SessionFactory, SessionHandle, TerminalOptions } from '@renderer/session/panel-session'
 import {
@@ -31,6 +32,34 @@ function createHandle(id: PanelId): SessionHandle {
     if (!handles) {
       handles = createTerminal()
       if (Object.keys(pendingOptions).length > 0) Object.assign(handles.term.options, pendingOptions)
+      // M51. Paths and URLs in the buffer become links: underlined on hover,
+      // opened on Cmd-click ONLY (a plain click stays a click — agent TUIs
+      // use clicks), and never by this process: the renderer sends the text
+      // it underlined and the panel it came from, and main decides and
+      // opens (link:open). The hover writes `data-link-hover` on the host,
+      // which is what verify:panels hover.1 reads to prove the corrected
+      // hover landed on the cell it meant.
+      const term = handles.term
+      term.registerLinkProvider({
+        provideLinks(y, callback) {
+          const line = term.buffer.active.getLine(y - 1)
+          if (!line) { callback(undefined); return }
+          const text = line.translateToString(true)
+          const found = findLinks(text)
+          if (found.length === 0) { callback(undefined); return }
+          callback(found.map((l) => ({
+            range: { start: { x: l.start + 1, y }, end: { x: l.end, y } },
+            text: l.text,
+            decorations: { underline: true, pointerCursor: true },
+            activate(event: MouseEvent, target: string) {
+              if (!event.metaKey) return
+              void window.canvas.links.open({ panelId: id, target })
+            },
+            hover() { host.dataset['linkHover'] = l.text },
+            leave() { delete host.dataset['linkHover'] }
+          })))
+        }
+      })
     }
     return handles
   }

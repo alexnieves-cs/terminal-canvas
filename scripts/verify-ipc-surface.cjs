@@ -202,7 +202,9 @@ app.whenReady().then(() => {
   // 60 = 59 plus M48's env:report, the environment report — an optional
   // trailing parameter with an inert default, like the worktree and
   // scrollback handlers before it.
-  const EXPECTED_CHANNELS = 60
+  // 61 = 60 plus M51's link:open, an optional trailing parameter with an
+  // inert default like env:report before it.
+  const EXPECTED_CHANNELS = 61
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -436,6 +436,27 @@ const failed = results.filter((r) => !r.pass)
     text.slice(0, 300) || 'buildEnvReport is not exported')
 }
 
+// M51 — link-open.1. resolveLinkOpen is the pure half of link:open: a URL
+//      opens only on http/https (never file:, never javascript:); a path is
+//      resolved against the panel's cwd with ~ expanded and its :line:col
+//      suffix stripped, and opens only if it exists; everything else is a
+//      RESULT with a reason, never a throw and never a window navigation.
+{
+  const can = typeof T.resolveLinkOpen === 'function'
+  const deps = { home: '/Users/x', exists: (p) => p === '/Users/x/repo/src/a.ts' || p === '/Users/x/notes/b.md' }
+  const r = (target, cwd = '/Users/x/repo') => (can ? T.resolveLinkOpen({ target, cwd }, deps) : null)
+  const url = r('https://example.com/a?b=1'), bad = r('javascript:alert(1)'), file = r('file:///etc/passwd')
+  const rel = r('src/a.ts:118'), tilde = r('~/notes/b.md'), missing = r('src/zzz.ts'), abs = r('/Users/x/notes/b.md:3:4')
+  ok('link-open.1 resolveLinkOpen opens http(s) only, resolves a path against the cwd with ~ and :line stripped, and refuses what does not exist',
+    can && url.kind === 'url' && url.url === 'https://example.com/a?b=1' &&
+      bad.kind === 'refused' && file.kind === 'refused' &&
+      rel.kind === 'path' && rel.path === '/Users/x/repo/src/a.ts' && /118/.test(rel.note ?? '') &&
+      tilde.kind === 'path' && tilde.path === '/Users/x/notes/b.md' &&
+      missing.kind === 'refused' && /exist/.test(missing.reason) &&
+      abs.kind === 'path' && abs.path === '/Users/x/notes/b.md',
+    JSON.stringify({ url, bad, file, rel, tilde, missing, abs }))
+}
+
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
 process.exit(failed.length ? 1 : 0)

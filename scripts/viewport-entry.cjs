@@ -13,6 +13,8 @@ module.exports = {
   ...require('../src/renderer/panels/layout-adapt'),
   // M50. Snapping and tidy: pure rect math over applyDrag's output.
   ...require('../src/renderer/canvas/placement'),
+  // M51. The link scanner, shared and pure.
+  ...require('../src/shared/link-scan'),
   /* M13: the link geometry. Pure — its only value import is linksOf from
      panels.ts, which is already in this bundle — so it belongs in the cheapest
      tier beside viewport.ts and lod.ts. Note that this import is what forced

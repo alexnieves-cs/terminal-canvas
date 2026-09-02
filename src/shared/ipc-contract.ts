@@ -385,7 +385,9 @@ export const IPC = {
    */
   DIAGNOSTICS_EXPORT: 'diagnostics:export',
   /** M48. The environment report: what main found at startup, key names only. */
-  ENV_REPORT: 'env:report'
+  ENV_REPORT: 'env:report',
+  /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
+  LINK_OPEN: 'link:open'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -916,6 +918,10 @@ export interface CanvasBridge {
   files: {
     /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
     list: (path: string) => Promise<DirResult>
+  }
+  links: {
+    /** M51. The text the terminal underlined and the panel it came from; main resolves and opens, or refuses with a reason. */
+    open(req: { panelId: string; target: string }): Promise<{ kind: 'opened' | 'refused'; reason?: string }>
   }
   env: {
     /** M48. The startup probe's facts — PATH entries, each CLI found or absent, tmux, the layout file. Names, never values. */
