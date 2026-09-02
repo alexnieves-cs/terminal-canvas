@@ -1,3 +1,4 @@
+import type { EnvReport } from './env-report'
 /**
  * Single source of truth for the IPC surface.
  *
@@ -382,7 +383,9 @@ export const IPC = {
    * split credential-store.ts and layout-store.ts already draw between "who
    * decides what's safe" and "who writes the file".
    */
-  DIAGNOSTICS_EXPORT: 'diagnostics:export'
+  DIAGNOSTICS_EXPORT: 'diagnostics:export',
+  /** M48. The environment report: what main found at startup, key names only. */
+  ENV_REPORT: 'env:report'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -913,6 +916,10 @@ export interface CanvasBridge {
   files: {
     /** `path` is absolute and UNEXPANDED `~` is allowed: main resolves it. */
     list: (path: string) => Promise<DirResult>
+  }
+  env: {
+    /** M48. The startup probe's facts — PATH entries, each CLI found or absent, tmux, the layout file. Names, never values. */
+    report(): Promise<EnvReport>
   }
   diagnostics: {
     /** Main's own numbers only — the IPC send rate. Everything else in the

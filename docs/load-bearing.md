@@ -1965,6 +1965,39 @@ to be repeated across five selector lists, and a fifth copy is how one surface e
 disagreeing with the panel border about what an agent is doing. `.panel--agent-wants-you` still
 keeps `border-color: var(--amber)` untransformed (`verify:panels` 62/97).
 
+**The launcher is keyed on `panels.length === 0`, never on "nothing running", and it calls the
+real create path (`canvas/Launcher.tsx`, `panels.ts`'s `firstRunPanels`).** A restored canvas has
+no output and no processes until its panels are woken — that is every panel on the canvas the
+moment the app relaunches — so a first-run state keyed on activity would appear on top of a
+perfectly good workspace (`verify:panels` `firstrun.2` restores one DORMANT panel and expects no
+launcher). `firstRunPanels()` returns `[]` since M48: an empty canvas is a designed state, and
+the placeholder it used to mint was `SEED_PANELS` with a nicer name. Every launcher control is a
+`paletteActions` member — `spawnPreset` through `preset:spawn-by-id`, `openFile`, `beginNewNote` —
+so a panel minted there is indistinguishable from one minted by `⌘N`; a hardcoded first-run
+panel would diverge from whatever placement and presets decide later, silently. A preset whose
+command is not on PATH is present and DISABLED with `REASON_NOT_ON_PATH` and an install line,
+never absent: the card is also the answer to "why does Claude not appear".
+
+**The environment report carries key NAMES only, and says when it looked (`main/env-report.ts`,
+`env:report`).** It is built by a pure function from facts main already held and printed to
+stdout, where nobody debugging "command not found" could see them. Values of the login
+environment never cross the bridge — #31's rule, and the credential boundary's: a report is
+exactly the artifact that gets pasted into an issue (`verify:tmux` `env.1` feeds a secret in and
+asserts it is not in the output). `probedAt` is load-bearing: the probe runs ONCE, so a
+`brew install` mid-session is invisible until relaunch, and a report that did not say when it
+looked would turn that limit into a lie. The probe's failure used to be swallowed into a
+`process.env` fallback with a `console.error`; `shellProbeOutcome()` records it, and the banner
+over the canvas is the first place a user ever sees it.
+
+**A gesture hint fades on the STATE the gesture moves, not on the event (`canvas/HintStrip.tsx`,
+`Canvas.tsx`'s `markHint`, `hints.seen`).** Pan when the camera's translation moves, zoom when
+its scale moves, `⌘K` when the palette opens, `⌘N` when the panel count grows — read off state
+Canvas already holds, so no input path needed a hook for a fact it already produced. Written to
+`hints.seen` (a LIST setting, the second non-boolean type after M45's enum; both parsers drop a
+non-list with a warning) after the list has been READ once — `hintsLoadedRef` — or the first
+render's empty set would overwrite a persisted list and every hint would come back on every
+launch.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

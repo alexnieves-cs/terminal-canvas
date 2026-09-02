@@ -15,6 +15,9 @@ import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
+import { Launcher } from './Launcher'
+import { HintStrip } from './HintStrip'
+import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
 import { SubagentLayer } from './SubagentLayer'
@@ -28,8 +31,7 @@ import { useInspectorDetail } from './useInspectorDetail'
 import {
   DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
-  MACHINE_COST_SAMPLE_MS, retainSelection
-} from './canvas-constants'
+  MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel } from './canvas-constants'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
@@ -2213,6 +2215,50 @@ export function Canvas({
     registry.applyTerminalOptions({ theme: terminalTheme(resolvedTheme) })
   }, [resolvedTheme])
 
+  // M48: the environment report, read ONCE — main probes once, and the
+  // report says when. Null until the invoke answers, and the launcher and the
+  // palette both render the null honestly rather than as "nothing found".
+  const [envReport, setEnvReport] = useState<EnvReport | null>(null)
+  useEffect(() => {
+    let live = true
+    void window.canvas.env.report().then((r) => { if (live) setEnvReport(r) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
+  // M48: the gesture hints. `hints.seen` is read the way every other setting
+  // is; a gesture is "seen" when the thing it moves has moved — the camera's
+  // translation, its scale, the palette opening, the panel count growing —
+  // and the id is written once. Never keyed on the event itself, which
+  // would need a hook into every input path for a fact the state already
+  // carries.
+  const [hintsSeen, setHintsSeen] = useState<ReadonlySet<string>>(() => new Set())
+  const hintsLoadedRef = useRef(false)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'hints.seen')
+      if (row && Array.isArray(row.value)) setHintsSeen(new Set(row.value as string[]))
+      hintsLoadedRef.current = true
+    })
+  }, [settingRows])
+  const markHint = useCallback((id: string) => {
+    if (!hintsLoadedRef.current) return
+    setHintsSeen((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev); next.add(id)
+      void window.canvas.settings.set('hints.seen', [...next])
+      return next
+    })
+  }, [])
+  const hintBaseRef = useRef<{ x: number; y: number; scale: number; panels: number } | null>(null)
+  useEffect(() => {
+    const base = hintBaseRef.current
+    if (!base) { hintBaseRef.current = { x: viewport.x, y: viewport.y, scale: viewport.scale, panels: panels.length }; return }
+    if (viewport.x !== base.x || viewport.y !== base.y) markHint('pan')
+    if (viewport.scale !== base.scale) markHint('zoom')
+    if (panels.length > base.panels) markHint('new-panel')
+    if (palette.open) markHint('palette')
+  }, [viewport.x, viewport.y, viewport.scale, panels.length, palette.open, markHint])
+
   // M41: read the SAME way, for the handoff hook's "scrollback is off" skip —
   // a handoff whose source recorded nothing says a different sentence when the
   // reason is the setting than when the panel simply printed nothing.
@@ -2973,6 +3019,10 @@ export function Canvas({
         treeRootLabel={treeRootLabel}
         treeRows={treeRows}
         treeRootPending={treeRootPending}
+        // M48 (spec §5). Which panel, and why there is nothing to list.
+        treeEmptyReason={!selectedPanel
+          ? 'select a panel to list its directory'
+          : `${panelLabel(selectedPanel)} has no directory to list`}
         onToggleDir={toggleDir}
         onInsertPath={insertPath}
         onRefreshTree={refreshTree}
@@ -3207,6 +3257,26 @@ export function Canvas({
           onClose={diagnostics.close}
           getRendererInput={getDiagnosticsInput}
         />
+        {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
+            on activity, and never while merged (the merged view's geometry is
+            read-only). A sibling of .world, so it never scales. */}
+        {panels.length === 0 && !merged && (
+          <Launcher
+            presets={presetRows}
+            report={envReport}
+            onSpawnPreset={paletteActions.spawnPreset}
+            onOpenFile={paletteActions.openFile}
+            onNewNote={paletteActions.newNote}
+            noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
+          />
+        )}
+        {envReport !== null && !envReport.shell.ok && (
+          <div className="env-banner" data-env-banner role="status">
+            Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
+            through your shell's rc files may not be found. Environment… in ⌘K says what was.
+          </div>
+        )}
+        {!merged && <HintStrip seen={hintsSeen} />}
         <CanvasHud
           viewport={viewport}
           cursor={cursor}
@@ -3227,6 +3297,7 @@ export function Canvas({
             workspaces={workspaceRows}
             credentials={credentialRows}
             worktrees={worktreeRows}
+            envReport={envReport}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are
             // wants-you" as a set, only individual agent:state transitions,

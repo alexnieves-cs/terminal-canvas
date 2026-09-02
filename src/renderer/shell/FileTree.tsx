@@ -22,6 +22,13 @@ export interface FileTreeProps {
    *  branch below renders "empty directory" — a confident wrong answer,
    *  indistinguishable from a directory that genuinely has nothing in it. */
   rootPending: boolean
+  /**
+   * M48. Why there is nothing to list when rootLabel is null: no selection,
+   * or a selected panel of a kind with no directory. Names the panel, so
+   * the empty pane says which panel it is about rather than reading as a
+   * broken list.
+   */
+  emptyReason: string
   onToggleDir: (path: string) => void
   onInsertPath: (path: string) => void
   onRefresh: () => void
@@ -41,7 +48,7 @@ export interface FileTreeProps {
  * mousemove whether or not this pane is up.
  */
 function FileTreeImpl({
-  onToggle, rootPath, rootLabel, rows, rootPending, onToggleDir, onInsertPath, onRefresh
+  onToggle, rootPath, rootLabel, rows, rootPending, emptyReason, onToggleDir, onInsertPath, onRefresh
 }: FileTreeProps): JSX.Element {
   return (
     <div className="shell__tree" aria-label="File tree" data-file-tree>
@@ -86,7 +93,7 @@ function FileTreeImpl({
           // A header with a void under it reads as a broken list, which is the
           // rule all three of SideRail's sections already obey. This state is
           // ordinary: it is every launch before the first click.
-          <li className="rail-empty">select a panel</li>
+          <li className="rail-empty" data-tree-empty>{emptyReason}</li>
         ) : rootPending ? (
           // The root's own read is in flight — every selection change, and
           // every press of refresh, which clears treeDirs first. Without this

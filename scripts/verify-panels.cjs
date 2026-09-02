@@ -804,6 +804,15 @@ app.whenReady().then(async () => {
   // honest rather than blanket-true.
   const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
   const toolboxCache = new ToolboxCache()
+  let harnessEnvReport = {
+    probedAt: Date.now(),
+    shell: { path: '/bin/zsh', ok: true },
+    pathEntries: ['/usr/bin', '/bin'],
+    clis: [{ name: 'claude', path: null }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }],
+    tmux: { kind: 'direct', reason: 'verify: direct', path: null },
+    layout: { path: '(harness)', backupWritten: false },
+    envKeys: ['HOME', 'PATH']
+  }
   // Check 174 fakes the four JIRA_* ipcMain handlers for the duration of its
   // own block and MUST restore the real ones afterward — see that check's
   // own trailing comment. Restoring means re-installing the SAME closures
@@ -906,7 +915,10 @@ app.whenReady().then(async () => {
     // M42. The same shape main/index.ts wires, so the SCROLLBACK_SEARCH handler
     // registerIpcHandlers installs has a real implementation to call.
     search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
-  })
+  },
+  // M48. The environment report, as a fixture the checks can swap: env.1
+  // needs a FAILED probe, which no harness machine should produce for real.
+  () => harnessEnvReport)
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -2274,14 +2286,18 @@ app.whenReady().then(async () => {
       const vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
       const sessionsAfter = await sessionMap(wc)
       const survivors = [...sessionsBeforeReset.keys()].filter((id) => sessionsAfter.has(id))
+      // M48: an empty canvas is a designed state — reset returns NO panel
+      // and the launcher, made of the real create verbs, stands in for the
+      // placeholder firstRunPanels() used to mint.
+      const launcherAfter = await wc.executeJavaScript(`!!document.querySelector('[data-launcher]')`)
 
-      ok('23 reset returns exactly one panel, the camera to INITIAL, and kills every pre-reset PTY',
-        countAfter === 1 &&
+      ok('23 reset returns an empty canvas with the launcher up, the camera to INITIAL, and kills every pre-reset PTY',
+        countAfter === 0 && launcherAfter === true &&
           vpAfter.x === DEFAULT_CAMERA.x && vpAfter.y === DEFAULT_CAMERA.y &&
           vpAfter.scale === DEFAULT_CAMERA.scale &&
           survivors.length === 0,
         `vpBefore=${JSON.stringify(vpBefore)} vpAfter=${JSON.stringify(vpAfter)} ` +
-        `panels=${countAfter} preResetSessions=${sessionsBeforeReset.size} survivors=${survivors.length}`)
+        `panels=${countAfter} launcher=${launcherAfter} preResetSessions=${sessionsBeforeReset.size} survivors=${survivors.length}`)
     }
 
     // ---------------------------------------------------------------------
@@ -14269,6 +14285,108 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (fLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onF)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M48 — first run. firstrun.1: a canvas booted with ZERO panels shows the
+    // launcher, its preset control spawns through preset:spawn-by-id (the
+    // harness's real handler), and the launcher leaves. firstrun.2: a canvas
+    // restored with one DORMANT panel shows no launcher — keyed on
+    // panels.length, never on activity. firstrun.3: a hint fades after its
+    // gesture and stays faded across a reload. env.1: a report with a failed
+    // probe renders the banner, and the Environment scope names the cause.
+    // -------------------------------------------------------------------
+    {
+      const rLog = []
+      const onR = (_e, level, message) => { if (level >= 2) rLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onR)
+      const IDS = [
+        'firstrun.1 a canvas with zero panels shows the launcher, whose preset control spawns through preset:spawn-by-id, and the launcher leaves',
+        'firstrun.2 a canvas restored with one dormant panel shows no launcher',
+        'firstrun.3 a gesture hint fades after its gesture and stays faded across a reload',
+        'env.1 a failed shell probe renders the banner, and the Environment scope names the cause'
+      ]
+      const reloadWith = async (panels) => {
+        layoutStore.save({ panels: fromPanels(panels), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const re = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await re
+        await settle()
+      }
+      const launcherUp = () => wc.executeJavaScript(`!!document.querySelector('[data-launcher]')`)
+      try {
+        backend = createDirectBackend('verify: direct (m48 first run)')
+        const home = require('node:os').homedir()
+        layoutStore.clearPreference('hints.seen')
+        await reloadWith([])
+        const zero = await waitUntil(async () => wc.executeJavaScript(`document.querySelectorAll('.panel').length === 0`), 5000)
+        const up = await launcherUp()
+        const presetControls = await wc.executeJavaScript(`[...document.querySelectorAll('[data-launcher-preset]')].map((b) => ({ id: b.dataset.launcherPreset, disabled: b.disabled, title: b.title }))`)
+        // The login shell preset is always available; spawn through it.
+        const shellControl = presetControls.find((c) => !c.disabled)
+        const sessionsBefore = await sessionMap(wc)
+        if (shellControl) await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-launcher-preset="' + ${JSON.stringify(shellControl.id)} + '"]'); b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        const spawned = await waitUntil(async () => wc.executeJavaScript(`document.querySelectorAll('.panel').length === 1`), 8000)
+        await settle()
+        const gone = !(await launcherUp())
+        const live = await waitUntil(async () => (await sessionMap(wc)).size > sessionsBefore.size, 8000)
+        ok(IDS[0],
+          zero === true && up === true && presetControls.length > 0 && shellControl !== undefined &&
+            spawned === true && gone === true && live === true,
+          JSON.stringify({ zero, up, presetControls, spawned, gone, live }))
+
+        // firstrun.2. One DORMANT panel: no launcher. The hints list is
+        //             cleared first: firstrun.1's spawn legitimately used the
+        //             ⌘N gesture, and firstrun.3 wants all four hints at rest.
+        layoutStore.clearPreference('hints.seen')
+        await reloadWith([{ kind: 'terminal', rect: { id: 'dA', x: 60, y: 60, w: 300, h: 220 }, z: 1, spec: { panelId: 'dA', cwd: home, command: '/bin/sh', args: [] } }])
+        const dormant = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).find((s) => s.id === 'dA') ?? null`)
+        const upDormant = await launcherUp()
+        ok(IDS[1], dormant !== null && dormant.dormant === true && dormant.spawned === false && upDormant === false,
+          JSON.stringify({ dormant, upDormant }))
+
+        // firstrun.3. The hint strip: four hints at rest; opening the palette
+        //             fades the ⌘K hint; the fade survives a reload.
+        const hintsAtRest = await wc.executeJavaScript(`[...document.querySelectorAll('[data-hint]')].map((h) => h.dataset.hint)`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`)
+        const faded = await waitUntil(async () => wc.executeJavaScript(`!document.querySelector('[data-hint="palette"]')`), 4000)
+        const seen = await waitUntil(async () => {
+          const v = await wc.executeJavaScript(`window.canvas.settings.list().then((rows) => rows.find((r) => r.id === 'hints.seen')?.value ?? null)`)
+          return Array.isArray(v) && v.includes('palette') ? v : false
+        }, 4000)
+        await reloadWith([{ kind: 'terminal', rect: { id: 'dA', x: 60, y: 60, w: 300, h: 220 }, z: 1, spec: { panelId: 'dA', cwd: home, command: '/bin/sh', args: [] } }])
+        const afterReload = await wc.executeJavaScript(`[...document.querySelectorAll('[data-hint]')].map((h) => h.dataset.hint)`)
+        ok(IDS[2],
+          hintsAtRest.includes('palette') && hintsAtRest.includes('pan') && hintsAtRest.includes('zoom') && hintsAtRest.includes('new-panel') &&
+            faded === true && seen !== false && !afterReload.includes('palette') && afterReload.includes('pan'),
+          JSON.stringify({ hintsAtRest, faded, seen, afterReload }))
+
+        // env.1. Swap in a failed probe, reload, read the banner and the scope.
+        const good = harnessEnvReport
+        harnessEnvReport = { ...good, shell: { path: '/bin/zsh', ok: false, reason: 'login shell produced no PATH' } }
+        await reloadWith([])
+        const banner = await waitUntil(async () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-env-banner]'); return b ? b.textContent : null })()`), 5000)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'Environment'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); return true })()`)
+        await settle()
+        const scopeRows = await wc.executeJavaScript(`[...document.querySelectorAll('.palette__row')].map((r) => r.textContent).slice(0, 12)`)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) { i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) } return true })()`)
+        harnessEnvReport = good
+        ok(IDS[3],
+          typeof banner === 'string' && /login shell/i.test(banner) && /no PATH/.test(banner) &&
+            scopeRows.some((t) => /could not be read/i.test(t) && /no PATH/.test(t)),
+          JSON.stringify({ banner, scopeRows: scopeRows.slice(0, 4) }))
+      } catch (rErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(rErr && rErr.message || rErr) + ' | renderer: ' + (rLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onR)
       }
     }
 

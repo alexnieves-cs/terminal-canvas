@@ -831,6 +831,15 @@ export function parsePreferences(
     }
     // `boolean`/`number` track what `typeof` can answer; an `enum` is a
     // string, checked against its values below.
+    // A list is checked below rather than by typeof, which answers 'object'.
+    if (def.type === 'list') {
+      if (!Array.isArray(value) || !value.every((v) => typeof v === 'string')) {
+        warnings.push(`dropped setting ${id}: expected a list of strings`)
+        continue
+      }
+      out[id] = [...value]
+      continue
+    }
     const expected = def.type === 'enum' ? 'string' : def.type
     if (typeof value !== expected) {
       warnings.push(`dropped setting ${id}: expected ${expected}, got ${typeof value}`)

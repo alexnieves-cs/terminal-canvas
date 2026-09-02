@@ -1285,7 +1285,7 @@ value-per-byte feature in this file for the one case that matters most.
   written raw is several partial submissions. Note it; it is a much larger feature and
   should not be smuggled in beside earcons.
 
-## 38. First run — what an empty infinite canvas teaches
+## 38. First run — what an empty infinite canvas teaches — DONE, M48
 
 M4b made the canvas restore what was there last time. The corollary nobody has designed
 yet: on a first launch there is nothing there, and an empty infinite canvas is
@@ -1493,7 +1493,7 @@ beside `layout.json`. That is the difference between "this panel exited with cod
   build the writer for both rather than leaving the second to discover the same
   constraints again.
 
-## 47. The environment report — everything main already knows and never says
+## 47. The environment report — everything main already knows and never says — DONE, M48
 
 Main resolves the login environment, logs whether `claude`, `codex` and `git` were found,
 picks a backend with a human-readable `reason`, and computes per-preset PATH availability.

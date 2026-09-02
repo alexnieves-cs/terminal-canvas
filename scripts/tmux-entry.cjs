@@ -4,5 +4,6 @@
    has leaked into tmux-args.ts and belongs in session-backend.ts instead. */
 module.exports = {
   ...require('../src/main/tmux-args'),
-  ...require('../src/main/tmux-probe')
+  ...require('../src/main/tmux-probe'),
+  ...require('../src/main/env-report')
 }

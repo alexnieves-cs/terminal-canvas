@@ -174,6 +174,8 @@ function AutomationList({
 function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element {
   return (
     <div className="inspector__body" data-inspector-summary>
+      {/* M48 (spec §5). The one line this pane owed: what selecting does. */}
+      <p className="inspector__review-note" data-context-hint>select a panel to inspect it</p>
       <dl className="inspector__fields">
         <div className="inspector__field">
           <dt className="inspector__label">panels</dt>

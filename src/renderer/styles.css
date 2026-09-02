@@ -1894,6 +1894,96 @@ body {
   color: var(--fg);
 }
 
+/* M48. The launcher: a raised card, centred over an EMPTY canvas — a
+   sibling of .world so the camera never scales it, and a card rather than a
+   modal because the canvas behind it is the product. Its controls are the
+   palette's verbs; a disabled one says why and what to install. */
+.launcher {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, 86%);
+  z-index: 20;
+  padding: var(--sp-7);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--s-3);
+  box-shadow: var(--e-3);
+  color: var(--fg-2);
+}
+.launcher__title {
+  font-size: var(--t-2xl);
+  font-weight: 600;
+  letter-spacing: var(--track-tight);
+  line-height: var(--lh-tight);
+  color: var(--fg);
+  margin-bottom: var(--sp-3);
+}
+.launcher__lead { margin: 0 0 var(--sp-6); font-size: var(--t-md); line-height: var(--lh-body); }
+.launcher__verbs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.launcher__verb {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-height: 24px;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--s-1);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.launcher__verb:hover:not(:disabled) { background: var(--s-4); border-color: var(--line-strong); }
+.launcher__verb:disabled { color: var(--fg-4); cursor: default; }
+.launcher__verb-name { font-size: var(--t-md); font-weight: 600; }
+.launcher__verb-hint { font-size: var(--t-xs); color: var(--fg-3); overflow-wrap: anywhere; }
+.launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); }
+.launcher__env { margin: var(--sp-6) 0 0; font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
+.launcher__env-hint { color: var(--iris); }
+.launcher__keys { margin: var(--sp-4) 0 0; font-size: var(--t-xs); color: var(--fg-4); }
+
+/* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
+   gesture has been used. Never a click target. */
+.hint-strip {
+  position: absolute;
+  left: var(--sp-5);
+  bottom: var(--sp-5);
+  display: flex;
+  gap: var(--sp-5);
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--s-3);
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* M48. The probe banner: shown only when the login shell could not be read,
+   because that is the case where every panel says "command not found" with
+   no explanation anywhere. Amber — a fact to act on, not an error of ours. */
+.env-banner {
+  position: absolute;
+  top: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(720px, 92%);
+  z-index: 30;
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid var(--amber);
+  border-radius: var(--r-md);
+  background: var(--amber-dim);
+  color: var(--fg);
+  font-size: var(--t-sm);
+  pointer-events: none;
+}
+
 /* Backlog #75. A sibling of .world like the HUD and the palette, so it never
    pans or zooms with the panels it is reporting on. */
 .diagnostics-overlay {
