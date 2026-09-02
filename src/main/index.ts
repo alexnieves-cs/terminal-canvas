@@ -18,6 +18,7 @@ import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
 import { runQuit } from './quit'
+import { createScrollbackLog } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { ToolboxCache } from './toolbox-cache'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -39,7 +40,7 @@ let mainWindow: BrowserWindow | null = null
  * Whether this process owns the app. TWO COPIES OF ONE BUILD ARE DESTRUCTIVE
  * TO EACH OTHER, and silently: they share one userData directory, so one
  * store's coalesced write lands on top of the other's, and they resolve the
- * SAME tmux socket, so before-quit's shutdown() — kill-server — destroys the
+ * SAME tmux socket, so before-quit's default shutdown() — kill-server — destroys the
  * OTHER instance's running agents with nothing said anywhere. Reachable by
  * double-clicking the dock icon while a copy is already open, which
  * window-all-closed's darwin branch makes easy: an instance with no window is
@@ -204,8 +205,22 @@ const ptyManager = new PtyManager(
   // M37. Closes over worktreeManager, declared below — the same forward
   // closure captureBaseline already relies on; never called before a real
   // pty:create lands.
-  (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd)
+  (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd),
+  // M39. The durable log, gated per flush on the setting so the toggle takes
+  // effect on the next flush rather than the next launch.
+  {
+    append: (panelId, data) => { void scrollbackLog.append(panelId, data) },
+    drop: (panelId) => { void scrollbackLog.drop(panelId) },
+    enabled: () => layoutStore.getSetting('scrollback.persist') === true
+  }
 )
+
+/**
+ * M39. One file per panel under userData, appended from the flush and read
+ * by the dormant card, search and export. An append stream, deliberately not
+ * layout-store's temp-and-rename — see scrollback-log.ts.
+ */
+const scrollbackLog = createScrollbackLog({ dir: join(app.getPath('userData'), 'scrollback') })
 
 /**
  * M37. Worktrees live under userData, never inside the repository — inside it
@@ -462,7 +477,7 @@ app.whenReady().then(async () => {
   // launchd gives a GUI app a bare PATH and /opt/homebrew/bin is not on it.
   //
   // The socket is resolved from app.isPackaged so a packaged build and a dev
-  // build never share a tmux server: before-quit calls shutdown(), which is
+  // build never share a tmux server: before-quit's default arm calls shutdown(), which is
   // kill-server, and a shared socket would mean quitting either one destroys
   // the other's agents. TC_TMUX_SOCKET is a developer override with no UI.
   const tmuxSocket = resolveSocket({
@@ -525,7 +540,9 @@ app.whenReady().then(async () => {
     }
 
     // A baseline describes ONE session's starting point, and quitting the app
-    // kills every session (before-quit runs shutdown(), i.e. kill-server), so
+    // kills every session by default (before-quit's end arm runs shutdown(), i.e.
+    // kill-server; the M38 keep arm is exactly the case where sessions DO survive
+    // and their baselines are kept, which staleBaselineIds handles by asking), so
     // a baseline that outlived its session would have the next launch's fresh
     // agent diffed against a snapshot from a previous day — blaming it for
     // every edit the user made by hand in between. Dropped HERE, at startup,
@@ -622,6 +639,14 @@ app.whenReady().then(async () => {
         shell.showItemInFolder(found.path)
         return true
       }
+    },
+    {
+      // The tail answers [] when persistence is off, so a card never shows
+      // lines from a log the user has asked not to keep — even one written
+      // before the toggle.
+      tail: (panelId, lines) =>
+        layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.tail(panelId, lines) : Promise.resolve([]),
+      clear: () => scrollbackLog.clearAll()
     }
   )
   createWindow()

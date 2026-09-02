@@ -256,7 +256,10 @@ function makeHarness(backend, options = {}) {
     options.flushMaxBytes,
     // M37. The worktree resolver; undefined means "no worktrees", as in a
     // harness that never asks. Only worktree.1-.3 pass one.
-    options.worktreeFor
+    options.worktreeFor,
+    // M39. The scrollback sink; undefined means "no log", as in a harness
+    // that never asks. Only scrollback.1-.3 pass one.
+    options.scrollback
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -671,6 +674,38 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     h.manager.killAll()
   }
 
+  // M39 — scrollback.1-.3. THE SINK IN THE FLUSH: one append per pty:data send,
+  //     of the same string, so the log is what the renderer was shown; the
+  //     sink's drop on kill(); and nothing appended while the sink says it is
+  //     disabled. The recorder stands in for the real file — verify:file owns
+  //     the disk half.
+  {
+    const appends = []
+    const drops = []
+    let enabled = true
+    const sink = { append: (id, data) => { appends.push({ id, data }) }, drop: (id) => { drops.push(id) }, enabled: () => enabled }
+    const h = makeHarness(undefined, { scrollback: sink })
+    await h.manager.create(spec('sb1', '/bin/sh', ['-c', 'echo one; echo two; echo three; sleep 30']))
+    await waitFor(() => appends.filter((a) => a.id === 'sb1').map((a) => a.data).join('').includes('three'), 5000)
+    const sends = h.events.filter((e) => e.channel === 'pty:data' && e.payload.panelId === 'sb1')
+    const mine = appends.filter((a) => a.id === 'sb1')
+    const joined = mine.map((a) => a.data).join('')
+    ok('scrollback.1 every pty:data send is mirrored by one append of the same bytes',
+      mine.length > 0 && mine.length === sends.length && joined.includes('one') && joined.includes('two') && joined.includes('three') &&
+        sends.every((e, i) => mine[i] !== undefined && mine[i].data === e.payload.data),
+      `appends=${mine.length} sends=${sends.length}`)
+    h.manager.kill('sb1')
+    ok('scrollback.2 kill() drops the panel\'s log', drops.includes('sb1'), JSON.stringify(drops))
+    enabled = false
+    const before = appends.length
+    await h.manager.create(spec('sb2', '/bin/sh', ['-c', 'echo quiet; sleep 30']))
+    await waitFor(() => h.events.some((e) => e.channel === 'pty:data' && e.payload.panelId === 'sb2' && e.payload.data.includes('quiet')), 5000)
+    ok('scrollback.3 with the sink disabled, output still reaches the renderer and nothing is appended',
+      appends.length === before && h.events.some((e) => e.channel === 'pty:data' && e.payload.panelId === 'sb2'),
+      `appends before=${before} after=${appends.length}`)
+    h.manager.killAll()
+  }
+
   const TMUX = findTmux()
   if (!TMUX) {
     ok('11-15 tmux backend (SKIPPED — no tmux binary found)', true, 'install tmux to cover these')
@@ -926,6 +961,25 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       ok('keep-on-quit.2 end: killAll, then flush, then shutdown — and the session and server are gone',
         Q !== null && JSON.stringify(calls2) === JSON.stringify(['killAll', 'flush', 'shutdown']) && listedAfterEnd.trim() === '',
         JSON.stringify({ calls2, listedAfterEnd: listedAfterEnd.trim() }))
+    }
+
+    // keep-on-quit.3. A teardown that THROWS still flushes, in both arms, and
+    //     the end arm still shuts down — the wrapping the spec claims, driven
+    //     rather than read. No real server needed: the throwing manager is a
+    //     fake, and the backend is a spy.
+    {
+      const Q = typeof runQuit === 'function' ? runQuit : null
+      const seen = []
+      const boom = { killAll: () => { seen.push('killAll'); throw new Error('boom') }, detachAll: () => { seen.push('detachAll'); throw new Error('boom') } }
+      const backend = { shutdown: () => { seen.push('shutdown') } }
+      let threw = false
+      try {
+        if (Q) { Q({ keep: true, manager: boom, backend, flush: () => { seen.push('flush') } }) }
+        if (Q) { Q({ keep: false, manager: boom, backend, flush: () => { seen.push('flush') } }) }
+      } catch { threw = true }
+      ok('keep-on-quit.3 a throwing teardown never skips the flush, and the end arm still shuts down',
+        Q !== null && !threw && JSON.stringify(seen) === JSON.stringify(['detachAll', 'flush', 'killAll', 'flush', 'shutdown']),
+        JSON.stringify({ seen, threw }))
     }
 
     // 15. destroy() ends the session, and shutdown() takes the server with it.

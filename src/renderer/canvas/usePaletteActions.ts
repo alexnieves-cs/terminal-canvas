@@ -8,6 +8,7 @@ import { clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
+import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
   isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   removeLink, setLinkLabel, type Panel
@@ -672,6 +673,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     clearSubagents(panelId)
                     clearUsage(panelId)
                     clearMachineCost(panelId)
+                    clearScrollbackTail(panelId)
                   }
                 }
                 await window.canvas.workspace.remove(id)
@@ -1108,6 +1110,20 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     revealWorktree: (id) => {
       void window.canvas.worktree.reveal(id)
+    },
+    beginClearScrollback: () => {
+      // Gated, for deletePreset's reason: a destructive row still runs on one
+      // Enter. The question says what goes, because "scrollback" is jargon
+      // and the user may have found this row by typing "clear".
+      setInputMode({
+        kind: 'confirm',
+        label: 'Clear every panel’s recorded output from disk? Restored panels will show nothing until they run again.',
+        initial: '',
+        submit: () => {
+          void window.canvas.scrollback.clear()
+        }
+      })
+      palette.openPalette()
     }
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,

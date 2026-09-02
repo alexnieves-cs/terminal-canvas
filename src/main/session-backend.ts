@@ -65,7 +65,11 @@ export interface SessionBackend {
   /** Destroy one session for good. Called when the user closes a panel. */
   destroy(panelId: PanelId): void
 
-  /** Tear down everything this backend owns. Called on before-quit. */
+  /**
+   * Tear down everything this backend owns. Called on before-quit's END arm
+   * only (main/quit.ts): with `session.keepOnQuit` on, quitting detaches and
+   * the server deliberately outlives the app.
+   */
   shutdown(): void
 }
 

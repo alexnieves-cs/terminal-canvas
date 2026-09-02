@@ -142,6 +142,10 @@ const bridge: CanvasBridge = {
     diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req),
     commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req)
   },
+  scrollback: {
+    tail: (req: { panelId: string; lines: number }) => ipcRenderer.invoke(IPC.SCROLLBACK_TAIL, req),
+    clear: () => ipcRenderer.invoke(IPC.SCROLLBACK_CLEAR)
+  },
   worktree: {
     list: () => ipcRenderer.invoke(IPC.WORKTREE_LIST),
     remove: (id: string) => ipcRenderer.invoke(IPC.WORKTREE_REMOVE, id),

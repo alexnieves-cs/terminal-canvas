@@ -13,5 +13,7 @@ module.exports = {
      reason — node:fs is not what moves a module out of it. */
   ...require('../src/main/file-write.ts'),
   /* M27: the note's creation verb, same tier and same reason. */
-  ...require('../src/main/file-create.ts')
+  ...require('../src/main/file-create.ts'),
+  /* M39: the per-panel append log, same tier and same reason. */
+  ...require('../src/main/scrollback-log.ts')
 }

@@ -115,6 +115,15 @@ export const IPC = {
   /** M37. Open the worktree's directory in Finder. A path in a 260px pane is a path nobody can get at. */
   WORKTREE_REVEAL: 'worktree:reveal',
   /**
+   * M39. The last N non-empty, ANSI-stripped lines of a panel's durable log,
+   * for the dormant card (and, later, a handoff's payload). Pull-only, asked
+   * once per card mount: the log is main's and the bytes never cross until
+   * something wants to show them.
+   */
+  SCROLLBACK_TAIL: 'scrollback:tail',
+  /** M39. Remove every panel's log. A destructive verb behind the palette's confirm. */
+  SCROLLBACK_CLEAR: 'scrollback:clear',
+  /**
    * "Reset canvas…" asked for from the palette rather than the menu. Main owns
    * the confirmation dialog and the counts request, so the renderer asks main
    * to run the flow it already has instead of growing a second one.
@@ -849,6 +858,12 @@ export interface CanvasBridge {
     remove(id: string): Promise<WorktreeRemoveResult>
     /** False when the id names nothing. */
     reveal(id: string): Promise<boolean>
+  }
+  /** M39. See SCROLLBACK_TAIL / SCROLLBACK_CLEAR. */
+  scrollback: {
+    /** [] for a panel with no log, including when persistence is off. */
+    tail(req: { panelId: PanelId; lines: number }): Promise<string[]>
+    clear(): Promise<void>
   }
   prompt: {
     list(cwd: string | null): Promise<PromptBridgeRow[]>

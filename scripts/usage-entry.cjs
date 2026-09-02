@@ -8,5 +8,9 @@ module.exports = {
   ...require('../src/shared/cost'),
   ...require('../src/main/usage-parse'),
   ...require('../src/main/pricing'),
-  ...require('../src/main/usage-accumulator')
+  ...require('../src/main/usage-accumulator'),
+  /* M39: two pure text helpers — the ANSI stripper the scrollback tail and
+     search share, and the secret scrubber export applies. Import-free. */
+  ...require('../src/shared/ansi'),
+  ...require('../src/shared/redact')
 }

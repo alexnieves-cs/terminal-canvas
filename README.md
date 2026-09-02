@@ -41,6 +41,10 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **A review layer.** Each panel is diffed against the snapshot taken when its
   agent started, so you can see what that agent — specifically that one —
   changed, and commit it without leaving the canvas.
+- **Output that survives a relaunch.** Each panel's recent output is kept on
+  disk (2 MB per panel, on by default, one setting to turn off), so a restored
+  panel's card shows what it was doing before you quit instead of a blank
+  "click to start" — and search has something to read.
 - **A git worktree per panel.** A preset can spawn its agent in a fresh
   worktree of the repository on its own `tc/` branch, so four agents on one
   codebase are four working trees, merged deliberately. The built-in *Claude in
@@ -191,6 +195,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        preset:set-default / preset:spawn-by-id / preset:save-panel
                        preset:set-worktree
                        worktree:list / worktree:remove / worktree:reveal
+                       scrollback:tail / scrollback:clear
                        prompt:list / prompt:save / prompt:delete
                        settings:list / settings:set
                        canvas:request-reset

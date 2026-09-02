@@ -11,7 +11,7 @@
    reviews because every fixture used a space-free path. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync, lstatSync, chmodSync, symlinkSync, readdirSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync, lstatSync, chmodSync, symlinkSync, readdirSync, existsSync } = require("node:fs")
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'file.cjs')
@@ -404,6 +404,89 @@ const p = (name) => join(DIR, name)
     const b = F.createFile(DIR, '   ', '# x\n')
     ok(23, a.kind === 'refused' && b.kind === 'refused' && readdirSync(DIR).length === before,
       `23 — an empty name is refused and nothing is written: empty=${a.kind} blank=${b.kind}`)
+  }
+
+  // M39 — the scrollback log against real disk, in this suite's spaced
+  // fixture directory. Scoped ids. An append stream, not layout-store's
+  // temp-and-rename: rewriting the whole file every 16ms is the exact cost
+  // the batcher exists to avoid.
+  {
+    const mk = typeof F.createScrollbackLog === 'function' ? F.createScrollbackLog : null
+    const dir = join(DIR, 'scrollback dir')
+    // A 4000-byte tail window, so scrollback.5's read genuinely starts inside
+    // the em-dash run rather than reading the whole file from byte 0.
+    const log = mk ? mk({ dir, maxBytes: 4096, tailWindowBytes: 4000 }) : null
+    const settle = () => log ? log.idle('p1') : Promise.resolve()
+
+    // scrollback.1. Append then tail: the last N NON-EMPTY, ANSI-stripped lines,
+    //      newest last, and a tail of a panel that never wrote is [] rather
+    //      than a throw or a null.
+    if (log) {
+      await log.append('p1', 'first line\r\n\x1b[32msecond\x1b[0m line\r\n\r\n')
+      await log.append('p1', 'third line\r\n')
+      await settle()
+    }
+    const tail1 = log ? await log.tail('p1', 2) : null
+    const none = log ? await log.tail('never', 5) : null
+    ok('scrollback.1 append then tail yields the last N non-empty stripped lines; an unknown panel yields []',
+      tail1 !== null && JSON.stringify(tail1) === JSON.stringify(['second line', 'third line']) &&
+        Array.isArray(none) && none.length === 0,
+      JSON.stringify({ tail1, none }))
+
+    // scrollback.2. Two appends issued WITHOUT awaiting land in order. The
+    //      per-panel queue is the whole reason the write is async-safe.
+    if (log) {
+      void log.append('p2', 'A\n')
+      void log.append('p2', 'B\n')
+      void log.append('p2', 'C\n')
+      await log.idle('p2')
+    }
+    const tail2 = log ? await log.tail('p2', 3) : null
+    ok('scrollback.2 interleaved appends to one panel land in order',
+      tail2 !== null && JSON.stringify(tail2) === JSON.stringify(['A', 'B', 'C']), JSON.stringify(tail2))
+
+    // scrollback.3. The ring: a file pushed well past the cap is trimmed back
+    //      to the cap at a line boundary whenever it passes 1.25x it, so it
+    //      never exceeds 1.25x the cap and the NEWEST bytes survive — a
+    //      head-preserving trim would keep exactly the lines nobody wants.
+    //      1.25x, not 1x: the file legitimately grows between trims, and a
+    //      bound of "the cap at every instant" would demand a rewrite per
+    //      append, which is the cost the whole append-stream design refuses.
+    if (log) {
+      for (let i = 0; i < 400; i++) await log.append('p3', `line ${String(i).padStart(4, '0')} padding padding\n`)
+      await log.idle('p3')
+    }
+    const size3 = log ? await log.size('p3') : -1
+    const tail3 = log ? await log.tail('p3', 1) : null
+    const head3 = log ? readFileSync(join(dir, 'p3.log'), 'utf8').split('\n')[0] : ''
+    ok('scrollback.3 a file past the cap is trimmed to the cap at a line boundary, newest bytes kept',
+      size3 > 0 && size3 <= 4096 * 1.25 && size3 < 400 * 32 && tail3 !== null && tail3[0] === 'line 0399 padding padding' &&
+        /^line \d{4} padding padding$/.test(head3),
+      JSON.stringify({ size3, tail3, head3 }))
+
+    // scrollback.4. drop removes one panel's file and nothing else; clearAll
+    //      removes every file in the directory and totalBytes reads 0 after.
+    if (log) { await log.drop('p1') }
+    const afterDrop = log ? { p1: existsSync(join(dir, 'p1.log')), p2: existsSync(join(dir, 'p2.log')) } : null
+    if (log) { await log.clearAll() }
+    const total = log ? await log.totalBytes() : -1
+    ok('scrollback.4 drop removes one file; clearAll removes them all and totalBytes reads 0',
+      afterDrop !== null && afterDrop.p1 === false && afterDrop.p2 === true && total === 0 &&
+        !existsSync(join(dir, 'p2.log')) && !existsSync(join(dir, 'p3.log')),
+      JSON.stringify({ afterDrop, total }))
+
+    // scrollback.5. A tail read at a byte offset that lands INSIDE a multibyte
+    //      character must not produce a replacement character: the read
+    //      window starts mid-sequence, and the decoder has to drop the
+    //      orphaned continuation bytes rather than render them.
+    if (log) {
+      await log.append('p5', '—'.repeat(3000) + '\nlast line\n')
+      await log.idle('p5')
+    }
+    const tail5 = log ? await log.tail('p5', 1) : null
+    ok('scrollback.5 a tail whose read window starts mid-character carries no replacement character',
+      tail5 !== null && tail5[0] === 'last line' && !JSON.stringify(tail5).includes('\\ufffd'),
+      JSON.stringify(tail5))
   }
 
   console.log('')

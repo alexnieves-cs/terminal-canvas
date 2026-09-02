@@ -676,6 +676,22 @@ if (!GIT) {
       cleanResult !== null && cleanResult.kind === 'removed' && made && !require('node:fs').existsSync(made.path) &&
         records.length === 1 && git('branch', '--list', made.branch).trim() !== '' && listWorktrees() === treesBefore,
       JSON.stringify({ cleanResult, records: records.length, trees: listWorktrees() - treesBefore }))
+    // worktree.10. The directory deleted by hand (the M37 verifier's one
+    //      untested branch): the record is stale, so ensureForPanel drops it
+    //      and mints a FRESH worktree rather than answering a path that is
+    //      not there — a stale `active` would spawn the panel in a cwd
+    //      resolveCwd falls back from to $HOME, silently.
+    let recovered = null
+    if (mgr && elsewhere && elsewhere.kind === 'active') {
+      require('node:fs').rmSync(elsewhere.path, { recursive: true, force: true })
+      const before = records.length
+      recovered = await mgr.ensureForPanel('p1', otherRepo)
+      recovered = { ...recovered, sameRecordCount: records.length === before, staleGone: !records.some((w) => w.path === elsewhere.path) }
+    }
+    ok('worktree.10 a hand-deleted worktree directory yields a fresh worktree and drops the stale record',
+      recovered !== null && recovered.kind === 'active' && recovered.path !== elsewhere.path &&
+        require('node:fs').existsSync(recovered.path) && recovered.sameRecordCount && recovered.staleGone,
+      JSON.stringify(recovered))
     try { require('node:fs').rmSync(worktreesDir, { recursive: true, force: true }) } catch { /* best effort */ }
     try { require('node:fs').rmSync(otherRepo, { recursive: true, force: true }) } catch { /* best effort */ }
   }

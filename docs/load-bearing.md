@@ -2264,3 +2264,44 @@ Two limits stay as they were and are recorded rather than fixed: `firstSpawnedAt
 relaunch falls back to now, so a kept `claude` panel's subagent nodes are unclaimable until
 its next spawn; and a reattached session's detector starts at `starting`, so a kept agent that
 is mid-question shows no `wants-you` until its next bell.
+
+**The scrollback log is an append stream written from the flush, and it is NOT
+`layout-store.ts`'s pattern (`main/scrollback-log.ts`, `main/pty-manager.ts`'s `flush()`).**
+M39 writes one append per 16 ms flush — the same string the renderer was sent, elision marker
+included — through a per-panel promise queue, so order is preserved and the flush path never
+waits on disk. The layout store's write-temp-then-rename is right for a few kilobytes of state
+twice a minute and exactly wrong for a byte stream from twelve processes: copied here it would
+rewrite the whole file every 16 ms. This is the app's third "state that survives a relaunch"
+and it is legitimately a different shape. Retention is the feature rather than a footnote: a
+file past 1.25× `SCROLLBACK_MAX_BYTES` is trimmed to its last cap bytes at a line boundary,
+inside the same queue so a trim can never race an append; `verify:file` `scrollback.3` pins
+the bound as 1.25× and NOT "the cap at every instant", because the file legitimately grows
+between trims and a bound of the cap would demand the per-append rewrite the design refuses.
+The `enabled()` gate is read per flush, never captured, so the `scrollback.persist` toggle
+takes effect on the next flush rather than the next launch. **A closed panel's log is dropped
+in `kill()`** beside its baseline and its session pin: search over closed panels is not a
+promise this app makes, and this is what keeps the directory bounded by the canvas — a
+restart-in-place therefore starts a fresh log, matching its fresh process.
+
+**A dormant card reads the log; a spawned card reads its buffer (`session/scrollback-store.ts`,
+`TerminalPanel.tsx`'s `PanelCard`).** The tail is fetched from main ONCE per dormant panel,
+through a per-panel store that never bumps `registry.version()`, and shown ABOVE "click to
+start" rather than instead of it — the lines say what the panel was doing, the prompt says how
+to resume it. A spawned panel keeps reading `handle.tail()`, the live truth. Nothing renders
+while the tail is unanswered or empty, so a card never flashes a blank block, and the store is
+cleared at every panel-removing site like every store beside it. The tail answers `[]` when
+persistence is off — even for a log written before the toggle — so a card never shows lines
+from a record the user asked not to keep. `verify:panels` `scrollback.1` reloads on the DIRECT
+backend so the process dies and the panel restores dormant: the state every panel is in the
+moment the app relaunches, and the one M39 exists to make non-blank.
+
+**The secret scrubber exists before its first customer, and it is applied to nothing local
+(`shared/redact.ts`).** Backlog #31's rule is that the answer to "agents print secrets" must
+exist BEFORE a feature moves a byte off the panel, and M39 is the first that does, so the
+scrubber lands here and M48's export is its customer. It is deliberately applied to nothing in
+this milestone — not the live terminal (the user's own screen), not the local log (marked by
+the setting's description rather than redacted). Detection is heuristic and fails toward the
+user: every match becomes a placeholder naming its kind, nothing is dropped silently, the count
+comes back; a bare hex sha, a UUID and the word "token" are never touched, because an export
+that redacts a commit sha is one nobody can act on. `verify:usage` `redact.3` pins the
+over-match direction, which is the failure a scrubber grows into.

@@ -210,6 +210,12 @@ module.exports = {
      and nothing about the feature. The harness builds it over its own git
      runner, review engine and layout store, exactly as main/index.ts does. */
   createWorktreeManager: require('../src/main/worktree-manager').createWorktreeManager,
+  /* M39. The durable log, over a scratch directory the harness owns, so
+     scrollback.1 can reload the renderer on the direct backend and read a
+     dead panel's last lines back off the card. Same reasoning as the two
+     constructors above: an inert sink would prove the card renders nothing,
+     which is what it renders today. */
+  createScrollbackLog: require('../src/main/scrollback-log').createScrollbackLog,
   /* Task 10's checks 130-132 need PtyManager's usage-tick machinery reading
      a real path off real disk — the readFrom half is generic delta-file
      reading with no ~/.claude/projects anywhere in it (only resolveTranscript

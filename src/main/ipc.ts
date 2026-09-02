@@ -79,6 +79,17 @@ export interface WorktreeHandlers {
   reveal(id: string): boolean
 }
 
+/** M39. What main hands the scrollback channels; see createScrollbackLog. */
+export interface ScrollbackHandlers {
+  tail(panelId: PanelId, lines: number): Promise<string[]>
+  clear(): Promise<void>
+}
+
+const INERT_SCROLLBACK: ScrollbackHandlers = {
+  tail: async () => [],
+  clear: async () => {}
+}
+
 const INERT_WORKTREES: WorktreeHandlers = {
   list: () => [],
   remove: async () => ({ kind: 'unknown' }),
@@ -141,8 +152,17 @@ export function registerIpcHandlers(
    * has a handler (verify:ipc): the default lists nothing and answers
    * `unknown`, which is what an install with no worktrees looks like.
    */
-  worktrees: WorktreeHandlers = INERT_WORKTREES
+  worktrees: WorktreeHandlers = INERT_WORKTREES,
+  /**
+   * M39. The durable log's two read/clear verbs. Optional with an inert
+   * default for WorktreeHandlers' reason: the positional harnesses keep
+   * compiling and every channel still has a handler.
+   */
+  scrollback: ScrollbackHandlers = INERT_SCROLLBACK
 ): void {
+  ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
+    scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
+  ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
   // M37. `attached` is computed HERE, at list time, from the layout: a

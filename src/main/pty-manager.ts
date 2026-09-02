@@ -67,6 +67,13 @@ const FLUSH_INTERVAL_MS = 16
  */
 export const FLUSH_MAX_BYTES = 256 * 1024
 
+/** M39. See the constructor's `scrollback` parameter and main/scrollback-log.ts. */
+export interface ScrollbackSink {
+  append(panelId: PanelId, data: string): void
+  drop(panelId: PanelId): void
+  enabled(): boolean
+}
+
 /**
  * The idleness tick. A SEPARATE timer from the flush, and one per manager
  * rather than per session, because the flush timer only runs when there IS
@@ -496,7 +503,15 @@ export class PtyManager {
      * silently spawned in place.
      */
     private readonly worktreeFor: (panelId: PanelId, cwd: string) => Promise<WorktreeOutcome> =
-      async () => ({ kind: 'refused', reason: 'worktrees are not available in this build' })
+      async () => ({ kind: 'refused', reason: 'worktrees are not available in this build' }),
+    /**
+     * M39. Where a flush's bytes are also written. Injected so this suite's
+     * recorder can count appends while verify:file owns the disk half; the
+     * default records nothing, which is what every harness that never asks
+     * gets. `enabled()` is read per flush, never captured, so the setting
+     * takes effect on the next flush rather than the next launch.
+     */
+    private readonly scrollback: ScrollbackSink = { append: () => {}, drop: () => {}, enabled: () => false }
   ) {}
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
@@ -797,6 +812,7 @@ export class PtyManager {
     // genuinely nothing there.
     if (!session) {
       this.getBackend().destroy(panelId)
+      this.scrollback.drop(panelId)
       this.dropBaseline(panelId)
       this.capturedBaselineIds.delete(panelId)
       this.dropPinnedSession(panelId)
@@ -820,6 +836,11 @@ export class PtyManager {
     // Closing a panel must end the SESSION, not merely detach a client.
     // Without this the tmux session survives with no panel able to reach it.
     this.getBackend().destroy(panelId)
+    // M39. A closed panel's log goes with it — search over closed panels is
+    // not a promise this app makes, and this is what keeps the directory
+    // bounded by the canvas. A restart-in-place therefore starts a fresh log,
+    // matching its fresh process.
+    this.scrollback.drop(panelId)
     this.dropBaseline(panelId)
     this.capturedBaselineIds.delete(panelId)
     this.dropPinnedSession(panelId)
@@ -835,7 +856,11 @@ export class PtyManager {
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
   }
 
-  /** Called on before-quit so no PTY outlives the app. */
+  /**
+   * before-quit's END arm (main/quit.ts), so no PTY outlives the app — the
+   * default. The KEEP arm calls detachAll() instead, and PTYs outlive the
+   * app on purpose (M38).
+   */
   killAll(): void {
     for (const panelId of [...this.sessions.keys()]) this.kill(panelId)
   }
@@ -1253,6 +1278,10 @@ export class PtyManager {
       session.elidedChars = 0
     }
     this.send(IPC_EVENTS.PTY_DATA, { panelId: session.panelId, data })
+    // M39. The same string, marker included, so the log is what the renderer
+    // was shown — one append per flush, beside the one send. The sink queues
+    // its own disk write; nothing here waits.
+    if (this.scrollback.enabled()) this.scrollback.append(session.panelId, data)
   }
 
   private send(channel: string, payload: unknown): void {

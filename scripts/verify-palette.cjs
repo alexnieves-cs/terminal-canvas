@@ -227,6 +227,8 @@ const spyActions = () => {
     setPresetWorktree: record('setPresetWorktree'),
     beginRemoveWorktree: record('beginRemoveWorktree'),
     revealWorktree: record('revealWorktree'),
+    // M39. The clear-scrollback verb, confirm-gated in the action.
+    beginClearScrollback: record('beginClearScrollback'),
     // M13. beginLink is reached from panel.link; the other two are the
     // inspector's own, reached from no Command row — kept here anyway so the
     // fixture stays honest about the full PaletteActions shape, the reason
@@ -1620,6 +1622,24 @@ const WS = [
       /repo-abc/.test(row.searchText ?? '') &&
       c.actions.calls.some((k) => k[0] === 'revealWorktree' && k[1] === 'w1'),
     JSON.stringify({ row, calls: c.actions.calls }))
+}
+
+// M39 — scrollback.1. The one verb the durable log adds to the palette: a
+//      destructive, hidden-at-rest row in the Canvas group that routes through
+//      the confirm-gated action, never straight to the invoke. Findable by
+//      typing "scrollback", "history" or "clear".
+{
+  const c = ctx()
+  const rows = P.buildCommands(c)
+  const row = byId(rows, 'canvas.clear-scrollback')
+  const resting = P.filterCommands(rows, '').map((r) => r.id)
+  const typed = P.filterCommands(rows, 'scrollback').map((r) => r.id)
+  if (row) row.run()
+  ok('scrollback.1 a destructive, hidden-at-rest Clear scrollback row routes through the confirm-gated action',
+    row !== undefined && row.group === 'canvas' && row.destructive === true && row.hiddenAtRest === true &&
+      !resting.includes('canvas.clear-scrollback') && typed.includes('canvas.clear-scrollback') &&
+      c.actions.calls.some((k) => k[0] === 'beginClearScrollback'),
+    JSON.stringify({ row, resting: resting.includes('canvas.clear-scrollback'), typed: typed.includes('canvas.clear-scrollback'), calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)
