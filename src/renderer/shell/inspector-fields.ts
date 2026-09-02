@@ -1,4 +1,4 @@
-import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { agentWord, panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
@@ -144,8 +144,8 @@ export function agentStateLabel(state: AgentState | undefined, input?: StateInpu
   // M63. One vocabulary: the pinned label is panelState's word. Without a
   // state input (older callers and checks) a live process is assumed, which
   // is the only case an agent state exists for.
-  const fallback: StateInput = { kind: 'terminal', status: { kind: 'running', pid: 0, command: '', cwd: '', reattached: false }, dormant: false }
-  return panelState(input ?? fallback, state).word
+  if (input === undefined) return state === undefined ? 'running' : agentWord(state).word
+  return panelState(input, state).word
 }
 
 /**

@@ -82,3 +82,12 @@ export function panelState(input: StateInput, agent: AgentState | undefined): Pa
       }
   }
 }
+
+/**
+ * The word for an agent state on a LIVE process — what the attention popover
+ * needs, since every row it lists is a running panel in `wants-you`. Routed
+ * through panelState so the popover cannot spell its own word.
+ */
+export function agentWord(agent: AgentState): PanelStateWord {
+  return panelState({ kind: 'terminal', status: { kind: 'running', pid: 0, command: '', cwd: '', reattached: false }, dormant: false }, agent)
+}

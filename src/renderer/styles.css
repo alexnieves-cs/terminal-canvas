@@ -652,9 +652,12 @@ body {
    ───────────────────────────────────────────────────────────────────────── */
 [data-tone] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
 [data-tone="kind"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
+/* asleep is the heavier grey (it has a history); not-started and starting
+   the lighter. The critic found a dashed asleep edge invisible at 100% and
+   gone at 22%: a solid edge in a darker grey says the same thing legibly. */
 [data-tone="asleep"] { --tone: var(--line-strong); --tone-dim: var(--s-2); }
-[data-tone="none"] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
-[data-tone="starting"] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
+[data-tone="none"] { --tone: var(--line); --tone-dim: var(--s-4); }
+[data-tone="starting"] { --tone: var(--line); --tone-dim: var(--s-4); }
 [data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); }
 [data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
@@ -663,10 +666,7 @@ body {
 /* THE STATE EDGE. A 3px column on every frame's left, in the tone — the
    app's one signature mark, legible at 100% and at 10%, in both themes and
    in a thumbnail. On the frame rather than the card so it survives the tier
-   change; the card's own left rule (below) is retired in its favour. The
-   asleep tone is a DASHED edge, so a restored-but-unstarted panel is told
-   apart from one that is merely quiet. */
-.pf { position: absolute; }
+   change; the card's own left rule (below) is retired in its favour. */
 .pf::before {
   content: "";
   position: absolute;
@@ -676,9 +676,6 @@ body {
   border-radius: var(--r-lg) 0 0 var(--r-lg);
   pointer-events: none;
   z-index: 1;
-}
-.pf[data-tone="asleep"]::before {
-  background: repeating-linear-gradient(to bottom, var(--tone) 0 6px, transparent 6px 10px);
 }
 
 .rail-row__dot {
@@ -705,12 +702,9 @@ body {
 .rail-row__tail[data-tone="kind"] { color: var(--muted); }
 .rail-row__go {
   flex: none;
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  color: var(--fg-3);
+  font-size: var(--t-xs);
+  color: var(--iris);
 }
-.rail-row__go svg { width: 14px; height: 14px; }
 
 /* M47. ONE status dot. The rail's dot, the context pane's dot and the
    frame's `.pf__state` all carry `.status-dot`, and this is the only rule
@@ -1571,10 +1565,15 @@ body {
 /* The kind's accent, from existing doctrine (spec §5.3): a review node and
    a toolbox are the app's own artefacts (--iris), a file is neutral, a Jira
    panel is an external system. A terminal's dot is its agent state. */
-.pf__state--kind { background: var(--fg-3); }
-.pf--kind-review .pf__state--kind,
-.pf--kind-toolbox .pf__state--kind { background: var(--iris); }
-.pf--kind-jira .pf__state--kind { background: var(--blue); }
+/* M63: NEUTRAL, one colour for every kind. Iris is selection and blue is
+   working; a kind dot in either read as a state (the critic sampled the Jira
+   dot at working-blue). The kind lives in the rail's glyph; M67 brings the
+   glyph into the chrome and retires this dot. */
+.pf__state--kind { background: var(--line-strong); }
+/* A terminal's chrome dot duplicated the pill's own dot 300px to its right —
+   the same state said twice on one frame. The element stays (checks read its
+   attributes); it is not painted. */
+.pf--kind-terminal .pf__state { display: none; }
 .pf__body { flex: 1; min-height: 0; }
 /* The reading kinds' body: scrolls on its own, mono, and SELECTABLE —
    .panel sets user-select: none so a drag on the chrome never leaves a text
@@ -1676,12 +1675,15 @@ body {
 .panel--selected.panel--agent-busy,
 .panel--selected.panel--agent-idle,
 .panel--selected.panel--agent-exited {
-  border-color: var(--blue);
+  /* M63: IRIS. The first cut changed only the base .panel--selected rule and
+     this later, equal-specificity one kept painting the ring blue — the
+     critic sampled it. Blue is now only ever "working". */
+  border-color: var(--iris);
   /* var(--e-3) belongs here as well as on .panel--selected above. This rule is
      the LATER one at equal specificity, so a ring-only box-shadow here wins
      outright — a selected panel is the raised one by definition, in every
      agent state. */
-  box-shadow: 0 0 0 1px var(--blue), var(--e-3);
+  box-shadow: 0 0 0 1px var(--iris), var(--e-3);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -1865,7 +1867,7 @@ body {
    tail of real terminal output and must stay monospace, top-aligned and
    dense — it is data, not a statement. :has() rather than a second class so
    the markup stays untouched (see the note above). */
-.panel__card:has(.panel__card-state) {
+.panel__card:has(.panel__card-idle) {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -1923,34 +1925,19 @@ body {
    the affordance at the same size in the UI face. The 32px headline that
    stood here was the loudest text in the app on a "quiet instrument"; the
    loudest thing on a card is now the agent's own tail. */
-.panel__card-state {
+.panel__card-idle {
   margin-top: auto;
   font-family: var(--font-ui);
   font-size: var(--t-sm);
   font-weight: 600;
   line-height: var(--lh-tight);
-  color: var(--tone);
-}
-.panel__card-state[data-tone="asleep"],
-.panel__card-state[data-tone="none"],
-.panel__card-state[data-tone="starting"] { color: var(--fg-2); }
-.panel__card-idle {
-  font-family: var(--font-ui);
-  font-size: var(--t-sm);
-  line-height: var(--lh-tight);
-  color: var(--fg-3);
+  color: var(--fg-2);
   font-style: normal;
 }
 
 /* The card's own left rule is RETIRED (M63): the frame's state edge carries
    the state at every tier. The classes stay on the element for the checks
    that read them. */
-/* Unlike the panel surface, .panel__card has no border-left of its own at
-   rest — without this rule a `starting` card would render with NO rule at
-   all while an `idle` card shows a visible 3px one. `starting` is a
-   distinct, reachable state in the state machine even where it happens to
-   look identical to `idle` here. */
-
 /* A badge reports state and cannot be pressed: a capsule with a hairline. */
 .badge {
   font-size: var(--t-xs);
@@ -2479,9 +2466,16 @@ body {
 
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
+/* M63: NOT amber. Amber is "needs you" and nothing else (brief §6); a
+   standing warning in the strip in the same hue was the critic's finding 4.
+   It stays a sentence, in the strip's second ink. */
 .canvas-hud__warn {
-  color: var(--amber);
+  color: var(--fg-2);
 }
+/* Capped: a long title would push the strip under the hint pill on its left. */
+.canvas-hud__focus { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-hud__word[data-tone] { color: var(--tone); font-weight: 600; }
+.canvas-hud__word[data-tone="none"], .canvas-hud__word[data-tone="starting"], .canvas-hud__word[data-tone="asleep"], .canvas-hud__word[data-tone="kind"] { color: var(--fg-3); }
 
 /* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
    are world-space facts. Inside the transform they would zoom and pan away

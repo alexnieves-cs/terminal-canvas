@@ -91,9 +91,9 @@ ok('4 nothing at all: "login shell"',
 ok('5 running reads as running', R.railTail(running(48213, '/bin/zsh'), false) === 'running')
 
 // 6. Dormant OUTRANKS the status kind. A dormant panel's status is
-//    {kind:'idle'}, and "not started" is true but useless — "dormant" is the
-//    word the panel's own card uses, and it is what tells the user the start
-//    control on this row exists at all.
+//    {kind:'idle'}, and "not started" is true but useless — "asleep" is the
+//    vocabulary's word (M63), the same one the panel's own card shows, and it
+//    is what tells the user the start control on this row exists at all.
 ok('6 dormant outranks the status kind',
   R.railTail({ kind: 'idle' }, true) === 'asleep')
 
@@ -2229,8 +2229,15 @@ const session = (id, over = {}) => ({
   const offenders = []
   for (const file of walk(join(__dirname, '..', 'src', 'renderer'))) {
     if (file.endsWith('panel-state.ts')) continue
+    // The diagnostics overlay prints the bundle's RAW field names (`dormant`
+    // is the snapshot key check 112 pins) — a maintainer table, not the
+    // display vocabulary.
+    if (file.endsWith('DiagnosticsOverlay.tsx')) continue
     const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
     for (const lit of LITERALS) if (text.includes(lit)) offenders.push(`${file.split('/src/renderer/')[1]}:${lit}`)
+    // JSX text too — `>needs you<` is a display string with no quotes around
+    // it, and the first cut of this pin missed exactly that in Dock.tsx.
+    for (const m of text.matchAll(/>\s*(dormant|not started|needs you|working|asleep)\s*</g)) offenders.push(`${file.split('/src/renderer/')[1]}:>${m[1]}<`)
   }
   ok('state.2 no renderer file outside panel-state.ts spells a state word as a display literal',
     offenders.length === 0, offenders.join(', ') || 'clean')

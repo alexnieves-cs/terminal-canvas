@@ -5950,7 +5950,7 @@ app.whenReady().then(async () => {
       const labelled = rows.every((r) => typeof r.label === 'string' && r.label.length > 0)
       // M63. The rail's word column, not a pid: every row here is live.
       const pidTail = rows.every((r) => /^(working|idle|running|starting|needs you)$/.test(r.tail))
-      ok('81 the rail renders one labelled row per panel, with a real pid',
+      ok('81 the rail renders one labelled row per panel, with a live state word',
         railOpen === true && sameSet && labelled && pidTail,
         `railOpen=${railOpen} rows=${JSON.stringify(rows)} panels=${JSON.stringify(panelIdsNow)}`)
     }
@@ -15229,7 +15229,7 @@ app.whenReady().then(async () => {
       const onS = (_e, level, message) => { if (level >= 2) sLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onS)
       const IDS = [
-        'state-edge.1 the frame edge is the tone: amber after a bell, dashed while asleep',
+        'state-edge.1 the frame edge is the tone: amber after a bell, solid grey while asleep',
         'state-word.1 pill, rail row and inspector label read one word per panel across asleep, working and needs-you',
         'state-popover.1 the attention popover row names the state and carries a jump'
       ]
@@ -15254,7 +15254,8 @@ app.whenReady().then(async () => {
           const edge = pf && getComputedStyle(pf, '::before')
           return { tone: pf && pf.getAttribute('data-tone'), rail: rail && rail.textContent, pill: pill && pill.textContent, card: card && card.textContent,
             edgeBg: edge && edge.backgroundColor, edgeImg: edge && edge.backgroundImage, edgeW: edge && edge.width,
-            amber: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim() }
+            amber: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(),
+            lineStrong: getComputedStyle(document.documentElement).getPropertyValue('--line-strong').trim() }
         })()`)
         const asleep = await words('svA')
         // Wake svA, select it through the rail so the inspector pins it, and
@@ -15286,12 +15287,12 @@ app.whenReady().then(async () => {
         const toRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})` }
 
         ok(IDS[0],
-          asleep !== null && asleep.tone === 'asleep' && asleep.edgeW === '3px' && /repeating-linear-gradient/.test(asleep.edgeImg || '') &&
-            working !== false && working.edgeImg === 'none' &&
+          asleep !== null && asleep.tone === 'asleep' && asleep.edgeW === '3px' && asleep.edgeBg === toRgb(asleep.lineStrong) &&
+            working !== false && working.edgeBg !== asleep.edgeBg &&
             needs !== false && needs.tone === 'needs-you' && needs.edgeBg === toRgb(needs.amber),
           JSON.stringify({ asleep, needs }))
         ok(IDS[1],
-          asleep !== null && asleep.rail === 'asleep' && asleep.pill === 'asleep' && asleep.card === 'asleep' &&
+          asleep !== null && asleep.rail === 'asleep' && asleep.pill === 'asleep' &&
             working !== false && working.rail === 'working' && working.pill === 'working' && inspectorWorking === 'working' &&
             needs !== false && needs.rail === 'needs you' && needs.pill === 'needs you' && inspectorNeeds === 'needs you',
           JSON.stringify({ asleep, working, inspectorWorking, needs, inspectorNeeds }))
@@ -15302,7 +15303,7 @@ app.whenReady().then(async () => {
           const row = document.querySelector('.dock__popover .rail-row[data-rail-attention="svA"]')
           if (!row) return null
           const main = row.querySelector('.rail-row__main')
-          return { word: row.querySelector('.rail-row__tail')?.textContent ?? null, go: row.querySelector('.rail-row__go svg') !== null, title: main?.getAttribute('title') ?? null }
+          return { word: row.querySelector('.rail-row__tail')?.textContent ?? null, go: row.querySelector('.rail-row__go')?.textContent === 'jump', title: main?.getAttribute('title') ?? null }
         })()`)
         ok(IDS[2], pop !== null && pop.word === 'needs you' && pop.go === true && /^Go to /.test(pop.title || ''), JSON.stringify({ pop, log: sLog.slice(-3) }))
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)

@@ -76,7 +76,10 @@ function RailPanelRowImpl({
           <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
         )}
         <span className="rail-row__label">{row.label}</span>
-        <span className="rail-row__tail" data-tone={shown.tone}>{shown.word}</span>
+        {/* M63. The kind already sits in the glyph column; the state column
+            is for state, so a sessionless row leaves it empty rather than
+            saying its kind a second time. */}
+        <span className="rail-row__tail" data-tone={shown.tone}>{shown.tone === 'kind' ? '' : shown.word}</span>
       </button>
       {row.dormant && (
         <button

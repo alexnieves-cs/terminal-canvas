@@ -45,3 +45,4 @@ copy here is deleted.
 | [m60-ship.md](m60-ship.md) | M60 — Ship | finished |
 | [m61-visual-loop.md](m61-visual-loop.md) | M61 — The visual loop, and three post-1.0 defects | finished |
 | [m62-design-brief.md](m62-design-brief.md) | M62 — The design brief and the 1.x scope decision | finished |
+| [m63-state-vocabulary.md](m63-state-vocabulary.md) | M63 — The state vocabulary | finished |

@@ -361,11 +361,11 @@ function PanelCard({ session, agentState, cost, detail, title, state, shown }: {
               affordance — whose text stays byte-identical for the checks
               that read it. The 32px headline is gone: the loudest text on a
               card is the agent's own tail. */}
-          <div className="panel__card-state" data-tone={shown.tone}>{shown.word}</div>
           {/* Every unspawned card wakes on click — a restored one and one
               the camera never reached alike — so the affordance is the same
-              sentence for both; the WORD above is what tells them apart. */}
-          <div className="panel__card-idle">click to start</div>
+              sentence for both; the pill in the chrome is what tells them
+              apart. (A word line here said it a second time on one frame.) */}
+          <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
         </>
       )}
       {cost !== undefined && (

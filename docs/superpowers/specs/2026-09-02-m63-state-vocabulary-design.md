@@ -49,6 +49,7 @@ Words, in the order they are tested:
 | running, agent `wants-you` | `needs you` | `needs-you` |
 | running, agent `busy` | `working` | `working` |
 | running, agent `idle` | `idle` | `idle` |
+| running, agent `exited` | `exited` | `exited` — the milliseconds between the detector's terminal transition and the registry's exit record |
 | running, agent `starting` | `starting` | `starting` |
 | running, no agent word known | `running` | `idle` |
 
@@ -74,14 +75,15 @@ state.2` reads the tree as text.
   kind glyph for the other kinds (five small icons added to `icons.tsx`).
 - **Panel pill:** `StatusBadge` becomes the state word with `data-tone`, for every
   terminal. The machine-cost badge stays.
-- **Card:** the 32px instruction goes. The tail tier shows the word as a small tone-coloured
-  line (`.panel__card-state`) above the existing `.panel__card-idle` affordance, which keeps
-  its exact text `click to start` (three checks read it) but at chrome size. The summary tier
+- **Card:** the 32px instruction goes. An UNSPAWNED card's tail tier shows the word as a
+  small tone-coloured line (`.panel__card-state`) above the `.panel__card-idle` affordance,
+  which keeps its exact text `click to start` (three checks read it) at chrome size; a
+  spawned card's word is its pill, and its body stays the tail. The summary tier
   shows the word; the block tier is filled with the tone.
 - **Attention popover:** anchored beside the bell (a caret on the dock edge, bottom-aligned
-  to the button), each row reads `label · needs you` with a trailing chevron and the title
+  to the button), each row reads the label then the word `needs you` (from `agentWord`, never spelled in the component) with a trailing chevron and the title
   "Go to …"; the empty state stays `nothing waiting`.
-- **Status strip:** the focused-panel token gains its label: `focus: twin`.
+- **Status strip:** the selected-panel token gains its label: `selected: twin` (it is the selection, not focus — the verifier caught the first label saying otherwise).
 
 ### The state edge
 

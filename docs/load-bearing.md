@@ -2069,6 +2069,21 @@ expanded and `:line:col` stripped, existing files only) and opens through `shell
 navigation, because `will-navigate` kills every PTY in the window. Opening AT a line needs an
 editor integration this app does not have; the result's reason says so rather than pretending.
 
+**A panel's state is ONE word from ONE function (`renderer/panels/panel-state.ts`), and
+every surface that says what a panel is doing reads it — the rail row, the frame's pill,
+the card's state line, the summary and block tiers, the attention popover, the inspector's
+pinned label.** Before M63 the same panel read `dormant` in the rail, `idle` on its pill and
+`click to start` on its card, each file locally consistent, and the drift was invisible until
+a screenshot put two of them side by side. The tone (`data-tone`) is a closed set bound to a
+hue in ONE stylesheet block; the state edge (`.pf::before`), the dots and the far tiers all
+read `var(--tone)`. Undoing either half fails silently in the same way it did: a new surface
+spells its own word, or a new rule binds `--amber` to its own selector, and nothing errors —
+`verify:rail state.2` reads the tree as text for the words and `verify:styles tone.1` for the
+hues, because neither has a runtime symptom. `railTail` is now a wrapper over `panelState`
+with no agent state (a live process reads `running`); the ROW applies the agent state it
+subscribes to, which is why `RailRow` carries `state` and why the signature does not carry
+the agent word.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

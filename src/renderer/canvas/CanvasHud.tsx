@@ -1,3 +1,5 @@
+import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { useAgentState } from '@renderer/session/agent-state-store'
 import type { JSX } from 'react'
 import type { SessionBackendInfo } from '@shared/ipc-contract'
 import type { MachineCostSnapshot } from '@shared/machine-cost'
@@ -9,6 +11,8 @@ export interface CanvasHudProps {
   viewport: Viewport
   cursor: Point
   selectedId: string | null
+  /** M63. The selected panel's title and state word, so the strip says who and what, not an id. */
+  selected?: { id: string; label: string; state: StateInput } | null
   /** null until the one-shot probe answers. */
   backend: SessionBackendInfo | null
   machineCost: MachineCostSnapshot['total']
@@ -34,7 +38,7 @@ const ZOOM_STEP = 1.2
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ viewport, cursor, selectedId, backend, machineCost, onZoomBy, onFit }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ viewport, cursor, selectedId, selected, backend, machineCost, onZoomBy, onFit }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       {/* M46. The zoom cluster: the ONE pointer surface in the HUD (the rest
@@ -54,7 +58,9 @@ export function CanvasHud({ viewport, cursor, selectedId, backend, machineCost, 
       </span>
       {/* M63. Labelled: a bare panel id in the strip read as a word nobody
           would guess (M61's critic could not identify it). */}
-      <span className="canvas-hud__focus" title="The selected panel">focus: {selectedId ?? '—'}</span>
+      <span className="canvas-hud__focus" title="The selected panel" data-hud-selected={selectedId ?? undefined}>
+        {selected ? <SelectedToken id={selected.id} label={selected.label} state={selected.state} /> : 'nothing selected'}
+      </span>
       <span className="canvas-hud__cost" data-machine-cost-total>
         CPU {formatCpu(machineCost.cpuPercent)} · RAM {formatMemory(machineCost.memoryBytes)}
       </span>
@@ -75,4 +81,16 @@ function formatMemory(bytes: number): string {
   const mib = bytes / (1024 * 1024)
   if (mib < 1024) return `${Math.round(mib)} MB`
   return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
+}
+
+/**
+ * M63. The strip's selected token: the panel's TITLE and its state word,
+ * from the one vocabulary. Subscribes to the agent state itself, per id, so
+ * a busy/idle flip on the selected panel re-renders this span and not the
+ * canvas — the rule every module-level store follows.
+ */
+function SelectedToken({ id, label, state }: { id: string; label: string; state: StateInput }): JSX.Element {
+  const agent = useAgentState(id)
+  const shown = panelState(state, agent)
+  return <>{label} <span className="canvas-hud__word" data-tone={shown.tone} data-state-word>{shown.word}</span></>
 }
