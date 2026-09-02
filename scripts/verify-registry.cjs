@@ -61,7 +61,7 @@ function fakeFactory() {
     create(id) {
       const state = {
         id, attached: false, disposed: false, written: [], cols: 80, rows: 24,
-        focused: false, inputListener: null
+        focused: false, inputListener: null, options: {}
       }
       made.set(id, state)
       return {
@@ -75,6 +75,7 @@ function fakeFactory() {
         onInput(listener) { state.inputListener = listener },
         getSelection() { return state.selection ?? '' },
         paste(data) { state.pasted = data },
+        configure(opts) { Object.assign(state.options, opts) },
         dispose() { state.disposed = true }
       }
     }
@@ -765,6 +766,31 @@ const tick = () => new Promise((r) => setImmediate(r))
 }
 
 console.log('\n' + '='.repeat(60))
+  // M44 — keyboard.1. applyTerminalOptions fans a partial across EVERY
+  //     session's terminal, live AND detached (the terminal object outlives
+  //     its host), and a session created AFTERWARDS inherits the current
+  //     options — the shared mechanism M45's theme and M49's font size reuse.
+  {
+    const { registry, factory } = setup()
+    registry.ensure('p1', SPEC)
+    registry.ensure('p2', { ...SPEC, panelId: 'p2' })
+    // p1 live, p2 detached (never attached): both must still be configured.
+    registry.applyTerminalOptions({ fontSize: 16 })
+    const p1 = factory.made.get('p1')
+    const p2 = factory.made.get('p2')
+    // A session created after the call inherits the accumulated options.
+    registry.ensure('p3', { ...SPEC, panelId: 'p3' })
+    const p3 = factory.made.get('p3')
+    registry.applyTerminalOptions({ theme: { background: '#000' } })
+    ok('keyboard.1 applyTerminalOptions reaches live and detached sessions and a later session inherits the options',
+      typeof registry.applyTerminalOptions === 'function' &&
+        p1.options.fontSize === 16 && p2.options.fontSize === 16 &&
+        p3.options.fontSize === 16 &&
+        p1.options.theme && p1.options.theme.background === '#000' &&
+        p3.options.theme && p3.options.theme.background === '#000',
+      JSON.stringify({ p1: p1.options, p2: p2.options, p3: p3.options }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

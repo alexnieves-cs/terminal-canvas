@@ -4,6 +4,7 @@ module.exports = {
   ...require('../src/renderer/canvas/viewport'),
   ...require('../src/renderer/canvas/canvas-input'),
   ...require('../src/renderer/canvas/lod'),
+  ...require('../src/renderer/canvas/spatial-order'),
   ...require('../src/renderer/canvas/panel-interaction'),
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),

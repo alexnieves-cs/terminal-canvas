@@ -1808,6 +1808,10 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     const h = makeHarness(DIRECT, { attention: sink, idleAfterMs: 200,
       onSend: (channel, payload) => { if (channel === 'agent:state') states.push(payload) } })
     await ringBell(h, 'at4', states)
+    // A SECOND live session that never rang, so resendStates has more than one
+    // to fan to and the "exactly one per session" claim is actually tested.
+    await h.manager.create(spec('at4b', '/bin/sh', ['-c', 'sleep 30']))
+    await waitFor(() => h.manager.attention !== undefined)  // give create() a tick to register
     await waitFor(() => calls.badge.length > 0 && calls.badge[calls.badge.length - 1] === 1)
     h.manager.acknowledge('at4')
     const cleared = await waitFor(() => calls.badge[calls.badge.length - 1] === 0)
@@ -1815,12 +1819,17 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     const before = states.length
     h.manager.resendStates()
     const resent = await waitFor(() => states.length > before)
-    ok('attention.4 acknowledge clears the badge to 0, attention() drops the id, and resendStates re-emits one state per session',
+    // EXACTLY one agent:state per live session, no more, no fewer.
+    const slice = states.slice(before)
+    const byId = new Map()
+    for (const x of slice) byId.set(x.panelId, (byId.get(x.panelId) ?? 0) + 1)
+    ok('attention.4 acknowledge clears the badge to 0, attention() drops the id, and resendStates re-emits EXACTLY one state per live session',
       cleared === true && Array.isArray(attn) && !attn.includes('at4') &&
         typeof h.manager.resendStates === 'function' && resent === true &&
-        states.slice(before).some((x) => x.panelId === 'at4'),
-      JSON.stringify({ badge: calls.badge, attn, resentCount: states.length - before }))
+        byId.get('at4') === 1 && byId.get('at4b') === 1 && slice.length === 2,
+      JSON.stringify({ badge: calls.badge, attn, counts: [...byId] }))
     h.manager.kill('at4')
+    h.manager.kill('at4b')
   }
 
   console.log('\n' + '='.repeat(60))

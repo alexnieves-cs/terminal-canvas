@@ -26,8 +26,16 @@ export function useSpaceHeld(): { isHeld: () => boolean } {
   const isHeld = useCallback(() => heldRef.current, [])
 
   useEffect(() => {
-    const nothingFocused = (): boolean =>
-      document.activeElement === null || document.activeElement === document.body
+    const nothingFocused = (): boolean => {
+      const a = document.activeElement
+      // Body/null is "nothing focused"; the canvas host (M44 made it
+      // focusable so Cmd+Escape can land there and Tab can walk the chrome)
+      // counts too — focusing the canvas IS canvas focus, so Space should
+      // still arm the pan. Without this, a background click now focuses the
+      // host (tabIndex) and Space would never arm — verify:panels 176.
+      return a === null || a === document.body ||
+        (a instanceof HTMLElement && a.getAttribute('role') === 'application')
+    }
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.code !== 'Space') return

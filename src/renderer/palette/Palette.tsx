@@ -521,6 +521,9 @@ export function Palette(props: PaletteProps): JSX.Element {
           // does. display:none would make it unfocusable and hand the
           // keyboard back to the agent with a destructive question on screen.
           className="palette__input palette__input--ghost"
+          role="combobox"
+          aria-expanded
+          aria-controls="palette-listbox"
           value=""
           readOnly
           onChange={() => {}}
@@ -532,6 +535,10 @@ export function Palette(props: PaletteProps): JSX.Element {
           <input
             ref={inputRef}
             className="palette__input"
+            role="combobox"
+            aria-expanded
+            aria-controls="palette-listbox"
+            aria-activedescendant={rows[index] ? `palette-row-${rows[index].id}` : undefined}
             // 'secret' is the only kind that renders as a password field —
             // see InputMode.kind's own doc comment above. Every other kind,
             // command mode included, is ordinary text: nothing else in this
@@ -562,8 +569,10 @@ export function Palette(props: PaletteProps): JSX.Element {
           the thing that shows this text. */}
       {inputMode?.feedback && <div className="palette__number-error">{inputMode.label}</div>}
 
+      {/* M44. A listbox for a screen reader: each runnable row is an option,
+          and the input points at the selected one via aria-activedescendant. */}
       {!inputMode && (
-        <ul className="palette__list">
+        <ul id="palette-listbox" className="palette__list" role="listbox" aria-label="Commands">
           {rows.map((row, i) => {
             // A header whenever the section changes. Sections are contiguous
             // because filterCommands sorts by section first, so one pass over
@@ -577,12 +586,18 @@ export function Palette(props: PaletteProps): JSX.Element {
               // reparent — which moves the rows out from under .palette__list's
               // own scroll container.
               <Fragment key={row.id}>
-                {header && <li className="palette__section">{sectionLabel(row.group)}</li>}
+                {header && <li className="palette__section" role="presentation">{sectionLabel(row.group)}</li>}
                 <li
                   ref={i === index ? selectedRef : null}
                   // M42. The command id, so a check (and only a check) can find
                   // one specific row without matching on its user-facing text.
                   data-command-id={row.id}
+                  // M44. Listbox option; a stable DOM id so the input's
+                  // aria-activedescendant can name the selected row.
+                  id={`palette-row-${row.id}`}
+                  role="option"
+                  aria-selected={i === index}
+                  aria-disabled={row.disabledReason ? true : undefined}
                   className={[
                     'palette__row',
                     i === index ? 'palette__row--selected' : '',

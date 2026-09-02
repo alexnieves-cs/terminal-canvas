@@ -13613,6 +13613,104 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M44 — a keyboard-first canvas. Scoped ids. Two panels side by side;
+    // Cmd+Arrow traverses selection (never wakes), Cmd+Enter wakes+focuses,
+    // Cmd+Escape leaves the terminal, and every panel names itself to a
+    // screen reader.
+    // -------------------------------------------------------------------
+    {
+      const kLog = []
+      const onK = (_e, level, message) => { if (level >= 2) kLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onK)
+      try {
+        backend = createDirectBackend('verify: direct (m44 keyboard)')
+        const home = require('node:os').homedir()
+        const kP = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 300, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] } })
+        // kA left, kB to its right, both on screen.
+        layoutStore.save({ panels: fromPanels([kP('kA', 60), kP('kB', 460)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reK = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reK
+        const seededK = await waitUntil(async () => wc.executeJavaScript(
+          `['kA', 'kB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const selectedNow = () => wc.executeJavaScript(`document.querySelector('.panel--selected')?.dataset.panelId ?? null`)
+        // Select kA through its rail row (goToPanel — selects without waking).
+        await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('.rail-row[data-rail-row="kA"] .rail-row__main')
+          if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        const selA = await selectedNow()
+
+        // keyboard.1. Cmd+Right selects kB (to the right of kA) and spawns
+        //      NOTHING — traversal frames and raises, never wakes.
+        const bLiveBefore = (await sessionMap(wc)).has('kB')
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', key: 'ArrowRight', metaKey: true, bubbles: true }))`)
+        const selB = await waitUntil(async () => (await selectedNow()) === 'kB', 4000)
+        await settle()
+        const bLiveAfter = (await sessionMap(wc)).has('kB')
+        ok('keyboard.1 Cmd+Right moves the selection to the panel on the right and wakes nothing',
+          seededK === true && selA === 'kA' && selB === true && bLiveBefore === false && bLiveAfter === false,
+          JSON.stringify({ seededK, selA, selB, bLiveBefore, bLiveAfter }))
+
+        // keyboard.2. Cmd+Enter on the selection (kB) wakes AND focuses it —
+        //      the deliberate second key. kB now spawns a PTY.
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', key: 'Enter', metaKey: true, bubbles: true }))`)
+        const bWoke = await waitUntil(async () => (await sessionMap(wc)).has('kB'), 8000)
+        ok('keyboard.2 Cmd+Enter wakes and focuses the selection',
+          bWoke === true, JSON.stringify({ bWoke }))
+
+        // keyboard.3. Cmd+Escape leaves the terminal: DOM focus moves OFF
+        //      xterm's hidden textarea and onto the canvas host (role
+        //      application), so Tab from there walks the chrome.
+        // Focus kB's terminal body with a real click first.
+        const bodyPt = await wc.executeJavaScript(`(() => {
+          const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
+          const el = document.querySelector('.panel[data-panel-id="kB"] .panel__slot'); if (!el) return null
+          const r = el.getBoundingClientRect(); const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2)
+          if (x < b.left+2 || x > b.right-2 || y < b.top+2 || y > b.bottom-2) return null
+          return { x, y } })()`)
+        if (bodyPt) { wc.sendInputEvent({ type: 'mouseDown', x: bodyPt.x, y: bodyPt.y, button: 'left', clickCount: 1 })
+                      wc.sendInputEvent({ type: 'mouseUp', x: bodyPt.x, y: bodyPt.y, button: 'left', clickCount: 1 }); await settle() }
+        const onTextareaBefore = await wc.executeJavaScript(`!!(document.activeElement && document.activeElement.classList.contains('xterm-helper-textarea'))`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', metaKey: true, bubbles: true }))`)
+        const leftTerminal = await waitUntil(async () => wc.executeJavaScript(
+          `!(document.activeElement && document.activeElement.classList.contains('xterm-helper-textarea'))`), 3000)
+        const onHost = await wc.executeJavaScript(`document.activeElement === document.querySelector('.canvas[role="application"]')`)
+        ok('keyboard.3 Cmd+Escape moves DOM focus off xterm and onto the canvas host',
+          bodyPt !== null && onTextareaBefore === true && leftTerminal === true && onHost === true,
+          JSON.stringify({ onTextareaBefore, leftTerminal, onHost }))
+
+        // keyboard.4. Names for a screen reader: every panel is a role=group
+        //      with an aria-label, and the rail's Attention list is aria-live.
+        const roles = await wc.executeJavaScript(`(() => {
+          const p = document.querySelector('.panel[data-panel-id="kA"]')
+          const att = document.querySelector('.rail-list--attention')
+          const host = document.querySelector('.canvas[role="application"]')
+          return {
+            role: p && p.getAttribute('role'),
+            label: p && p.getAttribute('aria-label'),
+            live: att && att.getAttribute('aria-live'),
+            hostLabel: host && host.getAttribute('aria-label'),
+            hostDesc: host && host.getAttribute('aria-roledescription')
+          } })()`)
+        ok('keyboard.4 panels are role=group with an aria-label, the Attention list is aria-live, and the host is a named application',
+          roles.role === 'group' && typeof roles.label === 'string' && /terminal/.test(roles.label) &&
+            roles.live === 'polite' && roles.hostLabel === 'Canvas' && typeof roles.hostDesc === 'string' && roles.hostDesc.length > 0,
+          JSON.stringify(roles))
+      } catch (kErr) {
+        for (const id of ['keyboard.1 Cmd+Right moves the selection to the panel on the right and wakes nothing',
+          'keyboard.2 Cmd+Enter wakes and focuses the selection',
+          'keyboard.3 Cmd+Escape moves DOM focus off xterm and onto the canvas host',
+          'keyboard.4 panels are role=group with an aria-label, the Attention list is aria-live, and the host is a named application'])
+          ok(id, false, 'threw: ' + String(kErr && kErr.message || kErr) + ' | renderer: ' + (kLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onK)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

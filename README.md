@@ -126,12 +126,28 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+Shift+A` | Every workspace at once, side by side |
 | `Cmd+Shift+I` | Broadcast keystrokes to every selected terminal (again to stop) |
 | `Cmd+F` | Search every panel's output; Enter flies to the match |
+| `Cmd+←/→/↑/↓` | Move the selection to the nearest panel that way (never wakes it) |
+| `Cmd+Enter` | Focus — and wake — the selected panel |
+| `Cmd+Escape` | Leave the focused terminal; `Tab` from there walks the chrome |
 | `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
 | **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**: `Ctrl+C` as SIGINT, `Ctrl+Z` as SIGTSTP, and `Ctrl+B` because tmux's own prefix is deliberately disabled |
 
 Trackpad: two-finger drag pans, pinch zooms. A wheel over the focused panel
 scrolls that terminal instead of the camera.
+
+## Accessibility
+
+Every canvas shortcut is `Cmd`-gated, because an agent's terminal claims every
+bare key — `Tab` autocompletes, `Escape` interrupts. So `Cmd+←/→/↑/↓` move a
+selection between panels, `Cmd+Enter` steps into one, and `Cmd+Escape` is the
+one way back out of a terminal to the chrome. The canvas is a labelled
+application region, each panel a named group, and the Attention list announces
+a panel that starts waiting. A screen-reader mode (off by default) keeps a text
+mirror of each live terminal so a reader can read it. Its limits are real and
+worth stating: a carded or off-screen panel has no terminal on screen and so
+nothing to mirror, the mirror announces output only as it arrives, and a
+full-screen TUI is read as lines, not as a layout.
 
 ## Stack
 

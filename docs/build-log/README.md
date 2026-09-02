@@ -26,3 +26,4 @@ copy here is deleted.
 | [m41-handoff-edges.md](m41-handoff-edges.md) | M41 — Handoff edges | finished |
 | [m42-search.md](m42-search.md) | M42 — Search across every panel | finished |
 | [m43-attention-beyond-the-window.md](m43-attention-beyond-the-window.md) | M43 — Attention beyond the window | finished |
+| [m44-keyboard-first-canvas.md](m44-keyboard-first-canvas.md) | M44 — A keyboard-first canvas | finished |

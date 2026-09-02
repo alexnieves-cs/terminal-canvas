@@ -7,6 +7,7 @@ import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
 import { useBroadcastChord } from './useBroadcastChord'
+import { useKeyboardNav } from './useKeyboardNav'
 import { useHandoff } from './useHandoff'
 import { shellControl } from '../shell/shell-control'
 import { EdgeIndicators } from './EdgeIndicators'
@@ -248,6 +249,10 @@ export function Canvas({
     [displayPanels]
   )
   const terminalRects = useMemo(() => terminalPanels.map((p) => p.rect), [terminalPanels])
+  // M44. A ref mirror for the keyboard-nav listener, which reads the current
+  // rects without re-subscribing every time a drag moves one.
+  const terminalRectsRef = useRef(terminalRects)
+  terminalRectsRef.current = terminalRects
   // A collapsed group is a presentation request, never a lifecycle command:
   // its panels remain in the registry and merely receive lod.ts's cheap card.
   const collapsedPanelIds = useMemo(() => new Set(
@@ -686,6 +691,12 @@ export function Canvas({
   // useViewport's effect installs the wheel listener exactly once.
   const focusedIdRef = useRef(focusedId)
   focusedIdRef.current = focusedId
+  // M44. Mirrors for the keyboard-nav listener, which installs once and reads
+  // the current values through refs (the useViewport pattern).
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
+  const lastFocusedAtRef = useRef<Record<string, number>>({})
+  lastFocusedAtRef.current = registry.lastFocusedAt()
 
   // Same mirror-into-a-ref pattern, for the reset listener below: it must
   // install once, but panels changes on every frame of a drag.
@@ -2169,6 +2180,20 @@ export function Canvas({
     })
   }, [settingRows])
 
+  // M44: xterm's screen-reader mode, fanned across every session (live and
+  // detached) through the shared applyTerminalOptions. Read on the settings
+  // reload the frame already re-reads, like glow/pips above.
+  const [screenReaderMode, setScreenReaderMode] = useState(false)
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'accessibility.screenReaderMode')
+      if (row) setScreenReaderMode(row.value === true)
+    })
+  }, [settingRows])
+  useEffect(() => {
+    registry.applyTerminalOptions({ screenReaderMode })
+  }, [screenReaderMode])
+
   // M41: read the SAME way, for the handoff hook's "scrollback is off" skip —
   // a handoff whose source recorded nothing says a different sentence when the
   // reason is the setting than when the panel simply printed nothing.
@@ -2764,6 +2789,23 @@ export function Canvas({
     paletteActionsRef.current.toggleBroadcastInput()
   }, [])
   useBroadcastChord({ paletteIsOpen: palette.isOpen, toggle: toggleBroadcastStable })
+  // M44. Cmd+Arrow traverse (never wakes), Cmd+Enter focus+wake, Cmd+Escape
+  // out of the terminal. goToPanel through the ref so the listener never goes
+  // stale; focusPanel is onFocusPanel; releaseFocus is the background release.
+  const goToPanelStable = useCallback((id: string) => { paletteActionsRef.current.goToPanel(id) }, [])
+  const releaseFocusStable = useCallback(() => setFocusedId(null), [])
+  useKeyboardNav({
+    shouldIgnoreKeys,
+    rectsRef: terminalRectsRef,
+    selectedIdRef,
+    focusedIdRef,
+    viewportRef,
+    lastFocusedAtRef,
+    hostRef,
+    goToPanel: goToPanelStable,
+    focusPanel: onFocusPanel,
+    releaseFocus: releaseFocusStable
+  })
   // The banner lives INSIDE the canvas host, unlike every other shell
   // control, so its press would bubble to useCanvasPointer's background
   // onMouseDown — which hit-tests the world point under the banner, selects
@@ -2813,7 +2855,7 @@ export function Canvas({
     panelRows, railRows, railWorkspaces, railAttention,
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   } = useRailModels({
-    registry, palette, panelsRef, panels, displayPanels, dormantIds,
+    registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
     workspaceRows, waitingIds, selectedId
   })
 
@@ -2900,6 +2942,14 @@ export function Canvas({
         // only; the gesture itself never consults this className.
         className={`canvas${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
+        // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
+        // here walks the chrome. role=application because the canvas owns its
+        // own keyboard model (a screen reader must pass keys through, not
+        // intercept them), with a spoken name and a role description.
+        tabIndex={0}
+        role="application"
+        aria-label="Canvas"
+        aria-roledescription="infinite canvas of terminal panels"
         onMouseDownCapture={onCanvasMouseDownCapture}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}

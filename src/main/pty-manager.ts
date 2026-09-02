@@ -1021,6 +1021,10 @@ export class PtyManager {
     // about a reload changes what the agent already wrote.
     this.transcriptPaths.clear()
     if (this.sessions.size === 0) { this.stopIdleTick(); this.stopLiveTick(); this.stopUsageTick() }
+    // M43 fix: the waiting set (and the dock badge) is derived from the
+    // sessions just deleted — recompute so a reload does not leave the badge
+    // stuck at the pre-reload count when a reattached agent emits nothing.
+    this.syncAttention()
   }
 
   /**

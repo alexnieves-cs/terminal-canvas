@@ -1569,6 +1569,71 @@ ok('74 a panel with no kind is not a review panel',
     `inside=${inside} self=${self} far=${far} nearer=${nearer}`)
 }
 
+// M44 — keyboard traversal. Scoped ids. spatial-order.ts is pure, bundled
+// beside viewport.ts. A plus of five panels around a centre C, plus two more
+// off to the side for the cone test.
+{
+  const near = typeof V.nearestInDirection === 'function' ? V.nearestInDirection : null
+  const C = { id: 'C', x: 0, y: 0, w: 100, h: 100 }
+  // A plus: neighbours dead-ahead in each of the four directions.
+  const R = { id: 'R', x: 300, y: 0, w: 100, h: 100 }
+  const Lf = { id: 'L', x: -300, y: 0, w: 100, h: 100 }
+  const Up = { id: 'U', x: 0, y: -300, w: 100, h: 100 }
+  const Dn = { id: 'D', x: 0, y: 300, w: 100, h: 100 }
+
+  // keyboard.1. The cone prefers DEAD-AHEAD over NEARER-but-sideways. `S` is
+  //      nearer along the x-axis than `R` (dx 100 vs 300) but far off it
+  //      (dy 400), so along + 2*perp makes R the winner going right.
+  {
+    const S = { id: 'S', x: 100, y: 400, w: 100, h: 100 }
+    const got = near ? near([C, R, S], 'C', 'right') : null
+    ok('keyboard.1 the direction cone prefers dead-ahead over a nearer but sideways panel',
+      got === 'R', `got=${got}`)
+  }
+
+  // keyboard.2. No candidate in that direction answers null (the selection
+  //      stays put), and an unknown `from` also answers null.
+  {
+    const none = near ? near([C, Dn], 'C', 'up') : 'x'
+    const unknown = near ? near([C, Dn], 'nope', 'down') : 'x'
+    ok('keyboard.2 no candidate in the direction, or an unknown from, answers null',
+      none === null && unknown === null, `none=${none} unknown=${unknown}`)
+  }
+
+  // keyboard.3. Four directions from the same fixture each pick their own
+  //      dead-ahead neighbour and nothing else.
+  {
+    const all = [C, R, Lf, Up, Dn]
+    const r = near ? near(all, 'C', 'right') : null
+    const l = near ? near(all, 'C', 'left') : null
+    const u = near ? near(all, 'C', 'up') : null
+    const d = near ? near(all, 'C', 'down') : null
+    ok('keyboard.3 the four directions each select their own neighbour',
+      r === 'R' && l === 'L' && u === 'U' && d === 'D',
+      JSON.stringify({ r, l, u, d }))
+  }
+
+  // keyboard.4. orderPanels lists ON-SCREEN panels first (by distance from
+  //      the camera centre), then the rest by recency of focus, stable for
+  //      ties. Viewport at origin, 800x600: A and B are on screen, F and G
+  //      are far off; B is nearer the camera centre than A; G was focused
+  //      more recently than F.
+  {
+    const order = typeof V.orderPanels === 'function' ? V.orderPanels : null
+    const A = { id: 'A', x: 600, y: 400, w: 100, h: 100 }   // centre (650,450)
+    const B = { id: 'B', x: 350, y: 250, w: 100, h: 100 }   // centre (400,300) == camera centre
+    const F = { id: 'F', x: 5000, y: 0, w: 100, h: 100 }
+    const G = { id: 'G', x: 6000, y: 0, w: 100, h: 100 }
+    const vp = { x: 0, y: 0, scale: 1 }
+    const size = { w: 800, h: 600 }
+    const focusedAt = { F: 10, G: 20 }
+    const got = order ? order([A, B, F, G], vp, size, focusedAt) : null
+    ok('keyboard.4 orderPanels puts on-screen first by camera distance, then the rest by focus recency',
+      Array.isArray(got) && JSON.stringify(got) === JSON.stringify(['B', 'A', 'G', 'F']),
+      JSON.stringify(got))
+  }
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

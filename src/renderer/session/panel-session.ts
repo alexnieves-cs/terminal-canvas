@@ -58,6 +58,9 @@ export type PanelSpecTemplate = Omit<PanelSpec, 'cols' | 'rows'>
  * own interface is M4b's; until then, adding a member here means deciding
  * which of the two audiences it is for.
  */
+/** M44. A partial of xterm's terminal options — what applyTerminalOptions fans out. */
+export type TerminalOptions = Record<string, unknown>
+
 export interface SessionHandle {
   readonly host: HTMLElement
   /** Open (first time only), take a WebGL context, fit. */
@@ -76,6 +79,12 @@ export interface SessionHandle {
   getSelection(): string
   /** Backs menu-driven Cmd+V. Not a raw pty.write: see session-factory.ts. */
   paste(data: string): void
+  /**
+   * M44. Set xterm options on this session's terminal — the fan-out target of
+   * registry.applyTerminalOptions. A partial merged into term.options; safe on
+   * a terminal that has never been opened (the object outlives its host).
+   */
+  configure(options: TerminalOptions): void
   /** Buffer position of the first occurrence of `word`, or null. */
   locate(word: string): { col: number; row: number } | null
   /** Cell metrics in CSS pixels — transform-blind, like xterm's own. */

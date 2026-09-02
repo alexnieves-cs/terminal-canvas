@@ -2411,3 +2411,35 @@ it would only pass because the verify harness does not wire `window-lifecycle`, 
 harness-not-app trap check 32 records. `verify:panels` `attention.1` therefore tests the one
 path that works: a dispatched `attention:jump` frames and selects an off-screen panel and spawns
 nothing.
+
+**The canvas host is FOCUSABLE (M44), and any guard that read `activeElement === body` must
+also accept it (`Canvas.tsx` host `tabIndex`/`role`, `useSpaceHeld.ts`).** M44 gave the host
+`tabIndex={0}` and `role="application"` so `Cmd+Escape` can land DOM focus there and `Tab` can
+walk the chrome. A silent consequence: a background CLICK now focuses the host, so
+`document.activeElement` after a background click is the host, NOT `<body>` as it was for the
+life of the app before. Every guard that armed only when "nothing is focused" by testing
+`activeElement === body` breaks — `useSpaceHeld`'s space-pan arm did exactly that and
+`verify:panels` 176 caught it. The fix is to treat the host as canvas-focus: `useSpaceHeld`
+arms when the active element is null, body, OR the element with `role="application"`, because
+focusing the canvas IS canvas focus. A FOURTH such guard added later inherits this and nothing
+will remind whoever adds it.
+
+**Keyboard traversal moves SELECTION and never wakes; only the deliberate second key wakes
+(`renderer/canvas/useKeyboardNav.ts`, `spatial-order.ts`).** `Cmd+Arrow` runs
+`nearestInDirection` (pure: candidates in the half-plane ahead, scored `along + 2*perp` so
+dead-ahead beats nearer-but-sideways) and frames the result through `goToPanel` — the
+switcher's verb, which raises and frames but NEVER wakes, because `assignTiers` pins the
+FOCUSED panel live unconditionally and arrowing across a restored twelve-panel canvas with
+focus attached would spawn a PTY per step and blow `LIVE_BUDGET`. `Cmd+Enter` is the second,
+deliberate key: it runs the CLICK path (`onFocusPanel` — clears dormancy, spawns, focuses).
+This is the same "dormancy outranks focus, and a wake is a separate deliberate act" rule the
+registry is built on, reached from the keyboard.
+
+**`registry.applyTerminalOptions` is the ONE fan-out of xterm options across every session,
+present and future (`session-registry.ts`, `session-factory.ts`).** It accumulates the options
+and applies them to every existing handle's `configure` AND to every handle created afterwards,
+so "all terminals" genuinely means present and future. `configure` on a handle whose terminal
+does not exist yet stores the options as PENDING and applies them when `createTerminal` first
+runs — it must not `ensure()` a Terminal into existence just to set a font size on a carded
+panel that has never gone live. M44's screen-reader toggle is its first caller; M45's theme and
+M49's font size are meant to reuse it rather than each writing a one-off loop.

@@ -2898,6 +2898,20 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ notify, sound }))
 }
 
+// M44 — keyboard.1. The screen-reader setting: a boolean, OFF by default
+//      (xterm's screen-reader mode maintains a live DOM mirror of the buffer,
+//      expensive precisely because everything else here avoids DOM text under
+//      WebGL), in its own Accessibility category so the menu and palette
+//      cannot drift on a typo.
+{
+  const def = L.settingDef('accessibility.screenReaderMode')
+  ok('keyboard.1 accessibility.screenReaderMode is a boolean, off by default, in the Accessibility category',
+    def !== undefined && def.type === 'boolean' && def.default === false &&
+      typeof L.ACCESSIBILITY_CATEGORY === 'string' && def.category === L.ACCESSIBILITY_CATEGORY &&
+      L.resolveSetting({}, 'accessibility.screenReaderMode') === false,
+    JSON.stringify(def))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

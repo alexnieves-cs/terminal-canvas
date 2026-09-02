@@ -186,10 +186,22 @@ function TerminalPanelImpl({
     }
   }, [live, session.id, session.handle.host, onSlotMount, onSlotUnmount])
 
+  // M44. The honest label, computed once and used for BOTH the title span
+  // below and the panel's screen-reader name — same chain, one source.
+  const panelLabel =
+    title ??
+    (session.status.kind === 'running' ? session.status.command : undefined) ??
+    session.spec.command ??
+    'login shell'
+
   return (
     <div
       className={`panel${selected ? ' panel--selected' : ''}${agentClass}`}
       data-panel-id={session.id}
+      // M44. A named group for a screen reader; the kind rides the label so
+      // "claude — terminal" reads as one thing rather than an anonymous div.
+      role="group"
+      aria-label={`${panelLabel} — terminal`}
       // A file panel carries data-panel-kind="file" and a review node
       // data-panel-kind="review"; this is the third kind's own marker,
       // named explicitly rather than left absent so a selector meaning "the
@@ -231,12 +243,7 @@ function TerminalPanelImpl({
             `spec.command` remains as the pre-spawn fallback: a dormant or
             never-promoted panel has no status to read, and showing the
             command it WILL run is better than showing nothing. */}
-        <span className="panel__title">
-          {title ??
-            (session.status.kind === 'running' ? session.status.command : undefined) ??
-            session.spec.command ??
-            'login shell'}
-        </span>
+        <span className="panel__title">{panelLabel}</span>
         {/*
           M20. The permission mode the panel was STARTED in, and only ever
           that: read off the session's own spec, which is the spec that
