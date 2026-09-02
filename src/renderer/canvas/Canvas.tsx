@@ -7,6 +7,7 @@ import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
 import { useBroadcastChord } from './useBroadcastChord'
+import { useHandoff } from './useHandoff'
 import { shellControl } from '../shell/shell-control'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
@@ -77,7 +78,7 @@ import {
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
-  addLink, setRestartOnExit, linksOf,
+  addLink, setRestartOnExit, setLinkAutomation, linksOf,
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
@@ -99,7 +100,8 @@ import type { AutomationRow } from '../shell/Inspector'
 import { FileTree } from '../shell/FileTree'
 import { useShellChrome } from '../shell/useShellChrome'
 import { railLabel } from '../shell/rail-rows'
-import { isRestartable, isRunning } from '../shell/inspector-fields'
+import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
+import type { LinkAutomation } from '@shared/handoff'
 
 
 const registry = createRegistry({
@@ -2159,6 +2161,19 @@ export function Canvas({
     })
   }, [settingRows])
 
+  // M41: read the SAME way, for the handoff hook's "scrollback is off" skip —
+  // a handoff whose source recorded nothing says a different sentence when the
+  // reason is the setting than when the panel simply printed nothing.
+  const [scrollbackPersist, setScrollbackPersist] = useState(true)
+  const scrollbackPersistRef = useRef(scrollbackPersist)
+  scrollbackPersistRef.current = scrollbackPersist
+  useEffect(() => {
+    void window.canvas.settings.list().then((rows) => {
+      const row = rows.find((r) => r.id === 'scrollback.persist')
+      if (row) setScrollbackPersist(row.value === true)
+    })
+  }, [settingRows])
+
   // Rail and inspector visibility, persisted through main's settings store and
   // chorded on Cmd+\ / ⇧Cmd+\. Sits beside glowEnabled and pipsEnabled above
   // because it is the same kind of state and reads exactly the way they do:
@@ -2496,7 +2511,7 @@ export function Canvas({
   // cascade only along a finite directed chain.
   const [automationResult, setAutomationResult] = useState<Map<string, string>>(() => new Map())
   const automationRowsBuilt: AutomationRow[] = panels.flatMap((source) => linksOf(source)
-    .filter((link) => link.automation?.kind === 'restart-on-exit')
+    .filter((link) => link.automation !== undefined)
     .map((link) => {
       const target = panels.find((panel) => panel.rect.id === link.to)
       return target === undefined ? null : {
@@ -2504,7 +2519,9 @@ export function Canvas({
         to: target.rect.id,
         source: railLabel(source, undefined),
         target: railLabel(target, undefined),
-        enabled: link.automation!.enabled
+        enabled: link.automation!.enabled,
+        automation: link.automation!,
+        sentence: describeAutomation(link.automation!)
       }
     })
     .filter((row): row is AutomationRow => row !== null))
@@ -2531,6 +2548,29 @@ export function Canvas({
     }
   }), [registry, restartWithSpec])
 
+  // M41: the handoff kind, in its own hook beside the restart effect above —
+  // it reacts to the SAME registry.onExit plus busy->idle transitions, reads
+  // main's scrollback tail as the payload, and pastes it (never writes). A
+  // stable setter so the hook's effect does not re-subscribe every render.
+  const setHandoffResult = useCallback((key: string, sentence: string) => {
+    setAutomationResult((current) => new Map(current).set(key, sentence))
+  }, [])
+  const scrollbackEnabled = useCallback(() => scrollbackPersistRef.current, [])
+  // The wake half of onSelectPanel WITHOUT the select/raise: a handoff must
+  // start its target but must not steal the selection or the camera. Clears
+  // Canvas's dormantIds (assignTiers reads it) alongside the registry flag,
+  // so a framed target actually promotes and spawns.
+  const wakeTarget = useCallback((id: string) => {
+    setDormantIds((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
+    registry.wake(id)
+  }, [registry])
+  useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled })
+
   const onSetRestartOnExit = useCallback((from: string, to: string, enabled: boolean) => {
     setPanels((current) => {
       const next = setRestartOnExit(current, from, to, enabled)
@@ -2539,6 +2579,22 @@ export function Canvas({
       return next
     })
     if (!enabled) setAutomationResult((current) => {
+      const next = new Map(current)
+      next.delete(`${from}:${to}`)
+      return next
+    })
+  }, [commitHistory])
+
+  // M41: the one-rule-per-link mutator, the handoff control's verb. Same
+  // shape as onSetRestartOnExit above, which is now a thin call into it.
+  const onSetLinkAutomation = useCallback((from: string, to: string, automation: LinkAutomation) => {
+    setPanels((current) => {
+      const next = setLinkAutomation(current, from, to, automation)
+      if (next === current) return current
+      commitHistory(next)
+      return next
+    })
+    if (!automation.enabled) setAutomationResult((current) => {
       const next = new Map(current)
       next.delete(`${from}:${to}`)
       return next
@@ -2992,6 +3048,9 @@ export function Canvas({
                 a palette search is a dead end for whoever arrived by the
                 chord. shellControl so the press never moves DOM focus off
                 the terminal that is still receiving the keystrokes. */}
+            {/* onMouseDown overrides shellControl's own (which only
+                preventDefaults): onBroadcastStopMouseDown does that AND
+                stopPropagation, the extra this one control inside .canvas needs. */}
             <button type="button" className="link-banner__stop" aria-label="Stop broadcasting"
               {...shellControl(toggleBroadcastStable)} onMouseDown={onBroadcastStopMouseDown}>Stop</button>
             <span className="link-banner__hint">⌘⇧I</span>
@@ -3050,6 +3109,7 @@ export function Canvas({
         onRemoveLink={paletteActions.removeLink}
         onRelabelLink={paletteActions.beginRelabelLink}
         onSetRestartOnExit={onSetRestartOnExit}
+        onSetLinkAutomation={onSetLinkAutomation}
         automationResults={automationResult}
         automations={automationRows}
         review={reviewModel}

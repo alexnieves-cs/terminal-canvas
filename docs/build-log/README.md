@@ -23,3 +23,4 @@ copy here is deleted.
 | [m38-agents-outlive-the-app.md](m38-agents-outlive-the-app.md) | M38 — Agents that outlive the app | finished |
 | [m39-durable-scrollback.md](m39-durable-scrollback.md) | M39 — Durable scrollback | finished |
 | [m40-broadcast-input.md](m40-broadcast-input.md) | M40 — Broadcast input: the exits | finished |
+| [m41-handoff-edges.md](m41-handoff-edges.md) | M41 — Handoff edges | finished |

@@ -1148,6 +1148,35 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
     `noArg=${JSON.stringify(noArg.links)} distinct=${new Set([none, one, labelled, automated]).size}`)
 }
 
+// M41 — handoff.1. The link row carries the handoff state as a NAMED value
+//      ('off' | 'exit' | 'idle'), the automation list's sentence names the
+//      trigger AND the bound (the rule states its own limit where it is
+//      made), and the control's title states the NEXT state — a three-state
+//      cycle button whose label only said the current state would leave the
+//      user guessing what a press does.
+{
+  const desc = typeof R.describeAutomation === 'function' ? R.describeAutomation : null
+  const ctl = typeof R.handoffControl === 'function' ? R.handoffControl : null
+  const m = (links) => R.buildInspectorModel(panel('a', { links }), undefined, undefined, [panel('a', { links }), panel('b')])
+  const exitRow = m([{ to: 'b', automation: { kind: 'handoff', enabled: true, trigger: 'exit' } }]).links[0]
+  const idleRow = m([{ to: 'b', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }]).links[0]
+  const offRow = m([{ to: 'b', automation: { kind: 'handoff', enabled: false, trigger: 'idle' } }]).links[0]
+  const bareRow = m([{ to: 'b' }]).links[0]
+  const restartRow = m([{ to: 'b', automation: { kind: 'restart-on-exit', enabled: true } }]).links[0]
+  const sExit = desc ? desc({ kind: 'handoff', enabled: true, trigger: 'exit' }) : null
+  const sIdle = desc ? desc({ kind: 'handoff', enabled: true, trigger: 'idle' }) : null
+  const sRestart = desc ? desc({ kind: 'restart-on-exit', enabled: true }) : null
+  const cExit = ctl ? ctl('exit') : null
+  const cOff = ctl ? ctl('off') : null
+  const cIdle = ctl ? ctl('idle') : null
+  ok('handoff.1 link rows name the handoff state, the sentence names trigger and bound, the control names the next state',
+    desc !== null && ctl !== null &&
+      exitRow.handoff === 'exit' && idleRow.handoff === 'idle' && offRow.handoff === 'off' && bareRow.handoff === 'off' && restartRow.handoff === 'off' &&
+      /handoff on exit · last 200 lines/.test(sExit) && /handoff after a turn · last 200 lines/.test(sIdle) && /restart/.test(sRestart) &&
+      cExit.label === 'handoff: exit' && /idle/.test(cExit.title) && /exit/.test(cOff.title) && /off/.test(cIdle.title),
+    JSON.stringify({ exitRow, sExit, sIdle, sRestart, cExit, cOff, cIdle }))
+}
+
 // M16: the file node's view model, and the rail/inspector arms it feeds.
 // Renumbered from M13's original 72-76: main landed a DIFFERENT M13 while
 // this branch was in flight ("links between panels", backlog #24), which

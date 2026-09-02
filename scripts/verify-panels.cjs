@@ -13302,6 +13302,166 @@ app.whenReady().then(async () => {
       const chordOff = await waitUntil(async () => (await bannerText()) === null, 3000)
       ok('broadcast.2 Cmd+Shift+I arms the mode and again disarms it',
         chordOn === true && chordOff === true, `on=${chordOn} off=${chordOff}`)
+
+      // broadcast.3. The two guards the M40 verifier found unpinned, the
+      //      shape checks 34 and 7b/33b establish for every toggle chord: a
+      //      HELD key (repeat:true) must not re-toggle, and the chord stands
+      //      down while the palette owns the keyboard. The two-panel
+      //      selection from broadcast.1 is still intact, so an ungated chord
+      //      WOULD arm — that is what makes each assertion non-vacuous.
+      //      Deleting `if (event.repeat) return` or `if (paletteIsOpen())
+      //      return` from useBroadcastChord turns this red.
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyI', key: 'I', metaKey: true, shiftKey: true, repeat: true, bubbles: true }))`)
+      await sleep(400)
+      const repeatArmed = await bannerText()
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      const paletteUp = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 3000)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyI', key: 'I', metaKey: true, shiftKey: true, bubbles: true }))`)
+      await sleep(400)
+      const gatedArmed = await bannerText()
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+      await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.palette') === null`), 3000)
+      ok('broadcast.3 the chord ignores auto-repeat and stands down while the palette is open',
+        repeatArmed === null && paletteUp === true && gatedArmed === null,
+        JSON.stringify({ repeatArmed, paletteUp, gatedArmed }))
+    }
+
+    // -------------------------------------------------------------------
+    // M41 — handoff edges. Scoped ids. A seeded layout of four terminal
+    // panels with two handoff rules on disk, reloaded so the rules arrive
+    // through the durable door; the sessions are woken by real card clicks,
+    // the source is driven to exit through its own PTY, and the observable
+    // is the TARGET's M39 log — a bracketed paste that reached a PTY echoes
+    // there, and nothing else in the renderer can say "this PTY received
+    // these bytes".
+    // -------------------------------------------------------------------
+    {
+      const rendererLog41 = []
+      const onConsole41 = (_e, level, message) => { if (level >= 2) rendererLog41.push(String(message).slice(0, 220)) }
+      const onGone41 = (_e, d) => rendererLog41.push('RENDER-GONE ' + JSON.stringify(d))
+      wc.on('console-message', onConsole41)
+      wc.on('render-process-gone', onGone41)
+      try {
+        backend = createDirectBackend('verify: direct (m41 handoff)')
+        const home = require('node:os').homedir()
+        const hPanel = (id, x, y, links) => ({
+          kind: 'terminal', rect: { id, x, y, w: 320, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] },
+          ...(links ? { links } : {})
+        })
+        const rule = (to) => [{ to, automation: { kind: 'handoff', enabled: true, trigger: 'exit' } }]
+        // hA/hB/hC kept in the first ~800px so their cards are clickable (x:840
+        // was off-screen in the first draft and cUp came back false); hD far off
+        // screen, so its wake cannot spawn until the camera is framed onto it —
+        // the "queued" arm made deterministic.
+        layoutStore.save({
+          panels: fromPanels([hPanel('hA', 60, 60, rule('hB')), hPanel('hB', 60, 340), hPanel('hC', 440, 60, rule('hD')), hPanel('hD', 6000, 60)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reloaded41 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload()
+        await reloaded41
+        const seeded = await waitUntil(async () => wc.executeJavaScript(
+          `['hA', 'hB', 'hC', 'hD'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const cardPoint = async (id) => wc.executeJavaScript(`(() => {
+          const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
+          const p = document.querySelector('.panel[data-panel-id="${id}"] .panel__card')
+          if (!p) return null
+          const r = p.getBoundingClientRect()
+          const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+          if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) return null
+          return { x, y }
+        })()`)
+        // Wake a dormant card with a real click and wait for its PTY to exist —
+        // no focus needed: typing goes through ptyManager.write(id, …), the same
+        // deterministic path check "first" uses, so a missed body-click cannot
+        // silently send the keystrokes nowhere.
+        const wake41 = async (id) => {
+          const pt = await cardPoint(id)
+          if (pt) {
+            wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+            wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+          }
+          await settle()
+          return await waitUntil(async () => (await sessionMap(wc)).has(id), 10000)
+        }
+        // The automation sentence renders in the inspector's automation LIST,
+        // which shows every rule when ANY panel is selected. Select a live
+        // panel through its rail row (goToPanel — never wakes) and open the
+        // inspector, then read the result span by its data-automation-result.
+        const showSentences = async (selectId) => {
+          await wc.executeJavaScript(`(() => {
+            const row = document.querySelector('.rail-row[data-rail-row="${selectId}"] .rail-row__main')
+            if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+            return !!row })()`)
+          await settle()
+          // Local: the M13 block's ensureInspectorOpen is out of scope here.
+          // check 80 drives ⇧⌘\\ and never restores the inspector, so it may
+          // be collapsed — a collapsed region still renders the automation
+          // list but with a zero-sized rect, so open it before reading.
+          const collapsed = await wc.executeJavaScript(
+            `document.querySelector('.shell').className.includes('inspector-collapsed')`)
+          if (collapsed) {
+            await wc.executeJavaScript(`(() => {
+              const b = document.querySelector('.shell__inspector-toggle')
+              if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+              return true })()`)
+            await settle()
+          }
+        }
+        const resultOf = (key) => wc.executeJavaScript(
+          `(() => { const el = document.querySelector('[data-automation-result="${key}"]'); return el ? el.textContent : null })()`)
+        const logHas41 = async (id, token) => (await scrollbackLog.tail(id, 80)).some((l) => l.includes(token))
+
+        // handoff.1. Both live. A prints a token and exits; B's log carries the
+        //      token (the bracketed paste reached B's PTY) and a header naming
+        //      the source, and the rule's row reads "handed off N lines after
+        //      exit 0". ptyManager.write types into A's PTY directly — the
+        //      observable throughout is the durable log, not a renderer hook.
+        const bUp = seeded ? await wake41('hB') : false
+        const aUp = seeded ? await wake41('hA') : false
+        if (aUp) ptyManager.write('hA', 'echo HANDOFF-TOKEN-4411\rexit\r')
+        const sourceRan = aUp ? await waitUntil(async () => logHas41('hA', 'HANDOFF-TOKEN-4411'), 10000) : false
+        const delivered = await waitUntil(async () => (await logHas41('hB', 'HANDOFF-TOKEN-4411')) ? true : false, 12000)
+        const header1 = await logHas41('hB', 'handoff from')
+        await showSentences('hB')
+        const row1 = await waitUntil(async () => { const t = await resultOf('hA:hB'); return t && /handed off \d+ lines after exit 0/.test(t) ? t : false }, 5000)
+        ok('handoff.1 a handoff on exit pastes the source\'s recorded tail into the live target, and the row says how much',
+          seeded === true && bUp === true && aUp === true && sourceRan === true &&
+            delivered === true && header1 === true && typeof row1 === 'string',
+          JSON.stringify({ seeded, bUp, aUp, sourceRan, delivered, header1, row1, renderer: rendererLog41.slice(-4) }))
+
+        // handoff.2. The target is dormant AND off screen. After the exit the
+        //      row reads "queued", the target is woken but NOT spawned (no
+        //      fitted terminal — the fit-before-spawn rule), and framing it
+        //      through its rail row promotes, spawns and delivers the queue.
+        const cUp = seeded ? await wake41('hC') : false
+        if (cUp) ptyManager.write('hC', 'echo HANDOFF-TOKEN-4412\rexit\r')
+        const sourceRan2 = cUp ? await waitUntil(async () => logHas41('hC', 'HANDOFF-TOKEN-4412'), 10000) : false
+        await showSentences('hC')
+        const queued = await waitUntil(async () => { const t = await resultOf('hC:hD'); return t && /queued/.test(t) ? t : false }, 12000)
+        const dState = (await wc.executeJavaScript(`window.__m4aSessions()`)).find((x) => x.id === 'hD') || null
+        const framed = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('.rail-row[data-rail-row="hD"] .rail-row__main'); if (!row) return false
+          row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        const dUp = framed ? await waitUntil(async () => (await sessionMap(wc)).has('hD'), 15000) : false
+        const delivered2 = await waitUntil(async () => (await logHas41('hD', 'HANDOFF-TOKEN-4412')) ? true : false, 15000)
+        await showSentences('hC')
+        const row2 = await waitUntil(async () => { const t = await resultOf('hC:hD'); return t && /handed off \d+ lines after exit 0/.test(t) ? t : false }, 5000)
+        ok('handoff.2 an off-screen dormant target is woken but not spawned, the row says queued, and framing it delivers',
+          cUp === true && sourceRan2 === true && typeof queued === 'string' && dState !== null && dState.dormant === false && dState.spawned === false &&
+            framed === true && dUp === true && delivered2 === true && typeof row2 === 'string',
+          JSON.stringify({ cUp, sourceRan2, queued, dState, framed, dUp, delivered2, row2, renderer: rendererLog41.slice(-4) }))
+      } catch (handoffErr) {
+        ok('handoff.1 a handoff on exit pastes the source\'s recorded tail into the live target, and the row says how much',
+          false, 'threw: ' + String(handoffErr && handoffErr.message || handoffErr) + ' | renderer: ' + (rendererLog41.slice(-8).join(' || ') || '(none)'))
+        ok('handoff.2 an off-screen dormant target is woken but not spawned, the row says queued, and framing it delivers',
+          false, 'threw (see handoff.1)')
+      } finally {
+        wc.removeListener('console-message', onConsole41)
+        wc.removeListener('render-process-gone', onGone41)
+      }
     }
 
   } catch (error) {

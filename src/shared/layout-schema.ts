@@ -3,6 +3,7 @@ import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
+import type { LinkAutomation } from './handoff'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import {
   AGENT_KINDS,
@@ -81,8 +82,12 @@ export interface PersistedPanelBase {
   links?: {
     to: string
     label?: string
-    /** #24: a guarded, auditable action owned by this directed link. */
-    automation?: { kind: 'restart-on-exit'; enabled: boolean }
+    /**
+     * #24: a guarded, auditable action owned by this directed link. ONE per
+     * link (M41): a link is a directed pair and carries one meaning, so a
+     * handoff REPLACES a restart rule rather than stacking beside it.
+     */
+    automation?: LinkAutomation
   }[]
 }
 
@@ -409,6 +414,23 @@ function parseReviewSubject(raw: unknown, id: string, warnings: string[]): Revie
  * runs per panel and the surviving set is not known until every panel has
  * parsed. parseWorkspace does that second pass. verify:layout 110, 111.
  */
+/**
+ * Either automation kind, or 'malformed' for a PRESENT value that is neither —
+ * absent stays undefined and warns nothing (every pre-M25 file). A handoff
+ * needs a trigger the code knows; an unknown one is malformed rather than
+ * defaulted, because a rule that fires on a trigger its owner did not write
+ * is exactly the surprise this parser exists to refuse.
+ */
+function parseLinkAutomation(raw: unknown): LinkAutomation | undefined | 'malformed' {
+  if (raw === undefined) return undefined
+  if (!isRecord(raw) || typeof raw.enabled !== 'boolean') return 'malformed'
+  if (raw.kind === 'restart-on-exit') return { kind: 'restart-on-exit', enabled: raw.enabled }
+  if (raw.kind === 'handoff' && (raw.trigger === 'exit' || raw.trigger === 'idle')) {
+    return { kind: 'handoff', enabled: raw.enabled, trigger: raw.trigger }
+  }
+  return 'malformed'
+}
+
 function parseLinks(
   raw: unknown,
   id: string,
@@ -435,14 +457,13 @@ function parseLinks(
       continue
     }
     seen.add(entry.to)
-    const automation = entry.automation
-    const parsedAutomation = isRecord(automation) && automation.kind === 'restart-on-exit' &&
-      typeof automation.enabled === 'boolean'
-      ? { automation: { kind: 'restart-on-exit' as const, enabled: automation.enabled } }
-      : automation === undefined
-        ? {}
-        : (warnings.push(`dropped automation on link ${id} -> ${entry.to}: malformed`), {})
-    out.push({ to: entry.to, ...(isStr(entry.label) ? { label: entry.label } : {}), ...parsedAutomation })
+    const automation = parseLinkAutomation(entry.automation)
+    if (automation === 'malformed') warnings.push(`dropped automation on link ${id} -> ${entry.to}: malformed`)
+    out.push({
+      to: entry.to,
+      ...(isStr(entry.label) ? { label: entry.label } : {}),
+      ...(automation === undefined || automation === 'malformed' ? {} : { automation })
+    })
   }
   // Undefined rather than [], so a panel whose links were all dropped
   // serialises identically to one that never had any — the same
@@ -1126,23 +1147,27 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     if (seen.has(from)) return false
     seen.add(from)
     const panel = byId.get(from)
+    // M41: any ENABLED rule of EITHER kind closes a cycle. A handoff a->b on
+    // idle plus a restart b->a is an infinite ping-pong between two
+    // interactive agents; a disabled rule fires nothing and closes nothing.
     return (panel?.links ?? []).some((link) =>
-      link.automation?.kind === 'restart-on-exit' && link.automation.enabled && reaches(link.to, sought, seen)
+      link.automation !== undefined && link.automation.enabled && reaches(link.to, sought, seen)
     )
   }
   for (const source of panels) {
     for (const link of source.links ?? []) {
-      if (link.automation?.kind !== 'restart-on-exit' || !link.automation.enabled) continue
+      const rule = link.automation
+      if (rule === undefined || !rule.enabled) continue
       // Temporarily remove this link, otherwise every directed edge trivially
       // reaches its own source through itself.
       clearAutomation(source, link.to)
       if (reaches(link.to, source.id)) {
-        warnings.push(`dropped automation on link ${source.id} -> ${link.to}: restart cycle`)
+        warnings.push(`dropped automation on link ${source.id} -> ${link.to}: ${rule.kind === 'handoff' ? 'handoff' : 'restart'} cycle`)
         continue
       }
       // It was safe, so restore the exact durable action.
       source.links = (source.links ?? []).map((candidate) => candidate.to === link.to
-        ? { ...candidate, automation: { kind: 'restart-on-exit', enabled: true } }
+        ? { ...candidate, automation: rule }
         : candidate)
     }
   }
