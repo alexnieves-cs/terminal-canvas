@@ -89,6 +89,15 @@ export interface Command {
    */
   searchText?: string
   /**
+   * M64. A path, matched ONLY as a contiguous substring — never through the
+   * fuzzy subsequence matcher, which lights scattered letters across
+   * /private/var/folders for any five-letter query.
+   */
+  pathText?: string
+  /** M64. The Go-to row's state word and its `state:` order (needs-you first). */
+  stateWord?: string
+  statePriority?: number
+  /**
    * A transient count the VIEW composes into what it renders — never baked
    * into `title`. A workspace's waiting count is the case today: it changes
    * as agents finish, and `title` feeds `haystack()` unconditionally, so a
@@ -157,7 +166,10 @@ export interface Command {
  */
 export const haystack = (c: Command): string => {
   let s = c.searchText ? `${c.searchText} ${c.title}` : c.title
-  if (c.subtitle) s += ` ${c.subtitle}`
+  // M64. A row that carries a path keeps its subtitle OUT of the fuzzy
+  // haystack: the subtitle is the state word and the shortened path, and a
+  // path in the subsequence matcher is exactly what pathText exists to stop.
+  if (c.subtitle && c.pathText === undefined) s += ` ${c.subtitle}`
   return s
 }
 
@@ -191,17 +203,50 @@ export function filterCommands(
   // which hiddenAtRest applies. Inside a scope the whole point is to SEE the
   // administration rows, so they are shown there with an empty query too.
   const resting = query === '' && scope === null
+  // M64. `state:<word>` — the who-needs-me list. Only Go-to rows (the ones
+  // carrying a state word) survive, filtered by the word and ordered by
+  // state priority rather than by score, so `state:` alone lists every
+  // panel needs-you first.
+  const stateQuery = parseStateQuery(query)
+  if (stateQuery !== null && scope === null) {
+    return commands
+      .map((command, order) => ({ command, order }))
+      .filter(({ command }) => command.stateWord !== undefined && command.stateWord.includes(stateQuery))
+      .sort((a, b) => ((a.command.statePriority ?? 99) - (b.command.statePriority ?? 99)) || (a.order - b.order))
+      .map((s) => s.command)
+  }
   const scored: Array<{ command: Command; score: number; order: number }> = []
   commands.forEach((command, order) => {
     if (scope !== null ? command.scope !== scope : resting && command.hiddenAtRest) return
-    const match = fuzzyMatch(query, haystack(command))
-    if (match) scored.push({ command, score: match.score, order })
+    const match = matchCommand(query, command)
+    if (match !== null) scored.push({ command, score: match, order })
   })
   scored.sort((a, b) =>
     (sectionIndex(a.command.group) - sectionIndex(b.command.group)) ||
     (b.score - a.score) ||
     (a.order - b.order))
   return scored.map((s) => s.command)
+}
+
+/** `state:needs` → `needs`; `state:` → ``; anything else → null. */
+export function parseStateQuery(query: string): string | null {
+  const m = /^state:\s*(.*)$/i.exec(query.trim())
+  return m === null ? null : m[1].trim().toLowerCase()
+}
+
+/** A low, fixed score for a contiguous path hit: below any title match, above nothing. */
+const PATH_SCORE = 1
+
+/**
+ * The fuzzy match over the haystack, and — only when that fails — a
+ * contiguous, case-insensitive substring match over `pathText`.
+ */
+export function matchCommand(query: string, command: Command): number | null {
+  const fuzzy = fuzzyMatch(query, haystack(command))
+  if (fuzzy !== null) return fuzzy.score
+  const q = query.trim().toLowerCase()
+  if (command.pathText !== undefined && q !== '' && command.pathText.toLowerCase().includes(q)) return PATH_SCORE
+  return null
 }
 
 const runnable = (c: Command | undefined): boolean => c !== undefined && c.disabledReason === undefined
@@ -231,9 +276,9 @@ export function bestMatchIndex(commands: Command[], query: string): number {
   let bestScore = -Infinity
   commands.forEach((command, i) => {
     if (!runnable(command)) return
-    const match = fuzzyMatch(query, haystack(command))
-    if (match && match.score > bestScore) {
-      bestScore = match.score
+    const score = matchCommand(query, command)
+    if (score !== null && score > bestScore) {
+      bestScore = score
       best = i
     }
   })

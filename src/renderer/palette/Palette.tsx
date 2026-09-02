@@ -317,6 +317,13 @@ export function Palette(props: PaletteProps): JSX.Element {
   // perfectly visible.
   //
   // Except when the pointer is what moved the selection: see pointerSelectRef.
+  // M64. A NEW QUERY starts at the top. Without this the list keeps the
+  // scroll offset of the previous query, and the first — best — match sits
+  // hidden under the sticky section header (M61's critic, finding 7).
+  const listRef = useRef<HTMLUListElement | null>(null)
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0
+  }, [query])
   useEffect(() => {
     if (pointerSelectRef.current) {
       pointerSelectRef.current = false
@@ -590,7 +597,7 @@ export function Palette(props: PaletteProps): JSX.Element {
       {/* M44. A listbox for a screen reader: each runnable row is an option,
           and the input points at the selected one via aria-activedescendant. */}
       {!inputMode && (
-        <ul id="palette-listbox" className="palette__list" role="listbox" aria-label="Commands">
+        <ul id="palette-listbox" className="palette__list" role="listbox" aria-label="Commands" ref={listRef}>
           {rows.map((row, i) => {
             // A header whenever the section changes. Sections are contiguous
             // because filterCommands sorts by section first, so one pass over

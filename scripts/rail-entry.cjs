@@ -39,5 +39,7 @@ module.exports = {
   ...require('../src/renderer/canvas/diagnostics-model'),
   /* M63. The one state vocabulary — pure, type-only imports, joins for the
      reason every module above did. */
-  ...require('../src/renderer/panels/panel-state')
+  ...require('../src/renderer/panels/panel-state'),
+  /* M64. Names and paths for the palette's rows — pure. */
+  ...require('../src/renderer/palette/panel-name')
 }

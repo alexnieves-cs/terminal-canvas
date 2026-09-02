@@ -4,7 +4,10 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { panelState, statePriority } from '@renderer/panels/panel-state'
+import { getAgentState } from '@renderer/session/agent-state-store'
+import { panelName, panelPath } from '@renderer/palette/panel-name'
 import type { PanelRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { WorkspaceRow } from '@shared/ipc-contract'
@@ -51,6 +54,21 @@ export interface RailModelsDeps {
  * memo keyed on the built object rather than its signature is the same code
  * with the freeze silently removed.
  */
+/**
+ * M64. The Go-to row's name, path and state word. Computed once when the
+ * palette opens, like `restartable`: the row's state may go stale while the
+ * overlay is up, which is the same accepted trade — recomputing on
+ * registry.version() would re-seat the selected row under the user.
+ */
+function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>): { name: string; path?: string; stateWord: string; statePriority: number } {
+  const status = registry.get(p.rect.id)?.status
+  const resolved = status?.kind === 'running' ? status.command : undefined
+  const tailKind = isFilePanel(p) && p.source.prose === true ? 'note' : p.kind
+  const { word } = panelState({ kind: tailKind, status, dormant: isTerminalPanel(p) && dormantIds.has(p.rect.id) }, getAgentState(p.rect.id))
+  const path = panelPath(p)
+  return { name: panelName(p, resolved), ...(path === undefined ? {} : { path }), stateWord: word, statePriority: statePriority(word) }
+}
+
 function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedAt: Record<string, number>): Panel[] {
   if (viewport === null) return panels
   const byId = new Map(panels.map((p) => [p.rect.id, p]))
@@ -110,7 +128,8 @@ export function useRailModels(deps: RailModelsDeps) {
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
                 // M20. From the SESSION's spec, like everything else that
                 // reports what a panel is actually running.
-                agent: registry.get(p.rect.id)?.spec.agent !== undefined
+                agent: registry.get(p.rect.id)?.spec.agent !== undefined,
+                ...findingFields(p, registry, dormantIds)
               }
             : {
                 id: p.rect.id,
@@ -118,7 +137,8 @@ export function useRailModels(deps: RailModelsDeps) {
                 kind: p.kind,
                 ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
-                agent: registry.get(p.rect.id)?.spec.agent !== undefined
+                agent: registry.get(p.rect.id)?.spec.agent !== undefined,
+                ...findingFields(p, registry, dormantIds)
               }
         )
       : EMPTY_PANELS),

@@ -11,6 +11,8 @@ import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import type { EnvReport } from '@shared/env-report'
 import type { CanvasGroup } from '@renderer/groups/groups'
+import { shortPath } from './panel-name'
+import { statePriority } from '@renderer/panels/panel-state'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
 // of credential-holding services, and credential-schema.ts imports nothing —
@@ -66,6 +68,16 @@ export interface PanelRow {
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
   title?: string
+  /**
+   * M64. What the Go-to row LEADS with (the user's title, else the honest
+   * name without path or id), the directory it trails, and the state word
+   * with its `state:` ordering. All optional so every older fixture builds;
+   * absent, the row falls back to `label`.
+   */
+  name?: string
+  path?: string
+  stateWord?: string
+  statePriority?: number
   /**
    * isRestartable(status) — computed in Canvas, where the registry is, and
    * passed in as plain data like everything else this module reads.
@@ -470,7 +482,7 @@ export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a pr
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
 export const REASON_SEARCH_OFF = 'scrollback is off — turn on Keep output for search to read'
-export const REASON_SEARCH_NO_MATCHES = 'no matches'
+export const REASON_SEARCH_NO_MATCHES = 'try another word'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 export const REASON_NOT_STARTED = 'that panel has not started'
@@ -620,20 +632,24 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // is what makes a panel named "auth refactor" findable by typing "auth".
     // Conditional, not `subtitle: panel.title`, so an untitled panel gets no
     // subtitle key at all rather than one holding undefined.
-    out.push(panel.title !== undefined
-      ? {
-          id: `panel.goto.${panel.id}`,
-          title: `Go to ${panel.label}`,
-          subtitle: panel.title,
-          group: 'panel',
-          run: () => actions.goToPanel(panel.id)
-        }
-      : {
-          id: `panel.goto.${panel.id}`,
-          title: `Go to ${panel.label}`,
-          group: 'panel',
-          run: () => actions.goToPanel(panel.id)
-        })
+    // M64. Identity leads: the NAME (the user's title when set), then a hint
+    // of the state word and the path cut from the left. The path is
+    // `pathText`, matched only as a contiguous substring — never fuzzy, so
+    // typing "group" no longer lights g…o…u…p across /private/var. The
+    // user's title and the name are the searchText, so a title still finds
+    // its row.
+    const name = panel.title ?? panel.name ?? panel.label
+    const hint = [panel.stateWord, panel.path === undefined ? undefined : shortPath(panel.path)].filter((x): x is string => x !== undefined).join(' · ')
+    out.push({
+      id: `panel.goto.${panel.id}`,
+      title: `Go to ${name}`,
+      ...(hint === '' ? {} : { subtitle: hint }),
+      ...(panel.path === undefined ? {} : { pathText: panel.path }),
+      ...(panel.stateWord === undefined ? {} : { stateWord: panel.stateWord, statePriority: panel.statePriority ?? statePriority(panel.stateWord) }),
+      searchText: panel.title !== undefined ? `${panel.title} ${panel.name ?? ''}` : (panel.name ?? ''),
+      group: 'panel',
+      run: () => actions.goToPanel(panel.id)
+    })
   }
 
   {
@@ -1569,12 +1585,15 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       // not [], so "no matches" never shows before the first keystroke.
       if (ctx.searchQuery.trim() !== '') {
         out.push(withReason(
-          { id: 'search.none', title: 'No matches', subtitle: `no panel has said “${ctx.searchQuery.trim()}”`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
+          // M64. Names the term, once — the old row said "No matches" in the
+          // title and "no matches" in the hint and never the word typed.
+          { id: 'search.none', title: `No matches for “${ctx.searchQuery.trim()}”`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
           REASON_SEARCH_NO_MATCHES
         ))
       }
     } else {
-      const labelOf = new Map(ctx.panels.map((row) => [row.id, row.label]))
+      // M64. The hit leads with the panel's NAME, not its path-and-id label.
+      const labelOf = new Map(ctx.panels.map((row) => [row.id, row.title ?? row.name ?? row.label]))
       for (const hit of ctx.searchResults) {
         out.push({
           id: `search.hit.${hit.panelId}.${hit.lineIndex}`,

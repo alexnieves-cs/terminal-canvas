@@ -1955,6 +1955,52 @@ const WS = [
     JSON.stringify({ toggle: toggle && [toggle.title, toggle.disabledReason], remove: remove && [remove.title, remove.disabledReason], calls: inside.actions.calls }))
 }
 
+// M64 — find.1–.4. FINDING A PANEL. Every row that names a panel led with a
+//     machine-minted path and hid the user's own name in the dim hint; the
+//     empty search never named its term; fuzzy lit scattered letters across
+//     /private/var. Identity leads, provenance follows (brief, principle 3).
+{
+  const st = (kind, status, dormant) => ({ kind, status, dormant })
+  const panels = [
+    { id: 'p1', label: 'sh — /Users/me/work/api (p1)', kind: 'terminal', restartable: true, agent: false, name: 'sh', path: '/Users/me/work/api', state: st('terminal', { kind: 'running', pid: 1, command: 'sh', cwd: '/x', reattached: false }, false), stateWord: 'needs you', statePriority: 0 },
+    { id: 'p2', label: 'claude — /Users/me/work/web (p2)', kind: 'terminal', restartable: true, agent: true, name: 'claude', title: 'web front', path: '/Users/me/work/web', state: st('terminal', { kind: 'running', pid: 2, command: 'claude', cwd: '/x', reattached: false }, false), stateWord: 'idle', statePriority: 2 },
+    { id: 'p3', label: 'sh — /Users/me/work/api (p3)', kind: 'terminal', restartable: false, agent: false, name: 'sh', path: '/Users/me/work/api', state: st('terminal', undefined, true), stateWord: 'asleep', statePriority: 6 },
+    { id: 'r1', label: 'review: claude (r1)', kind: 'review', restartable: false, agent: false, name: 'review: claude', state: st('review', undefined, false), stateWord: 'review', statePriority: 7 }
+  ]
+  const rows = P.buildCommands(ctx({ panels }))
+  const g1 = byId(rows, 'panel.goto.p1'), g2 = byId(rows, 'panel.goto.p2'), g3 = byId(rows, 'panel.goto.p3'), gr = byId(rows, 'panel.goto.r1')
+  ok('find.1 a Go-to row leads with the name, hints the state word and a left-truncated path, and never shows the id',
+    g1 && g1.title === 'Go to sh' && g1.subtitle === 'needs you · …/work/api' && g1.pathText === '/Users/me/work/api' &&
+      g2 && g2.title === 'Go to web front' && g2.subtitle === 'idle · …/work/web' &&
+      g3 && g3.subtitle === 'asleep · …/work/api' &&
+      gr && gr.title === 'Go to review: claude' && gr.subtitle === 'review' &&
+      [g1, g2, g3, gr].every((r) => !/\(p\d\)|\(r1\)/.test(r.title + (r.subtitle ?? ''))),
+    JSON.stringify([g1, g2, g3, gr].map((r) => r && [r.title, r.subtitle])))
+
+  const gotos = rows.filter((r) => r.id.startsWith('panel.goto.'))
+  const byPath = P.filterCommands(gotos, 'work/api').map((r) => r.id)
+  const scattered = P.filterCommands(gotos, 'wrkapi').map((r) => r.id)
+  const byName = P.filterCommands(gotos, 'wfr').map((r) => r.id)
+  ok('find.2 a path matches only as a contiguous substring; a name still matches as a subsequence',
+    byPath.length === 2 && byPath.includes('panel.goto.p1') && byPath.includes('panel.goto.p3') &&
+      scattered.length === 0 && byName.length === 1 && byName[0] === 'panel.goto.p2',
+    JSON.stringify({ byPath, scattered, byName }))
+
+  const needs = P.filterCommands(gotos, 'state:needs').map((r) => r.id)
+  const all = P.filterCommands(gotos, 'state:').map((r) => r.id)
+  ok('find.3 state: filters Go-to rows by their state word and orders needs-you first',
+    needs.length === 1 && needs[0] === 'panel.goto.p1' &&
+      all.length === 4 && all[0] === 'panel.goto.p1' && all[1] === 'panel.goto.p2' && all[2] === 'panel.goto.p3' && all[3] === 'panel.goto.r1',
+    JSON.stringify({ needs, all }))
+
+  const empty = byId(P.buildCommands(ctx({ panels, searchQuery: 'zzqx', searchResults: [] })), 'search.none')
+  const hit = byId(P.buildCommands(ctx({ panels, searchQuery: 'FAIL', searchResults: [{ panelId: 'p2', lineIndex: 3, line: 'FAIL 3 the writer' }] })), 'search.hit.p2.3')
+  ok('find.4 the empty search names the term once and a hit row leads with the panel\'s name',
+    empty && empty.title === 'No matches for “zzqx”' && empty.subtitle === undefined &&
+      hit && hit.title === 'web front' && hit.subtitle === 'FAIL 3 the writer',
+    JSON.stringify({ empty: empty && [empty.title, empty.subtitle], hit: hit && [hit.title, hit.subtitle] }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -3075,15 +3075,18 @@ app.whenReady().then(async () => {
         await wc.executeJavaScript(`(async () => {
           const input = document.querySelector('.palette__input')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
-          setter.call(input, 'go to ${dormantId}')
+          // M64: the id left the row's text; 'go to' lists every panel and
+          // the row is picked by its command id below.
+          setter.call(input, 'go to')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 50))
           // By TEXT, not by position: the prompt list now includes whatever
           // .claude/commands the focused panel's cwd holds, so "the first
           // row" is no longer a fact this suite controls. A row picked by
           // what it says can only ever run the command the check means.
-          const row = [...document.querySelectorAll('.palette__row')]
-            .find((r) => r.textContent.includes('Go to') && r.textContent.includes('${dormantId}'))
+          // M64: by the row's command id — the id left the row's TEXT when
+          // identity started leading (brief, principle 3).
+          const row = document.querySelector('.palette__row[data-command-id="panel.goto.${dormantId}"]')
           if (row) row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         })()`)
         await sleep(400)
@@ -15311,6 +15314,63 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onS)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M64 — find.5. A NEW QUERY STARTS AT THE TOP, and a search hit leads
+    // with the panel's name. The list kept the previous query's scroll
+    // offset, so the best match of the next query sat under the sticky
+    // section header (M61's critic, finding 7). The search hit's title used
+    // to be the path-and-id label.
+    // -------------------------------------------------------------------
+    {
+      const fLog = []
+      const onF = (_e, level, message) => { if (level >= 2) fLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onF)
+      const ID = 'find.5 a new palette query scrolls the list to the top, and a search hit row leads with the panel\'s name'
+      try {
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__list') !== null`), 2000)
+        // A query with many rows first ('a' matches nearly everything), so
+        // the list is long enough to scroll; then a second query.
+        const scrolled = await wc.executeJavaScript(`(async () => {
+          const list = document.querySelector('.palette__list')
+          const i0 = document.querySelector('.palette__input')
+          const set0 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+          set0.call(i0, 'a'); i0.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          list.scrollTop = list.scrollHeight
+          await new Promise((r) => setTimeout(r, 50))
+          const before = list.scrollTop
+          const i = document.querySelector('.palette__input')
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+          set.call(i, 'go'); i.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          return { before, after: list.scrollTop }
+        })()`)
+        // A marker svA (cat) echoes into its log, then a search for it.
+        ptyManager.write('svA', 'zzfindmarker\r')
+        await sleep(700)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', metaKey: true, bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'zzfindmarker'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        const hit = await waitUntil(async () => {
+          const r = await wc.executeJavaScript(`(() => { const row = [...document.querySelectorAll('.palette__row')].find((r) => (r.getAttribute('data-command-id') || '').startsWith('search.hit.svA')); return row ? { title: row.querySelector('.palette__title').textContent, hint: row.querySelector('.palette__hint').textContent } : null })()`)
+          return r || false
+        }, 5000)
+        ok(ID,
+          scrolled.before > 0 && scrolled.after === 0 && hit !== false && !/\//.test(hit.title) && !/svA/.test(hit.title) && /zzfindmarker/.test(hit.hint),
+          JSON.stringify({ scrolled, hit, log: fLog.slice(-3) }))
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) { i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) } return true })()`)
+      } catch (fErr) {
+        ok(ID, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (fLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onF)
       }
     }
 

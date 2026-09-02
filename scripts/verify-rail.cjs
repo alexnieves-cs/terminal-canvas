@@ -2247,6 +2247,17 @@ const session = (id, over = {}) => ({
   ok('state.3 railTail is panelState with no agent state, for every older fixture', agree)
 }
 
+// M64 — find.6. shortPath keeps the LAST segments, so the repository name
+//     survives truncation (a path cut from the right is nine identical
+//     characters of /private/var per row).
+{
+  const sp = typeof R.shortPath === 'function' ? R.shortPath : () => undefined
+  ok('find.6 shortPath keeps the last two segments with a leading ellipsis and leaves short paths alone',
+    sp('/Users/me/work/api') === '…/work/api' && sp('/tmp') === '/tmp' && sp('/a/b') === '/a/b' &&
+      sp('/private/var/folders/x/T/tc shot fixtures/repo/') === '…/tc shot fixtures/repo' && sp('') === '',
+    JSON.stringify([sp('/Users/me/work/api'), sp('/tmp'), sp('/a/b')]))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
