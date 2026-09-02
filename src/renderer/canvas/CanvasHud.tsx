@@ -52,7 +52,9 @@ export function CanvasHud({ viewport, cursor, selectedId, backend, machineCost, 
       <span>
         {Math.round(cursor.x)}, {Math.round(cursor.y)}
       </span>
-      <span>{selectedId ?? '—'}</span>
+      {/* M63. Labelled: a bare panel id in the strip read as a word nobody
+          would guess (M61's critic could not identify it). */}
+      <span className="canvas-hud__focus" title="The selected panel">focus: {selectedId ?? '—'}</span>
       <span className="canvas-hud__cost" data-machine-cost-total>
         CPU {formatCpu(machineCost.cpuPercent)} · RAM {formatMemory(machineCost.memoryBytes)}
       </span>

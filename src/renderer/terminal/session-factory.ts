@@ -136,13 +136,23 @@ function createHandle(id: PanelId): SessionHandle {
       if (!handles) return []
       // Read xterm's own parsed grid rather than keeping a second copy of every
       // byte and hand-rolling an ANSI stripper.
+      //
+      // M63 (backlog #53, rewritten down): ROWS AS ROWS. The last `lines`
+      // rows of the VIEWPORT, interior blank rows kept and only the trailing
+      // blank rows trimmed — so a full-screen TUI's card shows the bottom of
+      // its real screen with its layout intact, rather than six non-empty
+      // fragments of a box frame gathered from wherever they were. Right-
+      // trimmed only: leading spaces are the layout.
       const buffer = handles.term.buffer.active
-      const out: string[] = []
-      for (let i = buffer.length - 1; i >= 0 && out.length < lines; i--) {
-        const text = buffer.getLine(i)?.translateToString(true).trim()
-        if (text) out.unshift(text)
-      }
-      return out
+      const rowAt = (i: number): string => buffer.getLine(i)?.translateToString(true).replace(/\s+$/, '') ?? ''
+      // Anchor on the LAST NON-EMPTY row (a shell's prompt sits above a
+      // screenful of blank rows; a TUI's bottom border is its last row), then
+      // take `lines` rows upward from it, blanks included.
+      let bottom = buffer.length - 1
+      while (bottom >= 0 && rowAt(bottom) === '') bottom -= 1
+      const rows: string[] = []
+      for (let i = bottom; i >= 0 && rows.length < lines; i--) rows.unshift(rowAt(i))
+      return rows
     },
     focus() {
       handles?.term.focus()

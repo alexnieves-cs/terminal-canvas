@@ -36,5 +36,8 @@ module.exports = {
   // PanelSession shape and SessionBackendInfo), no DOM, no native dependency —
   // the same reason every model above joined this bundle rather than earning
   // a suite of its own.
-  ...require('../src/renderer/canvas/diagnostics-model')
+  ...require('../src/renderer/canvas/diagnostics-model'),
+  /* M63. The one state vocabulary — pure, type-only imports, joins for the
+     reason every module above did. */
+  ...require('../src/renderer/panels/panel-state')
 }

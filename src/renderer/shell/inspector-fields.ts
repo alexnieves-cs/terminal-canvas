@@ -1,3 +1,4 @@
+import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
@@ -41,6 +42,8 @@ export interface InspectorModel {
   fields: InspectorField[]
   reattached: boolean
   restartable: boolean
+  /** M63. What panelState needs for the pinned state word — the kind, the status and dormancy. */
+  state: StateInput
   /**
    * Every link touching this panel, in both directions. M13.
    *
@@ -130,13 +133,6 @@ export interface InspectorSummary {
 /** Rendered when the spec asked for nothing and main has not answered yet. */
 const NO_SPEC_COMMAND = 'none — the login shell'
 
-const AGENT_LABELS: Record<AgentState, string> = {
-  starting: 'starting',
-  busy: 'working',
-  idle: 'idle',
-  'wants-you': 'wants you',
-  exited: 'exited'
-}
 
 /**
  * Undefined is an ordinary input, not an error: it is every panel that has
@@ -144,8 +140,12 @@ const AGENT_LABELS: Record<AgentState, string> = {
  * AGENT_LABELS would render "undefined" and a bare `.toUpperCase()` would
  * throw, both for the commonest case this function sees.
  */
-export function agentStateLabel(state: AgentState | undefined): string {
-  return state === undefined ? 'no signal' : AGENT_LABELS[state]
+export function agentStateLabel(state: AgentState | undefined, input?: StateInput): string {
+  // M63. One vocabulary: the pinned label is panelState's word. Without a
+  // state input (older callers and checks) a live process is assumed, which
+  // is the only case an agent state exists for.
+  const fallback: StateInput = { kind: 'terminal', status: { kind: 'running', pid: 0, command: '', cwd: '', reattached: false }, dormant: false }
+  return panelState(input ?? fallback, state).word
 }
 
 /**
@@ -434,12 +434,15 @@ export function buildInspectorModel(
    * default or this panel's own. OPTIONAL and defaulted, the trade every
    * parameter before it made; absent renders no field.
    */
-  typography?: { fontSize: number; isDefault: boolean } | undefined
+  typography?: { fontSize: number; isDefault: boolean } | undefined,
+  /** M63. Whether the panel is asleep — the one fact the status cannot say. Optional, as every parameter after `status` is. */
+  dormant?: boolean
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isReviewPanel(panel)) {
     return {
       kind: 'review',
+      state: { kind: 'review', status: undefined, dormant: false },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
       ...(panel.title !== undefined ? { title: panel.title } : {}),
@@ -469,6 +472,7 @@ export function buildInspectorModel(
     const cut = path.lastIndexOf('/')
     return {
       kind: 'file',
+      state: { kind: panel.source.prose === true ? 'note' : 'file', status: undefined, dormant: false },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
       ...(panel.title !== undefined ? { title: panel.title } : {}),
@@ -494,6 +498,7 @@ export function buildInspectorModel(
   if (isToolboxPanel(panel)) {
     return {
       kind: 'toolbox',
+      state: { kind: 'toolbox', status: undefined, dormant: false },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
       ...(panel.title === undefined ? {} : { title: panel.title }),
@@ -512,10 +517,10 @@ export function buildInspectorModel(
       ]
     }
   }
-  if (isJiraPanel(panel)) return { kind: 'jira', id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
+  if (isJiraPanel(panel)) return { kind: 'jira', state: { kind: 'jira', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
-    { key: 'command', label: 'command', value: running?.command ?? 'not started' },
+    { key: 'command', label: 'command', value: running?.command ?? 'none yet' },
     { key: 'spec-command', label: 'asked for', value: panel.spec.command ?? NO_SPEC_COMMAND },
     { key: 'cwd', label: 'cwd', value: running?.cwd ?? panel.spec.cwd },
     // String(), not a template with a fallback: pid is a number and 0 is not a
@@ -617,7 +622,8 @@ export function buildInspectorModel(
     usage: buildUsageFields(usage, pinned),
     fields,
     reattached: running?.reattached === true,
-    restartable: isRestartable(status)
+    restartable: isRestartable(status),
+    state: { kind: 'terminal', status, dormant: dormant === true }
   }
 }
 
@@ -753,7 +759,7 @@ export function buildReviewFields(result: ReviewResult | undefined): ReviewField
   if (result === undefined || result.kind === 'not-a-repo') return HIDDEN
 
   if (result.kind === 'never-started') {
-    return { hidden: false, summary: 'not started', note: 'this panel has no session yet', files: [], more: 0 }
+    return { hidden: false, summary: 'no session yet', note: 'this panel has no session yet', files: [], more: 0 }
   }
   if (result.kind === 'git-missing') {
     return { hidden: false, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0 }

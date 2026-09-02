@@ -371,8 +371,11 @@ body {
    the palette, and dismissed the same two ways. */
 .dock__popover {
   position: fixed;
-  left: calc(var(--shell-dock-w) + var(--sp-2));
-  bottom: var(--sp-3);
+  left: calc(var(--shell-dock-w) + var(--sp-3));
+  /* M63. Bottom-aligned to the bell it belongs to, with a caret pointing at
+     it — the popover used to float in the navigator column with nothing
+     saying what opened it. */
+  bottom: var(--sp-4);
   width: 260px;
   max-height: 50vh;
   overflow: auto;
@@ -382,6 +385,18 @@ body {
   background: var(--s-3);
   box-shadow: var(--e-3);
   padding-bottom: var(--sp-2);
+}
+.dock__popover::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  bottom: 18px;
+  width: 10px;
+  height: 10px;
+  background: var(--s-3);
+  border-left: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  transform: rotate(45deg);
 }
 .navigator__header { align-items: center; }
 .navigator__header-actions { display: inline-flex; align-items: center; gap: var(--sp-1); }
@@ -625,12 +640,77 @@ body {
   cursor: pointer;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   M63. THE TONE BLOCK — the ONLY place an agent hue is bound to a state.
+   panel-state.ts computes one word and one tone per panel; the rail's dot,
+   the frame's pill and edge, the card's state line, the summary and block
+   tiers and the attention popover all carry `data-tone` and read these
+   rules. `--tone` is the colour, `--tone-dim` its tint. Add a state here and
+   nowhere else; verify:styles tone.1 fails the build if a selector outside
+   this block binds --blue/--amber/--green/--red to a data-tone or an agent
+   state, and if a tone panel-state.ts can produce has no rule here.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-tone] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
+[data-tone="kind"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
+[data-tone="asleep"] { --tone: var(--line-strong); --tone-dim: var(--s-2); }
+[data-tone="none"] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
+[data-tone="starting"] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
+[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); }
+[data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
+[data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
+[data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
+
+/* THE STATE EDGE. A 3px column on every frame's left, in the tone — the
+   app's one signature mark, legible at 100% and at 10%, in both themes and
+   in a thumbnail. On the frame rather than the card so it survives the tier
+   change; the card's own left rule (below) is retired in its favour. The
+   asleep tone is a DASHED edge, so a restored-but-unstarted panel is told
+   apart from one that is merely quiet. */
+.pf { position: absolute; }
+.pf::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--tone);
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+  pointer-events: none;
+  z-index: 1;
+}
+.pf[data-tone="asleep"]::before {
+  background: repeating-linear-gradient(to bottom, var(--tone) 0 6px, transparent 6px 10px);
+}
+
 .rail-row__dot {
   flex: none;
   width: 7px;
   height: 7px;
   border-radius: 50%;
 }
+/* M63. The kind glyph in the terminal dot's column. */
+.rail-row__kind {
+  flex: none;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--fg-3);
+}
+.rail-row__kind svg { width: 12px; height: 12px; }
+/* M63. The word column reads in its tone; `asleep` and `not started` stay
+   muted so a quiet canvas is a quiet rail. */
+.rail-row__tail[data-tone] { color: var(--tone); }
+.rail-row__tail[data-tone="asleep"],
+.rail-row__tail[data-tone="none"],
+.rail-row__tail[data-tone="starting"],
+.rail-row__tail[data-tone="kind"] { color: var(--muted); }
+.rail-row__go {
+  flex: none;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--fg-3);
+}
+.rail-row__go svg { width: 14px; height: 14px; }
 
 /* M47. ONE status dot. The rail's dot, the context pane's dot and the
    frame's `.pf__state` all carry `.status-dot`, and this is the only rule
@@ -642,9 +722,13 @@ body {
   background: var(--line-strong);
   transition: background var(--dur-1) var(--ease);
 }
-.status-dot[data-agent-state="busy"] { background: var(--blue); }
-.status-dot[data-agent-state="wants-you"] { background: var(--amber); }
-.status-dot[data-agent-state="exited"] { background: var(--red); }
+/* M63. The dot is its tone (the tone block above binds the hue); the quiet
+   tones keep the neutral default, and a kind's dot keeps the kind accent the
+   .pf__state--kind rules give it. */
+.status-dot[data-tone="working"],
+.status-dot[data-tone="needs-you"],
+.status-dot[data-tone="idle"],
+.status-dot[data-tone="exited"] { background: var(--tone); }
 
 /* min-width: 0 on the flex item, or a long resolved command refuses to shrink
    and pushes the tail and both controls out of the rail entirely — the same
@@ -1532,9 +1616,11 @@ body {
   animation: panel-enter var(--dur-2) var(--ease) both;
 }
 
+/* M63. IRIS, not blue: blue is now only ever "working", and the interface's
+   own accent answers selection everywhere (brief, principle 5). */
 .panel--selected {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 1px var(--blue), var(--e-3);
+  border-color: var(--iris);
+  box-shadow: 0 0 0 1px var(--iris), var(--e-3);
 }
 
 /* M35 Task 5. The panel a release right now would link to. A ring rather
@@ -1779,7 +1865,7 @@ body {
    tail of real terminal output and must stay monospace, top-aligned and
    dense — it is data, not a statement. :has() rather than a second class so
    the markup stays untouched (see the note above). */
-.panel__card:has(.panel__card-idle) {
+.panel__card:has(.panel__card-state) {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -1790,7 +1876,8 @@ body {
    the point — at 8% a block is a map marker, not a paragraph. */
 .panel__card--summary { justify-content: center; gap: var(--sp-3); font-family: var(--font-ui); }
 .panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.panel__card-summary-state { font-size: var(--t-lg); color: var(--fg-2); text-transform: capitalize; }
+.panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); }
+.panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
 .panel__card-summary-line { font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .panel__card-summary-cost { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; }
 .panel__card--block { padding: 0; }
@@ -1803,10 +1890,9 @@ body {
   font-family: var(--font-ui);
 }
 .panel__card-block-title { font-size: calc(var(--t-2xl) * 3); font-weight: 700; padding: var(--sp-6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.panel__card-block--busy, .panel__card-block--starting { background: var(--blue-dim); color: var(--blue); }
-.panel__card-block--idle { background: var(--green-dim); color: var(--green); }
-.panel__card-block--wants-you { background: var(--amber-dim); color: var(--amber); }
-.panel__card-block--exited { background: var(--red-dim); color: var(--red); }
+/* M63. The block is its tone: the same colour the edge and the minimap use. */
+.panel__card-block[data-tone] { background: var(--tone-dim); color: var(--tone); }
+.panel__card-block[data-tone="asleep"], .panel__card-block[data-tone="none"], .panel__card-block[data-tone="starting"] { background: var(--s-4); color: var(--fg); }
 
 .panel__card-line {
   white-space: pre;
@@ -1833,34 +1919,37 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The headline. The same three words in the UI face at the top of the scale.
-   max-width in `ch` is what produces the stacked wrap ("click to / start");
-   a CH unit tracks the font's own measure, so the break holds if the size
-   token changes, and it needs no literal px the spacing audit would reject. */
+/* M63. The state WORD on the card, chrome-sized, in its tone, and under it
+   the affordance at the same size in the UI face. The 32px headline that
+   stood here was the loudest text in the app on a "quiet instrument"; the
+   loudest thing on a card is now the agent's own tail. */
+.panel__card-state {
+  margin-top: auto;
+  font-family: var(--font-ui);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  color: var(--tone);
+}
+.panel__card-state[data-tone="asleep"],
+.panel__card-state[data-tone="none"],
+.panel__card-state[data-tone="starting"] { color: var(--fg-2); }
 .panel__card-idle {
   font-family: var(--font-ui);
-  font-weight: 600;
-  font-size: var(--t-2xl);
+  font-size: var(--t-sm);
   line-height: var(--lh-tight);
-  letter-spacing: var(--track-tight);
-  color: var(--fg);
+  color: var(--fg-3);
   font-style: normal;
-  max-width: 8ch;
 }
 
-/* The card's own left rule. The card sits inside .panel, so it already gets
-   the border above — this is what makes the state legible at the zoom where
-   a 1px border is a hairline. */
-.panel__card--agent-busy { border-left: 3px solid var(--blue); }
-.panel__card--agent-wants-you { border-left: 3px solid var(--amber); }
-.panel__card--agent-exited { border-left: 3px solid var(--red); }
+/* The card's own left rule is RETIRED (M63): the frame's state edge carries
+   the state at every tier. The classes stay on the element for the checks
+   that read them. */
 /* Unlike the panel surface, .panel__card has no border-left of its own at
    rest — without this rule a `starting` card would render with NO rule at
    all while an `idle` card shows a visible 3px one. `starting` is a
    distinct, reachable state in the state machine even where it happens to
    look identical to `idle` here. */
-.panel__card--agent-starting { border-left: 3px solid var(--border); }
-.panel__card--agent-idle { border-left: 3px solid var(--border); }
 
 /* A badge reports state and cannot be pressed: a capsule with a hairline. */
 .badge {
@@ -1885,18 +1974,12 @@ body {
   background: currentColor;
 }
 
-.badge--pending {
-  color: var(--muted);
-}
-.badge--running {
-  color: var(--green);
-}
-.badge--exited {
-  color: var(--muted);
-}
-.badge--error {
-  color: var(--red);
-}
+/* M63. The pill is the state word in its tone. The muted tones keep the
+   muted ink so a quiet panel has a quiet pill. */
+.pf__word[data-tone] { color: var(--tone); border-color: var(--tone-dim); }
+.pf__word[data-tone="asleep"],
+.pf__word[data-tone="none"],
+.pf__word[data-tone="starting"] { color: var(--muted); border-color: var(--border); }
 
 .canvas-hud {
   position: absolute;

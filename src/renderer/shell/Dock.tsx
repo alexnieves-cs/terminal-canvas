@@ -2,7 +2,7 @@ import { memo, type JSX } from 'react'
 import type { RailAttention } from './rail-sections'
 import type { NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
-import { Bell, Folder, Grid, Layers } from '@renderer/icons'
+import { Bell, Folder, Grid, Layers, ChevronRight } from '@renderer/icons'
 
 export interface DockProps {
   /** Which pane the navigator shows, when it shows. */
@@ -92,8 +92,11 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
                       title={`Go to ${row.label}`}
                       {...shellControl(() => onGoToPanel(row.id))}
                     >
-                      <span className="rail-row__dot status-dot" data-agent-state="wants-you" aria-hidden="true" />
+                      <span className="rail-row__dot status-dot" data-agent-state="wants-you" data-tone="needs-you" aria-hidden="true" />
                       <span className="rail-row__label">{row.label}</span>
+                      {/* M63. The word, and a visible verb: the row IS the jump. */}
+                      <span className="rail-row__tail" data-tone="needs-you">needs you</span>
+                      <span className="rail-row__go" aria-hidden="true"><ChevronRight /></span>
                     </button>
                   </li>
                 ))
