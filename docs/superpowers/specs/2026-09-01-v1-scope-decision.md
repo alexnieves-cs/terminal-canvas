@@ -276,3 +276,115 @@ Recorded now so the closing report does not discover it:
   accessibility mode is a setting (M39) because its DOM mirror is expensive,
   and a carded panel has no mirror at all. That is the honest limit, stated in
   M39's spec.
+
+---
+
+## 7. Amendment, 2026-09-01 — five required features, appended
+
+Received after M36 began, as an addition to §2's list rather than a
+replacement. Five features are required for 1.0 above the earlier list, six
+more follow in descending value per unit of work, and four earlier items are
+deprioritised. Nothing above is deleted; the milestone table in §4 is
+**superseded by the one below**, and M36 continues unchanged.
+
+### The five, and how each lands
+
+1. **A git worktree per panel** (#50). **In — its own milestone, M37.** The
+   entry §3 cut and flagged as the largest correctness gap is now the first
+   feature after hardening. A preset (and a panel) may declare that it spawns
+   in a fresh worktree of its repository on a new branch; the worktree is the
+   panel's cwd, so the review engine's `resolveRepo` and `captureBaseline`
+   see it as the repository root without change — but both of their
+   load-bearing entries are read before designing, because the baseline is
+   captured in the worktree and must be dropped with it. Closing a panel
+   decides its worktree's fate explicitly; undo never removes one from disk.
+2. **Broadcast input to a selection** (#21). **Already shipped as M31**, under
+   a commit message that never said so (`feat: add broadcast input`), which
+   is why the brief lists it as missing. The milestone (M40) is therefore an
+   AUDIT first: what M31 delivers is measured against the sentence "type
+   once, send to every selected panel", and if it is a one-shot send from the
+   palette rather than a mode the keyboard lives in, the mode is added — with
+   the loud indicator, the obvious exit and the dormant-panel skip the
+   backlog entry demands. Recorded here so it is not read as a dropped item.
+3. **Edges that run things** (#24, the half M25 declined). **In — M41.** A
+   link may carry a second automation: when the source panel COMPLETES, the
+   target panel is started and handed the source's recent output as context,
+   through `paste()`. "Completes" is the agent-state machine's `exited`, and
+   its idle-after-busy transition for an agent CLI that does not exit — both
+   are events main already emits. The output is read from the durable log
+   (M39), never from a renderer buffer that a dormant target has no access
+   to. M25's stated reason for declining — the canvas writing arbitrary bytes
+   to a PTY needs a payload and audit model — is answered rather than waved
+   away: the payload is bounded (a line cap and a byte cap, stated in the
+   inspector), it is bracketed-pasted so nothing is submitted mid-fragment,
+   the rule is listed in the inspector's automation list beside restart-on-
+   exit with its most recent outcome, and it never fires for a link the user
+   did not configure by hand.
+4. **Search across every panel, over durable scrollback** (#16, #30).
+   **Already in — now M39 (scrollback) and M42 (search)**, moved earlier
+   because M41 also consumes the log.
+5. **Agents that outlive the app** (#56). **In — M38.** `before-quit` detaches
+   instead of killing when `session.keepOnQuit` is on; the next launch's boot
+   reconciliation already reattaches known sessions. **Overruled in one
+   respect, in writing: it ships OFF by default.** A person who quits an app
+   expects its processes to stop, and an agent left burning tokens behind a
+   quit is the surprise the setting's description has to name; the author,
+   who wants the opposite, is one palette row away. The boot orphan-killer
+   becomes a correctness pair with the coalesced write, so `before-quit`'s
+   `flushSync` is asserted to precede the detach.
+
+### The six below them, in the order given
+
+| Entry | Decision |
+|---|---|
+| #54 Cmd-click a path or URL | **In — M51.** Gated on the hover half of pointer correction; the milestone fixes that first (a `mousemove` with no prior in-slot mousedown is corrected against the slot under the cursor), then registers a link provider for paths and URLs, opening through main. |
+| #59 OSC 133, and #46 the run ledger | **In — M52.** Main injects the prompt marks into the shell it spawns; each command gets a marker, a gutter mark by exit status, and a ledger row. |
+| #51 Discard | **In — M53.** Per-file, refusing outright on the `shared` arm, with the baseline's contents disclosed before the write; never undoable and never pretending to be. |
+| #57 `tc` CLI and URL scheme | **In — M54.** Panel ids stay renderer-minted; the CLI asks the running app over a local socket main owns, and the URL scheme is a second door onto the same verb. |
+| #58 Backpressure | **In — M36**, already. |
+| #61 Recover an orphan session | **In — M55.** Placement exists after M50, so a recovered orphan gets a real position; offered as a dialog naming the sessions, never adopted silently, and never offered for a dead pane. |
+
+### Deprioritised
+
+Camera bookmarks, camera undo, semantic-zoom cards and export are not cut —
+each is still §3's answer — but they move to the tail (M56–M58), so that if
+the run is forced to stop early they are what is missing. The camera
+milestone keeps zoom-to-fit and the reduced-motion flight rule, which
+criterion 3 needs regardless of bookmarks.
+
+### The milestone table, superseded
+
+| # | Milestone | Status |
+|---|---|---|
+| M36 | Hardening for 1.0 | in progress |
+| M37 | A git worktree per panel | |
+| M38 | Agents that outlive the app | |
+| M39 | Durable scrollback | |
+| M40 | Broadcast input — audit M31, add the mode if it is missing | |
+| M41 | Handoff edges — a link that starts its target with the source's output | |
+| M42 | Search across every panel | |
+| M43 | Attention beyond the window | |
+| M44 | Keyboard-first canvas, accessibility | |
+| M45 | The visual language | |
+| M46 | The interface architecture | |
+| M47 | One panel frame | |
+| M48 | First run and empty states | |
+| M49 | Panel typography | |
+| M50 | Placement: snapping and tidy | |
+| M51 | Cmd-click a path or URL | |
+| M52 | OSC 133 shell integration and the run ledger | |
+| M53 | Discard | |
+| M54 | `tc` CLI and URL scheme | |
+| M55 | Recover an orphan session | |
+| M56 | The camera: zoom-to-fit, flights, bookmarks, undo | |
+| M57 | Semantic zoom | |
+| M58 | Export | |
+| M59 | The dead-end audit | |
+| M60 | Ship | |
+
+Definitions of done for the milestones §4 already described are unchanged;
+the new ones get theirs in their own specs. The sequencing rationale is
+amended in one place: the five required features and the log they share come
+before the design milestones, because they are the brief's own definition of
+what the app is for, and a restyle of their rows by M45 is cheaper than
+building the product's differentiating features last.
