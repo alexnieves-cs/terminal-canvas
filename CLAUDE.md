@@ -56,7 +56,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 34 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | ~166 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | ~167 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:palette` | plain node | ~94 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
@@ -73,7 +73,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `verify:packaged` | real Electron, **not in `npm run verify`** | 11 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped PATH, a throwaway `--user-data-dir`, and a scratch |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
-| `verify:pty-manager` | Electron as node | 49 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
+| `verify:pty-manager` | Electron as node | 51 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 56 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |

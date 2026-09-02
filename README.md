@@ -22,10 +22,12 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   demote to cheap cards while their processes keep running. A fixed budget of
   live WebGL terminals is what stops the twentieth panel taking down the
   nineteen before it.
-- **Agents survive the window.** With `tmux` installed, panel processes outlive
-  a `Cmd+R` reload and a closed window — you come back to the agent
-  mid-sentence rather than to a dead pane. Quitting the app does tear them
-  down.
+- **Agents survive the window — and, if you ask, the app.** With `tmux`
+  installed, panel processes outlive a `Cmd+R` reload and a closed window —
+  you come back to the agent mid-sentence rather than to a dead pane.
+  Quitting ends them by default; turn on *Keep agents running after quit*
+  (in the palette's settings) and quitting detaches instead, so the next
+  launch reattaches to agents still working.
 - **A canvas that says who needs you.** Each panel's border reports what its
   agent is doing — starting, working, idle, or waiting on you. Panels that want
   attention while off screen get an edge pip pointing at them, and `Cmd+J`
@@ -271,9 +273,11 @@ destroy the page without running React cleanup, so the renderer never sends
 socket (`-L terminal-canvas`) and what `node-pty` holds is a tmux *client*, so a
 renderer teardown detaches rather than kills and the next page's `pty:create`
 hits `new-session -A` and lands back in the running agent. Quitting the app
-still tears everything down — agents never outlive the app. With no tmux
-installed the app falls back to spawning directly, says so in the HUD, and
-behaves exactly as it did before M4c.
+tears everything down by default; with the `session.keepOnQuit` setting on
+it detaches instead of killing, and the next launch's reconciliation — which
+already reattaches every session whose panel the layout knows — brings the
+agents back. With no tmux installed the app falls back to spawning directly,
+says so in the HUD, and behaves exactly as it did before M4c.
 
 **One transform, not N layouts.** The canvas is a single `.world` element
 carrying `transform: translate(...) scale(...)`; panels are positioned once in
