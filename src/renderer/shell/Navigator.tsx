@@ -29,6 +29,7 @@ export interface NavigatorProps {
   treeRootLabel: string | null
   treeRows: FileRow[]
   treeRootPending: boolean
+  treeEmptyReason: string
   onToggleDir: (path: string) => void
   onInsertPath: (path: string) => void
   onRefreshTree: () => void
@@ -71,6 +72,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
           rootLabel={props.treeRootLabel}
           rows={props.treeRows}
           rootPending={props.treeRootPending}
+          emptyReason={props.treeEmptyReason}
           onToggleDir={props.onToggleDir}
           onInsertPath={props.onInsertPath}
           onRefresh={props.onRefreshTree}

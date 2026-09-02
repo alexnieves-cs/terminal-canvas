@@ -12,7 +12,7 @@
  * here exists everywhere, and one that does not exist here cannot be set.
  */
 
-export type SettingValue = boolean | string | number
+export type SettingValue = boolean | string | number | string[]
 
 /**
  * Named once so the menu's submenu label, the menu's `settingsInCategory`
@@ -36,6 +36,12 @@ export const SESSION_CATEGORY = 'Sessions'
 export const ACCESSIBILITY_CATEGORY = 'Accessibility'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const APPEARANCE_CATEGORY = 'Appearance'
+/**
+ * M48. Not a user-facing category: the hint strip's memory lives in the same
+ * map every other persisted fact does (one map, never a bespoke home), but
+ * nobody chooses it from a menu.
+ */
+export const HINTS_CATEGORY = 'Hints'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -61,7 +67,7 @@ export interface SettingDef {
    * (the palette's row builder, the menu) has to handle the type or the
    * setting silently gets no row.
    */
-  type: 'boolean' | 'number' | 'enum'
+  type: 'boolean' | 'number' | 'enum' | 'list'
   default: SettingValue
   /** The legal values of an `enum` setting, in the order the palette cycles them. */
   values?: readonly string[]
@@ -242,6 +248,19 @@ export const SETTINGS: readonly SettingDef[] = [
     values: ['detail', 'work', 'tools'],
     default: 'detail',
     category: SHELL_CATEGORY
+  },
+  {
+    id: 'hints.seen',
+    label: 'Gesture hints seen',
+    description: 'Which first-run gesture hints have been used once and faded.',
+    keywords: ['hints'],
+    // M48. A LIST — the second customer of a non-boolean type after M45's
+    // enum. The palette mints no row for a list; hints are not a setting a
+    // person toggles, and a row that said "Gesture hints seen: pan, zoom"
+    // would be noise on the one surface that has to stay scannable.
+    type: 'list',
+    default: [],
+    category: HINTS_CATEGORY
   },
   {
     id: 'files.treeOpen',

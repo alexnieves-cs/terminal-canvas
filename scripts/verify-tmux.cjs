@@ -404,6 +404,38 @@ const ok = (n, pass, detail) => {
 
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
+// M48 — env.1. The environment report is built from facts main already
+//      holds, by a PURE builder: the resolved PATH's entries, each CLI's path
+//      or absence, the shell probe's outcome and reason, tmux's choice and
+//      reason, the layout file and whether a .bak was written, env key NAMES
+//      only (never values — #31's rule for the login environment), and the
+//      time the probe ran, because a `brew install` mid-session is invisible
+//      until relaunch and a report that does not say when it looked would turn
+//      that limit into a lie.
+{
+  const env = { PATH: '/opt/homebrew/bin:/usr/bin', HOME: '/Users/x', ANTHROPIC_API_KEY: 'sk-secret' }
+  const report = typeof T.buildEnvReport === 'function' ? T.buildEnvReport({
+    env,
+    shell: { path: '/bin/zsh', ok: false, reason: 'login shell produced no PATH' },
+    which: (name) => (name === 'git' ? '/usr/bin/git' : null),
+    backend: { kind: 'direct', reason: 'tmux not on PATH', tmuxPath: null },
+    layoutPath: '/Users/x/Library/Application Support/tc/layout.json',
+    backupWritten: true,
+    now: 1234
+  }) : null
+  const text = report ? JSON.stringify(report) : ''
+  ok('env.1 buildEnvReport carries the PATH entries, each CLI found or absent, the probe outcome, tmux, the layout file and env key NAMES only',
+    report !== null && report.probedAt === 1234 &&
+      JSON.stringify(report.pathEntries) === JSON.stringify(['/opt/homebrew/bin', '/usr/bin']) &&
+      report.shell.ok === false && report.shell.reason === 'login shell produced no PATH' && report.shell.path === '/bin/zsh' &&
+      JSON.stringify(report.clis) === JSON.stringify([{ name: 'claude', path: null }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }]) &&
+      report.tmux.kind === 'direct' && report.tmux.reason === 'tmux not on PATH' && report.tmux.path === null &&
+      report.layout.path.endsWith('layout.json') && report.layout.backupWritten === true &&
+      JSON.stringify(report.envKeys) === JSON.stringify(['ANTHROPIC_API_KEY', 'HOME', 'PATH']) &&
+      !text.includes('sk-secret'),
+    text.slice(0, 300) || 'buildEnvReport is not exported')
+}
+
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
 process.exit(failed.length ? 1 : 0)

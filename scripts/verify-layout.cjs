@@ -2956,6 +2956,26 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ nav, tab, stray, w }))
 }
 
+// M48 — firstrun.1. `hints.seen` is a LIST setting — the second customer of
+//      a non-boolean type after M45's enum: a string list, default empty,
+//      persisted as the user's gestures are first seen, and a non-list (or a
+//      list holding a non-string) is dropped with a warning on the load door
+//      exactly as a stray enum value is. It is not a user-facing toggle, so
+//      the palette mints no row for it.
+{
+  const def = L.settingDef('hints.seen')
+  const w = []
+  const good = L.parsePreferences({ 'hints.seen': ['pan', 'zoom'] }, w)
+  const bad = L.parsePreferences({ 'hints.seen': 'pan' }, w)
+  const mixed = L.parsePreferences({ 'hints.seen': ['pan', 3] }, w)
+  ok('firstrun.1 hints.seen is a string-list setting, default empty, and a non-list is dropped with a warning',
+    def !== undefined && def.type === 'list' && JSON.stringify(def.default) === '[]' &&
+      JSON.stringify(L.resolveSetting({}, 'hints.seen')) === '[]' &&
+      JSON.stringify(good['hints.seen']) === JSON.stringify(['pan', 'zoom']) &&
+      bad['hints.seen'] === undefined && mixed['hints.seen'] === undefined && w.length === 2,
+    JSON.stringify({ def, good, bad, mixed, w }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

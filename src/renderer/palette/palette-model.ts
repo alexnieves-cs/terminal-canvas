@@ -61,6 +61,8 @@ export type PaletteScope =
   | 'agent-mode'
   /** M42. Search across every panel's durable log; the query box IS the term. */
   | 'search'
+  /** M48. The environment report: what main found at startup, one row per fact. */
+  | 'environment'
 
 /** Unknown ids sink to the bottom rather than throwing: a row in a section
  *  that no longer exists is a display bug, not a reason to blank the palette. */

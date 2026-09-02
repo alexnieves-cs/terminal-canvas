@@ -8,7 +8,8 @@ import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
-import { resolveShellEnv, whichFromEnv } from './shell-env'
+import { resolveShellEnv, shellProbeOutcome, whichFromEnv } from './shell-env'
+import { buildEnvReport } from './env-report'
 import { createLayoutStore } from './layout-store'
 import { createCredentialStore } from './credential-store'
 import { createSafeStorageCrypto } from './credential-crypto'
@@ -35,6 +36,8 @@ import { mergePrompts, readProjectPrompts } from './prompts'
 import type { CapturedPanel } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
+/** M48. When the startup probe ran; the report says so, since it never re-runs. */
+let probedAt = 0
 
 /**
  * Whether this process owns the app. TWO COPIES OF ONE BUILD ARE DESTRUCTIVE
@@ -501,6 +504,7 @@ app.whenReady().then(async () => {
   // so no panel ever spawns with the bare launchd PATH.
   const env = await resolveShellEnv()
   loginEnv = env
+  probedAt = Date.now()
   for (const binary of ['claude', 'codex', 'git']) {
     const found = whichFromEnv(binary, env)
     // The diagnostic and the review engine's git are ONE resolution, not two.
@@ -692,7 +696,19 @@ app.whenReady().then(async () => {
         layoutStore.getSetting('scrollback.persist') === true
           ? scrollbackLog.search(panelIds, query, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
           : Promise.resolve([])
-    }
+    },
+    // M48. The environment report, built on demand from facts this file
+    // already holds: the probe's outcome, the login env, the same which()
+    // the presets use, the backend the probe chose, the layout file.
+    () => buildEnvReport({
+      env: loginEnv,
+      shell: shellProbeOutcome(),
+      which,
+      backend: { kind: backend.kind, reason: backend.reason, tmuxPath: backend.kind === 'tmux' ? (which('tmux') ?? null) : null },
+      layoutPath: join(app.getPath('userData'), 'layout.json'),
+      backupWritten: layoutStore.backupWritten(),
+      now: probedAt
+    })
   )
   createWindow()
 

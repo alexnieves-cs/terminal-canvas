@@ -199,7 +199,10 @@ app.whenReady().then(() => {
   // 59 = 56 plus M39's two (scrollback:tail, scrollback:clear) plus M42's
   // scrollback:search. All three ride the same optional-trailing-parameter
   // shape the worktree handlers do; search's id list is main's own.
-  const EXPECTED_CHANNELS = 59
+  // 60 = 59 plus M48's env:report, the environment report — an optional
+  // trailing parameter with an inert default, like the worktree and
+  // scrollback handlers before it.
+  const EXPECTED_CHANNELS = 60
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

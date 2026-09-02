@@ -836,6 +836,37 @@ const SETTING = {
       last.actions.calls.length > 0 && last.actions.calls[0][2] === 'system',
     JSON.stringify({ title: row && row.title, calls: c.actions.calls, wrap: last.actions.calls }))
 }
+// M48 — firstrun.1. The Environment scope: a door at rest, and one
+//     information row per fact of the report — the shell probe, each CLI
+//     found or absent (with its path or the install line), tmux, the PATH's
+//     entry count, the layout file, and when the probe ran. Information rows
+//     run nothing; they exist so "why does Claude not appear" has an answer
+//     one Cmd+K away.
+{
+  const report = {
+    probedAt: Date.UTC(2026, 8, 2, 10, 0, 0),
+    shell: { path: '/bin/zsh', ok: false, reason: 'login shell produced no PATH' },
+    pathEntries: ['/usr/bin', '/bin'],
+    clis: [{ name: 'claude', path: null }, { name: 'codex', path: '/opt/homebrew/bin/codex' }, { name: 'git', path: '/usr/bin/git' }],
+    tmux: { kind: 'direct', reason: 'tmux not on PATH', path: null },
+    layout: { path: '/Users/x/layout.json', backupWritten: false },
+    envKeys: ['HOME', 'PATH']
+  }
+  const rows = typeof P.buildEnvironmentRows === 'function' ? P.buildEnvironmentRows(report) : []
+  const byRowId = (id) => rows.find((r) => r.id === id)
+  const door = byRowId('manage.environment')
+  const claude = byRowId('env.cli.claude')
+  const codex = byRowId('env.cli.codex')
+  const shell = byRowId('env.shell')
+  ok('firstrun.1 the Environment scope has a door and one information row per report fact, with each CLI found or absent',
+    door !== undefined && door.entersScope === 'environment' && door.disabledReason === undefined &&
+      claude !== undefined && claude.scope === 'environment' && claude.hiddenAtRest === true && /not found/i.test(claude.title) && /install/i.test(claude.subtitle) &&
+      codex !== undefined && /found/i.test(codex.title) && codex.subtitle.includes('/opt/homebrew/bin/codex') &&
+      shell !== undefined && /could not be read|failed/i.test(shell.title) && shell.subtitle.includes('login shell produced no PATH') &&
+      byRowId('env.tmux') !== undefined && byRowId('env.path') !== undefined && byRowId('env.layout') !== undefined && byRowId('env.probed') !== undefined &&
+      rows.filter((r) => r.scope === 'environment').every((r) => typeof r.run === 'function'),
+    JSON.stringify(rows.map((r) => ({ id: r.id, title: r.title, subtitle: r.subtitle })).slice(0, 8)))
+}
 {
   const off = { ...SETTING, value: false }
   const row = byId(P.buildCommands(ctx({ settings: [off] })), 'setting.restore.camera')

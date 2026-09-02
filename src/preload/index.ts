@@ -104,6 +104,9 @@ const bridge: CanvasBridge = {
   files: {
     list: (path: string) => ipcRenderer.invoke(IPC.FS_LIST, path)
   },
+  env: {
+    report: () => ipcRenderer.invoke(IPC.ENV_REPORT)
+  },
   diagnostics: {
     sample: () => ipcRenderer.invoke(IPC.DIAGNOSTICS_SAMPLE),
     export: (snapshot: DiagnosticsSnapshot) => ipcRenderer.invoke(IPC.DIAGNOSTICS_EXPORT, snapshot)

@@ -76,6 +76,8 @@ export interface LayoutStore {
    * the never-touched state its shell checks are about.
    */
   clearPreference(id: string): void
+  /** M48. A newer-version layout file was preserved as .bak on this launch. */
+  backupWritten(): boolean
   /** User-created presets only; the built-ins live in main/presets.ts. */
   presets(): Preset[]
   /** Append one and schedule a write. Ids are minted by the caller. */
@@ -207,6 +209,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
   let snapshot: LayoutSnapshot = defaultSnapshot()
   let cancelPending: Cancel | null = null
   let dirty = false
+  let backupWritten = false
 
   function activeWorkspace(): Workspace {
     const found = snapshot.workspaces.find((w) => w.id === snapshot.activeWorkspaceId)
@@ -274,6 +277,12 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
   function writePreference(id: string, value: SettingValue): void {
     const def = settingDef(id)
     if (def === undefined) return
+    if (def.type === 'list') {
+      if (!Array.isArray(value) || !value.every((v) => typeof v === 'string')) return
+      snapshot.preferences[id] = [...value]
+      scheduleWrite()
+      return
+    }
     if (typeof value !== (def.type === 'enum' ? 'string' : def.type)) return
     // The enum's membership, for the reason parsePreferences states: the two
     // doors into the map each guard it, or the guard has a hole.
@@ -418,6 +427,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
         // authored, with no way back.
         try {
           renameSync(filePath, `${filePath}.bak`)
+          backupWritten = true
           warn(`preserved the newer layout file as ${filePath}.bak`)
         } catch (error: unknown) {
           warn(`could not back up ${filePath}: ${String(error)}`)
@@ -445,6 +455,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     },
 
     preferences: () => ({ ...snapshot.preferences }),
+    backupWritten: () => backupWritten,
     clearPreference(id) {
       if (!(id in snapshot.preferences)) return
       delete snapshot.preferences[id]

@@ -98,6 +98,9 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'light')`)
   await sleep(500)
 
+  // M48. The empty canvas first: the launcher is what a fresh install sees.
+  await shot(win, 'launcher')
+
   // Two more panels so the canvas shows the cascade, a live well and a card.
   await press(win.webContents, 'n', { metaKey: true })
   await sleep(900)

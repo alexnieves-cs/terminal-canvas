@@ -61,6 +61,12 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   output contains it, newest match first, each a row that flies the camera to
   that panel. The wall-of-terminals answered as a retrieval question — which
   of these twelve printed the stack trace.
+- **A first run that teaches by doing.** An empty canvas shows a launcher made
+  of the real verbs — your presets (a missing CLI is named, with what to
+  install), open a file, a note — and four gesture hints that each fade for
+  good once used. `Environment…` in `⌘K` says what the app found at startup:
+  PATH, each CLI, tmux, the layout file, and when it looked. If your login
+  shell could not be read, a banner says so.
 - **A shell that gives the canvas the window.** A 48px dock, ONE navigator pane
   (Panels, Workspaces or Files — the whole column tall), the canvas, and a
   context pane for the selected panel with a pinned identity header and three
@@ -256,6 +262,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        fs:list
                        toolbox:read / toolbox:permissions
                        diagnostics:sample / diagnostics:export
+                       env:report
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

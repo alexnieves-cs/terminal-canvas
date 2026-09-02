@@ -30,6 +30,7 @@ import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } f
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 import { ChevronRight } from '@renderer/icons'
+import type { EnvReport } from '@shared/env-report'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -100,6 +101,8 @@ export interface PaletteProps {
   credentials: readonly CredentialMeta[]
   /** M37. See PaletteContext.worktrees. */
   worktrees: readonly WorktreeListRow[]
+  /** M48. See PaletteContext.envReport. */
+  envReport: EnvReport | null
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
@@ -129,7 +132,8 @@ const SCOPE_LABEL: Record<PaletteScope, string> = {
   credentials: 'Credentials',
   worktrees: 'Worktrees',
   'agent-mode': 'Permission mode',
-  search: 'Search'
+  search: 'Search',
+  environment: 'Environment'
 }
 
 const sectionLabel = (id: SectionId): string =>
@@ -174,6 +178,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         workspaces: props.workspaces,
         credentials: props.credentials,
         worktrees: props.worktrees,
+        envReport: props.envReport,
         noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
@@ -190,7 +195,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
-     props.credentials, props.worktrees, props.attentionIds, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.attentionIds, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.scrollbackEnabled]
   )

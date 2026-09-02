@@ -1,5 +1,6 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
+import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import type {
   PanelId,
   PanelSpec,
@@ -161,7 +162,9 @@ export function registerIpcHandlers(
    * default for WorktreeHandlers' reason: the positional harnesses keep
    * compiling and every channel still has a handler.
    */
-  scrollback: ScrollbackHandlers = INERT_SCROLLBACK
+  scrollback: ScrollbackHandlers = INERT_SCROLLBACK,
+  /** M48. Appended last with an inert default, like every collaborator before it. */
+  envReport: () => EnvReport = () => INERT_ENV_REPORT
 ): void {
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
@@ -239,6 +242,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
+  ipcMain.handle(IPC.ENV_REPORT, () => envReport())
   ipcMain.handle(IPC.DIAGNOSTICS_SAMPLE, () => ({
     ipcMessagesPerSecond: ptyManager.ipcMessageRate()
   }))

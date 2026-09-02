@@ -232,15 +232,17 @@ export const SEED_PANELS: Panel[] = [
 export const FIRST_RUN_ID = 'p1'
 
 /**
- * What a fresh install — or a canvas that was reset — opens with.
+ * What a fresh install — or a canvas that was reset — opens with: NOTHING.
  *
- * One panel at the world origin, deliberately a placeholder: the new-canvas
- * wizard milestone (count control, per-panel working directory, CLI picker)
- * replaces this. SEED_PANELS' twelve scattered entries stay put as verify
- * fixture data, which is what they have always actually been.
+ * M48. An empty canvas is a designed state: Canvas renders the launcher over
+ * it, made of the real create verbs, so a first panel is minted the way every
+ * later one is. The placeholder panel this used to mint was SEED_PANELS with a
+ * nicer name, and it taught nothing. Kept as a function so both call sites
+ * (mount and reset) read the same decision. SEED_PANELS' twelve scattered
+ * entries stay put as verify fixture data, which is what they always were.
  */
 export function firstRunPanels(): Panel[] {
-  return [{ kind: 'terminal', rect: { id: FIRST_RUN_ID, x: -PANEL_W / 2, y: -PANEL_H / 2, w: PANEL_W, h: PANEL_H }, spec: shell(FIRST_RUN_ID), z: 1 }]
+  return []
 }
 
 /**

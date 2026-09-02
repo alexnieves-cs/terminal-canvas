@@ -79,6 +79,17 @@ function runLoginShell(shell: string): Promise<Record<string, string>> {
  * Resolve the login-shell environment once and cache it.
  * Safe to await repeatedly; only the first call spawns a shell.
  */
+/**
+ * M48. What the probe found, for the environment report. Recorded beside the
+ * cache rather than re-derived: the failure used to be swallowed into a
+ * process.env fallback with a console.error nobody sees, and the user-visible
+ * consequence was "command not found" in every panel with no explanation.
+ */
+let outcome: { path: string; ok: boolean; reason?: string } = { path: '', ok: true }
+export function shellProbeOutcome(): { path: string; ok: boolean; reason?: string } {
+  return { ...outcome }
+}
+
 export async function resolveShellEnv(): Promise<Record<string, string>> {
   if (cached) return cached
 
@@ -87,6 +98,7 @@ export async function resolveShellEnv(): Promise<Record<string, string>> {
   try {
     const resolved = await runLoginShell(shell)
     cached = resolved
+    outcome = { path: shell, ok: true }
     console.log(
       `[shell-env] resolved from ${shell}: ${Object.keys(resolved).length} vars, ` +
         `PATH has ${resolved.PATH.split(':').length} entries`
@@ -101,6 +113,7 @@ export async function resolveShellEnv(): Promise<Record<string, string>> {
       error
     )
     cached = { ...process.env } as Record<string, string>
+    outcome = { path: shell, ok: false, reason: error instanceof Error ? error.message : String(error) }
   }
 
   return cached
