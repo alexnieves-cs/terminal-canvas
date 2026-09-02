@@ -41,3 +41,4 @@ copy here is deleted.
 | [m56-camera.md](m56-camera.md) | M56 — The camera: flights, a trail, bookmarks | finished |
 | [m57-semantic-zoom.md](m57-semantic-zoom.md) | M57 — Semantic zoom | finished |
 | [m58-export.md](m58-export.md) | M58 — Export | finished |
+| [m59-dead-end-audit.md](m59-dead-end-audit.md) | M59 — The dead-end audit | finished |

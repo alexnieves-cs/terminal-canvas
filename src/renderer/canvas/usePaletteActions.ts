@@ -438,6 +438,19 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       })
       palette.openPalette()
     },
+    beginRenameBookmark: (id, currentName) => {
+      setInputMode({
+        kind: 'text',
+        label: `Rename \u201c${currentName}\u201d to\u2026`,
+        initial: currentName,
+        submit: (value) => {
+          const name = value.trim()
+          if (name !== '') setBookmarks((current) => current.map((b) => (b.id === id ? { ...b, name } : b)))
+          setInputMode(null)
+        }
+      })
+      palette.openPalette()
+    },
     cameraBack: () => cameraBack(),
     cameraForward: () => cameraForward(),
     // M58. Fire-and-forget into main, which owns the dialog, the write and
