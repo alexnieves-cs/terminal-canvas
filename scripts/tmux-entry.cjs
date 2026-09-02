@@ -7,5 +7,6 @@ module.exports = {
   ...require('../src/main/tmux-probe'),
   ...require('../src/main/env-report'),
   ...require('../src/main/link-open'),
-  ...require('../src/main/shell-integration')
+  ...require('../src/main/shell-integration'),
+  ...require('../src/main/orphans')
 }

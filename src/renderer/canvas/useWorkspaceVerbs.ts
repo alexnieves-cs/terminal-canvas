@@ -1,3 +1,4 @@
+import { seedAfter } from '@renderer/panels/recover'
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
 import { installPointerCorrection } from '@renderer/components/xterm-pointer'
@@ -306,17 +307,8 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         // session -A` would attach to a session THIS run already has live
         // elsewhere. Never letting the counter move backwards within a run
         // holds regardless of what any future caller's seed contains.
-        nextIdRef.current = Math.max(
-          nextIdRef.current,
-          result.allPanelIds.reduce((max, pid) => {
-            // All three prefixes (`n`, `r`, `f`), one sequence — see
-            // nextIdRef's own comment for what a regex blind to one of them
-            // costs. This is the SECOND of the two seed sites and must move
-            // with the first.
-            const match = /^[nrfjt](\d+)$/.exec(pid)
-            return match ? Math.max(max, Number(match[1]) + 1) : max
-          }, 1)
-        )
+        // ONE seeding rule, shared with Canvas.tsx's seed and M55's recovery.
+        nextIdRef.current = seedAfter(result.allPanelIds, nextIdRef.current)
         // Refreshes workspaceRows so the rail's Workspaces section reflects
         // which workspace is now active — see reloadWorkspacesRef's own
         // comment for why this is a ref rather than a direct call.

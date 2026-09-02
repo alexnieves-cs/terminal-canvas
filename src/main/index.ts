@@ -23,6 +23,8 @@ import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
+import { findOrphans, orphanPrompt } from './orphans'
+import type { OrphanRow } from '../shared/orphans'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
@@ -633,33 +635,52 @@ app.whenReady().then(async () => {
   // resolved store to answer from.
   layoutStore.load()
 
-  // A tmux session with no panel to reach it is worse than no session: it
-  // holds a process and a shell the user cannot see, close, or type into.
-  // Possible if a crash landed between a spawn and the store's coalesced save.
+  // M55. A tmux session with no panel to reach it holds a process and a
+  // shell the user cannot see, close, or type into — possible if a crash
+  // landed between a spawn and the store's coalesced save. Until M55 these
+  // were killed outright ("adopting would mint geometry the user never
+  // chose"); placement exists now, so the user is ASKED, once, by name.
+  // Never adopted silently: no dialog, no restore.
   //
-  // Killed rather than adopted on purpose. Adopting would mint geometry the
-  // user never chose, which is placement work belonging to ideas-backlog item
-  // 25. This is a deliberate trade, not an oversight.
+  // The known set is EVERY workspace's ids. It used to be the active
+  // workspace's alone, which killed a session kept across quit (M38) for a
+  // panel in a hidden workspace at the next launch — verify:tmux orphan.1.
+  let recovered: OrphanRow[] = []
   {
-    const known = new Set(
-      layoutStore.initial().panels.map((p) => p.id)
-    )
-    // Collected as the orphan loop runs rather than from a second list()
-    // call: a session KILLED as an orphan two lines below has not survived,
-    // and treating it as though it had would leave its baseline in place for
-    // a panel that is about to spawn a brand-new agent.
+    const known = new Set(layoutStore.workspaces().flatMap((w) => w.panelIds))
+    const orphans = findOrphans(ptyManager.list(), known)
+    let restore = false
+    if (orphans.length > 0) {
+      const prompt = orphanPrompt(orphans)
+      // App-modal: the window does not exist yet, and that is fine. Restore
+      // is the default button because the cost of a wrong Discard is an
+      // agent's work, and the cost of a wrong Restore is a panel to close.
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        message: prompt.message,
+        detail: prompt.detail,
+        buttons: prompt.buttons,
+        defaultId: 0,
+        cancelId: 1
+      })
+      restore = response === 0
+    }
+    // Collected as the loop runs rather than from a second list() call: a
+    // session KILLED here has not survived, and treating it as though it
+    // had would leave its baseline in place for a panel that is about to
+    // spawn a brand-new agent.
     const surviving: string[] = []
+    const orphanIds = new Set(orphans.map((o) => o.panelId))
     for (const session of ptyManager.list()) {
-      if (known.has(session.panelId)) {
-        surviving.push(session.panelId)
-        continue
-      }
+      if (known.has(session.panelId)) { surviving.push(session.panelId); continue }
+      if (orphanIds.has(session.panelId) && restore) { surviving.push(session.panelId); continue }
       console.warn(
         `[tmux] orphan session ${session.panelId} (pid ${session.pid}) has no saved ` +
-          `panel; killing it. A session with no panel cannot be reached, closed, or typed into.`
+          'panel; discarding it. A session with no panel cannot be reached, closed, or typed into.'
       )
       backend.destroy(session.panelId)
     }
+    if (restore) recovered = orphans
 
     // A baseline describes ONE session's starting point, and quitting the app
     // kills every session by default (before-quit's end arm runs shutdown(), i.e.
@@ -810,6 +831,10 @@ app.whenReady().then(async () => {
     reviewDiscard
   )
   createWindow()
+
+  // M55. The restore answer reaches the renderer once it can hold panels;
+  // sendToRenderer waits for the load. The ids are the sessions' own.
+  if (recovered.length > 0) sendToRenderer(IPC_EVENTS.SESSION_RECOVER, recovered)
 
   // M54. The door, on the winning side of the lock only (the gate above),
   // and the launcher that reaches it. The CLI file is read as NODE outside

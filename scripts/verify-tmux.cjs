@@ -500,6 +500,35 @@ console.log('\n' + '='.repeat(60))
     noArgsThrew ?? JSON.stringify(noArgs && noArgs.args))
 
 
+// M55 — orphan recovery's pure half. `findOrphans` is fed by list() rows,
+// which parseListOutput has already stripped of dead panes (check above), so
+// a corpse is never a candidate — by construction, not by a second filter.
+{
+  const can = typeof T.findOrphans === 'function' && typeof T.orphanPrompt === 'function'
+  const sessions = [
+    { panelId: 'n1', pid: 11, command: '/bin/zsh', cwd: '/a' },
+    { panelId: 'n7', pid: 17, command: 'claude', cwd: '/b' },
+    { panelId: 'r3', pid: 13, command: '/bin/zsh', cwd: '/c' }
+  ]
+  // Known ids drawn from SEVERAL workspaces: the active one holds n1 only,
+  // a hidden one holds r3. The defect this pins: a known set built from the
+  // active workspace alone would call r3 an orphan and kill a kept session.
+  const known = ['n1', 'r3']
+  const orphans = can ? T.findOrphans(sessions, known) : null
+  ok('orphan.1 findOrphans keeps only the ids no workspace knows, and nothing else',
+    can && Array.isArray(orphans) && orphans.length === 1 && orphans[0].panelId === 'n7' && orphans[0].pid === 17 && orphans[0].cwd === '/b',
+    can ? JSON.stringify(orphans) : 'findOrphans/orphanPrompt are not exported')
+  const many = Array.from({ length: 30 }, (_, i) => ({ panelId: `n${100 + i}`, pid: 1000 + i, command: 'claude', cwd: `/w/${i}` }))
+  const prompt = can ? T.orphanPrompt(many) : null
+  const one = can ? T.orphanPrompt([sessions[1]]) : null
+  ok('orphan.2 the prompt names each session (id, command, cwd) and caps a long list with "+N more"; one session reads in the singular',
+    can && /30 sessions/.test(prompt.message) && prompt.detail.includes('n100') && prompt.detail.includes('/w/0') && prompt.detail.includes('claude') &&
+      /\+\d+ more/.test(prompt.detail) && !prompt.detail.includes('n129') &&
+      /1 session\b/.test(one.message) && one.detail.includes('n7') && !/more/.test(one.detail) &&
+      prompt.buttons[0] === 'Restore' && prompt.buttons[1] === 'Discard',
+    can ? JSON.stringify({ message: prompt.message, detail: prompt.detail.slice(0, 200), one }) : 'absent')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

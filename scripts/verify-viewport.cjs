@@ -1748,6 +1748,32 @@ const R = (id, x, y, w = 200, h = 160) => ({ id, x, y, w, h })
 }
 
 console.log('\n' + '='.repeat(60))
+// M55 — orphan recovery's renderer half. A recovered panel takes THE
+// SESSION'S OWN ID (tmux names the session by it; new-session -A is what
+// reattaches), the row's cwd and command, and the same cascade a preset
+// spawn takes; and the id counter must move PAST every adopted id, or an
+// adopted n17 with the counter at 12 mints a second n17 five spawns later.
+{
+  const can = typeof V.recoverPanels === 'function' && typeof V.seedAfter === 'function'
+  const rows = [
+    { panelId: 'n17', pid: 1, command: 'claude', cwd: '/a' },
+    { panelId: 'n18', pid: 2, command: '', cwd: '/b' }
+  ]
+  const existing = []
+  const out = can ? V.recoverPanels(rows, existing, { x: 1000, y: 800 }) : null
+  const ids = out ? out.map((p) => p.rect.id) : []
+  const distinct = out ? new Set(out.map((p) => `${p.rect.x},${p.rect.y}`)).size : 0
+  ok('recover.1 recovered panels carry the rows\' own ids, cwd and command (absent for a login shell), are terminals, and do not stack',
+    can && ids.join() === 'n17,n18' && out.every((p) => p.kind === 'terminal' && p.spec.panelId === p.rect.id) &&
+      out[0].spec.cwd === '/a' && out[0].spec.command === 'claude' && out[1].spec.cwd === '/b' && !('command' in out[1].spec) &&
+      distinct === 2,
+    can ? JSON.stringify(out) : 'recoverPanels/seedAfter are not exported')
+  const seeded = can ? V.seedAfter(['n17', 'r3', 'f40', 'j2', 't9', 'orph1', 'x99'], 12) : null
+  const untouched = can ? V.seedAfter(['n3'], 12) : null
+  ok('recover.2 seedAfter moves the counter past every adopted n/r/f/j/t id, ignores foreign ids, and never moves it backwards',
+    can && seeded === 41 && untouched === 12, JSON.stringify({ seeded, untouched }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

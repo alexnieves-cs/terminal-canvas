@@ -1,4 +1,5 @@
 import type { RunRow } from './run-ledger'
+import type { OrphanRow } from './orphans'
 import type { EnvReport } from './env-report'
 /**
  * Single source of truth for the IPC surface.
@@ -484,6 +485,12 @@ export const IPC_EVENTS = {
    */
   SESSION_LIVE: 'session:live',
   /**
+   * M55. Sent once after the user answered Restore to the boot dialog: the
+   * orphan sessions the renderer should adopt as panels under their own ids.
+   * Never sent silently — no dialog, no send.
+   */
+  SESSION_RECOVER: 'session:recover',
+  /**
    * Which subagents a panel's agent has running, pushed when the set CHANGES.
    *
    * An IPC_EVENTS member and not an IPC one, which decides a number:
@@ -954,6 +961,8 @@ export interface CanvasBridge {
      * a React effect can clean up without stacking listeners.
      */
     onLive(listener: (update: LiveSessionUpdate) => void): () => void
+    /** M55. Orphan sessions the user chose to restore; adopt each under its own id. */
+    onRecover(listener: (rows: OrphanRow[]) => void): () => void
     /**
      * Subagent-set updates for one panel. Each subscribe returns its own
      * unsubscribe, so a React effect can clean up without stacking listeners.

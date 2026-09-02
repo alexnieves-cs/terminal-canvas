@@ -14729,6 +14729,43 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // recover.1 (M55). A session that exists in NO layout — spawned straight
+    //   through the manager under an id the renderer never minted — then
+    //   main's `session:recover` sent to the renderer, as a Restore answer
+    //   would. The panel must appear under the session's OWN id, go live by
+    //   reattaching rather than by a second spawn (the manager still lists
+    //   exactly one session under that id), and a preset spawn afterwards
+    //   must mint an id PAST the adopted one — the duplicate-id defect
+    //   through recovery's door. Red first: nothing subscribed.
+    {
+      const orphanId = 'n9990'
+      let created = null
+      try { created = await ptyManager.create({ panelId: orphanId, cwd: tmpdir(), command: '/bin/sh', args: ['-c', 'sleep 60'] }) } catch (e) { created = { error: String(e) } }
+      const rowsBefore = ptyManager.list().filter((r) => r.panelId === orphanId).length
+      const before = await panelCount(wc)
+      wc.send(IPC_EVENTS.SESSION_RECOVER, [{ panelId: orphanId, pid: created && created.pid ? created.pid : 0, command: '/bin/sh', cwd: tmpdir() }])
+      const appeared = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${orphanId}"]') !== null`), 6000)
+      // Wake it: a recovered panel is placed at the camera centre, so a click
+      // on its card (with real coordinates — see the M45 lesson) promotes it.
+      const live = appeared === true
+        ? await waitUntil(async () => wc.executeJavaScript(`(() => {
+            const s = (window.__m4aSessions ? window.__m4aSessions() : []).find((x) => x.id === '${orphanId}')
+            return !!(s && s.spawned) })()`), 8000)
+        : false
+      const rowsAfter = ptyManager.list().filter((r) => r.panelId === orphanId).length
+      const countAfter = await panelCount(wc)
+      const presets = layoutStore.presets()
+      if (presets[0]) wc.send(IPC_EVENTS.PRESET_SPAWN, templateOf(presets[0]))
+      const grew = await waitUntil(async () => (await panelCount(wc)) === countAfter + 1, 6000)
+      const newest = await wc.executeJavaScript(`(() => {
+        const ids = (window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)
+        return ids.filter((id) => /^n\\d+$/.test(id)).map((id) => Number(id.slice(1))).sort((a, b) => b - a)[0] || 0 })()`)
+      ok('recover.1 a session in no layout becomes a panel under its own id, goes live by reattaching (one session, not two), and the next spawn mints past it',
+        created && !created.error && rowsBefore === 1 && appeared === true && live === true && rowsAfter === 1 &&
+          countAfter === before + 1 && grew === true && Number(newest) > 9990,
+        JSON.stringify({ created: created && (created.error ?? created.panelId), rowsBefore, before, appeared, live, rowsAfter, countAfter, grew, newest }))
+    }
+
     // control.1 (M54). THE DOOR, end to end: a real Unix socket in a scratch
     //   dir, the same handler index.ts wires (over this harness's store,
     //   templateOf and a PRESET_SPAWN send), a client speaking one JSON line

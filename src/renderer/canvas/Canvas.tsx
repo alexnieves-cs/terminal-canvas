@@ -88,6 +88,7 @@ import {
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
+import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
@@ -314,21 +315,12 @@ export function Canvas({
   // process, with nothing visibly wrong on either panel. `switchWorkspace`
   // re-seeds this same ref from ActivateResult.allPanelIds on every switch,
   // for the identical reason.
-  const nextIdRef = useRef(
-    allPanelIds.reduce((max, id) => {
-      // All THREE prefixes, one sequence. `n` panels, `r` review nodes and
-      // `f` file panels draw from the same counter precisely so none can mint
-      // an id another owns; a regex that only saw `n` would restore a canvas
-      // holding r7 and then hand out n7, which is one id for two panels. The
-      // same trap is live for `f`: a regex blind to it recomputes a maximum a
-      // persisted f7 had no part in, and the next open mints f7 twice — React
-      // collides on the key and parseLayout drops one silently at the next
-      // load. BOTH seed sites (here and switchWorkspace) must carry the same
-      // character class; missing either reopens it through the other door.
-      const match = /^[nrfjt](\d+)$/.exec(id)
-      return match ? Math.max(max, Number(match[1]) + 1) : max
-    }, 1)
-  )
+  // ONE seeding rule for all five prefixes, shared with switchWorkspace and
+  // with M55's recovery: seedAfter (panels/recover.ts). The character class
+  // used to live inline here and in useWorkspaceVerbs, each warning that
+  // missing the other reopened the duplicate-id defect; a third copy for
+  // recovery would have been a third door.
+  const nextIdRef = useRef(seedAfter(allPanelIds, 1))
   // The undo stack holds Panel[] — the same array persistence already
   // serialises. Camera moves are deliberately absent: pan and zoom are
   // continuous and self-evidently reversible by doing the opposite, and
@@ -1169,6 +1161,21 @@ export function Canvas({
     const offSpawn = window.canvas.preset.onSpawn((template) => {
       onSpawn(worldCentre(), template)
     })
+    // M55. Recovered orphans, only ever after the user answered Restore.
+    // Through commitHistory like a spawn, so Cmd+Z un-adopts — which
+    // disposes the sessions, and that is right: asked, said yes, said no.
+    const offRecover = window.canvas.session.onRecover((rows) => {
+      const centre = worldCentre()
+      nextIdRef.current = seedAfter(rows.map((r) => r.panelId), nextIdRef.current)
+      setEnteringPanelIds((current) => { const next = new Set(current); for (const r of rows) next.add(r.panelId); return next })
+      setPanels((current) => {
+        const fresh = recoverPanels(rows.filter((r) => !current.some((p) => p.rect.id === r.panelId)), current, centre)
+        if (fresh.length === 0) return current
+        const next = [...current, ...fresh]
+        commitHistory(next)
+        return next
+      })
+    })
     const offDefault = window.canvas.preset.onDefault((template) => {
       defaultTemplateRef.current = template
     })
@@ -1206,6 +1213,7 @@ export function Canvas({
     })
     return () => {
       offSpawn()
+      offRecover()
       offDefault()
       offCapture()
     }
