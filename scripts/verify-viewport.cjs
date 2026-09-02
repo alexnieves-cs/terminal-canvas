@@ -1650,6 +1650,81 @@ ok('74 a panel with no kind is not a review panel',
     JSON.stringify({ panels, back }))
 }
 
+// M50 — placement. snapRect is a pure function over applyDrag's OUTPUT: the
+//      rect a drag implies, the other panels' rects, and a threshold in WORLD
+//      units that the caller derives as SNAP_PX / scale (verify:viewport 27's
+//      1/k relationship). Edges snap to edges, centres to centres, the
+//      smallest delta within the threshold wins per axis, nothing snaps to
+//      itself, and a resize snaps only its growing edges and never falls
+//      under the floor. tidyPanels compacts WITHOUT reordering and changes no
+//      size — a tidy that sorted by id would destroy the one thing the canvas
+//      was carrying, and one that resized could produce a rect the validator
+//      rejects, which is a canvas that cannot be saved.
+const has = typeof V.snapRect === 'function' && typeof V.tidyPanels === 'function'
+const R = (id, x, y, w = 200, h = 160) => ({ id, x, y, w, h })
+{
+  // snap.1: the dragged rect's left edge is 5 world units from another's
+  // right edge; it snaps ON and the guide names the x.
+  const out = has ? V.snapRect(R('a', 405, 300), [R('b', 100, 100, 300, 200)], 8) : null
+  ok('snap.1 an edge within the threshold snaps onto the other rect\'s edge, and a guide names it',
+    has && out.rect.x === 400 && out.rect.y === 300 && out.guides.some((g) => g.axis === 'x' && g.at === 400),
+    JSON.stringify(out))
+}
+{
+  // snap.2: beyond the threshold nothing moves; and a rect never snaps to
+  // itself (the others list may still contain it — the caller passes all).
+  // y 340, so no edge or centre aligns on the y axis by accident either.
+  const far = has ? V.snapRect(R('a', 420, 340), [R('b', 100, 100, 300, 200)], 8) : null
+  const self = has ? V.snapRect(R('a', 405, 340), [R('a', 100, 100, 300, 200), R('a', 405, 340)], 8) : null
+  ok('snap.2 nothing snaps beyond the threshold, and never to itself',
+    has && far.rect.x === 420 && far.guides.length === 0 && self.rect.x === 405 && self.guides.length === 0,
+    JSON.stringify({ far, self }))
+}
+{
+  // snap.3: a resize growing east snaps its RIGHT edge to another's left
+  // edge (x 600 → right edge at 600), and a snap that would take the width
+  // under MIN_PANEL_W is refused rather than clamped into a different size.
+  const grow = has ? V.snapRect(R('a', 100, 100, 495, 160), [R('b', 600, 100)], 8, { resize: { growsX: true, growsY: false } }) : null
+  const tooSmall = has ? V.snapRect(R('a', 100, 100, 200, 160), [R('b', 297, 100)], 8, { resize: { growsX: true, growsY: false } }) : null
+  ok('snap.3 a resize snaps its moving edge and never produces a rect under the floor',
+    has && grow.rect.x === 100 && grow.rect.w === 500 && grow.guides.some((g) => g.axis === 'x' && g.at === 600) &&
+      tooSmall.rect.w >= V.MIN_PANEL_W,
+    JSON.stringify({ grow, tooSmall }))
+}
+{
+  // snap.4: centres. a (w 240) at x 76 has centre 196; b's centre is 200,
+  // and neither of a's edges is within reach of b's (76 vs 100, 316 vs 300)
+  // — so only the centre can explain the move to x 80, and the guide is at
+  // the centre.
+  const out = has ? V.snapRect(R('a', 76, 500, 240, 160), [R('b', 100, 100)], 8) : null
+  ok('snap.4 centres snap to centres', has && out.rect.x === 80 && out.guides.some((g) => g.axis === 'x' && g.at === 200), JSON.stringify(out))
+}
+{
+  // tidy.1: three panels in one row with gaps and a jog compact left-to-
+  // right in their reading order, keep every size, and tidy again changes
+  // nothing.
+  const rects = [R('c', 900, 110, 240, 160), R('a', 100, 100), R('b', 500, 105, 300, 200)]
+  const tidied = has ? V.tidyPanels(rects, 24) : null
+  const again = has ? V.tidyPanels(tidied, 24) : null
+  const byId = (rs, id) => rs.find((r) => r.id === id)
+  ok('tidy.1 tidy compacts without reordering, keeps every size, and is idempotent',
+    has && tidied.length === 3 && byId(tidied, 'a').x === 100 && byId(tidied, 'b').x === 100 + 200 + 24 && byId(tidied, 'c').x === 100 + 200 + 24 + 300 + 24 &&
+      byId(tidied, 'a').w === 200 && byId(tidied, 'b').w === 300 && byId(tidied, 'c').w === 240 && byId(tidied, 'b').h === 200 &&
+      JSON.stringify(again) === JSON.stringify(tidied),
+    JSON.stringify(tidied))
+}
+{
+  // tidy.2: two rows. The second row starts below the tallest of the first
+  // plus the gap, at the selection's origin x; nothing falls under the floor.
+  const rects = [R('a', 100, 100), R('b', 400, 120, 200, 300), R('c', 150, 700), R('d', 500, 650)]
+  const tidied = has ? V.tidyPanels(rects, 24) : null
+  const byId = (rs, id) => rs.find((r) => r.id === id)
+  ok('tidy.2 rows are formed by overlap, the next row starts below the tallest, and no rect is under the floor',
+    has && byId(tidied, 'a').y === 100 && byId(tidied, 'b').y === 100 && byId(tidied, 'c').x === 100 && byId(tidied, 'c').y === 100 + 300 + 24 && byId(tidied, 'd').x === 100 + 200 + 24 &&
+      tidied.every((r) => r.w >= V.MIN_PANEL_W && r.h >= V.MIN_PANEL_H),
+    JSON.stringify(tidied))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

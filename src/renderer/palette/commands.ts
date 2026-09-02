@@ -175,6 +175,8 @@ export interface PaletteActions {
   restartPanel(id: string): void
   /** M49. Commit a per-panel font size; undefined returns the panel to the global. */
   setPanelFontSize(id: string, size: number | undefined): void
+  /** M50. Arrange these panels compactly, one undoable step, never reordering. */
+  tidyPanels(ids: string[]): void
   /**
    * Set this panel's permission mode AND restart it, as ONE gesture.
    *
@@ -423,6 +425,8 @@ export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
 /** M49. A font size belongs to a terminal; the other kinds set their own text. */
 export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
+/** M50. One panel has nothing to be tidied against. */
+export const REASON_TIDY_NEEDS_TWO = 'needs two panels on the canvas'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
@@ -918,6 +922,25 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.resetCanvas()
   })
+
+  // --- Placement (M50) -------------------------------------------------------
+  //
+  // Tidy the SELECTION when two or more are selected, everything otherwise;
+  // disabled with a reason on a lone panel. One undoable step, never twenty,
+  // and never a reorder — the arrangement is the information the canvas was
+  // carrying.
+  {
+    const useSelection = ctx.selectedIds.length >= 2
+    const ids = useSelection ? [...ctx.selectedIds] : ctx.panels.map((p) => p.id)
+    out.push(withReason({
+      id: 'panel.tidy',
+      title: useSelection ? `Tidy the selection (${ctx.selectedIds.length} panels)` : 'Tidy everything',
+      subtitle: 'compact without reordering — one undo',
+      group: 'panel',
+      searchText: 'tidy arrange compact grid align clean up layout',
+      run: () => actions.tidyPanels(ids)
+    }, ctx.panels.length < 2 ? REASON_TIDY_NEEDS_TWO : undefined))
+  }
 
   // --- Typography (M49) ------------------------------------------------------
   //

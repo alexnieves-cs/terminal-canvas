@@ -6,8 +6,8 @@ export interface PanelDragDeps {
   hostRef: RefObject<HTMLElement | null>
   /** Read through a ref: viewport changes on every wheel event. */
   viewportRef: RefObject<Viewport>
-  /** Called on every move with the rect this gesture implies. */
-  onDrag(panelId: string, rect: WorldRect): void
+  /** Called on every move with the rect this gesture implies, and the gesture itself (M50: a snap needs to know a resize's moving edges). */
+  onDrag(panelId: string, rect: WorldRect, state: DragState): void
   /**
    * Called once on release for the whole gesture. A group move carries one
    * immutable state per member, so this is the one place its history entry
@@ -79,7 +79,7 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       // rect is derived from its mousedown origin rather than the preceding
       // frame or a group bounding box — see applyDrag's own note.
       for (const member of state) {
-        depsRef.current.onDrag(member.panelId, applyDrag(member, world))
+        depsRef.current.onDrag(member.panelId, applyDrag(member, world), member)
       }
     }
 

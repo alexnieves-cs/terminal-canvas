@@ -1378,6 +1378,14 @@ body {
   fill: none;
 }
 
+/* M50. Snap guides: world-space hairlines inside .world, iris because a
+   guide answers an interaction with the interface, never an agent's state.
+   Never a target. */
+.snap-guides { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 1; pointer-events: none; }
+.snap-guide { position: absolute; background: var(--iris); pointer-events: none; }
+.snap-guide--x { width: 1px; }
+.snap-guide--y { height: 1px; }
+
 /* A group frame is positioned once in WORLD pixels. Only .world's transform
    moves. */
 .canvas-group {

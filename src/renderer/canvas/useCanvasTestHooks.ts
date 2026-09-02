@@ -27,6 +27,8 @@ export interface CanvasTestHooksDeps {
     panelIds: string[],
     target: { workspaceId: string } | { newName: string }
   ) => void
+  /** M50. The selection setter, for a check that arranges a chosen set. */
+  setSelectedIds: Dispatch<SetStateAction<ReadonlySet<string>>>
 }
 
 /**
@@ -48,7 +50,7 @@ export interface CanvasTestHooksDeps {
 export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
   const {
     registry, viewportRef, focusedIdRef, panelsRef, defaultTemplateRef,
-    deleteWorkspaceRef, setHistory, applyHistory, resetCanvas, switchWorkspace,
+    deleteWorkspaceRef, setHistory, applyHistory, resetCanvas, switchWorkspace, setSelectedIds,
     movePanelsToWorkspace
   } = deps
 
@@ -117,6 +119,8 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
       const theme = session.handle.options().theme as { background?: string } | undefined
       return theme?.background ?? null
     }
+    /** M50. Select exactly these panels — the M18 gesture's result, without the gesture. */
+    w.__m50Select = (ids: string[]): void => { setSelectedIds(new Set(ids)) }
     /** M49. A session's own cell metrics (CSS px, transform-blind), by id. */
     w.__m49CellSize = (id: string): { width: number; height: number } | null => {
       const session = registry.get(id)

@@ -16,6 +16,8 @@ import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
+import { SnapGuides } from './SnapGuides'
+import { snapRect, SNAP_PX, type SnapGuide } from './placement'
 import { HintStrip } from './HintStrip'
 import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
@@ -44,7 +46,7 @@ import { usePanelDrag } from './usePanelDrag'
 import { GroupLayer } from '@renderer/groups/GroupLayer'
 import { applyGroupDrag, groupDragState, pruneGroups, raiseGroup, removeGroup, type CanvasGroup } from '@renderer/groups/groups'
 import { useGroupDrag } from '@renderer/groups/useGroupDrag'
-import type { DragState } from './panel-interaction'
+import { applyDrag, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
 import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
@@ -1426,6 +1428,7 @@ export function Canvas({
   // effect used to occupy: deleteWorkspaceRef is created above and assigned
   // below, and moving this call would break that order silently.
   useCanvasTestHooks({
+    setSelectedIds,
     registry,
     viewportRef,
     focusedIdRef,
@@ -1442,14 +1445,56 @@ export function Canvas({
   // One gesture at a time, driven by document listeners installed once. Moves
   // rewrite the rect on every frame; only a resize commits anything to the PTY,
   // and only on release.
+  // M50. Snapping: applied to applyDrag's OUTPUT, per frame, against every
+  // other panel's rect, with the threshold in SCREEN pixels over the scale
+  // (verify:viewport 27's 1/k relationship — a world-unit threshold is huge
+  // zoomed out and invisible zoomed in). The guides are the one piece of
+  // state a drag leaves in React: cleared on commit. Off when the setting
+  // is off: a user aligning by eye against a snap is fighting the app.
+  const [snapEnabled, setSnapEnabled] = useState(true)
+  useEffect(() => {
+    // Read at mount and on every settings write (settings:changed, M45):
+    // this block sits above settingRows' declaration, and a subscription is
+    // the more honest source anyway — the row's own palette toggle and a
+    // menu write both land here.
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const row = rows.find((r) => r.id === 'placement.snap')
+        if (row) setSnapEnabled(row.value === true)
+      })
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [])
+  const snapEnabledRef = useRef(snapEnabled)
+  snapEnabledRef.current = snapEnabled
+  const [snapGuides, setSnapGuides] = useState<readonly SnapGuide[]>([])
+  const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }): WorldRect => {
+    if (!snapEnabledRef.current) return rect
+    const others = panelsRef.current.filter((p) => !exclude.has(p.rect.id)).map((p) => p.rect)
+    const out = snapRect(rect, others, SNAP_PX / viewportRef.current.scale, resize ? { resize } : {})
+    setSnapGuides(out.guides)
+    return out.rect
+  }, [])
+
   const beginDrag = usePanelDrag({
     hostRef,
     viewportRef,
     onDrag: useCallback(
-      (id: string, rect: WorldRect) => setPanels((current) => setPanelRect(current, id, rect)),
-      []
+      (id: string, rect: WorldRect, state: DragState) => {
+        const resize = state.mode.kind === 'resize'
+          ? { growsX: state.mode.edge === 'e' || state.mode.edge === 'se', growsY: state.mode.edge === 's' || state.mode.edge === 'se' }
+          : undefined
+        const snapped = snapNow(rect, new Set([id]), resize)
+        setPanels((current) => setPanelRect(current, id, snapped))
+      },
+      [snapNow]
     ),
     onCommit: useCallback((states: readonly DragState[]) => {
+      setSnapGuides([])
       // One history entry per gesture. onDrag (above) called setPanels ~60
       // times during the drag; pushing there would make a single drag take
       // sixty Cmd+Z presses to undo. This runs exactly once, on mouseup,
@@ -1474,9 +1519,26 @@ export function Canvas({
     hostRef,
     viewportRef,
     onDrag: useCallback((state, world) => {
-      setPanels((current) => applyGroupDrag(current, state, world))
-    }, []),
+      // M50. The group snaps as ONE rect — its members' bounding rect —
+      // and the snap's delta shifts the cursor's world point, so every
+      // member moves by the same amount and nothing shears.
+      const members = new Set(state.members.map((m) => m.panelId))
+      const rects = state.members.map((m) => applyDrag(m, world))
+      let snappedWorld = world
+      if (rects.length > 0) {
+        const bounds = {
+          id: `group:${state.groupId}`,
+          x: Math.min(...rects.map((r) => r.x)), y: Math.min(...rects.map((r) => r.y)),
+          w: Math.max(...rects.map((r) => r.x + r.w)) - Math.min(...rects.map((r) => r.x)),
+          h: Math.max(...rects.map((r) => r.y + r.h)) - Math.min(...rects.map((r) => r.y))
+        }
+        const snapped = snapNow(bounds, members)
+        snappedWorld = { x: world.x + (snapped.x - bounds.x), y: world.y + (snapped.y - bounds.y) }
+      }
+      setPanels((current) => applyGroupDrag(current, state, snappedWorld))
+    }, [snapNow]),
     onCommit: useCallback(() => {
+      setSnapGuides([])
       setPanels((current) => {
         commitHistory(current)
         return current
@@ -3120,6 +3182,7 @@ export function Canvas({
               removing a link means. Suppressed while merged, where geometry
               and links are read-only, the same gate the drag and the move
               verb already take. */}
+          <SnapGuides guides={snapGuides} />
           <LinkLayer
             panels={displayPanels}
             draw={linkDraw.state}
