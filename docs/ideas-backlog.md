@@ -1320,7 +1320,7 @@ indistinguishable from a broken one.
   found" in every panel with no explanation. First run is where that lands, and a one-line
   banner naming the actual cause is worth more than most of this entry.
 
-## 39. Export and share — a screenshot, a transcript, a receipt
+## 39. Export and share — a screenshot, a transcript, a receipt — DONE, M58 (narrowed: a panel's text and the canvas as PNG)
 
 Take what is on the canvas out of the app: an image of a region, a panel's output as text,
 a summary of what an agent did. The unglamorous half of "the canvas is where work happens"

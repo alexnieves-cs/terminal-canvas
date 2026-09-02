@@ -2905,3 +2905,24 @@ first, which lands the camera in the summary band — the first cut of this tier
 element with a state word and all three went red with "need one idle and one running panel".
 A summary of an unstarted panel is "not started", and the element that says so is the same
 one.
+
+**Export reads the DURABLE log, never the xterm buffer, and the PNG is main's `capturePage`,
+never a DOM capture (`main/export.ts`, `scrollback-log.ts`'s `readAll`, `index.ts`).** Two
+silent failures, one per door. The text door: the xterm buffer is whatever scrollback xterm
+still holds, a truncation the user cannot see, so with `scrollback.persist` off the row is
+DISABLED with that reason and the export answers `off` rather than falling back — and it
+reads the WHOLE file through `readAll` (after the panel's write queue drains, so it never
+races a flush mid-line), not `tail`, whose 64KB window would truncate silently in the other
+direction. The text is stripped by `shared/ansi.ts` and scrubbed by `shared/redact.ts`, the
+same module the diagnostics bundle uses, and the result carries the redaction COUNT: a file
+that quietly differs from the screen is the failure #31 is about, and the only honest
+answer is to say how much differs. The picture door: the panels are WebGL-backed, a DOM
+serialisation does not include a WebGL canvas, and `toDataURL` on one comes back empty
+without `preserveDrawingBuffer` (which costs memory on every context, up to `LIVE_BUDGET`
+of them) — so the capture is `webContents.capturePage()`, which composites the real frame,
+and what it captures is what the canvas IS: cards stay cards, nothing is promoted to make
+the picture prettier. The dialog and the capture are injected, so every arm — cancel writes
+nothing, off reads nothing, the bytes written are the bytes captured — runs under plain node
+in `verify:file`; `registerIpcHandlers` takes the exporters as a trailing parameter with an
+INERT default that answers `failed`, which is exactly the red `verify:panels export.1` was
+watched at before the harness wired its own.

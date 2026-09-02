@@ -45,6 +45,12 @@ export interface ScrollbackLog {
   append(panelId: string, data: string): Promise<void>
   /** The last `lines` NON-EMPTY, ANSI-stripped lines, oldest first. [] for a panel with no file. */
   tail(panelId: string, lines: number): Promise<string[]>
+  /**
+   * M58. The WHOLE file, raw. `tail` reads a 64KB window and would truncate
+   * an export silently; this is bounded by the log's own cap instead. '' when
+   * the panel has no file.
+   */
+  readAll(panelId: string): Promise<string>
   size(panelId: string): Promise<number>
   /**
    * M42. Case-insensitive substring over the ANSI-stripped log of each LISTED
@@ -123,6 +129,17 @@ export function createScrollbackLog(o: {
       })
     },
 
+    async readAll(panelId) {
+      const path = fileOf(panelId)
+      // After the queue drains, so an export never races a flush mid-line.
+      await (queues.get(panelId) ?? Promise.resolve())
+      try {
+        return await fs.readFile(path, 'utf8')
+      } catch (error: unknown) {
+        if ((error as { code?: string }).code === 'ENOENT') return ''
+        throw error
+      }
+    },
     async tail(panelId, lines) {
       const path = fileOf(panelId)
       const size = await statSize(path)

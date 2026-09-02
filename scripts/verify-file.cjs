@@ -597,7 +597,54 @@ const p = (name) => join(DIR, name)
     rmSync(dir, { recursive: true, force: true })
   }
 
-  const failed = results.filter((r) => !r.pass)
+  // M58 — export. Both doors run here against a scratch log and a FAKE save
+// dialog, because the arms — cancelled writes nothing, off reads nothing,
+// the written text is stripped AND scrubbed — are what a user cannot see go
+// wrong: a file that quietly differs from the screen, or a token in it.
+{
+  const can = typeof F.createExporters === 'function' && typeof F.createScrollbackLog === 'function'
+  const dir = mkdtempSync(join(tmpdir(), 'tc file export '))
+  const log = can ? F.createScrollbackLog({ dir: join(dir, 'log'), maxBytes: 1024 * 1024 }) : null
+  const writes = []
+  const mk = (path, opts = {}) => (can ? F.createExporters({
+    log,
+    persistOn: () => opts.persistOn !== false,
+    askPath: async () => path,
+    capture: async () => Buffer.from(opts.png ?? 'PNGBYTES'),
+    write: (p, data) => { writes.push(p); writeFileSync(p, data) }
+  }) : null)
+  if (log) {
+    await log.append('pX', 'hello \u001b[31mred\u001b[0m world\n')
+    await log.append('pX', 'token sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\n')
+    await log.append('pX', 'last line\n')
+    await log.idle('pX')
+  }
+  const out1 = join(dir, 'pX.txt')
+  const r1 = log ? await mk(out1).panelText('pX') : null
+  const text1 = existsSync(out1) ? readFileSync(out1, 'utf8') : ''
+  ok('export.1 a panel\'s text export is the whole log, ANSI stripped and secrets scrubbed, with lines and the redaction count reported',
+    can && r1.kind === 'written' && r1.path === out1 && r1.lines === 3 && r1.redacted === 1 &&
+      text1.includes('hello red world') && !text1.includes('\u001b[') && !text1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && text1.includes('last line'),
+    can ? JSON.stringify({ r1, text1 }) : 'createExporters is not exported')
+  const before = writes.length
+  const r2 = log ? await mk(null).panelText('pX') : null
+  ok('export.2 a cancelled save dialog writes nothing and says cancelled', can && r2.kind === 'cancelled' && writes.length === before, JSON.stringify(r2))
+  const r3 = log ? await mk(join(dir, 'none.txt')).panelText('pNone') : null
+  const r3b = log ? await mk(join(dir, 'off.txt'), { persistOn: false }).panelText('pX') : null
+  ok('export.3 no log is `empty`; scrollback off is `off` and reads nothing, never the xterm buffer',
+    can && r3.kind === 'empty' && r3b.kind === 'off' && !existsSync(join(dir, 'none.txt')) && !existsSync(join(dir, 'off.txt')),
+    JSON.stringify({ r3, r3b }))
+  const out4 = join(dir, 'canvas.png')
+  const r4 = log ? await mk(out4, { png: 'FRAMEBYTES' }).canvasPng() : null
+  const png = existsSync(out4) ? readFileSync(out4, 'utf8') : ''
+  const r4b = log ? await mk(null).canvasPng() : null
+  ok('export.4 the PNG export writes exactly the captured bytes, and a cancel writes nothing',
+    can && r4.kind === 'written' && r4.path === out4 && png === 'FRAMEBYTES' && r4b.kind === 'cancelled',
+    JSON.stringify({ r4, png, r4b }))
+  rmSync(dir, { recursive: true, force: true })
+}
+
+const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
   process.exit(failed.length === 0 ? 0 : 1)

@@ -79,6 +79,7 @@ const {
   createReviewDiscarder,
   createControlServer,
   createControlHandler,
+  createExporters,
   FileWatchers,
   ToolboxCache,
   readFrom,
@@ -740,6 +741,8 @@ app.whenReady().then(async () => {
   // layoutStore so worktree.1 can read them back over worktree:list.
   // M39. A scratch log directory, spaced like every fixture path here.
   const scrollbackLog = createScrollbackLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels scrollback ')), 'scrollback') })
+  // M58. Where the next export lands; the harness's own save dialog answer.
+  let exportTarget = null
   const WORKTREES_DIR = join(mkdtempSync(join(tmpdir(), 'tc panels worktrees ')), 'worktrees')
   const worktreeManager = createWorktreeManager({
     run: realGitRunner,
@@ -960,6 +963,14 @@ app.whenReady().then(async () => {
     peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
     removeFile: (p) => unlinkSync(p),
     isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
+  }),
+  // M58. Main's own exporters over this harness's "dialog": whatever path
+  // exportTarget names, or a cancel when it is null.
+  createExporters({
+    log: scrollbackLog,
+    persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
+    askPath: async () => exportTarget,
+    capture: async () => (await win.webContents.capturePage()).toPNG()
   }))
   ipcMain.handle = realIpcMainHandle
 
@@ -14740,6 +14751,61 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // export.1 (M58). THE DOOR OUT, end to end: a sentinel echoed into a live
+    //   panel reaches the durable log, the palette row asks main, main's
+    //   exporters (over this harness's scratch "dialog") write a file that
+    //   holds the sentinel with no escape bytes; then the PNG row writes a
+    //   real PNG of the composited frame. Read off DISK. Red first: the
+    //   harness exporters were the inert default, which answers `failed`.
+    {
+      const exportDir = mkdtempSync(join(tmpdir(), 'tc panels export '))
+      // A panel of its own, spawned at the camera centre and therefore live.
+      const idsBefore = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), args: ['-l'] })
+      const liveId = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : [])`)
+        const fresh = rows.find((r) => !idsBefore.includes(r.id) && r.spawned)
+        return fresh ? fresh.id : false
+      }, 8000) || null
+      const focused = liveId ? await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.panel[data-panel-id="${liveId}"] .xterm-screen') || document.querySelector('.panel[data-panel-id="${liveId}"] .panel__slot')
+        if (!el) return false
+        const r = el.getBoundingClientRect()
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, buttons: 1 }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }))
+        return true })()`) : false
+      if (liveId) ptyManager.write(liveId, 'echo EXPORT_SENTINEL_7781\r')
+      const logged = liveId ? await waitUntil(async () => (await scrollbackLog.tail(liveId, 8)).some((l) => /EXPORT_SENTINEL_7781/.test(l)), 8000) : false
+      const openP = async () => {
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      }
+      const runRow = async (rowId) => {
+        const opened = await openP()
+        if (opened !== true) return 'no palette'
+        return wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify(rowId)}) + ']')
+          if (!el) return 'no row'
+          if (el.className.includes('palette__row--disabled')) return 'disabled: ' + (el.getAttribute('title') || el.textContent)
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          return true })()`)
+      }
+      exportTarget = join(exportDir, 'panel.txt')
+      const ranText = await runRow('panel.export-text')
+      const textWritten = await waitUntil(async () => existsSync(exportTarget) && /EXPORT_SENTINEL_7781/.test(readFileSync(exportTarget, 'utf8')), 6000)
+      const text = existsSync(exportTarget) ? readFileSync(exportTarget, 'utf8') : ''
+      exportTarget = join(exportDir, 'canvas.png')
+      const ranPng = await runRow('canvas.export-png')
+      const pngWritten = await waitUntil(async () => existsSync(exportTarget) && readFileSync(exportTarget).length > 8, 8000)
+      const magic = existsSync(exportTarget) ? readFileSync(exportTarget).subarray(1, 4).toString('latin1') : ''
+      exportTarget = null
+      ok('export.1 the palette writes a panel\'s scrubbed text (holding what it printed, no escape bytes) and a real PNG of the frame, through main',
+        liveId !== null && focused === true && logged === true && ranText === true && textWritten === true && !text.includes('\u001b[') &&
+          ranPng === true && pngWritten === true && magic === 'PNG',
+        JSON.stringify({ liveId, focused, logged, ranText, textWritten, textTail: text.slice(-120), ranPng, pngWritten, magic }))
+      rmSync(exportDir, { recursive: true, force: true })
+    }
+
     // detail.1 (M57). Semantic zoom read off the DOM: every card is `tail`
     //   at the default zoom, `summary` (naming its panel) once the camera is
     //   pulled to ~0.2, `block` at ~0.08, and `tail` again after Cmd+0 — with

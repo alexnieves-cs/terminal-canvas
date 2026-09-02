@@ -215,6 +215,8 @@ const spyActions = () => {
     deleteBookmark: record('deleteBookmark'),
     cameraBack: record('cameraBack'),
     cameraForward: record('cameraForward'),
+    exportPanelText: record('exportPanelText'),
+    exportCanvasPng: record('exportCanvasPng'),
     zoomToFit: record('zoomToFit'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
@@ -1853,6 +1855,29 @@ const WS = [
       fwd !== undefined && fwd.disabledReason === undefined &&
       calls.includes('goToBookmark') && calls.includes('addBookmark'),
     JSON.stringify({ section, add: add && add.title, go: go && go.title, del: del && del.title, back: back && back.disabledReason, fwd: fwd && fwd.disabledReason, calls }))
+}
+
+// M58 — export rows. The panel row is disabled with a distinct reason for
+// no focus, a sessionless kind, and scrollback off — three different fixes;
+// the canvas row is always runnable.
+{
+  const panels = [{ id: 'n1', label: 'claude', kind: 'terminal' }, { id: 'r1', label: 'review', kind: 'review' }]
+  const on = ctx({ panels, capturedId: 'n1', scrollbackEnabled: true })
+  const off = ctx({ panels, capturedId: 'n1', scrollbackEnabled: false })
+  const none = ctx({ panels, capturedId: null })
+  const wrongKind = ctx({ panels, capturedId: 'r1' })
+  const row = (c) => byId(P.buildCommands(c), 'panel.export-text')
+  const png = byId(P.buildCommands(on), 'canvas.export-png')
+  const r = row(on)
+  if (r) r.run()
+  if (png) png.run()
+  const calls = on.actions.calls.map((x) => x[0])
+  ok('export.1 the panel text row runs on a focused terminal with scrollback on, and is disabled by name for no focus / a sessionless kind / scrollback off; the PNG row always runs',
+    r !== undefined && r.disabledReason === undefined && calls.includes('exportPanelText') && on.actions.calls.find((x) => x[0] === 'exportPanelText')[1] === 'n1' &&
+      typeof row(none).disabledReason === 'string' && typeof row(wrongKind).disabledReason === 'string' && /scrollback/i.test(row(off).disabledReason || '') &&
+      row(none).disabledReason !== row(off).disabledReason &&
+      png !== undefined && png.disabledReason === undefined && png.group === 'canvas' && calls.includes('exportCanvasPng'),
+    JSON.stringify({ r: r && r.disabledReason, none: row(none) && row(none).disabledReason, wrong: row(wrongKind) && row(wrongKind).disabledReason, off: row(off) && row(off).disabledReason, png: png && png.group, calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

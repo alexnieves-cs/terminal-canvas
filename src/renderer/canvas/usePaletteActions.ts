@@ -440,6 +440,18 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     cameraBack: () => cameraBack(),
     cameraForward: () => cameraForward(),
+    // M58. Fire-and-forget into main, which owns the dialog, the write and
+    // the reveal; a refusal is logged, since the palette has no toast.
+    exportPanelText: (panelId) => {
+      void window.canvas.export.panelText(panelId).then((r) => {
+        if (r.kind !== 'written' && r.kind !== 'cancelled') console.warn(`[export] panel text: ${r.kind}${'reason' in r ? ` — ${r.reason}` : ''}`)
+      })
+    },
+    exportCanvasPng: () => {
+      void window.canvas.export.canvasPng().then((r) => {
+        if (r.kind === 'failed') console.warn(`[export] canvas png — ${r.reason}`)
+      })
+    },
     toggleSetting: (id, value) => {
       // Main owns the store, so the write goes there and the row list is
       // reloaded from the answer rather than updated optimistically: an

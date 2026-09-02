@@ -205,7 +205,7 @@ app.whenReady().then(() => {
   // 61 = 60 plus M51's link:open, an optional trailing parameter with an
   // inert default like env:report before it.
   // 62 = 61 plus M52's ledger:list, inert by default like link:open.
-  const EXPECTED_CHANNELS = 63
+  const EXPECTED_CHANNELS = 65
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
