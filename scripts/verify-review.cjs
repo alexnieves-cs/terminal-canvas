@@ -1574,6 +1574,113 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
   }
 }
 
+// M53 — Discard. A NEW module beside the committer, driven with the same fake
+// runner. Every check here is a refusal or an ordering, because the operation
+// is the one this app has that destroys work.
+{
+  const can = typeof R.createReviewDiscarder === 'function'
+  const fakeFs = () => {
+    const removed = []
+    const dirs = new Set()
+    return { removed, dirs, removeFile: (p) => { removed.push(p) }, isDirectory: (p) => dirs.has(p) }
+  }
+  const discarderOn = (run, fs, shared = () => 0) =>
+    can ? R.createReviewDiscarder({ run, peersInRepo: shared, removeFile: fs.removeFile, isDirectory: fs.isDirectory }) : null
+  const REQ = { root: '/r', baseline: 'base1', subjectId: 'p1', paths: ['kept.ts', 'sub/new.ts'] }
+
+  // discard.1 — argv and order: exists, ls-tree (exact, NUL, over the request's
+  // paths), ONE restore over exactly the held paths with --worktree and never
+  // --staged, then the fs removal for the path the baseline never held.
+  {
+    const fs = fakeFs()
+    const g = fakeGit({ 'ls-tree': { stdout: 'kept.ts\0' } })
+    const out = can ? await discarderOn(g.run, fs)(REQ) : null
+    const sub = g.calls.map((c) => c.args[2])
+    const restore = g.calls.find((c) => c.args[2] === 'restore')
+    const lsTree = g.calls.find((c) => c.args[2] === 'ls-tree')
+    ok('discard.1 ls-tree then ONE worktree-only restore over the held paths, and removal for the rest',
+      can && out.kind === 'discarded' && out.restored.join() === 'kept.ts' && out.removed.join() === '/r/sub/new.ts' &&
+        out.failed.length === 0 &&
+        sub.indexOf('cat-file') < sub.indexOf('ls-tree') && sub.indexOf('ls-tree') < sub.indexOf('restore') &&
+        sub.filter((n) => n === 'restore').length === 1 &&
+        lsTree.args.includes('-z') && lsTree.args.includes('--name-only') && lsTree.args.includes('base1') &&
+        lsTree.args.slice(lsTree.args.indexOf('--') + 1).join() === 'kept.ts,sub/new.ts' &&
+        restore.args.includes('--source=base1') && restore.args.includes('--worktree') && !restore.args.includes('--staged') &&
+        restore.args.slice(restore.args.indexOf('--') + 1).join() === 'kept.ts' &&
+        fs.removed.join() === '/r/sub/new.ts',
+      can ? JSON.stringify({ out, sub, removed: fs.removed }) : 'createReviewDiscarder is not exported')
+  }
+  // discard.2 — a path absent at baseline is removed through the injected fs
+  // and NEVER through git: no `rm`, no `update-index`, and no restore at all
+  // when nothing is held.
+  {
+    const fs = fakeFs()
+    const g = fakeGit({ 'ls-tree': { stdout: '' } })
+    const out = can ? await discarderOn(g.run, fs)({ ...REQ, paths: ['only-new.ts'] }) : null
+    const sub = g.calls.map((c) => c.args[2])
+    ok('discard.2 an absent-at-baseline path is removed by the fs, never by a git write',
+      can && out.kind === 'discarded' && out.removed.join() === '/r/only-new.ts' && out.restored.length === 0 &&
+        !sub.includes('rm') && !sub.includes('update-index') && !sub.includes('restore'),
+      can ? JSON.stringify({ out, sub }) : 'absent')
+  }
+  // discard.3 — shared refuses BEFORE any git call. The node model blocks the
+  // control too, but the node's result can be stale; main's own count is the
+  // refusal that cannot be forgotten by a later UI.
+  {
+    const fs = fakeFs()
+    const g = fakeGit({})
+    const out = can ? await discarderOn(g.run, fs, () => 1)(REQ) : null
+    ok('discard.3 a shared checkout refuses before any git call and removes nothing',
+      can && out.kind === 'refused' && /share/.test(out.detail) && g.calls.length === 0 && fs.removed.length === 0,
+      can ? JSON.stringify({ out, calls: g.calls.length }) : 'absent')
+  }
+  // discard.4 — a lost baseline refuses: there is nothing to restore TO, and
+  // removing the added files while restoring nothing would be half a discard
+  // presented as one.
+  {
+    const fs = fakeFs()
+    const g = fakeGit({ 'cat-file': { ok: false, code: 1, stderr: '' } })
+    const out = can ? await discarderOn(g.run, fs)(REQ) : null
+    const sub = g.calls.map((c) => c.args[2])
+    ok('discard.4 a lost baseline refuses, and neither restores nor removes',
+      can && out.kind === 'refused' && /baseline/.test(out.detail) && !sub.includes('restore') && fs.removed.length === 0,
+      can ? JSON.stringify({ out, sub }) : 'absent')
+  }
+  // discard.5 — a restore that exits non-zero is `failed` per held path, and
+  // the removals still happen and are still reported: a half-done discard
+  // that said only "failed" would have the user retry what already happened.
+  {
+    const fs = fakeFs()
+    const g = fakeGit({ 'ls-tree': { stdout: 'kept.ts\0' }, restore: { ok: false, code: 1, stderr: 'error: unable to write kept.ts' } })
+    const out = can ? await discarderOn(g.run, fs)(REQ) : null
+    ok('discard.5 a failing restore is reported per path beside the removals that happened',
+      can && out.kind === 'discarded' && out.restored.length === 0 && out.removed.join() === '/r/sub/new.ts' &&
+        out.failed.length === 1 && out.failed[0].path === 'kept.ts' && /unable to write/.test(out.failed[0].detail),
+      can ? JSON.stringify(out) : 'absent')
+  }
+  // discard.6 — a path that is a DIRECTORY in the worktree is refused per
+  // path: ls-tree with a directory pathspec lists its children, never itself,
+  // so it would be "absent" and the fs removal would take a tree.
+  {
+    const fs = fakeFs()
+    fs.dirs.add('/r/build')
+    const g = fakeGit({ 'ls-tree': { stdout: '' } })
+    const out = can ? await discarderOn(g.run, fs)({ ...REQ, paths: ['build', 'gone.ts'] }) : null
+    ok('discard.6 a directory path is refused per path and never removed; the file beside it still is',
+      can && out.kind === 'discarded' && out.removed.join() === '/r/gone.ts' && fs.removed.join() === '/r/gone.ts' &&
+        out.failed.length === 1 && out.failed[0].path === 'build' && /director/.test(out.failed[0].detail),
+      can ? JSON.stringify({ out, removed: fs.removed }) : 'absent')
+  }
+  // discard.7 — no paths is its own arm, before any call.
+  {
+    const fs = fakeFs()
+    const g = fakeGit({})
+    const out = can ? await discarderOn(g.run, fs)({ ...REQ, paths: [] }) : null
+    ok('discard.7 no paths is nothing-to-discard, before any git call',
+      can && out.kind === 'nothing-to-discard' && g.calls.length === 0, can ? JSON.stringify(out) : 'absent')
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

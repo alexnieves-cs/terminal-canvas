@@ -269,7 +269,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:delete / workspace:activate
                        workspace:merged / workspace:move-panels
                        review:panel / review:baseline / review:at
-                       review:diff / review:commit
+                       review:diff / review:commit / review:discard
                        credential:list / credential:set / credential:delete
                        credential:verify
                        jira:list / jira:transitions

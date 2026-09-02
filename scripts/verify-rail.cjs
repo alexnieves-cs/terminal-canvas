@@ -873,6 +873,24 @@ ok('55 a review row is never dormant', R.buildRailRows(
     none && nodeModel(undefined).commit.kind === 'none')
 }
 
+// discard.1 (M53). The model's discard mirrors its commit: ready over EVERY
+//     reported path on `changes`, blocked with a reason that NAMES the
+//     sharing on `shared`, and none on the arms with nothing to restore. The
+//     control is disabled with the reason, never removed — verify:palette
+//     31's rule, the same as check 58 above.
+{
+  const files = Array.from({ length: R.NODE_FILE_CAP + 3 }, (_, i) =>
+    ({ path: `f${i}.ts`, added: 1, removed: 0, binary: false, untracked: i % 2 === 0 }))
+  const ready = nodeModel({ kind: 'changes', root: '/r', files })
+  const shared = nodeModel({ kind: 'shared', root: '/r', panelCount: 3, files: files.slice(0, 1) })
+  const lost = nodeModel({ kind: 'baseline-lost', root: '/r' })
+  ok('discard.1 discard is ready over every reported path, blocked by name on shared, none on baseline-lost',
+    ready.discard !== undefined && ready.discard.kind === 'ready' && ready.discard.paths.length === files.length &&
+      shared.discard !== undefined && shared.discard.kind === 'blocked' && /share/i.test(shared.discard.reason) && shared.discard.reason.includes('3') &&
+      lost.discard !== undefined && lost.discard.kind === 'none',
+    JSON.stringify({ ready: ready.discard, shared: shared.discard, lost: lost.discard }))
+}
+
 // 60. A RENAME contributes BOTH paths to the commit and ONE row to the list,
 //     and the two halves have to be asserted together or the check is about
 //     the wrong thing. `git diff --numstat` does rename detection by default,

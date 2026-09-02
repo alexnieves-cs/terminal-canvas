@@ -11,7 +11,7 @@ import {
   type FileChangedEvent,
   type DiagnosticsSnapshot
 } from '../shared/ipc-contract'
-import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest } from '../shared/review'
+import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewDiscardRequest } from '../shared/review'
 import type {
   AgentStateUpdate,
   LiveSessionUpdate,
@@ -151,7 +151,8 @@ const bridge: CanvasBridge = {
     baseline: (panelId: PanelId) => ipcRenderer.invoke(IPC.REVIEW_BASELINE, panelId),
     at: (subject: ReviewSubject) => ipcRenderer.invoke(IPC.REVIEW_AT, subject),
     diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req),
-    commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req)
+    commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req),
+    discard: (req: ReviewDiscardRequest) => ipcRenderer.invoke(IPC.REVIEW_DISCARD, req)
   },
   scrollback: {
     tail: (req: { panelId: string; lines: number }) => ipcRenderer.invoke(IPC.SCROLLBACK_TAIL, req),

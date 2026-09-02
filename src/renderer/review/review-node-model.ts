@@ -49,6 +49,16 @@ export type ReviewNodeCommit =
   | { kind: 'blocked'; reason: string }
   | { kind: 'none' }
 
+/**
+ * M53. The commit's mirror, with one more `blocked` arm: `shared` blocks it
+ * by name for the same reason it blocks the commit, and the reason must
+ * still NAME the sharing. Every arm with nothing to restore to is `none`.
+ */
+export type ReviewNodeDiscard =
+  | { kind: 'ready'; paths: string[] }
+  | { kind: 'blocked'; reason: string }
+  | { kind: 'none' }
+
 export interface ReviewNodeRow {
   path: string
   added: number
@@ -73,6 +83,7 @@ export interface ReviewNodeModel {
   files: ReviewNodeRow[]
   more: number
   commit: ReviewNodeCommit
+  discard: ReviewNodeDiscard
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -93,24 +104,24 @@ export function buildReviewNodeModel(input: {
   const root = subject.repoRoot
 
   if (result === undefined) {
-    return { heading, root, summary: 'reading…', files: [], more: 0, commit: { kind: 'none' } }
+    return { heading, root, summary: 'reading…', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
   }
   switch (result.kind) {
     case 'never-started':
-      return { heading, root, summary: 'nothing yet', note: 'this panel had no session when the review was opened', files: [], more: 0, commit: { kind: 'none' } }
+      return { heading, root, summary: 'nothing yet', note: 'this panel had no session when the review was opened', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'not-a-repo':
       // RENDERED here, hidden in the pane. See this module's own header.
-      return { heading, root, summary: 'no repository', note: 'this panel was not spawned inside a git repository', files: [], more: 0, commit: { kind: 'none' } }
+      return { heading, root, summary: 'no repository', note: 'this panel was not spawned inside a git repository', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'git-missing':
-      return { heading, root, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0, commit: { kind: 'none' } }
+      return { heading, root, summary: 'unavailable', note: 'no git binary was found', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'repo-unreadable':
-      return { heading, root, summary: 'unavailable', note: `git could not open this repository — ${result.detail}`, files: [], more: 0, commit: { kind: 'none' } }
+      return { heading, root, summary: 'unavailable', note: `git could not open this repository — ${result.detail}`, files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'baseline-lost':
-      return { heading, root, summary: 'unattributable', note: 'this repository could not be read against its baseline', files: [], more: 0, commit: { kind: 'none' } }
+      return { heading, root, summary: 'unattributable', note: 'this repository could not be read against its baseline', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     case 'clean':
       // NOT an empty render: a panel that genuinely changed nothing and one
       // the feature is broken for must not look the same.
-      return { heading, root, summary: 'no changes', files: [], more: 0, commit: { kind: 'none' } }
+      return { heading, root, summary: 'no changes', files: [], more: 0, commit: { kind: 'none' }, discard: { kind: 'none' } }
     default:
       break
   }
@@ -138,6 +149,13 @@ export function buildReviewNodeModel(input: {
           `${result.panelCount} panels share this checkout, so these changes ` +
           'cannot be attributed to one agent — committing them here would put ' +
           'another agent\'s work under this message.'
+      },
+      // M53. Blocked for a stronger reason than the commit: a discard here
+      // would DESTROY another agent's work, not misattribute it. Main refuses
+      // on its own count as well; this is the visible half.
+      discard: {
+        kind: 'blocked',
+        reason: `${result.panelCount} panels share this checkout — a discard here could throw away another agent's work`
       }
     }
   }
@@ -162,6 +180,13 @@ export function buildReviewNodeModel(input: {
       paths: result.files.flatMap((f) =>
         f.renamedFrom === undefined ? [f.path] : [f.path, f.renamedFrom]),
       label: `Commit ${plural(result.files.length, 'file')}`
+    },
+    // M53. The same path set as the commit, renames included: restoring
+    // `old` from the baseline and removing `new` is what un-does a `git mv`.
+    discard: {
+      kind: 'ready',
+      paths: result.files.flatMap((f) =>
+        f.renamedFrom === undefined ? [f.path] : [f.path, f.renamedFrom])
     }
   }
 }

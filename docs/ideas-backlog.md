@@ -1536,7 +1536,7 @@ refuses to start a gesture) and a **pin** (the panel is always live, exempt from
   **#29**, which is about a panel's process rather than its geometry. Neither proposes
   user-controlled exemption from the tiering rules.
 
-## 51. Discard — the half of per-panel review that writes in the other direction
+## 51. Discard — the half of per-panel review that writes in the other direction — DONE, M53
 
 M9a–M9c shipped the review layer: a baseline captured once per session at spawn and dropped
 when the session dies, a diff on demand in the inspector, a review node that outlives its

@@ -347,3 +347,25 @@ export function parseStagedEntries(stdout: string): StagedEntry[] {
   }
   return out
 }
+
+/**
+ * M53. Which of `paths` the baseline tree holds. Exact-match pathspecs
+ * against a TREE, NUL-terminated so a path with a newline survives, and
+ * `--name-only` so the parser is `parseNulList`. A path that names a
+ * directory at baseline lists its CHILDREN and never itself — which is why
+ * the discarder refuses worktree directories per path before this call.
+ */
+export function buildLsTreeArgs(root: string, baseline: string, paths: string[]): string[] {
+  return ['-C', root, 'ls-tree', '-r', '-z', '--name-only', baseline, '--', ...paths]
+}
+
+/**
+ * M53. `git restore --source=<baseline> --worktree`, and NEVER `--staged`:
+ * the repository's own index is not written by a discard, the inverse of the
+ * commit path's scratch-index rule and for the same reason — an agent may be
+ * mid-write against it. One call over every held path, so a restore that
+ * fails does so for the batch and is reported per path by the caller.
+ */
+export function buildRestoreArgs(root: string, baseline: string, paths: string[]): string[] {
+  return ['-C', root, 'restore', `--source=${baseline}`, '--worktree', '--', ...paths]
+}

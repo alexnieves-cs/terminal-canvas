@@ -2755,3 +2755,32 @@ osc133.1` pins that a chunk holding only marks yields zero bells. Only an OSC wh
 could still begin `133;` is accumulated (capped at 4096 bytes, poisoned past that), so an
 unrelated OSC — a title set, a hyperlink — costs nothing, and a bell inside one is still a
 bell, exactly as before.
+
+**A discard writes the WORKTREE only, removes through the filesystem, and reports per path
+(`main/review-discard.ts`, `git-args.ts`'s `buildRestoreArgs`/`buildLsTreeArgs`,
+`review/ReviewNode.tsx`).** The only operation in this app that destroys work, and the
+design is mostly refusals, each BEFORE any write and in a fixed order: a shared checkout —
+counted by MAIN through `peersInRepo`, not read off the renderer's result, because a node's
+result can be stale and a refusal that lives only in the UI is one a later UI forgets; a lost
+baseline, because there is nothing to restore TO and removing the added files while
+restoring nothing would be half a discard presented as one; git missing. Then three git
+calls at most — `cat-file -e`, `ls-tree -r -z --name-only <baseline> -- <paths>`, and ONE
+`restore --source=<baseline> --worktree` over exactly the held paths. `--worktree` and never
+`--staged`, the inverse of the commit path's scratch-index rule for the same reason: an
+agent may be mid-write against the real index. A path the baseline never held is removed
+through the injected `removeFile` (an unlink), NEVER `git rm`, so no call writes the index
+and the transaction runs under plain node in `verify:review`; `verify:panels discard.1`
+closes with `git status --porcelain` empty, which is the index clause read from disk. The
+result carries `restored`, `removed` and `failed` TOGETHER: a restore that fails for one
+path does not un-restore the others (it cannot), and a result that said only `failed` would
+have the user retry what already happened. A DIRECTORY path is refused per path before
+`ls-tree`, because a directory pathspec lists its children and never itself, so it would read
+as absent and the unlink would be asked to take a tree. There is no HEAD guard — a discard
+restores from the baseline, not HEAD, so M9c's `head-moved` does not transfer and is not
+copied. **No history entry is pushed, and the armed sentence says so**: the undo stack moves
+panels, a discard moves files, and the reasoning that keeps a commit out of history applies
+here with more force. The row's control is disabled with the model's reason on `shared`,
+never removed, and the ARMED state is the disclosure — which of two sentences a row shows
+("restore to spawn" or "did not exist at spawn — delete") is chosen by `untracked`, and the
+outcome line then names what actually happened, so the node never claims a restore it did
+not do.
