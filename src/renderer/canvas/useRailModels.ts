@@ -255,7 +255,9 @@ export function useRailModels(deps: RailModelsDeps) {
         // M49. The effective font size and whose it is.
         isTerminalPanel(selectedPanel)
           ? { fontSize: selectedPanel.fontSize ?? globalFontSize, isDefault: selectedPanel.fontSize === undefined }
-          : undefined
+          : undefined,
+        // M63. Asleep is the one state the status cannot say.
+        dormantIds.has(selectedPanel.rect.id)
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

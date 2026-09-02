@@ -86,14 +86,16 @@ ok('4 nothing at all: "login shell"',
 
 /* ---- The status tail ---- */
 
-ok('5 running reads its pid', R.railTail(running(48213, '/bin/zsh'), false) === 'pid 48213')
+// M63. The rail no longer says the pid — the word is the vocabulary's,
+// and with no agent state applied a live process reads `running`.
+ok('5 running reads as running', R.railTail(running(48213, '/bin/zsh'), false) === 'running')
 
 // 6. Dormant OUTRANKS the status kind. A dormant panel's status is
-//    {kind:'idle'}, and "not started" is true but useless — "dormant" is the
-//    word the panel's own card uses, and it is what tells the user the start
-//    control on this row exists at all.
+//    {kind:'idle'}, and "not started" is true but useless — "asleep" is the
+//    vocabulary's word (M63), the same one the panel's own card shows, and it
+//    is what tells the user the start control on this row exists at all.
 ok('6 dormant outranks the status kind',
-  R.railTail({ kind: 'idle' }, true) === 'dormant')
+  R.railTail({ kind: 'idle' }, true) === 'asleep')
 
 // 7. THE FALSY TRAP. A successful exit is code 0, and `code || ''` or a
 //    ternary on `code` would silently print the wrong tail for the single most
@@ -107,7 +109,7 @@ ok('8 a non-zero exit renders its code',
 // 9. `starting` is a real state main SENDS directly at spawn (see CLAUDE.md's
 //    "`starting` is sent directly"), and a real claude takes seconds to boot —
 //    that silence is exactly when the rail should say something is happening.
-ok('9 starting says so', R.railTail({ kind: 'starting' }, false) === 'starting…')
+ok('9 starting says so', R.railTail({ kind: 'starting' }, false) === 'starting')
 
 /* ---- The signature: the 60Hz defence ---- */
 
@@ -1984,7 +1986,7 @@ const inventory = (over) => ({
 //     that only asserted "no kind says 'not started'" would be demanding the
 //     wrong thing of the one kind that owns a process.
 {
-  const PROCESS_WORDS = ['not started', 'dormant', 'exited', 'pid ', 'starting']
+  const PROCESS_WORDS = ['not started', 'dormant', 'asleep', 'exited', 'pid ', 'starting', 'running', 'working', 'needs you']
   const SESSIONLESS = ['review', 'file', 'toolbox', 'jira']
   const tails = {}
   for (const k of SESSIONLESS) tails[k] = R.railTail(undefined, false, k)
@@ -2191,6 +2193,58 @@ const session = (id, over = {}) => ({
   const wrapperComposes = /const groupControl = [\s\S]*?shellControl\(run\)/.test(src)
   ok('group-keys.2 no <button in GroupLayer.tsx runs from onMouseDown alone, and its wrapper is built on shellControl',
     buttons.length >= 2 && bad.length === 0 && wrapperComposes, JSON.stringify({ buttons: buttons.length, bad: bad.length, wrapperComposes }))
+}
+
+// M63 — state.1/.2/.3. THE ONE VOCABULARY. Every combination of kind, status,
+//     dormancy and agent state yields a word from the closed vocabulary and a
+//     tone from the closed tone set (state.1); no renderer file outside
+//     panel-state.ts spells a state word as a display literal (state.2 — the
+//     drift this milestone exists to end arrived one word at a time, each
+//     file locally consistent); and railTail, now a wrapper, agrees with
+//     panelState for every fixture the older checks use (state.3).
+{
+  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'jira']
+  const STATUSES = [undefined, { kind: 'idle' }, { kind: 'starting' }, { kind: 'running', pid: 4, command: '/bin/sh' }, { kind: 'exited', code: 0 }, { kind: 'exited', code: 1 }, { kind: 'error', message: 'spawn failed' }]
+  const AGENTS = [undefined, 'starting', 'busy', 'idle', 'wants-you', 'exited']
+  const WORDS = new Set(['asleep', 'not started', 'starting', 'running', 'working', 'idle', 'needs you', 'exited', 'review', 'file', 'note', 'toolbox', 'jira'])
+  const bad = []
+  let count = 0
+  for (const kind of KINDS) for (const status of STATUSES) for (const dormant of [false, true]) for (const agent of AGENTS) {
+    const r = R.panelState({ kind, status, dormant }, agent)
+    count += 1
+    const wordOk = WORDS.has(r.word) || /^exited \d+$/.test(r.word) || (status && status.kind === 'error' && r.word === status.message)
+    if (!wordOk || !R.TONES.includes(r.tone)) bad.push({ kind, status, dormant, agent, r })
+  }
+  const live = R.panelState({ kind: 'terminal', status: { kind: 'running', pid: 4, command: 'x' }, dormant: false }, 'wants-you')
+  const asleep = R.panelState({ kind: 'terminal', status: { kind: 'idle' }, dormant: true }, 'busy')
+  ok('state.1 every kind × status × dormancy × agent combination yields a vocabulary word and a closed-set tone',
+    count === KINDS.length * STATUSES.length * 2 * AGENTS.length && bad.length === 0 &&
+      live.word === 'needs you' && live.tone === 'needs-you' && asleep.word === 'asleep' && asleep.tone === 'asleep' &&
+      R.panelState({ kind: 'terminal', status: { kind: 'exited', code: 0 }, dormant: false }, 'exited').word === 'exited 0',
+    JSON.stringify({ count, bad: bad.slice(0, 3) }))
+
+  const { readdirSync, statSync, readFileSync } = require('node:fs')
+  const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : (/\.tsx?$/.test(p) ? [p] : []) })
+  const LITERALS = ["'dormant'", "'not started'", "'needs you'", "'working'", "'asleep'", "'starting…'"]
+  const offenders = []
+  for (const file of walk(join(__dirname, '..', 'src', 'renderer'))) {
+    if (file.endsWith('panel-state.ts')) continue
+    // The diagnostics overlay prints the bundle's RAW field names (`dormant`
+    // is the snapshot key check 112 pins) — a maintainer table, not the
+    // display vocabulary.
+    if (file.endsWith('DiagnosticsOverlay.tsx')) continue
+    const text = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    for (const lit of LITERALS) if (text.includes(lit)) offenders.push(`${file.split('/src/renderer/')[1]}:${lit}`)
+    // JSX text too — `>needs you<` is a display string with no quotes around
+    // it, and the first cut of this pin missed exactly that in Dock.tsx.
+    for (const m of text.matchAll(/>\s*(dormant|not started|needs you|working|asleep)\s*</g)) offenders.push(`${file.split('/src/renderer/')[1]}:>${m[1]}<`)
+  }
+  ok('state.2 no renderer file outside panel-state.ts spells a state word as a display literal',
+    offenders.length === 0, offenders.join(', ') || 'clean')
+
+  const fixtures = [[undefined, false, 'terminal'], [{ kind: 'idle' }, true, 'terminal'], [{ kind: 'starting' }, false, 'terminal'], [running(1, '/bin/sh'), false, 'terminal'], [{ kind: 'exited', code: 3 }, false, 'terminal'], [undefined, false, 'review'], [undefined, false, 'note'], [undefined, false, 'jira']]
+  const agree = fixtures.every(([st, d, k]) => R.railTail(st, d, k) === R.panelState({ kind: k, status: st, dormant: d }, undefined).word)
+  ok('state.3 railTail is panelState with no agent state, for every older fixture', agree)
 }
 
 console.log('\n' + '='.repeat(60))

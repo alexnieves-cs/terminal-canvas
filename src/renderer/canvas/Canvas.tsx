@@ -3425,6 +3425,7 @@ export function Canvas({
           viewport={viewport}
           cursor={cursor}
           selectedId={selectedId}
+          selected={inspectorModel === null ? null : { id: inspectorModel.id, label: inspectorModel.heading, state: inspectorModel.state }}
           backend={backendInfo}
           machineCost={machineCostTotal}
           onZoomBy={zoomBy}

@@ -1,5 +1,6 @@
 import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
+import { panelState, type StateInput } from '@renderer/panels/panel-state'
 
 /**
  * What the rail's Panels section renders, as plain data.
@@ -15,10 +16,17 @@ export interface RailRow {
   id: string
   /** The honest chain's answer. See railLabel. */
   label: string
-  /** `pid 48213` / `dormant` / `exited 1` / `starting…`. See railTail. */
+  /**
+   * The state WORD with no agent state applied — `asleep`, `not started`,
+   * `running`, `exited 1`, or the kind. See railTail. The row component
+   * re-derives the word with the agent state it subscribes to (M63), so a
+   * `running` row reads `working`/`idle`/`needs you` on screen.
+   */
   tail: string
   /** Drives the start control, which is the ONLY way the rail wakes a panel. */
   dormant: boolean
+  /** M63. What panelState needs, so the row can apply the agent state itself. */
+  state: StateInput
 }
 
 /**
@@ -88,43 +96,10 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
 export type RailTailKind = Panel['kind'] | 'note'
 
 export function railTail(status: PanelStatus | undefined, dormant: boolean, kind: RailTailKind = 'terminal'): string {
-  // Before the dormant test, because a review node is never dormant and the
-  // whole status vocabulary below ('not started', 'exited 0', 'pid 4821') is
-  // a sentence about a process it does not have.
-  if (kind === 'review') return 'review'
-  // Same reason the review test above is here, and BEFORE the dormant test:
-  // 'not started', 'exited 0' and 'pid 4821' are all sentences about a process
-  // this panel does not have, and `dormant` in particular would render a
-  // start control that nothing can honour.
-  // M27. A note is a file panel in prose mode, so `kind` alone cannot answer
-  // this — the tail kind is a DISPLAY kind rather than the panel union's, and
-  // 'note' is a member of it and of nothing else. A row that said `file` for a
-  // note is not wrong so much as unhelpful: the rail is where a user finds a
-  // panel again, and the whole point of a note is that it is not source.
-  if (kind === 'note') return 'note'
-  if (kind === 'file') return 'file'
-  // Same reason again, and the same placement BEFORE the dormant test: a
-  // toolbox node owns no process, so a 'dormant' tail would render a start
-  // control nothing can honour.
-  if (kind === 'toolbox') return 'toolbox'
-  // Same reason a fourth time, and the same placement BEFORE the dormant test.
-  // This arm was MISSING until the M27 refactor audit, and its absence is the
-  // clearest evidence that this if-chain is a hand-maintained checklist: a Jira
-  // panel fell through to `dormant` (always false for a sessionless kind, per
-  // buildRailRows below) and then to `status === undefined`, so every Jira
-  // panel's rail row read 'not started' — a process sentence, permanently, for
-  // a panel that owns no process. verify:rail kind-tail.1 is pinned against it
-  // and covers every kind at once, so a sixth kind cannot repeat this quietly.
-  if (kind === 'jira') return 'jira'
-  if (dormant) return 'dormant'
-  if (status === undefined) return 'not started'
-  switch (status.kind) {
-    case 'running': return `pid ${status.pid}`
-    case 'starting': return 'starting…'
-    case 'exited': return `exited ${status.code}`
-    case 'error': return status.message
-    case 'idle': return 'not started'
-  }
+  // M63. One vocabulary: panelState is the only place a state word is
+  // spelled. With no agent state a running process reads `running`; the row
+  // component supplies the agent's word from its own subscription.
+  return panelState({ kind, status, dormant }, undefined).word
 }
 
 /**
@@ -157,7 +132,7 @@ export function buildRailRows(
     // several callers reach with nothing else in hand.
     const tailKind: RailTailKind =
       isFilePanel(panel) && panel.source.prose === true ? 'note' : panel.kind
-    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, tailKind), dormant }
+    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, tailKind), dormant, state: { kind: tailKind, status, dormant } }
   })
 }
 

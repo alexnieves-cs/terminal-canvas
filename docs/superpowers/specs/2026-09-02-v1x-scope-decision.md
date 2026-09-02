@@ -91,7 +91,7 @@ this run changes the reason.
 | 41 | Review's live-cwd resolution | **Cut, unchanged.** Both cwds are shown. |
 | 46 | Run ledger | **Shipped in M52**; its Work-tab section must say "no runs yet" when empty — **M68**. |
 | 48 | Lock and pin | **Cut.** Pin is a third author of the live budget; the armed close and the group frame cover the mis-click. |
-| 53 | Live-tier cards showing the last real screen | **In — M63**, the `serialize`-at-detach half only: a card for a panel that ran this session shows its last real screen lines rather than colour-stripped fragments, taken in `detachSlot` before the context goes. `capture-pane` stays cut (the log covers restore). This is what makes the state edge and the summary tier honest for a live panel that was just carded. |
+| 53 | Live-tier cards showing the last real screen | **In — M63, rewritten down (amended 2026-09-02 while building it):** the card's tail is read as ROWS — anchored on the last non-empty row, interior blanks kept — so a TUI's card shows the bottom of its real screen with its layout intact. Colour is NOT carried: `serialize`-at-detach would need an ANSI renderer in the card, a second renderer. `capture-pane` stays cut. |
 | 55 | Ad-hoc task panels | **In — M65**, narrow form; see §2. |
 | 60 | Zoom-independent chrome | **Cut**, with its complaint answered elsewhere; see §2. |
 | 64 | Rationing terminal memory | **Cut, unchanged.** No observed failure. |

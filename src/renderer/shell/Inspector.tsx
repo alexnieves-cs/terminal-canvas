@@ -2,6 +2,7 @@ import { memo, useEffect, useState, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import { agentStateLabel, handoffControl, KIND_NOUN } from './inspector-fields'
+import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
 import type { LinkAutomation } from '@shared/handoff'
 import { shellControl } from './shell-control'
@@ -303,8 +304,8 @@ function InspectorPanel({
           answer to "what is that agent doing" — the same split check 54 draws
           for the panel itself and RailPanelRow draws for its dot.
         */}
-        <span className="inspector__dot status-dot" data-agent-state={state ?? 'none'} aria-hidden="true" />
-        <span className="inspector__state-label">{agentStateLabel(state)}</span>
+        <span className="inspector__dot status-dot" data-agent-state={state ?? 'none'} data-tone={panelState(model.state, state).tone} aria-hidden="true" />
+        <span className="inspector__state-label" data-state-word>{agentStateLabel(state, model.state)}</span>
         {model.reattached && (
           /*
             M6a carried PanelStatus.running.reattached with ZERO readers, and

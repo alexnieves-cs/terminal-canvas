@@ -64,8 +64,10 @@ thing — so that a screenshot of it could not be mistaken for a screenshot of a
    green idle-and-alive, red exited, grey not-started, dashed-grey asleep. *Check:* find one
    panel in two surfaces of the same screenshot and read its state in both; they must match
    word for word.
-2. **The state edge.** Every panel frame, every rail row and every far-zoom block carries a
-   3px left edge in its state colour. It is the app's one signature mark: legible at 100%
+2. **The state edge.** Every panel frame and every far-zoom block carries a 3px left edge in
+   its state colour; a rail row carries the same tone as its dot and its word (amended
+   2026-09-02 after M63: the rail's left slot is the selection bar, and a second bar there
+   would make selection and state the same mark). It is the app's one signature mark: legible at 100%
    and at 10%, in both themes, in a thumbnail, and it is what makes the zoomed-out canvas and
    the minimap read as a status board rather than a pile of rectangles. *Check:* at any zoom
    the left edge of every terminal panel names a state.

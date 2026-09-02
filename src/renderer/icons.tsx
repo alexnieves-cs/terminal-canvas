@@ -107,3 +107,22 @@ export const More = (p: IconProps): JSX.Element => (
 export const Maximize = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" /></Svg>
 )
+
+/* M63. Kind glyphs for the rail's left column, 12px, so kind stops sharing
+   the state slot. A terminal keeps the state DOT (its column is its state);
+   these five say what a sessionless row is. */
+export const KindReview = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M8 3v10M3 8h10" /><path d="M4 12h8" strokeWidth="1" /></Svg>
+)
+export const KindFile = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M4 2h5l3 3v9H4z" /><path d="M9 2v3h3" /></Svg>
+)
+export const KindNote = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 13l1-4 7-7 3 3-7 7z" /><path d="M10 3l3 3" /></Svg>
+)
+export const KindToolbox = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="5" width="12" height="8" rx="1" /><path d="M6 5V3h4v2M2 9h12" /></Svg>
+)
+export const KindJira = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M8 2v12M2 8h6" /></Svg>
+)

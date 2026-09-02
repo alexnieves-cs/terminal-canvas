@@ -351,5 +351,33 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     toggled.size >= 2 && bad.length === 0, bad.length ? `no [hidden] rule for: ${bad.join(', ')}` : `toggled classes: ${[...toggled].join(', ')}`)
 }
 
+// M63 — tone.1. THE TONE BLOCK IS THE ONLY BINDING. Every tone panel-state.ts
+// can produce has a `[data-tone="…"]` rule, and no selector OUTSIDE that
+// block binds an agent hue (--blue/--amber/--green/--red) to a data-tone or
+// a data-agent-state. The state's colour used to be spelled in four places;
+// a fifth would drift exactly as the words did.
+{
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', 'panels', 'panel-state.ts'), 'utf8')
+  const tones = (/export const TONES[^=]*= \[([^\]]*)\]/.exec(src) || ['', ''])[1].match(/'([a-z-]+)'/g).map((t) => t.replace(/'/g, ''))
+  const missing = tones.filter((t) => !bare.includes(`[data-tone="${t}"]`))
+  const start = bare.indexOf('[data-tone] {')
+  const end = bare.indexOf('.pf::before')
+  const outside = bare.slice(0, start) + bare.slice(end)
+  // Any rule whose selector names a state — a data-tone or data-agent-state
+  // attribute, or a `--busy/--wants-you/--idle/--exited/--starting/--asleep`
+  // class suffix — and binds an agent hue. Multi-line selector lists are
+  // joined first so a state on an earlier line is not missed. The ONE
+  // allowed exception is the frame's own attention glow (`.panel--agent-*`
+  // border tint), a separate checked property the spec keeps beside the edge.
+  const stray = [...outside.matchAll(/([^{}]*)\{([^}]*)\}/g)]
+    .filter((m) => /\[data-(?:tone|agent-state)="[^"]+"\]|--(?:busy|wants-you|idle|exited|starting|asleep)\b/.test(m[1]))
+    .filter((m) => /var\(--(?:blue|amber|green|red)\)/.test(m[2]))
+    .map((m) => m[1].trim().replace(/\s+/g, ' '))
+    .filter((sel) => !/^\.panel(--selected)?\.?panel--agent-/.test(sel) && !/^\.panel--agent-/.test(sel))
+  ok('tone.1', 'every tone has a [data-tone] rule and no state-named selector outside the tone block binds an agent hue (the frame glow excepted)',
+    tones.length >= 8 && missing.length === 0 && start > 0 && stray.length === 0,
+    JSON.stringify({ tones: tones.length, missing, stray: stray.slice(0, 4) }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
-import type { PanelSession, PanelStatus } from '@renderer/session/panel-session'
+import { panelState } from '@renderer/panels/panel-state'
+import type { PanelSession } from '@renderer/session/panel-session'
 import { useMachineCost } from '@renderer/session/machine-cost-store'
 import type { PanelMachineCost } from '@shared/machine-cost'
 import type { DragState } from '@renderer/canvas/panel-interaction'
@@ -132,6 +133,9 @@ function TerminalPanelImpl({
   // 60Hz — see agent-state-store.ts.
   const agentState = useAgentState(session.id)
   const agentClass = glow && agentState ? ` panel--agent-${agentState}` : ''
+  // M63. The one state word for this panel, applied to the pill, the card's
+  // state line, the summary tier, the block tier and the frame's edge.
+  const shown = panelState({ kind: 'terminal', status: session.status, dormant: session.dormant }, agentState)
   useEffect(() => {
     if (openingContext === undefined || session.status.kind !== 'running') return
     session.handle.paste(openingContext)
@@ -209,7 +213,7 @@ function TerminalPanelImpl({
       className={agentClass.trim()}
       // M44. A named group for a screen reader; the kind rides the label so
       // "claude — terminal" reads as one thing rather than an anonymous div.
-      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined }}
+      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone }}
       title={panelLabel}
       agentState={glow ? agentState : undefined}
       motion={{ entering, onEntryEnd }}
@@ -252,7 +256,7 @@ function TerminalPanelImpl({
             {session.spec.agentOptions.sandbox}
           </span>
         )}
-        <StatusBadge status={session.status} />
+        <span className="badge pf__word" data-tone={shown.tone} data-state-word>{shown.word}</span>
         {live && machineCost !== undefined && <MachineCostBadge cost={machineCost} />}
       </>}
     >
@@ -278,20 +282,22 @@ function TerminalPanelImpl({
           }}
         />
       ) : (
-        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} detail={cardDetail ?? 'tail'} title={panelLabel} state={agentState} />
+        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} detail={cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} />
       )}
 
     </PanelFrame>
   )
 }
 
-function PanelCard({ session, agentState, cost, detail, title, state }: {
+function PanelCard({ session, agentState, cost, detail, title, state, shown }: {
   session: PanelSession
   agentState?: AgentState
   cost?: PanelMachineCost
   detail: CardDetail
   title: string
   state?: AgentState
+  /** M63. The one state word and tone. */
+  shown: { word: string; tone: string }
 }): JSX.Element {
   const lines = session.spawned ? session.handle.tail(CARD_LINES) : []
   // M39. A DORMANT panel has no buffer — that is every panel on the canvas the
@@ -314,7 +320,7 @@ function PanelCard({ session, agentState, cost, detail, title, state }: {
           no buffer has the same three tiers as a live one. The `tail` markup
           below stays byte-identical: three checks read .panel__card-idle. */}
       {detail === 'block' ? (
-        <div className={`panel__card-block${state ? ` panel__card-block--${state}` : ''}`} data-card-block>
+        <div className={`panel__card-block${state ? ` panel__card-block--${state}` : ''}`} data-card-block data-tone={shown.tone}>
           <span className="panel__card-block-title">{title}</span>
         </div>
       ) : detail === 'summary' ? (
@@ -323,9 +329,8 @@ function PanelCard({ session, agentState, cost, detail, title, state }: {
           {/* The same affordance element the tail tier renders, with the same
               exact text: an unstarted panel's summary IS "not started", and
               three checks read this element wherever the camera is. */}
-          {session.spawned
-            ? <div className="panel__card-summary-state">{state ?? 'running'}</div>
-            : <div className="panel__card-idle">{session.dormant ? 'click to start' : 'not started'}</div>}
+          <div className="panel__card-summary-state" data-tone={shown.tone}>{shown.word}</div>
+          {!session.spawned && <div className="panel__card-idle">click to start</div>}
           {(() => {
             const last = session.spawned ? lines[lines.length - 1] : (recorded?.[recorded.length - 1])
             return last ? <div className="panel__card-summary-line">{last}</div> : null
@@ -352,9 +357,15 @@ function PanelCard({ session, agentState, cost, detail, title, state }: {
           {/* A dormant panel is a restored one waiting for permission, not an
               unvisited one waiting for the camera. Saying "not started" for
               both would hide the only affordance the restored canvas has. */}
-          <div className="panel__card-idle">
-            {session.dormant ? 'click to start' : 'not started'}
-          </div>
+          {/* M63. The state WORD, chrome-sized and tone-coloured, then the
+              affordance — whose text stays byte-identical for the checks
+              that read it. The 32px headline is gone: the loudest text on a
+              card is the agent's own tail. */}
+          {/* Every unspawned card wakes on click — a restored one and one
+              the camera never reached alike — so the affordance is the same
+              sentence for both; the pill in the chrome is what tells them
+              apart. (A word line here said it a second time on one frame.) */}
+          <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
         </>
       )}
       {cost !== undefined && (
@@ -385,20 +396,6 @@ function formatMemory(bytes: number): string {
   return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
 }
 
-function StatusBadge({ status }: { status: PanelStatus }): JSX.Element {
-  switch (status.kind) {
-    case 'idle':
-      return <span className="badge badge--pending">idle</span>
-    case 'starting':
-      return <span className="badge badge--pending">starting…</span>
-    case 'running':
-      return <span className="badge badge--running">pid {status.pid}</span>
-    case 'exited':
-      return <span className="badge badge--exited">exited {status.code}</span>
-    case 'error':
-      return <span className="badge badge--error">{status.message}</span>
-  }
-}
 
 // Memoized because Canvas re-renders far more often than a panel changes:
 // it re-renders on every mousemove for the HUD cursor, and a 60Hz cascade

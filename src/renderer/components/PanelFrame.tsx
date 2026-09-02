@@ -94,7 +94,7 @@ export function PanelFrame({
         {/* The state dot (terminal) or the kind's accent mark — ONE rule set,
             keyed on data-agent-state, shared with the rail and the context
             pane (`.status-dot`). */}
-        <span className={`pf__state status-dot${kind === 'terminal' ? '' : ' pf__state--kind'}`} data-agent-state={kind === 'terminal' ? (agentState ?? 'none') : undefined} aria-hidden="true" />
+        <span className={`pf__state status-dot${kind === 'terminal' ? '' : ' pf__state--kind'}`} data-agent-state={kind === 'terminal' ? (agentState ?? 'none') : undefined} data-tone={rootAttrs?.['data-tone'] ?? 'kind'} aria-hidden="true" />
         <span className="pf__title panel__title">{title}</span>
         {chrome}
         {close !== null && (
@@ -141,6 +141,9 @@ export function PanelFrame({
       data-panel-kind={kind}
       data-link-target={linkTarget ? '' : undefined}
       style={style}
+      // M63. The state edge reads this: a terminal supplies its tone through
+      // rootAttrs; every other kind is its kind.
+      data-tone={rootAttrs?.['data-tone'] ?? 'kind'}
       {...(rootAttrs ?? {})}
     >
       {motion ? (

@@ -1907,7 +1907,8 @@ app.whenReady().then(async () => {
         // A panel that never spawned: its card says "not started".
         const idle = panels.find((p) => p.querySelector('.panel__card-idle'))
         // A panel with a running pty: its badge shows a pid.
-        const running = panels.find((p) => /pid /.test(p.textContent || ''))
+        // M63. The pill is the state word; a live one reads working/idle/running/starting.
+        const running = panels.find((p) => { const w = p.querySelector('[data-state-word]'); return w && /^(working|idle|running|starting|needs you)$/.test(w.textContent || '') })
         if (!idle || !running) return { error: 'need one idle and one running panel' }
 
         const idleId = idle.getAttribute('data-panel-id')
@@ -5947,8 +5948,9 @@ app.whenReady().then(async () => {
       const sameSet = rows.length === panelIdsNow.length &&
         panelIdsNow.every((id) => rows.some((r) => r.id === id))
       const labelled = rows.every((r) => typeof r.label === 'string' && r.label.length > 0)
-      const pidTail = rows.every((r) => /^pid \d+$/.test(r.tail))
-      ok('81 the rail renders one labelled row per panel, with a real pid',
+      // M63. The rail's word column, not a pid: every row here is live.
+      const pidTail = rows.every((r) => /^(working|idle|running|starting|needs you)$/.test(r.tail))
+      ok('81 the rail renders one labelled row per panel, with a live state word',
         railOpen === true && sameSet && labelled && pidTail,
         `railOpen=${railOpen} rows=${JSON.stringify(rows)} panels=${JSON.stringify(panelIdsNow)}`)
     }
@@ -6210,7 +6212,7 @@ app.whenReady().then(async () => {
       })()`)
       const seeded = await waitUntil(async () => {
         const s = await rowState()
-        return s && s.tail === 'dormant' ? s : false
+        return s && s.tail === 'asleep' ? s : false
       }, 4000)
       const before = await wc.executeJavaScript(`window.__m4aViewport()`)
       await wc.executeJavaScript(`
@@ -6247,7 +6249,7 @@ app.whenReady().then(async () => {
         return row ? row.querySelector('.rail-row__tail').textContent : null
       })()`)
       ok('85 the start control wakes the panel the row click would not',
-        woke !== false && tail !== 'dormant',
+        woke !== false && tail !== 'asleep',
         `session=${JSON.stringify(woke)} tail=${tail}`)
     }
 
@@ -15210,6 +15212,105 @@ app.whenReady().then(async () => {
         ok(ID, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onG)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M63 — state-edge.1 / state-word.1 / state-popover.1. ONE VOCABULARY, ONE
+    // MARK. The frame's left edge is the tone's colour at every tier (a bell
+    // paints it amber, a restored-unstarted panel paints it dashed); the
+    // pill, the rail row and the inspector's pinned label read the SAME word
+    // for the same panel in three states; the attention popover's row names
+    // the state and carries a visible jump. Before M63 one panel read
+    // `dormant`, `idle` and `click to start` in one screenshot.
+    // -------------------------------------------------------------------
+    {
+      const sLog = []
+      const onS = (_e, level, message) => { if (level >= 2) sLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onS)
+      const IDS = [
+        'state-edge.1 the frame edge is the tone: amber after a bell, solid grey while asleep',
+        'state-word.1 pill, rail row and inspector label read one word per panel across asleep, working and needs-you',
+        'state-popover.1 the attention popover row names the state and carries a jump'
+      ]
+      try {
+        layoutStore.save({
+          panels: fromPanels([
+            // cat: echoes what is written, so a line is "working" and a BEL byte is the bell.
+            { kind: 'terminal', rect: { id: 'svA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'svA', cwd: '/tmp', command: '/bin/cat', args: [] } },
+            { kind: 'terminal', rect: { id: 'svB', x: 520, y: 60, w: 420, h: 280 }, z: 2, spec: { panelId: 'svB', cwd: '/tmp', command: '/bin/cat', args: [] } }
+          ]),
+          groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reS
+        await settle()
+        const words = (id) => wc.executeJavaScript(`(() => {
+          const pf = document.querySelector('.panel[data-panel-id="${id}"]')
+          const rail = document.querySelector('.rail-row[data-rail-row="${id}"] .rail-row__tail')
+          const pill = pf && pf.querySelector('[data-state-word]')
+          const card = pf && pf.querySelector('.panel__card-state')
+          const edge = pf && getComputedStyle(pf, '::before')
+          return { tone: pf && pf.getAttribute('data-tone'), rail: rail && rail.textContent, pill: pill && pill.textContent, card: card && card.textContent,
+            edgeBg: edge && edge.backgroundColor, edgeImg: edge && edge.backgroundImage, edgeW: edge && edge.width,
+            amber: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(),
+            lineStrong: getComputedStyle(document.documentElement).getPropertyValue('--line-strong').trim() }
+        })()`)
+        const asleep = await words('svA')
+        // Wake svA, select it through the rail so the inspector pins it, and
+        // let the detector settle into idle.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="svA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="svA"] .panel__slot') !== null`), 6000)
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="svA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        const ctxHidden = await wc.executeJavaScript(`(document.querySelector('.shell__inspector')?.getBoundingClientRect().width ?? 0) === 0`)
+        if (ctxHidden) { await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__inspector-toggle'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`); await settle() }
+        // Working: the shell is printing right now.
+        ptyManager.write('svA', 'seq 1 2000\r')
+        const working = await waitUntil(async () => { const w = await words('svA'); return w.rail === 'working' ? w : false }, 4000)
+        const inspectorWorking = await wc.executeJavaScript(`document.querySelector('.inspector__state-label')?.textContent ?? null`)
+        // Needs you: the bell. Focus svB first so svA's bell is not acknowledged.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="svB"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="svB"] .panel__slot') !== null`), 6000)
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="svB"] .panel__slot'); if (!s) return false
+          const r = s.getBoundingClientRect(); s.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await settle()
+        ptyManager.write('svA', String.fromCharCode(7) + String.fromCharCode(13))
+        const needs = await waitUntil(async () => { const w = await words('svA'); return w.rail === 'needs you' ? w : false }, 6000)
+        // Re-select svA so the inspector's label is read for the same panel.
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="svA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        const inspectorNeeds = await wc.executeJavaScript(`document.querySelector('.inspector__state-label')?.textContent ?? null`)
+        const toRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})` }
+
+        ok(IDS[0],
+          asleep !== null && asleep.tone === 'asleep' && asleep.edgeW === '3px' && asleep.edgeBg === toRgb(asleep.lineStrong) &&
+            working !== false && working.edgeBg !== asleep.edgeBg &&
+            needs !== false && needs.tone === 'needs-you' && needs.edgeBg === toRgb(needs.amber),
+          JSON.stringify({ asleep, needs }))
+        ok(IDS[1],
+          asleep !== null && asleep.rail === 'asleep' && asleep.pill === 'asleep' &&
+            working !== false && working.rail === 'working' && working.pill === 'working' && inspectorWorking === 'working' &&
+            needs !== false && needs.rail === 'needs you' && needs.pill === 'needs you' && inspectorNeeds === 'needs you',
+          JSON.stringify({ asleep, working, inspectorWorking, needs, inspectorNeeds }))
+
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const pop = await wc.executeJavaScript(`(() => {
+          const row = document.querySelector('.dock__popover .rail-row[data-rail-attention="svA"]')
+          if (!row) return null
+          const main = row.querySelector('.rail-row__main')
+          return { word: row.querySelector('.rail-row__tail')?.textContent ?? null, go: row.querySelector('.rail-row__go')?.textContent === 'jump', title: main?.getAttribute('title') ?? null }
+        })()`)
+        ok(IDS[2], pop !== null && pop.word === 'needs you' && pop.go === true && /^Go to /.test(pop.title || ''), JSON.stringify({ pop, log: sLog.slice(-3) }))
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+      } catch (sErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onS)
       }
     }
 
