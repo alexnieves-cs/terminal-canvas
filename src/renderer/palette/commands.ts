@@ -6,7 +6,7 @@ import type { Command } from './palette-model'
 // different matter and this comment used to be read as covering it: waitingCount
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
-import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit} from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'
@@ -343,6 +343,14 @@ export interface PaletteContext {
    */
   worktrees: readonly WorktreeListRow[]
   /**
+   * M42. The search scope's inputs, filled by Canvas only while the scope is
+   * `search`. `searchResults` is null before the first answer (a distinct
+   * empty state from []), and `scrollbackEnabled` decides the "off" state.
+   */
+  searchQuery: string
+  searchResults: ScrollbackSearchHit[] | null
+  scrollbackEnabled: boolean
+  /**
    * Panel ids currently in wants-you, from the renderer's own attention set.
    * Intersected with each row's panelIds — which is why WORKSPACE_LIST returns
    * ids and not a count: main does not hold this fact, the renderer does.
@@ -404,6 +412,9 @@ export const REASON_ALREADY_DEFAULT = 'already the default'
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
 export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
+/** M42. Search's two failure states, distinct so the user gets the right fix. */
+export const REASON_SEARCH_OFF = 'scrollback is off — turn on Keep output for search to read'
+export const REASON_SEARCH_NO_MATCHES = 'no matches'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
 export const REASON_NOT_STARTED = 'that panel has not started'
@@ -1294,6 +1305,43 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         : (ctx.selectedIds.length === 0 ? REASON_NO_PANELS_SELECTED : undefined)
     )
   )
+
+  // M42 — the search scope. Rows exist only in scope 'search'; the view shows
+  // them only when the user has opened that scope. Three empty states, never
+  // one — a folded pair tells the user the wrong fix.
+  if (!ctx.scrollbackEnabled) {
+    out.push(withReason(
+      { id: 'search.off', title: 'Search is unavailable', subtitle: 'turn on Keep output', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
+      REASON_SEARCH_OFF
+    ))
+  } else if (ctx.searchResults !== null) {
+    if (ctx.searchResults.length === 0) {
+      // Only once a query has been typed: an empty query answers null above,
+      // not [], so "no matches" never shows before the first keystroke.
+      if (ctx.searchQuery.trim() !== '') {
+        out.push(withReason(
+          { id: 'search.none', title: 'No matches', subtitle: `no panel has said “${ctx.searchQuery.trim()}”`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
+          REASON_SEARCH_NO_MATCHES
+        ))
+      }
+    } else {
+      const labelOf = new Map(ctx.panels.map((row) => [row.id, row.label]))
+      for (const hit of ctx.searchResults) {
+        out.push({
+          id: `search.hit.${hit.panelId}.${hit.lineIndex}`,
+          title: labelOf.get(hit.panelId) ?? hit.panelId,
+          // The matched line, and the haystack: the palette's own filter runs
+          // over title+subtitle+searchText, so typing narrows the hits too.
+          subtitle: hit.line,
+          searchText: hit.line,
+          group: 'panel',
+          scope: 'search',
+          hiddenAtRest: true,
+          run: () => actions.goToPanel(hit.panelId)
+        })
+      }
+    }
+  }
 
   return out
 }

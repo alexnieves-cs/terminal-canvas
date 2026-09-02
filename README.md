@@ -54,6 +54,10 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **Search across every panel.** `Cmd+F` and a string: every panel whose
+  output contains it, newest match first, each a row that flies the camera to
+  that panel. The wall-of-terminals answered as a retrieval question — which
+  of these twelve printed the stack trace.
 - **A git worktree per panel.** A preset can spawn its agent in a fresh
   worktree of the repository on its own `tc/` branch, so four agents on one
   codebase are four working trees, merged deliberately. The built-in *Claude in
@@ -118,6 +122,7 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+Shift+[` / `Cmd+Shift+]` | Previous / next workspace |
 | `Cmd+Shift+A` | Every workspace at once, side by side |
 | `Cmd+Shift+I` | Broadcast keystrokes to every selected terminal (again to stop) |
+| `Cmd+F` | Search every panel's output; Enter flies to the match |
 | `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
 | **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**: `Ctrl+C` as SIGINT, `Ctrl+Z` as SIGTSTP, and `Ctrl+B` because tmux's own prefix is deliberately disabled |
@@ -205,7 +210,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        preset:set-default / preset:spawn-by-id / preset:save-panel
                        preset:set-worktree
                        worktree:list / worktree:remove / worktree:reveal
-                       scrollback:tail / scrollback:clear
+                       scrollback:tail / scrollback:clear / scrollback:search
                        prompt:list / prompt:save / prompt:delete
                        settings:list / settings:set
                        canvas:request-reset

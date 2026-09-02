@@ -59,13 +59,13 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:layout` | plain node | ~168 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
-| `verify:palette` | plain node | ~95 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:palette` | plain node | ~98 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
 | `verify:rail` | plain node | ~124 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~89 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
-| `verify:file` | plain node | 24 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
+| `verify:file` | plain node | ~33 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
-| `verify:usage` | plain node | 25 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
+| `verify:usage` | plain node | ~26 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
 | `verify:tmux` | plain node | 29 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
 | `verify:agent-state` | plain node | 25 checks (one lettered sub-check): `scanForBell`'s escape-sequence scanner and `nextState`'s state machine |
@@ -75,7 +75,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 55 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 58 channels as of the newest milestone that added one — re-derive i |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 59 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | ~200 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -111,6 +111,7 @@ renderer --invoke--> preset:set-default / preset:spawn-by-id                   -
 renderer --invoke--> preset:save-panel / preset:set-worktree                  --> main
 renderer --invoke--> worktree:list / worktree:remove / worktree:reveal         --> main
 renderer --invoke--> scrollback:tail / scrollback:clear                        --> main
+renderer --invoke--> scrollback:search                                         --> main
 renderer --invoke--> prompt:list / prompt:save / prompt:delete                 --> main
 renderer --invoke--> settings:list / settings:set                              --> main
 renderer --invoke--> canvas:request-reset                                      --> main

@@ -196,10 +196,10 @@ app.whenReady().then(() => {
   // are an OPTIONAL trailing parameter with an inert default, which is why
   // this harness passes nothing for them and every one of the four still has
   // a handler: an install with no worktrees lists nothing and answers unknown.
-  // 58 = 56 plus M39's two: scrollback:tail (the dormant card's lines) and
-  // scrollback:clear (the palette's destructive verb). Both ride the same
-  // optional-trailing-parameter shape the worktree handlers do.
-  const EXPECTED_CHANNELS = 58
+  // 59 = 56 plus M39's two (scrollback:tail, scrollback:clear) plus M42's
+  // scrollback:search. All three ride the same optional-trailing-parameter
+  // shape the worktree handlers do; search's id list is main's own.
+  const EXPECTED_CHANNELS = 59
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

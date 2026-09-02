@@ -1172,7 +1172,7 @@ const gridWs = (id, name, panelIds = [], active = false) => ({ id, name, panelId
   ok('handoff.1 link rows name the handoff state, the sentence names trigger and bound, the control names the next state',
     desc !== null && ctl !== null &&
       exitRow.handoff === 'exit' && idleRow.handoff === 'idle' && offRow.handoff === 'off' && bareRow.handoff === 'off' && restartRow.handoff === 'off' &&
-      /handoff on exit · last 200 lines/.test(sExit) && /handoff after a turn · last 200 lines/.test(sIdle) && /restart/.test(sRestart) &&
+      /handoff on exit · last 200 lines, 16 KiB max/.test(sExit) && /handoff after a turn · last 200 lines, 16 KiB max/.test(sIdle) && /restart/.test(sRestart) &&
       cExit.label === 'handoff: exit' && /idle/.test(cExit.title) && /exit/.test(cOff.title) && /off/.test(cIdle.title),
     JSON.stringify({ exitRow, sExit, sIdle, sRestart, cExit, cOff, cIdle }))
 }

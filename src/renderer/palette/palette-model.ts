@@ -59,6 +59,8 @@ export type PaletteScope =
   | 'worktrees'
   | 'credentials'
   | 'agent-mode'
+  /** M42. Search across every panel's durable log; the query box IS the term. */
+  | 'search'
 
 /** Unknown ids sink to the bottom rather than throwing: a row in a section
  *  that no longer exists is a display bug, not a reason to blank the palette. */

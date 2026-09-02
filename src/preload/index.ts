@@ -144,7 +144,8 @@ const bridge: CanvasBridge = {
   },
   scrollback: {
     tail: (req: { panelId: string; lines: number }) => ipcRenderer.invoke(IPC.SCROLLBACK_TAIL, req),
-    clear: () => ipcRenderer.invoke(IPC.SCROLLBACK_CLEAR)
+    clear: () => ipcRenderer.invoke(IPC.SCROLLBACK_CLEAR),
+    search: (query: string) => ipcRenderer.invoke(IPC.SCROLLBACK_SEARCH, query)
   },
   worktree: {
     list: () => ipcRenderer.invoke(IPC.WORKTREE_LIST),

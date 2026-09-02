@@ -102,6 +102,7 @@ import { useShellChrome } from '../shell/useShellChrome'
 import { railLabel } from '../shell/rail-rows'
 import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
+import type { ScrollbackSearchHit } from '@shared/ipc-contract'
 
 
 const registry = createRegistry({
@@ -2556,6 +2557,41 @@ export function Canvas({
     setAutomationResult((current) => new Map(current).set(key, sentence))
   }, [])
   const scrollbackEnabled = useCallback(() => scrollbackPersistRef.current, [])
+
+  // M42 — search across every panel, over the durable log. The palette owns
+  // the query (its input box IS the term) and reports it here while its scope
+  // is `search`; Canvas debounces 120ms, asks main, and holds the answer.
+  // Both are CLEARED when the scope leaves search, so a reopened palette
+  // starts from no answer (null), not stale hits.
+  const [searchResults, setSearchResults] = useState<ScrollbackSearchHit[] | null>(null)
+  const searchQueryRef = useRef('')
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onSearchQuery = useCallback((query: string) => {
+    searchQueryRef.current = query
+    if (searchTimerRef.current !== null) clearTimeout(searchTimerRef.current)
+    if (query.trim() === '') {
+      // An empty box is "no answer yet" (null), NOT "no matches" ([]): the
+      // three empty states depend on that distinction.
+      setSearchResults(null)
+      return
+    }
+    searchTimerRef.current = setTimeout(() => {
+      const q = query
+      void window.canvas.scrollback.search(q).then((hits) => {
+        // Ignore an answer that arrived after the user typed on — only the
+        // latest query's result may land.
+        if (searchQueryRef.current === q) setSearchResults(hits)
+      })
+    }, 120)
+  }, [])
+  // Leaving the search scope drops the answer, so the next open starts clean.
+  useEffect(() => {
+    if (palette.scope !== 'search') {
+      if (searchTimerRef.current !== null) clearTimeout(searchTimerRef.current)
+      searchQueryRef.current = ''
+      setSearchResults(null)
+    }
+  }, [palette.scope])
   // The wake half of onSelectPanel WITHOUT the select/raise: a handoff must
   // start its target but must not steal the selection or the camera. Clears
   // Canvas's dormantIds (assignTiers reads it) alongside the registry flag,
@@ -3093,6 +3129,9 @@ export function Canvas({
             broadcastReady={broadcastReady}
             broadcastActive={broadcastInput}
             inputMode={inputMode}
+            searchResults={searchResults}
+            scrollbackEnabled={scrollbackPersist}
+            onSearchQuery={onSearchQuery}
           />
         )}
       </div>

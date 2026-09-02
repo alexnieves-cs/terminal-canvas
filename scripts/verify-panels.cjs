@@ -902,7 +902,10 @@ app.whenReady().then(async () => {
   // M39. Real tail/clear over the log above.
   {
     tail: (panelId, lines) => scrollbackLog.tail(panelId, lines),
-    clear: () => scrollbackLog.clearAll()
+    clear: () => scrollbackLog.clearAll(),
+    // M42. The same shape main/index.ts wires, so the SCROLLBACK_SEARCH handler
+    // registerIpcHandlers installs has a real implementation to call.
+    search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
   })
   ipcMain.handle = realIpcMainHandle
 
@@ -7672,11 +7675,16 @@ app.whenReady().then(async () => {
           // The subject's own session reattaching (tmux) is what keeps its
           // baseline alive in main, exactly the mechanism check 91 already
           // proves for the inspector's reattached badge.
-          // 15s, not 8: the reattach after a reload waits on the store load,
-          // pty:list and the tier pass, and this window flaked twice in five
-          // runs at 8s on an otherwise idle machine (M36/M37 build logs).
+          // 30s, raised from 15s in M42: reattach after a reload waits on the
+          // store load, pty:list and the tier pass, and 15s flaked on the
+          // reattach (reattached=null) in EVERY M40-M42 full-chain run, where
+          // 20+ prior suites leave the machine warm and the socket crowded —
+          // never standalone. Raising the CEILING costs nothing on the common
+          // fast path and only adds time in the rare slow one; a check that
+          // reports a hang that isn't there destroys the real result, which is
+          // strictly worse (verify:panels' own watchdog note).
           const reattached = await waitUntil(
-            async () => (await sessionMap(wc)).has(subjectPanel), 15000)
+            async () => (await sessionMap(wc)).has(subjectPanel), 45000)
           reattached107 = reattached
           if (reattached) {
             await selectPanel(subjectPanel)
@@ -7689,7 +7697,7 @@ app.whenReady().then(async () => {
                 `window.canvas.workspace.list().then((ws) => ws.flatMap((w) => w.panelIds))`)
               const fresh = ids.filter((id) => !idsAfterReload.includes(id))
               return fresh.length === 1 ? fresh[0] : false
-            }, 15000)
+            }, 30000)
           }
         }
         const finalIds = await wc.executeJavaScript(
@@ -7697,7 +7705,7 @@ app.whenReady().then(async () => {
         ok('107 a review node cannot mint an id a persisted node already owns',
           subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
             minted !== collideId && new Set(finalIds).size === finalIds.length,
-          `collideId=${collideId} minted=${minted} reattached=${reattached107} action=${action107} ids=${JSON.stringify(finalIds)}`)
+          `subject=${subjectPanel} baseline=${seedBaseline ? 'yes' : 'no'} afterReload=${idsAfterReload ? idsAfterReload.length : 'null'} collideId=${collideId} minted=${minted} reattached=${reattached107} action=${action107} ids=${JSON.stringify(finalIds)}`)
       }
 
       // 108. The node is in the rail, and its row NAVIGATES — the rule
@@ -13461,6 +13469,87 @@ app.whenReady().then(async () => {
       } finally {
         wc.removeListener('console-message', onConsole41)
         wc.removeListener('render-process-gone', onGone41)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M42 — search across every panel, over the durable log. Scoped id.
+    // Two seeded panels print two different sentinels; Cmd+F, type one, the
+    // matching row appears, Enter frames THAT panel (camera moved, selection
+    // set) and wakes nothing.
+    // -------------------------------------------------------------------
+    {
+      const sLog = []
+      const onS = (_e, level, message) => { if (level >= 2) sLog.push(String(message).slice(0, 200)) }
+      wc.on('console-message', onS)
+      try {
+        backend = createDirectBackend('verify: direct (m42 search)')
+        const home = require('node:os').homedir()
+        const sPanel = (id, x) => ({
+          kind: 'terminal', rect: { id, x, y: 60, w: 320, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] }
+        })
+        layoutStore.save({ panels: fromPanels([sPanel('sX', 60), sPanel('sY', 440)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reloadedS = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reloadedS
+        const seededS = await waitUntil(async () => wc.executeJavaScript(
+          `['sX', 'sY'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const cardPtS = async (id) => wc.executeJavaScript(`(() => {
+          const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
+          const p = document.querySelector('.panel[data-panel-id="${id}"] .panel__card'); if (!p) return null
+          const r = p.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+          if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) return null
+          return { x, y } })()`)
+        const wakeS = async (id) => {
+          const pt = await cardPtS(id)
+          if (pt) { wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+                    wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 }) }
+          await settle()
+          return await waitUntil(async () => (await sessionMap(wc)).has(id), 10000)
+        }
+        const xUp = seededS ? await wakeS('sX') : false
+        const yUp = seededS ? await wakeS('sY') : false
+        // Two DIFFERENT sentinels, each printed by its own panel.
+        if (xUp) ptyManager.write('sX', 'echo SEARCH-ONLY-IN-XX-8801\r')
+        if (yUp) ptyManager.write('sY', 'echo SEARCH-ONLY-IN-YY-8802\r')
+        const xLogged = xUp ? await waitUntil(async () => (await scrollbackLog.tail('sX', 20)).some((l) => l.includes('SEARCH-ONLY-IN-XX-8801')), 10000) : false
+        const yLogged = yUp ? await waitUntil(async () => (await scrollbackLog.tail('sY', 20)).some((l) => l.includes('SEARCH-ONLY-IN-YY-8802')), 10000) : false
+        // Cmd+F opens the search scope; type the X sentinel; the row appears.
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyF', key: 'f', metaKey: true, bubbles: true }))`)
+        const paletteUp = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 4000)
+        const chip = await wc.executeJavaScript(`(() => { const c = document.querySelector('.palette__scope, .palette__chip'); return c ? c.textContent : null })()`)
+        // React's controlled <input> ignores a plain value assignment and a raw
+        // char event: the native setter plus a dispatched 'input' is what makes
+        // the query reach React (the rename check's own rule, ~line 2871).
+        await wc.executeJavaScript(`(() => {
+          const input = document.querySelector('.palette__input'); if (!input) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'SEARCH-ONLY-IN-XX-8801')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          return true })()`)
+        // A hit row for sX appears (its id encodes the panel), and NOT for sY.
+        const rowSel = `.palette [data-command-id^="search.hit.sX."]`
+        const hitRow = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('${rowSel}') !== null`), 6000)
+        const noSY = await wc.executeJavaScript(`document.querySelector('.palette [data-command-id^="search.hit.sY."]') === null`)
+        // Selection + camera before, to prove Enter MOVED the camera onto sX.
+        const camBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
+        // Enter runs the highlighted row (goToPanel sX).
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+        const closed = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.palette') === null`), 4000)
+        const selectedX = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.panel--selected')?.dataset.panelId === 'sX'`), 4000)
+        const camAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const moved = camBefore && camAfter && (camBefore.x !== camAfter.x || camBefore.y !== camAfter.y)
+        ok('search.1 Cmd+F opens the search scope, a typed sentinel surfaces its panel\'s row, and Enter frames and selects that panel',
+          seededS === true && xUp === true && yUp === true && xLogged === true && yLogged === true &&
+            paletteUp === true && hitRow === true && noSY === true && closed === true && selectedX === true && moved === true,
+          JSON.stringify({ seededS, xUp, yUp, xLogged, yLogged, paletteUp, chip, hitRow, noSY, closed, selectedX, moved, cam: [camBefore, camAfter], renderer: sLog.slice(-4) }))
+      } catch (searchErr) {
+        ok('search.1 Cmd+F opens the search scope, a typed sentinel surfaces its panel\'s row, and Enter frames and selects that panel',
+          false, 'threw: ' + String(searchErr && searchErr.message || searchErr) + ' | renderer: ' + (sLog.slice(-6).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onS)
       }
     }
 

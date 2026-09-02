@@ -3,7 +3,7 @@ import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
 import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
-import { HANDOFF_MAX_LINES, type LinkAutomation } from '@shared/handoff'
+import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type LinkAutomation } from '@shared/handoff'
 import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
@@ -96,9 +96,12 @@ export function handoffStateOf(automation: LinkAutomation | undefined): HandoffS
  */
 export function describeAutomation(automation: LinkAutomation): string {
   if (automation.kind === 'restart-on-exit') return 'restart on exit'
+  // BOTH bounds, named where the rule is made: a user must never learn the
+  // 16 KiB cap from a silently truncated paste (the M41 verifier's note).
+  const bound = `last ${HANDOFF_MAX_LINES} lines, ${Math.round(HANDOFF_MAX_CHARS / 1024)} KiB max`
   return automation.trigger === 'exit'
-    ? `handoff on exit · last ${HANDOFF_MAX_LINES} lines`
-    : `handoff after a turn · last ${HANDOFF_MAX_LINES} lines`
+    ? `handoff on exit · ${bound}`
+    : `handoff after a turn · ${bound}`
 }
 
 /**

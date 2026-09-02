@@ -2136,9 +2136,12 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    larger question (retention, byte caps, and #31) and it is what makes a restored canvas
    show anything at all. Write it from `pty-manager`'s existing flush, as an append stream
    and emphatically not with `layout-store`'s rewrite-the-file pattern.
-33. **#16 canvas-wide search** — the search itself is small; it is gated on durable
-   scrollback, which is a bigger question than search (retention, size caps, and secrets
-   in agent output) and should be costed on its own before this is scheduled.
+33. ~~**#16 canvas-wide search**~~ — **done, M42.** `Cmd+F` opens the palette in a
+   `search` scope whose query box IS the term; main searches every panel's durable log
+   (case-insensitive, ANSI-stripped, capped 50 total / 5 per panel, newest first) and each
+   hit is a row that frames its panel through `goToPanel` — never waking it, never scrolling
+   the live terminal. Three empty states (off / no matches / nothing typed yet). Gated on
+   M39, as this entry required.
 34. **#39 export and share** — main-side page capture, because a WebGL-backed panel comes out
    blank of any renderer-side DOM capture. Bounded by #30 for the text half.
 35. **#9, one integration each from tier 1 and tier 2** — Obsidian and GitHub as the two

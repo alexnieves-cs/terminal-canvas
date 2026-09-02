@@ -7,7 +7,7 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult } from '../shared/ipc-contract'
+import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
@@ -83,11 +83,14 @@ export interface WorktreeHandlers {
 export interface ScrollbackHandlers {
   tail(panelId: PanelId, lines: number): Promise<string[]>
   clear(): Promise<void>
+  /** M42. panelIds are supplied by the handler from the layout, never by the renderer. */
+  search(panelIds: PanelId[], query: string): Promise<ScrollbackSearchHit[]>
 }
 
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
-  clear: async () => {}
+  clear: async () => {},
+  search: async () => []
 }
 
 const INERT_WORKTREES: WorktreeHandlers = {
@@ -163,6 +166,16 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())
+  // M42. The id list is MAIN's — every panel in every workspace — never a
+  // renderer argument: a closed panel's log is already dropped, and a search
+  // that accepted ids could ask for one the layout no longer holds.
+  ipcMain.handle(IPC.SCROLLBACK_SEARCH, (_event, query: string): Promise<ScrollbackSearchHit[]> => {
+    const ids = new Set<PanelId>()
+    for (const ws of layoutStore.mergedWorkspaces()) {
+      for (const panel of ws.panels) ids.add(panel.id)
+    }
+    return scrollback.search([...ids], query)
+  })
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
 
   // M37. `attached` is computed HERE, at list time, from the layout: a
