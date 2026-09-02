@@ -22,6 +22,12 @@ function createHandle(id: PanelId): SessionHandle {
   host.dataset.panelId = id
 
   let handles: TerminalHandles | null = null
+  // M52. The shell's prompt marks, for navigation and "copy last output".
+  const prompts: import('@xterm/xterm').IMarker[] = []
+  let commandMarker: import('@xterm/xterm').IMarker | null = null
+  let lastCommand: import('@xterm/xterm').IMarker | null = null
+  let lastEnd: import('@xterm/xterm').IMarker | null = null
+
   // M44. Options set through configure() BEFORE the terminal is created — a
   // carded panel that has never gone live. Applied when createTerminal first
   // runs, so configure never forces an early Terminal (and its addons) into
@@ -40,6 +46,38 @@ function createHandle(id: PanelId): SessionHandle {
       // which is what verify:panels hover.1 reads to prove the corrected
       // hover landed on the cell it meant.
       const term = handles.term
+      // M52. OSC 133 marks — emitted by the shell main decorated, never by
+      // this app's own bytes. A marker per prompt (A), the command's own
+      // marker at C, and on D a decoration on it: a gutter rib, --ok or
+      // --fail by exit status. Markers and decorations only: no text is kept
+      // here and nothing bumps registry.version(); the ledger row is main's.
+      term.parser.registerOscHandler(133, (data) => {
+        const kind = data[0]
+        const payload = data.length > 1 && data[1] === ';' ? data.slice(2) : ''
+        if (kind === 'A') {
+          const m = term.registerMarker(0)
+          if (m) prompts.push(m)
+          return true
+        }
+        if (kind === 'C') { commandMarker = term.registerMarker(0) ?? null; return true }
+        if (kind === 'D') {
+          const at = commandMarker ?? prompts[prompts.length - 1]
+          const exit = payload === '' ? null : Number(payload)
+          if (at && !at.isDisposed) {
+            const dec = term.registerDecoration({ marker: at, x: 0, width: 1, layer: 'top' })
+            dec?.onRender((el) => {
+              el.classList.add('cmd-mark', exit === 0 ? 'cmd-mark--ok' : 'cmd-mark--fail')
+              el.dataset['cmdExit'] = exit === null ? '' : String(exit)
+              el.title = exit === 0 ? 'exit 0' : `exit ${exit ?? '?'}`
+            })
+          }
+          lastEnd = term.registerMarker(0) ?? null
+          lastCommand = commandMarker
+          commandMarker = null
+          return true
+        }
+        return true
+      })
       term.registerLinkProvider({
         provideLinks(y, callback) {
           const line = term.buffer.active.getLine(y - 1)
@@ -175,6 +213,28 @@ function createHandle(id: PanelId): SessionHandle {
     },
     options() {
       return { ...pendingOptions }
+    },
+    jumpPrompt(direction) {
+      if (!handles) return false
+      const term = handles.term
+      const top = term.buffer.active.viewportY
+      const live = prompts.filter((m) => !m.isDisposed).map((m) => m.line)
+      const target = direction < 0
+        ? live.filter((l) => l < top).pop()
+        : live.find((l) => l > top)
+      if (target === undefined) return false
+      term.scrollToLine(target)
+      return true
+    },
+    lastCommandOutput() {
+      if (!handles || !lastCommand || !lastEnd || lastCommand.isDisposed || lastEnd.isDisposed) return null
+      const buf = handles.term.buffer.active
+      const lines: string[] = []
+      for (let y = lastCommand.line + 1; y < lastEnd.line; y += 1) {
+        const line = buf.getLine(y)
+        if (line) lines.push(line.translateToString(true))
+      }
+      return lines.join('\n')
     },
     dispose() {
       if (handles) disposeTerminal(handles)

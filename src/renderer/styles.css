@@ -1378,6 +1378,13 @@ body {
   fill: none;
 }
 
+/* M52. The command marks: a gutter rib per command on the row its prompt
+   sat on, green for exit 0 and red otherwise — the shell's own answer, never
+   a heuristic. xterm positions the decoration; this only paints it. */
+.cmd-mark { width: 3px !important; border-radius: var(--r-full); pointer-events: none; }
+.cmd-mark--ok { background: var(--green); }
+.cmd-mark--fail { background: var(--red); }
+
 /* M50. Snap guides: world-space hairlines inside .world, iris because a
    guide answers an interaction with the interface, never an agent's state.
    Never a target. */

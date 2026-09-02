@@ -46,8 +46,72 @@ export function scanForBell(
   state: ScanState,
   chunk: string
 ): { state: ScanState; bells: number } {
+  const r = scanChunk({ state, osc: '' }, chunk)
+  return { state: r.pos.state, bells: r.bells }
+}
+
+/**
+ * M52. The scanner's POSITION: the grammar state plus the OSC body being
+ * accumulated, because an OSC 133 mark can straddle a 16ms flush boundary
+ * and has to complete on the next chunk. Only a body that can still be an
+ * OSC 133 mark is kept (the prefix is checked as it arrives, and the body is
+ * capped), so a window title costs nothing and the hot path stays a byte
+ * loop.
+ */
+export interface ScanPos { state: ScanState; osc: string }
+export const INITIAL_POS: ScanPos = { state: 'text', osc: '' }
+
+/** An OSC 133 mark: prompt start, prompt end, command start (with the command), command end (with the exit code). */
+export type OscMark =
+  | { kind: 'A' }
+  | { kind: 'B' }
+  | { kind: 'C'; command: string }
+  | { kind: 'D'; exit: number | null }
+
+const OSC_PREFIX = '133;'
+const OSC_MAX = 4096
+
+function markOf(body: string): OscMark | null {
+  if (!body.startsWith(OSC_PREFIX)) return null
+  const rest = body.slice(OSC_PREFIX.length)
+  const kind = rest[0]
+  const payload = rest.length > 1 && rest[1] === ';' ? rest.slice(2) : ''
+  if (kind === 'A') return { kind: 'A' }
+  if (kind === 'B') return { kind: 'B' }
+  if (kind === 'C') {
+    let command = payload
+    try { command = decodeURIComponent(payload) } catch { /* the hook percent-encodes; a stray % is kept as typed */ }
+    return { kind: 'C', command }
+  }
+  if (kind === 'D') {
+    const n = payload === '' ? null : Number(payload)
+    return { kind: 'D', exit: n === null || !Number.isFinite(n) ? null : n }
+  }
+  return null
+}
+
+/**
+ * scanForBell with a position and the OSC 133 marks it saw. A mark's own BEL
+ * terminator is NOT a bell — the trap scanForBell exists for holds for the
+ * marks too. Runs on every chunk at the choke point and must never bump
+ * anything higher-frequency than the per-command events it yields.
+ */
+export function scanChunk(pos: ScanPos, chunk: string): { pos: ScanPos; bells: number; marks: OscMark[] } {
   let bells = 0
-  let s = state
+  let s = pos.state
+  let osc = pos.osc
+  const marks: OscMark[] = []
+  const endOsc = (): void => {
+    const mark = markOf(osc)
+    if (mark) marks.push(mark)
+    osc = ''
+  }
+  const take = (c: number): void => {
+    // Accumulate only while the body can still be a mark: the prefix must
+    // match as it arrives, and the whole body is capped.
+    if (osc.length < OSC_MAX && (osc.length >= OSC_PREFIX.length ? osc.startsWith(OSC_PREFIX) : OSC_PREFIX.startsWith(osc + String.fromCharCode(c)) || osc.startsWith(OSC_PREFIX))) osc += String.fromCharCode(c)
+    else if (osc.length < OSC_PREFIX.length) osc = '\u0000' // poisoned: cannot become a mark, and never matches the prefix
+  }
   for (let i = 0; i < chunk.length; i += 1) {
     const c = chunk.charCodeAt(i)
     switch (s) {
@@ -60,7 +124,7 @@ export function scanForBell(
         // ESC _ (APC) all open string bodies terminated only by ST. Everything
         // else — CSI included — is a short sequence that cannot contain a BEL,
         // so returning to text is both correct and the safe direction.
-        if (c === 0x5d) s = 'osc'
+        if (c === 0x5d) { s = 'osc'; osc = '' }
         else if (c === 0x50 || c === 0x58 || c === 0x5e || c === 0x5f) s = 'dcs'
         else if (c === ESC) s = 'esc'
         else s = 'text'
@@ -68,13 +132,14 @@ export function scanForBell(
       case 'osc':
         // An OSC string is terminated by BEL *or* by ST. This BEL is the
         // terminator, not a bell — it is the whole trap.
-        if (c === BEL) s = 'text'
+        if (c === BEL) { s = 'text'; endOsc() }
         else if (c === ESC) s = 'osc-esc'
+        else take(c)
         break
       case 'osc-esc':
-        if (c === 0x5c) s = 'text' // ST
+        if (c === 0x5c) { s = 'text'; endOsc() } // ST
         else if (c === ESC) s = 'osc-esc'
-        else s = 'osc'
+        else { s = 'osc'; take(c) }
         break
       case 'dcs':
         // DCS is terminated ONLY by ST. A BEL inside one is body content and
@@ -89,7 +154,7 @@ export function scanForBell(
         break
     }
   }
-  return { state: s, bells }
+  return { pos: { state: s, osc }, bells, marks }
 }
 
 /**
@@ -104,7 +169,8 @@ export function scanForBell(
 export interface Detector {
   state: AgentState
   lastOutputAt: number
-  scan: ScanState
+  /** M52: the scanner's position, not only its state — an OSC 133 mark can straddle a flush. */
+  scan: ScanPos
 }
 
 export type AgentEvent =
@@ -120,7 +186,7 @@ export function initialDetector(now: number): Detector {
   // 'starting', not 'idle': a panel that has never emitted a byte has not
   // finished anything, and painting it idle at spawn would make the very first
   // thing the user sees a lie.
-  return { state: 'starting', lastOutputAt: now, scan: INITIAL_SCAN }
+  return { state: 'starting', lastOutputAt: now, scan: INITIAL_POS }
 }
 
 /**

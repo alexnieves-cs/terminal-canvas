@@ -1468,7 +1468,7 @@ reset, bookmark, go-to-panel — and never on continuous gestures.
   absent from the undo stack. This is a gap in an existing mechanism rather than a new
   surface.
 
-## 46. A run ledger — what each panel ran, and how it ended
+## 46. A run ledger — what each panel ran, and how it ended — DONE, M52
 
 `exitCodeFor` goes to real trouble to recover a truthful exit code through the `pane-died`
 hook and a file on disk, and then that number is sent once as `pty:exit` and forgotten.
@@ -1664,7 +1664,7 @@ makes the canvas something agents extend rather than only something a human arra
 - **Nearest existing entry: #21** and **#12**, both of which are gestures *inside* the app.
   This is the app's first external control surface.
 
-## 59. OSC 133 shell integration — command boundaries as first-class objects
+## 59. OSC 133 shell integration — command boundaries as first-class objects — DONE, M52
 
 Nothing in the byte stream is parsed for structure today. If the spawned shell emits OSC 133
 prompt marks — and a preset can *make* it, by having main inject the marker into the shell's

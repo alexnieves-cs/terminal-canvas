@@ -2,6 +2,7 @@ import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
+import type { RunRow } from '../shared/run-ledger'
 import type {
   PanelId,
   PanelSpec,
@@ -167,7 +168,9 @@ export function registerIpcHandlers(
   /** M48. Appended last with an inert default, like every collaborator before it. */
   envReport: () => EnvReport = () => INERT_ENV_REPORT,
   /** M51. Appended last with an inert default; the harness passes a recorder. */
-  links: LinkHandlers = INERT_LINKS
+  links: LinkHandlers = INERT_LINKS,
+  /** M52. The run ledger's read half, inert by default. */
+  ledgerList: (panelId: string, limit: number) => Promise<RunRow[]> = async () => []
 ): void {
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
@@ -246,6 +249,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
   ipcMain.handle(IPC.ENV_REPORT, () => envReport())
+  ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
   ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))
   ipcMain.handle(IPC.DIAGNOSTICS_SAMPLE, () => ({
     ipcMessagesPerSecond: ptyManager.ipcMessageRate()

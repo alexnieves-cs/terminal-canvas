@@ -34,3 +34,4 @@ copy here is deleted.
 | [m49-panel-typography.md](m49-panel-typography.md) | M49 — Panel typography | finished |
 | [m50-placement.md](m50-placement.md) | M50 — Placement: snapping and tidy | finished |
 | [m51-links.md](m51-links.md) | M51 — Cmd-click a path or URL | finished |
+| [m52-osc133.md](m52-osc133.md) | M52 — OSC 133 shell integration and the run ledger | finished |

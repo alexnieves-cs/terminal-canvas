@@ -101,6 +101,8 @@ module.exports = {
      the same rule CASCADE_STEP/SEED_PANELS below already state. */
   FILE_MAX_LINES: require('../src/shared/file-panel').FILE_MAX_LINES,
   createDirectBackend: require('../src/main/session-backend').createDirectBackend,
+  /* M52: the run ledger, for a scratch file the harness owns. */
+  createRunLedger: require('../src/main/run-ledger').createRunLedger,
   // Check 26 swaps the manager onto a REAL tmux backend (its own socket) and
   // reloads the renderer: reload survival is a tmux property, so a direct
   // backend cannot express it at all.

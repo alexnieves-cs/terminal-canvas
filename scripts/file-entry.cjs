@@ -15,5 +15,7 @@ module.exports = {
   /* M27: the note's creation verb, same tier and same reason. */
   ...require('../src/main/file-create.ts'),
   /* M39: the per-panel append log, same tier and same reason. */
-  ...require('../src/main/scrollback-log.ts')
+  ...require('../src/main/scrollback-log.ts'),
+  /* M52: the run ledger, an append stream beside layout.json, same tier. */
+  ...require('../src/main/run-ledger.ts')
 }

@@ -107,6 +107,9 @@ const bridge: CanvasBridge = {
   env: {
     report: () => ipcRenderer.invoke(IPC.ENV_REPORT)
   },
+  ledger: {
+    list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit)
+  },
   links: {
     open: (req: { panelId: string; target: string }) => ipcRenderer.invoke(IPC.LINK_OPEN, req)
   },

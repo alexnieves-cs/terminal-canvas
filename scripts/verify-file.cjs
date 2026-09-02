@@ -11,7 +11,7 @@
    reviews because every fixture used a space-free path. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync, lstatSync, chmodSync, symlinkSync, readdirSync, existsSync } = require("node:fs")
+const { mkdtempSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, readFileSync, lstatSync, chmodSync, symlinkSync, readdirSync, existsSync, appendFileSync } = require("node:fs")
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'file.cjs')
@@ -570,6 +570,33 @@ const p = (name) => join(DIR, name)
   }
 
   console.log('')
+  // M52 — ledger.1. The run ledger: an APPEND stream beside layout.json —
+  //      one JSON line per command end, its own writer (never
+  //      layout-store's temp-and-rename, which is wrong for a growing log),
+  //      capped by line count with the oldest trimmed, newest first on read,
+  //      and a malformed line costs that line, never the file. It records no
+  //      output bytes, only metadata, which is what keeps it outside #31's
+  //      disclosure surface.
+  {
+    const can = typeof F.createRunLedger === 'function'
+    const dir = mkdtempSync(join(tmpdir(), 'tc file ledger '))
+    const file = join(dir, 'runs.jsonl')
+    const ledger = can ? F.createRunLedger({ file, maxLines: 5 }) : null
+    const row = (i, panelId = 'p1') => ({ panelId, command: `cmd ${i}`, cwd: '/tmp', startedAt: 1000 + i, endedAt: 2000 + i, exitCode: i % 2 })
+    if (ledger) for (let i = 1; i <= 7; i += 1) await ledger.append(row(i))
+    if (ledger) await ledger.append(row(8, 'p2'))
+    if (ledger) appendFileSync(file, '{not json\n')
+    const p1 = ledger ? await ledger.list('p1', 10) : null
+    const p2 = ledger ? await ledger.list('p2', 10) : null
+    const lines = existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean) : []
+    ok('ledger.1 the run ledger appends one line per row, lists a panel newest first, trims the oldest past the cap, and skips a malformed line',
+      can && p1 !== null && p1.length > 0 && p1[0].command === 'cmd 7' && p1.every((r) => r.panelId === 'p1') &&
+        p2 !== null && p2.length === 1 && p2[0].command === 'cmd 8' && p2[0].exitCode === 0 &&
+        lines.length <= 6 && !lines.some((l) => l.includes('cmd 1')),
+      JSON.stringify({ p1: p1 && p1.map((r) => r.command), p2: p2 && p2.map((r) => r.command), lines: lines.length }))
+    rmSync(dir, { recursive: true, force: true })
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -2706,3 +2706,52 @@ does not exist yet stores the options as PENDING and applies them when `createTe
 runs — it must not `ensure()` a Terminal into existence just to set a font size on a carded
 panel that has never gone live. M44's screen-reader toggle is its first caller; M45's theme and
 M49's font size are meant to reuse it rather than each writing a one-off loop.
+
+**Main INJECTS the OSC 133 hooks and main SCANS for the marks; the renderer only paints them
+(`main/shell-integration.ts`, `main/agent-state.ts`'s `scanChunk`, `pty-manager.ts`,
+`session-factory.ts`).** Two halves that could each have lived in the renderer, and each
+would then fail without a symptom. Injection is main's because main is the only party that
+knows which shell `resolveCommand` picked for an ABSENT `command` — the renderer sees a
+panel spec with no command and cannot tell zsh from bash, and an agent CLI must never be
+decorated (the same rule that keeps `--session-id` off a typed command). Scanning is main's
+because the ledger (`run-ledger.ts`) is written from `PtyManager.flush()`'s byte path,
+where `scanForBell` already ran: `scanChunk` is that scanner widened to carry an OSC
+accumulator across chunk boundaries, since a mark split over two `pty:data` batches is the
+ordinary case at 16ms batching, not the edge. The renderer registers its own xterm OSC 133
+handler purely to place markers and decorations — it reads the same bytes, so the two
+never disagree on WHERE a boundary is, but only main's copy records anything. The rc files
+are written idempotently at every spawn (compare, then write) into
+`userData/shell-integration`, and zsh's shim restores the user's own `ZDOTDIR` through
+`TC_ORIG_ZDOTDIR` before sourcing their files, so a user's `.zshrc` runs unchanged and
+first. A spec with NO `args` (the harness seed, any programmatic `create({ panelId, cwd })`)
+must inject rather than throw: an unguarded spread of `args` threw inside `create()` BEFORE
+the spawn, and because `verify:panels` awaits its seed create ahead of arming the watchdog,
+the whole suite hung silently with zero checks printed — `verify:tmux shell-integration.2`
+pins the absent case.
+
+**The run ledger is an append stream that records NO terminal bytes (`main/run-ledger.ts`,
+`shared/run-ledger.ts`).** A row is `panelId`, `command`, `cwd`, `startedAt`, `endedAt`,
+`exitCode` — the command text is what the shell reported in its `133;C` mark,
+percent-decoded, and that is the whole payload. Output never enters the file, by type:
+`RunRow` has nowhere to put it, the same trick `DiagnosticsSessionRow` and
+`credential-store.ts`'s `list()` use, so a later field on `Session` cannot leak through. It
+is an append-only JSONL file with a per-file queue and a ring trim at the cap, like
+`scrollback-log.ts` and deliberately NOT `layout-store.ts`'s temp-and-rename: one row per
+command at human speed is exactly the rate an append stream is for, and a rewrite-the-world
+save would turn every command into a full file write. The trim is count-tracked and runs
+whenever the count passes the cap — an earlier "every fiftieth append" version let the file
+run to cap+49 rows between trims, a bounded leak nobody would see. A malformed line costs
+that line, never the list, and `ledger:list` returns newest first with a caller-chosen
+limit, so the Work tab asks for twenty and a future search can ask for more without a
+second reader.
+
+**A mark's BEL is not a bell (`main/agent-state.ts`).** OSC sequences end in either `ESC \`
+or a raw BEL (0x07), and the hooks emit `\a` because it is the form every shell's `printf`
+can write. `scanForBell` previously counted every 0x07 in the stream as the agent asking for
+attention — so with integration on, every prompt would have rung the M43 attention path
+(badge, notification, beep) once per command. `scanChunk` therefore consumes the terminator
+as part of the OSC it closes and reports it in `marks`, not `bells`; `verify:agent-state
+osc133.1` pins that a chunk holding only marks yields zero bells. Only an OSC whose body
+could still begin `133;` is accumulated (capped at 4096 bytes, poisoned past that), so an
+unrelated OSC — a title set, a hyperlink — costs nothing, and a bell inside one is still a
+bell, exactly as before.

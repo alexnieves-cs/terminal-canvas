@@ -57,6 +57,14 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **Command boundaries the app can see.** A login shell is decorated at spawn
+  with OSC 133 marks (zsh through a `ZDOTDIR` shim that sources your own
+  files first, bash through `--rcfile`), so every command gets a gutter mark
+  coloured by its exit status, `Previous prompt` / `Next prompt` in `⌘K` jump
+  between commands, `Copy last output` copies exactly one command's output,
+  and the Work tab lists what the panel ran and how it ended — a run ledger
+  main keeps as an append-only file, holding commands and exit codes and
+  never a byte of output.
 - **Search across every panel.** `Cmd+F` and a string: every panel whose
   output contains it, newest match first, each a row that flies the camera to
   that panel. The wall-of-terminals answered as a retrieval question — which
@@ -271,7 +279,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        fs:list
                        toolbox:read / toolbox:permissions
                        diagnostics:sample / diagnostics:export
-                       env:report / link:open
+                       env:report / link:open / ledger:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

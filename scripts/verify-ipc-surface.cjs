@@ -204,7 +204,8 @@ app.whenReady().then(() => {
   // scrollback handlers before it.
   // 61 = 60 plus M51's link:open, an optional trailing parameter with an
   // inert default like env:report before it.
-  const EXPECTED_CHANNELS = 61
+  // 62 = 61 plus M52's ledger:list, inert by default like link:open.
+  const EXPECTED_CHANNELS = 62
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

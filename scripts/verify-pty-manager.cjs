@@ -262,7 +262,10 @@ function makeHarness(backend, options = {}) {
     options.scrollback,
     // M43. The attention sink; undefined means "no OS surfaces", as in a
     // harness that never asks. Only attention.1-.4 pass one.
-    options.attention
+    options.attention,
+    // M52. The run ledger and shell-integration directory; undefined means
+    // neither, as in a harness that never asks. Only osc133.1 passes them.
+    options.runs
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -1720,6 +1723,43 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     // wired to THIS run's now-deleted exitDir, and check 14 would silently
     // report the wrong exit code). Whoever appends check 32 inherits it next.
     tmuxBackend.shutdown()
+  }
+
+  // -------------------------------------------------------------------
+  // M52 — OSC 133 shell integration and the run ledger, against a REAL zsh.
+  //      The manager injects the marks (a login shell: command absent), the
+  //      shell emits them on every prompt, the scanner turns C/D into ledger
+  //      rows with the shell's own $? — under the direct backend, whose
+  //      exitCodeFor is null by contract, which is exactly why the exit code
+  //      must come from the mark. The zsh on this machine sources the
+  //      developer's own rc through TC_ORIG_ZDOTDIR first, which is the
+  //      integration's contract and the one thing a fixture cannot fence.
+  // -------------------------------------------------------------------
+  {
+    const rows = []
+    const ledger = { append: async (row) => { rows.push(row) }, list: async () => rows.slice().reverse() }
+    const dir = mkdtempSync(join(tmpdir(), 'tc pty-manager osc133 '))
+    let bytes = ''
+    const h = makeHarness(DIRECT, {
+      runs: { ledger, integrationDir: dir, now: () => Date.now() },
+      onSend: (channel, payload) => { if (channel === 'pty:data') bytes += payload.data }
+    })
+    // A LOGIN SHELL: command absent, so main resolves it — and on this
+    // machine that is zsh (SHELL), the shell the integration decorates.
+    const s = { panelId: 'osc1', cwd: os.homedir(), args: ['-l'], cols: 80, rows: 24 }
+    let created = null
+    try { created = await h.manager.create(s) } catch (e) { created = { error: String(e) } }
+    const prompted = await waitFor(() => bytes.includes('\x1b]133;A'), 8000)
+    h.manager.write('osc1', 'true\r')
+    const ok0 = await waitFor(() => rows.some((r) => /^true$/.test(r.command.trim()) && r.exitCode === 0), 8000)
+    h.manager.write('osc1', 'false\r')
+    const ok1 = await waitFor(() => rows.some((r) => /^false$/.test(r.command.trim()) && r.exitCode === 1), 8000)
+    const zshrc = existsSync(join(dir, 'zsh', '.zshrc'))
+    ok('osc133.1 a real login zsh spawned by the manager emits the marks, and true/false become ledger rows with exit 0 and 1',
+      created && !created.error && prompted === true && ok0 === true && ok1 === true && zshrc === true,
+      JSON.stringify({ created: created && (created.error ?? created.panelId), prompted, ok0, ok1, zshrc, rows: rows.map((r) => [r.command, r.exitCode]), tail: bytes.slice(-200) }))
+    h.manager.kill('osc1')
+    try { rmSync(dir, { recursive: true, force: true }) } catch { /* zsh may still hold the dir for a beat */ }
   }
 
   // -------------------------------------------------------------------
