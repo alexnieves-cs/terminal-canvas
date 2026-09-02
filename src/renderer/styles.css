@@ -1781,6 +1781,29 @@ body {
   justify-content: flex-end;
 }
 
+/* M57. Semantic zoom. `summary` and `block` replace the tail; both are
+   sized in world units like the tail so they scale with the panel, which is
+   the point — at 8% a block is a map marker, not a paragraph. */
+.panel__card--summary { justify-content: center; gap: var(--sp-3); font-family: var(--font-ui); }
+.panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel__card-summary-state { font-size: var(--t-lg); color: var(--fg-2); text-transform: capitalize; }
+.panel__card-summary-line { font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.panel__card-summary-cost { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.panel__card--block { padding: 0; }
+.panel__card-block {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  background: var(--s-4);
+  color: var(--fg);
+  font-family: var(--font-ui);
+}
+.panel__card-block-title { font-size: calc(var(--t-2xl) * 3); font-weight: 700; padding: var(--sp-6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.panel__card-block--busy, .panel__card-block--starting { background: var(--blue-dim); color: var(--blue); }
+.panel__card-block--idle { background: var(--green-dim); color: var(--green); }
+.panel__card-block--wants-you { background: var(--amber-dim); color: var(--amber); }
+.panel__card-block--exited { background: var(--red-dim); color: var(--red); }
+
 .panel__card-line {
   white-space: pre;
   overflow: hidden;

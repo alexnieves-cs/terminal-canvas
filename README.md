@@ -57,6 +57,11 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   disk (2 MB per panel, on by default, one setting to turn off), so a restored
   panel's card shows what it was doing before you quit instead of a blank
   "click to start" — and search has something to read.
+- **Cards that become less as you pull away.** Above a third zoom a card is
+  a terminal tail; between that and a tenth it is a summary — the panel's
+  name, its agent's state, one last line, the cost; below a tenth it is a
+  block coloured by state with the name across it. The thresholds have
+  hysteresis, so a pinch hovering on one never flickers the whole canvas.
 - **A camera that flies, remembers, and keeps places.** Every discrete jump —
   a rail row, a search hit, a notification, `⌘1`, `⌘0`, a bookmark — is a
   short eased flight instead of a teleport, unless the system asks for

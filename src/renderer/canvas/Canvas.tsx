@@ -89,6 +89,7 @@ import {
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
+import { nextCardDetail, type CardDetail } from './card-detail'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
@@ -971,6 +972,15 @@ export function Canvas({
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
   )
+  // M57. The RENDER tier every card draws at — one value for the canvas,
+  // since the scale is global — advanced through nextCardDetail's hysteresis
+  // so a pinch on a boundary cannot flip every card twice a frame. Below
+  // tiering, never inside it: assignTiers rations contexts, this rations
+  // typography.
+  const [cardDetail, setCardDetail] = useState<CardDetail>('tail')
+  useEffect(() => {
+    setCardDetail((current) => nextCardDetail(current, viewport.scale))
+  }, [viewport.scale])
   // Backlog #68: space-drag and middle-drag pan for the mouse-only user. See
   // useSpaceHeld.ts for why this is gated on real DOM focus rather than the
   // app's own focusedId/palette/draft state.
@@ -3294,6 +3304,7 @@ export function Canvas({
                 rect={panel.rect}
                 z={panel.z}
                 title={panel.title}
+                cardDetail={cardDetail}
                 selected={selectedIds.has(panel.rect.id)}
                 onSelect={onSelectPanel}
                 onSlotMount={onSlotMount}

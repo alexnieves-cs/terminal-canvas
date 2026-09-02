@@ -656,7 +656,7 @@ the same world, or a different workspace (#2) entirely.
   shared saved layout as a single value — a detail M4b's format should be checked against
   now, while it is cheap.
 
-## 22. Semantic zoom — a card that changes with distance
+## 22. Semantic zoom — a card that changes with distance — DONE, M57
 
 A card at 45% zoom and a card at 8% zoom render the same thing today: a text tail. At 8%
 that text is a grey smear. The card should become *less* as you zoom out — tail, then

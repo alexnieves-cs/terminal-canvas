@@ -39,3 +39,4 @@ copy here is deleted.
 | [m54-tc-cli.md](m54-tc-cli.md) | M54 — `tc`: a CLI and a URL scheme | finished |
 | [m55-orphans.md](m55-orphans.md) | M55 — Recover an orphan session | finished |
 | [m56-camera.md](m56-camera.md) | M56 — The camera: flights, a trail, bookmarks | finished |
+| [m57-semantic-zoom.md](m57-semantic-zoom.md) | M57 — Semantic zoom | finished |
