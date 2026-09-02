@@ -31,3 +31,4 @@ copy here is deleted.
 | [m46-interface-architecture.md](m46-interface-architecture.md) | M46 — The interface architecture | finished |
 | [m47-panel-frame.md](m47-panel-frame.md) | M47 — One panel frame | finished |
 | [m48-first-run.md](m48-first-run.md) | M48 — First run, and every empty state | finished |
+| [m49-panel-typography.md](m49-panel-typography.md) | M49 — Panel typography | finished |

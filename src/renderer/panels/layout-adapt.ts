@@ -55,6 +55,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     return {
       ...base,
       kind: 'terminal' as const,
+      // M49. Absent stays absent — the sixth field-by-field copy site.
+      ...(p.fontSize === undefined ? {} : { fontSize: p.fontSize }),
       spec: {
         panelId: p.id,
         cwd: p.cwd,
@@ -122,6 +124,8 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     return {
       ...base,
       kind: 'terminal' as const,
+      // M49. Absent stays absent, mirrored from toPanels.
+      ...(panel.fontSize === undefined ? {} : { fontSize: panel.fontSize }),
       cwd: panel.spec.cwd,
       ...(panel.spec.command === undefined ? {} : { command: panel.spec.command }),
       ...(panel.spec.agent === undefined ? {} : { agent: panel.spec.agent }),

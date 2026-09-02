@@ -61,7 +61,7 @@ function fakeFactory() {
     create(id) {
       const state = {
         id, attached: false, disposed: false, written: [], cols: 80, rows: 24,
-        focused: false, inputListener: null, options: {}
+        focused: false, inputListener: null, options: {}, refits: 0
       }
       made.set(id, state)
       return {
@@ -76,6 +76,8 @@ function fakeFactory() {
         getSelection() { return state.selection ?? '' },
         paste(data) { state.pasted = data },
         configure(opts) { Object.assign(state.options, opts) },
+        refit() { state.refits += 1 },
+        options() { return { ...state.options } },
         dispose() { state.disposed = true }
       }
     }
@@ -815,6 +817,35 @@ console.log('\n' + '='.repeat(60))
         t1.options.theme && t1.options.theme.background === '#ffffff' &&
         t2.options.theme && t2.options.theme.background === '#ffffff',
       JSON.stringify({ t1: { attached: t1 && t1.attached, options: t1 && t1.options }, t2: t2 && t2.options }))
+  }
+
+  // M49 — type.1. The registry resolves the global size and the override map
+  //     into each session's EFFECTIVE size: a session without an override
+  //     takes the global, an override survives a global change, a session
+  //     created LATER inherits its effective size at creation (no first fit
+  //     at 13 then a refit), and each LIVE session is refitted once per
+  //     commit — a detached one has no host to measure and settles on its
+  //     next attach.
+  {
+    const { registry, factory } = setup()
+    registry.ensure('f1', { ...SPEC, panelId: 'f1' })
+    registry.ensure('f2', { ...SPEC, panelId: 'f2' })
+    // f1 LIVE (the view attaches its host once tiering says so); f2 stays a
+    // card with no host to measure.
+    registry.applyTiers({ f1: 'live' })
+    registry.attachSlot('f1')
+    await tick()
+    const can = typeof registry.setFontSizes === 'function'
+    if (can) registry.setFontSizes({ global: 15, overrides: { f2: 20 } })
+    const f1 = factory.made.get('f1'), f2 = factory.made.get('f2')
+    const refitsAfterFirst = f1.refits
+    if (can) registry.setFontSizes({ global: 18, overrides: { f2: 20 } })
+    registry.ensure('f3', { ...SPEC, panelId: 'f3' })
+    const f3 = factory.made.get('f3')
+    ok('type.1 setFontSizes gives every session its effective size, keeps an override across a global change, seeds a later session, and refits each live session once per commit',
+      can && f1.options.fontSize === 18 && f2.options.fontSize === 20 && f3.options.fontSize === 18 &&
+        refitsAfterFirst === 1 && f1.refits === 2 && f2.refits === 0,
+      JSON.stringify({ can, f1: { size: f1.options.fontSize, refits: f1.refits }, f2: { size: f2.options.fontSize, refits: f2.refits }, f3: f3 && f3.options }))
   }
 
   const failed = results.filter((r) => !r.pass)

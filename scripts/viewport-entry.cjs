@@ -9,6 +9,8 @@ module.exports = {
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),
   ...require('../src/renderer/panels/panels'),
+  // M49. toPanels/fromPanels: the sixth absent-stays-absent copy site.
+  ...require('../src/renderer/panels/layout-adapt'),
   /* M13: the link geometry. Pure — its only value import is linksOf from
      panels.ts, which is already in this bundle — so it belongs in the cheapest
      tier beside viewport.ts and lod.ts. Note that this import is what forced

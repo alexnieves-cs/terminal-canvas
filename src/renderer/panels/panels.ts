@@ -81,6 +81,8 @@ export interface PanelBase {
 export interface TerminalPanel extends PanelBase {
   kind: 'terminal'
   spec: PanelSpecTemplate
+  /** M49. A per-panel font size overriding the global setting. Absent means the global. */
+  fontSize?: number
 }
 
 /**

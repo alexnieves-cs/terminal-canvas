@@ -1998,6 +1998,33 @@ non-list with a warning) after the list has been READ once — `hintsLoadedRef` 
 render's empty set would overwrite a persisted list and every hint would come back on every
 launch.
 
+**A font size is a resize wearing a hat: committed, never live, and resolved in the registry
+(`session-registry.ts`'s `setFontSizes`, `terminal.fontSize`, `TerminalPanel.fontSize`).**
+Bigger cells mean fewer columns, which is a `pty:resize`, which is a SIGWINCH, which is a
+full-screen agent TUI repainting its frame — so the palette offers three COMMIT rows (larger,
+smaller, default) and the global setting's number row, never a slider: a slider that refits on
+every tick is sixty full repaints a second through a 16ms-batched channel. The registry holds the
+global size and the override map and configures each session with its EFFECTIVE size, including
+a session created later (seeded at `ensure()`, so its first fit is the right one rather than a
+fit at 13 followed by a refit and a second SIGWINCH), and refits each LIVE session once per
+commit — a detached one has no host to measure and settles on its next attach. **Zoom is not
+font size**: the camera's `scale()` is invisible to `getComputedStyle` and the fit, which is
+deliberate ("one transform, not N layouts"), and an implementation that reached for the camera
+or made zoom adjust font size would turn a working invariant into a reflow storm. `cellSize()`
+reads the rendered screen on every call and caches nothing, which is what keeps the pointer
+corrector right after a size change; `verify:panels` `type.1` clicks a marker cell for real after
+the commit.
+
+**`fontSize` is the sixth field-by-field copy site of the absent-stays-absent rule, and rename
+was a seventh nobody had counted (`layout-adapt.ts`, `layout-schema.ts`'s `parsePanel`,
+`usePaletteActions.ts`'s rename and `setPanelFontSize`).** A spread writes `fontSize: undefined`,
+which survives IPC and reads as present. `verify:viewport` `type.1` pins `toPanels`/`fromPanels`;
+`verify:layout` `type.1` pins the parse (present-but-out-of-range costs the FIELD with a warning,
+never the panel). Adding the field found that the rename action rebuilt a terminal panel from
+four named fields and so silently dropped its `links` too — every link a renamed panel held,
+gone on the next save. Both ride along now; a new optional field on `Panel` has to be added to
+rename's arms as well as the adapter's.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

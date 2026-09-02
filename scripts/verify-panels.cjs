@@ -14390,6 +14390,89 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M49 — panel typography. type.1: the global setting grows a live
+    // terminal's cell, and a REAL click on a marker cell still reaches xterm
+    // afterwards — the pointer corrector read the new metrics rather than a
+    // cached pair. type.2: a per-panel override persists across a reload and
+    // wins over the global.
+    // -------------------------------------------------------------------
+    {
+      const tLog = []
+      const onT = (_e, level, message) => { if (level >= 2) tLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onT)
+      const IDS = [
+        'type.1 setting terminal.fontSize grows a live terminal\'s cell and a real click on a marker cell still reaches xterm at the new metrics',
+        'type.2 a per-panel font override persists across a reload and wins over the global size'
+      ]
+      // The session's OWN cell metrics — the pair the pointer corrector reads —
+      // never a DOM row count, which the WebGL renderer does not produce.
+      const cellOf = (id) => wc.executeJavaScript(`(() => { const c = window.__m49CellSize ? window.__m49CellSize(${JSON.stringify(id)}) : null; return c ? { h: c.height, w: c.width } : null })()`)
+      try {
+        backend = createDirectBackend('verify: direct (m49 typography)')
+        const home = require('node:os').homedir()
+        layoutStore.setPreference('terminal.fontSize', 13)
+        layoutStore.save({ panels: fromPanels([
+          { kind: 'terminal', rect: { id: 'tA', x: 60, y: 60, w: 520, h: 320 }, z: 1, spec: { panelId: 'tA', cwd: home, command: '/bin/sh', args: [] } },
+          { kind: 'terminal', rect: { id: 'tB', x: 640, y: 60, w: 520, h: 320 }, z: 2, spec: { panelId: 'tB', cwd: home, command: '/bin/sh', args: [] }, fontSize: 20 }
+        ]), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reT
+        await waitUntil(async () => wc.executeJavaScript(`['tA', 'tB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const wake = async (id) => {
+          await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="' + ${JSON.stringify(id)} + '"] .panel__card'); if (!card) return false
+            const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+          return waitUntil(async () => (await sessionMap(wc)).has(id), 10000)
+        }
+        const wokeA = await wake('tA')
+        await settle()
+        // Focus tA for real (DOM focus is a default action) and print a marker.
+        const slotA = await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="tA"] .panel__slot'); if (!s) return null; const r = s.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (slotA) { wc.sendInputEvent({ type: 'mouseDown', x: slotA.x, y: slotA.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: slotA.x, y: slotA.y, button: 'left', clickCount: 1 }) }
+        await settle()
+        await wc.executeJavaScript(`window.__m4aWrite ? window.__m4aWrite('echo TYPEMARK\\n') : null`)
+        const marked = await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('TYPEMARK') !== null`), 8000)
+        const cellBefore = await cellOf('tA')
+        // The commit: the setting, through the same invoke the palette row uses.
+        await wc.executeJavaScript(`window.canvas.settings.set('terminal.fontSize', 18)`)
+        const grew = await waitUntil(async () => { const c = await cellOf('tA'); return c && cellBefore && c.h > cellBefore.h + 2 ? c : false }, 6000)
+        await settle()
+        // A real click on the marker's cell, then ask xterm where it thinks the
+        // click landed: the corrector must have read the NEW cell size.
+        const target = await wc.executeJavaScript(`window.__m4aCellToScreen('TYPEMARK')`)
+        let reached = null
+        if (target) {
+          wc.sendInputEvent({ type: 'mouseDown', x: Math.round(target.x), y: Math.round(target.y), button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: Math.round(target.x), y: Math.round(target.y), button: 'left', clickCount: 1 })
+          await settle()
+          reached = await wc.executeJavaScript(`(() => { const el = document.elementFromPoint(${Math.round(target.x)}, ${Math.round(target.y)}); return !!(el && el.closest('.panel[data-panel-id="tA"] .xterm')) })()`)
+        }
+        ok(IDS[0],
+          wokeA === true && marked === true && cellBefore !== null && grew !== false && target !== null && reached === true,
+          JSON.stringify({ wokeA, marked, cellBefore, grew, target, reached }))
+
+        // type.2. tB carries fontSize 20; wake it; its cell is larger than tA's
+        //         (18) — the override wins — and it survived the reload above.
+        const wokeB = await wake('tB')
+        await settle()
+        const cellA = await cellOf('tA'), cellB = await cellOf('tB')
+        const persisted = layoutStore.initial().panels.find((p) => p.id === 'tB')
+        const field = await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="tB"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        await settle()
+        const detail = await wc.executeJavaScript(`(() => { const el = document.querySelector('[data-inspector-field="font-size"] dd'); return el ? el.textContent : null })()`)
+        ok(IDS[1],
+          wokeB === true && cellA !== null && cellB !== null && cellB.h > cellA.h + 1 &&
+            persisted !== undefined && persisted.fontSize === 20 && field === true && typeof detail === 'string' && /20/.test(detail),
+          JSON.stringify({ wokeB, cellA, cellB, persisted: persisted && persisted.fontSize, detail }))
+        await wc.executeJavaScript(`window.canvas.settings.set('terminal.fontSize', 13)`)
+      } catch (tErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(tErr && tErr.message || tErr) + ' | renderer: ' + (tLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onT)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

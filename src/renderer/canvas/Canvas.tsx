@@ -2215,6 +2215,34 @@ export function Canvas({
     registry.applyTerminalOptions({ theme: terminalTheme(resolvedTheme) })
   }, [resolvedTheme])
 
+  // M49: the global terminal font size, read the way glow is, and fanned
+  // through the registry together with every terminal panel's override —
+  // the registry resolves the effective size per session and refits each
+  // live one ONCE per commit. A font size is a resize wearing a hat; zoom is
+  // not font size, and nothing here reaches for the camera.
+  const [globalFontSize, setGlobalFontSize] = useState(13)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const row = rows.find((r) => r.id === 'terminal.fontSize')
+        if (row && typeof row.value === 'number') setGlobalFontSize(row.value)
+      })
+    }
+    read()
+    // And on any write, as useTheme does: the setting's own palette row
+    // reloads settingRows, but a write from anywhere else must apply too.
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [settingRows])
+  const fontOverridesSig = panels.map((p) => (isTerminalPanel(p) && p.fontSize !== undefined ? `${p.rect.id}=${p.fontSize}` : '')).filter(Boolean).join(',')
+  useEffect(() => {
+    const overrides: Record<string, number> = {}
+    for (const p of panelsRef.current) if (isTerminalPanel(p) && p.fontSize !== undefined) overrides[p.rect.id] = p.fontSize
+    registry.setFontSizes({ global: globalFontSize, overrides })
+  }, [globalFontSize, fontOverridesSig])
+
   // M48: the environment report, read ONCE — main probes once, and the
   // report says when. Null until the invoke answers, and the launcher and the
   // palette both render the null honestly rather than as "nothing found".
@@ -2934,7 +2962,7 @@ export function Canvas({
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   } = useRailModels({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
-    workspaceRows, waitingIds, selectedId
+    workspaceRows, waitingIds, selectedId, globalFontSize
   })
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
@@ -3298,6 +3326,7 @@ export function Canvas({
             credentials={credentialRows}
             worktrees={worktreeRows}
             envReport={envReport}
+            globalFontSize={globalFontSize}
             // The renderer's own attention set (agent-state-store.ts), not a
             // second derivation: main never learns "which panels are
             // wants-you" as a set, only individual agent:state transitions,

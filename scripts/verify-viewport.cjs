@@ -1634,6 +1634,22 @@ ok('74 a panel with no kind is not a review panel',
   }
 }
 
+// M49 — type.1. The override rides toPanels/fromPanels — the sixth
+//      field-by-field copy site of the absent-stays-absent rule: a spread
+//      writes `fontSize: undefined`, which survives IPC and reads as present.
+{
+  const persisted = [
+    { id: 'a', x: 0, y: 0, w: 10, h: 10, z: 1, kind: 'terminal', cwd: '~', args: [], fontSize: 16 },
+    { id: 'b', x: 0, y: 0, w: 10, h: 10, z: 1, kind: 'terminal', cwd: '~', args: [] }
+  ]
+  const panels = typeof V.toPanels === 'function' ? V.toPanels(persisted) : null
+  const back = panels ? V.fromPanels(panels) : null
+  ok('type.1 toPanels and fromPanels carry a fontSize override and keep absence absent',
+    panels !== null && panels[0].fontSize === 16 && !('fontSize' in panels[1]) &&
+      back !== null && back[0].fontSize === 16 && !('fontSize' in back[1]),
+    JSON.stringify({ panels, back }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

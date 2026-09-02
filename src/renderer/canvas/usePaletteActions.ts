@@ -316,16 +316,22 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             const next: Panel[] = prev.map((p) => {
               if (p.rect.id !== id) return p
               if (isReviewPanel(p)) {
-                return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name }
+                return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
               if (isFilePanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
-              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name }
+              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               if (isToolboxPanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name }
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
-              return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name }
+              // M49. `fontSize` and `links` ride along field by field, absent
+              // staying absent: a rename that rebuilt the panel without them
+              // silently dropped a font override and every link the panel
+              // held — found while adding the override, fixed for both.
+              return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name,
+                ...(p.links === undefined ? {} : { links: p.links }),
+                ...(p.fontSize === undefined ? {} : { fontSize: p.fontSize }) }
             })
             // One entry for the whole gesture, on commit — the rule a drag
             // already follows. Pushing per keystroke would make one rename
@@ -340,6 +346,27 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // overlay BEFORE running a row's command, so without reopening, the mode
       // would be set on a palette that is already gone.
       palette.openPalette()
+    },
+    setPanelFontSize: (id, size) => {
+      // A COMMIT, one history entry, the rule a drag and a rename follow. The
+      // registry does the rest on the next render: it resolves the effective
+      // size and refits the live session once. Rebuilt field by field so an
+      // absent override stays absent (fromPanels' rule) — `undefined` here
+      // means "back to the global", which is the field's absence.
+      setPanels((prev) => {
+        const target = prev.find((p) => p.rect.id === id)
+        if (!target || !isTerminalPanel(target)) return prev
+        if (target.fontSize === size) return prev
+        const next: Panel[] = prev.map((p) => {
+          if (p.rect.id !== id || !isTerminalPanel(p)) return p
+          return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z,
+            ...(p.title === undefined ? {} : { title: p.title }),
+            ...(p.links === undefined ? {} : { links: p.links }),
+            ...(size === undefined ? {} : { fontSize: size }) }
+        })
+        commitHistory(next)
+        return next
+      })
     },
     resetCanvas: () => {
       // Main owns the confirmation dialog and the counts request. The palette

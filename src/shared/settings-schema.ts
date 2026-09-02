@@ -42,6 +42,8 @@ export const APPEARANCE_CATEGORY = 'Appearance'
  * nobody chooses it from a menu.
  */
 export const HINTS_CATEGORY = 'Hints'
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const TERMINAL_CATEGORY = 'Terminal'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -248,6 +250,22 @@ export const SETTINGS: readonly SettingDef[] = [
     values: ['detail', 'work', 'tools'],
     default: 'detail',
     category: SHELL_CATEGORY
+  },
+  {
+    id: 'terminal.fontSize',
+    label: 'Terminal font size',
+    // M49. A font size change is a RESIZE wearing a hat: bigger cells mean
+    // fewer columns, which is a pty:resize, which is a SIGWINCH, which is a
+    // full-screen agent TUI repainting its frame. Committed per press, never
+    // live. The bounds are legibility on one end and a 24px grid that fits
+    // nothing on the other.
+    description: 'The size of terminal text, in pixels. A panel can override it from the palette.',
+    keywords: ['font', 'size', 'text', 'terminal', 'bigger', 'smaller', 'zoom', 'type', 'typography'],
+    type: 'number',
+    default: 13,
+    min: 9,
+    max: 24,
+    category: TERMINAL_CATEGORY
   },
   {
     id: 'hints.seen',

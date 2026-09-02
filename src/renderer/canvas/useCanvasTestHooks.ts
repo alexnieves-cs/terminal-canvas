@@ -117,6 +117,11 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
       const theme = session.handle.options().theme as { background?: string } | undefined
       return theme?.background ?? null
     }
+    /** M49. A session's own cell metrics (CSS px, transform-blind), by id. */
+    w.__m49CellSize = (id: string): { width: number; height: number } | null => {
+      const session = registry.get(id)
+      return session ? session.handle.cellSize() : null
+    }
     /** A panel's xterm scrollback offset, by id — not just the focused one. */
     w.__m4aScrollY = (id: string): number | null => {
       const session = registry.get(id)

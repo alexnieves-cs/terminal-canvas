@@ -29,6 +29,8 @@ export interface RailModelsDeps {
   workspaceRows: WorkspaceRow[]
   waitingIds: readonly string[]
   selectedId: string | null
+  /** M49. The global terminal font size, for the inspector's Detail field. */
+  globalFontSize: number
 }
 
 /**
@@ -61,7 +63,7 @@ function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedA
 export function useRailModels(deps: RailModelsDeps) {
   const {
     registry, palette, panelsRef, panels, displayPanels, dormantIds,
-    workspaceRows, waitingIds, selectedId, viewportRef } = deps
+    workspaceRows, waitingIds, selectedId, viewportRef, globalFontSize } = deps
 
   // Keyed on palette.open and read out of panelsRef, NOT on `panels`. `panels`
   // is a fresh array on every setPanelRect, i.e. every frame of a drag — and
@@ -102,6 +104,8 @@ export function useRailModels(deps: RailModelsDeps) {
             ? {
                 id: p.rect.id,
                 label: panelLabel(p),
+                kind: p.kind,
+                ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 title: p.title,
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
                 // M20. From the SESSION's spec, like everything else that
@@ -111,6 +115,8 @@ export function useRailModels(deps: RailModelsDeps) {
             : {
                 id: p.rect.id,
                 label: panelLabel(p),
+                kind: p.kind,
+                ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined
               }
@@ -245,7 +251,11 @@ export function useRailModels(deps: RailModelsDeps) {
         // session's spec is what actually reached pty.create while the panel's
         // is merely what this canvas currently holds — and a pane that read the
         // panel could claim a permission mode the running agent is not in.
-        registry.get(selectedPanel.rect.id)?.spec.agentOptions
+        registry.get(selectedPanel.rect.id)?.spec.agentOptions,
+        // M49. The effective font size and whose it is.
+        isTerminalPanel(selectedPanel)
+          ? { fontSize: selectedPanel.fontSize ?? globalFontSize, isDefault: selectedPanel.fontSize === undefined }
+          : undefined
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
