@@ -700,15 +700,17 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
     shown('panel.rename') && shown('canvas.fit'))
 }
 
-// 47. Both deletes are marked destructive, and NOTHING else is. The flag
+// 47. The deletes are marked destructive, and NOTHING else is. The flag
 //     drives red styling and the confirm gate, so a flag that spread to a
 //     benign row would put a confirm step in front of spawning a panel.
+//     M39 added the third: clearing every panel's recorded output from disk
+//     is exactly the kind of row this flag exists for.
 {
   const rows = P.buildCommands(ctx({ presets: [MINE], prompts: [{ id: 'p1', name: 'r', source: 'saved' }],
     capturedId: 'n1', panels: [{ id: 'n1', label: 'n1' }] }))
   const marked = rows.filter((r) => r.destructive === true).map((r) => r.id).sort()
-  ok('47 exactly the two delete rows are destructive',
-    marked.join(',') === 'preset.delete.u1,prompt.delete.p1', marked.join(','))
+  ok('47 exactly the three delete rows are destructive',
+    marked.join(',') === 'canvas.clear-scrollback,preset.delete.u1,prompt.delete.p1', marked.join(','))
 }
 
 // 48. The Cmd+N hint, on the DEFAULT preset's spawn row and no other. This is
