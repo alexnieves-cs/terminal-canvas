@@ -1379,6 +1379,30 @@ body {
   font-weight: 600;
 }
 
+/* M40. The banner itself is pointer-events: none so it never eats a click
+   meant for the canvas beneath it; its Stop control opts back in, and is the
+   ONE element of the banner a pointer can reach. */
+.link-banner__stop {
+  pointer-events: auto;
+  margin-left: var(--sp-4);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: var(--s-2);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-banner__stop:hover {
+  background: var(--s-4);
+}
+
+.link-banner__hint {
+  margin-left: var(--sp-2);
+  color: var(--fg-3);
+}
+
 /* M35. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
    path fills the region its curve encloses by default, so without it every
    link paints as a solid crescent over the canvas. It was harmless on the
@@ -1913,6 +1937,13 @@ body {
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* M39. A line recorded before the last quit, as against a live session's
+   tail: dimmer, so a card is honest about which of the two it is showing. The
+   M39 verifier found the class rendered with no rule at all. */
+.panel__card-line--recorded {
+  color: var(--fg-3);
 }
 
 /* The card tier is the ordinary many-panel view, so this is the primary

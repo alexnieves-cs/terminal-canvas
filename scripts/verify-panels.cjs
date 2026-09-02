@@ -7638,6 +7638,12 @@ app.whenReady().then(async () => {
           : null
         let minted = null
         let idsAfterReload = null
+        // Carried into the detail line: `minted=null` alone cannot say which
+        // of the two 15s windows below closed — the subject's tmux reattach
+        // after the reload, or the review gesture's mint — and the M40 chain
+        // run flaked here once with exactly that ambiguity.
+        let reattached107 = null
+        let action107 = null
         if (seedBaseline) {
           const saved = layoutStore.initial()
           const seededPanels = saved.panels.concat([{
@@ -7671,9 +7677,10 @@ app.whenReady().then(async () => {
           // runs at 8s on an otherwise idle machine (M36/M37 build logs).
           const reattached = await waitUntil(
             async () => (await sessionMap(wc)).has(subjectPanel), 15000)
+          reattached107 = reattached
           if (reattached) {
             await selectPanel(subjectPanel)
-            await waitUntil(async () => wc.executeJavaScript(
+            action107 = await waitUntil(async () => wc.executeJavaScript(
               `document.querySelector('[data-inspector-action="review"]') !== null`), 5000)
             await clickShell('[data-inspector-action="review"]')
             await settle()
@@ -7690,7 +7697,7 @@ app.whenReady().then(async () => {
         ok('107 a review node cannot mint an id a persisted node already owns',
           subjectPanel !== null && seedBaseline !== null && typeof minted === 'string' &&
             minted !== collideId && new Set(finalIds).size === finalIds.length,
-          `collideId=${collideId} minted=${minted} ids=${JSON.stringify(finalIds)}`)
+          `collideId=${collideId} minted=${minted} reattached=${reattached107} action=${action107} ids=${JSON.stringify(finalIds)}`)
       }
 
       // 108. The node is in the rail, and its row NAVIGATES — the rule
@@ -13184,6 +13191,117 @@ app.whenReady().then(async () => {
         typeof fresh === 'string' && logged === true && restored === true && dormant === true &&
           typeof card === 'string' && card.includes('click to start'),
         `fresh=${fresh} logged=${logged} restored=${restored} dormant=${dormant} card=${JSON.stringify(card)}`)
+    }
+
+    // -------------------------------------------------------------------
+    // M40 — broadcast input: the exit and the chord. Scoped ids.
+    // -------------------------------------------------------------------
+    {
+      backend = createDirectBackend('verify: direct (m40 broadcast)')
+      const ids0 = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      // Two interactive shells, small, spawned through main's own push.
+      for (let i = 0; i < 2; i++) {
+        wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), command: '/bin/sh', args: [], w: 300, h: 200 })
+        await sleep(400)
+      }
+      const pair = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        const diff = now.filter((id) => !ids0.includes(id))
+        return diff.length === 2 ? diff : false
+      }, 8000)
+      const [A, B] = pair || [null, null]
+      const running = A && B ? await waitUntil(async () => { const m = await sessionMap(wc); return m.has(A) && m.has(B) }, 8000) : false
+      // Chrome points by id (144b's shape), and a body point for focus.
+      const pointIn = async (id, part) => wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
+        const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] ' + ${JSON.stringify(part)})
+        if (!p) return null
+        const r = p.getBoundingClientRect()
+        for (const f of [[0.5, 0.5], [0.3, 0.5], [0.7, 0.5], [0.85, 0.5]]) {
+          const x = Math.round(r.left + r.width * f[0]), y = Math.round(r.top + r.height * f[1])
+          if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
+          const hit = document.elementFromPoint(x, y)
+          if (hit && hit.closest(${JSON.stringify(part)}) === p && !hit.closest('button')) return { x, y }
+        }
+        return null
+      })()`)
+      const realClick = async (pt, modifiers = []) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1, modifiers })
+        wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1, modifiers })
+        await sleep(200)
+      }
+      // B is topmost (spawned last) and may cover A's chrome; move B down out
+      // of the way first, exactly as 144b does.
+      if (running) {
+        const bChrome = await pointIn(B, '.panel__chrome')
+        if (bChrome) {
+          wc.sendInputEvent({ type: 'mouseDown', x: bChrome.x, y: bChrome.y, button: 'left', clickCount: 1 })
+          for (let i = 1; i <= 4; i++) wc.sendInputEvent({ type: 'mouseMove', x: bChrome.x, y: bChrome.y + 60 * i, button: 'left', modifiers: ['leftButtonDown'] })
+          wc.sendInputEvent({ type: 'mouseUp', x: bChrome.x, y: bChrome.y + 240, button: 'left', clickCount: 1 })
+          await settle()
+        }
+      }
+      const aChrome = running ? await pointIn(A, '.panel__chrome') : null
+      const bChrome2 = running ? await pointIn(B, '.panel__chrome') : null
+      if (aChrome) await realClick(aChrome)
+      if (bChrome2) await realClick(bChrome2, ['shift'])
+      const selected = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel--selected')].map((p) => p.dataset.panelId)`)
+      const aBody = running ? await pointIn(A, '.panel__slot') : null
+      if (aBody) await realClick(aBody)
+      const typeLine = async (text) => {
+        for (const ch of text) wc.sendInputEvent({ type: 'char', keyCode: ch })
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' })
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+      }
+      const bannerText = () => wc.executeJavaScript(
+        `(() => { const b = document.querySelector('.link-banner'); return b ? b.textContent : null })()`)
+      const logsHave = async (token) => ({
+        a: A ? (await scrollbackLog.tail(A, 12)).some((l) => l.includes(token)) : false,
+        b: B ? (await scrollbackLog.tail(B, 12)).some((l) => l.includes(token)) : false
+      })
+
+      // broadcast.1. Armed through the palette the way a user does — ⌘K,
+      //      "broadcast", Enter — a keystroke into the FOCUSED member reaches
+      //      BOTH logs; the banner's own Stop control (a real click) ends the
+      //      mode, and the next keystroke reaches ONE. The M39 log is the
+      //      observable: every flush of every panel lands there, which is a
+      //      cleaner reading than any renderer hook.
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await sleep(300)
+      for (const ch of 'broadcast') wc.sendInputEvent({ type: 'char', keyCode: ch })
+      await sleep(300)
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+      const armed = await waitUntil(async () => { const t = await bannerText(); return t && t.includes('Broadcasting') ? t : false }, 4000)
+      await typeLine('echo BCAST-ONE-7731')
+      const both = await waitUntil(async () => { const h = await logsHave('BCAST-ONE-7731'); return h.a && h.b ? h : false }, 8000)
+      const stopPt = await wc.executeJavaScript(`(() => {
+        const s = document.querySelector('.link-banner__stop'); if (!s) return null
+        const r = s.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (stopPt) await realClick(stopPt)
+      const stopped = await waitUntil(async () => (await bannerText()) === null, 3000)
+      await typeLine('echo BCAST-TWO-7731')
+      const oneA = await waitUntil(async () => (await logsHave('BCAST-TWO-7731')).a, 8000)
+      await sleep(1500)
+      const two = await logsHave('BCAST-TWO-7731')
+      ok('broadcast.1 armed from the palette a keystroke reaches both logs; the banner\'s Stop ends the mode and the next reaches one',
+        running === true && selected.length === 2 && typeof armed === 'string' && both !== false &&
+          stopPt !== null && stopped === true && oneA === true && two.a === true && two.b === false,
+        `selected=${JSON.stringify(selected)} armed=${JSON.stringify(armed)} both=${JSON.stringify(both)} stop=${JSON.stringify(stopPt)} ` +
+          `stopped=${stopped} two=${JSON.stringify(two)}`)
+
+      // broadcast.2. The chord: ⌘⇧I arms and disarms, matched on event.code
+      //      (Shift rewrites the printed character). Dispatched, like every
+      //      chord check here — what it proves is the listener, and .1 above
+      //      proves the mode behind it.
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyI', key: 'I', metaKey: true, shiftKey: true, bubbles: true }))`)
+      const chordOn = await waitUntil(async () => { const t = await bannerText(); return t && t.includes('Broadcasting') }, 3000)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyI', key: 'I', metaKey: true, shiftKey: true, bubbles: true }))`)
+      const chordOff = await waitUntil(async () => (await bannerText()) === null, 3000)
+      ok('broadcast.2 Cmd+Shift+I arms the mode and again disarms it',
+        chordOn === true && chordOff === true, `on=${chordOn} off=${chordOff}`)
     }
 
   } catch (error) {

@@ -4,7 +4,10 @@ import {
 } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
+import { useBroadcastChord } from './useBroadcastChord'
+import { shellControl } from '../shell/shell-control'
 import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
@@ -2654,6 +2657,27 @@ export function Canvas({
   const removeLinkStable = useCallback((from: string, to: string) => {
     paletteActionsRef.current.removeLink(from, to)
   }, [])
+  // M40. The banner's Stop and the Cmd+Shift+I chord both run the palette
+  // row's own verb through the same ref, so the three exits cannot drift:
+  // the guard (two live selected terminals, or the mode already on) lives
+  // in toggleBroadcastInput and nowhere else.
+  const toggleBroadcastStable = useCallback(() => {
+    paletteActionsRef.current.toggleBroadcastInput()
+  }, [])
+  useBroadcastChord({ paletteIsOpen: palette.isOpen, toggle: toggleBroadcastStable })
+  // The banner lives INSIDE the canvas host, unlike every other shell
+  // control, so its press would bubble to useCanvasPointer's background
+  // onMouseDown — which hit-tests the world point under the banner, selects
+  // whatever panel lies beneath (or clears the selection and starts a
+  // marquee) and releases focus. Stopping it here is what panel chrome does
+  // for the same reason; the palette's outside-click dismissal is a CAPTURE
+  // listener and has already run. verify:panels broadcast.2 went red on
+  // exactly this: Stop cleared the two-panel selection, so the chord that
+  // followed was refused by its own guard.
+  const onBroadcastStopMouseDown = useCallback((event: ReactMouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
 
   /**
    * The top bar's ⚙. It opens the palette straight into the settings
@@ -2963,7 +2987,14 @@ export function Canvas({
         )}
         {broadcastInput && (
           <div className="link-banner" role="status">
-            Broadcasting keyboard input to <strong>{broadcastTargetIds.length} terminals</strong> — open the palette to stop
+            Broadcasting keyboard input to <strong>{broadcastTargetIds.length} terminals</strong>
+            {/* M40. The exit lives on the banner: a mode whose only way out is
+                a palette search is a dead end for whoever arrived by the
+                chord. shellControl so the press never moves DOM focus off
+                the terminal that is still receiving the keystrokes. */}
+            <button type="button" className="link-banner__stop" aria-label="Stop broadcasting"
+              {...shellControl(toggleBroadcastStable)} onMouseDown={onBroadcastStopMouseDown}>Stop</button>
+            <span className="link-banner__hint">⌘⇧I</span>
           </div>
         )}
         <NavGrid controller={navGrid} />

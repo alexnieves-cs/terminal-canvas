@@ -476,9 +476,12 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ afterDrop, total }))
 
     // scrollback.5. A tail read at a byte offset that lands INSIDE a multibyte
-    //      character must not produce a replacement character: the read
-    //      window starts mid-sequence, and the decoder has to drop the
-    //      orphaned continuation bytes rather than render them.
+    //      character, with a newline later in the window: the partial first
+    //      line is dropped at that newline, so the torn character never
+    //      reaches the decoder. (The window is 9000 bytes of em-dashes plus
+    //      "last line"; start = size − 4000 lands mid-dash, and the newline
+    //      at byte 9000 is inside the window, so this is the NEWLINE-FOUND
+    //      branch. The no-newline fallback is scrollback.6.)
     if (log) {
       await log.append('p5', '—'.repeat(3000) + '\nlast line\n')
       await log.idle('p5')
@@ -487,6 +490,24 @@ const p = (name) => join(DIR, name)
     ok('scrollback.5 a tail whose read window starts mid-character carries no replacement character',
       tail5 !== null && tail5[0] === 'last line' && !JSON.stringify(tail5).includes('\\ufffd'),
       JSON.stringify(tail5))
+
+    // scrollback.6. The fallback the M39 verifier found untested: a window
+    //      with NO newline in it at all — one enormous unbroken line, the
+    //      shape a TUI's repaint stream takes — starting mid-character. The
+    //      decoder must skip the orphaned continuation bytes (here exactly
+    //      one: byte 5000 of the dash run is 5000 mod 3 = 2, the third byte
+    //      of a dash) and hand back the remaining 3999 bytes as 1333 whole
+    //      dashes, no U+FFFD. Without the strip the line begins with a
+    //      replacement character the agent never printed.
+    if (log) {
+      await log.append('p6', 'head\n' + '—'.repeat(3000))
+      await log.idle('p6')
+    }
+    const tail6 = log ? await log.tail('p6', 3) : null
+    ok('scrollback.6 a window with no newline that starts mid-character drops the orphaned bytes and no more',
+      tail6 !== null && tail6.length === 1 && tail6[0] === '—'.repeat(1333) &&
+        !JSON.stringify(tail6).includes('\\ufffd'),
+      JSON.stringify({ n: tail6 && tail6.length, len: tail6 && tail6[0] && tail6[0].length, head: tail6 && tail6[0] && tail6[0].slice(0, 3) }))
   }
 
   console.log('')

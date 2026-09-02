@@ -344,6 +344,20 @@ const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + 
     JSON.stringify({ out, leaked }))
 }
 
+// redact.4. A STANDALONE JWT — three base64url segments, not preceded by
+//      "Bearer" — is its own rule, and redact.1 covers it only when the
+//      bearer rule swallows it whole (the M39 verifier's note). A JWT is
+//      exactly what a `curl -v` or an SDK's debug log prints bare.
+{
+  const fn = typeof U.redactSecrets === 'function' ? U.redactSecrets : null
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+  const out = fn ? fn(`token=${jwt} ok`) : null
+  ok('redact.4 a bare JWT is replaced by the jwt placeholder and none of its segments survive',
+    out !== null && out.count === 1 && /\[redacted jwt\]/.test(out.text) &&
+      !out.text.includes('eyJhbGci') && !out.text.includes('SflKxwRJ') && out.text.endsWith(' ok'),
+    JSON.stringify(out))
+}
+
 // redact.2. A private-key block is one replacement, header to footer, not a
 //      line-by-line mangling that leaves the base64 body intact.
 {
