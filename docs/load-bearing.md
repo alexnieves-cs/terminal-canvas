@@ -2885,3 +2885,23 @@ block so a held Shift never reaches the trail. Bookmarks persist beside the came
 malformed entries dropped per entry, a zero-scale camera dropping the bookmark rather than
 pointing it at the origin), are saved UNGATED by the restore settings (a place is not
 layout), and travel with a workspace switch exactly as groups do.
+
+**Semantic zoom is a RENDER tier below tiering, with hysteresis, and never a fourth state in
+`assignTiers` (`canvas/card-detail.ts`, `Canvas.tsx`'s `cardDetail`, `TerminalPanel.tsx`'s
+`PanelCard`).** `lod.ts` rations WebGL contexts and PTYs and is plain-node tested for exactly
+that; a card's typography has no resource consequence and reads the same scale through a
+different function, so the file that rations contexts never makes a typography decision.
+One value for the whole canvas (the scale is global), advanced by an effect on
+`viewport.scale` through `nextCardDetail`, whose bands — enter `summary` below 0.26, leave
+above 0.32; enter `block` below 0.11, leave above 0.15 — are the whole point: a pinch
+hovering on a single threshold would flip every card on the canvas twice a frame, the same
+class of thrash `DEMOTE_DELAY_MS` and `CULL_MARGIN_PX` exist to prevent, cheaper here since
+nothing is destroyed and still visibly bad. **The `summary` and `block` tiers draw from facts
+the `Panel` holds** — title, agent state, cost, at most one recorded or tail line — so a
+DORMANT panel, which has no buffer to `tail()`, has the same three renderings as a live one.
+**The `tail` markup is byte-identical and the idle affordance element survives into
+`summary`**: `.panel__card-idle` with its exact text is read by three checks that FIT-ALL
+first, which lands the camera in the summary band — the first cut of this tier replaced the
+element with a state word and all three went red with "need one idle and one running panel".
+A summary of an unstarted panel is "not started", and the element that says so is the same
+one.

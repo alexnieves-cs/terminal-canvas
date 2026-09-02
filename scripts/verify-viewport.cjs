@@ -1824,6 +1824,25 @@ console.log('\n' + '='.repeat(60))
     canH ? JSON.stringify({ back: back.present, fwd: fwd.present }) : 'history is not bundled')
 }
 
+// M57 — semantic zoom's render tier. A RENDER tier, never a fourth state in
+// assignTiers: that function rations contexts and PTYs, this one decides
+// typography. Hysteresis is the whole point of the second check — a pinch
+// hovering on a boundary must not flip every card on the canvas twice a frame.
+{
+  const can = typeof V.nextCardDetail === 'function'
+  const at = (current, scale) => (can ? V.nextCardDetail(current, scale) : null)
+  ok('detail.1 tail above the summary band, summary inside it, block below it, whatever the current tier',
+    can && at('tail', 1) === 'tail' && at('tail', 0.5) === 'tail' && at('tail', 0.2) === 'summary' && at('tail', 0.05) === 'block' &&
+      at('block', 1) === 'tail' && at('block', 0.2) === 'summary' && at('summary', 0.05) === 'block',
+    can ? JSON.stringify({ t1: at('tail', 1), t02: at('tail', 0.2), t005: at('tail', 0.05), b1: at('block', 1) }) : 'nextCardDetail is not exported')
+  // Inside the tail/summary band (0.26..0.32): a card that is `tail` stays
+  // tail, a card that is `summary` stays summary; only the far edges flip.
+  ok('detail.2 a scale oscillating inside a hysteresis band keeps the current tier; only crossing the far edge flips it',
+    can && at('tail', 0.29) === 'tail' && at('summary', 0.29) === 'summary' && at('tail', 0.25) === 'summary' && at('summary', 0.33) === 'tail' &&
+      at('summary', 0.13) === 'summary' && at('block', 0.13) === 'block' && at('summary', 0.10) === 'block' && at('block', 0.16) === 'summary',
+    can ? JSON.stringify({ t029: at('tail', 0.29), s029: at('summary', 0.29), s013: at('summary', 0.13), b013: at('block', 0.13) }) : 'absent')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

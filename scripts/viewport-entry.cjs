@@ -15,6 +15,7 @@ module.exports = {
   ...require('../src/renderer/canvas/placement'),
   ...require('../src/renderer/panels/recover'),
   ...require('../src/renderer/canvas/flight'),
+  ...require('../src/renderer/canvas/card-detail'),
   // M51. The link scanner, shared and pure.
   ...require('../src/shared/link-scan'),
   /* M13: the link geometry. Pure — its only value import is linksOf from

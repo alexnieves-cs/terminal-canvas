@@ -6,6 +6,7 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
+import type { CardDetail } from '@renderer/canvas/card-detail'
 import type { AgentState } from '@shared/types'
 import { PanelFrame } from './PanelFrame'
 
@@ -36,6 +37,8 @@ export interface TerminalPanelProps {
    * mutated in place and would not.
    */
   title?: string
+  /** M57. How the card draws at this zoom; `tail` is the only tier with terminal text. */
+  cardDetail?: CardDetail
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
   onFocus: (id: string) => void
@@ -113,7 +116,7 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, z, title, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
+  session, rect, z, title, cardDetail, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
   onBeginLink, linkTarget
 }: TerminalPanelProps): JSX.Element {
@@ -275,17 +278,20 @@ function TerminalPanelImpl({
           }}
         />
       ) : (
-        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} />
+        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} detail={cardDetail ?? 'tail'} title={panelLabel} state={agentState} />
       )}
 
     </PanelFrame>
   )
 }
 
-function PanelCard({ session, agentState, cost }: {
+function PanelCard({ session, agentState, cost, detail, title, state }: {
   session: PanelSession
   agentState?: AgentState
   cost?: PanelMachineCost
+  detail: CardDetail
+  title: string
+  state?: AgentState
 }): JSX.Element {
   const lines = session.spawned ? session.handle.tail(CARD_LINES) : []
   // M39. A DORMANT panel has no buffer — that is every panel on the canvas the
@@ -299,9 +305,36 @@ function PanelCard({ session, agentState, cost }: {
       // would be invisible exactly when it matters: LIVE_BUDGET caps live
       // panels at eight, so on the twelve-panel canvas this feature exists
       // for, most of what wants you is a card.
-      className={`pf__body panel__card${agentState ? ` panel__card--agent-${agentState}` : ''}`}
+      className={`pf__body panel__card${agentState ? ` panel__card--agent-${agentState}` : ''}${detail === 'tail' ? '' : ` panel__card--${detail}`}`}
+      data-card-detail={detail}
     >
-      {session.spawned ? (
+      {/* M57. Semantic zoom: the card becomes LESS as the camera pulls
+          away. `summary` and `block` draw from facts the Panel holds (title,
+          agent state, cost) plus at most one line, so a dormant panel with
+          no buffer has the same three tiers as a live one. The `tail` markup
+          below stays byte-identical: three checks read .panel__card-idle. */}
+      {detail === 'block' ? (
+        <div className={`panel__card-block${state ? ` panel__card-block--${state}` : ''}`} data-card-block>
+          <span className="panel__card-block-title">{title}</span>
+        </div>
+      ) : detail === 'summary' ? (
+        <div className="panel__card-summary" data-card-summary>
+          <div className="panel__card-summary-title">{title}</div>
+          {/* The same affordance element the tail tier renders, with the same
+              exact text: an unstarted panel's summary IS "not started", and
+              three checks read this element wherever the camera is. */}
+          {session.spawned
+            ? <div className="panel__card-summary-state">{state ?? 'running'}</div>
+            : <div className="panel__card-idle">{session.dormant ? 'click to start' : 'not started'}</div>}
+          {(() => {
+            const last = session.spawned ? lines[lines.length - 1] : (recorded?.[recorded.length - 1])
+            return last ? <div className="panel__card-summary-line">{last}</div> : null
+          })()}
+          {cost !== undefined && (
+            <div className="panel__card-summary-cost">CPU {formatCpu(cost.cpuPercent)} · RAM {formatMemory(cost.memoryBytes)}</div>
+          )}
+        </div>
+      ) : session.spawned ? (
         lines.map((line, i) => (
           <div className="panel__card-line" key={i}>{line}</div>
         ))

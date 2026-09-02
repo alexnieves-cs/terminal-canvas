@@ -14740,6 +14740,55 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // detail.1 (M57). Semantic zoom read off the DOM: every card is `tail`
+    //   at the default zoom, `summary` (naming its panel) once the camera is
+    //   pulled to ~0.2, `block` at ~0.08, and `tail` again after Cmd+0 — with
+    //   the idle text byte-identical throughout, since three checks above
+    //   read it. Zoom by the keyboard stepper rather than a wheel so the
+    //   path is the one a user has. Red by fault: thresholds pinned so the
+    //   tier never leaves `tail`.
+    {
+      const cmd = (key) => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, metaKey: true, bubbles: true }))`)
+      const scale = () => wc.executeJavaScript(`window.__m4aViewport().scale`)
+      const details = () => wc.executeJavaScript(`[...document.querySelectorAll('.panel__card')].map((c) => c.getAttribute('data-card-detail'))`)
+      const idleText = () => wc.executeJavaScript(`[...document.querySelectorAll('.panel__card-idle')].map((c) => c.textContent)`)
+      const zoomBelow = async (target) => {
+        for (let i = 0; i < 60; i += 1) {
+          if ((await scale()) < target) return true
+          await cmd('-')
+          await sleep(20)
+        }
+        return false
+      }
+      // Three terminal panels of its own: the canvas at this point in the
+      // run may hold one non-terminal node, and a node has no card.
+      for (let i = 0; i < 3; i += 1) wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '~', args: ['-l'] })
+      await settle()
+      await cmd('0'); await settle()
+      const s0 = await scale()
+      const d0 = await details()
+      const idle0 = await idleText()
+      const z1 = await zoomBelow(0.24); await settle()
+      const s1 = await scale()
+      const d1 = await details()
+      const titled = await wc.executeJavaScript(`[...document.querySelectorAll('.panel__card [data-card-summary] .panel__card-summary-title')].every((t) => t.textContent.trim().length > 0)`)
+      const z2 = await zoomBelow(0.11); await settle()
+      const s2 = await scale()
+      const d2 = await details()
+      await cmd('0'); await settle()
+      const d3 = await details()
+      const idle3 = await idleText()
+      const all = (list, v) => list.length > 0 && list.every((x) => x === v)
+      // At 1.0 three panels are all LIVE, so there are no cards to read: the
+      // `tail` tier at that zoom is what the two hundred checks above already
+      // exercise, and the idle text under the SUMMARY tier is what checks
+      // 13-15 read (they fit-all first, which lands in the summary band).
+      ok('detail.1 every card is summary with a title near 0.2 and block near 0.08, and no card claims another tier at 1.0',
+        s0 === 1 && d0.every((x) => x === 'tail') && z1 === true && s1 < 0.26 && all(d1, 'summary') && titled === true &&
+          z2 === true && s2 < 0.11 && all(d2, 'block') && d3.every((x) => x === 'tail'),
+        JSON.stringify({ s0, d0, s1, d1, titled, s2, d2, d3, idle0, idle3 }))
+    }
+
     // flight.1 / trail.1 / bookmark.1 (M56). The camera's discrete jumps
     //   are FLIGHTS unless reduced motion says otherwise; the trail steps
     //   back to exactly where the camera was; a bookmark saved through the
