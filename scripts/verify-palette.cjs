@@ -285,6 +285,11 @@ const ctx = (over = {}) => ({
   // M37. Empty means "no worktrees yet"; the Manage worktrees door still
   // renders, disabled with a reason, so the feature is findable.
   worktrees: [],
+  // M42. The search scope's inputs. null results = no answer yet (before the
+  // first keystroke); [] = a query that matched nothing.
+  searchQuery: '',
+  searchResults: null,
+  scrollbackEnabled: true,
   ...over
 })
 
@@ -1642,6 +1647,60 @@ const WS = [
       !resting.includes('canvas.clear-scrollback') && typed.includes('canvas.clear-scrollback') &&
       c.actions.calls.some((k) => k[0] === 'beginClearScrollback'),
     JSON.stringify({ row, resting: resting.includes('canvas.clear-scrollback'), typed: typed.includes('canvas.clear-scrollback'), calls: c.actions.calls }))
+}
+
+// M42 — search scope, rows and the three empty states. Scoped ids.
+//
+// search.1. A results array becomes one row per hit, in the search scope,
+//      group panel, each running goToPanel with THAT hit's panel id and
+//      carrying the matched line so the palette's own filter keeps it. The
+//      title is the panel's honest label when known, the id otherwise.
+{
+  const hits = [
+    { panelId: 'n1', line: 'Error: cannot read foo', lineIndex: 12 },
+    { panelId: 'n2', line: 'Error: undefined bar', lineIndex: 3 }
+  ]
+  const c = ctx({ searchQuery: 'error', searchResults: hits, panels: [{ id: 'n1', label: 'claude — api (n1)' }] })
+  const rows = P.buildCommands(c).filter((r) => r.scope === 'search')
+  const r1 = byId(rows, 'search.hit.n1.12')
+  const r2 = byId(rows, 'search.hit.n2.3')
+  if (r1) r1.run()
+  ok('search.1 each hit is a search-scope panel row running goToPanel with its id and carrying the line',
+    rows.length === 2 && r1 !== undefined && r2 !== undefined &&
+      r1.group === 'panel' && r1.scope === 'search' &&
+      /claude — api/.test(r1.title) && /Error: cannot read foo/.test(r1.subtitle) &&
+      /Error: cannot read foo/.test(r1.searchText || '') &&
+      /n2/.test(r2.title) &&
+      c.actions.calls.filter((x) => x[0] === 'goToPanel').length === 1 &&
+      c.actions.calls.filter((x) => x[0] === 'goToPanel')[0][1] === 'n1',
+    JSON.stringify({ n: rows.length, r1, calls: c.actions.calls }))
+}
+
+// search.2. Three empty states, three distinct renderings: scrollback off is
+//      one disabled row with its own reason; a query that matched nothing is
+//      a DIFFERENT disabled row naming the query; and no answer yet (null,
+//      before the first keystroke) is NO row at all.
+{
+  const off = P.buildCommands(ctx({ scrollbackEnabled: false, searchQuery: 'x', searchResults: null })).filter((r) => r.scope === 'search')
+  const none = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: 'zzz', searchResults: [] })).filter((r) => r.scope === 'search')
+  const blankBefore = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: '', searchResults: null })).filter((r) => r.scope === 'search')
+  ok('search.2 the three empty states are three distinct rows: off (its reason), no-match (names the query), and nothing before the first keystroke',
+    off.length === 1 && off[0].disabledReason === P.REASON_SEARCH_OFF &&
+      none.length === 1 && none[0].disabledReason === P.REASON_SEARCH_NO_MATCHES && /zzz/.test(none[0].subtitle || none[0].title) &&
+      P.REASON_SEARCH_OFF !== P.REASON_SEARCH_NO_MATCHES &&
+      blankBefore.length === 0,
+    JSON.stringify({ off, none, blankBefore }))
+}
+
+// search.3. The search scope shows ONLY its own rows: every row it produces
+//      is scope 'search', and a hit row never leaks into the top level.
+{
+  const hits = [{ panelId: 'n1', line: 'match here', lineIndex: 1 }]
+  const all = P.buildCommands(ctx({ searchQuery: 'match', searchResults: hits, panels: [{ id: 'n1', label: 'n1' }] }))
+  const searchRows = all.filter((r) => r.id.startsWith('search.'))
+  ok('search.3 every search row is scope search and none leaks to the top level',
+    searchRows.length >= 1 && searchRows.every((r) => r.scope === 'search'),
+    JSON.stringify(searchRows.map((r) => ({ id: r.id, scope: r.scope }))))
 }
 
 const failed = results.filter((r) => !r.pass)

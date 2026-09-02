@@ -24,3 +24,4 @@ copy here is deleted.
 | [m39-durable-scrollback.md](m39-durable-scrollback.md) | M39 — Durable scrollback | finished |
 | [m40-broadcast-input.md](m40-broadcast-input.md) | M40 — Broadcast input: the exits | finished |
 | [m41-handoff-edges.md](m41-handoff-edges.md) | M41 — Handoff edges | finished |
+| [m42-search.md](m42-search.md) | M42 — Search across every panel | finished |

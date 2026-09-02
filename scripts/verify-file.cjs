@@ -510,6 +510,65 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ n: tail6 && tail6.length, len: tail6 && tail6[0] && tail6[0].length, head: tail6 && tail6[0] && tail6[0].slice(0, 3) }))
   }
 
+  // M42 — search across every panel, over the durable log. Scoped ids. A
+  // fresh log dir at the default cap so the seed lines are not trimmed.
+  {
+    const mk = typeof F.createScrollbackLog === 'function' ? F.createScrollbackLog : null
+    const sdir = join(DIR, 'scrollback search dir')
+    const slog = mk ? mk({ dir: sdir }) : null
+    const hasSearch = slog && typeof slog.search === 'function'
+    if (slog) {
+      await slog.append('pA', 'alpha line\r\nfind-ME first\r\nbeta line\r\n\x1b[32mother FIND-me second\x1b[0m\r\n')
+      await slog.append('pB', 'gamma\r\nFIND-Me on pB\r\n')
+      await slog.append('pC', 'this also has find-me but pC is not searched\r\n')
+      await slog.idle('pA'); await slog.idle('pB'); await slog.idle('pC')
+    }
+
+    // search.1. Case-insensitive substring across the LISTED panels only,
+    //      newest-first WITHIN a panel, each hit an ANSI-stripped line with
+    //      its panel id and its line index. pC has a match but is not in the
+    //      id list, so it is never returned.
+    const r1 = hasSearch ? await slog.search(['pA', 'pB'], 'find-me', { maxHits: 50, maxPerPanel: 5 }) : null
+    const aHits = r1 ? r1.filter((h) => h.panelId === 'pA') : []
+    const okShape = r1 !== null && r1.every((h) => typeof h.panelId === 'string' && typeof h.line === 'string' && typeof h.lineIndex === 'number')
+    ok('search.1 case-insensitive substring over listed panels only, newest-first within a panel, stripped lines with ids',
+      hasSearch === true && okShape &&
+        r1.some((h) => h.panelId === 'pB' && /FIND-Me on pB/.test(h.line)) &&
+        !r1.some((h) => h.panelId === 'pC') &&
+        aHits.length === 2 && /other FIND-me second/.test(aHits[0].line) && /find-ME first/.test(aHits[1].line) &&
+        aHits[0].lineIndex > aHits[1].lineIndex &&
+        !aHits.some((h) => h.line.includes('\u001b')),
+      JSON.stringify(r1))
+
+    // search.2. Both caps: at most maxPerPanel from one panel (newest), and
+    //      at most maxHits in total across panels.
+    if (slog) {
+      for (let i = 0; i < 8; i++) await slog.append('pD', `dup line number ${i}\r\n`)
+      await slog.idle('pD')
+    }
+    const perPanel = hasSearch ? await slog.search(['pD'], 'dup', { maxHits: 50, maxPerPanel: 3 }) : null
+    const total = hasSearch ? await slog.search(['pA', 'pB', 'pD'], 'line', { maxHits: 2, maxPerPanel: 5 }) : null
+    ok('search.2 the per-panel cap and the total cap are both honoured, newest kept',
+      hasSearch === true && Array.isArray(perPanel) && perPanel.length === 3 &&
+        /number 7/.test(perPanel[0].line) && /number 5/.test(perPanel[2].line) &&
+        Array.isArray(total) && total.length === 2,
+      JSON.stringify({ perPanel, total }))
+
+    // search.3. An empty or whitespace-only query answers [] without opening
+    //      a file; a real query with no match answers [] too. Three distinct
+    //      cases collapsed onto the same empty answer would still be [], so
+    //      the value is the assertion.
+    const empty = hasSearch ? await slog.search(['pA'], '', { maxHits: 50, maxPerPanel: 5 }) : null
+    const blank = hasSearch ? await slog.search(['pA'], '   ', { maxHits: 50, maxPerPanel: 5 }) : null
+    const miss = hasSearch ? await slog.search(['pA'], 'zzz-no-such-token', { maxHits: 50, maxPerPanel: 5 }) : null
+    const unknown = hasSearch ? await slog.search(['never-existed'], 'find-me', { maxHits: 50, maxPerPanel: 5 }) : null
+    ok('search.3 an empty, whitespace, no-match or unknown-panel query answers []',
+      hasSearch === true && Array.isArray(empty) && empty.length === 0 &&
+        Array.isArray(blank) && blank.length === 0 && Array.isArray(miss) && miss.length === 0 &&
+        Array.isArray(unknown) && unknown.length === 0,
+      JSON.stringify({ empty, blank, miss, unknown }))
+  }
+
   console.log('')
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)

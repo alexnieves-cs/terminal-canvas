@@ -27,6 +27,17 @@ import { stripAnsi } from '../shared/ansi'
  */
 export const SCROLLBACK_MAX_BYTES = 2 * 1024 * 1024
 
+/** M42. A total cap and a per-panel cap so a common token cannot flood the palette. */
+export const SEARCH_MAX_HITS = 50
+export const SEARCH_MAX_PER_PANEL = 5
+
+/** One matching line: its panel, the stripped text, and its index among the log's split lines. */
+export interface ScrollbackHit {
+  panelId: string
+  line: string
+  lineIndex: number
+}
+
 /** How far back a tail reads. 64 KiB covers hundreds of lines of a TUI's repaints. */
 export const TAIL_WINDOW_BYTES = 64 * 1024
 
@@ -35,6 +46,12 @@ export interface ScrollbackLog {
   /** The last `lines` NON-EMPTY, ANSI-stripped lines, oldest first. [] for a panel with no file. */
   tail(panelId: string, lines: number): Promise<string[]>
   size(panelId: string): Promise<number>
+  /**
+   * M42. Case-insensitive substring over the ANSI-stripped log of each LISTED
+   * panel, newest hit first WITHIN a panel, capped per panel and in total.
+   * An empty or whitespace query answers [] without opening a file.
+   */
+  search(panelIds: string[], query: string, opts: { maxHits: number; maxPerPanel: number }): Promise<ScrollbackHit[]>
   /** A closed panel's log goes with it. */
   drop(panelId: string): Promise<void>
   clearAll(): Promise<void>
@@ -146,6 +163,38 @@ export function createScrollbackLog(o: {
         if (line !== '') out.unshift(line)
       }
       return out
+    },
+
+    async search(panelIds, query, opts) {
+      const q = query.trim().toLowerCase()
+      if (q === '') return []
+      const hits: ScrollbackHit[] = []
+      for (const panelId of panelIds) {
+        if (hits.length >= opts.maxHits) break
+        const path = fileOf(panelId)
+        let text: string
+        try {
+          if ((await statSize(path)) === 0) continue
+          // The whole file, which the ring trim keeps at <= 1.25x the cap —
+          // bounded by construction, so no windowing is needed here.
+          text = await fs.readFile(path, 'utf8')
+        } catch {
+          continue
+        }
+        const lines = stripAnsi(text).split(/\r?\n|\r/)
+        let perPanel = 0
+        // From the END: the newest matching line first, which is the one a
+        // user looking for "which panel printed the stack trace" wants first.
+        for (let i = lines.length - 1; i >= 0 && perPanel < opts.maxPerPanel && hits.length < opts.maxHits; i -= 1) {
+          const line = lines[i]!.trim()
+          if (line === '') continue
+          if (line.toLowerCase().includes(q)) {
+            hits.push({ panelId, line, lineIndex: i })
+            perPanel += 1
+          }
+        }
+      }
+      return hits
     },
 
     size(panelId) {

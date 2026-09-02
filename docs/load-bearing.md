@@ -2366,3 +2366,21 @@ plus a restart B→A is an infinite ping-pong, refused at creation and stripped 
 as a same-kind cycle is. A `nextHandoffState` three-state cycle (off → on exit → on idle → off)
 drives the inspector's handoff control, whose title names the NEXT state because a cycle button
 labelled only with its current state leaves the user guessing what a press does.
+
+**Search is the LOG read by main, and the id list is main's — never the renderer's
+(`main/scrollback-log.ts` `search`, `main/ipc.ts` SCROLLBACK_SEARCH, `renderer/palette/commands.ts`).**
+M42 is the reader M39's durable log was built for: before it, an xterm-backed search found
+nothing on a restored canvas and did so silently. Three things are load-bearing. **The handler
+supplies the panel ids from `mergedWorkspaces()`, never from a renderer argument** — a closed
+panel's log is already dropped, and a search that accepted ids could ask for a log the layout no
+longer holds; this is the SCROLLBACK_TAIL rule reached again, the bytes staying main's until
+something wants to show them. **Search is gated on `scrollback.persist` exactly as tail is** —
+it reads the same files, so a user who turned persistence off gets nothing rather than stale
+hits from a log they asked not to keep. **A hit moves the CAMERA, never the terminal**: Enter on
+a row runs `goToPanel`, the switcher's verb, which frames and selects but never wakes and never
+scrolls a live terminal to the match — scrolling a running session is a real side effect this
+repo already asserts the absence of, and the matched line is visible in the row itself. The
+palette owns the query (its input box IS the term) and reports it to Canvas only while the scope
+is `search`; Canvas debounces 120 ms, asks main, and CLEARS the answer when the scope leaves, so
+a reopened palette starts from null (no answer yet) rather than stale hits — the null-vs-`[]`
+distinction the three empty states depend on (off / no matches / nothing typed yet).

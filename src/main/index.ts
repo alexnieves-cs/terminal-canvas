@@ -18,7 +18,7 @@ import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
 import { runQuit } from './quit'
-import { createScrollbackLog } from './scrollback-log'
+import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { ToolboxCache } from './toolbox-cache'
 import { IPC_EVENTS } from '../shared/ipc-contract'
@@ -646,7 +646,14 @@ app.whenReady().then(async () => {
       // before the toggle.
       tail: (panelId, lines) =>
         layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.tail(panelId, lines) : Promise.resolve([]),
-      clear: () => scrollbackLog.clearAll()
+      clear: () => scrollbackLog.clearAll(),
+      // Gated on the SAME setting as tail: search reads the same files, so a
+      // user who turned persistence off must get nothing rather than stale
+      // hits from a log they asked not to keep.
+      search: (panelIds, query) =>
+        layoutStore.getSetting('scrollback.persist') === true
+          ? scrollbackLog.search(panelIds, query, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
+          : Promise.resolve([])
     }
   )
   createWindow()

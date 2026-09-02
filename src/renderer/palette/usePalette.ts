@@ -81,6 +81,10 @@ export function usePalette(deps: {
 
   const openRef = useRef(open)
   openRef.current = open
+  // M42. Cmd+F's toggle needs the CURRENT scope at press time without adding
+  // scope to the once-installed listener's deps — the same mirror openRef is.
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
   const capturedRef = useRef(capturedId)
   capturedRef.current = capturedId
   // deps is a fresh object every render; mirroring it keeps the toggle
@@ -139,6 +143,17 @@ export function usePalette(deps: {
       // Shift is the easy one to forget, because Cmd+Shift+K still arrives
       // with `key === 'K'`, which the check below accepts on its own.
       if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      // M42. Cmd+F opens the palette straight into the search scope — the
+      // query box IS the search term. Free of every TUI claim (bare keys are
+      // theirs; Cmd chords are ours), matched on event.code so a rebound
+      // layout still gets the physical F key.
+      if (event.code === 'KeyF') {
+        event.preventDefault()
+        if (event.repeat) return
+        if (openRef.current && scopeRef.current === 'search') closePalette()
+        else openPalette('search')
+        return
+      }
       if (event.key !== 'k' && event.key !== 'K') return
       event.preventDefault()
       // preventDefault FIRST, then stand down: a held Cmd+K is still ours to

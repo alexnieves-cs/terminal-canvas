@@ -26,7 +26,7 @@ import {
   type PresetRow,
   type PromptRow
 } from './commands'
-import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit} from '@shared/ipc-contract'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 
@@ -112,6 +112,12 @@ export interface PaletteProps {
   broadcastActive: boolean
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
+  /** M42. Hits from main for the current search query; null before the first answer. */
+  searchResults: ScrollbackSearchHit[] | null
+  /** M42. scrollback.persist — decides the "search is off" empty state. */
+  scrollbackEnabled: boolean
+  /** M42. Called with the live query WHILE the scope is `search`, so Canvas can ask main. */
+  onSearchQuery: (query: string) => void
 }
 
 const SCOPE_LABEL: Record<PaletteScope, string> = {
@@ -121,7 +127,8 @@ const SCOPE_LABEL: Record<PaletteScope, string> = {
   workspaces: 'Workspaces',
   credentials: 'Credentials',
   worktrees: 'Worktrees',
-  'agent-mode': 'Permission mode'
+  'agent-mode': 'Permission mode',
+  search: 'Search'
 }
 
 const sectionLabel = (id: SectionId): string =>
@@ -174,13 +181,26 @@ export function Palette(props: PaletteProps): JSX.Element {
         merged: props.merged,
         broadcastReady: props.broadcastReady,
         broadcastActive: props.broadcastActive,
+        // M42. The query is the search TERM only inside the search scope; the
+        // "no matches" row names it, so it must be the palette's own query.
+        searchQuery: scope === 'search' ? query : '',
+        searchResults: props.searchResults,
+        scrollbackEnabled: props.scrollbackEnabled,
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
      props.credentials, props.worktrees, props.attentionIds, controller.capturedId, props.hasSelection,
-     props.selectedIds, props.merged, props.actions]
+     props.selectedIds, props.merged, props.actions,
+     query, scope, props.searchResults, props.scrollbackEnabled]
   )
   const rows = useMemo(() => filterCommands(commands, query, scope), [commands, query, scope])
+
+  // M42. Report the live query to Canvas WHILE the search scope is open, so it
+  // can debounce and ask main. Cleared (empty) when the scope leaves search,
+  // so Canvas drops its results and the row set collapses to nothing.
+  useEffect(() => {
+    if (scope === 'search') props.onSearchQuery(query)
+  }, [scope, query, props])
 
   // Rule 1: opening focuses the input. This is what takes the keyboard off
   // xterm — nothing else in this component does it, and without it the user's
@@ -554,6 +574,9 @@ export function Palette(props: PaletteProps): JSX.Element {
                 {header && <li className="palette__section">{sectionLabel(row.group)}</li>}
                 <li
                   ref={i === index ? selectedRef : null}
+                  // M42. The command id, so a check (and only a check) can find
+                  // one specific row without matching on its user-facing text.
+                  data-command-id={row.id}
                   className={[
                     'palette__row',
                     i === index ? 'palette__row--selected' : '',

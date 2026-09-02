@@ -124,6 +124,13 @@ export const IPC = {
   /** M39. Remove every panel's log. A destructive verb behind the palette's confirm. */
   SCROLLBACK_CLEAR: 'scrollback:clear',
   /**
+   * M42. Case-insensitive substring across EVERY panel's durable log, capped.
+   * Pull-only like SCROLLBACK_TAIL, and the id list is main's — the handler
+   * searches every panel the layout holds, never a renderer-supplied set, so
+   * a closed panel's already-dropped log cannot be asked for.
+   */
+  SCROLLBACK_SEARCH: 'scrollback:search',
+  /**
    * "Reset canvas…" asked for from the palette rather than the menu. Main owns
    * the confirmation dialog and the counts request, so the renderer asks main
    * to run the flow it already has instead of growing a second one.
@@ -652,6 +659,13 @@ export interface CapturedPanel {
 }
 
 /** One row of the palette's prompt list. Mirrors PromptListRow in main. */
+/** M42. One search hit: the panel, the matching line (ANSI-stripped) and its line index. */
+export interface ScrollbackSearchHit {
+  panelId: PanelId
+  line: string
+  lineIndex: number
+}
+
 export interface PromptBridgeRow {
   id: string
   name: string
@@ -864,6 +878,8 @@ export interface CanvasBridge {
     /** [] for a panel with no log, including when persistence is off. */
     tail(req: { panelId: PanelId; lines: number }): Promise<string[]>
     clear(): Promise<void>
+    /** M42. Hits across every panel's log, newest-first within a panel, capped. [] for an empty query. */
+    search(query: string): Promise<ScrollbackSearchHit[]>
   }
   prompt: {
     list(cwd: string | null): Promise<PromptBridgeRow[]>
