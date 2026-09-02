@@ -151,6 +151,7 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+←/→/↑/↓` | Move the selection to the nearest panel that way (never wakes it) |
 | `Cmd+Enter` | Focus — and wake — the selected panel |
 | `Cmd+Escape` | Leave the focused terminal; `Tab` from there walks the chrome |
+| `Cmd+click` | Open a path or URL printed in a terminal (paths in their default app, http(s) in the browser) |
 | `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
 | **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**: `Ctrl+C` as SIGINT, `Ctrl+Z` as SIGTSTP, and `Ctrl+B` because tmux's own prefix is deliberately disabled |
@@ -270,7 +271,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        fs:list
                        toolbox:read / toolbox:permissions
                        diagnostics:sample / diagnostics:export
-                       env:report
+                       env:report / link:open
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

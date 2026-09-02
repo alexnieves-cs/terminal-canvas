@@ -1725,6 +1725,28 @@ const R = (id, x, y, w = 200, h = 160) => ({ id, x, y, w, h })
     JSON.stringify(tidied))
 }
 
+// M51 — links.1. findLinks is the pure scanner the link provider maps over a
+//      rendered line: URLs (http/https) and paths (absolute, ~/, ./, or
+//      relative with a slash), with an optional :line or :line:col suffix
+//      kept as part of the link, trailing punctuation EXCLUDED (a URL at the
+//      end of a sentence is not "…5173."), and plain words ignored. Ranges
+//      are exact, because xterm underlines exactly the columns given.
+{
+  const has = typeof V.findLinks === 'function'
+  const line = 'see src/main/pty-manager.ts:118 and http://localhost:5173/x?y=1, or ~/notes/a.md; nothing else.'
+  const found = has ? V.findLinks(line) : null
+  const at = (t) => found && found.find((l) => l.text === t)
+  const p1 = at('src/main/pty-manager.ts:118'), u = at('http://localhost:5173/x?y=1'), p2 = at('~/notes/a.md')
+  ok('links.1 findLinks reports URLs and paths with exact ranges, keeps a :line suffix, excludes trailing punctuation, ignores words',
+    has && found.length === 3 &&
+      p1 && p1.kind === 'path' && line.slice(p1.start, p1.end) === p1.text &&
+      u && u.kind === 'url' && line.slice(u.start, u.end) === u.text &&
+      p2 && p2.kind === 'path' && line.slice(p2.start, p2.end) === p2.text &&
+      V.findLinks('nothing here: just words and a colon').length === 0 &&
+      V.findLinks('/abs/path.ts:3:9)').length === 1 && V.findLinks('/abs/path.ts:3:9)')[0].text === '/abs/path.ts:3:9',
+    JSON.stringify(found))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

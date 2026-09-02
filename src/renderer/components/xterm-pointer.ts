@@ -17,13 +17,11 @@ import { correctForScale } from '@renderer/canvas/pointer-correct'
  * mouse-reporting TUIs — this file should not read as though either were
  * already handled:
  *
- *   - A mousemove with no button held. Correction is anchored to a slot pinned
- *     at mousedown (see `activeSlot`), so a hover that never followed an
- *     in-slot mousedown returns early and reaches xterm uncorrected. xterm
- *     feeds motion events to a mouse-reporting TUI through the same
- *     getMouseReportCoords path, so under scale(k) such a TUI still sees a
- *     column k times the true one on hover. Correcting hover means resolving
- *     the slot per-event rather than from the pin.
+ *   - A mousemove with no button held — HANDLED since M51. A hover used to
+ *     return early uncorrected (the pin is set at mousedown, and a hover has
+ *     none), and it became user-visible the moment link underlines followed
+ *     the hover. It is now corrected against the slot under the cursor,
+ *     resolved per event; see the hover branch in onEvent.
  *   - Wheel. `TYPES` covers mousedown/mousemove/mouseup only, so no wheel
  *     event is ever corrected. xterm's wheel handler routes through
  *     getMouseReportCoords too, so a wheel over the FOCUSED panel — the one
@@ -95,7 +93,18 @@ export function installPointerCorrection(getScale: () => number): () => void {
     // reason; fix one and check the other.
     if (event.type === 'mousemove' && event.buttons === 0) {
       activeSlot = null
-      return
+      // M51. THE HOVER HALF. A hover that never followed a mousedown used to
+      // return here uncorrected — recorded above as a known limit — and it
+      // became user-visible the moment link underlines followed the hover:
+      // at any zoom ≠ 1 the underline sat over the wrong cell. So a hover is
+      // corrected against the slot UNDER THE CURSOR, resolved per event
+      // rather than from the pin (the pin is still released, so a stale one
+      // cannot outlive its gesture). A hover outside any slot passes
+      // untouched, so the HUD's world cursor and every document-level move
+      // handler keep seeing the original.
+      const hoverSlot = (target?.closest?.('.panel__slot') as HTMLElement | null) ?? null
+      if (!hoverSlot) return
+      slot = hoverSlot
     }
     if (!slot) return
     if (event.type === 'mouseup') activeSlot = null

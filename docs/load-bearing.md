@@ -2052,6 +2052,23 @@ structurally safe, and the result is idempotent (`verify:viewport` `tidy.1`). On
 twenty — the same rule a drag and a rename follow. The palette row acts on the selection when
 two or more are selected and on everything otherwise, disabled with a reason on a lone panel.
 
+**A hover is corrected per event against the slot under the cursor; only main opens a link, and
+only on Cmd (`components/xterm-pointer.ts`, `terminal/session-factory.ts`'s link provider,
+`main/link-open.ts`, `link:open`).** Pointer correction was anchored to a slot pinned at
+mousedown, so a hover — no mousedown — returned early uncorrected, a limit the file recorded for
+years and which became user-visible the moment link underlines followed the hover: at any zoom
+≠ 1 the underline sat over the wrong cell, and a link that underlines the wrong cell is worse
+than no link. M51 resolves the slot for each hover event and corrects it exactly as a drag's
+move; the pin is still released, so a stale pin cannot outlive a gesture, and a hover outside
+any slot passes untouched (the HUD's world cursor keeps seeing originals). `verify:panels`
+`hover.1` sends a REAL mouse move at 48% zoom and reads the provider's hover off the host —
+fault-injected (hover left uncorrected) to prove it lands cells away. Activation is Cmd-click
+ONLY: agent TUIs use clicks. The renderer sends the underlined TEXT and the panel id; main
+resolves (`resolveLinkOpen`, pure: http/https only, a path against the panel's cwd with `~`
+expanded and `:line:col` stripped, existing files only) and opens through `shell` — never a
+navigation, because `will-navigate` kills every PTY in the window. Opening AT a line needs an
+editor integration this app does not have; the result's reason says so rather than pretending.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

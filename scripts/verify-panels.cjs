@@ -811,6 +811,7 @@ app.whenReady().then(async () => {
   // honest rather than blanket-true.
   const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
   const toolboxCache = new ToolboxCache()
+  const linkOpens = []
   let harnessEnvReport = {
     probedAt: Date.now(),
     shell: { path: '/bin/zsh', ok: true },
@@ -925,7 +926,12 @@ app.whenReady().then(async () => {
   },
   // M48. The environment report, as a fixture the checks can swap: env.1
   // needs a FAILED probe, which no harness machine should produce for real.
-  () => harnessEnvReport)
+  () => harnessEnvReport,
+  // M51. link:open RECORDS rather than opens: a harness must never open the
+  // developer's browser or editor. The renderer's half — the corrected
+  // hover, the Cmd-only activation, the request's shape — is what the
+  // checks are about.
+  { open: (req) => { linkOpens.push(req); return { kind: 'opened' } } })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -14559,6 +14565,85 @@ app.whenReady().then(async () => {
       } finally {
         wc.removeListener('console-message', onP)
         layoutStore.setPreference('placement.snap', false)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M51 — Cmd-click a path or URL. hover.1: at 50% zoom a REAL mouse move
+    // over a link's cell reports that link through the provider's hover —
+    // the corrected hover; an uncorrected one lands cells away and reports
+    // nothing. links.1: a REAL Cmd-click on it reaches main's link:open with
+    // the text and the panel id, a plain click does not, and the window did
+    // not navigate.
+    // -------------------------------------------------------------------
+    {
+      const lLog = []
+      const onL = (_e, level, message) => { if (level >= 2) lLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onL)
+      const IDS = [
+        'hover.1 at 50% zoom a real mouse move over a link\'s cell reports that link through the corrected hover',
+        'links.1 a real Cmd-click on a link reaches main\'s link:open with its text, a plain click does not, and the window did not navigate'
+      ]
+      try {
+        backend = createDirectBackend('verify: direct (m51 links)')
+        const home = require('node:os').homedir()
+        layoutStore.save({ panels: fromPanels([{ kind: 'terminal', rect: { id: 'lA', x: 60, y: 60, w: 640, h: 400 }, z: 1, spec: { panelId: 'lA', cwd: home, command: '/bin/sh', args: [] } }]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reL
+        await waitUntil(async () => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="lA"]') !== null`), 10000)
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="lA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const woke = await waitUntil(async () => (await sessionMap(wc)).has('lA'), 10000)
+        await settle()
+        const slotPt = await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="lA"] .panel__slot'); if (!s) return null; const r = s.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (slotPt) { wc.sendInputEvent({ type: 'mouseDown', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 }) }
+        await settle()
+        // Known content through the session handle: a URL on its own line.
+        await wc.executeJavaScript(`window.__m4aWrite('\\r\\nopen http://localhost:5173/ok now\\r\\n')`)
+        const marked = await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('localhost') !== null`), 8000)
+        // Zoom out to ~48% through the canvas's own path.
+        for (let i = 0; i < 4; i++) await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))`)
+        await settle()
+        const scale = await wc.executeJavaScript(`window.__m4aScale()`)
+        const target = await wc.executeJavaScript(`window.__m4aCellToScreen('localhost')`)
+        const hoverOf = () => wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="lA"] .panel__terminal'); return h ? (h.dataset.linkHover ?? null) : null })()`)
+        let hovered = null
+        if (target) {
+          // A real hover: two moves, the second on the cell, no button held.
+          wc.sendInputEvent({ type: 'mouseMove', x: Math.round(target.x) - 30, y: Math.round(target.y) })
+          await sleep(60)
+          wc.sendInputEvent({ type: 'mouseMove', x: Math.round(target.x), y: Math.round(target.y) })
+          hovered = await waitUntil(async () => { const h = await hoverOf(); return h ? h : false }, 3000)
+        }
+        ok(IDS[0], woke === true && marked === true && scale < 0.6 && target !== null && hovered === 'http://localhost:5173/ok',
+          JSON.stringify({ woke, marked, scale, target, hovered }))
+
+        // links.1. Plain click first (nothing recorded), then Cmd-click.
+        const before = linkOpens.length
+        const urlBefore = wc.getURL()
+        if (target) {
+          wc.sendInputEvent({ type: 'mouseDown', x: Math.round(target.x), y: Math.round(target.y), button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: Math.round(target.x), y: Math.round(target.y), button: 'left', clickCount: 1 })
+          await settle()
+        }
+        const afterPlain = linkOpens.length
+        if (target) {
+          wc.sendInputEvent({ type: 'mouseDown', x: Math.round(target.x), y: Math.round(target.y), button: 'left', clickCount: 1, modifiers: ['meta'] })
+          wc.sendInputEvent({ type: 'mouseUp', x: Math.round(target.x), y: Math.round(target.y), button: 'left', clickCount: 1, modifiers: ['meta'] })
+        }
+        const opened = await waitUntil(async () => (linkOpens.length > afterPlain ? linkOpens[linkOpens.length - 1] : false), 4000)
+        await settle()
+        const urlAfter = wc.getURL()
+        ok(IDS[1],
+          afterPlain === before && opened !== false && opened.target === 'http://localhost:5173/ok' && opened.panelId === 'lA' && urlAfter === urlBefore,
+          JSON.stringify({ before, afterPlain, opened, navigated: urlAfter !== urlBefore }))
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '0', metaKey: true }))`)
+      } catch (lErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onL)
       }
     }
 

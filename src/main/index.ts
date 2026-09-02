@@ -1,5 +1,6 @@
+import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
@@ -10,6 +11,7 @@ import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
 import { resolveShellEnv, shellProbeOutcome, whichFromEnv } from './shell-env'
 import { buildEnvReport } from './env-report'
+import { resolveLinkOpen } from './link-open'
 import { createLayoutStore } from './layout-store'
 import { createCredentialStore } from './credential-store'
 import { createSafeStorageCrypto } from './credential-crypto'
@@ -708,7 +710,22 @@ app.whenReady().then(async () => {
       layoutPath: join(app.getPath('userData'), 'layout.json'),
       backupWritten: layoutStore.backupWritten(),
       now: probedAt
-    })
+    }),
+    // M51. The only place a Cmd-clicked link opens. The resolution is pure
+    // (link-open.ts); this does the two shell calls and turns their outcomes
+    // into a result — never a navigation of this window.
+    {
+      open: async (req) => {
+        const cwd = ptyManager.list().find((s) => s.panelId === req.panelId)?.cwd ?? homedir()
+        const r = resolveLinkOpen({ target: req.target, cwd }, { home: homedir(), exists: existsSync })
+        if (r.kind === 'url') { await shell.openExternal(r.url); return { kind: 'opened' } }
+        if (r.kind === 'path') {
+          const err = await shell.openPath(r.path)
+          return err ? { kind: 'refused', reason: err } : (r.note ? { kind: 'opened', reason: r.note } : { kind: 'opened' })
+        }
+        return { kind: 'refused', reason: r.reason }
+      }
+    }
   )
   createWindow()
 

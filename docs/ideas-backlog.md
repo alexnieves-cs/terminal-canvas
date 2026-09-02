@@ -1595,7 +1595,7 @@ session, and `tmux capture-pane -p -e` on the surviving session for a panel rest
   which decides how *little* a card shows when far away; this decides whether what it shows
   is true at all.
 
-## 54. Cmd-click a path or URL in agent output
+## 54. Cmd-click a path or URL in agent output — DONE, M51
 
 Agent CLIs print `src/main/pty-manager.ts:118`, `http://localhost:5173` and stack traces all
 day, and none of it is clickable — only the fit and webgl addons are installed, so neither
