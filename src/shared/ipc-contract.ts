@@ -443,6 +443,13 @@ export const IPC_EVENTS = {
    */
   AGENT_STATE: 'agent:state',
   /**
+   * M43. Main -> renderer: an OS notification for a waiting panel was clicked.
+   * The renderer frames that panel through goToPanel — the Cmd+J path, which
+   * never wakes. An EVENT, not an invoke, so verify:ipc's channel count is
+   * unmoved (it counts INVOKE channels only).
+   */
+  ATTENTION_JUMP: 'attention:jump',
+  /**
    * Where a panel is and what it is running, pushed when either CHANGES.
    *
    * An IPC_EVENTS member and not an IPC one, which decides a number: verify:ipc
@@ -922,6 +929,8 @@ export interface CanvasBridge {
     onState(listener: (update: AgentStateUpdate) => void): () => void
     /** Focus counts as reading it. See IPC.AGENT_ACKNOWLEDGE. */
     acknowledge(panelId: PanelId): Promise<void>
+    /** M43. A clicked OS notification asks the renderer to frame this panel (never wakes). */
+    onAttentionJump(listener: (panelId: PanelId) => void): () => void
   }
   workspace: {
     list(): Promise<WorkspaceRow[]>

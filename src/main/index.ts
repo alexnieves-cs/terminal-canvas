@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { mkdirSync, rmSync } from 'node:fs'
-import { BrowserWindow, app, dialog, shell } from 'electron'
+import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager, resolveCwd } from './pty-manager'
@@ -212,6 +212,34 @@ const ptyManager = new PtyManager(
     append: (panelId, data) => { void scrollbackLog.append(panelId, data) },
     drop: (panelId) => { void scrollbackLog.drop(panelId) },
     enabled: () => layoutStore.getSetting('scrollback.persist') === true
+  },
+  // M43. The real OS attention surfaces. Every method reads live state through
+  // a getter (focus and the two settings change constantly), and the whole
+  // decision path — when to notify, when to beep — lives in PtyManager, tested
+  // under plain node; this object only DOES what it is told. Confirmed by hand
+  // against a real dock, a real notification and a real beep (manual-only list).
+  {
+    notify: (panelId, label, count) => {
+      if (!Notification.isSupported()) return
+      const n = new Notification({
+        title: label,
+        body: count > 1 ? `${label} wants you (${count} panels waiting)` : `${label} wants you`
+      })
+      n.on('click', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.focus()
+          // The Cmd+J path, never a wake: frame the panel that called for you.
+          mainWindow.webContents.send(IPC_EVENTS.ATTENTION_JUMP, panelId)
+        }
+      })
+      n.show()
+    },
+    badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : '') },
+    beep: () => { shell.beep() },
+    windowFocused: () => mainWindow?.isFocused() ?? false,
+    notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,
+    soundEnabled: () => layoutStore.getSetting('attention.sound') === true
   }
 )
 
@@ -446,6 +474,10 @@ function createWindow(): void {
   // component makes every configured default silently inert again.
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) pushDefaultPreset(mainWindow.webContents, layoutStore)
+    // M43. The snapshot M6d declined twice: a fresh renderer reads zero waiting
+    // until the next real transition, while the dock badge (main's own count)
+    // says N. Re-emit each session's current state so the two agree.
+    ptyManager.resendStates()
   })
 }
 

@@ -121,6 +121,26 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    id: 'attention.notify',
+    label: 'Notify me when a panel needs me',
+    description:
+      'Post an OS notification when a panel wants you and this window is behind another. Clicking it flies here to that panel.',
+    keywords: ['notify', 'notification', 'os', 'alert', 'attention', 'background', 'dock', 'badge'],
+    type: 'boolean',
+    default: true,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'attention.sound',
+    label: 'Play a sound when a panel needs me',
+    description:
+      'Ring the system alert sound when a panel wants you. Off by default — it uses your own alert sound and volume, and works when this window is hidden.',
+    keywords: ['sound', 'beep', 'alert', 'audio', 'attention', 'ping', 'chime'],
+    type: 'boolean',
+    default: false,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.idleAfterMs',
     label: 'Idle after',
     description: 'Milliseconds of silence before a working panel is called idle.',

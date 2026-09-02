@@ -259,7 +259,10 @@ function makeHarness(backend, options = {}) {
     options.worktreeFor,
     // M39. The scrollback sink; undefined means "no log", as in a harness
     // that never asks. Only scrollback.1-.3 pass one.
-    options.scrollback
+    options.scrollback,
+    // M43. The attention sink; undefined means "no OS surfaces", as in a
+    // harness that never asks. Only attention.1-.4 pass one.
+    options.attention
   )
   return { manager, events, exits: () => events.filter((e) => e.channel === 'pty:exit') }
 }
@@ -1717,6 +1720,107 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     // wired to THIS run's now-deleted exitDir, and check 14 would silently
     // report the wrong exit code). Whoever appends check 32 inherits it next.
     tmuxBackend.shutdown()
+  }
+
+  // -------------------------------------------------------------------
+  // M43 — attention beyond the window. Scoped ids. An injected AttentionSink,
+  // driven by a real bell, with focus/enabled answers the harness controls.
+  // -------------------------------------------------------------------
+  const makeSink = (over = {}) => {
+    const calls = { notify: [], badge: [], beep: 0 }
+    return {
+      calls,
+      sink: {
+        notify: (panelId, label, count) => calls.notify.push({ panelId, label, count }),
+        badge: (count) => calls.badge.push(count),
+        beep: () => { calls.beep += 1 },
+        windowFocused: over.windowFocused ?? (() => false),
+        notifyEnabled: over.notifyEnabled ?? (() => true),
+        soundEnabled: over.soundEnabled ?? (() => false)
+      }
+    }
+  }
+  const ringBell = async (h, id, states) => {
+    await h.manager.create(spec(id, '/bin/sh', ['-c', "printf '\007'; cat"]))
+    return await waitFor(() => states.some((x) => x.panelId === id && x.state === 'wants-you'))
+  }
+
+  // attention.1. A bell on an UNFOCUSED window calls notify ONCE with the
+  //      panel's label and a count, and sets the badge to 1.
+  {
+    const states = []
+    const { sink, calls } = makeSink({ windowFocused: () => false, notifyEnabled: () => true })
+    const h = makeHarness(DIRECT, { attention: sink, idleAfterMs: 200,
+      onSend: (channel, payload) => { if (channel === 'agent:state') states.push(payload) } })
+    const rang = await ringBell(h, 'at1', states)
+    const notifiedOnce = await waitFor(() => calls.notify.length === 1)
+    ok('attention.1 a bell on an unfocused window notifies once with the label and sets the badge to 1',
+      rang && notifiedOnce && calls.notify[0].panelId === 'at1' && typeof calls.notify[0].label === 'string' &&
+        calls.notify[0].label.length > 0 && calls.notify[0].count === 1 &&
+        calls.badge.length > 0 && calls.badge[calls.badge.length - 1] === 1,
+      JSON.stringify(calls))
+    h.manager.kill('at1')
+  }
+
+  // attention.2. The SAME bell on a FOCUSED window sets the badge but calls
+  //      NO notifier — the window is already in front of the user.
+  {
+    const states = []
+    const { sink, calls } = makeSink({ windowFocused: () => true, notifyEnabled: () => true })
+    const h = makeHarness(DIRECT, { attention: sink, idleAfterMs: 200,
+      onSend: (channel, payload) => { if (channel === 'agent:state') states.push(payload) } })
+    const rang = await ringBell(h, 'at2', states)
+    const badged = await waitFor(() => calls.badge.length > 0 && calls.badge[calls.badge.length - 1] === 1)
+    ok('attention.2 a bell on a focused window sets the badge and calls no notifier',
+      rang && badged && calls.notify.length === 0,
+      JSON.stringify(calls))
+    h.manager.kill('at2')
+  }
+
+  // attention.3. The beep fires only when the sound setting answers true.
+  {
+    const statesOn = []
+    const on = makeSink({ soundEnabled: () => true })
+    const hOn = makeHarness(DIRECT, { attention: on.sink, idleAfterMs: 200,
+      onSend: (c, p) => { if (c === 'agent:state') statesOn.push(p) } })
+    await ringBell(hOn, 'at3a', statesOn)
+    const beeped = await waitFor(() => on.calls.beep >= 1)
+    hOn.manager.kill('at3a')
+
+    const statesOff = []
+    const off = makeSink({ soundEnabled: () => false })
+    const hOff = makeHarness(DIRECT, { attention: off.sink, idleAfterMs: 200,
+      onSend: (c, p) => { if (c === 'agent:state') statesOff.push(p) } })
+    await ringBell(hOff, 'at3b', statesOff)
+    await waitFor(() => statesOff.some((x) => x.state === 'wants-you'))
+    ok('attention.3 the beep fires only when the sound setting answers true',
+      beeped === true && on.calls.beep >= 1 && off.calls.beep === 0,
+      JSON.stringify({ on: on.calls.beep, off: off.calls.beep }))
+    hOff.manager.kill('at3b')
+  }
+
+  // attention.4. Acknowledge clears the badge to 0, and resendStates() sends
+  //      one agent:state per live session — the snapshot a fresh renderer
+  //      needs so its count agrees with the dock.
+  {
+    const states = []
+    const { sink, calls } = makeSink({ windowFocused: () => false, notifyEnabled: () => true })
+    const h = makeHarness(DIRECT, { attention: sink, idleAfterMs: 200,
+      onSend: (channel, payload) => { if (channel === 'agent:state') states.push(payload) } })
+    await ringBell(h, 'at4', states)
+    await waitFor(() => calls.badge.length > 0 && calls.badge[calls.badge.length - 1] === 1)
+    h.manager.acknowledge('at4')
+    const cleared = await waitFor(() => calls.badge[calls.badge.length - 1] === 0)
+    const attn = typeof h.manager.attention === 'function' ? h.manager.attention() : null
+    const before = states.length
+    h.manager.resendStates()
+    const resent = await waitFor(() => states.length > before)
+    ok('attention.4 acknowledge clears the badge to 0, attention() drops the id, and resendStates re-emits one state per session',
+      cleared === true && Array.isArray(attn) && !attn.includes('at4') &&
+        typeof h.manager.resendStates === 'function' && resent === true &&
+        states.slice(before).some((x) => x.panelId === 'at4'),
+      JSON.stringify({ badge: calls.badge, attn, resentCount: states.length - before }))
+    h.manager.kill('at4')
   }
 
   console.log('\n' + '='.repeat(60))

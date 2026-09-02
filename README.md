@@ -31,7 +31,10 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
 - **A canvas that says who needs you.** Each panel's border reports what its
   agent is doing — starting, working, idle, or waiting on you. Panels that want
   attention while off screen get an edge pip pointing at them, and `Cmd+J`
-  flies to the next one.
+  flies to the next one. When this window is behind another, a panel that
+  needs you posts an OS notification (click it to fly here) and a dock-badge
+  count; an optional sound is one setting away.
+
 - **Workspaces.** Named canvases you switch between without killing anything;
   the agents in the canvas you left keep working. `Cmd+Shift+A` shows all of
   them at once, side by side, and a rubber-band selection can be refiled from
@@ -231,7 +234,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        diagnostics:sample / diagnostics:export
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
-                       file:changed / usage:panel
+                       file:changed / usage:panel / attention:jump
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture

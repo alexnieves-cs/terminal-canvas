@@ -6,7 +6,7 @@ import type { Command } from './palette-model'
 // different matter and this comment used to be read as covering it: waitingCount
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
-import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit} from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import { waitingCount } from '@renderer/shell/rail-sections'

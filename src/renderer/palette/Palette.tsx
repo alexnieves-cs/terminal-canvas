@@ -26,7 +26,7 @@ import {
   type PresetRow,
   type PromptRow
 } from './commands'
-import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit} from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 
@@ -198,9 +198,15 @@ export function Palette(props: PaletteProps): JSX.Element {
   // M42. Report the live query to Canvas WHILE the search scope is open, so it
   // can debounce and ask main. Cleared (empty) when the scope leaves search,
   // so Canvas drops its results and the row set collapses to nothing.
+  const onSearchQuery = props.onSearchQuery
   useEffect(() => {
-    if (scope === 'search') props.onSearchQuery(query)
-  }, [scope, query, props])
+    if (scope === 'search') onSearchQuery(query)
+    // The DESTRUCTURED callback, not `props`: Canvas rebuilds `props` every
+    // render, and depending on it refires this effect (and re-arms the
+    // debounce) on every Canvas render while the scope is search — the exact
+    // trap CLAUDE.md names for the Canvas split-out hooks. onSearchQuery is a
+    // stable useCallback, so this fires only on a real scope/query change.
+  }, [scope, query, onSearchQuery])
 
   // Rule 1: opening focuses the input. This is what takes the keyboard off
   // xterm — nothing else in this component does it, and without it the user's

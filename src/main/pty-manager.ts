@@ -75,6 +75,26 @@ export interface ScrollbackSink {
 }
 
 /**
+ * M43. The OS surfaces "a panel wants you" reaches when the canvas is not the
+ * front window: the dock badge, an OS notification, a beep. INJECTED so the
+ * whole decision path runs under plain node in verify:pty-manager against a
+ * fake window-focus answer, and so main owns the real Notification/dock/beep
+ * in one place (main/index.ts). `windowFocused` is a getter because focus
+ * changes constantly and a captured value would freeze at construction.
+ */
+export interface AttentionSink {
+  /** A panel newly entered wants-you while the window was NOT focused. */
+  notify(panelId: PanelId, label: string, count: number): void
+  /** The dock badge: the number waiting, on every change. */
+  badge(count: number): void
+  /** The system alert sound, on a panel entering wants-you. */
+  beep(): void
+  windowFocused(): boolean
+  notifyEnabled(): boolean
+  soundEnabled(): boolean
+}
+
+/**
  * The idleness tick. A SEPARATE timer from the flush, and one per manager
  * rather than per session, because the flush timer only runs when there IS
  * pending data — it structurally cannot observe the absence of data, which is
@@ -511,8 +531,74 @@ export class PtyManager {
      * gets. `enabled()` is read per flush, never captured, so the setting
      * takes effect on the next flush rather than the next launch.
      */
-    private readonly scrollback: ScrollbackSink = { append: () => {}, drop: () => {}, enabled: () => false }
-  ) {}
+    private readonly scrollback: ScrollbackSink = { append: () => {}, drop: () => {}, enabled: () => false },
+    /**
+     * M43. The OS attention surfaces. Inert by default — every existing
+     * fixture constructs this manager without one, and an inert sink makes no
+     * dock/notification/beep, exactly as before this milestone.
+     */
+    private readonly attentionSink: AttentionSink = {
+      notify: () => {}, badge: () => {}, beep: () => {},
+      windowFocused: () => true, notifyEnabled: () => false, soundEnabled: () => false
+    }
+  ) {
+    // nothing to construct; fields are the injected dependencies.
+  }
+
+  /** M43. The panel ids currently in wants-you, in entry order. */
+  private waiting = new Set<PanelId>()
+
+  /** M43. The ids currently waiting — read by main for the snapshot and tests. */
+  attention(): PanelId[] {
+    return [...this.waiting]
+  }
+
+  /**
+   * M43. Re-emit the current agent state for every live session. The channel
+   * M6d declined twice, and the dock badge is the customer that changes the
+   * answer: after a reload the renderer reads zero waiting until the next real
+   * transition, while the dock says N — a canvas disagreeing with its own
+   * icon. No new channel; the existing event, sent once more per session.
+   */
+  resendStates(): void {
+    for (const session of this.sessions.values()) {
+      this.send(IPC_EVENTS.AGENT_STATE, {
+        panelId: session.panelId,
+        state: session.detector.state satisfies AgentState
+      })
+    }
+  }
+
+  /**
+   * M43. Recompute the waiting set and drive the OS surfaces when it CHANGES.
+   * The badge is set on every change; a notification and a beep fire only for
+   * a panel NEWLY entering wants-you (a notification only when the window is
+   * not focused). Nothing here clears a state — focus and a write remain the
+   * only two clearers (see acknowledge), so a notification that framed a panel
+   * still leaves it amber until the user clicks in.
+   */
+  private syncAttention(): void {
+    const next = new Set<PanelId>()
+    for (const s of this.sessions.values()) {
+      if (s.detector.state === 'wants-you') next.add(s.panelId)
+    }
+    let changed = next.size !== this.waiting.size
+    if (!changed) for (const id of next) if (!this.waiting.has(id)) { changed = true; break }
+    if (!changed) return
+    const entering: PanelId[] = []
+    for (const id of next) if (!this.waiting.has(id)) entering.push(id)
+    this.waiting = next
+    this.attentionSink.badge(next.size)
+    for (const id of entering) {
+      const session = this.sessions.get(id)
+      const label = session ? session.command : id
+      if (!this.attentionSink.windowFocused() && this.attentionSink.notifyEnabled()) {
+        this.attentionSink.notify(id, label, next.size)
+      }
+      if (this.attentionSink.soundEnabled()) this.attentionSink.beep()
+    }
+  }
+  
 
   async create(spec: PanelSpec): Promise<PtyCreateResult> {
     if (this.sessions.has(spec.panelId)) {
@@ -1181,6 +1267,10 @@ export class PtyManager {
     const before = session.detector.state
     session.detector = nextState(session.detector, event, Date.now(), this.getIdleAfterMs())
     if (session.detector.state === before) return
+    // The waiting set is recomputed on EVERY real state change, mute or not: a
+    // killed panel leaving wants-you must still drop the badge, even though its
+    // agent:state is not sent (the renderer's teardown handles that half).
+    this.syncAttention()
     if (mute) return
     this.send(IPC_EVENTS.AGENT_STATE, {
       panelId: session.panelId,

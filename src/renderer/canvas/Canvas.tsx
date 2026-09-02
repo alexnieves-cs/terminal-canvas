@@ -1097,6 +1097,13 @@ export function Canvas({
     applyAgentState(update.panelId, update.state)
   }), [])
 
+  // M43. A clicked OS notification frames its panel — the Cmd+J path, which
+  // never wakes. Read through the ref so this subscribes once and never goes
+  // stale as paletteActions is rebuilt.
+  useEffect(() => window.canvas.agent.onAttentionJump((panelId) => {
+    paletteActionsRef.current.goToPanel(panelId)
+  }), [])
+
   // One subscription for the whole canvas, like agent.onState above and for the
   // same reason: the store fans out per panel id, so a per-panel subscription
   // here would deliver every panel's update to every panel.
