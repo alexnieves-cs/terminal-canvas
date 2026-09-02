@@ -125,6 +125,27 @@ discipline: this milestone builds the loop, it does not redesign the app.
 dormant tail, the navigator row shape, the honest status strip, the review table, the dark
 well, the group header's shape.
 
+## The verifier
+
+A fresh-context sub-agent given the spec and the diff, and allowed to run the plain-node
+suites. Every promise confirmed delivered. Nine risks raised; six acted on in a follow-up
+commit on the next branch, three declined:
+
+- **Acted on.** `exit-flush.1` could pass on an ungated tree if the trap never fired — it
+  now carries a control case (the same trap on a natural exit must deliver its marker,
+  which also pins flush-before-announce). `hidden.1` was a hand list of two classes — it now
+  derives the toggled classes from the renderer's JSX, and its first run flagged
+  `aria-hidden` as a false positive, fixed with a lookbehind. `group-keys.2` now also
+  requires the wrapper to be built on `shellControl`. The `group-collapsed` scene wakes a
+  member first so carding changes pixels. The two palette actions refuse in the merged view
+  at the action, as `beginCreateGroup` does. The flush gate's comment states that a
+  detached session is gated on purpose. `PaletteContext.groups` is typed as `CanvasGroup`.
+- **Declined.** A `<button onPointerDown>` would slip past `group-keys.2` — true, and the
+  repo has no pointer-event buttons; widening the scan is cheap when one appears. The
+  `removed` assertion counting `.panel[data-panel-id]` is brittle if a non-panel ever
+  carries that attribute — none does. The M61 README row was not in the spec — the pin's
+  second direction requires it once the build log exists.
+
 ## What M61 leaves for the next document
 
 The three things the author touches most — starting a panel, finding a panel, seeing what

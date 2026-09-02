@@ -134,8 +134,8 @@ const SCENES = [
   { name: 'attention', intent: 'A panel rang its bell: the dock badge counts one, and the popover lists the waiting panel with a way to jump to it.',
     run: async (k) => { await k.focus('live'); await k.ring(); await k.click('[data-dock="attention"]'); await sleep(400); await k.shot('attention'); await k.press('Escape'); await sleep(200) } },
   { name: 'group', intent: 'A named, coloured group frame around two panels, with its label, member count, and its card and remove controls in the header.',
-    run: async (k) => { await k.goTo('the workers'); await k.shot('group') } },
-  { name: 'group-collapsed', intent: 'The same group carded: its members show as cards inside a dashed frame, and nothing was closed.',
+    run: async (k) => { await k.goTo('the workers'); await k.wake('groupA'); await k.shot('group') } },
+  { name: 'group-collapsed', intent: 'The same group carded: its live member is now a card inside a dashed frame, and nothing was closed.',
     run: async (k) => { await k.click('.canvas-group__toggle'); await sleep(500); await k.shot('group-collapsed'); await k.click('.canvas-group__toggle'); await sleep(300) } },
   { name: 'merged', intent: 'The merged view: every workspace\'s panels at once in labelled lanes, read-only, with the door to leave it visible.',
     run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
@@ -333,6 +333,13 @@ app.whenReady().then(async () => {
         await js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`)
         await sleep(250)
       }
+    },
+    // Wake a dormant panel by clicking its card at the centre (a mousedown
+    // with no coordinates hit-tests world (0,0) and misses).
+    wake: async (id) => {
+      await js(`(() => { const card = document.querySelector('.panel[data-panel-id="${id}"] .panel__card'); if (!card) return false
+        const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+      await sleep(2000)
     },
     // Focus a live panel by clicking into its terminal.
     focus: async (id) => {

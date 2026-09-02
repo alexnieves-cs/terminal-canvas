@@ -979,8 +979,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     // M61. Pure transitions from groups.ts, the same ones GroupLayer's
     // buttons reach through Canvas — one definition of "collapse".
-    toggleGroup: (id) => { setGroups((current) => (current.find((g) => g.id === id)?.collapsed ? expandGroup : toggleGroup)(current, id)) },
-    removeGroup: (id) => { setGroups((current) => removeGroup(current, id)) },
+    // Refused in the merged view at the action as well as at the row, the way
+    // beginCreateGroup below is: the row's reason is the user-facing refusal,
+    // this is the one a future caller cannot forget.
+    toggleGroup: (id) => { if (mergedRef.current) return; setGroups((current) => (current.find((g) => g.id === id)?.collapsed ? expandGroup : toggleGroup)(current, id)) },
+    removeGroup: (id) => { if (mergedRef.current) return; setGroups((current) => removeGroup(current, id)) },
     beginCreateGroup: (panelIds) => {
       if (mergedRef.current) return
       const present = panelIds.filter((id) => panelsRef.current.some((panel) => panel.rect.id === id))

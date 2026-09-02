@@ -1449,7 +1449,10 @@ export class PtyManager {
     // after kill(). Gating here closes both; gating only onExit would not.
     // A NATURAL exit is untouched: a session that exited on its own is still
     // in the map when onExit runs, so its last lines — the error that
-    // explains the exit — still reach the renderer and the log.
+    // explains the exit — still reach the renderer and the log. A DETACHED
+    // session (detachAll deletes the entry too) is gated on purpose: its
+    // renderer is the one being torn down, and under tmux the bytes a
+    // detaching client prints are the client's own farewell, not output.
     if (this.sessions.get(session.panelId) !== session) {
       session.buffer.length = 0
       session.pendingChars = 0

@@ -791,6 +791,7 @@ price of not killing something.
 | M59 | The dead-end audit: every surface walked in `docs/dead-end-audit.md`, three dead ends fixed, two guards | ✅ done |
 | M60 | Ship 1.0.0: the icon as code, both packaging gates run and recorded, the documents reconciled | ✅ done |
 | M61 | The visual loop: `npm run shot`, a fresh-context critic, and three post-1.0 defects fixed with checks | ✅ done |
+| M62 | The design brief and the 1.x scope decision — documents only | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

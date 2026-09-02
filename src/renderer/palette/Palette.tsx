@@ -27,6 +27,7 @@ import {
   type PromptRow
 } from './commands'
 import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { CanvasGroup } from '@renderer/groups/groups'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 import { ChevronRight } from '@renderer/icons'
@@ -116,7 +117,7 @@ export interface PaletteProps {
   /** The rubber-band selection, as ids — what the move rows act on. */
   selectedIds: string[]
   /** M61. The canvas's groups, for the Card/Expand and Remove rows. */
-  groups: readonly { id: string; label: string; collapsed?: boolean; panelIds: readonly string[] }[]
+  groups: readonly CanvasGroup[]
   /** Whether the merged view is open; the move rows refuse there. */
   merged: boolean
   broadcastReady: boolean

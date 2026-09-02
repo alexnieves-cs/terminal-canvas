@@ -2185,8 +2185,12 @@ const session = (id, over = {}) => ({
   const src = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'groups', 'GroupLayer.tsx'), 'utf8')
   const buttons = src.split('<button').slice(1).map((b) => b.split('</button>')[0])
   const bad = buttons.filter((b) => /onMouseDown=/.test(b) && !/shellControl|groupControl/.test(b))
-  ok('group-keys.2 every <button in GroupLayer.tsx goes through shellControl, none runs from onMouseDown alone',
-    buttons.length >= 2 && bad.length === 0, JSON.stringify({ buttons: buttons.length, bad: bad.length }))
+  // A local wrapper is accepted only if it is built ON shellControl — a
+  // wrapper that re-implemented the pair by hand would pass the name test
+  // and could drop the click half again.
+  const wrapperComposes = /const groupControl = [\s\S]*?shellControl\(run\)/.test(src)
+  ok('group-keys.2 no <button in GroupLayer.tsx runs from onMouseDown alone, and its wrapper is built on shellControl',
+    buttons.length >= 2 && bad.length === 0 && wrapperComposes, JSON.stringify({ buttons: buttons.length, bad: bad.length, wrapperComposes }))
 }
 
 console.log('\n' + '='.repeat(60))
