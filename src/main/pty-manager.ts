@@ -814,6 +814,8 @@ export class PtyManager {
     proc.onExit(({ exitCode, signal }) => {
       // Flush whatever is pending BEFORE announcing exit, otherwise the last
       // lines of output (often the error that explains the exit) are dropped.
+      // flush() itself refuses a session the map no longer holds (M61), so a
+      // kill()ed process's tail cannot land in a panel recreated at this id.
       this.flush(session)
       // The OS process exits some milliseconds after kill() returned, by which
       // time this panelId may already have been recreated. Evicting by key
@@ -1433,6 +1435,26 @@ export class PtyManager {
     if (session.flushTimer) {
       clearTimeout(session.flushTimer)
       session.flushTimer = null
+    }
+    // M61. A session that is no longer THIS panel's session has no right to
+    // speak to it. kill() and detachAll() delete the map entry synchronously
+    // and never drain the buffer; the OS process exits milliseconds later,
+    // usually printing something on its way out, and by then the id may
+    // belong to a recreated panel (restart in place reuses it). Both sends
+    // below are keyed by panelId alone, so an unguarded flush here would
+    // paint a dead process's last line into a fresh terminal and append it
+    // to a log kill() had just dropped — resurrecting the file, with nothing
+    // on screen to say why. There are TWO doors in: onExit's deliberate
+    // flush-before-announce, and a flush timer armed by a read that landed
+    // after kill(). Gating here closes both; gating only onExit would not.
+    // A NATURAL exit is untouched: a session that exited on its own is still
+    // in the map when onExit runs, so its last lines — the error that
+    // explains the exit — still reach the renderer and the log.
+    if (this.sessions.get(session.panelId) !== session) {
+      session.buffer.length = 0
+      session.pendingChars = 0
+      session.elidedChars = 0
+      return
     }
     if (session.buffer.length === 0) return
     let data = session.buffer.join('')

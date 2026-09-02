@@ -282,7 +282,15 @@ npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wh
 npm run package              # the unsigned .app and .dmg, into release/
 npm run verify:package       # the packaging config, as a value, plain node
 npm run verify:packaged      # packages for real and launches it — NOT in verify
+npm run shot                 # after a build: 23 PNGs of the real renderer into out/shots — asserts NOTHING
 ```
+
+`npm run shot` is the visual loop (M61): it seeds a fixture canvas — every panel kind, a
+group, two workspaces, a bell, a search hit — and paints each surface to a PNG, with a
+`manifest.json` naming what each picture is meant to show. It is not a verify suite on
+purpose: nothing in it can go red, it is slow, and it opens real shells. Its output is
+judged by eyes, yours and a fresh-context critic's. No milestone that changes a visible
+surface is finished until someone has looked at it.
 
 `node-pty` is a native module built for Electron's ABI, so the checks that touch it run under
 the Electron binary rather than plain `node`. None need a display: the ones that require a
@@ -757,6 +765,32 @@ price of not killing something.
 | M33 | Codex agent launch: a second `AgentKind`, with its own flags | ✅ done |
 | M34 | Space-drag and middle-drag pan (backlog #68; built as "M26") | ✅ done |
 | M35 | Drawing links: port handles, snapping, and bezier edges (built as "M24") | ✅ done |
+| M36 | Hardening for 1.0: the red baseline made green, Unicode 11 widths, a flush byte cap that keeps the tail | ✅ done |
+| M37 | A git worktree per panel: `tc/<panelId>-<stamp>` under `userData/worktrees`, records that outlive the panel | ✅ done |
+| M38 | Agents that outlive the app: `session.keepOnQuit` detaches instead of killing, boot reattaches | ✅ done |
+| M39 | Durable scrollback: one append-only log per panel, ring-trimmed; a dormant card shows its tail | ✅ done |
+| M40 | Broadcast input finished: the audit that found one exit and no chord, and added both | ✅ done |
+| M41 | Handoff edges: a link that starts its target with the source's recorded output as context (backlog #24) | ✅ done |
+| M42 | Search across every panel over the durable log: `Cmd+F`, camera to the match | ✅ done |
+| M43 | Attention beyond the window: a dock badge, an OS notification, an optional beep | ✅ done |
+| M44 | A keyboard-first canvas: Cmd-gated panel navigation, step in and out, screen-reader names | ✅ done |
+| M45 | The visual language: flat surfaces, hairlines, one accent, two themes from one token set, the terminal follows | ✅ done |
+| M46 | The interface architecture: dock, one navigator pane, the canvas, a context pane; three breakpoints | ✅ done |
+| M47 | One panel frame: `PanelFrame` behind every kind, the checks' DOM contract kept as aliases | ✅ done |
+| M48 | First run and every empty state: a launcher of real verbs, fading gesture hints, an environment report | ✅ done |
+| M49 | Panel typography: a global terminal font size and a per-panel override, one refit per commit | ✅ done |
+| M50 | Placement: edge and centre snapping with guides, and Tidy as one undo | ✅ done |
+| M51 | Cmd-click a path or URL: a link provider over the terminal, opened through main | ✅ done |
+| M52 | OSC 133 shell integration and a run ledger: command boundaries painted and navigable, what each panel ran | ✅ done |
+| M53 | Discard, per file: a review row's armed discard that restores from the baseline into the worktree only | ✅ done |
+| M54 | `tc`: a CLI over a Unix socket and a `terminal-canvas://` scheme, one parser, one handler | ✅ done |
+| M55 | Recover an orphan session: a boot dialog that adopts or ends a session in no layout | ✅ done |
+| M56 | The camera: eased flights with tiering held, a trail on `⌘[`/`⌘]`, named bookmarks per workspace | ✅ done |
+| M57 | Semantic zoom: a card is a tail, a summary, then a coloured block as the camera pulls away | ✅ done |
+| M58 | Export: a panel's output as scrubbed text from the log, the canvas as a PNG | ✅ done |
+| M59 | The dead-end audit: every surface walked in `docs/dead-end-audit.md`, three dead ends fixed, two guards | ✅ done |
+| M60 | Ship 1.0.0: the icon as code, both packaging gates run and recorded, the documents reconciled | ✅ done |
+| M61 | The visual loop: `npm run shot`, a fresh-context critic, and three post-1.0 defects fixed with checks | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

@@ -2175,6 +2175,20 @@ const session = (id, over = {}) => ({
     JSON.stringify({ keys: none.fields.map((f) => f.key), sigs: sigs.size }))
 }
 
+// M61 — group-keys.2. NO CONTROL RUNS FROM onMouseDown ALONE. The one check
+//     M59's audit lacked: it asked whether every affordance had a name and a
+//     reason, never whether it had a route without a pointer. Read as text
+//     like verify:styles — a <button in GroupLayer.tsx that carries
+//     onMouseDown and does not spread shellControl is invisible to Enter and
+//     Space, and nothing at runtime says so.
+{
+  const src = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'renderer', 'groups', 'GroupLayer.tsx'), 'utf8')
+  const buttons = src.split('<button').slice(1).map((b) => b.split('</button>')[0])
+  const bad = buttons.filter((b) => /onMouseDown=/.test(b) && !/shellControl|groupControl/.test(b))
+  ok('group-keys.2 every <button in GroupLayer.tsx goes through shellControl, none runs from onMouseDown alone',
+    buttons.length >= 2 && bad.length === 0, JSON.stringify({ buttons: buttons.length, bad: bad.length }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

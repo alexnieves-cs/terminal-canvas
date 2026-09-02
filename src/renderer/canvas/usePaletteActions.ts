@@ -14,7 +14,7 @@ import {
   isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
-import type { CanvasGroup } from '@renderer/groups/groups'
+import { expandGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
 import { GROUP_COLOURS } from '@shared/groups'
 import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
@@ -977,6 +977,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       if (cwd === '') return
       openToolboxPanel(cwd, railLabel(panel, registry.get(panelId)?.status), worldCentre())
     },
+    // M61. Pure transitions from groups.ts, the same ones GroupLayer's
+    // buttons reach through Canvas — one definition of "collapse".
+    toggleGroup: (id) => { setGroups((current) => (current.find((g) => g.id === id)?.collapsed ? expandGroup : toggleGroup)(current, id)) },
+    removeGroup: (id) => { setGroups((current) => removeGroup(current, id)) },
     beginCreateGroup: (panelIds) => {
       if (mergedRef.current) return
       const present = panelIds.filter((id) => panelsRef.current.some((panel) => panel.rect.id === id))

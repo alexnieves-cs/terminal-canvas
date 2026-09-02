@@ -15162,6 +15162,57 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M61 — group-keys.1. THE GROUP'S TWO BUTTONS ANSWER A CLICK. Before M61
+    // both ran from onMouseDown alone, so a dispatched `click` — the event
+    // Enter and Space produce on a focused button — did nothing, and no
+    // keyboard could card or remove a group. A seeded group around two
+    // panels, one woken live: "card" must card the LIVE member (its slot
+    // goes, its session does not), "expand" must uncollapse, and "remove"
+    // must drop the frame and leave both panels and the PTY standing.
+    // -------------------------------------------------------------------
+    {
+      const gLog = []
+      const onG = (_e, level, message) => { if (level >= 2) gLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onG)
+      const ID = 'group-keys.1 card, expand and remove on a group answer a click — the live member is carded, nothing is closed'
+      try {
+        layoutStore.save({
+          panels: fromPanels([
+            { kind: 'terminal', rect: { id: 'gA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'gA', cwd: '/tmp', command: '/bin/cat', args: [] } },
+            { kind: 'terminal', rect: { id: 'gB', x: 520, y: 60, w: 420, h: 280 }, z: 2, spec: { panelId: 'gB', cwd: '/tmp', command: '/bin/cat', args: [] } }
+          ]),
+          groups: [{ id: 'g1', label: 'pair', colour: 'blue', panelIds: ['gA', 'gB'] }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reG
+        await settle()
+        const framed = await wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]') !== null`)
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="gA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const live = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="gA"] .panel__slot') !== null`), 6000)
+        const click = (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`)
+        const t1 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
+        await settle()
+        const carded = await wc.executeJavaScript(`document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed') && document.querySelector('.panel[data-panel-id="gA"] .panel__slot') === null`)
+        const t2 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
+        await settle()
+        const expanded = await wc.executeJavaScript(`!document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed')`)
+        const r1 = await click('.canvas-group[data-group-id="g1"] .canvas-group__remove')
+        await settle()
+        const removed = await wc.executeJavaScript(`document.querySelector('.canvas-group') === null && document.querySelectorAll('.panel[data-panel-id]').length === 2`)
+        const ptyStill = ptyManager.list().some((s) => s.panelId === 'gA')
+        ok(ID, framed && live === true && t1 && carded && t2 && expanded && r1 && removed && ptyStill,
+          JSON.stringify({ framed, live, t1, carded, t2, expanded, r1, removed, ptyStill, log: gLog.slice(-3) }))
+      } catch (gErr) {
+        ok(ID, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onG)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

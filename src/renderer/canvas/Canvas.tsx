@@ -43,7 +43,7 @@ import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
 import { usePanelDrag } from './usePanelDrag'
 import { GroupLayer } from '@renderer/groups/GroupLayer'
-import { applyGroupDrag, groupDragState, pruneGroups, raiseGroup, removeGroup, type CanvasGroup } from '@renderer/groups/groups'
+import { applyGroupDrag, expandGroup, groupDragState, pruneGroups, raiseGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
 import { useGroupDrag } from '@renderer/groups/useGroupDrag'
 import { applyDrag, type DragState } from './panel-interaction'
 import { nextAttentionId, reachableQueue, type JumpDirection } from './attention'
@@ -1584,14 +1584,10 @@ export function Canvas({
     beginGroupDrag(groupDragState(group, panelsRef.current, origin))
   }, [beginGroupDrag])
 
+  // M61. The same two pure transitions the palette's group.toggle row runs
+  // (usePaletteActions), so the frame's button and the row cannot disagree.
   const toggleGroupCollapsed = useCallback((id: string) => {
-    setGroups((current) => current.map((group) => {
-      if (group.id !== id) return group
-      if (!group.collapsed) return { ...group, collapsed: true }
-      const next = { ...group }
-      delete next.collapsed
-      return next
-    }))
+    setGroups((current) => (current.find((g) => g.id === id)?.collapsed ? expandGroup : toggleGroup)(current, id))
   }, [])
   const onRemoveGroup = useCallback((id: string) => {
     setGroups((current) => removeGroup(current, id))
@@ -3457,6 +3453,7 @@ export function Canvas({
             attentionIds={waitingIds}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
+            groups={groups}
             noteRoot={noteRoot}
             merged={merged}
             broadcastReady={broadcastReady}

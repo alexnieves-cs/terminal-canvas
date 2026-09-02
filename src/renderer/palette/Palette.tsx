@@ -115,6 +115,8 @@ export interface PaletteProps {
   noteRoot: string | null
   /** The rubber-band selection, as ids — what the move rows act on. */
   selectedIds: string[]
+  /** M61. The canvas's groups, for the Card/Expand and Remove rows. */
+  groups: readonly { id: string; label: string; collapsed?: boolean; panelIds: readonly string[] }[]
   /** Whether the merged view is open; the move rows refuse there. */
   merged: boolean
   broadcastReady: boolean
@@ -192,6 +194,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         selectedIds: props.selectedIds,
+        groups: props.groups,
         merged: props.merged,
         broadcastReady: props.broadcastReady,
         broadcastActive: props.broadcastActive,

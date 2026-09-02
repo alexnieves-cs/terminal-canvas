@@ -30,6 +30,7 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | `REASON_MERGED_READ_ONLY` | the merged view is read-only — leave it to move panels | `⇧⌘A` |
 | `REASON_TIDY_NEEDS_TWO` | needs two panels on the canvas | spawn another |
 | `REASON_GROUP_NEEDS_TWO` | select at least two panels to make a group | marquee two |
+| `REASON_NOT_IN_GROUP` | the focused panel is not in a group | focus a panel inside a group frame (M61: the Card/Expand and Remove group rows) |
 | `REASON_BROADCAST_NEEDS_TWO` | select at least two live terminal panels | marquee two live ones |
 | `REASON_NOTHING_TO_LINK` | this canvas has only one panel | spawn another |
 | `REASON_ALREADY_ACTIVE` | already the active workspace | — (informational) |
