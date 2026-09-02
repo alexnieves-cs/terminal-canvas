@@ -266,7 +266,10 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
   function writePreference(id: string, value: SettingValue): void {
     const def = settingDef(id)
     if (def === undefined) return
-    if (typeof value !== def.type) return
+    if (typeof value !== (def.type === 'enum' ? 'string' : def.type)) return
+    // The enum's membership, for the reason parsePreferences states: the two
+    // doors into the map each guard it, or the guard has a hole.
+    if (def.type === 'enum' && typeof value === 'string' && !(def.values ?? []).includes(value)) return
     // Range, for the reason SettingDef.min/max records: both ends of the
     // idleness threshold fail silently, so a value outside them is refused
     // here rather than stored and puzzled over later.

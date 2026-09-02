@@ -10,38 +10,14 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
  * must not visibly change size when it does.
  */
 
-// M19 SOFT MACHINE. background and cursorAccent track the stylesheet's
-// --well (#14161c) — the terminal is a dark screen sunk into a pale casing,
-// and the two values have to agree or the screen shows a seam against the
-// well's own fill in the frame before xterm paints.
-//
-// NOTHING ELSE HERE MOVES. The sixteen ANSI entries are the agent's palette,
-// not the app's: tmux-args.ts sets terminal-features RGB specifically to pass
-// 24-bit agent colour through undownsampled, and re-tuning these to suit a
-// light chrome would be the app overruling the thing it exists to display.
-const theme: ITheme = {
-  background: '#14161c',
-  foreground: '#d8dae5',
-  cursor: '#7aa2f7',
-  cursorAccent: '#14161c',
-  selectionBackground: '#2d3350',
-  black: '#15161e',
-  red: '#f7768e',
-  green: '#9ece6a',
-  yellow: '#e0af68',
-  blue: '#7aa2f7',
-  magenta: '#bb9af7',
-  cyan: '#7dcfff',
-  white: '#a9b1d6',
-  brightBlack: '#414868',
-  brightRed: '#ff7a93',
-  brightGreen: '#b9f27c',
-  brightYellow: '#ff9e64',
-  brightBlue: '#7da6ff',
-  brightMagenta: '#bb9af7',
-  brightCyan: '#0db9d7',
-  brightWhite: '#c0caf5'
-}
+// M45. The theme is a PARAMETER, defaulting to the light theme that bare
+// :root carries — but the value that actually renders is whatever
+// registry.applyTerminalOptions last fanned out, because session-factory.ts
+// applies the accumulated options the moment the Terminal is built. This
+// default only matters for a Terminal built before the first fan-out, which
+// is the frame before useTheme's first read; terminal/themes.ts is where the
+// two palettes live and why the light one is re-tuned rather than inverted.
+import { LIGHT_TERMINAL_THEME } from './themes'
 
 export interface TerminalHandles {
   term: Terminal
@@ -60,10 +36,14 @@ export interface TerminalHandles {
  * the host is out of the document — and a panel that has never been on screen
  * has no size to be measured.
  */
-export function createTerminal(): TerminalHandles {
+export function createTerminal(theme: ITheme = LIGHT_TERMINAL_THEME): TerminalHandles {
   const term = new Terminal({
     theme,
-    fontFamily: '"SF Mono", "JetBrains Mono", Menlo, Monaco, monospace',
+    // The SAME list as the stylesheet's --font-mono, so a path in the
+    // inspector and the same path in the terminal resolve to the same glyphs.
+    // The pre-M45 list named JetBrains Mono, which the app does not ship and
+    // which therefore fell through silently on every machine.
+    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace',
     fontSize: 13,
     lineHeight: 1.2,
     letterSpacing: 0,

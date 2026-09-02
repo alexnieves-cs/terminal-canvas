@@ -1,32 +1,24 @@
 /* ─────────────────────────────────────────────────────────────────────────
    STRUCTURE. Theme-invariant by definition, so none of it ever appears in a
    theme block. A radius inside a theme block is a radius every future theme
-   has to remember to repeat.
+   has to remember to repeat — and since M45, verify:styles 8 defines
+   "structural" as "declared here", so moving one into a theme block is red.
    ───────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Space. Fourteen ad-hoc padding values collapse to seven steps. The
-     constraint IS the mechanism: rhythm comes from the absence of options. */
+  /* Space. Eight steps. The constraint IS the mechanism: rhythm comes from
+     the absence of options. --sp-8 is for overlays and cards only — a list
+     (the rail, the inspector) cannot afford 32px of padding. */
   --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
-  --sp-5: 12px; --sp-6: 16px; --sp-7: 24px;
+  --sp-5: 12px; --sp-6: 16px; --sp-7: 24px; --sp-8: 32px;
 
-  /* SPIKE (editorial glass). Two steps of air above the dense scale above.
-     They exist for OVERLAYS AND CARDS ONLY — the palette, the launcher, a
-     review node, a dormant panel card. The rail and the inspector are LISTS
-     and lists want density: a 240px rail cannot afford 32px of padding, and
-     the failure mode of an editorial pass is a uniform "everything got --sp-8"
-     that halves how much the user can see. If one of these appears on a
-     .rail-* or .inspector__* rule, that is the bug. */
-  --sp-8: 32px; --sp-9: 48px;
-
-  /* One-off structural constant, tokenised rather than left as a literal so
-     the spacing audit can hold at zero literals. It is the hiddenInset
-     traffic-light clearance and belongs to no scale. */
+  /* One-off structural constants, tokenised so the spacing audit can hold at
+     zero literals. --titlebar-h is the hiddenInset traffic-light clearance and
+     belongs to no scale; --titlebar-inset is its horizontal twin, paid as the
+     top bar's left padding so the lights sit inside one continuous surface. */
   --titlebar-h: 38px;
+  --titlebar-inset: 48px;
 
-  /* M11. One nav-grid cell. Structural like --titlebar-h and belonging to no
-     scale, so it is tokenised rather than left as a literal and it lives on
-     bare :root: a length in a theme block is a length every future theme has
-     to remember to repeat. */
+  /* M11. One nav-grid cell. */
   --navgrid-cell: 150px;
   /* Wide enough for five digits at --t-sm, which is FILE_MAX_LINES' 10000 plus
      one. A gutter narrower than its widest number reflows the text column
@@ -35,305 +27,125 @@
 
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
-     is right, and today's 6-inside-10 is not. 50% and --r-full are SHAPES (a
-     circle, a pill), not scale steps. */
-  --r-sm: 4px; --r-md: 6px; --r-lg: 12px; --r-full: 999px;
+     is right. 50% and --r-full are SHAPES (a circle, a pill), not steps. */
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-full: 999px;
 
-  /* SPIKE. Glass panes read as glass partly through radius: the reference
-     card is ~26px on a 640px pane. Same containment rule as --sp-8/9 — these
-     belong to floating surfaces, never to a row in a list. The concentric
-     rule above still holds: --r-lg inside --r-2xl, not --r-2xl inside itself. */
-  --r-xl: 18px; --r-2xl: 26px;
-
-  /* Type. Six sizes inside a 6px band become four with real ratios. --t-xs is
-     legal below the 12px floor ONLY because every user of it is a one- or
-     two-word ALL-CAPS label at 0.09em tracking. Sentence-case text at --t-xs
-     is a bug. */
-  --t-xs: 10.5px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px;
+  /* Type. A six-step scale at a 1.2 ratio, 11 to 24. --t-xs is legal below
+     the 12px floor ONLY because every user of it is a one- or two-word
+     ALL-CAPS label at --track-caps. Sentence-case text at --t-xs is a bug.
+     M45 retired the display sizes (40/56) with the display face: the chrome
+     must not compete with the terminal, and the hierarchy is carried by
+     weight and the value ramp rather than by size. */
+  --t-xs: 11px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px; --t-xl: 18px; --t-2xl: 24px;
   --lh-tight: 1.25; --lh-body: 1.5;
 
-  /* SPIKE. The diagnosis that produced this branch: the ENTIRE application
-     rendered inside a 10.5–15px band, a ratio of about 1.4:1 between its
-     largest and smallest type. The reference this is modelled on runs about
-     5:1. Nothing here is a "bigger label" — these are DISPLAY sizes, set in
-     --font-display, and they are what carries the hierarchy the value ramp
-     alone could never carry.
+  /* Tracking. Caps micro-labels need positive tracking or they read as a
+     smear; headings at --t-xl and up need a touch of negative or the
+     counters read loose. */
+  --track-tight: -.01em; --track-caps: .06em;
 
-     --lh-display is below 1 on purpose: stacked headline lines at 40px+ set
-     at --lh-tight leave a gap that reads as three separate labels rather than
-     one block of text. */
-  --t-xl: 20px; --t-2xl: 28px; --t-3xl: 40px; --t-4xl: 56px;
-  --lh-display: .95;
-
-  /* Tracking. Heavy grotesks at display sizes need NEGATIVE tracking or the
-     counters read loose; caps micro-labels need positive or they read as a
-     smear. Both were hardcoded per-rule before this branch. */
-  --track-display: -.02em; --track-tight: -.015em; --track-caps: .09em;
-
-  /* One monospace stack. There were three in CSS and a fourth in
-     create-terminal.ts, which resolve to different faces on some macOS
-     configurations. The xterm one moves in M11, with the terminal theme. */
+  /* ONE face for the chrome: the system UI stack. On macOS Terminal, Xcode
+     and every system dialog set SF, so an app that reads as native reads as
+     finished — consistency of size and weight is what makes it designed, not
+     a bundled marketing face. ONE face for values: the mono stack, and
+     create-terminal.ts names the SAME list so a value in the inspector and
+     the terminal it describes resolve to the same glyphs. */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-
-  /* M19. The one bundled face, and it CHANGED with this milestone: Inter
-     Display Black -> Poppins Black (SIL OFL 1.1, 7.6 KB latin subset, see
-     assets/fonts/OFL.txt). Inter is a neo-grotesque — flat-sided, engineered
-     — and the reference this milestone is modelled on sets its display type
-     as a geometric with circular bowls and monoline strokes. That roundness
-     is the argument the shadows make one screen up, said in type: the casing
-     is soft, so the numerals on it should be too. Poppins is the closest
-     widely-available OFL face to it, and it is 14x SMALLER than what it
-     replaces.
-
-     DISPLAY ONLY — body and label text stay on the
-     system UI stack, and the contrast between an editorial display face and a
-     plain system UI face IS the look; a single face used for everything is
-     what makes an app read as a template.
-
-     The fallback chain matters more than usual here: if the @font-face fails
-     (a CSP font-src regression is the realistic cause) headlines silently
-     fall back to a system face at weight 900 and look ALMOST right, which is
-     exactly the kind of failure that ships. document.fonts.check() is how to
-     assert it, not the eye.
-
-     ui-rounded LEADS the fallbacks now rather than ui-sans-serif: on macOS it
-     resolves to SF Pro Rounded, so even a failed load degrades to something
-     with the right SHAPE rather than to a grotesque that contradicts every
-     other surface in the app. */
-  --font-display: "Poppins", ui-rounded, ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
   --dur-1: 90ms; --dur-2: 160ms;
   --ease: cubic-bezier(.2, .8, .2, 1);
-
-  /* Elevation MOVED to the theme block on this branch. It used to live here,
-     in bare :root, holding rgba(0,0,0,.40) — which check 7 forbids and did not
-     catch, because its regex only matches a value that STARTS with a colour
-     and these start with `0 1px 2px`. That gap is documented in
-     verify-styles.cjs's own header as a known hole.
-
-     A shadow's colour is a colour. A milestone that leans this hard on
-     shadows is the wrong moment to keep expanding through the hole, so the
-     tokens move to where they were always supposed to be. Check 8 permits it:
-     its structural regex is (sp|r|dur|t|lh|ease) and does not name --e-*. */
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   COLOUR, and colour only. Declared on BOTH selectors so the app is dark with
-   no attribute set — which is today's behaviour, byte for byte.
+   COLOUR, and colour only. ONE token set, TWO blocks, and both blocks
+   declare exactly the same names — verify:styles theme.1 fails the build if
+   they drift, because a token declared in one theme and not the other falls
+   through to the OTHER theme's value (or to nothing) with no error, visible
+   only when a user hovers, in the theme the author was not looking at.
 
-   The specificity is deliberate rather than incidental. `:root` alone is
-   (0,1,0) and `:root[data-theme="light"]` is (0,2,0), so a theme block added
-   in M11 wins on SPECIFICITY rather than on source order — which means it can
-   be appended without reordering anything, and a third theme after it cannot
-   silently lose to whichever block happens to be declared last.
+   Bare `:root` carries the LIGHT block's values (theme.2), so the app has a
+   theme in the frame before useTheme stamps the attribute, and it is the
+   same theme `system` resolves to on a light desktop. The attribute selector
+   is (0,2,0) against bare :root's (0,1,0), so the dark block wins on
+   SPECIFICITY rather than on source order.
 
-   M10 ships exactly one theme block and the renderer sets no `data-theme`
-   attribute. No attribute means dark, which is what the app already does.
-   Wiring the attribute is M11's first task, not a loose end here.
+   The direction, decided in M45's spec: a quiet instrument. Flat surfaces,
+   HAIRLINE boundaries, modest elevation, one accent. Every boundary is a
+   line — a line survives every rendering the app must live in (dark, light,
+   forced colours, a screenshot pasted into an issue) where a shadow pair
+   survives one — and --e-* are ELEVATION only, never a boundary. Depth no
+   longer needs re-deriving per theme, which is what makes the dark block a
+   values change rather than a rewrite.
+
+   Every value below is DERIVED against verify:styles 11 rather than chosen:
+   text tokens clear 4.5:1 on every ground they can land on (--fg-4, disabled
+   only, 3:1), and the five accents clear 3:1 on --s-1 and --s-4 for the
+   non-text rule (WCAG 1.4.11). Do not nudge one without re-running it.
    ───────────────────────────────────────────────────────────────────────── */
 :root,
-:root[data-theme="dark"] {
-  /* M19 SOFT MACHINE. The app stops being a dark sheet of glass and becomes a
-     physical instrument: a pale extruded casing with dark screens sunk into
-     it. Chrome is the case, terminals are the wells.
-
-     WHY THE SELECTOR STILL SAYS "dark", and why that is not a leftover: the
-     renderer has never set a `data-theme` attribute — M11's first task never
-     landed — so this one block IS the app's only theme and both selectors
-     resolve to it. Renaming the attribute selector would be a lie of a
-     different kind (there is no dark theme to name) and would silently change
-     nothing, because nothing stamps the attribute. `color-scheme` below is
-     the value that actually had to move.
-
-     WHY ONE BLOCK AND NOT A THIRD THEME. verify:styles 11 flattens EVERY
-     theme block into a single token map, so the last declaration of each
-     token wins and earlier blocks stop being measured. A `[data-theme="soft"]`
-     added alongside a dark one would leave the contrast check silently
-     covering only one of them — a hole in the only guard this repo has on
-     text legibility. One block means what renders is what is measured. A dark
-     soft variant is a real follow-up and it needs check 11 taught to loop
-     over blocks FIRST; see docs/ideas-backlog.md. */
+:root[data-theme="light"] {
   color-scheme: light;
 
-  /* ── Surface ramp ─────────────────────────────────────────────────────
-     Re-derived, and the semantics invert. In a dark UI depth is asserted by
-     LIGHTNESS, so the old ramp climbed 22 L* from a near-black ground. In
-     soft UI depth is asserted by SHADOW, so the ramp collapses to a five-step
-     band about 5 L* wide and the ground sits in the MIDDLE of it — raised
-     surfaces go lighter, recessed ones go darker, and both directions have to
-     be available from the ground or nothing can appear to sink.
+  /* Surface ramp. Depth is asserted by LIGHTNESS again: the ground is the
+     darkest step, panels sit a step above it, raised surfaces are white.
+     --s-4 is the hover fill and --s-5 the pressed/selected fill — a tint, as
+     every native macOS control does it, and never a text ground. */
+  --s-0: #e9ecf0;   /* canvas ground                                  */
+  --s-1: #f7f8fa;   /* panel and pane surfaces                        */
+  --s-2: #f0f2f5;   /* chrome: top bar, rail, inspector               */
+  --s-3: #ffffff;   /* raised: palette, HUD, menus                    */
+  --s-4: #e2e5ea;   /* hover fill                                     */
+  --s-5: #d5d9e0;   /* pressed / selected fill — never a text ground  */
 
-     --s-4 is therefore DARKER than the ground rather than lighter, which is
-     the one step that looks wrong in a diff and is the whole grammar: hover
-     and selection are RECESSES here, not highlights. It is also the binding
-     constraint on the whole ink ramp below, being the darkest thing text ever
-     lands on.
+  /* The terminal ground. Tied to terminal/themes.ts's light `background`:
+     the two must agree or the screen shows a seam against the slot's own
+     fill in the frame before xterm paints. */
+  --well: #ffffff;
 
-     Every value re-derived against verify:styles 11 rather than by eye. Do
-     not nudge one without re-running it. */
-  --s-0: #e3e6eb;   /* app ground, canvas — the mid tone, not the darkest  */
-  --s-1: #e8eaef;   /* panel casing, palette list                          */
-  --s-2: #e5e8ed;   /* chrome: rail, inspector, panel header               */
-  --s-3: #eceef2;   /* raised: top bar, palette surface, HUD — the lightest */
-  --s-4: #dbdee6;   /* hover fill, AND the selected fill — a RECESS        */
-  --s-5: #cfd4de;   /* pressed only — transient, never a text ground       */
-
-  /* THE WELL. The one dark value left in the app, and the reason the style
-     works here at all: a terminal cannot go light. tmux-args.ts passes 24-bit
-     agent colour through on purpose and agent TUIs paint their own grounds,
-     so tinting a terminal body fights the thing the app exists to show. The
-     screen stays dark and the CASING around it is what changed — which is
-     more skeuomorphic than a uniform repaint, not less: it is a display sunk
-     into a device.
-
-     Kept in the same family as the pre-M19 --s-0 deliberately, so the xterm
-     theme in create-terminal.ts needed one value changed rather than a
-     re-tune of all sixteen ANSI colours. */
-  --well: #14161c;
-
-  /* The canvas tick. It was an allowlisted rgba() literal — a translucent
-     iris dot that had to composite over whatever ground a theme set — and it
-     is a TOKEN now for a reason that only appears on a light ground: a
-     translucent light tick over porcelain is invisible, so the dot has to
-     DARKEN rather than lighten, which is a different colour and not a
-     different alpha. verify-styles check 1's allowlist entry for it is now
-     unused; the entry is harmless (a Set membership test) and is left for the
-     follow-up that retires the other two. */
-  --dot: rgba(96, 106, 128, .13);
-
-  /* Hairlines. Both decorative, and both now do LESS work than they did:
-     depth used to be asserted by a 1.30:1 hairline and is now asserted by the
-     shadow pairs below. What a line is still for is the forced-colours and
-     high-contrast case, where every shadow is stripped and the border is the
-     only thing left holding a boundary — see the @media block at the end of
-     this file. That is Law IV of the direction, and it is why these did not
-     simply get deleted. */
-  --line:        #c3c8d3;
-  --line-strong: #a8afbd;
-
-  /* Text ramp, re-derived against check 11 on the new grounds. --fg-4 is
-     DISABLED ONLY and lands at 3.07 against a 3.0 floor — a margin as thin as
-     the 3.03 the pre-M19 ramp carried, and thin for the same structural
-     reason: it is the dimmest text on the darkest ground. Measured worst
-     cases, all against --s-4: fg 12.38, fg-2 6.92, fg-3 5.06, fg-4 3.07. */
+  /* Text ramp. --fg-4 is DISABLED ONLY. */
   --fg:   #1b1e26;
-  --fg-2: #414754;
-  --fg-3: #555b69;
-  --fg-4: #767d8c;
+  --fg-2: #3f4552;
+  --fg-3: #5b6271;
+  --fg-4: #737b8b;
 
-  /* Agent-state accents, re-tuned for a light ground and NOT re-chosen. The
-     old values were tuned to glow on near-black and are near-invisible on
-     porcelain — #e0af68 amber on #e3e6eb is 1.5:1, so a waiting panel's
-     border would effectively vanish, which is the single most important
-     signal in the app.
+  /* Hairlines. Every surface has one. */
+  --line:        #d3d7de;
+  --line-strong: #b5bcc7;
 
-     These are borders, dots and icons, so the floor is WCAG 1.4.11 non-text
-     contrast at 3:1 rather than check 11's text ratios — which do not measure
-     accents at all. Measured worst cases, all against --s-4: blue 3.70,
-     green 3.14, amber 3.07, red 3.78, iris 3.47.
-
-     --amber MUST stay a literal colour declared here, and
+  /* Agent-state accents — borders, dots and icons, so the floor is the
+     non-text 3:1. --amber MUST stay a literal colour declared here, and
      .panel--agent-wants-you MUST keep `border-color: var(--amber)`
-     un-transformed. verify:panels 62 and 97 compare the two by RESOLVED
-     value, so the value may be re-tuned — as it is here — and may never
-     become a gradient, an image or a shadow.
-
-     The dims invert with the ground: a tint on a light surface has to DARKEN
-     to read, so these are the same hues at low alpha over porcelain rather
-     than the old glows. --blue-dim still has no user and is still kept, so
-     the four pairs stay a pair each. */
+     un-transformed: verify:panels 62 and 97 compare the two by RESOLVED
+     value. The -dim tints are the same hues at low alpha over the surface. */
   --blue:  #2f6bd8;  --blue-dim:  rgba(47, 107, 216, .12);
   --green: #3f8b3f;  --green-dim: rgba(63, 139, 63, .12);
-  --amber: #a8720a;  --amber-dim: rgba(168, 114, 10, .14);
+  --amber: #a06c08;  --amber-dim: rgba(160, 108, 8, .14);
   --red:   #cc3344;  --red-dim:   rgba(204, 51, 68, .11);
 
   /* App identity, never agent state. Iris answers an interaction with the
-     interface itself. Cyan cannot survive a light ground — #67e8f9 is 1.3:1
-     on porcelain — so it deepens to a teal that holds the same "this is the
-     interface, not the agent" reading while clearing 3.47:1. */
+     interface itself: selection in the palette and rail, links, focus. */
   --iris: #0b7f97;  --iris-dim: rgba(11, 127, 151, .12);
+  --focus: var(--iris);
 
-  /* ── The material ────────────────────────────────────────────────────
-     Two shadow colours, one light source, upper-left, never moved. Every
-     raised surface gets white up-left and shadow down-right; every recess
-     reverses exactly that pair. A single element lit the other way reads as a
-     rendering bug rather than a variation, which is why these are two tokens
-     and not a per-rule decision.
+  /* Elevation, and ONLY elevation: e-1 a chip, e-2 a panel, e-3 an overlay,
+     e-4 a modal. A boundary is always a --line beside these, never carried
+     by them. */
+  --e-1: 0 1px 2px rgba(15, 18, 26, .10);
+  --e-2: 0 2px 8px rgba(15, 18, 26, .12);
+  --e-3: 0 6px 20px rgba(15, 18, 26, .16);
+  --e-4: 0 14px 40px rgba(15, 18, 26, .22);
 
-     --sh-lo is a translucent COOL GREY rather than black: black at low alpha
-     over porcelain goes muddy and reads as dirt on the casing, while a grey
-     carrying the ground's own blue bias reads as shade. */
-  --sh-hi: rgba(255, 255, 255, .92);
-  --sh-lo: rgba(163, 171, 189, .55);
+  /* The canvas tick. Visible — a person can perceive it on this ground — and
+     a colour rather than an alpha over "whatever is behind", because a light
+     tick over a light ground is invisible: it has to DARKEN here and LIGHTEN
+     in the dark block, which is a different colour, not a different alpha. */
+  --dot: rgba(50, 60, 80, .18);
 
-  /* RAISED. These keep the --e-* names on purpose. Every existing rule that
-     says `box-shadow: var(--e-2)` becomes soft-raised with no edit at all,
-     which is what let this milestone land as a values change plus targeted
-     grammar edits rather than a 2,400-line rewrite. The scale still reads as
-     elevation: e-1 a chip, e-2 a panel, e-3 an overlay, e-4 a modal.
-
-     The offsets grow with the blur rather than independently: in soft UI the
-     ratio between them IS the apparent size of the object, and an e-4 with
-     e-1's offset reads as a large FLAT sticker rather than a thick one. */
-  --e-1: 2px 2px 5px var(--sh-lo), -2px -2px 5px var(--sh-hi);
-  --e-2: 6px 6px 14px var(--sh-lo), -6px -6px 14px var(--sh-hi);
-  --e-3: 12px 12px 30px var(--sh-lo), -10px -10px 24px var(--sh-hi);
-  --e-4: 20px 20px 48px var(--sh-lo), -16px -16px 36px var(--sh-hi);
-
-  /* RECESSED. The other half of the grammar, and the half the app did not
-     have a vocabulary for before: depth was only ever UP. --in-1 is a control
-     that holds state (a pressed button, a selected row, an input); --in-2 is
-     a container that holds content (a list scroll area, a well).
-
-     A recess needs LESS blur than the raise at the same nominal depth, or the
-     inner shadow fills the whole element and it reads as a smudge rather than
-     as a dish. */
-  --in-1: inset 2px 2px 5px var(--sh-lo), inset -2px -2px 5px var(--sh-hi);
-  --in-2: inset 6px 6px 12px var(--sh-lo), inset -5px -5px 10px var(--sh-hi);
-
-  /* THE SCREEN. A well is not an --in-2: it holds a surface DARKER than the
-     casing, so a white inner highlight on its lower-right would read as light
-     leaking out from behind the glass. It gets a hard dark inner shadow and a
-     single white line along its bottom edge — the lip of the cut-out catching
-     the room light, which is the detail that sells a screen as inset. */
-  --well-inset: inset 0 2px 10px rgba(0, 0, 0, .70), 0 1px 0 var(--sh-hi);
-
-  /* GLASS, RETIRED — kept as ALIASES rather than deleted. Soft UI takes its
-     depth from shadow, so every backdrop-filter in this file goes with it,
-     and that is a real performance win rather than a style preference: three
-     permanently composited blur layers over a canvas that repaints on every
-     frame of a pan, alongside up to LIVE_BUDGET WebGL terminals, stop
-     existing. The names survive only so this milestone lands without
-     rewriting every overlay rule in one unreviewable diff; retiring the names
-     is a follow-up, and whoever does it should re-derive the usage counts
-     rather than trust a number written here. */
-  --glass-1: var(--s-3);
-  --glass-2: var(--s-1);
-  --glass-edge: var(--sh-hi);
-
-  /* SHEEN. Survives, and its argument survives with it: a top-stop gradient
-     is a cheap fake of a lit edge. On porcelain it goes to near-white. */
-  --sheen: rgba(255, 255, 255, .55);
-
-  /* BEVEL. The pre-M19 file rationed these to VERBS ONLY, with a comment
-     warning that universal extrusion is "precisely the failure that killed
-     neumorphism as a style". That warning is correct and this milestone does
-     not overrule it — it makes it structural. Depth is now GRAMMATICAL rather
-     than emphatic: raised means pressable, recessed means holds content or
-     state, flat means a label. Nothing is extruded for importance, so
-     extrusion never has to compete with itself, and colour is left to carry
-     urgency alone, which it was always better at.
-
-     These stay as the verb accent on top of that grammar: a verb is a raised
-     control that ALSO catches a brighter top edge. */
-  --bevel-hi: rgba(255, 255, 255, .95);
-  --bevel-lo: rgba(163, 171, 189, .60);
-  --press-inset: rgba(150, 158, 176, .65);
-
-  /* Back-compat aliases. Unchanged in role from M10: they are what let a
-     migration land task by task instead of as one unreviewable diff. */
+  /* Back-compat aliases. Recorded as debt in M45's build log: they let the
+     migration land task by task, and they go when their last user does. */
   --text:      var(--fg);
   --muted:     var(--fg-3);
   --bg:        var(--s-0);
@@ -342,65 +154,70 @@
   --border:    var(--line);
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   M19 LAW IV — shadow never carries a boundary alone.
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-   This is the clause that makes soft UI survivable rather than merely pretty,
-   and it is the one every neumorphic implementation skips. The style encodes
-   "this is a control" in a shadow pair that is deliberately low contrast
-   against its own ground; under forced colours the UA replaces backgrounds
-   and text with the user's own palette and KEEPS box-shadow, so every surface
-   in the app would flatten into one sheet with its boundaries painted in a
-   shadow the user has explicitly asked not to see.
+  --s-0: #0e1015;
+  --s-1: #171a21;
+  --s-2: #1b1f27;
+  --s-3: #232833;
+  --s-4: #2b313d;
+  --s-5: #363d4b;
 
-   Stripping the shadows and restoring a real border is the whole fix. It sits
-   here, immediately after the theme block, rather than at the end of the file
-   because it must lose to nothing: it is a media block, so it beats every
-   later rule of equal specificity regardless of source order, and putting it
-   beside the tokens it neutralises is where a reader looking for it will be.
+  /* terminal/themes.ts's dark `background`, and the pre-M45 value: the
+     sixteen ANSI colours were tuned against it and did not move. */
+  --well: #14161c;
 
-   The colours are SYSTEM KEYWORDS, not values of ours — that is the entire
-   point of the mode — which is also why verify:styles check 1 does not see
-   them: they are not hex, rgb() or hsl(). */
+  --fg:   #e7e9ee;
+  --fg-2: #b6bcc8;
+  --fg-3: #98a0b0;
+  --fg-4: #78808f;
+
+  --line:        #2c323e;
+  --line-strong: #414959;
+
+  --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .16);
+  --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .16);
+  --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .18);
+  --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .16);
+
+  --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .14);
+  --focus: var(--iris);
+
+  --e-1: 0 1px 2px rgba(0, 0, 0, .35);
+  --e-2: 0 2px 8px rgba(0, 0, 0, .40);
+  --e-3: 0 6px 20px rgba(0, 0, 0, .50);
+  --e-4: 0 14px 40px rgba(0, 0, 0, .60);
+
+  --dot: rgba(255, 255, 255, .08);
+
+  --text:      var(--fg);
+  --muted:     var(--fg-3);
+  --bg:        var(--s-0);
+  --panel-bg:  var(--s-1);
+  --chrome-bg: var(--s-2);
+  --border:    var(--line);
+}
+
+/* Forced colours. Every boundary in this file is already a border, so the UA
+   palette swap leaves the app legible on its own; the two things worth
+   stating are that elevation shadows go (the user asked for the system
+   palette, not our shade) and that selection — INFORMATION, not decoration —
+   survives in a channel forced colours preserves. The colours are SYSTEM
+   KEYWORDS, which is why verify:styles 1 does not see them. */
 @media (forced-colors: active) {
   .panel,
-  .panel__slot > .panel__terminal,
   .palette,
-  .navgrid,
+  .navgrid__cell,
   .canvas-hud,
-  .badge,
-  .rail-row,
-  .rail-row:hover,
-  .rail-row--selected,
-  .shell__top,
-  .shell__rail,
-  .shell__inspector,
-  .shell__top button,
-  .shell__top button:hover {
+  .diagnostics-overlay {
     box-shadow: none;
-    border: 1px solid CanvasText;
   }
-  /* The one exception. A recessed row loses its shadow like everything else,
-     but selection is INFORMATION rather than decoration, so it has to survive
-     in a channel forced colours preserves. */
-  .rail-row--selected {
+  .rail-row--selected,
+  .palette__row--selected {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
-}
-
-/* SPIKE. The one bundled face. `font-display: block` rather than `swap`
-   deliberately: swap paints the fallback first and then reflows, and a reflow
-   on 56px headline type is a visible jump on every launch. block holds the
-   text invisible for a short period instead — correct for a LOCAL font, which
-   resolves in a frame or two, and wrong for a network one. There is no
-   network here; the file is inside the asar. */
-@font-face {
-  font-family: "Poppins";
-  src: url("./assets/fonts/Poppins-Black.woff2") format("woff2");
-  font-weight: 900;
-  font-style: normal;
-  font-display: block;
 }
 
 * {
@@ -417,20 +234,10 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-family: var(--font-ui);
   overflow: hidden;
 }
 
-/* SPIKE. The padding is GONE. It reserved --titlebar-h of bare --bg above the
-   shell, in a different value from the top bar directly beneath it — so the
-   window opened with two dark bands of slightly different lightness stacked at
-   the top, which is the classic unfinished tell and was visible in the very
-   first screenshot of the diagnosis.
-
-   The clearance still has to exist (hiddenInset traffic lights are painted
-   over the web contents, not beside them) but it is now paid INSIDE the top
-   bar as left padding and height, so there is one continuous chrome surface
-   from the top edge of the window down. See --shell-top-h. */
 .app {
   height: 100%;
 }
@@ -441,7 +248,8 @@ body {
    honest. Nothing in the canvas measures the window (useViewport, Canvas and
    EdgeIndicators all measure the .canvas host at event time), which is the
    whole reason insetting is safe; a future window measurement breaks this
-   silently. */
+   silently. The column widths are read by verify:panels (73/125/156) and are
+   M46's to change, not this milestone's. */
 .shell {
   --shell-tree-w: 220px;
   --shell-rail-w: 240px;
@@ -449,12 +257,10 @@ body {
   display: grid;
   height: 100%;
   grid-template-columns: var(--shell-tree-w) var(--shell-rail-w) 1fr var(--shell-inspector-w);
-  /* SPIKE. Was `36px 1fr` under a 38px .app padding — 74px of chrome in two
-     mismatched bands. Now one 56px band that absorbs both. The traffic lights
-     are NOT vertically centred in it (hiddenInset pins them near the top edge
-     and this window sets no trafficLightPosition), so the bar's own controls
-     are centred and the lights sit above-left of them, which reads as
-     deliberate at this height and does not at 36. */
+  /* One band that absorbs the titlebar clearance and the bar's own controls.
+     The traffic lights are NOT vertically centred in it (hiddenInset pins
+     them near the top edge), so the bar's controls are centred and the
+     lights sit above-left of them. */
   --shell-top-h: 56px;
   grid-template-rows: var(--shell-top-h) 1fr;
   grid-template-areas:
@@ -485,11 +291,7 @@ body {
   overflow: hidden;
 }
 
-/* SPIKE. Persistent chrome, so it is OPAQUE and fakes glass rather than
-   spending a backdrop-filter (see --sheen). The gradient stops at 40% because
-   a full-height one reads as a colour change rather than as light falling on
-   a surface; the inset hairline is the lit top edge.
-
+/* Persistent chrome: one flat surface with a hairline against the canvas.
    -webkit-app-region: drag makes the whole bar a window drag handle, which it
    has to be now that it contains the titlebar area. Every CONTROL inside it
    must set `no-drag` or it becomes undraggable-but-also-unclickable — see
@@ -502,23 +304,19 @@ body {
   gap: var(--sp-4);
   /* The left padding is the traffic-light clearance, paid here instead of as
      dead space above the shell. */
-  padding: 0 var(--sp-5) 0 var(--sp-9);
-  background:
-    linear-gradient(180deg, var(--sheen), transparent 40%),
-    var(--s-3);
-  box-shadow: inset 0 1px 0 var(--glass-edge), var(--e-2);
+  padding: 0 var(--sp-5) 0 var(--titlebar-inset);
+  background: var(--s-2);
+  border-bottom: 1px solid var(--line);
   -webkit-app-region: drag;
 }
 
-/* The app mark. Display type in the one place it costs nothing and gives the
-   window an anchor — the diagnosis found the bar using roughly a quarter of
-   its width with ~1000px of nothing in the middle. */
+/* The app's name, in the UI face. It is a label, not a wordmark: the window
+   already has a title and the terminal is the thing on screen worth looking
+   at. */
 .shell__mark {
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: var(--t-md);
-  letter-spacing: var(--track-tight);
-  color: var(--fg);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--fg-2);
   margin-right: var(--sp-2);
   -webkit-app-region: no-drag;
 }
@@ -530,11 +328,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
+  min-height: 24px;
   border: 1px solid transparent;
   border-radius: var(--r-md);
   background: transparent;
   color: var(--fg-2);
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  font: inherit;
   font-size: var(--t-sm);
   cursor: pointer;
   /* The bar itself is a drag region; a control inside a drag region stops
@@ -545,37 +345,27 @@ body {
 .shell__top button:hover {
   background: var(--s-4);
   color: var(--fg);
-  box-shadow: var(--in-1);
 }
+.shell__top button:active:not(:disabled) { background: var(--s-5); }
 .shell__top button:disabled { color: var(--fg-4); cursor: default; }
 .shell__top button:disabled:hover { background: transparent; color: var(--fg-4); }
 
-/* TACTILE — and the only tactile control in the top bar, because it is the
-   only VERB there. Zoom and Fit adjust a view; this one starts a process.
-   Rest: lit top edge inside, shadow below, so it reads as raised. */
+/* The one VERB in the top bar: it starts a process, where zoom and fit only
+   adjust a view. A filled control with a hairline, and nothing more. */
 .shell__top .shell__spawn {
-  border-color: var(--line);
-  background:
-    linear-gradient(180deg, var(--bevel-hi), transparent 55%),
-    var(--s-4);
+  border-color: var(--line-strong);
+  background: var(--s-3);
   color: var(--fg);
   font-weight: 600;
-  box-shadow: inset 0 1px 0 var(--bevel-hi), 0 1px 2px var(--bevel-lo);
+  box-shadow: var(--e-1);
 }
 .shell__top .shell__spawn:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  background:
-    linear-gradient(180deg, var(--bevel-hi), transparent 45%),
-    var(--s-5);
-}
-/* Pressed. The inset shadow plus a --sp-1 downward shift of the content is
-   the whole of what makes a bevel read as a button rather than a sticker —
-   without the shift the surface changes but nothing appears to MOVE. */
-.shell__top .shell__spawn:active:not(:disabled) {
   background: var(--s-3);
-  box-shadow: inset 0 2px 4px var(--press-inset);
-  padding-top: calc(var(--sp-3) + var(--sp-1));
-  padding-bottom: calc(var(--sp-3) - var(--sp-1));
+  border-color: var(--fg-4);
+}
+.shell__top .shell__spawn:active:not(:disabled) {
+  background: var(--s-4);
+  box-shadow: none;
 }
 .shell__top .shell__spawn:disabled {
   background: var(--s-2);
@@ -594,6 +384,24 @@ body {
 }
 .shell__spacer { flex: 1; }
 
+/* M45. A shortcut chip, on exactly the two top-bar buttons whose shortcut
+   is the way most people will reach them (New panel, Search). A chip on
+   every control would be a lie on most of them — see commands.ts's rule for
+   .palette__kbd. */
+.shell__top kbd,
+.palette__kbd {
+  flex: none;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--s-2);
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--t-xs);
+  line-height: var(--lh-body);
+  white-space: nowrap;
+}
+
 /* Three sections now, so the rail has to divide its own height rather than let
    one list claim a fixed slice of it. Panels is the section that grows;
    Workspaces and Attention are short by construction and are capped so a long
@@ -601,18 +409,14 @@ body {
 .shell__tree,
 .shell__rail {
   background: var(--s-2);
-  /* The rail and inspector are continuous physical surfaces, not boxes
-     outlined against the canvas. M19 makes this the --sh-hi token rather than
-     an allowlisted literal: a 4%-white edge is invisible on porcelain, and
-     the light edge of a surface is exactly what --sh-hi already means. */
-  box-shadow: inset 0 1px 0 var(--sh-hi);
+  border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 .shell__inspector {
   background: var(--s-2);
-  box-shadow: inset 0 1px 0 var(--sh-hi);
+  border-left: 1px solid var(--line);
 }
 
 /* Collapsed is a WIDTH change on the grid, not display:none: the toggle has
@@ -634,36 +438,31 @@ body {
 .shell__rail-toggle,
 .shell__inspector-toggle {
   width: 100%;
-  padding: var(--sp-3) 0;
+  min-height: 24px;
+  padding: var(--sp-2) 0;
   border: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  font: inherit;
   font-size: var(--t-sm);
 }
+.shell__tree-toggle:hover,
+.shell__rail-toggle:hover,
+.shell__inspector-toggle:hover { color: var(--fg); background: var(--s-4); }
 
-/* NO width transition, and the honest reason is smaller than it looks.
-   An earlier version of this comment claimed a transition would re-run
-   assignTiers at 60Hz. It would not: the tiering effect observes no size at
-   all — it depends on [rects, viewport, focusedId, version, dormantIds] and
-   reads getBoundingClientRect() only when one of those changes — and the
-   renderer's ONE ResizeObserver belongs to EdgeIndicators, which observes
-   itself and, by its own comment, re-renders the pip layer and nothing else.
-   So what an animated collapse would actually cost is a pip-layer re-render
-   on every frame of the transition: real, but confined to the one layer built
-   to absorb it, and a weaker argument for keeping the collapse discrete than
-   the one it replaces. It is kept discrete on that weaker argument plus the
-   plain one that a sliding frame buys nothing here. Don't restate the 60Hz
-   claim — a confidently false why gets "fixed" by matching the code to it. */
+/* NO width transition. What an animated collapse would cost is a pip-layer
+   re-render on every frame of the transition (EdgeIndicators' ResizeObserver
+   observes itself), and a sliding frame buys nothing here. */
 
-/* SPIKE. Region titles carry the tracking token rather than a literal, and
-   sit at --fg-4 so they read as captions on the surface rather than as
-   competing headings — there are three of them permanently on screen. */
+/* Region titles: caps labels at --t-xs and --fg-3, so they read as captions
+   on the surface rather than as competing headings — there are three of them
+   permanently on screen. */
 .shell__region-title {
   padding: var(--sp-4) var(--sp-5) var(--sp-3);
   color: var(--fg-3);
   font-size: var(--t-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
@@ -677,21 +476,21 @@ body {
   border: 0;
   background: transparent;
   color: var(--muted);
+  font: inherit;
   font-size: var(--t-md);
   line-height: 1;
-  padding: 0 var(--sp-1);
+  padding: 0;
   cursor: pointer;
 }
-.shell__region-add:hover { color: var(--text); }
+.shell__region-add:hover { color: var(--text); background: var(--s-4); }
 
 /* .shell__tree-root has no overflow rule of its own and sits in a flex row
    (.shell__region-title--action) beside the refresh control. A flex item's
    default min-width is auto, not 0, so a long unbreakable directory name
-   cannot shrink — it pushes the refresh button (shell__region-add, shared
-   with SideRail's own controls) out past the column's overflow: hidden clip,
-   making a documented re-read control disappear for some users. Scoped to
-   .shell__tree so SideRail's + and rename buttons keep their existing
-   behaviour — this is a tree-heading-specific fix, not a shared one. */
+   cannot shrink — it pushes the refresh button out past the column's
+   overflow: hidden clip, making a documented re-read control disappear for
+   some users. Scoped to .shell__tree so SideRail's + and rename buttons keep
+   their existing behaviour. */
 .shell__tree-root {
   min-width: 0;
   overflow: hidden;
@@ -719,41 +518,28 @@ body {
 .rail-list--workspaces,
 .rail-list--attention { flex: 0 1 auto; max-height: 26%; }
 
-/* SPIKE. --r-sm -> --r-md and real vertical rhythm. The rail is a LIST and
-   lists want density, so it deliberately does NOT get --sp-8/--sp-9 (see
-   their note in the token block) — but the diagnosis found twelve rows at 4px
-   of separation reading as one undifferentiated block of text, which is the
-   opposite problem from too much air. */
+/* M45. Rows are 28px: tall enough for a 24px control (WCAG 2.5.8) with 2px
+   of air, and fewer rows fit before the list scrolls — which it does. */
 .rail-row {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
+  min-height: 28px;
   border-radius: var(--r-md);
 }
 .rail-list { row-gap: var(--sp-1); }
 
-/* --s-4 is the ramp's one hover/selected fill (see the token block). It was a
-   hand-mixed white overlay, which is a fourth idiom for a state three other
-   surfaces already spelled a different way each — the duplication M10 exists
-   to remove — and it is invisible to any audit that reads declared colours.
-   M19 REVERSES THE DIRECTION and keeps the argument. A hovered row still has
-   to read as an available action; in this material it does that by going IN
-   rather than up, because a row is a thing you press into a list, not a card
-   you lift out of one. The one-pixel translate goes with it — a lift plus a
-   recess is two contradictory depth cues on one element. */
+/* --s-4 is the ramp's one hover fill and --s-5 the selected fill: a tint,
+   the way every native list does it. */
 .rail-row:hover {
   background: var(--s-4);
-  box-shadow: var(--in-1);
 }
-/* SPIKE. An accent bar as well as a fill, matching .palette__row--selected.
-   The rail's selection drives what the inspector shows, so "which row is
+/* An accent bar as well as a fill, matching .palette__row--selected. The
+   rail's selection drives what the inspector shows, so "which row is
    selected" has to survive a glance across a 240px column. */
-/* The accent bar is declared FIRST so it paints above the recess — box-shadow
-   paints first-to-last, and a bar behind the inner shadow is a bar you cannot
-   see at the one edge it lives on. */
 .rail-row--selected {
-  background: var(--s-4);
-  box-shadow: inset 3px 0 0 var(--iris), var(--in-1);
+  background: var(--s-5);
+  box-shadow: inset 3px 0 0 var(--iris);
 }
 .rail-row--selected .rail-row__label { color: var(--fg); }
 
@@ -766,7 +552,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border: 0;
   background: transparent;
   color: var(--fg-2);
@@ -781,7 +567,7 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--border);
+  background: var(--line-strong);
   transition: background var(--dur-1) var(--ease);
 }
 
@@ -807,11 +593,9 @@ body {
 /* Bounded the same way .rail-row__label is bounded, above. Every OTHER tail
    value (`pid 48213`, `dormant`, `exited 1`, `starting…`) is short by
    construction, but railTail's 'error' case returns status.message VERBATIM —
-   an arbitrary-length spawn error, e.g. an ENOENT path — and flex:none with no
-   width bound lets that one case squeeze .rail-row__label to zero width and
-   still overflow the row, since neither .rail-row nor .rail-list clips the x
-   axis. max-width caps how much of the row a long error can claim; the
-   ellipsis/overflow trio then behaves exactly like the label's own. */
+   an arbitrary-length spawn error — and flex:none with no width bound lets
+   that one case squeeze .rail-row__label to zero width and still overflow the
+   row. max-width caps how much of the row a long error can claim. */
 .rail-row__tail {
   flex: none;
   min-width: 0;
@@ -821,22 +605,86 @@ body {
   white-space: nowrap;
   color: var(--muted);
   font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ...except in Workspaces, where 45% is too tight and the failure lands in
-   exactly the state the section exists for. The cap above is sized for a tail
-   that is unbounded (railTail's 'error' case) beside a label that must keep
-   most of the row. A workspace tail is `N waiting · M panels` — two short
-   numbers, bounded by construction — and the arithmetic runs against it: the
-   rail is 240px, less 8 of list padding, less two 18px controls and 4 of gaps
-   leaves 192 for .rail-row__main, less 8 of its own padding is 184 of content,
-   and 45% of that is ~83px against ~85-95px of text. So the PANEL COUNT
-   ellipses away precisely when a waiting count is also present, which is the
-   one moment this row has something to say. 70% buys the room without letting
-   the workspace name collapse. verify:panels 96 reads textContent and is blind
-   to this — an ellipsis is painted, not stored — so it is a hand-verified
-   number and the response to a longer tail is to re-run the arithmetic. */
+   exactly the state the section exists for: a workspace tail is `N waiting ·
+   M panels`, bounded by construction, and at 45% the PANEL COUNT ellipses
+   away precisely when a waiting count is also present. verify:panels 96 reads
+   textContent and is blind to this — an ellipsis is painted, not stored — so
+   it is a hand-verified number. */
 .rail-list--workspaces .rail-row__tail { max-width: 70%; }
+
+/* M45. Row controls are hidden at rest and revealed on :hover AND
+   :focus-within — the focus half is what keeps them Tab-reachable, which
+   opacity: 0 alone would not. On a twelve-panel canvas that is twelve close
+   buttons that stop competing with the twelve names they sit beside.
+
+   THE ONE EXCEPTION: .rail-row__start, a dormant panel's ▶, is ALWAYS
+   visible. It is the only affordance a dormant panel has, and a control that
+   disappears is indistinguishable from a feature that is missing — the rule
+   verify:palette 31 states. verify:panels reveal.1 pins both halves. */
+.rail-row__rename,
+.rail-row__close {
+  opacity: 0;
+}
+.rail-row:hover .rail-row__rename,
+.rail-row:hover .rail-row__close,
+.rail-row:focus-within .rail-row__rename,
+.rail-row:focus-within .rail-row__close {
+  opacity: 1;
+}
+
+.rail-row__start:hover,
+.rail-row__rename:hover,
+.rail-row__close:hover { color: var(--text); }
+
+/* The active workspace's switch is disabled, not hidden. Keep it at full text
+   colour: greying it out would read as "this workspace is unavailable" rather
+   than "you are already here", which is the opposite of what it means. */
+.rail-row__main:disabled { cursor: default; color: var(--text); }
+
+/* Amber, because it is the same fact the panel border and the row dot already
+   paint amber. */
+.rail-row__waiting { color: var(--amber); }
+
+.rail-empty {
+  padding: var(--sp-2) var(--sp-4);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+/* M45. Every icon control in the app. 24×24 is WCAG 2.2's floor (SC 2.5.8),
+   and `display: grid; place-items: center` is what puts an SVG's optical
+   centre on the button's — the glyph icons this replaced sat at three
+   different baselines. A control that also carries text (the armed close's
+   "kill?") keeps its text and simply grows to fit. */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-button:hover { color: var(--fg); background: var(--s-4); }
+.icon-button:active { background: var(--s-5); }
+.icon-button:disabled { color: var(--fg-4); cursor: default; }
+.icon-button:disabled:hover { background: transparent; }
+.icon-button svg { display: block; }
+
+.rail-row__start,
+.rail-row__rename,
+.rail-row__close {
+  flex: none;
+}
 
 /* The inspector's body. Scrolls on its own for the same reason .rail-list
    does: a long cwd plus an error message can exceed the pane's height, and a
@@ -848,23 +696,22 @@ body {
   max-height: calc(100% - 60px);
 }
 
-/* SPIKE. The pane's title — the third reader of M6a's honest chain, and the
-   one with room to actually be a heading. It must never write back into
-   PanelSpec: the pane renders the resolved command AND the spec's own answer
-   as separate fields, so a backfill would make them agree and the one surface
-   built to explain the chain would be the one that misrepresents it. */
+/* The pane's title — the third reader of M6a's honest chain. It must never
+   write back into PanelSpec: the pane renders the resolved command AND the
+   spec's own answer as separate fields, so a backfill would make them agree
+   and the one surface built to explain the chain would be the one that
+   misrepresents it. */
 .inspector__heading {
   color: var(--fg);
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: var(--t-xl);
-  line-height: var(--lh-display);
-  letter-spacing: var(--track-display);
+  font-weight: 600;
+  font-size: var(--t-lg);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
   margin-bottom: var(--sp-4);
   /* A resolved command is an absolute path and a title is user text; neither
-     is bounded, and the pane is 260px. Break rather than overflow: the rail
-     next door clips, but a path the user cannot read at all defeats the one
-     question this pane exists to answer. */
+     is bounded, and the pane is 260px. Break rather than overflow: a path the
+     user cannot read at all defeats the one question this pane exists to
+     answer. */
   overflow-wrap: anywhere;
 }
 
@@ -879,13 +726,12 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--line-strong);
   flex: none;
 }
 
 /* The same four colours the rail's dot uses. Kept as its own selector list
-   rather than a shared class, because .rail-row__dot is 5px and this is 7px —
-   sharing the rule would couple two sizes that have no reason to agree. */
+   rather than a shared class, so the two sizes are not coupled. */
 .inspector__dot[data-agent-state="busy"] { background: var(--blue); }
 .inspector__dot[data-agent-state="wants-you"] { background: var(--amber); }
 .inspector__dot[data-agent-state="exited"] { background: var(--red); }
@@ -900,7 +746,7 @@ body {
   color: var(--muted);
   font-size: var(--t-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 
@@ -911,7 +757,7 @@ body {
 .inspector__label {
   color: var(--fg-3);
   font-size: var(--t-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
@@ -923,20 +769,24 @@ body {
   overflow-wrap: anywhere;
 }
 
-/* SPIKE. The empty-state summary rendered its LABELS as letter-spaced caps
-   and its NUMBERS at body size beneath them — so the three most scannable
-   facts in the pane were the quietest things in it. Inverted here: the number
-   is the subject, the label is the caption.
+/* M45. A value that is a path, an argv or a pid is set in the mono face, so
+   a path in the inspector and the same path in the terminal resolve to the
+   same glyphs and read as the same kind of thing. */
+.inspector__value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
 
+/* The empty-state summary: the number is the subject, the label the caption.
    The [data-summary] hook already existed on these three <dd>s (verify:panels
    reads them by it), so this needs no markup change. tabular-nums stops the
    column shifting as a count crosses from 9 to 10. */
 .inspector__value[data-summary] {
-  font-family: var(--font-display);
-  font-weight: 900;
+  font-weight: 600;
   font-size: var(--t-2xl);
-  line-height: var(--lh-display);
-  letter-spacing: var(--track-display);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
   font-variant-numeric: tabular-nums;
   margin-top: var(--sp-1);
 }
@@ -949,33 +799,34 @@ body {
 }
 
 .inspector__action {
+  min-height: 24px;
   padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: transparent;
   color: var(--fg);
   cursor: pointer;
+  font: inherit;
   font-size: var(--t-sm);
   text-align: left;
 }
 
-/* --s-4, the one hover fill — not a second hand-mixed white overlay. The
-   lift gives these actions the same small elevation cue as a rail row. */
+/* --s-4, the one hover fill. */
 .inspector__action:hover {
   background: var(--s-4);
-  transform: translateY(-1px);
-  box-shadow: var(--e-1);
+  border-color: var(--line-strong);
 }
+.inspector__action:active { background: var(--s-5); }
 
 /* Disabled is the restart control's resting state on a panel that never
-   started (Task 6). Kept visible rather than hidden, per the rule
-   verify:palette 31 states: a control that disappears is indistinguishable
-   from a feature that is missing. */
+   started. Kept visible rather than hidden, per the rule verify:palette 31
+   states: a control that disappears is indistinguishable from a feature that
+   is missing. */
 .inspector__action:disabled {
   color: var(--fg-4);
   cursor: default;
 }
-.inspector__action:disabled:hover { background: transparent; }
+.inspector__action:disabled:hover { background: transparent; border-color: var(--border); }
 
 /* M9a's Changes section, following the existing .inspector__* rules above. */
 
@@ -1029,6 +880,7 @@ body {
 
 .inspector__review-path {
   color: var(--fg);
+  font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1053,9 +905,7 @@ body {
 }
 
 /* The Cost section (M15). Same shapes as the Changes section immediately
-   above — a muted note for the "nothing to explain yet" state, a row list
-   for the figures, a muted trailer for the turn counts and the price caveat —
-   reusing the identical tokens rather than introducing new ones. */
+   above, reusing the identical tokens rather than introducing new ones. */
 .inspector__usage-note {
   margin: 0 0 var(--sp-4);
   color: var(--muted);
@@ -1094,49 +944,19 @@ body {
   margin: var(--sp-2) 0 0;
   color: var(--muted);
   font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .inspector__usage-cost {
   margin: var(--sp-2) 0 0;
   color: var(--fg);
   font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .inspector__usage-cost-suffix {
   color: var(--muted);
   font-size: var(--t-xs);
-}
-
-.rail-row__start,
-.rail-row__rename,
-.rail-row__close {
-  flex: none;
-  width: 18px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--t-sm);
-  cursor: pointer;
-}
-
-.rail-row__start:hover,
-.rail-row__rename:hover,
-.rail-row__close:hover { color: var(--text); }
-
-/* The active workspace's switch is disabled, not hidden. Keep it at full text
-   colour: greying it out would read as "this workspace is unavailable" rather
-   than "you are already here", which is the opposite of what it means. */
-.rail-row__main:disabled { cursor: default; color: var(--text); }
-
-/* Amber, because it is the same fact the panel border and the row dot already
-   paint amber. */
-.rail-row__waiting { color: var(--amber); }
-
-.rail-empty {
-  padding: var(--sp-2) var(--sp-4);
-  color: var(--muted);
-  font-size: var(--t-sm);
 }
 
 /* The tree's own rows. Monospace and one line each: a filename is a path
@@ -1164,49 +984,20 @@ body {
 /* The fixed viewport. Clips the world and catches every canvas event. */
 .canvas {
   position: relative;
-  /* No height: 100% any more — as the grid's middle cell the canvas is sized
-     by its row track. Keeping the old declaration would resolve it against
-     .app's full height and push the canvas back out of the frame. */
+  /* No height: 100% — as the grid's middle cell the canvas is sized by its
+     row track. Keeping the old declaration would resolve it against .app's
+     full height and push the canvas back out of the frame. */
   overflow: hidden;
-  /* The dot grid was #1c2030 on #0b0c11 — 1.21:1, imperceptible, a
-     compositing cost buying nothing. It stays, at an alpha that can actually
-     be seen: it is the canvas's only parallax cue, and with none at all
-     panning reads as stuck. The vignette keeps a large dark field from
-     reading as a void; its centre is --s-2, the nearest declared surface,
-     rather than a hand-picked literal that would belong to no ramp.
-
-     The dot's rgba() is a DELIBERATE literal and is allowlisted by name in
-     verify-styles check 1. It is a translucent iris tick whose whole job is
-     to take whatever ground is behind it, so tokenising it would produce an
-     opaque value that stops tracking the vignette it sits on. A future theme
-     overrides the ground, not the tick. */
-  /* SPIKE: THE VIGNETTE IS INVERTED, AND THAT IS THE FIX.
-
-     It ran `at 50% 0%` from --s-2 to --s-0, so the TOP of the canvas was the
-     brightest surface in the application — brighter than the panels sitting
-     on it. Panels therefore read as cut into the canvas rather than floating
-     above it, and a translucent pane over it had nothing darker to be
-     translucent against. That single gradient was the largest obstacle to
-     this whole direction, and it is invisible in any static description of
-     the file; it took a screenshot to find.
-
-     M19 INVERTS BOTH HALVES. The light moves to the TOP, because the whole
-     stylesheet now models one light source at the upper-left and a ground lit
-     from below would contradict every shadow pair in the file at once — the
-     one inconsistency the eye reads instantly as broken rather than as a
-     variation.
-
-     The pre-M19 rule that the ground must be the darkest thing in the app is
-     GONE, and deliberately: it existed because translucency only reads as
-     glass when the pane is lighter than what is behind it. Nothing is glass
-     any more. The ground is now the MID tone of a five-step band and panels
-     separate from it by shadow, so the ground is free to be lighter than the
-     casings sitting on it — which is what a casing sitting on a desk actually
-     looks like. */
+  /* The dot grid is the canvas's only parallax cue — with none at all,
+     panning reads as stuck — and it is VISIBLE: --dot is a colour a person
+     can perceive on both grounds (M10's own open question, answered). Under
+     it a soft radial vignette keeps a large flat field from reading as a
+     void; the centre is --s-1, the nearest declared surface, rather than a
+     hand-picked literal that would belong to no ramp. */
   background:
     radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0)
       0 0 / 28px 28px,
-    radial-gradient(140% 90% at 50% -18%, var(--s-3) 0%, var(--s-0) 55%);
+    radial-gradient(120% 90% at 50% 0%, var(--s-1) 0%, var(--s-0) 60%);
   cursor: default;
 }
 
@@ -1232,36 +1023,24 @@ body {
    INSIDE .world, so it inherits the one translate()/scale() and pans and zooms
    with the panels for free — the opposite of .edge-indicators, which is a
    SIBLING of .world precisely because a viewport-pinned pip must not zoom
-   away. Two unrelated features with confusingly similar names, which is why
-   this one is `link` everywhere and never `edge`.
+   away.
 
-   ZERO-SIZED with overflow visible, and that pair is load-bearing rather than
-   a trick. .world is `position: absolute; top: 0; left: 0` with NO width or
-   height — it is a positioning origin, not a box — so `width: 100%` here would
-   resolve to 0 and an svg's UA default `overflow: hidden` would then clip
-   every link out of existence, silently, with the elements still in the DOM
-   and still carrying correct geometry. World coordinates are also freely
-   negative, which no percentage size could ever cover. Sizing it 0 and letting
-   it paint outside is what makes the coordinate system here simply BE world
-   space, the same way a panel's left/top are world pixels.
+   ZERO-SIZED with overflow visible, and that pair is load-bearing. .world is
+   `position: absolute; top: 0; left: 0` with NO width or height — it is a
+   positioning origin, not a box — so `width: 100%` here would resolve to 0
+   and an svg's UA default `overflow: hidden` would then clip every link out
+   of existence, silently. World coordinates are also freely negative, which
+   no percentage size could ever cover.
 
-   z-index 0 puts it beneath every panel, and that IS Panel.z's scheme rather
-   than a second one: nextZ returns max(..., 0) + 1, so a minted panel is
-   always >= 1. Beneath is also right on its own merits — a line painted over a
-   terminal hides the agent output the app exists to show — and costs nothing,
-   because linkAnchors anchors both ends ON the panel borders, so the whole
-   segment is outside both rects.
+   z-index 0 puts it beneath every panel, and that IS Panel.z's scheme: nextZ
+   returns max(..., 0) + 1, so a minted panel is always >= 1.
 
-   pointer-events: none on the LAYER, not a hit test anyone has to remember —
-   but M35 Task 6 narrows that surgically rather than removing it: exactly two
-   descendants opt back in, `.link-layer__hit` (below) with
-   `pointer-events: stroke` and `.link-layer__badge` with `pointer-events:
-   all`. Nothing else in this layer is hit-testable. The invariant this
-   became is "things that can be hit do not consume" rather than "nothing in
-   this layer can be hit": the hit stroke's own handlers must never call
+   pointer-events: none on the LAYER; exactly two descendants opt back in,
+   `.link-layer__hit` with `pointer-events: stroke` and `.link-layer__badge`
+   with `pointer-events: all`. The hit stroke's own handlers must never call
    stopPropagation, so a mousedown on it still bubbles to Canvas's background
    handler and clears focusedId exactly as a click on bare canvas does. See
-   verify:panels 127 (rewritten in M35) and 178. */
+   verify:panels 127 and 178. */
 .link-layer {
   position: absolute;
   top: 0;
@@ -1273,31 +1052,20 @@ body {
   pointer-events: none;
 }
 
-/* M13. The armed link mode's banner. Success criterion 6: there is no state
-   in which the mode is armed and invisible, and this is the half that makes
-   that true — the mode is one-shot, so the only way to be IN it is to be
-   looking at this.
-
-   OUTSIDE .world, so it is viewport-pinned chrome: a banner that panned away
-   with the camera would describe a mode that is still armed while sitting
-   somewhere the user is no longer looking. pointer-events: none so it can
-   never intercept the very click it is asking for. */
 /* M13. The inspector's Links section: every link touching the selected panel,
-   in BOTH directions, each with a label and a remove control.
-
-   This is the only surface that acts on a link. There is deliberately no link
-   SELECTION on the canvas: selecting one means hit-testing a hairline, which
-   at MIN_SCALE (0.1) is a sub-pixel target — an affordance that exists in the
-   code and not on the screen — and it would force .link-layer to take pointer
-   events, giving up the guarantee that a link can never swallow a click. */
+   in BOTH directions, each with a label and a remove control. This is the
+   only surface that acts on a link: there is deliberately no link SELECTION
+   on the canvas, because selecting one means hit-testing a hairline, which
+   at MIN_SCALE (0.1) is a sub-pixel target. */
 .inspector__links {
   padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid var(--line);
 }
 
 .inspector__links-label {
-  color: var(--fg-4);
+  color: var(--fg-3);
   font-size: var(--t-xs);
+  font-weight: 600;
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
   margin-bottom: var(--sp-3);
@@ -1307,7 +1075,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) 0;
+  padding: var(--sp-1) 0;
   font-size: var(--t-sm);
   color: var(--fg-2);
 }
@@ -1340,36 +1108,48 @@ body {
   border-radius: var(--r-sm);
 }
 
+/* An inspector link action that carries TEXT ("↻ on" became a labelled
+   toggle) stays a small text button; the icon ones take .icon-button. */
 .inspector__link-action {
   flex: none;
+  min-height: 24px;
   background: none;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   padding: 0 var(--sp-2);
-  color: var(--fg-4);
+  color: var(--fg-3);
   cursor: pointer;
-  font-size: var(--t-sm);
+  font: inherit;
+  font-size: var(--t-xs);
 }
 
 .inspector__link-action:hover {
   color: var(--fg);
+  background: var(--s-4);
 }
 
-.inspector__link-action:focus-visible {
-  outline: 1px solid var(--blue);
+.inspector__link-action--on {
+  color: var(--iris);
+  border-color: var(--iris-dim);
+  background: var(--iris-dim);
 }
 
+/* M13. The armed link mode's banner. Success criterion 6: there is no state
+   in which the mode is armed and invisible. OUTSIDE .world, so it is
+   viewport-pinned chrome; pointer-events: none so it can never intercept the
+   very click it is asking for. */
 .link-banner {
   position: absolute;
   top: var(--sp-5);
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
-  padding: var(--sp-3) var(--sp-5);
+  padding: var(--sp-2) var(--sp-5);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-full);
   background: var(--s-3);
+  box-shadow: var(--e-2);
   color: var(--fg-2);
-  font-family: var(--font-mono);
   font-size: var(--t-sm);
   pointer-events: none;
 }
@@ -1385,6 +1165,7 @@ body {
 .link-banner__stop {
   pointer-events: auto;
   margin-left: var(--sp-4);
+  min-height: 24px;
   padding: var(--sp-1) var(--sp-3);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-full);
@@ -1403,10 +1184,9 @@ body {
   color: var(--fg-3);
 }
 
-/* M35. A path rather than a line. `fill: none` is now LOAD-BEARING: an SVG
-   path fills the region its curve encloses by default, so without it every
-   link paints as a solid crescent over the canvas. It was harmless on the
-   <line> this replaced, which has no interior to fill. */
+/* M35. A path rather than a line. `fill: none` is LOAD-BEARING: an SVG path
+   fills the region its curve encloses by default, so without it every link
+   paints as a solid crescent over the canvas. */
 .link-layer__line {
   stroke: var(--line-strong);
   stroke-width: 2px;
@@ -1420,11 +1200,9 @@ body {
 
 /* M35 Task 6. The hover target. Transparent and wide, and it opts back INTO
    pointer events where .link-layer opts out — `stroke` rather than `all`, so
-   only the stroked band is hittable and the path's notional interior is not.
-
-   The width is a hit target rather than a visual: 18 world units is a
-   comfortable aim at scale 1 and shrinks with the zoom, which is correct —
-   at low zoom the ports are gone too, so there is no gesture left to serve. */
+   only the stroked band is hittable. 18 world units is a comfortable aim at
+   scale 1 and shrinks with the zoom, which is correct — at low zoom the ports
+   are gone too, so there is no gesture left to serve. */
 .link-layer__hit {
   stroke: transparent;
   stroke-width: 18px;
@@ -1460,11 +1238,10 @@ body {
   fill: none;
 }
 
-/* M35 Task 5 fix round 1. The ghost's OWN arrowhead: an SVG marker does not
-   inherit the referencing path's stroke, so pointing the ghost at
-   `link-arrow`'s head painted a solid `--line-strong` tip on a dashed iris
-   curve — a committed-link colour on a path whose whole job is to say "not
-   committed yet". */
+/* The ghost's OWN arrowhead: an SVG marker does not inherit the referencing
+   path's stroke, so pointing the ghost at `link-arrow`'s head painted a
+   committed-link colour on a path whose whole job is to say "not committed
+   yet". */
 .link-layer__ghost-head {
   fill: var(--iris);
 }
@@ -1481,10 +1258,8 @@ body {
   stroke-width: 4px;
 }
 
-/* M35 Task 5. The in-flight preview. Dashed so it reads as provisional rather
-   than as a link that already exists — the whole point of the preview is
-   that it says what WOULD happen, and a solid ghost is indistinguishable
-   from a committed link that failed to attach. */
+/* The in-flight preview. Dashed so it reads as provisional rather than as a
+   link that already exists. */
 .link-layer__ghost {
   stroke: var(--iris);
   stroke-width: 2px;
@@ -1493,7 +1268,8 @@ body {
   fill: none;
 }
 
-/* A panel is positioned once in WORLD pixels. Only .world's transform moves. */
+/* A group frame is positioned once in WORLD pixels. Only .world's transform
+   moves. */
 .canvas-group {
   position: absolute;
   z-index: 0;
@@ -1511,14 +1287,14 @@ body {
   position: absolute;
   left: 10px;
   right: 10px;
-  top: 7px;
+  top: 6px;
   height: 24px;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   color: var(--fg);
   font-size: var(--t-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
   pointer-events: auto;
@@ -1542,22 +1318,19 @@ body {
 .canvas-group__remove:hover { color: var(--fg); }
 .canvas-group--collapsed { border-style: dashed; }
 
+/* A panel is positioned once in WORLD pixels. Only .world's transform
+   moves. box-shadow and border-color ONLY — never transform: four checks
+   read .world's computed matrix through DOMMatrixReadOnly, and a transform
+   transition here reads as elastic on every pan. */
 .panel {
   position: absolute;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
-  /* SPIKE: --r-lg -> --r-xl. A floating pane reads as floating partly through
-     radius; 12px reads as a list row scaled up, 18px reads as an object. */
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--panel-bg);
   user-select: none;
-  /* Panels had no shadow at all, which is why they read as pasted onto the
-     canvas rather than floating above it. box-shadow and border-color ONLY —
-     never transform: four checks read .world's computed matrix through
-     DOMMatrixReadOnly, and a transform transition here reads as elastic on
-     every pan (Global Constraint 3). */
   box-shadow: var(--e-2);
   transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
@@ -1586,15 +1359,11 @@ body {
 }
 
 /* M35 Task 5. The panel a release right now would link to. A ring rather
-   than a fill: a fill would hide the agent output this app exists to show,
-   on the one panel the user is currently looking at.
-
+   than a fill: a fill would hide the agent output this app exists to show.
    var(--e-2) belongs here for the identical reason .panel--selected's own
    comment states for var(--e-3): the attribute selector's specificity (0,2,0)
    beats the plain .panel rule (0,1,0) that supplies the base elevation, so
-   without it the target ring REPLACED box-shadow wholesale and the
-   highlighted panel visually flattened against the canvas at the exact
-   moment it was being pointed at — fix round 1's finding. */
+   without it the target ring REPLACED box-shadow wholesale. */
 .panel[data-link-target] {
   box-shadow: 0 0 0 2px var(--iris), var(--e-2);
 }
@@ -1604,12 +1373,11 @@ body {
    tmux-args.ts goes out of its way to pass through at 24-bit. */
 .panel--agent-busy { border-color: var(--blue); }
 /* Same colour as .panel's own base border-color — deliberately, not left out.
-   agent-state.ts refuses to alias `starting` to `idle` ("painting it idle at
-   spawn would make the very first thing the user sees a lie"), so the state
-   machine treats them as distinct even though they currently render alike on
-   this surface. Without this rule the coincidence is invisible: the next
-   person who changes .panel's base border colour turns `starting` into a
-   silent visual bug, because nothing here would move with it. */
+   agent-state.ts refuses to alias `starting` to `idle`, so the state machine
+   treats them as distinct even though they currently render alike on this
+   surface. Without this rule the coincidence is invisible: the next person
+   who changes .panel's base border colour turns `starting` into a silent
+   visual bug, because nothing here would move with it. */
 .panel--agent-starting { border-color: var(--border); }
 .panel--agent-idle { border-color: var(--border); }
 /* wants-you is the only state carrying INTENT — idleness cannot tell
@@ -1624,14 +1392,12 @@ body {
 .panel--agent-wants-you {
   border-color: var(--amber);
   /* The STATIC ring is not redundant with the keyframes and must not be
-     deleted as such. The reduced-motion block below forces every animation to
+     deleted as such. The reduced-motion block forces every animation to
      .01ms with one iteration and no fill-mode, so the moment it applies the
      keyframed box-shadow stops painting entirely and the panel falls back to
-     whatever is declared HERE. Without this line that fallback is .panel's
-     plain var(--e-2): an unselected waiting panel shows no amber ring at all,
-     for exactly the users who asked for less motion — silently removing the
-     app's one attention signal. The animation merely MODULATES this ring's
-     glow; the ring itself lives outside it. */
+     whatever is declared HERE. Without this line an unselected waiting panel
+     shows no amber ring at all, for exactly the users who asked for less
+     motion — silently removing the app's one attention signal. */
   box-shadow: 0 0 0 2px var(--amber), var(--e-2);
   animation: wants-you-pulse 2.4s ease-in-out infinite;
 }
@@ -1648,27 +1414,18 @@ body {
   border-color: var(--blue);
   /* var(--e-3) belongs here as well as on .panel--selected above. This rule is
      the LATER one at equal specificity, so a ring-only box-shadow here wins
-     outright — which meant selecting a panel replaced .panel's own var(--e-2)
-     with nothing and flattened it against the canvas, and made --e-3 a token
-     that never rendered anywhere. A selected panel is the raised one by
-     definition, in every agent state. */
+     outright — a selected panel is the raised one by definition, in every
+     agent state. */
   box-shadow: 0 0 0 1px var(--blue), var(--e-3);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
-   that carries INTENT — a panel asking you something — and Cmd+J deliberately
-   does not acknowledge, so landing on a panel selects it while it is still
-   waiting. If selection painted over the amber here, the jump key would take
-   you to a panel and hide the very reason it took you there, leaving it in the
-   queue with nothing on screen saying so. The other four states stay below
-   selection: none of them is asking for anything. */
+   that carries INTENT, and Cmd+J deliberately does not acknowledge, so
+   landing on a panel selects it while it is still waiting. If selection
+   painted over the amber here, the jump key would take you to a panel and
+   hide the very reason it took you there. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--amber);
-  /* Elevated for the same reason the blue rule above is: selection raises the
-     panel whatever its agent state. While the pulse is running the keyframes'
-     own box-shadow (carrying --e-2) wins over this declaration, so the
-     difference is visible only with reduced motion — which is precisely the
-     case this line, like the static ring above, exists to cover. */
   box-shadow: 0 0 0 2px var(--amber), var(--e-3);
 }
 
@@ -1679,76 +1436,45 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-5);
-  padding: var(--sp-4) var(--sp-5);
-  background:
-    linear-gradient(180deg, var(--sheen), transparent 60%),
-    var(--chrome-bg);
+  gap: var(--sp-4);
+  min-height: 36px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-5);
+  background: var(--chrome-bg);
   border-bottom: 1px solid var(--line);
-  box-shadow: inset 0 1px 0 var(--glass-edge);
-  /* .panel moved from 10px to --r-lg (12px); a calc off the same token rather
-     than a literal 11px so the relationship survives a change to the token,
-     and so this stays zero literals for the audit. Without matching top
-     corners here, a sliver of .panel's own background shows past the header
-     at the corners. */
-  border-radius: calc(var(--r-xl) - 1px) calc(var(--r-xl) - 1px) 0 0;
+  /* A calc off the same token rather than a literal so the relationship
+     survives a change to the token. Without matching top corners here, a
+     sliver of .panel's own background shows past the header at the corners. */
+  border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
   font-size: var(--t-sm);
   user-select: none;
 }
 
 .panel__title {
-  /* SPIKE. Display face at --t-md — not larger, because the chrome is 36px
-     and this has to sit beside a badge — but the WEIGHT and the negative
-     tracking are what separate it from the body text everywhere else. The
-     diagnosis found every string in the app rendering at one weight. */
-  /* SPIKE. Display face at --t-md — not larger, because the chrome is 36px
-     and this has to sit beside a badge — but the WEIGHT and the negative
-     tracking are what separate it from the body text everywhere else. The
-     diagnosis found every string in the app rendering at one weight.
-
-     flex: 1 moves the status badge off centre. With no flex the chrome's
+  /* flex: 1 moves the status badge off centre. With no flex the chrome's
      space-between distributed three children evenly and parked the badge in
-     the middle of the header, aligned to nothing. min-width/ellipsis below
-     already let this shrink, so a long user title still truncates rather than
-     pushing the close button out of the panel. */
+     the middle of the header, aligned to nothing. */
   flex: 1;
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: var(--t-md);
+  font-weight: 600;
+  font-size: var(--t-sm);
   color: var(--fg);
-  letter-spacing: var(--track-tight);
-  /* A user-set title (M6a) is arbitrary-length text, unlike the fixed labels
-     .panel__chrome used to hold. Flex items default to min-width: auto, which
-     refuses to shrink below its content's intrinsic width — so without this,
-     a long title pushes the badge and close button out past `.panel`'s
-     overflow: hidden, and the panel becomes unclosable by mouse. min-width: 0
-     lets the title actually shrink to fit the remaining chrome space; the
-     rest truncates it visibly instead of just clipping mid-character. */
+  /* A user-set title (M6a) is arbitrary-length text. Flex items default to
+     min-width: auto, which refuses to shrink below its content's intrinsic
+     width — so without this, a long title pushes the badge and close button
+     out past `.panel`'s overflow: hidden, and the panel becomes unclosable by
+     mouse. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* M20. The permission mode a panel was STARTED in.
-
-   Every colour here is a token: verify:styles 1 forbids a literal in any
-   notation outside a theme block, and the two exempt values are translucent
-   whites modelling light on a surface, which this is not.
-
-   The DEFAULT is deliberately quiet — --muted on the hover fill, the same
-   weight the close button carries — because most modes are unremarkable and a
-   chip that shouted on every agent panel would train the eye to skip it, which
-   is exactly what must not happen to the one case that matters.
-
-   bypassPermissions and dontAsk get --red. They are the modes where the agent
-   stops asking before it acts, and this chip is the only place that fact is
-   visible on a canvas built to hold panels nobody is looking at. plan gets
-   --green: it is the mode where the agent cannot write at all, and saying so
-   is worth as much as the warning is.
-
-   Never shrunk to make room for a long title, the rule .panel__title's own
-   comment states for its neighbours. */
+/* M20. The permission mode a panel was STARTED in. The DEFAULT is
+   deliberately quiet, because most modes are unremarkable and a chip that
+   shouted on every agent panel would train the eye to skip it, which is
+   exactly what must not happen to the one case that matters.
+   bypassPermissions and dontAsk get --red: they are the modes where the agent
+   stops asking before it acts. plan gets --green: the agent cannot write at
+   all. Never shrunk to make room for a long title. */
 .panel__mode {
   flex: none;
   border-radius: var(--r-sm);
@@ -1774,8 +1500,7 @@ body {
 }
 
 /* The card remains the readable many-panel surface, but a promoted terminal
-   should not make its resource cost disappear. This compact badge shares the
-   chrome without claiming a new interaction. */
+   should not make its resource cost disappear. */
 .panel__machine-cost {
   flex: none;
   color: var(--muted);
@@ -1784,34 +1509,19 @@ body {
   white-space: nowrap;
 }
 
+/* Never shrunk to make room for a long title — see .panel__title. Everything
+   else comes from .icon-button. */
 .panel__close {
-  /* Never shrunk to make room for a long title — see .panel__title. */
   flex: none;
-  appearance: none;
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  line-height: 1;
-  padding: var(--sp-1) var(--sp-3);
-  cursor: pointer;
-}
-
-/* --s-4, the hover fill. --border is the HAIRLINE token: using it as a fill
-   makes a boundary colour and a surface colour the same value by accident, so
-   changing either one moves the other. */
-.panel__close:hover {
-  background: var(--s-4);
-  color: var(--text);
 }
 
 /* Armed: a running process is one click from dying, so it stops looking like
-   a neutral control. */
+   a neutral control. The text ("kill?") is what the icon becomes. */
 .panel__close--arming {
   border-color: var(--red);
   color: var(--red);
-  font-size: var(--t-sm);
+  padding: 0 var(--sp-2);
+  font-size: var(--t-xs);
 }
 
 /* The terminal's retained host (.panel__terminal, created once in
@@ -1819,69 +1529,39 @@ body {
    slot must give it a real height so fit() computes the same grid every
    time the panel is promoted. flex here, not just min-height:0 on the slot
    itself: a percentage height on a descendant only resolves against an
-   ancestor with an explicit (not auto) height, so the host also needs to be
-   a flex ITEM of this box, not merely a block child of it — otherwise the
-   host's height is auto, FitAddon measures its own auto-sized parent, and
-   fit() is circular and returns roughly the row count it already had. */
+   ancestor with an explicit height, so the host also needs to be a flex ITEM
+   of this box — otherwise the host's height is auto, FitAddon measures its
+   own auto-sized parent, and fit() is circular. */
 .panel__slot {
   flex: 1;
   min-height: 0;
   display: flex;
 }
 
-/* M19 THE WELL. The screen sunk into the casing, and the one place in the
-   app where a dark surface survives.
-
-   ────────────────────────────────────────────────────────────────────────
+/* ────────────────────────────────────────────────────────────────────────
    DO NOT GIVE THIS SLOT PADDING, A BORDER, OR A MARGIN ON ITS CHILD.
    ────────────────────────────────────────────────────────────────────────
-   The first cut of this milestone did exactly that — var(--sp-2) of padding,
-   to float the screen inside the casing — and it is the regression
-   xterm-pointer.ts predicts BY NAME twenty lines into its own comment:
-   correction re-expresses a click relative to the SLOT's rect while xterm
-   subtracts .xterm-screen's, so any inset between the two survives as
-   d * (1 - 1/scale) and every click at a zoomed-out scale lands a column or
-   more off the cell the user aimed at. The whole verify suite stays GREEN
-   through it: verify:panels 9's target is the four characters of "beta", and
-   a one-to-two column shift is still inside that word.
+   xterm-pointer.ts's correction re-expresses a click relative to the SLOT's
+   rect while xterm subtracts .xterm-screen's, so any inset between the two
+   survives as d * (1 - 1/scale) and every click at a zoomed-out scale lands
+   a column or more off the cell the user aimed at. The whole verify suite
+   stays GREEN through it: verify:panels 9's target is the four characters of
+   "beta", and a one-to-two column shift is still inside that word.
 
-   So the recess is drawn WITHOUT geometry. Radius and overflow clip the
-   terminal's corners against the casing, which is what actually reads as a
-   screen bonded into a case; the fill is what a dormant card and the frame
-   before xterm attaches show. Neither moves an origin by a pixel, so the
-   invariant holds untouched.
-
-   Insetting the screen for real is a legitimate future change and the path is
-   already written down: anchor the correction to .xterm-screen's own rect,
-   and add a check with a target tighter than a four-character word. It is not
-   a CSS-only change and must not be attempted as one. */
+   The fill is what a dormant card and the frame before xterm attaches show;
+   it is tied to the xterm theme's own background (terminal/themes.ts) so the
+   two agree in both themes. The bottom radius matches the panel's own so the
+   terminal's corners clip against the frame. */
 .panel__slot {
   background: var(--well);
-  /* Concentric corners, per the rule --r-* is declared with: a nested radius
-     must decrease by roughly the inset, and this slot's inset is ZERO — it is
-     flush to the panel's left, right and bottom edges. So the BOTTOM pair has
-     to match the panel's own --r-xl exactly; at --r-md the screen's 6px curve
-     sits inside the casing's 18px one and leaves a visible sliver of casing in
-     each bottom corner, which reads as a misprinted part rather than a screen.
-
-     The TOP pair is square because the header sits directly above and the two
-     surfaces meet on a straight line. This is the one radius in the file that
-     is a four-value shorthand, and it is why: the slot is not a free-floating
-     box, it is the bottom of a case. */
-  border-radius: 0 0 var(--r-xl) var(--r-xl);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
   overflow: hidden;
-  box-shadow: var(--well-inset);
 }
 
 .panel__slot > .panel__terminal {
   flex: 1;
   min-height: 0;
 }
-
-/* M3's .panel__slot--blocked gate is gone: xterm now receives corrected
-   coordinates at every zoom (see components/xterm-pointer.ts), so there is no
-   longer a band inside which mouse input is trusted and outside which it is
-   suppressed. */
 
 /* xterm sizes itself in cols/rows against this box; it must fill it exactly. */
 .panel__slot .xterm,
@@ -1894,22 +1574,15 @@ body {
   scrollbar-width: thin;
 }
 
-/* SPIKE. The single highest-leverage surface in the application, and it was
-   the emptiest: panels do not spawn until clicked, so the DEFAULT VIEW of
-   this app is twelve dormant cards — and each was a ~950x580 box containing
-   the words "click to start" in italic mono, ~13px, in the top-left corner.
-   That is the first impression the app makes, and it was blank.
-
-   It is also entirely ours to draw. There is no xterm in a card, no WebGL
-   context, no agent output to fight — pure CSS over which we have total
-   authority, instanced more than anything else on screen.
+/* The dormant card. Panels do not spawn until clicked, so the DEFAULT VIEW of
+   this app is a field of dormant cards, and each is entirely ours to draw:
+   no xterm, no WebGL context, no agent output to fight.
 
    NOTE FOR ANYONE EDITING THE MARKUP: this whole treatment is CSS-only, on
    purpose. verify:panels asserts `.panel__card-idle`.textContent === 'click
    to start' EXACTLY in three separate checks (and reads `.panel__card`'s own
    textContent in a fourth), so adding a subtitle element inside either one
-   turns them red. The headline below is the existing string restyled, not new
-   copy. Add a hint element only if you also update those checks. */
+   turns them red. */
 .panel__card {
   display: flex;
   flex-direction: column;
@@ -1923,7 +1596,7 @@ body {
   color: var(--muted);
 }
 
-/* Only the DORMANT card gets the editorial treatment. A spawned card is a
+/* Only the DORMANT card gets the headline treatment. A spawned card is a
    tail of real terminal output and must stay monospace, top-aligned and
    dense — it is data, not a statement. :has() rather than a second class so
    the markup stays untouched (see the note above). */
@@ -1940,15 +1613,13 @@ body {
 }
 
 /* M39. A line recorded before the last quit, as against a live session's
-   tail: dimmer, so a card is honest about which of the two it is showing. The
-   M39 verifier found the class rendered with no rule at all. */
+   tail: dimmer, so a card is honest about which of the two it is showing. */
 .panel__card-line--recorded {
   color: var(--fg-3);
 }
 
 /* The card tier is the ordinary many-panel view, so this is the primary
-   machine-cost readout. It is quiet metadata under the terminal tail rather
-   than chrome competing with the panel title. */
+   machine-cost readout. */
 .panel__card-cost {
   display: flex;
   gap: var(--sp-4);
@@ -1960,24 +1631,19 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The headline. Same three words, ~4x the size, in the display face — this
-   is the whole of the editorial direction expressed on one element.
-
-   max-width in `ch` is what produces the stacked wrap ("click to / start")
-   that the reference image gets from a hard line break. It is a CH unit
-   deliberately: it tracks the font's own measure, so the break holds if the
-   size token changes, and it needs no literal px the spacing audit would
-   reject. --lh-display (below 1) is what keeps the two lines reading as one
-   block rather than as two separate labels. */
+/* The headline. The same three words in the UI face at the top of the scale.
+   max-width in `ch` is what produces the stacked wrap ("click to / start");
+   a CH unit tracks the font's own measure, so the break holds if the size
+   token changes, and it needs no literal px the spacing audit would reject. */
 .panel__card-idle {
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: var(--t-3xl);
-  line-height: var(--lh-display);
-  letter-spacing: var(--track-display);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: var(--t-2xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--track-tight);
   color: var(--fg);
   font-style: normal;
-  max-width: 7ch;
+  max-width: 8ch;
 }
 
 /* The card's own left rule. The card sits inside .panel, so it already gets
@@ -1988,30 +1654,23 @@ body {
 .panel__card--agent-exited { border-left: 3px solid var(--red); }
 /* Unlike the panel surface, .panel__card has no border-left of its own at
    rest — without this rule a `starting` card would render with NO rule at
-   all while an `idle` card shows a visible 3px one, which is a real (not
-   coincidental) inconsistency: a slow-launching agent would look different
-   from an idle one for no principled reason. Same neutral treatment as
-   `idle` for the same reason as the panel-surface comment above: `starting`
-   is a distinct, reachable state in the state machine even where it happens
-   to look identical to `idle` here. */
+   all while an `idle` card shows a visible 3px one. `starting` is a
+   distinct, reachable state in the state machine even where it happens to
+   look identical to `idle` here. */
 .panel__card--agent-starting { border-left: 3px solid var(--border); }
 .panel__card--agent-idle { border-left: 3px solid var(--border); }
 
-/* M19. A badge reports state and cannot be pressed, so by the grammar it is
-   a RECESS — a capsule stamped into the surface — never a raised chip. The
-   border survives the shadow for Law IV: with shadows stripped by forced
-   colours it is the only thing left holding the capsule's boundary. */
+/* A badge reports state and cannot be pressed: a capsule with a hairline. */
 .badge {
-  font-size: var(--t-sm);
+  font-size: var(--t-xs);
   font-variant-numeric: tabular-nums;
-  padding: var(--sp-1) var(--sp-4);
+  padding: var(--sp-1) var(--sp-3);
   border-radius: var(--r-full);
   border: 1px solid var(--border);
-  box-shadow: var(--in-1);
   color: var(--muted);
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   /* Never shrunk to make room for a long .panel__title — see its comment. */
   flex: none;
 }
@@ -2039,25 +1698,19 @@ body {
 
 .canvas-hud {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: var(--sp-5);
+  bottom: var(--sp-5);
   display: flex;
   gap: var(--sp-5);
-  padding: var(--sp-3) var(--sp-5);
-  border: 1px solid var(--iris-dim);
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid var(--line);
   border-radius: var(--r-full);
-  /* M19. The backdrop cost is no longer earned and this is the most
-     expensive place it was being paid: the HUD is mounted permanently over a
-     world layer that repaints on every frame of a pan, so its blur was a
-     composited layer for the entire life of the app — unlike the palette and
-     the nav grid, which are transient.
-
-     It becomes a gauge cut INTO the ground rather than chrome floating above
-     it, which is what the old comment wanted a blur to buy: a recess cannot
-     read as a sticker, because a sticker has no inside. */
-  background: var(--s-0);
-  box-shadow: var(--in-1);
-  color: var(--iris);
+  /* Opaque and flat, with an e-1: the HUD is mounted permanently over a
+     world layer that repaints on every frame of a pan, so it must never cost
+     a composited blur. */
+  background: var(--s-3);
+  box-shadow: var(--e-1);
+  color: var(--fg-3);
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -2069,9 +1722,7 @@ body {
 }
 
 /* Backlog #75. A sibling of .world like the HUD and the palette, so it never
-   pans or zooms with the panels it is reporting on. Cmd-gated, unlike the
-   HUD's own always-on strip — see CanvasHud.tsx's comment on why those are
-   two different designs. */
+   pans or zooms with the panels it is reporting on. */
 .diagnostics-overlay {
   position: absolute;
   top: var(--sp-7);
@@ -2081,7 +1732,7 @@ body {
   max-height: 70vh;
   overflow: auto;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--s-3);
   box-shadow: var(--e-3);
   padding: var(--sp-5);
@@ -2094,18 +1745,15 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-family: var(--font-ui);
+  font-weight: 600;
   font-size: var(--t-md);
-  color: var(--fg-2);
+  color: var(--fg);
   margin-bottom: var(--sp-4);
 }
 
 .diagnostics-overlay__close {
-  background: none;
-  border: none;
-  color: var(--fg-2);
-  font-size: var(--t-lg);
-  cursor: pointer;
-  line-height: 1;
+  flex: none;
 }
 
 .diagnostics-overlay__note {
@@ -2154,20 +1802,12 @@ body {
 /* Resize handles. East, south, south-east only — see panel-interaction.ts.
    Positioned INSIDE the panel's border box so they scale with .world's
    transform like everything else; a handle in screen pixels would drift away
-   from its own panel as you zoom.
-
-   Flush with the edge rather than overhanging it: .panel sets overflow:hidden,
-   which clips hit-testing as well as painting, so a handle straddling the edge
-   would declare a width it does not actually have. Every pixel below is
-   grabbable.
-
-   The sizes below are therefore WORLD units, and riding the transform costs
-   grabbability when zoomed out: an 8px handle is 8 screen px at 1:1 but ~2.4 at
-   scale 0.3, which is a hard target for a mouse and roughly the floor at which
-   resizing stays usable. Widening these would only trade that back for a fat
-   band at 1:1. A handle sized in screen pixels — one that grew as you zoomed
-   out — has to be positioned outside .world's transform and kept in step with
-   its panel by hand, which is a different design, not a bigger number here. */
+   from its own panel as you zoom. Flush with the edge rather than
+   overhanging it: .panel sets overflow:hidden, which clips hit-testing as
+   well as painting. The sizes are therefore WORLD units: an 8px handle is
+   ~2.4 screen px at scale 0.3, roughly the floor at which resizing stays
+   usable; a handle sized in screen pixels is a different design, not a
+   bigger number here. */
 .panel__resize {
   position: absolute;
   z-index: 2;
@@ -2213,17 +1853,15 @@ body {
   color: var(--muted);
   background: var(--panel-bg);
   /* `.panel` sets user-select: none so a drag on the chrome never leaves a
-     text selection behind. This is the one surface in the app built for
-     READING, and inheriting that rule makes a path or a hunk impossible to
-     copy out of the only place it is rendered. The body's onMouseDown
-     stopPropagation's (so the canvas never sees it) but deliberately does not
-     preventDefault, so native selection works the moment the rule is lifted. */
+     text selection behind. This is a surface built for READING, and
+     inheriting that rule makes a path or a hunk impossible to copy out of
+     the only place it is rendered. */
   user-select: text;
 }
 
 .review-node__summary { margin: 0 0 var(--sp-1); color: var(--text); }
-/* --fg-3, not --fg-4: --fg-4 is the DISABLED step (3.03:1 on its worst
-   ground) and this is ordinary running text. */
+/* --fg-3, not --fg-4: --fg-4 is the DISABLED step and this is ordinary
+   running text. */
 .review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
 .review-node__note { margin: 0 0 var(--sp-4); color: var(--amber); }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
@@ -2244,14 +1882,13 @@ body {
 }
 
 /* --s-4 for both, the same fill the rail row and the palette row use. The
-   open state is deliberately NOT --s-5 (the pressed step): --s-5 is transient
-   by definition and an expanded file stays expanded, so an open row reads as
-   selected, which is what --s-4 means everywhere else in this file. */
+   open state is deliberately NOT --s-5: an expanded file stays expanded, so
+   an open row reads as hovered-and-held, not pressed. */
 .review-node__file-button:hover,
 .review-node__file-button--open { background: var(--s-4); }
 
 .review-node__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.review-node__counts { flex: none; color: var(--fg-3); }
+.review-node__counts { flex: none; color: var(--fg-3); font-variant-numeric: tabular-nums; }
 
 .review-node__hunks {
   margin: var(--sp-1) 0 var(--sp-4);
@@ -2262,8 +1899,7 @@ body {
 .review-node__line { padding: 0 var(--sp-3); white-space: pre; }
 
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
-   languages, which is a dependency and a milestone of its own — the spec's
-   own out-of-scope line. */
+   languages, which is a dependency and a milestone of its own. */
 .review-node__line--add { color: var(--green); background: var(--green-dim); }
 .review-node__line--del { color: var(--red); background: var(--red-dim); }
 .review-node__line--hunk { color: var(--blue); }
@@ -2272,40 +1908,42 @@ body {
 .review-node__hunk-note,
 .review-node__more { margin: var(--sp-2); color: var(--fg-3); }
 
-.review-node__refresh {
-  /* Never shrunk to make room for a long heading — the same rule
-     .panel__close obeys, and it shares that button's chrome row. */
+/* The chrome-row icon controls of the four non-terminal kinds all take
+   .icon-button; these classes keep only what is theirs. */
+.review-node__refresh,
+.file-node__refresh,
+.jira-node__refresh,
+.toolbox-node__refresh,
+.file-node__edit {
   flex: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--fg-3);
 }
 
-.review-node__refresh:hover { color: var(--fg); }
-
-/* Matches .review-node__refresh rather than standing out: a destructive verb
+/* Matches the refresh control rather than standing out: a destructive verb
    that looks like a primary action invites the accidental press this app's
    one irreversible write can least afford. The message field is what makes it
    deliberate, not the colour. */
 .review-node__commit {
   flex: none;
+  min-height: 24px;
   background: none;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   color: var(--fg-3);
   cursor: pointer;
+  font: inherit;
+  font-size: var(--t-xs);
   padding: 0 var(--sp-2);
 }
-.review-node__commit:hover:not(:disabled) { color: var(--fg); }
+.review-node__commit:hover:not(:disabled) { color: var(--fg); background: var(--s-4); }
 .review-node__commit:disabled { color: var(--fg-4); cursor: default; }
 .review-node__commit-form { margin: 0 0 var(--sp-4); }
-.review-node__commit-input {
+.review-node__commit-input,
+.jira-node__comment-input {
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg);
+  background: var(--s-3);
   border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   color: var(--text);
   font: inherit;
   padding: var(--sp-2) var(--sp-3);
@@ -2318,32 +1956,22 @@ body {
 }
 
 /* M16. A file panel reuses .panel for its box, its chrome and its resize
-   handles — see FileNode.tsx — and adds only what a scrollable text body
-   needs. The body is the ONE element carrying data-scroll-host, which is what
-   gives this kind the wheel over itself; shouldYieldWheel needed no edit for
-   it, because rule 3 asks the DOM rather than the panel's kind. */
+   handles — see FileNode.tsx. The body is the ONE element carrying
+   data-scroll-host. JiraNode shares the RULE by naming both selectors, so a
+   change to the file panel's body cannot silently restyle Jira panels; it
+   collapses to one selector when <PanelFrame> lands (M47). */
 .file-node__body,
-/* M27 audit: JiraNode rendered the .file-node__* class names literally, so a
-   change to the file panel's chrome silently restyled Jira panels. Sharing the
-   RULE by naming both selectors keeps the two visually identical — which they
-   are meant to be — without either kind reading as the other in the markup. It
-   collapses to one selector when <PanelFrame> lands. */
 .jira-node__body {
   flex: 1;
   min-height: 0;          /* or the <pre> refuses to shrink and the box overflows */
   /* BOTH axes, unlike .review-node__body's overflow-y. Lines here do not wrap
      (see .file-node__text), so a long line has to scroll INSIDE this element
-     — the alternative is the page itself scrolling sideways, which no other
-     surface in this app ever does. */
+     — the alternative is the page itself scrolling sideways. */
   overflow: auto;
   padding: var(--sp-4) var(--sp-4);
   font: var(--t-sm) / var(--lh-body) var(--font-mono);
   color: var(--muted);
   background: var(--panel-bg);
-  /* .panel sets user-select: none so a drag on the chrome never leaves a text
-     selection behind. This is a READING surface, and inheriting that rule
-     makes a file impossible to copy out of the only place it is rendered —
-     the same lift .review-node__body takes, for the same reason. */
   user-select: text;
 }
 
@@ -2352,6 +1980,7 @@ body {
 .file-node__summary {
   flex: none;
   color: var(--fg-3);
+  font-size: var(--t-xs);
 }
 
 .file-node__directory {
@@ -2384,29 +2013,22 @@ body {
   min-width: var(--file-gutter-w);
   text-align: right;
   color: var(--fg-4);
+  font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
-/* pre, never pre-wrap. A wrapped line renumbers nothing but makes the gutter
-   lie about which line the text belongs to, which is the one thing a gutter
-   is for. The body scrolls instead. */
+/* pre, never pre-wrap. A wrapped line makes the gutter lie about which line
+   the text belongs to, which is the one thing a gutter is for. */
 .file-node__text { white-space: pre; }
 
 /* M27. A note's body: prose, so it WRAPS, where .file-node__text deliberately
-   does not. The reasons are opposite and both hold — a wrapped line makes a
-   gutter lie about which line the text belongs to, which is the one thing a
-   gutter is for, and a note has no gutter to lie. `anywhere` rather than
-   `break-word` because the panel is resizable down to a narrow column and an
-   unbreakable token (a URL, a path) would otherwise push a horizontal
-   scrollbar onto a surface that is meant to be read straight down.
-
-   Deliberately NOT --font-mono. A note is sentences, and the display face is
-   what every other piece of sentence-shaped chrome in this app already uses;
-   monospace here would say "this is code" about the one panel kind that is
-   explicitly not. */
+   does not. `anywhere` because the panel is resizable down to a narrow
+   column and an unbreakable token would otherwise push a horizontal
+   scrollbar onto a surface meant to be read straight down. Deliberately NOT
+   --font-mono: a note is sentences. */
 .file-node__prose {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-ui);
   font-size: var(--t-md);
   line-height: var(--lh-body);
   white-space: pre-wrap;
@@ -2414,60 +2036,26 @@ body {
 }
 
 .file-node__more { margin: var(--sp-4) 0 0; color: var(--fg-3); }
-.jira-node__item { border-bottom: 1px solid var(--s-3); padding: var(--sp-3) 0; }
+.jira-node__item { border-bottom: 1px solid var(--line); padding: var(--sp-3) 0; }
 .jira-node__item small { display: block; color: var(--fg-3); margin-top: var(--sp-1); }
 .jira-node__item p { white-space: pre-wrap; margin: var(--sp-2) 0; }
 .jira-node__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
 .jira-node__transitions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .jira-node__comment-form { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); }
-.jira-node__comment-input { width: 100%; min-height: var(--sp-6); resize: vertical; }
+.jira-node__comment-input { min-height: var(--sp-8); resize: vertical; }
 .jira-node__outcome { color: var(--fg-3); margin-top: var(--sp-2); }
 
-.file-node__refresh,
-.jira-node__refresh {
-  /* Never shrunk to make room for a long heading — the same rule
-     .panel__close obeys, and it shares that button's chrome row. */
-  flex: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--fg-3);
-}
-
-.file-node__refresh:hover,
-.jira-node__refresh:hover { color: var(--fg); }
-
-/* Present and DISABLED when model.editable is false — see FileNode's own
-   comment on the button. The disabled colour matches .review-node__commit's,
-   the sibling verb-that-can-be-unavailable in the other node kind. */
-.file-node__edit {
-  flex: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--fg-3);
-}
-.file-node__edit:hover:not(:disabled) { color: var(--fg); }
-.file-node__edit:disabled { color: var(--fg-4); cursor: default; }
-
 /* The unsaved-work marker. Amber, the same "something here wants your
-   attention" colour .file-node__note and .panel--agent-wants-you both use —
-   this is not an error, but it is a fact worth noticing before closing the
-   panel. */
+   attention" colour .file-node__note and .panel--agent-wants-you both use. */
 .file-node__dirty {
   flex: none;
   color: var(--amber);
   font-size: var(--t-xs);
 }
 
-/* The draft surface. Tokens only, per verify:styles 1/4-6: --s-1 matches the
-   read view's own .panel-bg ground, and the mono font/size/line-height match
-   .file-node__body so switching into edit mode does not reflow the text the
-   user was just reading. */
+/* The draft surface. --s-1 matches the read view's own ground, and the mono
+   font/size/line-height match .file-node__body so switching into edit mode
+   does not reflow the text the user was just reading. */
 .file-node__editor {
   width: 100%;
   flex: 1;
@@ -2482,22 +2070,31 @@ body {
   padding: var(--sp-4);
 }
 
-.file-node__save {
-  align-self: flex-start;
+/* Small text buttons inside a node body: the save control, the conflict
+   choices, a Jira transition. One shape. */
+.file-node__save,
+.file-node__conflict button,
+.jira-node__actions button,
+.jira-node__transitions button {
   flex: none;
+  min-height: 24px;
   border: 1px solid var(--border);
-  background: var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--s-3);
   color: var(--fg);
   font: inherit;
+  font-size: var(--t-xs);
   cursor: pointer;
-  padding: var(--sp-2) var(--sp-4);
-  margin-top: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
 }
-.file-node__save:hover { background: var(--s-4); }
+.file-node__save { align-self: flex-start; margin-top: var(--sp-2); }
+.file-node__save:hover,
+.file-node__conflict button:hover,
+.jira-node__actions button:hover,
+.jira-node__transitions button:hover { background: var(--s-4); border-color: var(--line-strong); }
 
-/* --amber-dim, the same wash .panel--agent-wants-you's card variant uses for
-   "this needs you, but it is not an error" — a conflict is exactly that: the
-   save was refused (or would silently reseed), not a system failure. */
+/* --amber-dim, the same wash the wants-you card uses for "this needs you,
+   but it is not an error" — a conflict is exactly that. */
 .file-node__conflict {
   display: flex;
   gap: var(--sp-4);
@@ -2505,19 +2102,10 @@ body {
   padding: var(--sp-2) var(--sp-4);
   margin: 0 0 var(--sp-4);
   background: var(--amber-dim);
+  border-radius: var(--r-sm);
   color: var(--fg);
   font-size: var(--t-sm);
 }
-.file-node__conflict button {
-  flex: none;
-  border: 1px solid var(--border);
-  background: var(--s-2);
-  color: var(--fg);
-  font: inherit;
-  cursor: pointer;
-  padding: var(--sp-1) var(--sp-3);
-}
-.file-node__conflict button:hover { background: var(--s-4); }
 
 /* Only ever rendered when tmux is unavailable, so it is allowed to be loud —
    the alternative is a user who believes their sessions are durable. */
@@ -2550,24 +2138,12 @@ body {
   border-bottom: 7px solid transparent;
 }
 
-/* M14. The rubber band. A sibling of .world for the pips' reason plus one of
-   its own: the band must stay under the cursor at the cursor's own size, and
-   inside the transform it would be scaled twice — once by the caller
-   converting its world rect to screen, once by the ancestor. --blue and
-   --blue-dim are the selection accent the panels it is selecting already
-   wear; this is --blue-dim's first user, and it is a token rather than a
-   hand-mixed rgba() precisely so the fill stays in step with the ring on
-   .panel--selected instead of drifting from it. */
-/* M14's merged view.
-
-   The lanes live INSIDE .world — see MergedLanes.tsx for why a lane header is
-   the one overlay in this app that must scale with the canvas — so this block
-   describes world-space chrome, unlike .canvas-marquee below it.
-
-   z-index 0 against panels' own Panel.z (>= 1) is what keeps a lane BEHIND
-   the panels it labels; pointer-events: none is what keeps a region covering
-   most of the canvas from swallowing the background mousedown that clears
-   selection. */
+/* M14's merged view. The lanes live INSIDE .world — see MergedLanes.tsx for
+   why a lane header is the one overlay in this app that must scale with the
+   canvas. z-index 0 against panels' own Panel.z (>= 1) is what keeps a lane
+   BEHIND the panels it labels; pointer-events: none is what keeps a region
+   covering most of the canvas from swallowing the background mousedown that
+   clears selection. */
 .merged-lanes {
   position: absolute;
   left: 0;
@@ -2578,14 +2154,14 @@ body {
 .merged-lane {
   position: absolute;
   z-index: 0;
-  border: 1px dashed var(--line);
+  border: 1px dashed var(--line-strong);
   border-radius: var(--r-lg);
   pointer-events: none;
 }
 /* The active workspace's own lane, brighter so "which of these is the canvas
-   I was just on" is answerable at a glance rather than by reading four
-   headers. --blue is the same accent selection already uses, at the same two
-   strengths, rather than a fifth colour nobody has a meaning for. */
+   I was just on" is answerable at a glance. --blue is the same accent
+   selection already uses, rather than a fifth colour nobody has a meaning
+   for. */
 .merged-lane--active {
   border-color: var(--blue);
   border-style: solid;
@@ -2595,42 +2171,36 @@ body {
   padding: var(--sp-2) var(--sp-4);
   color: var(--muted);
   font-size: var(--t-lg);
+  font-weight: 600;
   line-height: var(--lh-tight);
 }
 .merged-lane--active .merged-lane__name { color: var(--text); }
 
 /* The top bar's merged toggle, held down while the mode is on. Inherits
-   .shell__top button for everything else; only the pressed look is its own,
-   and it reuses the raised/hover surface rather than inventing a state
-   colour. */
+   .shell__top button for everything else; only the pressed look is its own. */
 .shell__merge--on {
-  background: var(--s-4);
+  background: var(--s-5);
   border-color: var(--line-strong);
   color: var(--text);
 }
 
+/* M14. The rubber band. A sibling of .world: the band must stay under the
+   cursor at the cursor's own size, and inside the transform it would be
+   scaled twice. Never a click target: a hit-testable band would swallow the
+   very mousemoves that size it. */
 .canvas-marquee {
   position: absolute;
   border: 1px solid var(--blue);
   background: var(--blue-dim);
   border-radius: var(--r-sm);
-  /* Never a click target: the band sits under the cursor for the whole
-     gesture, so a hit-testable one would swallow the very mousemoves that
-     size it — and its mousedown would reach the background handler beneath,
-     which clears focus and wakes whatever it hit-tests. */
   pointer-events: none;
 }
 
 /* M15. Subagent nodes: one per subagent, positioned beside the panel that
-   spawned it. Unlike .edge-indicators immediately above — and deliberately
-   the mirror image of it — these are INSIDE .world (see SubagentLayer.tsx):
-   a pip has to stay pinned to the viewport's physical edge, but a subagent
-   node belongs to a place beside its parent, so it must pan and zoom with
-   the panel rather than stay fixed on screen. pointer-events: none on all
-   three rules below for the same reason .edge-indicator carries it: there is
-   no verb to click here, only a fact to read, and a click target would reach
-   .canvas's background handler and hit-test a world point that was never
-   meant to be one. */
+   spawned it. INSIDE .world (see SubagentLayer.tsx): a subagent node belongs
+   to a place beside its parent, so it must pan and zoom with the panel.
+   pointer-events: none on all three rules below: there is no verb to click
+   here, only a fact to read. */
 .subagent-node {
   position: absolute;
   box-sizing: border-box;
@@ -2638,14 +2208,14 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--s-1);
+  box-shadow: var(--e-1);
   overflow: hidden;
   pointer-events: none;
 }
 
 /* --fg-4, never opacity: opacity compounds against an already-muted token
-   and is invisible to any audit that only reads declared colours
-   (verify:styles check 3 forbids it outright). Nothing is REMOVED when a
-   subagent finishes — the node stays, dimmer. */
+   and is invisible to any audit that only reads declared colours. Nothing is
+   REMOVED when a subagent finishes — the node stays, dimmer. */
 .subagent-node--done { color: var(--fg-4); }
 
 .subagent-node__type {
@@ -2671,20 +2241,17 @@ body {
 .subagent-node--done .subagent-node__desc { color: var(--fg-4); }
 
 /* The straight horizontal run from the panel's right edge to the node's left
-   edge — a border rather than a filled div, the same convention
-   .review-node__hunks' left-rule already uses. Not an <svg>: it would need
-   its own coordinate space nested inside a transformed ancestor, where a
-   plain absolutely-positioned div needs none. */
+   edge — a border rather than a filled div. Not an <svg>: it would need its
+   own coordinate space nested inside a transformed ancestor. */
 .subagent-edge {
   position: absolute;
   height: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-strong);
   pointer-events: none;
 }
 
-/* The ambiguous case: one line instead of nodes, because there is no correct
-   per-panel attribution to draw a node for. --fg-3, not --fg-4 — this is an
-   ordinary sentence the user is meant to read, not a disabled control. */
+/* The ambiguous case: one line instead of nodes. --fg-3, not --fg-4 — this
+   is an ordinary sentence the user is meant to read. */
 .subagent-ambiguous {
   position: absolute;
   padding: var(--sp-2) var(--sp-3);
@@ -2693,10 +2260,8 @@ body {
   pointer-events: none;
 }
 
-/* The cap's remainder. --fg-4 rather than --fg-3, unlike .subagent-ambiguous
-   above: that one is a sentence explaining why there is nothing to show, while
-   this is a footnote under a column of real nodes and must not compete with
-   them for a reading eye. */
+/* The cap's remainder. --fg-4 rather than --fg-3: a footnote under a column
+   of real nodes must not compete with them for a reading eye. */
 .subagent-more {
   position: absolute;
   padding: var(--sp-1) var(--sp-3);
@@ -2713,46 +2278,27 @@ body {
   top: 12%;
   left: 50%;
   transform: translateX(-50%);
-  /* SPIKE: 680 -> 760. The list is long by construction (four rows per
-     preset, one per panel) and the extra width is what lets a row's title and
-     its right-aligned hint coexist without the hint truncating to nothing. */
+  /* The list is long by construction (four rows per preset, one per panel)
+     and the width is what lets a row's title and its right-aligned hint
+     coexist without the hint truncating to nothing. */
   width: min(760px, 92%);
   z-index: 1000;
   border: 1px solid var(--line-strong);
-  /* Glass reads as glass partly through radius. This is a TRANSIENT overlay
-     floating over content, which is exactly the case that earns a real
-     backdrop-filter (see --glass-1) rather than the opaque --sheen fake the
-     rail and top bar get. */
-  border-radius: var(--r-2xl);
-  /* --e-3, plus a top inner highlight — the one-line move that separates a
-     floating surface from its own shadow.
-
-     The highlight's rgba() is a DELIBERATE literal and is allowlisted by name
-     in verify-styles check 1. Like the canvas dot grid it is a translucent
-     white, not a theme colour: it models light falling on the surface's top
-     edge, so it must composite over whatever --s-3 the active theme sets
-     rather than being a colour of its own that a theme has to restate. */
-  /* --e-4, not --e-3. The ground is near-black now, so the old shadow was
-     invisible against it and the overlay read as pasted on rather than
-     floating; a deeper, wider shadow is what re-separates them. */
-  /* M19. No blur, no translucency: --e-4 is a soft raise now, and a slab
-     lifted 20px off the ground by shadow alone separates from it at least as
-     well as a blurred pane did — with no composited layer over a repainting
-     canvas. The literal white gradient becomes --sheen, which is the token
-     that already meant "a lit top edge faked on an opaque surface". */
-  box-shadow: var(--e-4), inset 0 1px 0 var(--glass-edge);
-  background: var(--glass-1);
-  background-image: linear-gradient(180deg, var(--sheen), transparent 40%);
+  border-radius: var(--r-lg);
+  /* Opaque, flat, with the deepest elevation in the file. No blur, no
+     translucency: a composited layer over a canvas that repaints on every
+     frame of a pan is a cost this overlay does not need to pay. */
+  box-shadow: var(--e-4);
+  background: var(--s-3);
   overflow: hidden;
   font-size: var(--t-md);
 }
 
-/* SPIKE. An overlay that appears instantly at full opacity is the single
-   loudest "unfinished" tell in a desktop app. Opacity and transform only, on
-   the overlay's OWN element — .world is never touched (four checks read its
+/* An overlay that appears instantly at full opacity is the single loudest
+   "unfinished" tell in a desktop app. Opacity and transform only, on the
+   overlay's OWN element — .world is never touched (four checks read its
    computed matrix) and this is not in .world. Standing down under
-   prefers-reduced-motion is handled by the global block at the end of the
-   file, which forces every animation to .01ms. */
+   prefers-reduced-motion is handled by the global block below. */
 @keyframes palette-enter {
   from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -2765,17 +2311,18 @@ body {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: 0 var(--sp-7);
-  border-bottom: 1px solid var(--line-strong);
+  padding: 0 var(--sp-6);
+  border-bottom: 1px solid var(--line);
 }
 
 .palette__scope {
   flex: none;
-  padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--r-md);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-sm);
   background: var(--iris-dim);
   color: var(--iris);
   font-size: var(--t-sm);
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -2783,15 +2330,13 @@ body {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  padding: var(--sp-6) 0;
+  padding: var(--sp-5) 0;
   background: transparent;
   border: 0;
   color: var(--fg);
   font: inherit;
-  /* SPIKE: --t-lg (15px) -> --t-xl (20px). This is the one element the user
-     is looking at the instant the overlay opens, and it was two thirds the
-     size of the reference's body text. Tracking is negative because it is now
-     large enough for default tracking to read loose. */
+  /* The one element the user is looking at the instant the overlay opens:
+     the top of the scale for an input. */
   font-size: var(--t-xl);
   letter-spacing: var(--track-tight);
   outline: none;
@@ -2824,9 +2369,8 @@ body {
 }
 
 /* An out-of-range number edit's refusal — genuinely an error, not a question,
-   so it reads with --red rather than palette__confirm's red-tinted --text.
-   Sits in the ordinary bar (the input with the bad value still in it stays
-   visible above it), unlike palette__confirm which replaces the bar outright. */
+   so it reads with --red. Sits in the ordinary bar (the input with the bad
+   value still in it stays visible above it). */
 .palette__number-error {
   padding: var(--sp-4) var(--sp-6) var(--sp-6);
   color: var(--red);
@@ -2852,18 +2396,17 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  /* SPIKE. More air ABOVE than below, so a header groups with the rows under
-     it rather than floating between two groups. Still --t-xs: these are
-     two-word ALL-CAPS labels at wide tracking, which is the one case the type
-     scale's own comment permits below the 12px floor. */
-  padding: var(--sp-6) var(--sp-7) var(--sp-3);
-  /* Opaque, NOT --glass-1: this is position:sticky and rows scroll UNDER it.
-     A translucent sticky header shows the moving rows through itself, which
-     reads as a rendering bug. */
+  /* More air ABOVE than below, so a header groups with the rows under it
+     rather than floating between two groups. --t-xs: two-word ALL-CAPS
+     labels at wide tracking, the one case the type scale permits below the
+     12px floor. */
+  padding: var(--sp-5) var(--sp-6) var(--sp-2);
+  /* Opaque: this is position:sticky and rows scroll UNDER it. A translucent
+     sticky header shows the moving rows through itself. */
   background: var(--s-3);
   color: var(--fg-3);
   font-size: var(--t-xs);
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: var(--track-caps);
 }
@@ -2872,33 +2415,25 @@ body {
   display: flex;
   align-items: baseline;
   gap: var(--sp-4);
-  /* SPIKE. Taller rows. The list is scanned, not read, and 6px of vertical
-     padding put twelve near-identical rows into one undifferentiated block —
-     which is exactly what the palette screenshot in the diagnosis showed. */
-  padding: var(--sp-4) var(--sp-7);
+  /* Taller rows. The list is scanned, not read, and 6px of vertical padding
+     put twelve near-identical rows into one undifferentiated block. */
+  padding: var(--sp-3) var(--sp-6);
   color: var(--fg-2);
   /* A row answers the pointer — hovering selects it and a mousedown runs it —
      so it must not read as inert text the way `default` makes it. */
   cursor: pointer;
-  /* Load-bearing, and it must match .palette__section's rendered height.
-     scrollIntoView({ block: 'nearest' }) considers a row "visible" when it is
-     inside the scrollport — including when a sticky header is painted on top
-     of it. Without this margin, arrowing down into a new section parks the
-     selected row UNDERNEATH its own header, which looks exactly like the
-     selection having jumped somewhere off screen. */
-  /* MUST match .palette__section's rendered height, which grew with its
-     padding above (--sp-6 + --t-xs line + --sp-3 ~= 36px). Get this wrong and
-     arrowing into a new section parks the selected row underneath its own
-     header — which looks exactly like the selection jumping off screen. */
-  scroll-margin-top: 36px;
+  /* MUST match .palette__section's rendered height (--sp-5 + --t-xs line +
+     --sp-2 ~= 30px). scrollIntoView({ block: 'nearest' }) considers a row
+     "visible" when it is inside the scrollport — including when a sticky
+     header is painted on top of it. Get this wrong and arrowing into a new
+     section parks the selected row UNDERNEATH its own header, which looks
+     exactly like the selection jumping off screen. */
+  scroll-margin-top: 32px;
   scroll-margin-bottom: 6px;
 }
 
-/* An accent bar as well as a background shift: at 13px on a dark ground the
-   background alone is a subtle enough change that the eye loses the selection
-   while scanning, which matters more here than usual because Enter acts on it. */
-/* SPIKE. The accent bar widens and the fill lifts a step. Enter acts on this
-   row, so it is the one thing in the overlay that must never be ambiguous. */
+/* An accent bar as well as a fill: Enter acts on this row, so it is the one
+   thing in the overlay that must never be ambiguous. */
 .palette__row--selected {
   background: var(--s-4);
   color: var(--fg);
@@ -2913,9 +2448,7 @@ body {
 }
 
 /* Destructive rows are marked as well as gated (Canvas.tsx confirms them).
-   The colour is the warning; the confirm is the safety. Neither replaces the
-   other — a red row still runs on one Enter, and an unmarked confirm is a
-   question the user did not expect to be asked. */
+   The colour is the warning; the confirm is the safety. */
 .palette__row--destructive .palette__title {
   color: var(--red);
 }
@@ -2938,7 +2471,7 @@ body {
    weight and the accent colour instead. */
 .palette__hit {
   background: transparent;
-  color: var(--blue);
+  color: var(--iris);
   font-weight: 600;
 }
 
@@ -2954,26 +2487,15 @@ body {
 
 .palette__chevron {
   flex: none;
+  display: inline-grid;
+  place-items: center;
+  align-self: center;
   color: var(--fg-3);
 }
-
-/* Shown only where a shortcut genuinely exists — the default preset's spawn
-   row and Reset zoom. See commands.ts: a hint on every row would be a lie on
-   all but those two. */
-.palette__kbd {
-  flex: none;
-  padding: 1px var(--sp-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--s-2);
-  color: var(--fg-3);
-  font: inherit;
-  font-size: var(--t-sm);
-  white-space: nowrap;
-}
+.palette__chevron svg { display: block; }
 
 .palette__empty {
-  padding: var(--sp-5) var(--sp-7);
+  padding: var(--sp-5) var(--sp-6);
   color: var(--fg-3);
 }
 
@@ -2981,28 +2503,19 @@ body {
    overlay swallows rather than passes to the agent, and "esc back" vs
    "esc close" is the only place the two-stage Escape is visible at all. */
 .palette__footer {
-  padding: var(--sp-4) var(--sp-7);
-  border-top: 1px solid var(--line-strong);
+  padding: var(--sp-3) var(--sp-6);
+  border-top: 1px solid var(--line);
   background: var(--s-2);
   color: var(--fg-4);
-  font-size: var(--t-sm);
+  font-size: var(--t-xs);
 }
 
-/* Every hover, selection and state change in this app is currently a 0ms
-   hard cut — the single largest contributor to the whole thing reading as a
-   prototype. 90ms is below the threshold at which a change reads as waiting
-   and above the one at which it reads as a glitch.
-
-   NOTE the properties: background-color, color and border-color, never
-   transform. .world carries will-change: transform and is driven at
-   60Hz by the viewport, and four checks read its computed matrix through
-   DOMMatrixReadOnly — a transition there is both an elastic-feeling pan and
-   a race against those reads.
-
-   .review-node__commit joins its siblings .review-node__file-button and
-   .review-node__refresh here: it is the same kind of button in the same
-   component, with its own :hover/:disabled colour changes, and the M9c
-   commit UI landed after this selector list was drafted. */
+/* Every hover, selection and state change transitions its colours; 90ms is
+   below the threshold at which a change reads as waiting and above the one
+   at which it reads as a glitch. NOTE the properties: background-color,
+   color and border-color, never transform. .world carries will-change:
+   transform and is driven at 60Hz by the viewport, and four checks read its
+   computed matrix through DOMMatrixReadOnly. */
 .rail-row,
 .rail-row__main,
 .rail-row__close,
@@ -3011,14 +2524,12 @@ body {
 .shell__top button,
 .shell__region-add,
 .inspector__action,
+.inspector__link-action,
+.icon-button,
 .palette__row,
 .panel__close,
 .review-node__file-button,
-.review-node__refresh,
 .review-node__commit,
-.file-node__refresh,
-.jira-node__refresh,
-.file-node__edit,
 .file-node__save,
 .file-node__conflict button {
   transition:
@@ -3027,17 +2538,17 @@ body {
     border-color     var(--dur-1) var(--ease);
 }
 
-/* Only raised controls transition transforms. .world remains deliberately
-   absent: its transform is the live camera state, not visual ornament. */
-.rail-row,
-.inspector__action {
+/* The reveal. Opacity only, and only on the two controls that hide. */
+.rail-row__rename,
+.rail-row__close {
   transition:
-    transform var(--dur-1) var(--ease),
-    box-shadow var(--dur-1) var(--ease);
+    opacity          var(--dur-1) var(--ease),
+    background-color var(--dur-1) var(--ease),
+    color            var(--dur-1) var(--ease);
 }
 
-/* Not optional the moment any animation exists, and the app had none until
-   this task — which is why there was nothing here before. */
+/* Not optional the moment any animation exists. M56's camera flights must
+   honour the same query. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -3050,40 +2561,29 @@ body {
   }
 }
 
-/* The only `outline` in this file before now was `outline: none` on the
-   palette input. Because shellControl() calls preventDefault() on mousedown,
-   focus never lands on a shell control by MOUSE — but every one of them is
-   natively Tab-reachable, so a keyboard user got Chromium's default ring on
-   some surfaces and nothing considered anywhere.
-
-   :focus-visible rather than :focus, or every mouse click would ring.
+/* Focus. shellControl() calls preventDefault() on mousedown, so focus never
+   lands on a shell control by MOUSE — but every one of them is natively
+   Tab-reachable. :focus-visible rather than :focus, or every mouse click
+   would ring.
 
    :not(.palette__input) is what makes the relocation below TRUE rather than
    merely intended. :where() contributes zero specificity, so without the
    exclusion this rule is (0,1,0) — a tie with `.palette__input { outline:
-   none }`, won on source order because it is declared later. Chromium always
-   matches :focus-visible on a text input and the palette autofocuses on open,
-   so every single Cmd+K painted this 2px ring AND the bar's underline: the
-   exact ring-inside-a-ring the comment below claims was avoided. The input is
-   excluded here rather than given a higher-specificity `outline: none` of its
-   own, so there is one place that decides which elements get the ring. */
-:where(button, [href], input, [tabindex]):not(.palette__input):focus-visible {
-  outline: 2px solid var(--iris);
+   none }`, won on source order. Chromium always matches :focus-visible on a
+   text input and the palette autofocuses on open, so every single Cmd+K
+   would paint this ring AND the bar's underline. */
+:where(button, [href], input, textarea, [tabindex]):not(.palette__input):focus-visible {
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   /* No border-radius here. An outline already follows the element's OWN
-     radius, so setting one made every focused control adopt --r-sm — visibly
-     popping .panel__close from --r-md (6px) to 4px for as long as it held
-     focus, a shape change nothing about focus should cause. */
+     radius. */
 }
 
 /* The input keeps outline: none — a ring inside a ring reads as broken — and
    the BAR carries the indicator instead. Same information, correct object:
-   this satisfies "never remove a focus outline without a replacement" by
-   RELOCATION rather than by deletion, which is the distinction that makes the
-   existing outline:none defensible rather than an oversight. The generic rule
-   above excludes the input by name, which is what makes that true in the
-   cascade and not only in prose. */
-.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--iris); }
+   "never remove a focus outline without a replacement" satisfied by
+   RELOCATION rather than by deletion. */
+.palette__bar:focus-within { box-shadow: inset 0 -1px 0 var(--focus); }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M11. The nav grid: a sibling of .world, pinned to the viewport rather than
@@ -3095,14 +2595,11 @@ body {
   display: grid;
   place-items: center;
   /* The canvas remains perceptible through this transient surface, so the
-     grid reads as summoned above the workspace rather than replacing it.
-     This uses a translucent fill rather than element opacity: opacity would
-     also dim the grid's text and controls. */
-  /* M19: the translucency stays and the blur goes. The comment above is why
-     the fill is translucent rather than the element being faded, and that
-     argument is untouched; what the blur was adding on top of it was a
-     full-viewport composited layer for the duration of a held chord. */
-  background: color-mix(in srgb, var(--s-3) 82%, transparent);
+     grid reads as summoned above the workspace rather than replacing it. A
+     translucent fill rather than element opacity: opacity would also dim the
+     grid's text and controls. No blur: a full-viewport composited layer for
+     the duration of a held chord. */
+  background: color-mix(in srgb, var(--s-0) 82%, transparent);
   z-index: 1000; /* the palette's layer; only one of the two is ever up */
 }
 .navgrid__grid {
@@ -3120,6 +2617,7 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--s-1);
+  box-shadow: var(--e-2);
   color: var(--fg-2);
   font-size: var(--t-md);
   animation: navgrid-cell-enter var(--dur-1) var(--ease) both;
@@ -3138,11 +2636,9 @@ body {
 .navgrid__cell:nth-child(7) { animation-delay: 180ms; }
 .navgrid__cell:nth-child(8) { animation-delay: 210ms; }
 .navgrid__cell:nth-child(9) { animation-delay: 240ms; }
-.navgrid__cell--empty { background: var(--s-0); border-style: dashed; }
-/* --s-4 is the selected fill, and the cursor IS a selection. --s-5 is
-   deliberately not used: it is the pressed state — transient, never a text
-   ground — and verify:styles 11 excludes it as a ground when it measures
-   contrast. */
+.navgrid__cell--empty { background: var(--s-0); border-style: dashed; box-shadow: none; }
+/* --s-4 is the hover fill, and the cursor IS a hover. --s-5 is deliberately
+   not used: verify:styles 11 excludes it as a text ground. */
 .navgrid__cell--cursor {
   border-color: var(--iris);
   background: var(--s-4);
@@ -3165,10 +2661,9 @@ body {
   font: var(--t-sm) / var(--lh-body) var(--font-mono);
   color: var(--muted);
   background: var(--panel-bg);
-  /* .panel sets user-select: none so a drag on the chrome leaves no text
-     selection. This is a READING surface — a user copying a skill name or an
-     MCP command out of it is the ordinary use — so it takes the same lift
-     .file-node__body and .review-node__body already take. */
+  /* A READING surface — a user copying a skill name or an MCP command out of
+     it is the ordinary use — so it takes the same lift .file-node__body and
+     .review-node__body already take. */
   user-select: text;
 }
 
@@ -3177,21 +2672,8 @@ body {
 .toolbox-node__summary {
   flex: none;
   color: var(--fg-3);
+  font-size: var(--t-xs);
 }
-
-.toolbox-node__refresh {
-  /* Never shrunk to make room for a long heading — the rule .panel__close
-     obeys, and it shares that button's chrome row. */
-  flex: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--fg-3);
-}
-
-.toolbox-node__refresh:hover { color: var(--fg); }
 
 .toolbox-node__directory {
   margin: 0 0 var(--sp-4);
@@ -3217,13 +2699,13 @@ body {
 
 .toolbox-node__group-heading {
   margin: 0 0 var(--sp-2);
-  font: var(--t-xs) / var(--lh-tight) var(--font-display);
-  letter-spacing: var(--track-display);
+  font: 600 var(--t-xs) / var(--lh-tight) var(--font-ui);
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   color: var(--fg-3);
 }
 
-.toolbox-node__count { color: var(--fg-4); }
+.toolbox-node__count { color: var(--fg-4); font-variant-numeric: tabular-nums; }
 
 .toolbox-node__list {
   margin: 0;
@@ -3240,9 +2722,8 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-/* Not `opacity`: verify:styles 3 refuses a fractional opacity, which compounds
-   against an already-muted token and is invisible to any audit that reads
-   declared colours. A dimmer TOKEN says the same thing and stays auditable. */
+/* Not `opacity`: verify:styles 3 refuses a fractional opacity. A dimmer
+   TOKEN says the same thing and stays auditable. */
 .toolbox-node__row--muted { color: var(--fg-4); }
 
 .toolbox-node__name { color: var(--fg); }
@@ -3285,24 +2766,18 @@ body {
 .inspector__toolbox-state { flex: none; color: var(--amber); }
 
 /* M35. The four link handles. Children of .panel, so they ride .world's
-   transform with the rest of the panel — the same placement .panel__resize
-   already has, and for the same reason: a handle sized in screen pixels would
-   drift away from its own border on every zoom.
-
-   z-index 4 so a port beats .panel__resize--se (3) and --e/--s (2) where they
-   overlap. --e covers the ENTIRE right border, so the east port sits on top of
-   it by construction, and the cursor change is honest feedback about which of
-   the two a press will reach.
-
-   opacity 0 and 1, never a fraction: verify:styles check 3 forbids fractional
-   opacity, and integers are what this wanted anyway. */
+   transform with the rest of the panel — a handle sized in screen pixels
+   would drift away from its own border on every zoom. z-index 4 so a port
+   beats .panel__resize--se (3) and --e/--s (2) where they overlap. opacity 0
+   and 1, never a fraction: verify:styles check 3 forbids fractional opacity,
+   and integers are what this wanted anyway. */
 .panel__port {
   position: absolute;
   width: 14px;
   height: 14px;
   z-index: 4;
   border-radius: var(--r-full);
-  border: 2px solid var(--s-2);
+  border: 2px solid var(--s-1);
   background: var(--iris);
   cursor: crosshair;
   opacity: 0;
@@ -3311,8 +2786,7 @@ body {
 
 .panel:hover .panel__port,
 /* Every panel reveals its ports while ANY draw is in flight, so the drop
-   targets are visible rather than hunted for. This is the single largest
-   contributor to the gesture feeling aimed rather than guessed at. */
+   targets are visible rather than hunted for. */
 .canvas--linking .panel__port {
   opacity: 1;
 }
@@ -3323,36 +2797,22 @@ body {
   border-color: var(--fg);
 }
 
-/* M35 (Fix round 1). PORT_MIN_SCALE's own comment (PanelPorts.tsx) states why
-   this is a CANVAS-HOST CLASS rather than a `scale` prop threaded through
+/* PORT_MIN_SCALE's own comment (PanelPorts.tsx) states why this is a
+   CANVAS-HOST CLASS rather than a `scale` prop threaded through
    TerminalPanel: `viewport.scale` changes on every zoom frame, and a prop
    would defeat that component's memo on every one of them. `display: none`
    rather than `opacity: 0`, because below this scale a port must be
-   genuinely NOT HIT-TESTABLE, not merely invisible — opacity alone would
-   leave a 14px dot clickable at a size nobody can see to aim at. */
+   genuinely NOT HIT-TESTABLE, not merely invisible. */
 .canvas--ports-hidden .panel__port {
   display: none;
 }
 
-/* Flush with the edge, never straddling it (a deviation from the brief's
-   -7px offsets, found necessary by a failing check rather than by inspection:
-   .panel carries `overflow: hidden` — needed so a terminal's own content
-   never bleeds past its rounded corners — and a port centred ON the border
-   has HALF its hit area clipped away by that ancestor, landing its own
-   getBoundingClientRect() centre exactly on the clip edge, where a real
-   mousedown resolves to whatever is behind it rather than to the port. Fully
-   inside is what .panel__resize--e/--s already do for the identical reason,
-   and it costs only a few pixels of visual overlap with the border instead of
-   being centred on it.
-
-   The four -7px margins below are this stylesheet's first negative margins,
-   and verify:styles check 6 (`/^\d+px$/`, no leading minus) structurally
-   cannot see them — 7px would fail that check; -7px passes, silently. That
-   is not a gap in the token audit worth closing: -7px is exactly half of
-   .panel__port's own 14px width/height, a CENTRING offset (the idiomatic
-   `top: 50%; margin-top: -half-the-element` pattern), not a spacing literal
-   drawn from the spacing scale check 6 polices. A later auditor re-reading
-   this file should not mistake it for a crack in the tokenised stylesheet. */
+/* Flush with the edge, never straddling it: .panel carries `overflow: hidden`
+   and a port centred ON the border has HALF its hit area clipped away by that
+   ancestor, landing its own getBoundingClientRect() centre exactly on the
+   clip edge. The four -7px margins are CENTRING offsets (half of the port's
+   own 14px), not spacing literals; verify:styles 6 (`/^\d+px$/`) structurally
+   cannot see them and that is not a gap worth closing. */
 .panel__port--n { top: 0; left: 50%; margin-left: -7px; }
 .panel__port--s { bottom: 0; left: 50%; margin-left: -7px; }
 .panel__port--w { left: 0; top: 50%; margin-top: -7px; }

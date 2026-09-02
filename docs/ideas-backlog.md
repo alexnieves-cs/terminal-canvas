@@ -223,7 +223,7 @@ together: the canvas as an agentic super app, not a terminal multiplexer.**
   surface. GitHub remains the preferred second reference implementation, at which point the
   common boundary can be derived rather than guessed.
 
-## 10. Light mode / dark mode
+## 10. Light mode / dark mode — DONE, M45
 
 A theme the user picks — light or dark — plus, presumably, "follow the system".
 

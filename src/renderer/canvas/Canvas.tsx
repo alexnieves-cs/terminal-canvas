@@ -14,6 +14,8 @@ import { EdgeIndicators } from './EdgeIndicators'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
+import { useTheme } from './useTheme'
+import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
 import { SubagentLayer } from './SubagentLayer'
 import { useCanvasTestHooks } from './useCanvasTestHooks'
@@ -2193,6 +2195,16 @@ export function Canvas({
   useEffect(() => {
     registry.applyTerminalOptions({ screenReaderMode })
   }, [screenReaderMode])
+
+  // M45: the theme. useTheme stamps data-theme (the stylesheet's two colour
+  // blocks select on it) and the terminal follows through the SAME fan-out
+  // the screen-reader option uses — every session, live and detached, and
+  // sessions created later inherit it. configure() refreshes an opened
+  // terminal itself; a detached one repaints on its next attach.
+  const resolvedTheme = useTheme(settingRows)
+  useEffect(() => {
+    registry.applyTerminalOptions({ theme: terminalTheme(resolvedTheme) })
+  }, [resolvedTheme])
 
   // M41: read the SAME way, for the handoff hook's "scrollback is off" skip —
   // a handoff whose source recorded nothing says a different sentence when the

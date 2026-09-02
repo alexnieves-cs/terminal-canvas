@@ -55,11 +55,11 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:viewport` | plain node | ~97 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
-| `verify:registry` | plain node | 35 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | ~168 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:registry` | plain node | 36 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
+| `verify:layout` | plain node | ~174 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
-| `verify:palette` | plain node | ~98 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:palette` | plain node | ~100 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
 | `verify:rail` | plain node | ~124 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~89 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
@@ -69,7 +69,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
 | `verify:tmux` | plain node | 29 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
 | `verify:agent-state` | plain node | 25 checks (one lettered sub-check): `scanForBell`'s escape-sequence scanner and `nextState`'s state machine |
-| `verify:styles` | plain node | 11 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
+| `verify:styles` | plain node | 15 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 10 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `verify:packaged` | real Electron, **not in `npm run verify`** | 11 checks: packages with `electron-builder --dir` and launches the produced binary with a stripped PATH, a throwaway `--user-data-dir`, and a scratch |
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
@@ -141,6 +141,7 @@ main     --send-->   subagent:state                                             
 main     --send-->   file:changed                                              --> renderer
 main     --send-->   usage:panel                                               --> renderer
 main     --send-->   attention:jump                                            --> renderer
+main     --send-->   settings:changed                                          --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
@@ -213,6 +214,17 @@ check does not, and should not, cover it.
   own mount lifecycle.
 - `src/renderer/canvas/lod.ts` — pure tier-assignment function; decides which panels' sessions
   are attached (`live`) vs. carded, based on viewport, focus, and budget.
+- `src/renderer/terminal/themes.ts` — M45. The two xterm `ITheme`s, one per `data-theme`; the
+  dark one is the pre-M45 palette byte for byte, the light one is RE-TUNED for a light ground
+  (bright yellow on white is the whole reason #10 called this "the whole item"). Its
+  `background` must equal the stylesheet's `--well` for the same theme.
+- `src/renderer/canvas/useTheme.ts` — M45. Resolves `appearance.theme` (following
+  `prefers-color-scheme` live for `system`), stamps `data-theme` on `<html>`, and re-reads on
+  `settings:changed` — the event that lets the MENU's radio group apply without a palette
+  open. `Canvas.tsx` fans the matching xterm theme through `registry.applyTerminalOptions`.
+- `src/renderer/icons.tsx` — M45. The inline SVG icon set, `stroke="currentColor"` on a 16px
+  grid, `aria-hidden` on every one. `verify:styles` `icons.1` fails the build if an entity or
+  symbol glyph comes back as a control's text.
 - `src/renderer/terminal/create-terminal.ts` — the only place a `Terminal` is constructed, and
   it returns one **detached**. `src/renderer/terminal/session-factory.ts` implements
   `SessionHandle` over `attachTerminal`/`detachTerminal` from the same module, and is what the

@@ -251,6 +251,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
+                       settings:changed
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture

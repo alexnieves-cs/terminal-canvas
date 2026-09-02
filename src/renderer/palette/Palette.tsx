@@ -29,6 +29,7 @@ import {
 import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
+import { ChevronRight } from '@renderer/icons'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -653,7 +654,7 @@ export function Palette(props: PaletteProps): JSX.Element {
                       the menu. It replaces the subtitle rather than joining
                       it: the reason is the more urgent of the two. */}
                   <span className="palette__hint">{row.disabledReason ?? row.subtitle ?? ''}</span>
-                  {row.entersScope && <span className="palette__chevron">›</span>}
+                  {row.entersScope && <span className="palette__chevron"><ChevronRight /></span>}
                   {row.shortcut && <kbd className="palette__kbd">{row.shortcut}</kbd>}
                 </li>
               </Fragment>

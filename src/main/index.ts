@@ -339,7 +339,13 @@ function onSpawnPreset(id: string): void {
 function rebuildMenu(): void {
   buildAppMenu({
     settingValue: (id) => layoutStore.getSetting(id),
-    onToggleSetting: (id, value) => layoutStore.setPreference(id, value),
+    onToggleSetting: (id, value) => {
+      layoutStore.setPreference(id, value)
+      // M45. The menu is main's, so the renderer never sees this write
+      // unless told — and a theme radio that applies on the next Cmd+K is
+      // a picker that appears to do nothing.
+      mainWindow?.webContents.send(IPC_EVENTS.SETTINGS_CHANGED, id)
+    },
     onReset: () => {
       void confirmReset()
     },

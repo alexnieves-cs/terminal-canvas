@@ -34,6 +34,8 @@ export const FILES_CATEGORY = 'Files'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const SESSION_CATEGORY = 'Sessions'
 export const ACCESSIBILITY_CATEGORY = 'Accessibility'
+/** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const APPEARANCE_CATEGORY = 'Appearance'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -49,9 +51,20 @@ export interface SettingDef {
    * only by its own label is a setting most users will not find.
    */
   keywords: string[]
-  /** Tracks what `typeof` can actually answer — see parsePreferences/setPreference. */
-  type: 'boolean' | 'number'
+  /**
+   * `boolean` and `number` track what `typeof` can answer; `enum` is a
+   * string drawn from `values`, and both parsers reject one outside that
+   * list exactly as they reject an out-of-range number. An earlier 'enum'
+   * member with no enum-typed setting behind it was removed as a
+   * customer-free abstraction (M23-spec §9.1); `appearance.theme` is its
+   * customer, and it is the FIRST enum, so anything that renders a setting
+   * (the palette's row builder, the menu) has to handle the type or the
+   * setting silently gets no row.
+   */
+  type: 'boolean' | 'number' | 'enum'
   default: SettingValue
+  /** The legal values of an `enum` setting, in the order the palette cycles them. */
+  values?: readonly string[]
   /** Groups rows in the palette and names the menu submenu they came from. */
   category: string
   /**
@@ -150,6 +163,19 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: false,
     category: ACCESSIBILITY_CATEGORY
+  },
+  {
+    id: 'appearance.theme',
+    label: 'Theme',
+    description:
+      'Follow the system appearance, or force light or dark. The terminal follows the theme too.',
+    // "dark" and "light" are what a user types looking for this; the label
+    // says neither.
+    keywords: ['theme', 'dark', 'light', 'appearance', 'mode', 'system', 'colour', 'color'],
+    type: 'enum',
+    values: ['system', 'light', 'dark'],
+    default: 'system',
+    category: APPEARANCE_CATEGORY
   },
   {
     id: 'agent.idleAfterMs',

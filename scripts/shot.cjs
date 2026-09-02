@@ -80,11 +80,23 @@ app.whenReady().then(async () => {
       resolveRepo: async () => null,
       captureBaseline: async () => null,
       review: async () => ({ kind: 'not-a-repo' })
-    }
+    },
+    // M45. The positional collaborators after reviewEngine, up to getWindow:
+    // settings:set now sends settings:changed through it, so the dark pass
+    // below needs a window to send to. The rest stay undefined — nothing this
+    // script invokes reaches them.
+    undefined, undefined, undefined,
+    () => win,
+    undefined,
+    tmpdir()
   )
 
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
   await sleep(1500)
+  // M45. Force LIGHT for the first pass rather than trusting `system`: on a
+  // machine in dark mode the "light" shots would silently be dark ones.
+  await win.webContents.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'light')`)
+  await sleep(500)
 
   // Two more panels so the canvas shows the cascade, a live well and a card.
   await press(win.webContents, 'n', { metaKey: true })
@@ -97,6 +109,18 @@ app.whenReady().then(async () => {
   await press(win.webContents, 'k', { metaKey: true })
   await sleep(700)
   await shot(win, 'palette')
+  await press(win.webContents, 'Escape')
+  await sleep(300)
+
+  // M45. The same two surfaces in the dark theme, switched the way a user
+  // switches it — through the setting, so useTheme and the terminal fan-out
+  // both run — rather than by stamping the attribute.
+  await win.webContents.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'dark')`)
+  await sleep(900)
+  await shot(win, 'canvas-dark')
+  await press(win.webContents, 'k', { metaKey: true })
+  await sleep(700)
+  await shot(win, 'palette-dark')
 
   app.quit()
 })

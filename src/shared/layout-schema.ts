@@ -829,10 +829,20 @@ export function parsePreferences(
       warnings.push(`dropped an unknown setting: ${id}`)
       continue
     }
-    // SettingDef['type'] tracks what `typeof` can actually answer, so this
-    // comparison is meaningful for every declared type.
-    if (typeof value !== def.type) {
-      warnings.push(`dropped setting ${id}: expected ${def.type}, got ${typeof value}`)
+    // `boolean`/`number` track what `typeof` can answer; an `enum` is a
+    // string, checked against its values below.
+    const expected = def.type === 'enum' ? 'string' : def.type
+    if (typeof value !== expected) {
+      warnings.push(`dropped setting ${id}: expected ${expected}, got ${typeof value}`)
+      continue
+    }
+    // The enum's membership test is this loader's OWN door, like the range
+    // check below: a hand-edited or synced layout.json never passes through
+    // setPreference. Dropping with a warning, never coercing to the default —
+    // a value that silently became `system` is a preference the user set
+    // that stopped applying, with nothing anywhere saying why.
+    if (def.type === 'enum' && typeof value === 'string' && !(def.values ?? []).includes(value)) {
+      warnings.push(`dropped setting ${id}: ${JSON.stringify(value)} is not one of ${(def.values ?? []).join('|')}`)
       continue
     }
     // The write path (layout-store.ts's setPreference) enforces min/max, but

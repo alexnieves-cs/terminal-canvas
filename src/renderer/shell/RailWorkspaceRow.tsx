@@ -1,6 +1,7 @@
 import { memo, type JSX } from 'react'
 import type { RailWorkspace } from './rail-sections'
 import { shellControl } from './shell-control'
+import { Close, Pencil } from '@renderer/icons'
 
 export interface RailWorkspaceRowProps {
   row: RailWorkspace
@@ -66,21 +67,21 @@ function RailWorkspaceRowImpl({
       </button>
       <button
         type="button"
-        className="rail-row__rename"
+        className="rail-row__rename icon-button"
         title={`Rename ${row.name}`}
         aria-label={`Rename ${row.name}`}
         {...shellControl(() => onRename(row.id, row.name))}
       >
-        &#9998;
+        <Pencil />
       </button>
       <button
         type="button"
-        className="rail-row__close"
+        className="rail-row__close icon-button"
         title={`Delete ${row.name}`}
         aria-label={`Delete ${row.name}`}
         {...shellControl(() => onDelete(row.id, row.name, row.panels))}
       >
-        &times;
+        <Close />
       </button>
     </li>
   )

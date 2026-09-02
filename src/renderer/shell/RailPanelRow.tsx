@@ -2,6 +2,7 @@ import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
+import { Close, Play } from '@renderer/icons'
 
 export interface RailPanelRowProps {
   row: RailRow
@@ -65,22 +66,22 @@ function RailPanelRowImpl({
       {row.dormant && (
         <button
           type="button"
-          className="rail-row__start"
+          className="rail-row__start icon-button"
           title={`Start ${row.label}`}
           aria-label={`Start ${row.label}`}
           {...shellControl(() => onStart(row.id))}
         >
-          &#9654;
+          <Play />
         </button>
       )}
       <button
         type="button"
-        className="rail-row__close"
+        className="rail-row__close icon-button"
         title={`Close ${row.label}`}
         aria-label={`Close ${row.label}`}
         {...shellControl(() => onClose(row.id))}
       >
-        &times;
+        <Close />
       </button>
     </li>
   )

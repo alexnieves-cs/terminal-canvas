@@ -29,12 +29,20 @@
  *          `bottom: 12px` are spacing by any reasonable reading and are not
  *          seen, and every `1px` is exempt outright as a hairline — so a
  *          genuine 1px gap that should have been --sp-1 passes too.
- *   8      Its token-name regex lists sp|r|dur|t|lh|ease, so `--e-*`,
- *          `--ease` (matched only by luck, as the `ease` alternative), and
- *          the one-offs `--font-mono` and `--titlebar-h` could all be moved
- *          into a theme block without failing anything. Widening it to "any
- *          token declared on bare :root" is the obvious improvement and was
- *          not made here.
+ *   8      Widened in M45 to "any token declared on bare :root", so a
+ *          structural token can no longer be moved into a theme block
+ *          unnoticed. What it still cannot see is a NEW structural token
+ *          declared only inside a theme block and nowhere on :root — that
+ *          is a token every other theme must remember to repeat, and it
+ *          reads to this check as a colour.
+ *   11     Reads only six-digit hex. A ground or text token written as
+ *          rgb()/oklch() is skipped as undeclared and REPORTED as such, so
+ *          the failure is loud rather than silent — but a token written
+ *          that way is not measured either.
+ *   icons.1 Greps source text for the glyph inventory the M45 spec lists.
+ *          A glyph spelled some other way (a numeric entity for ×, a
+ *          lookalike code point) is a button with a text icon this check
+ *          does not know about.
  *
  * The pattern in all of them is the same and is worth stating once: this file
  * greps text. Anything spelled in a way it was not taught to look for is
@@ -138,19 +146,26 @@ const spLit = [...new Set([...bodyText.matchAll(/(?<![\w-])(?:padding|margin|gap
   .filter((v) => /^\d+px$/.test(v) && v !== '0px' && v !== '1px'))]
 ok(6, 'no literal padding/margin/gap outside the scale', spLit.length === 0, `literals: ${spLit.join(' ')}`)
 
-// 7 — the structure/colour split, from the colour side
+// 7 — the structure/colour split, from the colour side. `rootOnly` — the
+//     rules whose selector is EXACTLY `:root`, the structural block — is
+//     shared with check 8, so both read the same definition of it.
 const rootOnly = all.filter((r) => /^:root$/.test(r.sel))
 const colourInRoot = rootOnly.flatMap((r) =>
   [...r.body.matchAll(/(--[a-z0-9-]+)\s*:\s*(?:#|rgb|hsl|oklch|color-mix)/gi)].map((m) => m[1]))
 ok(7, 'bare :root declares no colour', colourInRoot.length === 0, `colour on :root: ${colourInRoot.join(' ')}`)
 
-// 8 — and from the structure side. VACUOUS until Task 2 introduces the first
-//     [data-theme] block; it passes today against a stylesheet with no split
-//     at all, which is exactly the shape of check this repo distrusts. It is
-//     kept because it is the only guard against a later theme block quietly
-//     acquiring a radius that every other theme must then remember to repeat.
+// 8 — and from the structure side. Was VACUOUS until M45 introduced the
+//     first [data-theme] blocks; now it is what stops a structural token
+//     (space, radius, type, motion, the one-off lengths) from quietly
+//     acquiring a per-theme value that every other theme must then remember
+//     to repeat. "Structural" is DEFINED as "declared on bare :root" rather
+//     than by a name regex — the old regex listed sp|r|dur|t|lh|ease and
+//     missed --font-mono, --titlebar-h, --navgrid-cell and --file-gutter-w.
+const structural = new Set(rootOnly.flatMap((r) =>
+  [...r.body.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1])))
 const structInTheme = themeRules.filter((r) => /\[data-theme/.test(r.sel))
-  .flatMap((r) => [...r.body.matchAll(/(--(?:sp|r|dur|t|lh|ease)-[a-z0-9-]+)\s*:/gi)].map((m) => m[1]))
+  .flatMap((r) => [...r.body.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1]))
+  .filter((t) => structural.has(t))
 ok(8, 'no structural token inside a theme block', structInTheme.length === 0, `structure in theme: ${structInTheme.join(' ')}`)
 
 // 9 — reduced motion is honoured
@@ -160,11 +175,40 @@ ok(9, 'a prefers-reduced-motion block exists', /@media[^{]*prefers-reduced-motio
 ok(10, 'at least one :focus-visible rule exists', all.some((r) => /:focus-visible/.test(r.sel)))
 
 // 11 — measured contrast for every text token against every ground it can
-//      land on. --s-5 is deliberately NOT a ground: it is a pressed state,
-//      transient, and no text is ever read against it.
-const tok = {}
+//      land on, PER THEME BLOCK. Before M45 this flattened every theme block
+//      into one map (last declaration wins), so a second block would have been
+//      measured only where it overwrote the first — the hole the M19
+//      stylesheet's own comment names as the reason it shipped one block. A
+//      rule is filed under every theme its selector list names: `:root` is
+//      "root", `[data-theme="light"]` is "light", `[data-theme="dark"]` is
+//      "dark", and `:root, :root[data-theme="dark"]` is both.
+//
+//      --s-5 is deliberately NOT a ground: it is a pressed state, transient,
+//      and no text is ever read against it. The five accents are measured for
+//      the NON-TEXT rule (WCAG 1.4.11, 3:1) on --s-1 and --s-4: they are
+//      borders, dots and icons, and a waiting panel's amber border is the
+//      single most important signal in the app.
+function blockNames (sel) {
+  const names = new Set()
+  for (const part of sel.split(',').map((p) => p.trim())) {
+    if (/^:root$/.test(part)) names.add('root')
+    const m = part.match(/data-theme="([a-z]+)"/)
+    if (m) names.add(m[1])
+  }
+  return [...names]
+}
+const perBlock = {}       // name -> { token: value } for every declaration
+const perBlockHex = {}    // name -> { token: #rrggbb } for the measurable ones
 for (const r of themeRules) {
-  for (const m of r.body.matchAll(/(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})/g)) tok[m[1]] = m[2]
+  for (const name of blockNames(r.sel)) {
+    perBlock[name] ??= {}
+    perBlockHex[name] ??= {}
+    for (const m of r.body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+      perBlock[name][m[1]] = m[2].trim()
+      const hex = m[2].trim().match(/^#[0-9a-fA-F]{6}$/)
+      if (hex) perBlockHex[name][m[1]] = hex[0]
+    }
+  }
 }
 const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
 const lum = (h) => {
@@ -175,16 +219,95 @@ const lum = (h) => {
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
 const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4']
 const texts = { '--fg': 4.5, '--fg-2': 4.5, '--fg-3': 4.5, '--fg-4': 3.0 }
+const accents = ['--blue', '--green', '--amber', '--red', '--iris']
+const accentGrounds = ['--s-1', '--s-4']
 const bad = []
-for (const [t, min] of Object.entries(texts)) {
-  for (const g of grounds) {
-    if (!tok[t] || !tok[g]) { bad.push(`${t}/${g} undeclared`); continue }
-    const r = ratio(tok[t], tok[g])
-    if (r < min) bad.push(`${t} on ${g} = ${r.toFixed(2)} (need ${min})`)
+const measured = Object.keys(perBlockHex).filter((name) => Object.keys(perBlockHex[name]).length > 0)
+for (const name of measured) {
+  const tok = perBlockHex[name]
+  for (const [t, min] of Object.entries(texts)) {
+    for (const g of grounds) {
+      if (!tok[t] || !tok[g]) { bad.push(`[${name}] ${t}/${g} undeclared`); continue }
+      const r = ratio(tok[t], tok[g])
+      if (r < min) bad.push(`[${name}] ${t} on ${g} = ${r.toFixed(2)} (need ${min})`)
+    }
+  }
+  for (const a of accents) {
+    for (const g of accentGrounds) {
+      if (!tok[a] || !tok[g]) { bad.push(`[${name}] ${a}/${g} undeclared`); continue }
+      const r = ratio(tok[a], tok[g])
+      if (r < 3.0) bad.push(`[${name}] ${a} on ${g} = ${r.toFixed(2)} (need 3.0, non-text)`)
+    }
   }
 }
-ok(11, 'every text token clears its ratio on every ground it can land on',
-  bad.length === 0, bad.join('; '))
+ok(11, `every text and accent token clears its ratio in every theme block (${measured.join(', ') || 'none'})`,
+  measured.length > 0 && bad.length === 0, bad.length ? bad.join('; ') : 'no theme block declares a hex token')
+
+// M45 — theme.1. Two blocks, one token set. A token declared in one theme
+//       and not the other is a colour that falls through to the OTHER
+//       theme's value (or to nothing) with no error: a dark-only --s-4 makes
+//       light hover fill dark grey, and it shows only when a user hovers, in
+//       the theme the author was not looking at.
+const lightSet = new Set(Object.keys(perBlock.light || {}))
+const darkSet = new Set(Object.keys(perBlock.dark || {}))
+const onlyLight = [...lightSet].filter((t) => !darkSet.has(t))
+const onlyDark = [...darkSet].filter((t) => !lightSet.has(t))
+ok('theme.1', 'the light and dark blocks declare the same token set',
+  lightSet.size > 0 && darkSet.size > 0 && onlyLight.length === 0 && onlyDark.length === 0,
+  `light=${lightSet.size} dark=${darkSet.size} only-light: ${onlyLight.join(' ')} only-dark: ${onlyDark.join(' ')}`)
+
+// M45 — theme.2. Bare :root carries the LIGHT block's values, so the app has
+//       a theme before useTheme stamps the attribute — the frame between
+//       first paint and the settings load — and it is the same theme
+//       `system` resolves to on a light desktop. A mismatch is a flash of
+//       the wrong theme on every launch, visible once and never reported.
+const rootMap = perBlock.root || {}
+const lightMap = perBlock.light || {}
+const rootMismatch = Object.keys(lightMap).filter((t) => rootMap[t] !== lightMap[t])
+ok('theme.2', 'bare :root declares the light block\'s values',
+  Object.keys(lightMap).length > 0 && rootMismatch.length === 0,
+  `light tokens=${Object.keys(lightMap).length} differing on :root: ${rootMismatch.slice(0, 8).join(' ')}`)
+
+// M45 — icons.1. No entity or symbol glyph as a control's text, anywhere in
+//       the renderer (source text, comments stripped). A glyph icon renders
+//       from whichever font the stack resolves: ⚙ and ▶ are emoji-
+//       presentation-eligible and can come back in colour, and each sits at
+//       its own optical centre at a stroke weight the font chose. The
+//       inventory is the spec's; `−`/`+` are text in a diff stat, so for
+//       those two only the exact `>−</button>` / `>+</button>` shape counts.
+const GLYPHS = ['&times;', '&#9654;', '&#9998;', '×', '⚙', '⟳', '‹', '›', '✎', '↻', '▶']
+function walk (dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name)
+    if (e.isDirectory()) walk(p, out)
+    else if (/\.tsx$/.test(e.name)) out.push(p)
+  }
+  return out
+}
+const RENDERER = path.join(__dirname, '..', 'src', 'renderer')
+const glyphSites = []
+for (const file of walk(RENDERER)) {
+  const text = fs.readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+  const rel = path.relative(RENDERER, file)
+  for (const g of GLYPHS) if (text.includes(g)) glyphSites.push(`${rel}:${g}`)
+  for (const m of text.matchAll(/>\s*([−+])\s*<\/button>/g)) glyphSites.push(`${rel}:${m[1]}`)
+}
+ok('icons.1', 'no entity or symbol glyph is a control\'s text content in src/renderer',
+  glyphSites.length === 0, `${glyphSites.length} site(s): ${glyphSites.slice(0, 10).join(' ')}`)
+
+// M45 — font.1. No bundled face: no @font-face in the stylesheet and no
+//       font-src in the CSP. The chrome sets the system UI stack, which is
+//       what Terminal, Xcode and every system dialog set, so an app that
+//       reads as native reads as finished; a bundled display face is a load
+//       race (font-display: block) and a CSP allowance for nothing.
+const HTML = process.env.TC_HTML || path.join(__dirname, '..', 'src', 'renderer', 'index.html')
+const html = fs.readFileSync(HTML, 'utf8')
+const fontFace = /@font-face/.test(bare)
+const fontSrc = /font-src/.test(html)
+ok('font.1', 'no @font-face in the stylesheet and no font-src in the CSP',
+  !fontFace && !fontSrc, `@font-face=${fontFace} font-src=${fontSrc}`)
 
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

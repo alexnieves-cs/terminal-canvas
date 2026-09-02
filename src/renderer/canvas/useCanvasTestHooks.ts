@@ -106,6 +106,17 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
         y: rect.top + (found.row + 0.5) * cell.height * scale
       }
     }
+    /**
+     * M45. The xterm theme a session's terminal currently holds, as its
+     * background hex — for a LIVE or a DETACHED session alike, which is the
+     * distinction verify:panels theme.1 exists to make.
+     */
+    w.__m45TerminalTheme = (id: string): string | null => {
+      const session = registry.get(id)
+      if (!session) return null
+      const theme = session.handle.options().theme as { background?: string } | undefined
+      return theme?.background ?? null
+    }
     /** A panel's xterm scrollback offset, by id — not just the focused one. */
     w.__m4aScrollY = (id: string): number | null => {
       const session = registry.get(id)

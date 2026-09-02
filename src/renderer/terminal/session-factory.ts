@@ -133,7 +133,19 @@ function createHandle(id: PanelId): SessionHandle {
       // a Terminal built just to configure it. Merge into pending and apply
       // live only if the terminal already exists.
       Object.assign(pendingOptions, options)
-      if (handles) Object.assign(handles.term.options, options)
+      if (handles) {
+        Object.assign(handles.term.options, options)
+        // M45. A theme change on an OPENED terminal repaints explicitly, the
+        // same refresh(0, rows - 1) attachTerminal carries for a re-attach:
+        // under WebGL the option setter re-derives the palette but a fresh
+        // paint of every row is what makes the old colours actually leave
+        // the screen. A never-opened terminal has nothing to repaint and
+        // paints in the new theme on its first attach.
+        if ('theme' in options && handles.opened) handles.term.refresh(0, handles.term.rows - 1)
+      }
+    },
+    options() {
+      return { ...pendingOptions }
     },
     dispose() {
       if (handles) disposeTerminal(handles)

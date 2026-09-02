@@ -1806,6 +1806,74 @@ question: a relative path is only guaranteed correct when the paste target and t
 happen to be the SAME panel, so `insertPath` resolves absolute in every other case — a
 naive always-relative version is silently wrong (and never errors) the moment the two diverge.
 
+**Two colour blocks, one token set, and the instrument that measures BOTH (`styles.css`,
+`verify:styles` 11/`theme.1`/`theme.2`).** M45 replaced the single soft-machine block with a
+light block (`:root, :root[data-theme="light"]`) and a dark block (`:root[data-theme="dark"]`)
+that declare exactly the same token names. Three things fail silently if undone. A token
+declared in one block and not the other FALLS THROUGH: a dark-only `--s-4` makes light hover
+fill dark grey, visible only when a user hovers, in the theme the author was not looking at —
+`theme.1` diffs the two name sets. Bare `:root` must carry the LIGHT values (`theme.2`), because
+the frame before `useTheme`'s first `settings.list()` resolves renders with no attribute, and
+`system` resolves to light on a light desktop; a mismatch is a flash of the wrong theme on
+every launch, visible once and never reported. And check 11 used to FLATTEN every theme block
+into one map, last declaration wins — the M19 stylesheet's own comment names that as the
+reason it shipped one block — so a second block was measured only where it overwrote the
+first. It now files each rule under every theme its selector list names and measures each
+separately, plus the non-text 3:1 rule for the five accents on `--s-1`/`--s-4`. Values are
+DERIVED against it: do not nudge one without re-running it.
+
+**A boundary is a LINE, and `--e-*` is elevation only (`styles.css`).** M19 drew depth with
+shadow pairs, and its forced-colours block had to restore borders by hand — the design admitting
+lines were load-bearing all along. M45 makes that structural: every surface has a `--line`
+hairline, and no shadow carries a boundary, which is what lets a dark theme be a VALUES block
+rather than a re-derivation of every shadow. The one deliberate survivor from the old grammar is
+`.panel--agent-wants-you`'s untransformed `border-color: var(--amber)` (`verify:panels` 62/97
+compare it by resolved value); `--amber` may be re-tuned per block and may never become a
+gradient or a shadow.
+
+**`appearance.theme` is the schema's first ENUM, and both doors check membership
+(`shared/settings-schema.ts`, `parsePreferences`, `layout-store.ts`'s `writePreference`).** The
+'enum' type M23's spec removed as customer-free has its customer. `parsePreferences` drops a
+value outside `values` with a WARNING, never coerces to the default — the identical rule the
+number range uses, for the identical reason: a hand-edited or synced `layout.json` never passes
+through `setPreference`, and a value that silently became `system` is a preference that stopped
+applying with nothing saying why. A stray value that survived would reach `useTheme`, which would
+stamp `data-theme="blue"`, matching no block, and the app would render bare `:root`'s light
+values while the row said "blue". The palette renders an enum as a CYCLE row (`Theme: system` →
+light → dark, wrapping) through the same `toggleSetting` a boolean uses — it was always a plain
+`SettingValue` write — and the menu's `Appearance` submenu is a radio group DERIVED from
+`settingsInCategory(APPEARANCE_CATEGORY)`, like Restore's checkboxes.
+
+**The terminal follows the theme through M44's fan-out, and the MENU's write needs an event
+(`terminal/themes.ts`, `useTheme.ts`, `session-factory.ts`'s `configure`, `settings:changed`).**
+A theme change is `registry.applyTerminalOptions({ theme })`: every session, live AND detached,
+and sessions created later inherit it (`verify:registry` `theme.1`, fault-injected to prove a
+live-only walk turns it red). `configure()` refreshes an OPENED terminal itself — under WebGL the
+option setter re-derives the palette but a fresh paint of every row is what makes the old colours
+leave the screen — and a never-opened one paints in the new theme on its first attach, which
+`attachTerminal` already forces. `themes.ts`'s `background` must equal the stylesheet's `--well`
+for the same theme or the slot shows a seam in the frame before xterm paints; `verify:panels`
+`theme.1` reads the card slot's computed background against it. And the menu's radio group
+writes through main with NO palette open: without `settings:changed` (main → renderer, sent
+after any settings write from either surface) the theme would land in `layout.json` and apply on
+the next Cmd+K — a picker that appears to do nothing. `useTheme` re-reads on it, the way glow and
+pips re-read on the palette's own reload.
+
+**Icon controls are SVG with `aria-hidden`, 24×24 by measurement, and rail row controls hide by
+OPACITY with `:focus-within` (`icons.tsx`, `.icon-button`, `verify:styles` `icons.1`,
+`verify:panels` `targets.1`/`reveal.1`).** A glyph icon renders from whichever font the stack
+resolves, at its own optical centre and a stroke weight the font chose, and `⚙`/`▶` are
+emoji-presentation-eligible; `icons.1` greps the renderer's source for the inventory so one cannot
+creep back. `aria-hidden` on every icon because the button already carries `aria-label`, and an
+un-hidden SVG is a SECOND accessible name. `targets.1` measures `getBoundingClientRect` on every
+icon control rather than trusting a declared size (WCAG 2.2 SC 2.5.8's 24×24). The rail's
+rename/close controls are `opacity: 0` at rest and `1` on `:hover` AND `:focus-within` — the
+focus half is what keeps them Tab-reachable — and `.rail-row__start` is ALWAYS visible, because it
+is a dormant panel's only affordance and a control that disappears is indistinguishable from a
+feature that is missing. `reveal.1` reads computed opacity AFTER the `--dur-1` transition: a
+read in the same tick as `focus()` is still `0`, which is how the check's first cut went red for
+the wrong reason.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

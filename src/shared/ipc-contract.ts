@@ -450,6 +450,13 @@ export const IPC_EVENTS = {
    */
   ATTENTION_JUMP: 'attention:jump',
   /**
+   * M45. Main wrote a setting — from the palette's invoke OR the menu's
+   * radio/checkbox, which the renderer otherwise never hears about. The
+   * renderer re-reads the list; the payload is the id, for a listener that
+   * wants to skip an unrelated write.
+   */
+  SETTINGS_CHANGED: 'settings:changed',
+  /**
    * Where a panel is and what it is running, pushed when either CHANGES.
    *
    * An IPC_EVENTS member and not an IPC one, which decides a number: verify:ipc
@@ -796,6 +803,8 @@ export interface SettingRow {
   type: SettingDef['type']
   value: SettingValue
   category: string
+  /** The legal values of an `enum` setting, in cycle order. Absent for other types. */
+  values?: string[]
   /**
    * Inclusive bounds for a `number` setting, mirrored from `SettingDef`.
    * Absent for a boolean. The palette needs these to reject an out-of-range
@@ -923,6 +932,8 @@ export interface CanvasBridge {
   settings: {
     list(): Promise<SettingRow[]>
     set(id: string, value: SettingValue): Promise<void>
+    /** M45. Fires after ANY write, whichever surface made it. */
+    onChanged(listener: (id: string) => void): () => void
   }
   agent: {
     /** Per-panel state updates. Each subscribe returns its own unsubscribe. */

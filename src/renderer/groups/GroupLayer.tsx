@@ -2,6 +2,7 @@ import type { JSX, MouseEvent as ReactMouseEvent } from 'react'
 import type { CanvasGroup } from './groups'
 import { groupRect } from './groups'
 import type { Panel } from '@renderer/panels/panels'
+import { Close } from '@renderer/icons'
 
 export function GroupLayer({
   groups, panels, readOnly, onBeginDrag, onToggle, onRemove
@@ -46,14 +47,15 @@ export function GroupLayer({
           >{group.collapsed ? 'expand' : 'card'}</button>}
           {!readOnly && <button
             type="button"
-            className="canvas-group__remove"
+            className="canvas-group__remove icon-button"
             onMouseDown={(event) => {
               event.preventDefault()
               event.stopPropagation()
               onRemove(group.id)
             }}
             title="Remove group"
-          >×</button>}
+            aria-label="Remove group"
+          ><Close /></button>}
         </header>
       </section>
     )

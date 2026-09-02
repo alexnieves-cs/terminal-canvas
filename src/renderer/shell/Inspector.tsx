@@ -5,6 +5,15 @@ import { agentStateLabel, handoffControl, KIND_NOUN } from './inspector-fields'
 import { nextHandoffState } from '@renderer/panels/panels'
 import type { LinkAutomation } from '@shared/handoff'
 import { shellControl } from './shell-control'
+import { ChevronRight, Close, Pencil, RotateCw } from '@renderer/icons'
+
+/**
+ * M45. Fields whose value is a path, an argv or a pid take the mono face, so
+ * the inspector and the terminal it describes resolve the same string to the
+ * same glyphs. By KEY rather than a flag on InspectorField: the model is what
+ * verify:rail asserts on, and a presentation choice does not belong in it.
+ */
+const MONO_FIELDS = new Set(['command', 'spec-command', 'cwd', 'live-cwd', 'live-command', 'worktree-path', 'pid', 'repo', 'file', 'directory', 'toolbox-cwd'])
 
 export interface AutomationRow {
   from: string
@@ -87,12 +96,12 @@ function InspectorImpl({
     <aside className="shell__inspector" aria-label="Inspector">
       <button
         type="button"
-        className="shell__inspector-toggle"
+        className="shell__inspector-toggle icon-button"
         title="Hide the inspector (⇧⌘\)"
         aria-label="Hide the inspector"
         {...shellControl(onToggle)}
       >
-        ›
+        <ChevronRight />
       </button>
       <div className="shell__region-title">Panel</div>
       <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
@@ -239,7 +248,7 @@ function InspectorPanel({
         {model.fields.map((field) => (
           <div className="inspector__field" key={field.key} data-inspector-field={field.key}>
             <dt className="inspector__label">{field.label}</dt>
-            <dd className="inspector__value">{field.value}</dd>
+            <dd className={`inspector__value${MONO_FIELDS.has(field.key) ? ' inspector__value--mono' : ''}`}>{field.value}</dd>
           </div>
         ))}
       </dl>
@@ -270,7 +279,7 @@ function InspectorPanel({
                 {link.direction === 'out' && (
                   <button
                     type="button"
-                    className="inspector__link-action"
+                    className={`inspector__link-action${link.restartOnExit ? ' inspector__link-action--on' : ''}`}
                     data-link-automation={`${from}:${to}`}
                     disabled={!link.canRestartOnExit}
                     title={link.canRestartOnExit
@@ -280,7 +289,7 @@ function InspectorPanel({
                       : 'Restart-on-exit requires two terminal panels'}
                     {...shellControl(() => onSetRestartOnExit(from, to, !link.restartOnExit))}
                   >
-                    {link.restartOnExit ? '↻ on' : '↻'}
+                    <RotateCw />{link.restartOnExit ? ' on' : ''}
                   </button>
                 )}
                 {/* M41. The handoff control: a three-state cycle beside the
@@ -309,19 +318,21 @@ function InspectorPanel({
                     takes DOM focus". */}
                 <button
                   type="button"
-                  className="inspector__link-action"
+                  className="inspector__link-action icon-button"
                   title="Label this link"
+                  aria-label="Label this link"
                   {...shellControl(() => onRelabelLink(from, to, link.label ?? ''))}
                 >
-                  ✎
+                  <Pencil />
                 </button>
                 <button
                   type="button"
-                  className="inspector__link-action"
+                  className="inspector__link-action icon-button"
                   title="Remove this link"
+                  aria-label="Remove this link"
                   {...shellControl(() => onRemoveLink(from, to))}
                 >
-                  ×
+                  <Close />
                 </button>
               </div>
             )

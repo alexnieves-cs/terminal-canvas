@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { buildDiagnosticsSnapshot, type DiagnosticsInput } from './diagnostics-model'
 import type { DiagnosticsSnapshot } from '@shared/ipc-contract'
+import { Close } from '@renderer/icons'
 
 const DIAGNOSTICS_SAMPLE_MS = 2000
 
@@ -62,8 +63,8 @@ export function DiagnosticsOverlay({ open, onClose, getRendererInput }: Diagnost
     <div className="diagnostics-overlay" data-diagnostics-overlay>
       <div className="diagnostics-overlay__header">
         <span>Diagnostics</span>
-        <button type="button" className="diagnostics-overlay__close" onClick={onClose} aria-label="Close">
-          ×
+        <button type="button" className="diagnostics-overlay__close icon-button" onClick={onClose} aria-label="Close">
+          <Close />
         </button>
       </div>
       {!snapshot ? (
