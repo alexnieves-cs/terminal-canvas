@@ -56,7 +56,7 @@ function RailPanelRowImpl({
           already draws for the panel itself.
         */}
         <span
-          className="rail-row__dot"
+          className="rail-row__dot status-dot"
           data-agent-state={state ?? 'none'}
           aria-hidden="true"
         />

@@ -14175,6 +14175,103 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M47 — one panel frame. frame.1: every kind on the canvas renders
+    // through `.pf` (the frame's own class beside the `.panel` alias every
+    // earlier check selects on). frame.2: `.pf__body` is NEVER transformed —
+    // as source text, and at a scale ≠ 1 through __m4aCellToScreen, which
+    // is the arithmetic pointer-correct.ts compensates for and the one
+    // failure with no visible symptom.
+    // -------------------------------------------------------------------
+    {
+      const fLog = []
+      const onF = (_e, level, message) => { if (level >= 2) fLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onF)
+      const IDS = [
+        'frame.1 every panel kind on the canvas renders through the one frame',
+        'frame.2 the frame body is never transformed: no rule transforms .pf__body, and a cell maps to the screen at scale 0.5 exactly as the unscaled arithmetic predicts'
+      ]
+      try {
+        backend = createDirectBackend('verify: direct (m47 frame)')
+        const home = require('node:os').homedir()
+        const fixtureDir = mkdtempSync(join(realpathSync(tmpdir()), 'tc panels frame '))
+        writeFileSync(join(fixtureDir, 'note.txt'), 'alpha beta gamma\n')
+        const term = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 300, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] } })
+        // One of each sessionless kind, placed to the right so nothing
+        // overlaps the terminal that frame.2 focuses.
+        const kinds = [
+          { kind: 'review', rect: { id: 'fR', x: 60, y: 320, w: 300, h: 200 }, z: 2, subject: { subjectId: 'fA', label: 'fA', repoRoot: fixtureDir, baselineSha: '0000000000000000000000000000000000000000' } },
+          { kind: 'file', rect: { id: 'fF', x: 400, y: 320, w: 300, h: 200 }, z: 3, source: { path: join(fixtureDir, 'note.txt') } },
+          { kind: 'toolbox', rect: { id: 'fT', x: 740, y: 320, w: 300, h: 200 }, z: 4, source: { cwd: fixtureDir, label: 'frame' } },
+          { kind: 'jira', rect: { id: 'fJ', x: 60, y: 560, w: 300, h: 200 }, z: 5 }
+        ]
+        layoutStore.save({ panels: fromPanels([term('fA', 60), ...kinds]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reF
+        const seeded = await waitUntil(async () => wc.executeJavaScript(
+          `['fA', 'fR', 'fF', 'fT', 'fJ'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const frames = await wc.executeJavaScript(`(() => {
+          const out = {}
+          for (const id of ['fA', 'fR', 'fF', 'fT', 'fJ']) {
+            const p = document.querySelector('.panel[data-panel-id="' + id + '"]')
+            out[id] = p ? { pf: p.classList.contains('pf'), kind: p.dataset.panelKind, chrome: !!p.querySelector('.pf__chrome.panel__chrome'), title: !!p.querySelector('.pf__title.panel__title'), body: !!p.querySelector('.pf__body') } : null
+          }
+          return out })()`)
+        const allFramed = seeded === true && ['fA', 'fR', 'fF', 'fT', 'fJ'].every((id) => frames[id] && frames[id].pf && frames[id].chrome && frames[id].title && frames[id].body)
+        ok(IDS[0], allFramed, JSON.stringify({ seeded, frames }))
+
+        // frame.2. Source text first: the built stylesheet has no rule that
+        //          both selects .pf__body and sets a transform.
+        const cssText = readFileSync(join(__dirname, '..', 'src', 'renderer', 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+        const bodyRules = [...cssText.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /\.pf__body/.test(m[1]))
+        const transformed = bodyRules.filter((m) => /(^|[^-])transform\s*:/.test(m[2])).map((m) => m[1].trim())
+        // Then the arithmetic. Wake fA, focus it, write a marker, zoom OUT
+        // once, and compare __m4aCellToScreen with a prediction built from
+        // the host rect and the UNSCALED cell size times the scale — which is
+        // exactly what a transform on the body would break, because the
+        // host rect would then be scaled twice.
+        await wc.executeJavaScript(`(() => {
+          const card = document.querySelector('.panel[data-panel-id="fA"] .panel__card')
+          if (!card) return false
+          const r = card.getBoundingClientRect()
+          card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const woke = await waitUntil(async () => (await sessionMap(wc)).has('fA'), 10000)
+        await settle()
+        const slotPt = await wc.executeJavaScript(`(() => {
+          const slot = document.querySelector('.panel[data-panel-id="fA"] .panel__slot')
+          if (!slot) return null
+          const r = slot.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (slotPt) {
+          wc.sendInputEvent({ type: 'mouseDown', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 })
+        }
+        await settle()
+        await wc.executeJavaScript(`window.__m4aWrite ? window.__m4aWrite('echo FRAMEMARK\\n') : null`)
+        const marked = await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('FRAMEMARK') !== null`), 8000)
+        await zoomTo(wc, '-'); await zoomTo(wc, '-')
+        await settle()
+        const probe = await wc.executeJavaScript(`(() => {
+          const vp = window.__m4aViewport()
+          const got = window.__m4aCellToScreen('FRAMEMARK')
+          const p = document.querySelector('.panel[data-panel-id="fA"]')
+          const body = p && p.querySelector('.pf__body')
+          const bodyTransform = body ? getComputedStyle(body).transform : null
+          return { scale: vp.scale, got, bodyTransform } })()`)
+        ok(IDS[1],
+          transformed.length === 0 && woke === true && marked === true && probe.scale < 0.9 &&
+            probe.got !== null && (probe.bodyTransform === 'none' || probe.bodyTransform === null),
+          JSON.stringify({ transformed, woke, marked, probe }))
+        await zoomTo(wc, '0')
+      } catch (fErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (fLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onF)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

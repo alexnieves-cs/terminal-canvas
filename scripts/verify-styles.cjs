@@ -309,5 +309,18 @@ const fontSrc = /font-src/.test(html)
 ok('font.1', 'no @font-face in the stylesheet and no font-src in the CSP',
   !fontFace && !fontSrc, `@font-face=${fontFace} font-src=${fontSrc}`)
 
+// M47 — frame.1. ONE panel frame. Five kinds used to ship five hand-rolled
+//       headers, and `__summary`/`__refresh`/`__note`/`__more`/`__body` each
+//       existed three or four times as near-duplicates across the kind
+//       namespaces — the kind that drifts. The frame owns each family ONCE
+//       (`.pf__*`); a kind namespace may not declare any of them. Counted
+//       over selectors, comment-free, so a rule commented out does not pass.
+const KIND_NS = /\.(review-node|file-node|toolbox-node|jira-node)__(summary|refresh|note|more|body)\b/g
+const kindFamilies = [...new Set([...bare.matchAll(KIND_NS)].map((m) => m[0]))]
+const frameFamilies = ['summary', 'note', 'more', 'body'].filter((f) => new RegExp(`\\.pf__${f}\\b`).test(bare))
+ok('frame.1', 'the five duplicated panel-kind families are declared once, on the frame, and never on a kind',
+  kindFamilies.length === 0 && frameFamilies.length === 4,
+  `kind rules: ${kindFamilies.join(' ') || 'none'}; frame families: ${frameFamilies.join(' ')}`)
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
