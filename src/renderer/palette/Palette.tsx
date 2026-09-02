@@ -1,3 +1,5 @@
+import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { useAgentState } from '@renderer/session/agent-state-store'
 import {
   Fragment,
   useEffect,
@@ -317,6 +319,13 @@ export function Palette(props: PaletteProps): JSX.Element {
   // perfectly visible.
   //
   // Except when the pointer is what moved the selection: see pointerSelectRef.
+  // M64. A NEW QUERY starts at the top. Without this the list keeps the
+  // scroll offset of the previous query, and the first — best — match sits
+  // hidden under the sticky section header (M61's critic, finding 7).
+  const listRef = useRef<HTMLUListElement | null>(null)
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0
+  }, [query])
   useEffect(() => {
     if (pointerSelectRef.current) {
       pointerSelectRef.current = false
@@ -503,7 +512,7 @@ export function Palette(props: PaletteProps): JSX.Element {
     // from here: there is nothing to go back to at the top level, and no door
     // to open inside a scope (every row there is a leaf).
     : scope
-      ? '↑↓ move · ↵ run · ← back · esc close'
+      ? '↑↓ move · ↵ go to · ← back · esc close'
       : '↑↓ move · → open · ↵ run · esc close'
 
   return (
@@ -590,7 +599,7 @@ export function Palette(props: PaletteProps): JSX.Element {
       {/* M44. A listbox for a screen reader: each runnable row is an option,
           and the input points at the selected one via aria-activedescendant. */}
       {!inputMode && (
-        <ul id="palette-listbox" className="palette__list" role="listbox" aria-label="Commands">
+        <ul id="palette-listbox" className="palette__list" role="listbox" aria-label="Commands" ref={listRef}>
           {rows.map((row, i) => {
             // A header whenever the section changes. Sections are contiguous
             // because filterCommands sorts by section first, so one pass over
@@ -620,7 +629,8 @@ export function Palette(props: PaletteProps): JSX.Element {
                     'palette__row',
                     i === index ? 'palette__row--selected' : '',
                     row.disabledReason ? 'palette__row--disabled' : '',
-                    row.destructive ? 'palette__row--destructive' : ''
+                    row.destructive ? 'palette__row--destructive' : '',
+                    row.mono ? 'palette__row--mono' : ''
                   ].filter(Boolean).join(' ')}
                   // onMouseDown, not onClick: it keeps DOM focus in the input,
                   // where a click would blur it first — and the input's focus
@@ -670,7 +680,17 @@ export function Palette(props: PaletteProps): JSX.Element {
                       is a bug report — the same rule menuLabel() states for
                       the menu. It replaces the subtitle rather than joining
                       it: the reason is the more urgent of the two. */}
-                  <span className="palette__hint">{row.disabledReason ?? row.subtitle ?? ''}</span>
+                  {/* M64. The state word, live and in its tone, its own column. */}
+                  {row.state !== undefined && <LiveStateWord id={row.state.id} input={row.state.input} />}
+                  {/* M64. A search hit's line is terminal output: the term is
+                      marked in it, the way the title's match is. */}
+                  <span className="palette__hint">
+                    {row.disabledReason !== undefined
+                      ? row.disabledReason
+                      : (scope === 'search' && row.subtitle !== undefined
+                          ? splitHighlight(row.subtitle, query).map((seg, si) => seg.hit ? <mark key={si} className="palette__hit">{seg.text}</mark> : <span key={si}>{seg.text}</span>)
+                          : (row.subtitle ?? ''))}
+                  </span>
                   {row.entersScope && <span className="palette__chevron"><ChevronRight /></span>}
                   {row.shortcut && <kbd className="palette__kbd">{row.shortcut}</kbd>}
                 </li>
@@ -684,4 +704,17 @@ export function Palette(props: PaletteProps): JSX.Element {
       <div className="palette__footer">{footer}</div>
     </div>
   )
+}
+
+/**
+ * M64. A Go-to row's state word, from the one vocabulary, subscribed per
+ * panel so it is live while the palette is open — the rows themselves are
+ * frozen on open by design, and a frozen word read `working` beside a rail
+ * that said `idle` in M64's first render.
+ */
+function LiveStateWord({ id, input }: { id: string; input: StateInput }): JSX.Element {
+  const shown = panelState(input, useAgentState(id))
+  // A sessionless kind has no state: its column stays empty (the kind is
+  // the rail glyph's to say, not this slot's).
+  return <span className="palette__state" data-tone={shown.tone} data-state-word>{shown.tone === 'kind' ? '' : shown.word}</span>
 }

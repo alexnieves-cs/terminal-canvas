@@ -20,7 +20,7 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 
 | Constant | Reason shown | What the user does |
 |---|---|---|
-| `REASON_NO_FOCUS` | no focused panel | click into a terminal panel |
+| `REASON_NO_FOCUS` | click into a panel first | click into a terminal panel |
 | `REASON_NOT_STARTED` | that panel has not started | start it (click the card, or its rail row's ▶) |
 | `REASON_NOT_TERMINAL` | only a terminal panel has a font size | focus a terminal panel |
 | `REASON_NOT_TERMINAL_OUTPUT` | only a terminal panel has output to export | focus a terminal panel |
@@ -46,7 +46,7 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | `REASON_NO_NOTE_ROOT` | select a panel first — a note is saved in its directory | select a panel |
 | `REASON_NO_ENV_REPORT` | the environment has not been read yet | wait for startup; relaunch |
 | `REASON_SEARCH_OFF` | scrollback is off — turn on Keep output for search to read | Settings → scrollback.persist |
-| `REASON_SEARCH_NO_MATCHES` | no matches | change the query |
+| `REASON_SEARCH_NO_MATCHES` | try another word | change the query |
 | `REASON_SCROLLBACK_OFF` | durable scrollback is off — turn on scrollback.persist in Settings | Settings → scrollback.persist |
 
 ## Surfaces walked, and their states

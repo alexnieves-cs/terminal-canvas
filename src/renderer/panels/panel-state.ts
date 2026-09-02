@@ -91,3 +91,11 @@ export function panelState(input: StateInput, agent: AgentState | undefined): Pa
 export function agentWord(agent: AgentState): PanelStateWord {
   return panelState({ kind: 'terminal', status: { kind: 'running', pid: 0, command: '', cwd: '', reattached: false }, dormant: false }, agent)
 }
+
+/** needs-you first: the order the palette's `state:` query lists panels in (M64). */
+export const STATE_PRIORITY: readonly string[] = ['needs you', 'working', 'idle', 'starting', 'running', 'exited', 'not started', 'asleep']
+
+export function statePriority(word: string): number {
+  const i = STATE_PRIORITY.findIndex((w) => word === w || word.startsWith(w + ' '))
+  return i === -1 ? STATE_PRIORITY.length : i
+}
