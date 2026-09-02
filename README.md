@@ -8,10 +8,12 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: beta (`v0.1.0`).** macOS only, Apple Silicon by default. The app is
-> unsigned, so Gatekeeper will object the first time you open it — see
-> [Install](#install). It is used daily by its author and has not been used by
-> anyone else, which is the entire reason it is now public.
+> **Status: `v1.0.0`.** macOS only, Apple Silicon by default. The app is
+> unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
+> object the first time you open it; [Install](#install) says exactly what it
+> will say and what to do. `npm run verify` is the whole verification story and
+> is green at this version; what it cannot prove is listed, by item, at the end
+> of [docs/load-bearing.md](docs/load-bearing.md).
 
 ## What it does
 
@@ -141,15 +143,30 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   of them shows no nodes, which is a CLI this feature does not support rather
   than a bug.
 
+## What it does not do
+
+- **Isolate agents from each other or from you.** A worktree per panel is a
+  separate checkout on its own branch, not a sandbox: every agent runs as your
+  user, with your home directory, your keychain, your network and your other
+  agents' processes all reachable. The app runs whatever commands you give it.
+- **Sign its own builds.** See [Install](#install) for what Gatekeeper says.
+- **Run anywhere but macOS.** `tmux` is optional but is what makes agents
+  survive a reload or a quit; without it, sessions end with the window.
+- **Make the terminals themselves accessible to a screen reader.** The chrome
+  is; what an agent CLI draws is that CLI's own — see [Accessibility](#accessibility).
+- **Rename a bookmark's saved camera, region-capture the canvas, or export a
+  canvas another instance can open.** Export is a panel's text and a PNG of
+  the window; the rest is in [docs/ideas-backlog.md](docs/ideas-backlog.md).
+
 ## Install
 
-### Download the beta
+### Download
 
 Grab the `.dmg` from [Releases](https://github.com/alexnieves-cs/terminal-canvas/releases),
 open it, and drag **Terminal Canvas** to Applications.
 
-The build is **unsigned** — signing requires a paid Apple Developer account, and
-this is a beta. macOS will refuse the first launch with *"Terminal Canvas is
+The build is **unsigned** — signing requires a paid Apple Developer account,
+which this project does not have. macOS will refuse the first launch with *"Terminal Canvas is
 damaged"* or *"cannot be opened because the developer cannot be verified"*. To
 get past it, either:
 

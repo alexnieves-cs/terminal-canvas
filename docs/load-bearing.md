@@ -2123,6 +2123,14 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   restore, `shellControl`'s focus-preservation): a synthetic event is `isTrusted: false` and
   Blink performs no default action for one, so any check built from `dispatchEvent` can at best
   show the guard reads the right flag, never that the platform sets it the way assumed.
+- **Native dialogs (M55, M58) and the URL scheme (M54)** — the orphan-recovery
+  `showMessageBox`, the two export `showSaveDialog`s and the Finder reveal, `open-url` on a real
+  packaged build with a real link, and `setAsDefaultProtocolClient` registering the scheme with
+  Launch Services: no suite drives a native dialog or Launch Services. Each was exercised by
+  hand once at 1.0 on one machine, no more.
+- **The OS reduced-motion preference (M56)** — `matchMedia('(prefers-reduced-motion: reduce)')`
+  is read in production and OVERRIDDEN in the harness, which proves both answers of the flight
+  code and nothing about the media query on a real machine.
 - **Whether a rail row's agent-state glow comes from that row's own per-id subscription (the
   design) or from one list-level read passed down** — both paint identical DOM, and no test in
   this repo can tell them apart without adding an impure render-counting side effect to

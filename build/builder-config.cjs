@@ -85,6 +85,8 @@ function buildConfig(opts) {
 
     mac: {
       category: 'public.app-category.developer-tools',
+      // M60. Authored by build/make-icon.cjs; verify:package icon.1 pins the file.
+      icon: 'build/icon.icns',
       target: [
         { target: 'dir', arch: [arch] },
         { target: 'dmg', arch: [arch] }

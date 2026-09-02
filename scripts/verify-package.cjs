@@ -138,6 +138,21 @@ console.log('\n' + '='.repeat(60))
   ok('cli.1 the tc CLI is unpacked from the asar', unpack.some((p) => /tc\.js$/.test(p)), JSON.stringify(unpack))
 }
 
+// icon.1 (M60). The config names an icon, and the file is on disk: an
+// `icon` that names a missing file makes electron-builder fall back to the
+// stock Electron icon with a warning nobody reads, and the shipped app then
+// wears the framework's face.
+{
+  // Required HERE, not at the top: this suite is import-free by design (see
+  // builder-config.cjs), and node:fs/node:path are the one exception a file
+  // check needs.
+  const { existsSync } = require('node:fs')
+  const { join } = require('node:path')
+  const icon = config.mac?.icon
+  const onDisk = typeof icon === 'string' && existsSync(join(__dirname, '..', icon))
+  ok('icon.1 the mac icon is named and exists', typeof icon === 'string' && /\.icns$/.test(icon) && onDisk, JSON.stringify({ icon, onDisk }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

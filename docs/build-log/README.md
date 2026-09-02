@@ -42,3 +42,4 @@ copy here is deleted.
 | [m57-semantic-zoom.md](m57-semantic-zoom.md) | M57 — Semantic zoom | finished |
 | [m58-export.md](m58-export.md) | M58 — Export | finished |
 | [m59-dead-end-audit.md](m59-dead-end-audit.md) | M59 — The dead-end audit | finished |
+| [m60-ship.md](m60-ship.md) | M60 — Ship | finished |
