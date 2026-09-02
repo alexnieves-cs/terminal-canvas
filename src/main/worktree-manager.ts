@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import type { WorktreeRecord } from '../shared/layout-schema'
 import type { WorktreeOutcome } from '../shared/types'
-import { buildWorktreeAddArgs, buildWorktreeRemoveArgs } from './git-args'
+import { buildBranchExistsArgs, buildWorktreeAddArgs, buildWorktreeRemoveArgs } from './git-args'
 import type { GitRunner, RepoAnswer } from './review-engine'
 import { worktreeBranch, worktreePath } from './worktree'
 
@@ -53,7 +53,16 @@ export interface WorktreeManager {
   remove(id: string): Promise<WorktreeRemoveResult>
 }
 
-const firstLine = (s: string): string => s.split('\n').find((l) => l.trim() !== '')?.trim() ?? ''
+/**
+ * Git's own sentence, and the RIGHT one: `worktree add` prints "Preparing
+ * worktree ..." to stderr before it fails, so the first non-empty line is
+ * progress, not the reason. Prefer a `fatal:`/`error:` line; fall back to the
+ * last non-empty one.
+ */
+const reasonLine = (s: string): string => {
+  const lines = s.split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  return lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines[lines.length - 1] ?? ''
+}
 
 export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManager {
   const now = deps.now ?? (() => new Date())
@@ -85,7 +94,17 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
         // answering one thing.
         deps.records.drop(existing.id)
       }
-      const branch = worktreeBranch(panelId, now())
+      // The stamp is per minute, so a same-minute recycle of a panel id — or
+      // the branch a hand-deleted worktree left behind — would make `-b`
+      // refuse. Probe, and suffix rather than fail: a panel that asked for a
+      // worktree and could have had one must not be refused over a name.
+      const base = worktreeBranch(panelId, now())
+      let branch = base
+      for (let n = 2; n < 10; n += 1) {
+        const exists = await deps.run(buildBranchExistsArgs(root, branch))
+        if (!exists.ok) break
+        branch = `${base}-${n}`
+      }
       const path = worktreePath(deps.worktreesDir, root, branch)
       try {
         mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true })
@@ -96,7 +115,7 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
       if (!added.ok) {
         return {
           kind: 'refused',
-          reason: added.notFound ? 'git could not be run' : (firstLine(added.stderr) || 'git worktree add failed')
+          reason: added.notFound ? 'git could not be run' : (reasonLine(added.stderr) || 'git worktree add failed')
         }
       }
       deps.records.add({ id: mintId(), root, path, branch, createdAt: now().getTime(), panelId })
@@ -113,7 +132,7 @@ export function createWorktreeManager(deps: WorktreeManagerDeps): WorktreeManage
         const result = await deps.run(buildWorktreeRemoveArgs(record.root, record.path))
         if (!result.ok) {
           if (result.notFound) return { kind: 'failed', reason: 'git could not be run' }
-          return { kind: 'refused', reason: firstLine(result.stderr) || 'git refused to remove the worktree' }
+          return { kind: 'refused', reason: reasonLine(result.stderr) || 'git refused to remove the worktree' }
         }
       }
       deps.records.drop(id)
