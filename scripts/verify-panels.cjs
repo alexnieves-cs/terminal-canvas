@@ -916,6 +916,11 @@ app.whenReady().then(async () => {
   // after the renderer had settled and could never fail.
   win.webContents.on('did-finish-load', () => {
     pushDefaultPreset(win.webContents, layoutStore)
+    // M43. Mirror main/index.ts. In production detachAll() empties the session
+    // map on a reload, so this is a no-op after a real Cmd+R (see the M43
+    // overrule); here the harness does not wire window-lifecycle, so it is
+    // harmless either way and kept only for fidelity with main.
+    ptyManager.resendStates()
   })
 
   // Check 24 needs boot reconciliation exercised end to end, not stubbed: a
@@ -7635,9 +7640,16 @@ app.whenReady().then(async () => {
         // never sees this r-node at all, so it recomputes the same
         // n-max-plus-one it would have without this node existing.
         const collideId = `r${maxN + 1}`
+        // review.baseline shells out to git; under full-chain load it has
+        // returned null once (baseline=no) where standalone it never does.
+        // Retry a few times rather than let one git race fail an unrelated
+        // id-collision check — the same reasoning as the 45s reattach window.
         const seedBaseline = subjectPanel
-          ? await wc.executeJavaScript(
-              `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
+          ? await waitUntil(async () => {
+              const b = await wc.executeJavaScript(
+                `window.canvas.review.baseline(${JSON.stringify(subjectPanel)})`)
+              return b && b.sha ? b : false
+            }, 20000)
           : null
         let minted = null
         let idsAfterReload = null
@@ -13550,6 +13562,54 @@ app.whenReady().then(async () => {
           false, 'threw: ' + String(searchErr && searchErr.message || searchErr) + ' | renderer: ' + (sLog.slice(-6).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onS)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M43 — attention beyond the window. Scoped id. The ONE renderer path
+    // that actually works across the design: a clicked OS notification (main
+    // sends ATTENTION_JUMP) frames its panel through goToPanel — the Cmd+J
+    // path, which NEVER wakes. tmux-free and reload-free: the flawed snapshot
+    // (decision 5, overruled) is not tested because detachAll empties main's
+    // map on reload, so it is inert in production and would only pass here.
+    // -------------------------------------------------------------------
+    {
+      const jLog = []
+      const onJ = (_e, level, message) => { if (level >= 2) jLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onJ)
+      try {
+        backend = createDirectBackend('verify: direct (m43 attention)')
+        const home = require('node:os').homedir()
+        const jP = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 320, h: 220 }, z: 1,
+          spec: { panelId: id, cwd: home, command: '/bin/sh', args: [] } })
+        // jHere on screen, jFar far off — the jump must move the camera onto jFar.
+        layoutStore.save({ panels: fromPanels([jP('jHere', 60), jP('jFar', 9000)]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        layoutStore.flushSync()
+        const reJ = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reJ
+        const seededJ = await waitUntil(async () => wc.executeJavaScript(
+          `['jHere', 'jFar'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const camBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const farLiveBefore = (await wc.executeJavaScript(`window.__m4aSessions()`)).some((x) => x.id === 'jFar' && x.spawned)
+        // Main's notification click: send ATTENTION_JUMP for the off-screen panel.
+        wc.send(IPC_EVENTS.ATTENTION_JUMP, 'jFar')
+        const selectedFar = await waitUntil(async () => wc.executeJavaScript(
+          `document.querySelector('.panel--selected')?.dataset.panelId === 'jFar'`), 4000)
+        const camAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const moved = camBefore && camAfter && (camBefore.x !== camAfter.x || camBefore.y !== camAfter.y)
+        await settle()
+        const farLiveAfter = (await wc.executeJavaScript(`window.__m4aSessions()`)).some((x) => x.id === 'jFar' && x.spawned)
+        const farHasPty = (await sessionMap(wc)).has('jFar')
+        ok('attention.1 a clicked notification (ATTENTION_JUMP) frames its panel and selects it, and never wakes it',
+          seededJ === true && selectedFar === true && moved === true &&
+            farLiveBefore === false && farLiveAfter === false && farHasPty === false,
+          JSON.stringify({ seededJ, selectedFar, moved, farLiveBefore, farLiveAfter, farHasPty, cam: [camBefore, camAfter], renderer: jLog.slice(-4) }))
+      } catch (jErr) {
+        ok('attention.1 a clicked notification (ATTENTION_JUMP) frames its panel and selects it, and never wakes it',
+          false, 'threw: ' + String(jErr && jErr.message || jErr) + ' | renderer: ' + (jLog.slice(-6).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onJ)
       }
     }
 

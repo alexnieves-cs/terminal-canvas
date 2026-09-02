@@ -121,7 +121,8 @@ const bridge: CanvasBridge = {
   },
   agent: {
     onState: (listener) => subscribe<AgentStateUpdate>(IPC_EVENTS.AGENT_STATE, listener),
-    acknowledge: (panelId: PanelId) => ipcRenderer.invoke(IPC.AGENT_ACKNOWLEDGE, panelId)
+    acknowledge: (panelId: PanelId) => ipcRenderer.invoke(IPC.AGENT_ACKNOWLEDGE, panelId),
+    onAttentionJump: (listener) => subscribe<PanelId>(IPC_EVENTS.ATTENTION_JUMP, listener)
   },
   workspace: {
     list: () => ipcRenderer.invoke(IPC.WORKSPACE_LIST),

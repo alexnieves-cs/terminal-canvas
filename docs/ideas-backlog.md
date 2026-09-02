@@ -559,7 +559,7 @@ twelve was the one that printed the stack trace?"
   "did this terminal scroll when it shouldn't have" is already a property worth asserting.
 - **Depends on:** durable scrollback. Everything else here is small.
 
-## 17. Attention that reaches you outside the window
+## 17. Attention that reaches you outside the window — DONE, M43
 
 M6d shipped the in-app half: edge pips for off-screen `wants-you` panels (`edgeIndicator` in
 `viewport.ts`, which clips a ray rather than clamping two axes, and treats partially visible
@@ -1253,7 +1253,7 @@ cosmetic one.
   are `Terminal` options fanned across every session in the registry. Whichever ships first
   should build the fan-out, not a one-off.
 
-## 37. Sound — the channel that works when you are not looking
+## 37. Sound — the channel that works when you are not looking — DONE, M43 (the bell half)
 
 Short distinct sounds for the state changes #5 detects: an agent finished, an agent is
 asking a question, a command failed. Optional, off by default, and immediately the highest
@@ -2028,9 +2028,10 @@ Ordered by (value × confidence) ÷ effort, not by preference:
    `dragover`/`drop` at the document level, independently of whether the drag-and-drop
    feature is ever built.
 1. ~~**#6 panel names**~~ — **done, M6a.**
-2. **#37, the bell half only** — agent CLIs already ring the terminal bell and nothing
-   listens. One xterm event, one sound, one setting. It is the cheapest completion signal
-   in this file and it exists before #5 does any detection at all.
+2. ~~**#37, the bell half only**~~ — **done, M43.** The bell already drives wants-you (M6d);
+   M43 adds the SOUND on that transition — `shell.beep()`, off by default, using the user's
+   own alert sound so it needs no bundled asset and works when the window is hidden. The full
+   #37 (distinct per-state sounds) remains a later, larger design.
 3. **#23, the zoom-to-fit half only** — a camera animation to a panel's rect. Pure
    `viewport.ts`, no session state touched. Cheapest useful thing on this list, and
    building it first is what surfaces the surprise the rest of #23 is about.

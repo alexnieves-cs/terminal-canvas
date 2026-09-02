@@ -1810,6 +1810,12 @@ naive always-relative version is silently wrong (and never errors) the moment th
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
 
+- **The real OS attention surfaces (M43)** — `new Notification(...).show()` and its click
+  handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/index.ts`. No suite reaches
+  them: `verify:pty-manager` drives a FAKE `AttentionSink` and counts its calls. That a real
+  notification appears when the window is behind another, that clicking it focuses the window and
+  flies to the panel, that the dock shows the count, and that the beep uses the user's own alert
+  sound were each confirmed once by hand.
 - **`scrollback.persist` off in the REAL main process** — `main/index.ts` wires the sink's
   `enabled()` and the `scrollback:tail` gate to `layoutStore.getSetting('scrollback.persist')`,
   and no suite runs that line: `verify:pty-manager` drives the sink with a fake `enabled()`, and
@@ -2384,3 +2390,24 @@ palette owns the query (its input box IS the term) and reports it to Canvas only
 is `search`; Canvas debounces 120 ms, asks main, and CLEARS the answer when the scope leaves, so
 a reopened palette starts from null (no answer yet) rather than stale hits — the null-vs-`[]`
 distinction the three empty states depend on (off / no matches / nothing typed yet).
+
+**Main owns `wants-you` and every out-of-window surface is a READER; the reload SNAPSHOT is a
+no-op and must not be claimed otherwise (`main/pty-manager.ts` AttentionSink/`syncAttention`,
+`main/index.ts`, `main/window-lifecycle.ts`).** M43 hangs the dock badge, an OS notification and
+a beep off the SAME detectors M6d built, through an injected `AttentionSink` so the whole
+decision path (when to notify, when to beep, the window-focus gate) runs under plain node in
+`verify:pty-manager`; the real `Notification`/`app.dock`/`shell.beep` live in `main/index.ts` and
+are on the manual-only list. Nothing here CLEARS a state — focus (`agent:acknowledge`) and a
+`pty:write` stay the only two clearers, so a notification click frames the panel (through
+`goToPanel`, the `Cmd+J` never-wake path, over the new `attention:jump` EVENT — an event, not an
+invoke, so `verify:ipc`'s count is unmoved) but leaves it amber until the user clicks in. **The
+snapshot (`resendStates()`) is the milestone's one dead end, and it is documented as one**: a
+Cmd+R reload runs `detachAll()` from `window-lifecycle.ts`'s `did-start-navigation`, which
+DELETES main's `Session` objects and their detectors (the tmux processes survive), so at
+`did-finish-load` there is nothing to re-emit and the reattaching sessions get fresh
+`starting` detectors. `resendStates()` is kept as a cheap, correct-shaped method and called
+there for fidelity, but it restores no attention across a reload — and a check that "proved"
+it would only pass because the verify harness does not wire `window-lifecycle`, the same
+harness-not-app trap check 32 records. `verify:panels` `attention.1` therefore tests the one
+path that works: a dispatched `attention:jump` frames and selects an off-screen panel and spawns
+nothing.

@@ -2882,6 +2882,22 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify(def))
 }
 
+// M43 — attention.1. The two "reach me outside the window" settings, in the
+//      Agent state category. notify defaults ON (an OS notification for a
+//      panel that wants you while the window is behind another is the whole
+//      point); sound defaults OFF (a beep on every turn is a lot, and it is
+//      one row away). Both booleans, both resolving to their default off an
+//      empty prefs object.
+{
+  const notify = L.settingDef('attention.notify')
+  const sound = L.settingDef('attention.sound')
+  ok('attention.1 attention.notify (on) and attention.sound (off) are booleans in the Agent state category',
+    notify !== undefined && notify.type === 'boolean' && notify.default === true && notify.category === L.AGENT_CATEGORY &&
+      sound !== undefined && sound.type === 'boolean' && sound.default === false && sound.category === L.AGENT_CATEGORY &&
+      L.resolveSetting({}, 'attention.notify') === true && L.resolveSetting({}, 'attention.sound') === false,
+    JSON.stringify({ notify, sound }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

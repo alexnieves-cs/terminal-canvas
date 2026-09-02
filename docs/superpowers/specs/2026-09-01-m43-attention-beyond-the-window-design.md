@@ -46,12 +46,26 @@ invisible; a badge would make it a number that is wrong.
    one case the whole entry is about. Per-panel attribution rides the
    surfaces that already exist: the sound says WHEN, the pip and the badge
    say WHICH.
-5. **A snapshot on every `did-finish-load`.** Main re-sends the current
-   `agent:state` for every session to the fresh renderer, after the default
-   preset push. This is the channel M6d declined twice and the badge is the
-   customer that changes the answer: a renderer that reads zero after
-   `Cmd+R` while the dock says 3 is a canvas that disagrees with its own
-   icon. No new channel — it is the existing event, sent once more.
+5. **A snapshot on every `did-finish-load` — OVERRULED IN IMPLEMENTATION (M43).**
+   The design intended main to re-send each session's `agent:state` to a fresh
+   renderer so its waiting count would not read zero after `Cmd+R`. This does
+   NOT work: `window-lifecycle.ts`'s `did-start-navigation` calls
+   `PtyManager.detachAll()` on every reload, which EMPTIES main's session map
+   (the tmux processes survive, but main's `Session` objects — and their
+   wants-you detectors — are deleted). So at `did-finish-load` there are no
+   sessions to snapshot, and the reattaching sessions that follow get FRESH
+   detectors (`starting`), not the pre-reload state. `resendStates()` is kept
+   as a cheap, correctly-shaped method and IS called on `did-finish-load`, but
+   it is a no-op after a real reload and must not be claimed to restore
+   attention. A check that seemed to prove it would only pass because the
+   verify harness does not wire `window-lifecycle` (so its map is NOT emptied
+   on reload) — the exact "green against the harness, inert in the app" trap
+   check 32 records. Attention after a reload is instead governed by the
+   reattach path: a still-working agent shows busy again as bytes flow; a
+   silently-idle one that was waiting genuinely loses its amber until it next
+   emits, which is accepted. The dock badge, the notification and the beep
+   (decisions 2–4) are unaffected — they are driven by LIVE transitions in a
+   running session, not by the reload.
 6. **Three settings, one category:** `attention.notify` (on),
    `attention.sound` (off), and the existing `agent.edgeIndicators` moves
    nowhere. The notifier, the badge and the beep are injected into
@@ -77,5 +91,8 @@ invisible; a badge would make it a number that is wrong.
   beep is called only when its setting answers true; acknowledge clears the
   badge to `''`; `resendStates()` sends one `agent:state` per live session.
 - `verify:layout` `attention.1`: the two settings, their defaults.
-- `verify:panels` `attention.1`: after a bell, `wc.reload()`, the rail's
-  Attention row for that panel is present WITHOUT a second bell.
+- `verify:panels` `attention.1`: REPLACED (the reload snapshot is overruled,
+  above). Instead: a clicked notification — main sends `attention:jump` for an
+  OFF-SCREEN panel — frames and selects that panel through `goToPanel` and
+  NEVER wakes it (no PTY spawned). tmux-free and reload-free, so it tests the
+  one renderer path the design actually delivers.
