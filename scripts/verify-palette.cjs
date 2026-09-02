@@ -263,6 +263,8 @@ const spyActions = () => {
     movePanelsToWorkspace: record('movePanelsToWorkspace'),
     beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace'),
     toggleBroadcastInput: record('toggleBroadcastInput'),
+    toggleGroup: record('toggleGroup'),
+    removeGroup: record('removeGroup'),
     // The three credential verbs (the credential checks exercise
     // buildCredentialRows directly, but buildCommands also reaches these
     // through ctx.actions).
@@ -288,6 +290,7 @@ const ctx = (over = {}) => ({
   capturedId: null,
   hasSelection: false,
   selectedIds: [],
+  groups: [],
   broadcastReady: false,
   broadcastActive: false,
   actions: spyActions(),
@@ -1915,6 +1918,41 @@ const WS = [
   }
   ok('audit.1 across six contexts every row has a title and a run, and every disabled row names a non-empty reason',
     rows > 100 && bad.length === 0, JSON.stringify({ rows, bad: bad.slice(0, 8) }))
+}
+
+// M61 — group-rows.1. THE GROUP VERBS REACH THE PALETTE. GroupLayer's two
+//     buttons ran from onMouseDown alone, so a keyboard user could neither
+//     card nor remove a group and no row covered either; M59's audit walked
+//     palette reasons and missed a control that had a name but no route. One
+//     PAIR of rows, on the group holding the captured panel (never one per
+//     group — removeLink's rule), disabled with a named reason when the
+//     captured panel is in no group, and refusing in the merged view like
+//     every other geometry verb.
+{
+  const groups = [{ id: 'g1', label: 'backend', colour: 'blue', panelIds: ['n1', 'n2'] }]
+  const panels = [{ id: 'n1', label: 'n1', kind: 'terminal', restartable: false, isAgent: false }, { id: 'n3', label: 'n3', kind: 'terminal', restartable: false, isAgent: false }]
+  const outside = P.buildCommands(ctx({ panels, groups, capturedId: 'n3' }))
+  const none = P.buildCommands(ctx({ panels, groups, capturedId: null }))
+  const inside = ctx({ panels, groups, capturedId: 'n1' })
+  const rows = P.buildCommands(inside)
+  const toggle = byId(rows, 'group.toggle')
+  const remove = byId(rows, 'group.remove')
+  if (toggle) toggle.run()
+  if (remove) remove.run()
+  const collapsedRows = P.buildCommands(ctx({ panels, groups: [{ ...groups[0], collapsed: true }], capturedId: 'n1' }))
+  const mergedRows = P.buildCommands(ctx({ panels, groups, capturedId: 'n1', merged: true }))
+  ok('group-rows.1 Card/Expand and Remove rows act on the captured panel\'s group, and name a reason outside one',
+    toggle !== undefined && remove !== undefined &&
+      /Card group/.test(toggle.title) && /backend/.test(toggle.title) && /Remove group/.test(remove.title) &&
+      toggle.disabledReason === undefined && remove.disabledReason === undefined &&
+      inside.actions.calls.some((c) => c[0] === 'toggleGroup' && c[1] === 'g1') &&
+      inside.actions.calls.some((c) => c[0] === 'removeGroup' && c[1] === 'g1') &&
+      /Expand group/.test(byId(collapsedRows, 'group.toggle').title) &&
+      byId(outside, 'group.toggle').disabledReason === P.REASON_NOT_IN_GROUP &&
+      byId(outside, 'group.remove').disabledReason === P.REASON_NOT_IN_GROUP &&
+      byId(none, 'group.toggle').disabledReason === P.REASON_NO_FOCUS &&
+      byId(mergedRows, 'group.toggle').disabledReason === P.REASON_MERGED_READ_ONLY,
+    JSON.stringify({ toggle: toggle && [toggle.title, toggle.disabledReason], remove: remove && [remove.title, remove.disabledReason], calls: inside.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

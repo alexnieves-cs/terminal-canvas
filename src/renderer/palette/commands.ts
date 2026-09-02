@@ -254,6 +254,14 @@ export interface PaletteActions {
   beginMovePanelsToNewWorkspace(panelIds: string[]): void
   /** Name the current multi-selection as one movable canvas region. */
   beginCreateGroup(panelIds: string[]): void
+  /**
+   * M61. Card or expand one group, and remove one. Ids rather than "the
+   * captured panel's group", the rule every panel verb here obeys; both are
+   * the SAME callbacks GroupLayer's header buttons run, so the palette and
+   * the frame cannot disagree about what a collapse is.
+   */
+  toggleGroup(id: string): void
+  removeGroup(id: string): void
   /** Turn the selected live terminals' shared keyboard route on or off. */
   toggleBroadcastInput(): void
   /**
@@ -430,6 +438,13 @@ export interface PaletteContext {
    * below), which is the last thing that should degrade quietly to "false".
    */
   merged: boolean
+  /**
+   * M61. Every group on this canvas, as plain data — id, label, collapsed
+   * and members — so the group rows can find the one holding the captured
+   * panel. Optional only for the checks' older contexts: an absent list is
+   * "no groups", which is a real state, not a hole.
+   */
+  groups?: readonly { id: string; label: string; collapsed?: boolean; panelIds: readonly string[] }[]
   actions: PaletteActions
 }
 
@@ -473,6 +488,11 @@ export const REASON_NOT_AN_AGENT = 'that panel is not running a known agent'
 // need to select text, which sends them to do the thing they already did.
 export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag first'
 export const REASON_GROUP_NEEDS_TWO = 'select at least two panels to make a group'
+/**
+ * M61. Its own reason, not REASON_NO_FOCUS: the fix is "put this panel in a
+ * group", which is a different gesture from "click a panel".
+ */
+export const REASON_NOT_IN_GROUP = 'the focused panel is not in a group'
 /**
  * The merged view is read-only, so the move rows refuse there.
  *
@@ -1385,6 +1405,34 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // open, and a row reading only "Move to school" is a verb with an invisible
   // object.
   const count = `${ctx.selectedIds.length} panel${ctx.selectedIds.length === 1 ? '' : 's'}`
+
+  // M61. The two verbs GroupLayer's header carries, on the group holding the
+  // CAPTURED panel. One pair, never one per group: a row per group would
+  // scale with the canvas (removeLink's rule), and the captured panel is
+  // what every other panel verb in this palette already targets.
+  {
+    const held = ctx.capturedId === null ? undefined : (ctx.groups ?? []).find((g) => g.panelIds.includes(ctx.capturedId as string))
+    const reason = ctx.merged
+      ? REASON_MERGED_READ_ONLY
+      : (ctx.capturedId === null ? REASON_NO_FOCUS : (held === undefined ? REASON_NOT_IN_GROUP : undefined))
+    const name = held === undefined ? '' : ` “${held.label}”`
+    out.push(withReason({
+      id: 'group.toggle',
+      title: held?.collapsed ? `Expand group${name}` : `Card group${name}`,
+      subtitle: held?.collapsed ? 'show its panels again' : 'fold its panels to cards — nothing is closed',
+      searchText: 'group collapse expand card fold unfold',
+      group: 'canvas',
+      run: () => { if (held !== undefined) actions.toggleGroup(held.id) }
+    }, reason))
+    out.push(withReason({
+      id: 'group.remove',
+      title: `Remove group${name}`,
+      subtitle: 'the frame goes; its panels stay',
+      searchText: 'group remove delete ungroup dissolve',
+      group: 'canvas',
+      run: () => { if (held !== undefined) actions.removeGroup(held.id) }
+    }, reason))
+  }
 
   out.push(
     withReason(

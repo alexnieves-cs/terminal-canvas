@@ -43,3 +43,4 @@ copy here is deleted.
 | [m58-export.md](m58-export.md) | M58 — Export | finished |
 | [m59-dead-end-audit.md](m59-dead-end-audit.md) | M59 — The dead-end audit | finished |
 | [m60-ship.md](m60-ship.md) | M60 — Ship | finished |
+| [m61-visual-loop.md](m61-visual-loop.md) | M61 — The visual loop, and three post-1.0 defects | finished |

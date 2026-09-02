@@ -600,6 +600,29 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 
+// M61 — milestones.1. THE ROADMAP CONTRACT, PINNED. README.md's milestone
+// table is described in two places as "the roadmap contract", and it ended
+// at M35 for twenty-five milestones while check 14 kept the IPC diagram
+// honest three sections above it. Nothing read the table, so nothing noticed.
+// Every build log under docs/build-log/mNN-*.md must have a `| MNN |` row,
+// and — the direction that stops a row being invented ahead of the work —
+// every row at or above M36 must have a build log. M1–M35 predate the
+// build-log directory and are pinned only in the first direction.
+{
+  const { readdirSync } = require('node:fs')
+  const logs = readdirSync(join(ROOT, 'docs', 'build-log'))
+    .map((f) => /^m(\d+)[a-z]?-.*\.md$/.exec(f)).filter(Boolean).map((m) => Number(m[1]))
+  const readme = read('README.md') ?? ''
+  const rows = [...readme.matchAll(/^\| M(\d+)[a-z]? \|/gm)].map((m) => Number(m[1]))
+  const rowSet = new Set(rows)
+  const logSet = new Set(logs)
+  const missingRows = [...logSet].filter((n) => !rowSet.has(n))
+  const missingLogs = [...rowSet].filter((n) => n >= 36 && !logSet.has(n))
+  ok('milestones.1 every build log has a README milestone row, and every row from M36 on has a build log',
+    logs.length >= 25 && missingRows.length === 0 && missingLogs.length === 0,
+    JSON.stringify({ logs: logs.length, rows: rowSet.size, missingRows, missingLogs }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

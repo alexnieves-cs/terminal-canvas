@@ -322,5 +322,19 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   kindFamilies.length === 0 && frameFamilies.length === 4,
   `kind rules: ${kindFamilies.join(' ') || 'none'}; frame families: ${frameFamilies.join(' ')}`)
 
+// M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each
+// render a <section hidden={tab !== id}>, and `.context__panel { display:
+// block }` — a selector with higher specificity than the UA's `[hidden]`
+// rule — silently overrode it, so every tab showed all three bodies
+// stacked. verify:panels reads the attribute and passed; only a screenshot
+// saw it (M61's first render). Any rule that sets `display` on a class the
+// renderer also toggles with `hidden` must carry a `[hidden]` reset.
+{
+  const hiddenClasses = ['context__panel', 'dock__badge']
+  const bad = hiddenClasses.filter((c) => new RegExp(`\\.${c}\\s*\\{[^}]*display\\s*:`).test(bare) && !new RegExp(`\\.${c}\\[hidden\\]`).test(bare))
+  ok('hidden.1', 'every class that sets display and is toggled with the hidden attribute carries a [hidden] reset',
+    bad.length === 0, bad.length ? `no [hidden] rule for: ${bad.join(', ')}` : 'ok')
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

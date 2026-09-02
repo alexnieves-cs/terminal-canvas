@@ -785,7 +785,11 @@ body {
 }
 .context__tab:hover { color: var(--fg); background: var(--s-4); }
 .context__tab--on { color: var(--fg); border-bottom-color: var(--iris); }
+/* M61. `[hidden]` must beat the class: the UA's `[hidden] { display: none }`
+   loses to any authored `display`, and with it every tab body stacked into
+   one — a defect no attribute-reading check could see. */
 .context__panel { display: block; }
+.context__panel[hidden] { display: none; }
 .context__actions {
   flex: none;
   display: flex;
@@ -2533,14 +2537,30 @@ body {
   pointer-events: none;
 }
 
-/* The ambiguous case: one line instead of nodes. --fg-3, not --fg-4 — this
-   is an ordinary sentence the user is meant to read. */
+/* The ambiguous case: a notice instead of nodes, in the SAME frame a node
+   has. M61: before this it was bare monospace text with no box, wrapping
+   nowhere, so it hung off the panel's right edge and ran past the canvas —
+   the first thing a screenshot showed after 1.0, and it read as a rendering
+   error rather than a sentence. --fg-3 on the body, not --fg-4: this is an
+   ordinary sentence the user is meant to read. */
 .subagent-ambiguous {
   position: absolute;
-  padding: var(--sp-2) var(--sp-3);
+  box-sizing: border-box;
+  padding: var(--sp-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  background: var(--s-1);
   font: var(--t-sm) / var(--lh-tight) var(--font-mono);
   color: var(--fg-3);
+  white-space: normal;
   pointer-events: none;
+}
+.subagent-ambiguous__type {
+  margin: 0 0 var(--sp-1);
+  font: var(--t-xs) / var(--lh-tight) var(--font-mono);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg-4);
 }
 
 /* The cap's remainder. --fg-4 rather than --fg-3: a footnote under a column

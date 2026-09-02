@@ -93,7 +93,8 @@ const SubagentGroup = memo(function SubagentGroup({ panel }: SubagentGroupProps)
         data-subagent-ambiguous
         style={{ left: nodeX, top: rect.y, width: NODE_W, zIndex: z }}
       >
-        {subagents.sharing} panels share this repository — subagents unattributed
+        <div className="subagent-ambiguous__type">subagents</div>
+        {subagents.sharing} panels share this repository, so their subagents cannot be told apart
       </div>
     )
   }
