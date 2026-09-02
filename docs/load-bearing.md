@@ -1810,6 +1810,11 @@ naive always-relative version is silently wrong (and never errors) the moment th
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
 
+- **`scrollback.persist` off in the REAL main process** — `main/index.ts` wires the sink's
+  `enabled()` and the `scrollback:tail` gate to `layoutStore.getSetting('scrollback.persist')`,
+  and no suite runs that line: `verify:pty-manager` drives the sink with a fake `enabled()`, and
+  `verify:panels`' harness wires `enabled: () => true`. That turning the setting off stops the
+  append and makes a restored card show no recorded lines was confirmed once by hand.
 - **Auto-repeat guards** (`verify:panels` 7b/33b/75b/153 and siblings) prove only that the code
   *reads* `event.repeat`; that a physically held `Cmd`-modified key actually sets that flag on
   macOS/Electron was confirmed once via a throwaway `sendInputEvent` probe using the
@@ -2305,3 +2310,25 @@ user: every match becomes a placeholder naming its kind, nothing is dropped sile
 comes back; a bare hex sha, a UUID and the word "token" are never touched, because an export
 that redacts a commit sha is one nobody can act on. `verify:usage` `redact.3` pins the
 over-match direction, which is the failure a scrubber grows into.
+
+**Broadcast has three exits and ONE guard (`Canvas.tsx`, `useBroadcastChord.ts`,
+`usePaletteActions.ts`).** M31 shipped the mode with a single way out — find the palette
+row again — which is a dead end for whoever armed it from the chord M40 adds (`Cmd+Shift+I`;
+`Cmd+Shift+B`, the obvious spelling, is NOT free: `useShellChrome` matches `KeyB` without
+testing Shift, so it toggles the tree). The banner's Stop and the chord both call
+`toggleBroadcastInput` through `paletteActionsRef`, the same verb the palette row runs, so
+the "two live selected terminals, or the mode is already on" rule lives in one function and
+the three doors cannot disagree in the cases nobody tests. The banner is `pointer-events:
+none` so it never eats a click meant for the canvas beneath it; the Stop control alone opts
+back in, and it mounts `shellControl` so the press never moves DOM focus off the terminal
+that is still receiving the keystrokes — AND it stops the mousedown's propagation, which no
+other shell control needs: the banner is the one control INSIDE the canvas host, so its press
+otherwise bubbles to `useCanvasPointer`'s background handler, which hit-tests the world point
+under the banner, selects the panel beneath or clears the selection and starts a marquee, and
+releases focus. `broadcast.2` went red on exactly that — Stop had cleared the two-panel
+selection, so the chord that followed was refused by its own guard. No first-time confirmation: the mode is visibly
+armed (a banner with a count, M13's "an armed mode must never be invisible"), it is
+reversible with one key, and a confirm on every arming would cost the four-agent case its
+whole point. `verify:panels` `broadcast.1` is the end-to-end proof, read from the M39 log
+rather than any renderer hook — a keystroke into the focused member lands in BOTH panels'
+logs, a real click on Stop ends the mode, and the next keystroke lands in one.

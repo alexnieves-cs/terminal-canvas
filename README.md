@@ -36,6 +36,10 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   the agents in the canvas you left keep working. `Cmd+Shift+A` shows all of
   them at once, side by side, and a rubber-band selection can be refiled from
   one canvas into another without a single process restarting.
+- **Type once into many.** Select two or more running terminals and arm
+  broadcast (`Cmd+Shift+I`, or the palette): every keystroke into the focused
+  one reaches all of them, so the same instruction goes to four agents in one
+  go. A banner says how many are listening and carries the Stop.
 - **A command palette.** `Cmd+K` for panels, presets, saved prompts, settings
   and workspaces, with drill-in scopes and fuzzy matching.
 - **A review layer.** Each panel is diffed against the snapshot taken when its
@@ -108,6 +112,7 @@ essentially every bare key, so a bare keystroke always belongs to the terminal.
 | `Cmd+Shift+\` | Toggle the inspector |
 | `Cmd+Shift+[` / `Cmd+Shift+]` | Previous / next workspace |
 | `Cmd+Shift+A` | Every workspace at once, side by side |
+| `Cmd+Shift+I` | Broadcast keystrokes to every selected terminal (again to stop) |
 | `Cmd+C` / `Cmd+V` | Copy / paste in the focused terminal |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / redo a canvas gesture |
 | **`Ctrl+C`, `Ctrl+Z`, `Ctrl+B`** | **Untouched — these reach the agent**: `Ctrl+C` as SIGINT, `Ctrl+Z` as SIGTSTP, and `Ctrl+B` because tmux's own prefix is deliberately disabled |
