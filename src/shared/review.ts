@@ -156,3 +156,29 @@ export type ReviewCommitResult =
   | { kind: 'head-moved' }
   | { kind: 'refused'; detail: string }
   | { kind: 'failed'; detail: string }
+
+/**
+ * M53. Root-and-baseline addressed like ReviewCommitRequest, plus the SUBJECT
+ * panel, so main can ask its own peer count and refuse a shared checkout
+ * without trusting the renderer's possibly stale result.
+ */
+export interface ReviewDiscardRequest {
+  root: string
+  baseline: string
+  subjectId: PanelId
+  /** Every path the result reported — not only the ones under the render cap. */
+  paths: string[]
+}
+
+/**
+ * Four designed states. `discarded` carries THREE lists together because a
+ * restore that fails for one path does not un-restore the others — it cannot
+ * — and a result that said only `failed` would have the user retry what
+ * already happened. `refused` is the answer before any write: a shared
+ * checkout, a lost baseline, git missing.
+ */
+export type ReviewDiscardResult =
+  | { kind: 'discarded'; restored: string[]; removed: string[]; failed: { path: string; detail: string }[] }
+  | { kind: 'nothing-to-discard' }
+  | { kind: 'refused'; detail: string }
+  | { kind: 'failed'; detail: string }

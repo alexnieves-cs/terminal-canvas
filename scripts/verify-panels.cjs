@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync, unlinkSync, statSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow, ipcMain } = require('electron')
@@ -76,6 +76,7 @@ const {
   createRunLedger,
   createBaselineCapture,
   createReviewCommitter,
+  createReviewDiscarder,
   FileWatchers,
   ToolboxCache,
   readFrom,
@@ -944,7 +945,15 @@ app.whenReady().then(async () => {
   // checks are about.
   { open: (req) => { linkOpens.push(req); return { kind: 'opened' } } },
   // M52. The ledger's read half, over the scratch ledger the manager writes.
-  (panelId, limit) => runLedger.list(panelId, limit))
+  (panelId, limit) => runLedger.list(panelId, limit),
+  // M53. Exactly main/index.ts's wiring: the store's own peer count, a FILE
+  // unlink, and stat for the directory refusal.
+  createReviewDiscarder({
+    run: fencedGitRunner,
+    peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
+    removeFile: (p) => unlinkSync(p),
+    isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
+  }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -8300,6 +8309,63 @@ app.whenReady().then(async () => {
             committed.includes('work.txt') && !committed.includes('seed.txt') &&
             typeof clean === 'string',
           `before=${before} after=${after} committed=${JSON.stringify(committed)} clean=${clean}`)
+      }
+
+      // discard.1 (M53). THE OTHER WRITE VERB, end to end, against the same
+      //   repository and node 113 just committed through — which now reads
+      //   clean against a baseline onCommitted advanced. Two files written
+      //   from the harness (the baseline is the node's, so anything written
+      //   now is a change): one tracked and modified, one brand new. Each is
+      //   discarded through the ROW's own control and confirm, never through
+      //   window.canvas.review.discard by hand — the arming, the sentence and
+      //   the re-read are the three things this milestone adds. Read back
+      //   off DISK and out of `git status`, never off the node: a node that
+      //   says "no changes" is satisfied by a node that lost its result.
+      //   `--porcelain` empty at the end is also the index clause — a discard
+      //   that wrote the index (`--staged`, or `git rm`) would leave a staged
+      //   deletion or a phantom entry behind.
+      {
+        const modified = join(crepo, 'seed.txt')
+        const fresh = join(crepo, 'brand-new.txt')
+        writeFileSync(modified, 'changed by hand\n')
+        writeFileSync(fresh, 'new\n')
+        const q = (sel) => `document.querySelector('.review-node[data-panel-id="rcommit"] ${sel}')`
+        const press = (sel) => wc.executeJavaScript(`(() => {
+          const el = ${q(sel)}
+          if (!el || el.disabled) return false
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          return true })()`)
+        const text = (sel) => wc.executeJavaScript(`((${q(sel)} || {}).textContent) || ''`)
+        const rowReady = (path) => waitUntil(async () => wc.executeJavaScript(
+          `(() => { const el = ${q(`[data-review-node-discard="${path}"]`)}; return el !== null && !el.disabled })()`), 8000)
+        const refreshed = cnode ? await press('.review-node__refresh') : false
+        const row1 = refreshed === true ? await rowReady('seed.txt') : false
+        const armed1 = row1 === true ? await press('[data-review-node-discard="seed.txt"]') : false
+        await settle()
+        const sentence1 = armed1 === true ? await text('[data-review-node-discard-armed="seed.txt"]') : ''
+        const confirmed1 = armed1 === true ? await press('[data-review-node-discard-confirm="seed.txt"]') : false
+        const restored = confirmed1 === true
+          ? await waitUntil(async () => readFileSync(modified, 'utf8') === 'seed\n', 8000)
+          : false
+        const outcome1 = await text('[data-review-node-commit-outcome]')
+        const row2 = restored === true ? await rowReady('brand-new.txt') : false
+        const armed2 = row2 === true ? await press('[data-review-node-discard="brand-new.txt"]') : false
+        await settle()
+        const sentence2 = armed2 === true ? await text('[data-review-node-discard-armed="brand-new.txt"]') : ''
+        const confirmed2 = armed2 === true ? await press('[data-review-node-discard-confirm="brand-new.txt"]') : false
+        const gone = confirmed2 === true ? await waitUntil(async () => !existsSync(fresh), 8000) : false
+        const clean = gone === true
+          ? await waitUntil(async () => {
+              const t = await text('[data-review-node-summary]')
+              return /no changes|clean/i.test(t) ? t : false
+            }, 8000)
+          : false
+        const status = cgit('status', '--porcelain').trim()
+        ok('discard.1 a modified file is restored and a new one deleted through the row\'s own confirm, the index untouched, and the node re-reads clean',
+          restored === true && /^Restore seed\.txt .*cannot be undone/.test(sentence1) &&
+            gone === true && /did not exist at spawn/.test(sentence2) &&
+            typeof clean === 'string' && status === '',
+          JSON.stringify({ refreshed, row1, armed1, sentence1, confirmed1, restored, outcome1, row2, sentence2, gone, clean, status }))
       }
 
       // 114. Escape cancels, and NOTHING is committed — read back out of

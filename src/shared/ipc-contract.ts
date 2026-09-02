@@ -20,7 +20,7 @@ import type {
 } from './types'
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { SettingDef, SettingValue } from './settings-schema'
-import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult } from './review'
+import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
@@ -250,6 +250,12 @@ export const IPC = {
    * state rather than assuming a prompt reply.
    */
   REVIEW_COMMIT: 'review:commit',
+  /**
+   * M53. Root-and-baseline addressed like REVIEW_COMMIT, plus the subject
+   * panel so main can refuse a shared checkout on its own count. Per file;
+   * never undoable; the worktree only.
+   */
+  REVIEW_DISCARD: 'review:discard',
   /** Metadata only. There is deliberately no credential:get — see CLAUDE.md. */
   CREDENTIAL_LIST: 'credential:list',
   CREDENTIAL_SET: 'credential:set',
@@ -999,6 +1005,7 @@ export interface CanvasBridge {
     at(subject: ReviewSubject): Promise<ReviewResult>
     diff(req: ReviewDiffRequest): Promise<ReviewDiff>
     commit(req: ReviewCommitRequest): Promise<ReviewCommitResult>
+    discard(req: ReviewDiscardRequest): Promise<ReviewDiscardResult>
   }
   /**
    * Metadata only. Deliberately no `get` here — there is no channel that

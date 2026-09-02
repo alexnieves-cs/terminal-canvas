@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, unlinkSync, statSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
@@ -18,6 +18,7 @@ import { createCredentialStore } from './credential-store'
 import { createSafeStorageCrypto } from './credential-crypto'
 import { createReviewEngine } from './review-engine'
 import { createReviewCommitter } from './review-commit'
+import { createReviewDiscarder } from './review-discard'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
@@ -149,6 +150,16 @@ const reviewEngine = createReviewEngine({
  */
 const scratchIndexDir = join(app.getPath('userData'), 'git-index')
 let scratchIndexSeq = 0
+// M53. The subject's own peer count is the refusal the renderer cannot make
+// stale; removal is a FILE unlink through node, never a git write.
+const reviewDiscard = createReviewDiscarder({
+  run: gitRunner,
+  peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
+  removeFile: (p) => unlinkSync(p),
+  isDirectory: (p) => {
+    try { return statSync(p).isDirectory() } catch { return false }
+  }
+})
 const reviewCommit = createReviewCommitter({
   run: gitRunner,
   tempIndexPath: () => {
@@ -738,7 +749,8 @@ app.whenReady().then(async () => {
       }
     },
     // M52. The ledger's read half.
-    (panelId, limit) => runLedger.list(panelId, limit)
+    (panelId, limit) => runLedger.list(panelId, limit),
+    reviewDiscard
   )
   createWindow()
 

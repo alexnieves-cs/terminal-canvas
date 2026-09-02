@@ -106,6 +106,12 @@ function ReviewNodeImpl({
   // The last commit's own answer. Cleared when a new draft opens, so a refusal
   // from a previous attempt cannot sit under a fresh one.
   const [outcome, setOutcome] = useState<string | null>(null)
+  // M53. The row whose discard is ARMED — a presentation state, like the ×'s
+  // arming, and cleared by the same things: a second press, a cancel, a
+  // refresh. Only one row can be armed, because the sentence is the
+  // disclosure and two disclosures on screen at once read as a list.
+  const [armedPath, setArmedPath] = useState<string | null>(null)
+  const [discarding, setDiscarding] = useState(false)
   // Captured when the draft opens, exactly as usePalette captures `focusedId`
   // rather than clearing it — and used on BOTH exits below.
   const capturedFocusRef = useRef<string | null>(null)
@@ -225,6 +231,41 @@ function ReviewNodeImpl({
     [subject, panel.title, result, expandedPath]
   )
   const { rect, z } = panel
+
+  // M53. One path per call — the row's own confirm — and the result is
+  // read back by REFRESHING, never by editing the local result: the engine's
+  // answer is the only one that can say what the tree looks like now. No
+  // history entry is pushed; the armed sentence says so.
+  const runDiscard = (path: string): void => {
+    if (discarding || model.discard.kind !== 'ready') return
+    setDiscarding(true)
+    setOutcome(null)
+    void window.canvas.review.discard(
+      { root: subject.repoRoot, baseline: subject.baselineSha, subjectId: subject.subjectId, paths: [path] }
+    )
+      .then((r) => {
+        setDiscarding(false)
+        setArmedPath(null)
+        if (r.kind === 'discarded') {
+          const parts: string[] = []
+          if (r.restored.length > 0) parts.push(`restored ${r.restored.join(', ')}`)
+          if (r.removed.length > 0) parts.push(`deleted ${path}`)
+          for (const f of r.failed) parts.push(`could not discard ${f.path} — ${f.detail}`)
+          setOutcome(parts.join(' · '))
+        } else {
+          setOutcome(
+            r.kind === 'nothing-to-discard' ? 'nothing to discard'
+              : r.kind === 'refused' ? `discard refused — ${r.detail}`
+              : `could not discard — ${r.detail}`)
+        }
+        setRefreshToken((n) => n + 1)
+      })
+      .catch((error: unknown) => {
+        setDiscarding(false)
+        setArmedPath(null)
+        setOutcome(`could not discard — ${String(error)}`)
+      })
+  }
 
   const runCommit = (): void => {
     const message = draft?.trim() ?? ''
@@ -421,6 +462,46 @@ function ReviewNodeImpl({
                   {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
                 </span>
               </button>
+              {model.discard.kind !== 'none' && !readOnly && (
+                <button
+                  type="button"
+                  className="review-node__discard"
+                  data-review-node-discard={f.path}
+                  disabled={model.discard.kind === 'blocked' || discarding}
+                  title={model.discard.kind === 'blocked' ? model.discard.reason : `Discard the changes to ${f.path}`}
+                  onMouseDown={(event) => {
+                    event.stopPropagation()
+                    event.preventDefault()
+                    if (model.discard.kind !== 'ready' || discarding) return
+                    onFocus(rect.id)
+                    setArmedPath((p) => (p === f.path ? null : f.path))
+                  }}
+                >
+                  {armedPath === f.path ? 'keep' : 'discard'}
+                </button>
+              )}
+              {armedPath === f.path && (
+                <div className="review-node__discard-armed" data-review-node-discard-armed={f.path}>
+                  <p className="review-node__discard-sentence">
+                    {f.untracked
+                      ? `${f.path} did not exist at spawn. Delete it? This cannot be undone.`
+                      : `Restore ${f.path} to its state at spawn (${subject.baselineSha.slice(0, 7)})? Anything changed by hand since then goes with it. This cannot be undone.`}
+                  </p>
+                  <button
+                    type="button"
+                    className="review-node__discard-confirm"
+                    data-review-node-discard-confirm={f.path}
+                    disabled={discarding}
+                    onMouseDown={(event) => {
+                      event.stopPropagation()
+                      event.preventDefault()
+                      runDiscard(f.path)
+                    }}
+                  >
+                    {discarding ? 'discarding…' : f.untracked ? 'Delete' : 'Restore'}
+                  </button>
+                </div>
+              )}
               {f.expanded && <Hunks diff={diff} />}
             </li>
           ))}
