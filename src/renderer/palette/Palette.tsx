@@ -103,6 +103,8 @@ export interface PaletteProps {
   worktrees: readonly WorktreeListRow[]
   /** M48. See PaletteContext.envReport. */
   envReport: EnvReport | null
+  /** M49. See PaletteContext.globalFontSize. */
+  globalFontSize: number
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
   hasSelection: boolean
@@ -179,6 +181,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         credentials: props.credentials,
         worktrees: props.worktrees,
         envReport: props.envReport,
+        globalFontSize: props.globalFontSize,
         noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
         capturedId: controller.capturedId,
@@ -195,7 +198,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces,
-     props.credentials, props.worktrees, props.envReport, props.attentionIds, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.scrollbackEnabled]
   )

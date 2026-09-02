@@ -61,6 +61,10 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   output contains it, newest match first, each a row that flies the camera to
   that panel. The wall-of-terminals answered as a retrieval question — which
   of these twelve printed the stack trace.
+- **Terminal type you can read from across the room.** A global font size
+  (9–24) and a per-panel override from the palette — three commit rows, no
+  slider, because a size change is a resize and a resize is a SIGWINCH to the
+  agent. Zoom stays zoom.
 - **A first run that teaches by doing.** An empty canvas shows a launcher made
   of the real verbs — your presets (a missing CLI is named, with what to
   install), open a file, a note — and four gesture hints that each fade for

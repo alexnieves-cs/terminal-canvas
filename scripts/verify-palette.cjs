@@ -264,7 +264,8 @@ const spyActions = () => {
     // panel.open-file's row calls this (check 73, renumbered from this
     // milestone's own original 70 — main's credential checks claimed 70-72
     // first) — same reason as restartPanel and openReview above.
-    openFile: record('openFile')
+    openFile: record('openFile'),
+    setPanelFontSize: record('setPanelFontSize')
   }
 }
 
@@ -866,6 +867,27 @@ const SETTING = {
       byRowId('env.tmux') !== undefined && byRowId('env.path') !== undefined && byRowId('env.layout') !== undefined && byRowId('env.probed') !== undefined &&
       rows.filter((r) => r.scope === 'environment').every((r) => typeof r.run === 'function'),
     JSON.stringify(rows.map((r) => ({ id: r.id, title: r.title, subtitle: r.subtitle })).slice(0, 8)))
+}
+// M49 — type.1. Three commit rows on the focused terminal — larger, smaller,
+//     default — each disabled with a reason otherwise. No slider: a slider
+//     that refits on every tick is sixty full repaints a second.
+{
+  const P1 = { id: 'n1', label: 'claude', kind: 'terminal', restartable: true, fontSize: 16 }
+  const rows = (ctx2) => P.buildCommands(ctx2)
+  const withFocus = ctx({ panels: [P1], capturedId: 'n1' })
+  const larger = byId(rows(withFocus), 'panel.font.larger')
+  const smaller = byId(rows(withFocus), 'panel.font.smaller')
+  const reset = byId(rows(withFocus), 'panel.font.default')
+  if (larger) larger.run()
+  const none = byId(rows(ctx({ panels: [P1], capturedId: null })), 'panel.font.larger')
+  const R1 = { id: 'r1', label: 'review', kind: 'review', restartable: false }
+  const sessionless = byId(rows(ctx({ panels: [R1], capturedId: 'r1' })), 'panel.font.larger')
+  ok('type.1 the three font rows commit on a focused terminal and are disabled with a reason otherwise',
+    larger !== undefined && smaller !== undefined && reset !== undefined && larger.disabledReason === undefined &&
+      /16/.test(larger.title) && withFocus.actions.calls.some((c) => c[0] === 'setPanelFontSize' && c[1] === 'n1' && c[2] === 17) &&
+      none !== undefined && none.disabledReason !== undefined &&
+      sessionless !== undefined && sessionless.disabledReason !== undefined,
+    JSON.stringify({ larger, none: none && none.disabledReason, sessionless: sessionless && sessionless.disabledReason, calls: withFocus.actions.calls }))
 }
 {
   const off = { ...SETTING, value: false }

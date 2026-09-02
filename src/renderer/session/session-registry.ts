@@ -69,6 +69,19 @@ export interface Registry {
    */
   applyTerminalOptions(options: TerminalOptions): void
   /**
+   * M49. The global font size and the per-panel overrides, resolved HERE
+   * into each session's effective size: a session without an override takes
+   * the global, an override survives a global change, a session created
+   * later inherits its effective size at creation (so its first fit is the
+   * right one — no fit at 13 and then a refit), and each LIVE session is
+   * refitted once per call, which sends at most one pty:resize. A font size
+   * is a resize wearing a hat: bigger cells mean fewer columns, a SIGWINCH,
+   * a full-screen TUI repainting — so this is a commit, never a live stream.
+   * ZOOM IS NOT FONT SIZE: the camera's scale is invisible to the fit, and
+   * nothing here reaches for it.
+   */
+  setFontSizes(sizes: { global: number; overrides: Record<string, number> }): void
+  /**
    * Advance version() and notify, and do nothing else.
    *
    * Exists for exactly one caller: restart, which calls ensure() from an EVENT
@@ -166,6 +179,10 @@ export function createRegistry(deps: RegistryDeps): Registry {
   // a genuine "all terminals, present and future", the shape M45's theme and
   // M49's font size both reuse.
   let terminalOptions: TerminalOptions = {}
+  // M49. The resolved font sizes, so ensure() can seed a later session.
+  let fontGlobal: number | null = null
+  let fontOverrides: Record<string, number> = {}
+  const effectiveFont = (id: string): number | null => fontOverrides[id] ?? fontGlobal
   let version = 0
 
   /**
@@ -279,6 +296,9 @@ export function createRegistry(deps: RegistryDeps): Registry {
       const handle = factory.create(id)
       // A session born after applyTerminalOptions inherits the current options.
       if (Object.keys(terminalOptions).length > 0) handle.configure(terminalOptions)
+      // M49. And its effective font size, so its first fit is the right one.
+      const seededFont = effectiveFont(id)
+      if (seededFont !== null) handle.configure({ fontSize: seededFont })
       const session: PanelSession = {
         id,
         spec,
@@ -402,6 +422,22 @@ export function createRegistry(deps: RegistryDeps): Registry {
     applyTerminalOptions(options) {
       Object.assign(terminalOptions, options)
       for (const session of sessions.values()) session.handle.configure(options)
+    },
+
+    setFontSizes({ global, overrides }) {
+      fontGlobal = global
+      fontOverrides = { ...overrides }
+      for (const session of sessions.values()) {
+        const size = effectiveFont(session.id)
+        if (size === null) continue
+        const current = session.handle.options().fontSize
+        if (current === size) continue
+        session.handle.configure({ fontSize: size })
+        // One refit per live session per commit; a detached one has no host
+        // to measure and settles on its next attach. refit() itself sends
+        // at most one pty:resize, and none when the grid did not change.
+        if (session.tier === 'live') this.refit(session.id)
+      }
     },
 
     version: () => version,

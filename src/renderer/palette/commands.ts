@@ -59,6 +59,10 @@ export interface PromptRow {
 export interface PanelRow {
   id: string
   label: string
+  /** M49. The kind, so a row that only means anything on a terminal can say so. */
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox'
+  /** M49. A per-panel font override, when set. Absent means the global. */
+  fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
   title?: string
   /**
@@ -169,6 +173,8 @@ export interface PaletteActions {
    * row is the only way to reach it without the inspector open.
    */
   restartPanel(id: string): void
+  /** M49. Commit a per-panel font size; undefined returns the panel to the global. */
+  setPanelFontSize(id: string, size: number | undefined): void
   /**
    * Set this panel's permission mode AND restart it, as ONE gesture.
    *
@@ -335,6 +341,8 @@ export interface PaletteContext {
    * Read by buildEnvironmentRows; the launcher reads the same object.
    */
   envReport?: EnvReport | null
+  /** M49. The global terminal font size, for the font rows' titles. */
+  globalFontSize?: number
   workspaces: WorkspaceRow[]
   /**
    * Metadata only, from window.canvas.credential.list() — never a token, and
@@ -413,6 +421,8 @@ export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
 export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
 export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
+/** M49. A font size belongs to a terminal; the other kinds set their own text. */
+export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
@@ -908,6 +918,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.resetCanvas()
   })
+
+  // --- Typography (M49) ------------------------------------------------------
+  //
+  // Three COMMIT rows on the focused terminal, no slider: a font size change
+  // is a resize wearing a hat (fewer columns, a pty:resize, a SIGWINCH, a full
+  // TUI repaint), and a slider that refits on every tick is sixty of those a
+  // second. Each press is one commit. Disabled with a reason on nothing and on
+  // a sessionless kind, never absent.
+  {
+    const target = ctx.capturedId === null ? undefined : ctx.panels.find((p) => p.id === ctx.capturedId)
+    const reason = ctx.capturedId === null || target === undefined
+      ? REASON_NO_FOCUS
+      : (target.kind === 'terminal' ? undefined : REASON_NOT_TERMINAL)
+    const current = target?.fontSize ?? ctx.globalFontSize ?? 13
+    const fontRow = (id: string, title: string, next: number | undefined, searchText: string): Command => withReason({
+      id, title, group: 'panel', searchText, hiddenAtRest: true,
+      run: () => { if (target !== undefined) actions.setPanelFontSize(target.id, next) }
+    }, reason)
+    out.push(fontRow('panel.font.larger', target === undefined ? 'Font: larger' : `Font: larger (${current} → ${Math.min(24, current + 1)})`, Math.min(24, current + 1), 'font bigger larger size text zoom'))
+    out.push(fontRow('panel.font.smaller', target === undefined ? 'Font: smaller' : `Font: smaller (${current} → ${Math.max(9, current - 1)})`, Math.max(9, current - 1), 'font smaller size text'))
+    out.push(fontRow('panel.font.default', target?.fontSize === undefined ? 'Font: default (already)' : `Font: default (${current} → global)`, undefined, 'font default reset global size text'))
+  }
 
   // --- Settings ------------------------------------------------------------
   //

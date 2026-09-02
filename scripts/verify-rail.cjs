@@ -267,6 +267,19 @@ ok('17 isRunning counts starting as running, and nothing else as running',
     JSON.stringify({ s, bad, none }))
 }
 
+// M49 — type.1. The Detail field: the effective size, and whether it is the
+//      default or this panel's own.
+{
+  const p = panel('n1')
+  const m = R.buildInspectorModel(p, undefined, undefined, [], undefined, undefined, { fontSize: 13, isDefault: true })
+  const o = R.buildInspectorModel({ ...p, fontSize: 16 }, undefined, undefined, [], undefined, undefined, { fontSize: 16, isDefault: false })
+  const f = (mm) => mm.fields.find((x) => x.key === 'font-size')
+  ok('type.1 the inspector shows the effective font size and whether it is the default',
+    f(m) !== undefined && /13/.test(f(m).value) && /default/.test(f(m).value) &&
+      f(o) !== undefined && /16/.test(f(o).value) && !/default/.test(f(o).value),
+    JSON.stringify({ m: f(m), o: f(o) }))
+}
+
 // 20. The heading is the SAME honest chain the rail and the header walk.
 //     Two labels for one panel differing only in the common case is the defect
 //     railLabel's own comment describes; the inspector must not reopen it.

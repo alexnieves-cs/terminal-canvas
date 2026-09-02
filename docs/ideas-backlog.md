@@ -1216,7 +1216,7 @@ two that were never about naming a spawn:
   proved the spec half is free, because it is already on the session. The env is not free,
   because capturing a running panel's env captures its secrets — #31.
 
-## 36. Panel typography — font size, and why it is a resize wearing a hat
+## 36. Panel typography — font size, and why it is a resize wearing a hat — DONE, M49
 
 Let the user set the terminal font size and family, per panel or globally. The most
 requested setting in the history of terminal emulators, and in this app it is not a

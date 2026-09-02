@@ -2976,6 +2976,34 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ def, good, bad, mixed, w }))
 }
 
+// M49 — type.1. terminal.fontSize is a bounded number setting (9–24, default
+//      13, in the Terminal category), and a terminal panel's `fontSize` is an
+//      OPTIONAL persisted field exactly as `title` is: absent stays absent,
+//      present-but-out-of-range is dropped with a warning and the panel
+//      survives without it (a per-entry failure costs the field, never the
+//      panel).
+{
+  const def = L.settingDef('terminal.fontSize')
+  const w = []
+  const parsed = L.parseLayout(file({ workspaces: [{
+    id: 'w1', name: 'Canvas', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+    panels: [
+      { id: 'a', x: 0, y: 0, w: 100, h: 100, z: 1, cwd: '~', args: [], fontSize: 16 },
+      { id: 'b', x: 0, y: 0, w: 100, h: 100, z: 1, cwd: '~', args: [] },
+      { id: 'c', x: 0, y: 0, w: 100, h: 100, z: 1, cwd: '~', args: [], fontSize: 99 }
+    ]
+  }] }))
+  const all = parsed.snapshot.workspaces.flatMap((ws) => ws.panels)
+  const a = all.find((p) => p.id === 'a')
+  const b = all.find((p) => p.id === 'b')
+  const c = all.find((p) => p.id === 'c')
+  ok('type.1 terminal.fontSize is bounded 9–24 default 13, and a panel fontSize override parses, keeps absence absent, and is dropped with a warning out of range',
+    def !== undefined && def.type === 'number' && def.default === 13 && def.min === 9 && def.max === 24 && typeof L.TERMINAL_CATEGORY === 'string' && def.category === L.TERMINAL_CATEGORY &&
+      a !== undefined && a.fontSize === 16 && b !== undefined && !('fontSize' in b) &&
+      c !== undefined && !('fontSize' in c) && parsed.warnings.some((m) => /fontSize/.test(m)),
+    JSON.stringify({ def, a, b, c, warnings: parsed.warnings, w }))
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

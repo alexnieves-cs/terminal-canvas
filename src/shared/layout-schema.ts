@@ -104,6 +104,13 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
   cwd: string
   /** Absent means "the user's login shell" — main resolves it. See PanelSpec. */
   command?: string
+  /**
+   * M49. A per-panel font size, overriding `terminal.fontSize`. OPTIONAL
+   * exactly as `title` is: absent means "the global", and readers tolerate
+   * absence. Out of the setting's bounds it is dropped with a warning and
+   * the panel survives without it.
+   */
+  fontSize?: number
   // PanelSpec.env has NO counterpart here — deliberate, not an oversight.
   // Nothing sets spec.env today, so nothing is lost by the omission yet; but
   // it is a SILENT exclusion, and a later feature that starts setting env
@@ -524,7 +531,7 @@ function parsePanel(
     warnings.push('dropped a panel that was not an object')
     return null
   }
-  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions, worktree } = raw
+  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions, worktree, fontSize } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a panel with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -552,6 +559,11 @@ function parsePanel(
     h: Math.max(MIN_PANEL_H, h),
     z,
     ...(isStr(title) ? { title } : {}),
+    // M49. Absent stays absent; present-but-unusable costs the FIELD, never
+    // the panel — a per-entry failure at one level down.
+    ...(fontSize === undefined ? {} : (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= 9 && fontSize <= 24
+      ? { fontSize }
+      : (warnings.push(`dropped panel ${id}'s fontSize: ${JSON.stringify(fontSize)} is not a number in [9, 24]`), {}))),
     ...(() => {
       const links = parseLinks(raw.links, id, warnings)
       // Absence is PRESERVED, not normalised to an empty array — the same rule

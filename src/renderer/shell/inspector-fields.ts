@@ -428,7 +428,13 @@ export function buildInspectorModel(
    * OPTIONAL and defaulted, the trade `live`, `panels` and `usage` each made
    * before it, so no pre-M20 caller or check changes meaning.
    */
-  sessionOptions?: AgentOptions | undefined
+  sessionOptions?: AgentOptions | undefined,
+  /**
+   * M49. The terminal's EFFECTIVE font size and whether it is the global
+   * default or this panel's own. OPTIONAL and defaulted, the trade every
+   * parameter before it made; absent renders no field.
+   */
+  typography?: { fontSize: number; isDefault: boolean } | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isReviewPanel(panel)) {
@@ -516,7 +522,8 @@ export function buildInspectorModel(
     // real pid, so there is no zero-trap here — but the exit field below has
     // one, and writing both the same way keeps the difference from reading as
     // an accident.
-    { key: 'pid', label: 'pid', value: running === undefined ? '—' : String(running.pid) }
+    { key: 'pid', label: 'pid', value: running === undefined ? '—' : String(running.pid) },
+    ...(typography === undefined ? [] : [{ key: 'font-size', label: 'font size', value: typography.isDefault ? `${typography.fontSize} (default)` : `${typography.fontSize} (this panel)` }])
   ]
   // M37. Three states, and the third renders NOTHING: a panel that never
   // asked for a worktree gets no row, by the Cost section's rule against a
