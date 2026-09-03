@@ -30,7 +30,10 @@ import type { OrphanRow } from '../shared/orphans'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
 import { createWorktreeManager } from './worktree-manager'
+import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
+import { AgentSessionManager } from './agent-session'
+import { claudeCliRunner } from './claude-cli-runner'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { ToolboxCache } from './toolbox-cache'
@@ -125,6 +128,15 @@ const credentialStore = createCredentialStore({
  * this answer for its startup diagnostic and threw it away.
  */
 let gitPath: string | null = null
+// M71. The agent-session runtime — a conversation with the installed `claude`
+// in headless mode, not a PTY. Constructed after the env probe for the same
+// reason the PtyManager is: it needs the login environment (how the CLI
+// finds its login and its config) and the CLI's resolved path. Null until
+// then; nothing can reach it before the window exists. No IPC channel names
+// it yet — M72's chat panel is its first caller — but it is wired into the
+// quit sequence now so a process it owns can never outlive the app.
+let agentSessions: AgentSessionManager | null = null
+let claudePath: string | null = null
 
 // Getters for the reason PtyManager's getBackend is one: this runner is
 // constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
@@ -598,8 +610,19 @@ app.whenReady().then(async () => {
     // only logged it, while git-runner.ts spawned the bare name against the
     // launchd PATH — see gitPath's declaration above.
     if (binary === 'git') gitPath = found
+    if (binary === 'claude') claudePath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
+  // The bare name is kept when the probe found nothing: the spawn then fails
+  // with ENOENT and the session reads `exited` with the reason in its stderr
+  // tail, which is a named failure. M72 disables the chat verb by name before
+  // it gets that far.
+  agentSessions = new AgentSessionManager({
+    runner: claudeCliRunner,
+    command: claudePath ?? 'claude',
+    env,
+    newSessionId: () => randomUUID()
+  })
 
   // After the env probe, because tmux must be resolved from the LOGIN PATH:
   // launchd gives a GUI app a bare PATH and /opt/homebrew/bin is not on it.
@@ -937,7 +960,8 @@ app.on('before-quit', () => {
     keep: layoutStore.getSetting('session.keepOnQuit') === true && backend.kind === 'tmux',
     manager: ptyManager,
     backend,
-    flush: () => layoutStore.flushSync()
+    flush: () => layoutStore.flushSync(),
+    agents: agentSessions ?? undefined
   })
 })
 

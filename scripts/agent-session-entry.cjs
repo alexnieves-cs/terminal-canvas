@@ -1,0 +1,15 @@
+/* esbuild entry for the agent-session suite (M71). Four modules, each pure or
+   injected: shared/transcript.ts imports only a type from @shared/cost;
+   main/agent-session.ts takes its process runner, command, environment and
+   id minter as dependencies; main/agent-session-args.ts is argv arithmetic
+   over main/agent-args.ts; main/quit.ts imports nothing. None of them may
+   import `electron` or `node-pty` — if this entry ever needs
+   `external: ['node-pty']`, the real claude-cli-runner (child_process, a
+   real login environment) has leaked into the manager and belongs back in
+   its own module, which is deliberately NOT bundled here. */
+module.exports = {
+  transcript: require('../src/shared/transcript'),
+  session: require('../src/main/agent-session'),
+  args: require('../src/main/agent-session-args'),
+  quit: require('../src/main/quit')
+}

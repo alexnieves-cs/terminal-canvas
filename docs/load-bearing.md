@@ -2160,6 +2160,14 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   design) or from one list-level read passed down** — both paint identical DOM, and no test in
   this repo can tell them apart without adding an impure render-counting side effect to
   production code, which was deliberately declined.
+- **The real `claude` behind an agent session (M71).** `claude-cli-runner.ts` against the
+  installed CLI — a turn, a tool call whose permission request was answered on the wire, an
+  interrupt mid-turn, `--resume` after an exit — was driven once by hand under plain node
+  (`docs/build-log/m71-agent-session.md` carries the transcript). No suite spawns a real
+  `claude`; `verify:agent-session` replays streams recorded from 2.1.259, so a CLI release
+  that changes a record type shows up as the session's `unknown` counter, and one that
+  changes a flag shows up as `exited` with the CLI's own stderr — never as a red suite. The
+  `deny` branch of a permission response has only the SDK's documented shape behind it.
 - **Every pixel (M61–M70).** `npm run shot` renders twenty-five scenes and asserts nothing;
   each milestone's look was a person's (and a fresh-context critic's) reading of the PNGs,
   recorded in the build logs. A green `npm run verify` is silent on how anything LOOKS —
@@ -2986,3 +2994,48 @@ comment draft lives in that child subtree; zooming out past 26% discarded typed,
 with no sign. The body is wrapped in `.pf__keep` (`display: contents`, so the DOM the checks
 select is unchanged) and given the `hidden` attribute under the far tiers. `hidden.1` in
 `verify:styles` is why the class carries its own `[hidden]` reset.
+
+**An agent session's process is gated on TWO identities, and the second one is the
+exit-then-resume case (`main/agent-session.ts`).** M61 fixed the PTY layer's late-event bug
+with one test — `sessions.get(id) === session` — because there a recreated id is a new
+`Session` object. The agent runtime has a case the PTY layer does not: after an exit, the
+NEXT `send` respawns the SAME session object with `--resume`, so the dead process's farewell
+bytes and its exit callback arrive against a session that is still in the map and still
+itself. Every data and exit callback therefore checks `session.proc === proc` as well, with
+`proc` captured at spawn. Drop the second clause and a killed process's exit marks the
+resumed session `exited` a moment after it started, with the new process alive and unwatched
+— the resurrected-log failure wearing a different coat. `verify:agent-session
+session.identity` drives the disposed case; the resumed case holds by the same line and is
+the reason the guard is written as two clauses rather than the one M61 needed.
+
+**The CLI's `usage` is per turn and its `total_cost_usd` is cumulative, and the session
+treats them differently on purpose (`main/agent-session.ts`, `shared/transcript.ts`).**
+Measured on claude 2.1.259: three turns of one process reported `output_tokens` 166, 135, 43
+and `total_cost_usd` 0.0215, 0.1609, 0.1684. Usage is SUMMED into the session's four token
+classes; cost is TAKEN as the latest value. The obvious accumulator sums both and reports a
+session that cost three times what it did, growing quadratically with turn count — a number
+that looks plausible on every screen it reaches. The interrupted turn's result reports a
+zero usage and an unchanged cost, which the same rule handles without a branch.
+`verify:agent-session session.accounting` pins the asymmetry with the real figures.
+
+**A permission request needs `--permission-prompt-tool stdio`, or it is a refusal
+(`main/agent-session-args.ts`).** Without that flag a headless `claude` DENIES every tool
+that would have asked, emits a `system/permission_denied` line, and carries on — the agent
+reports it could not run the command, the transcript reads as an ordinary turn, and nothing
+anywhere says a question was skipped. `--permission-prompts host` alone does not change this,
+and neither does an `initialize` control request (both measured). With the flag the CLI emits
+a `control_request` of subtype `can_use_tool` and WAITS; the session holds it as `pending`
+and answers only through `answerPermission`, and a request whose process exits is dropped by
+name (`permission-dropped`) so no surface can show a question nobody can answer.
+
+**An agent session spawns on the first `send`, never on `create`, and respawns with
+`--resume` after any exit (`main/agent-session.ts`).** A restored chat panel (M72) creates its
+session at boot for every panel on the canvas; spawning there would boot one `claude` per
+restored panel — the exact decision-on-the-user's-behalf dormancy exists to refuse for
+terminals. The CLI session UUID is minted at create and pinned with `--session-id`, so the
+first process and every later one name the same conversation, and the conversation's own
+durability is the CLI's transcript under `~/.claude/projects`, not a file this app writes.
+A `send` during a turn is queued in the session (the transcript shows it, dispose drops it);
+a `send` after an exit is a respawn, so a crashed or interrupt-killed process costs the user
+one message, never the conversation.
+

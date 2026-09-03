@@ -291,6 +291,7 @@ npm run verify:review        # git argv, the review engine's result arms, plain 
 npm run verify:usage         # transcript JSONL parsing, the price table, the per-panel accumulator, plain node
 npm run verify:tmux          # tmux argv, config and version parsing, plain node
 npm run verify:agent-state   # bell/OSC scanner + idle state machine, plain node
+npm run verify:agent-session # the agent-session runtime over a fake process runner and recorded CLI streams, plain node
 npm run verify:styles        # the stylesheet's own token rules + measured contrast, plain node
 npm run verify:credentials   # the credential store, its schema and its refusal path, plain node
 npm run verify:jira          # Jira's injected HTTP adapter, ticket mapping and the two writes, plain node
@@ -821,6 +822,7 @@ price of not killing something.
 | M68 | The context pane finished: Detail repeats nothing, Work's three headings each answer, Tools shows permissions, the Jira panel's Connect verb, the navigator names its root panel and carries the merged door | ✅ done |
 | M69 | The overview: summary and block tiers for every kind, and the minimap — every panel a block in its tone, the camera a rectangle, click or drag to move | ✅ done |
 | M70 | Ship 1.1.0: the version, the README's pictures in words, CLAUDE.md and `docs/load-bearing.md` reconciled, the manual-only list re-read, both packaging gates run with numbers, the graph refreshed | ✅ done |
+| M71 | The agent-session runtime: a main-process conversation with the installed `claude` in headless mode — transcript schema, streaming deltas, interrupt, permission requests, resume — over an injected process runner; no UI by design | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

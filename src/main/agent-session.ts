@@ -1,0 +1,557 @@
+import { addTotals, emptyTotals, type AgentOptions, type TokenTotals } from '@shared/cost'
+import {
+  interruptLine,
+  parseStreamChunk,
+  permissionResponseLine,
+  userMessageLine,
+  type PermissionAnswer,
+  type TranscriptEvent,
+  type TranscriptTurn
+} from '@shared/transcript'
+import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
+import { headlessArgs } from './agent-session-args'
+
+/**
+ * M71. A main-process object that represents an agent CONVERSATION — a
+ * structured, streaming transcript with a lifecycle of its own — rather than
+ * a PTY. No xterm anywhere near it; no `electron` import, so the whole class
+ * runs under plain node in verify:agent-session against a fake runner.
+ *
+ * Read the M71 spec before changing the lifecycle. The rules that fail
+ * silently if undone, in one place:
+ *
+ *   - IDS ARE THE CALLER'S. The renderer mints panel ids; this class takes
+ *     one and never invents one (two authors of one id space is the
+ *     duplicate-id defect). The CLI's own session UUID is a SECOND fact,
+ *     minted here through an injected `newSessionId` and pinned with
+ *     `--session-id`, so it is known before the process has written a byte
+ *     and is what `--resume` names on every later spawn.
+ *   - SPAWN ON FIRST SEND, NOT ON CREATE. A created session with no process
+ *     costs nothing, which is what a restored-but-untouched chat panel should
+ *     cost — dormancy's argument for terminals, reached from the other side.
+ *   - ONE PROCESS PER SESSION, MULTI-TURN OVER STDIN. A second send during a
+ *     turn is QUEUED here (the queue is ours so the transcript shows the
+ *     pending turn and dispose drops it deterministically). After an exit the
+ *     next send respawns with `--resume`.
+ *   - TURNS ARE ASSEMBLED FROM THE COMPLETE RECORDS; DELTAS ARE FOR THE
+ *     SCREEN. `assistant` records sharing a message id merge into one turn.
+ *     Deltas are batched per session on a 16ms timer for the reason
+ *     pty-manager.ts batches: the renderer must not re-render per token.
+ *   - USAGE IS SUMMED PER RESULT; COST IS THE LATEST RESULT'S. Measured:
+ *     the CLI's `usage` is per turn and its `total_cost_usd` is cumulative
+ *     across the process. Summing cost double-counts every earlier turn.
+ *   - THE M61 IDENTITY RULE, ON BOTH DOORS. Every data and exit callback is
+ *     gated on `this.sessions.get(id) === session && session.proc === proc`
+ *     before it touches anything. dispose() kills and deletes synchronously;
+ *     the OS process exits milliseconds later, usually printing, and by then
+ *     the id may belong to a session recreated at it. The second clause
+ *     matters on its own: after an exit-then-resume the session object is the
+ *     SAME, and only the process identity tells the dead one's tail apart
+ *     from the new one's stream.
+ */
+
+export type AgentSessionStatus =
+  | 'not-started'
+  | 'starting'
+  | 'ready'
+  | 'streaming'
+  | 'exited'
+  | 'disposed'
+
+export interface AgentSessionSpec {
+  id: string
+  cwd: string
+  agentOptions?: AgentOptions
+  /**
+   * A CLI session UUID from a previous run of the app (M72 stores it beside
+   * the panel). The first spawn then says `--resume` rather than
+   * `--session-id`, and the conversation continues from the transcript the
+   * CLI itself keeps.
+   */
+  resume?: string
+}
+
+export interface PendingPermission {
+  requestId: string
+  toolName: string
+  input: Record<string, unknown>
+  description?: string
+  toolUseId?: string
+}
+
+export interface AgentSessionCounters {
+  ignored: number
+  unknown: number
+  malformed: number
+}
+
+export interface AgentSessionSnapshot {
+  id: string
+  cwd: string
+  status: AgentSessionStatus
+  /** The CLI session UUID — what `--resume` names. */
+  sessionId: string
+  model?: string
+  pid?: number
+  exitCode?: number | null
+  exitSignal?: string
+  /** Results seen, i.e. completed turns. */
+  turns: number
+  usage: TokenTotals
+  /** The CLI's cumulative figure for the current process. Undefined until priced. */
+  costUsd?: number
+  pending: PendingPermission[]
+  queued: number
+  counters: AgentSessionCounters
+}
+
+export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
+  /** Set from this session's own state, never from the record. */
+  interrupted: boolean
+}
+
+export type AgentSessionEvent = { id: string } & (
+  | Exclude<TranscriptEvent, { type: 'result' | 'assistant' | 'user' | 'ignored' }>
+  | ResultEvent
+  | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
+  | { type: 'turn'; turn: TranscriptTurn }
+  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' }
+  | { type: 'queued'; text: string }
+  | { type: 'queue-dropped'; count: number }
+  | { type: 'permission-answered'; requestId: string; allow: boolean }
+  | { type: 'permission-dropped'; requestId: string }
+)
+
+export interface AgentSessionDeps {
+  runner: AgentRunner
+  /** The resolved path of the `claude` binary. */
+  command: string
+  /** The login environment every PTY gets — how the CLI finds its config. */
+  env: Record<string, string>
+  newSessionId: () => string
+  now?: () => number
+  /** How long an interrupt may go unanswered before the process is killed. */
+  interruptGraceMs?: number
+  /** The delta batch window. */
+  coalesceMs?: number
+}
+
+export type SendResult = 'sent' | 'queued' | 'no-session'
+
+interface Session {
+  id: string
+  cwd: string
+  agentOptions?: AgentOptions
+  sessionId: string
+  status: AgentSessionStatus
+  model?: string
+  proc?: AgentProcess
+  exitCode?: number | null
+  exitSignal?: string
+  everSpawned: boolean
+  carry: string
+  turns: TranscriptTurn[]
+  inFlight: boolean
+  interrupting: boolean
+  interruptTimer: ReturnType<typeof setTimeout> | null
+  abortReason: 'interrupt-timeout' | null
+  queue: string[]
+  pending: Map<string, PendingPermission>
+  usage: TokenTotals
+  costUsd?: number
+  turnCount: number
+  userTurns: number
+  counters: AgentSessionCounters
+  batch: AgentSessionEvent[]
+  batchTimer: ReturnType<typeof setTimeout> | null
+}
+
+const INTERRUPT_GRACE_MS = 5000
+const COALESCE_MS = 16
+
+export class AgentSessionManager {
+  private readonly sessions = new Map<string, Session>()
+  private readonly listeners = new Set<(event: AgentSessionEvent) => void>()
+  private readonly now: () => number
+  private readonly interruptGraceMs: number
+  private readonly coalesceMs: number
+  private requestSeq = 0
+
+  constructor(private readonly deps: AgentSessionDeps) {
+    this.now = deps.now ?? (() => Date.now())
+    this.interruptGraceMs = deps.interruptGraceMs ?? INTERRUPT_GRACE_MS
+    this.coalesceMs = deps.coalesceMs ?? COALESCE_MS
+  }
+
+  /** Synchronous, cannot fail, idempotent at an id. Spawns nothing. */
+  create(spec: AgentSessionSpec): AgentSessionSnapshot {
+    const existing = this.sessions.get(spec.id)
+    if (existing) return this.snapshot(existing)
+    const session: Session = {
+      id: spec.id,
+      cwd: spec.cwd,
+      agentOptions: spec.agentOptions,
+      sessionId: spec.resume ?? this.deps.newSessionId(),
+      status: 'not-started',
+      // A resumed conversation spawns with --resume from its first process.
+      everSpawned: spec.resume !== undefined,
+      carry: '',
+      turns: [],
+      inFlight: false,
+      interrupting: false,
+      interruptTimer: null,
+      abortReason: null,
+      queue: [],
+      pending: new Map(),
+      usage: emptyTotals(),
+      turnCount: 0,
+      userTurns: 0,
+      counters: { ignored: 0, unknown: 0, malformed: 0 },
+      batch: [],
+      batchTimer: null
+    }
+    this.sessions.set(spec.id, session)
+    return this.snapshot(session)
+  }
+
+  send(id: string, text: string): SendResult {
+    const session = this.sessions.get(id)
+    if (!session) return 'no-session'
+    // On the transcript the moment it is sent, before the CLI has echoed
+    // anything — the echo (`isReplay`) is deliberately NOT stored, or every
+    // message would appear twice.
+    this.storeTurn(session, {
+      id: `u-${++session.userTurns}`,
+      role: 'user',
+      blocks: [{ type: 'text', text }],
+      at: this.now()
+    })
+    if (session.inFlight) {
+      session.queue.push(text)
+      this.emit({ id, type: 'queued', text })
+      return 'queued'
+    }
+    this.ensureProcess(session)
+    this.writeUser(session, text)
+    return 'sent'
+  }
+
+  /** True when a request was written; false with no turn in flight. */
+  interrupt(id: string): boolean {
+    const session = this.sessions.get(id)
+    if (!session || !session.inFlight || !session.proc) return false
+    const requestId = `tc-int-${++this.requestSeq}`
+    session.proc.write(interruptLine(requestId))
+    session.interrupting = true
+    this.clearInterruptTimer(session)
+    const proc = session.proc
+    session.interruptTimer = setTimeout(() => {
+      session.interruptTimer = null
+      // Still the same process, still mid-turn: the CLI ignored us. Kill it;
+      // the exit arrives through onExit and names this as the reason.
+      if (this.sessions.get(id) !== session || session.proc !== proc || !session.inFlight) return
+      session.abortReason = 'interrupt-timeout'
+      proc.kill()
+    }, this.interruptGraceMs)
+    return true
+  }
+
+  answerPermission(id: string, requestId: string, answer: PermissionAnswer): boolean {
+    const session = this.sessions.get(id)
+    if (!session || !session.proc) return false
+    const pending = session.pending.get(requestId)
+    if (!pending) return false
+    session.proc.write(permissionResponseLine(requestId, pending.input, answer))
+    session.pending.delete(requestId)
+    this.emit({ id, type: 'permission-answered', requestId, allow: answer.allow })
+    return true
+  }
+
+  dispose(id: string): void {
+    const session = this.sessions.get(id)
+    if (!session) return
+    // Deleted FIRST, so the process's late callbacks find nothing to speak to.
+    this.sessions.delete(id)
+    this.clearInterruptTimer(session)
+    this.dropBatch(session)
+    session.queue.length = 0
+    session.pending.clear()
+    session.inFlight = false
+    if (session.proc) {
+      const proc = session.proc
+      session.proc = undefined
+      proc.kill()
+    }
+    session.status = 'disposed'
+    this.emit({ id, type: 'status', status: 'disposed' })
+  }
+
+  disposeAll(): void {
+    for (const id of [...this.sessions.keys()]) this.dispose(id)
+  }
+
+  list(): AgentSessionSnapshot[] {
+    return [...this.sessions.values()].map((s) => this.snapshot(s))
+  }
+
+  get(id: string): AgentSessionSnapshot | undefined {
+    const session = this.sessions.get(id)
+    return session ? this.snapshot(session) : undefined
+  }
+
+  /** The stored turns, copied. Empty for an unknown id. */
+  transcript(id: string): TranscriptTurn[] {
+    const session = this.sessions.get(id)
+    if (!session) return []
+    return session.turns.map((t) => ({ ...t, blocks: [...t.blocks] }))
+  }
+
+  /** Returns its own unsubscribe, the preload convention. */
+  subscribe(cb: (event: AgentSessionEvent) => void): () => void {
+    this.listeners.add(cb)
+    return () => {
+      this.listeners.delete(cb)
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
+
+  private ensureProcess(session: Session): void {
+    if (session.proc) return
+    const args = headlessArgs({
+      sessionId: session.sessionId,
+      resume: session.everSpawned,
+      agentOptions: session.agentOptions
+    })
+    const proc = this.deps.runner({
+      command: this.deps.command,
+      args,
+      cwd: session.cwd,
+      env: this.deps.env
+    })
+    session.proc = proc
+    session.everSpawned = true
+    session.carry = ''
+    session.exitCode = undefined
+    session.exitSignal = undefined
+    session.abortReason = null
+    this.setStatus(session, 'starting')
+    proc.onData((chunk) => {
+      if (this.sessions.get(session.id) !== session || session.proc !== proc) return
+      const { events, carry } = parseStreamChunk(chunk, session.carry)
+      session.carry = carry
+      for (const event of events) this.handle(session, event)
+    })
+    proc.onExit((info) => {
+      if (this.sessions.get(session.id) !== session || session.proc !== proc) return
+      this.handleExit(session, info)
+    })
+  }
+
+  private writeUser(session: Session, text: string): void {
+    if (!session.proc) return
+    session.proc.write(userMessageLine(text))
+    session.inFlight = true
+    session.interrupting = false
+    if (session.status === 'ready') this.setStatus(session, 'streaming')
+  }
+
+  private handle(session: Session, event: TranscriptEvent): void {
+    const id = session.id
+    switch (event.type) {
+      case 'session':
+        session.model = event.model ?? session.model
+        if (session.status === 'starting') this.setStatus(session, session.inFlight ? 'streaming' : 'ready')
+        this.emit({ id, ...event })
+        return
+      case 'ignored':
+        session.counters.ignored += 1
+        return
+      case 'unknown':
+        session.counters.unknown += 1
+        this.emit({ id, ...event })
+        return
+      case 'malformed':
+        session.counters.malformed += 1
+        this.emit({ id, ...event })
+        return
+      case 'block-delta':
+        this.enqueueDelta(session, { id, ...event })
+        return
+      case 'assistant': {
+        const last = session.turns[session.turns.length - 1]
+        if (last && last.role === 'assistant' && last.id === event.messageId) {
+          last.blocks.push(...event.blocks)
+          last.model = event.model ?? last.model
+          // The per-block records repeat one message's usage; it is NOT
+          // summed here or anywhere — the result prices the turn.
+          this.emit({ id, type: 'turn', turn: { ...last, blocks: [...last.blocks] } })
+          return
+        }
+        this.storeTurn(session, {
+          id: event.messageId,
+          role: 'assistant',
+          blocks: event.blocks,
+          model: event.model,
+          usage: event.usage,
+          at: this.now()
+        })
+        return
+      }
+      case 'user':
+        // Our own message echoed back; already stored at send().
+        if (event.replay) return
+        this.storeTurn(session, {
+          id: `u-${++session.userTurns}`,
+          role: 'user',
+          blocks: event.blocks,
+          at: this.now()
+        })
+        return
+      case 'result': {
+        const interrupted = session.interrupting
+        session.inFlight = false
+        session.interrupting = false
+        this.clearInterruptTimer(session)
+        session.turnCount += 1
+        if (event.usage) session.usage = addTotals(session.usage, event.usage)
+        if (event.costUsd !== undefined) session.costUsd = event.costUsd
+        if (session.proc && session.status !== 'starting') this.setStatus(session, 'ready')
+        this.emit({ id, ...event, interrupted })
+        const next = session.queue.shift()
+        if (next !== undefined) this.writeUser(session, next)
+        return
+      }
+      case 'permission-request':
+        session.pending.set(event.requestId, {
+          requestId: event.requestId,
+          toolName: event.toolName,
+          input: event.input,
+          description: event.description,
+          toolUseId: event.toolUseId
+        })
+        this.emit({ id, ...event })
+        return
+      default:
+        this.emit({ id, ...event })
+    }
+  }
+
+  private handleExit(session: Session, info: AgentExitInfo): void {
+    const id = session.id
+    session.proc = undefined
+    session.exitCode = info.code
+    session.exitSignal = info.signal ?? undefined
+    session.carry = ''
+    this.clearInterruptTimer(session)
+    if (session.inFlight) {
+      session.inFlight = false
+      session.interrupting = false
+      this.emit({ id, type: 'turn-aborted', reason: session.abortReason ?? 'exited' })
+    }
+    session.abortReason = null
+    if (session.queue.length > 0) {
+      const count = session.queue.length
+      session.queue.length = 0
+      this.emit({ id, type: 'queue-dropped', count })
+    }
+    for (const requestId of [...session.pending.keys()]) {
+      session.pending.delete(requestId)
+      this.emit({ id, type: 'permission-dropped', requestId })
+    }
+    session.status = 'exited'
+    this.flushBatch(session)
+    this.emit({
+      id,
+      type: 'status',
+      status: 'exited',
+      exitCode: info.code,
+      exitSignal: info.signal ?? undefined,
+      stderr: info.stderr
+    })
+  }
+
+  private storeTurn(session: Session, turn: TranscriptTurn): void {
+    session.turns.push(turn)
+    this.emit({ id: session.id, type: 'turn', turn: { ...turn, blocks: [...turn.blocks] } })
+  }
+
+  private setStatus(session: Session, status: AgentSessionStatus): void {
+    if (session.status === status) return
+    session.status = status
+    this.emit({ id: session.id, type: 'status', status })
+  }
+
+  /* The delta batch. Adjacent deltas for one block index and one delta kind
+     are joined; anything that is not a delta flushes the batch first, so a
+     block-stop can never be delivered ahead of the deltas it follows. */
+  private enqueueDelta(session: Session, event: AgentSessionEvent & { type: 'block-delta' }): void {
+    const last = session.batch[session.batch.length - 1]
+    if (last && last.type === 'block-delta' && last.index === event.index && last.delta === event.delta) {
+      last.text += event.text
+    } else {
+      session.batch.push(event)
+    }
+    if (session.batchTimer === null) {
+      session.batchTimer = setTimeout(() => {
+        session.batchTimer = null
+        this.flushBatch(session)
+      }, this.coalesceMs)
+    }
+  }
+
+  private flushBatch(session: Session): void {
+    if (session.batchTimer !== null) {
+      clearTimeout(session.batchTimer)
+      session.batchTimer = null
+    }
+    if (session.batch.length === 0) return
+    const batch = session.batch
+    session.batch = []
+    for (const event of batch) this.deliver(event)
+  }
+
+  private dropBatch(session: Session): void {
+    if (session.batchTimer !== null) {
+      clearTimeout(session.batchTimer)
+      session.batchTimer = null
+    }
+    session.batch = []
+  }
+
+  private clearInterruptTimer(session: Session): void {
+    if (session.interruptTimer !== null) {
+      clearTimeout(session.interruptTimer)
+      session.interruptTimer = null
+    }
+  }
+
+  private emit(event: AgentSessionEvent): void {
+    const session = this.sessions.get(event.id)
+    if (session) this.flushBatch(session)
+    this.deliver(event)
+  }
+
+  private deliver(event: AgentSessionEvent): void {
+    for (const cb of this.listeners) cb(event)
+  }
+
+  private snapshot(session: Session): AgentSessionSnapshot {
+    return {
+      id: session.id,
+      cwd: session.cwd,
+      status: session.status,
+      sessionId: session.sessionId,
+      model: session.model,
+      pid: session.proc?.pid,
+      exitCode: session.exitCode,
+      exitSignal: session.exitSignal,
+      turns: session.turnCount,
+      usage: { ...session.usage },
+      costUsd: session.costUsd,
+      pending: [...session.pending.values()],
+      queued: session.queue.length,
+      counters: { ...session.counters }
+    }
+  }
+}
