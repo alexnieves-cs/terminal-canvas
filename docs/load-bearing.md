@@ -2084,6 +2084,16 @@ with no agent state (a live process reads `running`); the ROW applies the agent 
 subscribes to, which is why `RailRow` carries `state` and why the signature does not carry
 the agent word.
 
+**The spawn sheet's directory is checked with `expandTilde`, never `resolveCwd`
+(`main/index.ts` `spawnWith`, and the same stub in `verify-panels.cjs`).** `resolveCwd` falls
+back to the home directory when a path is missing — right for a restored panel whose
+directory went away, and exactly wrong for a path a person just typed: the sheet's first
+check run spawned two panels at `~` from a typo and refused nothing, because the fallback
+made the missing directory look present. The refusal names the path and is shown in the
+sheet; nothing spawns. The recent-directories list is recorded in the `pty:create` handler,
+not in the sheet's, so `⌘N` and a menu pick count too — it is "where panels start", and a
+list fed only by the sheet would be a list of where the sheet was used.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:

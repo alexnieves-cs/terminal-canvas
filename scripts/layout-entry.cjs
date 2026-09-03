@@ -28,5 +28,7 @@ module.exports = {
      module out of the plain-node tier, not the filesystem. Numbered M13
      during its own design and implementation; renumbered on merge — a
      different, unrelated milestone had already claimed M13. */
-  ...require('../src/main/fs-tree')
+  ...require('../src/main/fs-tree'),
+  /* M65. The spawn sheet's resolver: pure over an injected directory test. */
+  ...require('../src/main/spawn-request')
 }

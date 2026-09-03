@@ -3044,6 +3044,56 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ absent: ws.bookmarks, absentWarnings: absent.warnings, kept, warnings: mixed.warnings }))
 }
 
+// M65 — recent.1. RECENT DIRECTORIES: main records every spawn's cwd, the
+//     spawn sheet offers them. Absent is every file written before M65 and
+//     must warn nothing; a non-array warns and is dropped; a non-string entry
+//     costs that entry; the list is deduplicated, most recent first, capped at
+//     twelve — a spawn sheet with a scrolling list of forty temp directories
+//     is the failure the cap exists for.
+{
+  const parse = typeof L.parseRecentDirectories === 'function' ? L.parseRecentDirectories : () => undefined
+  const w1 = [], w2 = [], w3 = []
+  const absent = parse(undefined, w1)
+  const bad = parse('nope', w2)
+  const mixed = parse(['/a', 42, '/b', '/a', '', '/c', '/d', '/e', '/f', '/g', '/h', '/i', '/j', '/k', '/l', '/m'], w3)
+  ok('recent.1 absent recent directories parse as [] silently; malformed entries are dropped with a warning; deduplicated and capped at twelve',
+    Array.isArray(absent) && absent.length === 0 && w1.length === 0 &&
+      Array.isArray(bad) && bad.length === 0 && w2.length === 1 &&
+      Array.isArray(mixed) && mixed.length === 12 && mixed[0] === '/a' && mixed[1] === '/b' && !mixed.includes('') && w3.length >= 2,
+    JSON.stringify({ absent, w1, bad, w2, mixed, w3 }))
+  const store = L.createLayoutStore ? L.createLayoutStore({ filePath: require('node:path').join(require('node:os').tmpdir(), `tc-recent-${Date.now()}.json`) }) : null
+  if (store && typeof store.addRecentDirectory === 'function') {
+    store.load()
+    for (const d of ['/one', '/two', '/one', '/three']) store.addRecentDirectory(d)
+    const list = store.recentDirectories()
+    ok('recent.2 addRecentDirectory puts the newest first and keeps one copy of a repeat', JSON.stringify(list) === JSON.stringify(['/three', '/one', '/two']), JSON.stringify(list))
+  } else {
+    ok('recent.2 addRecentDirectory puts the newest first and keeps one copy of a repeat', false, 'store has no addRecentDirectory')
+  }
+}
+
+// M65 — spawn.1. THE RESOLVER main and the harness both run. An absent
+//     command stays absent; a typed command is `/bin/sh -lc` titled with
+//     itself; agent options merge only onto an agent preset; a FILE is
+//     refused like a missing path (existsSync passed it and the panel died
+//     at spawn); the reason names the typed path.
+{
+  const resolve = typeof L.resolveSpawnRequest === 'function' ? L.resolveSpawnRequest : () => null
+  const presets = [{ id: 'shell', name: 'Login shell', cwd: '~', args: [] }, { id: 'claude', name: 'Claude', cwd: '~', command: 'claude', args: [], agent: 'claude-code', agentOptions: { effort: 'high' } }]
+  const fs = { expand: (p) => p.replace(/^~/, '/home/me'), isDirectory: (p) => p === '/home/me' || p === '/work' }
+  const a = resolve({ presetId: 'shell', cwd: '~' }, presets, fs)
+  const b = resolve({ presetId: 'claude', cwd: '/work', agentOptions: { permissionMode: 'plan' }, title: 'api' }, presets, fs)
+  const c = resolve({ command: 'npm test', cwd: '/work' }, presets, fs)
+  const d = resolve({ presetId: 'shell', cwd: '/work/file.txt' }, presets, fs)
+  const e = resolve({ presetId: 'gone', cwd: '/work' }, presets, fs)
+  ok('spawn.1 resolveSpawnRequest keeps an absent command absent, merges agent options onto an agent preset only, wraps a typed command as a titled task, and refuses a file or a missing preset with a reason',
+    a && a.kind === 'spawned' && !('command' in a.template) && a.template.cwd === '/home/me' && a.template.focus === true &&
+      b && b.kind === 'spawned' && b.template.agentOptions && b.template.agentOptions.permissionMode === 'plan' && b.template.agentOptions.effort === 'high' && b.template.title === 'api' &&
+      c && c.kind === 'spawned' && c.template.command === '/bin/sh' && c.template.args[0] === '-lc' && c.template.args[1] === 'npm test' && c.template.title === 'npm test' &&
+      d && d.kind === 'refused' && /file\.txt/.test(d.reason) && e && e.kind === 'refused',
+    JSON.stringify({ a, b, c, d, e }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

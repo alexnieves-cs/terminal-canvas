@@ -47,3 +47,4 @@ copy here is deleted.
 | [m62-design-brief.md](m62-design-brief.md) | M62 — The design brief and the 1.x scope decision | finished |
 | [m63-state-vocabulary.md](m63-state-vocabulary.md) | M63 — The state vocabulary | finished |
 | [m64-finding.md](m64-finding.md) | M64 — Finding a panel | finished |
+| [m65-starting.md](m65-starting.md) | M65 — Starting a panel | finished |

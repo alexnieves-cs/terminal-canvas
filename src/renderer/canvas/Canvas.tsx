@@ -93,7 +93,7 @@ import { shellQuote } from '@renderer/shell/file-tree-model'
 import { createHistory, pushHistory, undoHistory, redoHistory, type History } from '@renderer/panels/history'
 import { usePalette } from '@renderer/palette/usePalette'
 import { Palette, type InputMode } from '@renderer/palette/Palette'
-import type { PresetRow, PromptRow } from '@renderer/palette/commands'
+import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/commands'
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
@@ -380,10 +380,16 @@ export function Canvas({
   // presets or the default still has to land after mount.
   const defaultTemplateRef = useRef<PresetTemplate | undefined>(defaultTemplate)
 
+  // M65. A sheet spawn is a USER-initiated one: it is focused on arrival, and
+  // focus is what promotes it live regardless of the budget — which is why a
+  // typed command needs no "spawn at a stated grid" door. The id is queued
+  // here and selected once the panel exists in state (the effect below).
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null)
   const onSpawn = useCallback(
-    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string }) => {
+    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true }) => {
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
+      if (opening?.focus) setPendingFocusId(id)
       setEnteringPanelIds((current) => new Set(current).add(id))
       setPanels((current) => {
         // Where the panel ACTUALLY goes. Without this, N presses at an
@@ -1133,7 +1139,7 @@ export function Canvas({
   // never wakes. Read through the ref so this subscribes once and never goes
   // stale as paletteActions is rebuilt.
   useEffect(() => window.canvas.agent.onAttentionJump((panelId) => {
-    paletteActionsRef.current.goToPanel(panelId)
+    paletteActionsRef.current?.goToPanel(panelId)
   }), [])
 
   // One subscription for the whole canvas, like agent.onState above and for the
@@ -1173,10 +1179,21 @@ export function Canvas({
   // preset spawn inherits the SAME undo behaviour as Cmd+N: undo removing a
   // panel must dispose its session, and that guarantee lives in applyHistory,
   // reachable only by going through the ordinary history stack.
+  // Declared here, above the preset-event effect that reads it (M65's
+  // ⌘⇧N subscription), and assigned beside usePaletteActions far below —
+  // the create-then-assign shape M28's hook split records.
+  const paletteActionsRef = useRef<PaletteActions | null>(null)
   useEffect(() => {
     const offSpawn = window.canvas.preset.onSpawn((template) => {
-      onSpawn(worldCentre(), template)
+      // M65. A template from the sheet carries its title and asks for focus;
+      // a menu template carries neither and spawns exactly as before.
+      onSpawn(worldCentre(), template, template.title === undefined && template.focus === undefined
+        ? undefined
+        : { ...(template.title === undefined ? {} : { title: template.title }), ...(template.focus === undefined ? {} : { focus: true as const }) })
     })
+    // M65. The menu's ⌘⇧N asks the renderer for the sheet. Through a ref:
+    // paletteActions is built far below this effect.
+    const offSheet = window.canvas.spawn.onOpenSheet(() => paletteActionsRef.current?.beginSpawnSheet())
     // M55. Recovered orphans, only ever after the user answered Restore.
     // Through commitHistory like a spawn, so Cmd+Z un-adopts — which
     // disposes the sessions, and that is right: asked, said yes, said no.
@@ -1228,6 +1245,7 @@ export function Canvas({
       return captured
     })
     return () => {
+      offSheet()
       offSpawn()
       offRecover()
       offDefault()
@@ -1827,6 +1845,13 @@ export function Canvas({
     // any panel that does not want you.
     void window.canvas.agent.acknowledge(id)
   }, [onSelectPanel])
+  // M65. The sheet's spawn gets focus once its panel is in state.
+  useEffect(() => {
+    if (pendingFocusId === null) return
+    if (!panels.some((p) => p.rect.id === pendingFocusId)) return
+    setPendingFocusId(null)
+    onSelectPanel(pendingFocusId)
+  }, [pendingFocusId, panels, onSelectPanel])
 
   // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
   // epoch ms at which the hold started. Refs, not state: the hold is bookkeeping
@@ -2996,23 +3021,22 @@ export function Canvas({
   // re-rendered the whole layer on every palette open — the exact case its
   // own memo comment names as one it stops. Read through a ref so the wrapper
   // never goes stale and never changes. verify:panels memo-stable.1.
-  const paletteActionsRef = useRef(paletteActions)
   paletteActionsRef.current = paletteActions
   const removeLinkStable = useCallback((from: string, to: string) => {
-    paletteActionsRef.current.removeLink(from, to)
+    paletteActionsRef.current?.removeLink(from, to)
   }, [])
   // M40. The banner's Stop and the Cmd+Shift+I chord both run the palette
   // row's own verb through the same ref, so the three exits cannot drift:
   // the guard (two live selected terminals, or the mode already on) lives
   // in toggleBroadcastInput and nowhere else.
   const toggleBroadcastStable = useCallback(() => {
-    paletteActionsRef.current.toggleBroadcastInput()
+    paletteActionsRef.current?.toggleBroadcastInput()
   }, [])
   useBroadcastChord({ paletteIsOpen: palette.isOpen, toggle: toggleBroadcastStable })
   // M44. Cmd+Arrow traverse (never wakes), Cmd+Enter focus+wake, Cmd+Escape
   // out of the terminal. goToPanel through the ref so the listener never goes
   // stale; focusPanel is onFocusPanel; releaseFocus is the background release.
-  const goToPanelStable = useCallback((id: string) => { paletteActionsRef.current.goToPanel(id) }, [])
+  const goToPanelStable = useCallback((id: string) => { paletteActionsRef.current?.goToPanel(id) }, [])
   const releaseFocusStable = useCallback(() => setFocusedId(null), [])
   useKeyboardNav({
     shouldIgnoreKeys,
@@ -3136,7 +3160,7 @@ export function Canvas({
       />
       <TopBar
         presets={presetRows}
-        onSpawnPreset={paletteActions.spawnPreset}
+        onOpenSheet={paletteActions.beginSpawnSheet}
         onSearch={palette.openPalette}
         onSettings={openSettingsScope}
         merged={merged}
@@ -3409,6 +3433,7 @@ export function Canvas({
             presets={presetRows}
             report={envReport}
             onSpawnPreset={paletteActions.spawnPreset}
+            onOpenSheet={paletteActions.beginSpawnSheet}
             onOpenFile={paletteActions.openFile}
             onNewNote={paletteActions.newNote}
             noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}

@@ -6,5 +6,7 @@
 module.exports = {
   ...require('../src/renderer/palette/fuzzy'),
   ...require('../src/renderer/palette/palette-model'),
-  ...require('../src/renderer/palette/commands')
+  ...require('../src/renderer/palette/commands'),
+  /* M65. The spawn sheet's model — pure. */
+  ...require('../src/renderer/palette/spawn-sheet')
 }

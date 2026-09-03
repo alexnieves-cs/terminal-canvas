@@ -4,6 +4,8 @@ import { APPEARANCE_CATEGORY, RESTORE_CATEGORY, settingsInCategory, type Setting
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
+  /** M65. The File menu's New panel… (⌘⇧N): open the spawn sheet. */
+  onOpenSheet(): void
   /** Resolved current values, keyed by SettingDef.id. */
   settingValue(id: string): SettingValue
   onToggleSetting(id: string, value: SettingValue): void
@@ -82,6 +84,13 @@ export function buildAppMenu(options: AppMenuOptions): void {
     {
       label: 'File',
       submenu: [
+        {
+          // M65. The spawn sheet: where, what, how. ⌘N stays the instant
+          // default; this is the considered one.
+          label: 'New panel…',
+          accelerator: 'CmdOrCtrl+Shift+N',
+          click: () => options.onOpenSheet()
+        },
         {
           label: 'New panel from preset',
           submenu: options.presets.map((entry) => ({

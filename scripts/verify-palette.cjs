@@ -263,6 +263,7 @@ const spyActions = () => {
     movePanelsToWorkspace: record('movePanelsToWorkspace'),
     beginMovePanelsToNewWorkspace: record('beginMovePanelsToNewWorkspace'),
     toggleBroadcastInput: record('toggleBroadcastInput'),
+    beginSpawnSheet: record('beginSpawnSheet'),
     toggleGroup: record('toggleGroup'),
     removeGroup: record('removeGroup'),
     // The three credential verbs (the credential checks exercise
@@ -740,8 +741,9 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
 {
   const rows = P.buildCommands(ctx({ presets: [SHELL, MINE] }))
   const withHint = rows.filter((r) => r.shortcut !== undefined).map((r) => r.id + '=' + r.shortcut)
+  // M65: the sheet's row carries its own chord (⌘⇧N), a different key.
   ok('48 only the default preset advertises Cmd+N',
-    withHint.sort().join(',') === 'canvas.fit=\u23180,preset.spawn.shell=\u2318N',
+    withHint.sort().join(',') === 'canvas.fit=\u23180,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
     withHint.join(','))
 }
 
@@ -2005,6 +2007,32 @@ const WS = [
     empty && empty.title === 'No matches for “zzqx”' && empty.subtitle === undefined &&
       hit && hit.title === 'web front' && hit.subtitle === 'FAIL 3 the writer',
     JSON.stringify({ empty: empty && [empty.title, empty.subtitle], hit: hit && [hit.title, hit.subtitle] }))
+}
+
+// M65 — sheet.1/.2. STARTING A PANEL. The sheet's row is the first thing under
+//     New panel, with its chord; the default preset's row carries ⌘N. The
+//     request the sheet builds is pure: an absent command STAYS absent (M5a's
+//     four-layer rule reaching a fifth surface), a typed command becomes a
+//     `/bin/sh -lc` task titled with itself, agent options ride only on an
+//     agent preset, and a title rides only when typed.
+{
+  const rows = P.buildCommands(ctx({ presets: [SHELL, CLAUDE, MINE] }))
+  const sheet = byId(rows, 'spawn.sheet')
+  const spawnRows = P.filterCommands(rows, '').filter((r) => r.group === 'spawn')
+  const dflt = byId(rows, 'preset.spawn.shell')
+  ok('sheet.1 New panel… is the first spawn row with ⌘⇧N, and the default preset\'s row carries ⌘N',
+    sheet !== undefined && sheet.shortcut === '⌘⇧N' && spawnRows[0] && spawnRows[0].id === 'spawn.sheet' && dflt && dflt.shortcut === '⌘N',
+    JSON.stringify({ sheet: sheet && sheet.title, first: spawnRows[0] && spawnRows[0].id, dflt: dflt && dflt.shortcut }))
+  const build = typeof P.buildSpawnRequest === 'function' ? P.buildSpawnRequest : () => null
+  const presets = [{ id: 'shell', name: 'Login shell', agent: undefined }, { id: 'claude', name: 'Claude', agent: 'claude-code' }]
+  const a = build({ what: { kind: 'preset', id: 'shell' }, cwd: '/work', title: '', agentOptions: { permissionMode: 'plan' } }, presets)
+  const b = build({ what: { kind: 'preset', id: 'claude' }, cwd: '/work', title: 'api', agentOptions: { permissionMode: 'plan' } }, presets)
+  const c = build({ what: { kind: 'command', command: 'npm test' }, cwd: '/work', title: '', agentOptions: {} }, presets)
+  ok('sheet.2 buildSpawnRequest keeps an absent command absent, carries agent options only for an agent preset, titles a task with its command',
+    a && a.presetId === 'shell' && !('command' in a) && !('agentOptions' in a) && !('title' in a) && a.cwd === '/work' &&
+      b && b.presetId === 'claude' && b.title === 'api' && b.agentOptions && b.agentOptions.permissionMode === 'plan' &&
+      c && !('presetId' in c) && c.command === 'npm test' && c.title === 'npm test',
+    JSON.stringify({ a, b, c }))
 }
 
 const failed = results.filter((r) => !r.pass)

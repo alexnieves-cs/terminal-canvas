@@ -4,6 +4,7 @@ import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
+import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { clearSubagents } from '@renderer/session/subagent-store'
 import { clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
@@ -984,6 +985,35 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // this is the one a future caller cannot forget.
     toggleGroup: (id) => { if (mergedRef.current) return; setGroups((current) => (current.find((g) => g.id === id)?.collapsed ? expandGroup : toggleGroup)(current, id)) },
     removeGroup: (id) => { if (mergedRef.current) return; setGroups((current) => removeGroup(current, id)) },
+    beginSpawnSheet: () => {
+      // The focused panel's LIVE directory first (M12's poll, falling back to
+      // the spawn cwd), then main's recent list, then every panel's directory.
+      // The captured id while the palette is open; from the menu (palette
+      // closed) the most recently focused panel, which the registry records.
+      const focusedAt = registry.lastFocusedAt()
+      const lastFocused = Object.keys(focusedAt).sort((a, b) => focusedAt[b] - focusedAt[a])[0]
+      const captured = palette.capturedId ?? lastFocused ?? null
+      const focusedPanel = captured === null ? undefined : panelsRef.current.find((p) => p.rect.id === captured)
+      const focusedCwd = focusedPanel !== undefined && isTerminalPanel(focusedPanel)
+        ? (getLiveSession(focusedPanel.rect.id)?.cwd ?? focusedPanel.spec.cwd)
+        : undefined
+      const panelDirs = panelsRef.current.filter(isTerminalPanel).map((p) => getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd)
+      const presets = presetRows.map((p) => ({ id: p.id, name: p.name, available: p.available, ...(p.agent === undefined ? {} : { agent: p.agent }), ...(p.cwd === undefined ? {} : { cwd: p.cwd }), ...(p.agentOptions === undefined ? {} : { agentOptions: p.agentOptions }) }))
+      const defaultPresetId = presetRows.find((p) => p.isDefault)?.id ?? presetRows[0]?.id ?? ''
+      void window.canvas.spawn.recent().then((recents) => {
+        setInputMode({
+          kind: 'sheet',
+          label: 'New panel',
+          initial: '',
+          submit: () => {},
+          sheet: {
+            presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
+            submit: (values) => window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
+          }
+        })
+        palette.openPalette()
+      })
+    },
     beginCreateGroup: (panelIds) => {
       if (mergedRef.current) return
       const present = panelIds.filter((id) => panelsRef.current.some((panel) => panel.rect.id === id))

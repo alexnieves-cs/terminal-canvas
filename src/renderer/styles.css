@@ -2021,53 +2021,57 @@ body {
    sibling of .world so the camera never scales it, and a card rather than a
    modal because the canvas behind it is the product. Its controls are the
    palette's verbs; a disabled one says why and what to install. */
+/* M65. The launcher is a PANEL-shaped card — a chrome row and a well in the
+   frame family — not an onboarding modal (brief §5, The launcher). It keeps
+   .pf so the state edge and the chrome rules apply; `position` and the
+   centring transform are its own, and .pf::before is not involved. */
 .launcher {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(520px, 86%);
+  width: min(560px, 86%);
   z-index: 20;
-  padding: var(--sp-7);
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  background: var(--s-3);
-  box-shadow: var(--e-3);
+  background: var(--s-1);
+  box-shadow: none;
   color: var(--fg-2);
+  overflow: hidden;
 }
+.launcher__chrome { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--line); background: var(--s-2); }
+.launcher__well { padding: var(--sp-6); background: var(--well); }
 .launcher__title {
-  font-size: var(--t-2xl);
+  font-family: var(--font-mono);
+  font-size: var(--t-md);
   font-weight: 600;
-  letter-spacing: var(--track-tight);
-  line-height: var(--lh-tight);
   color: var(--fg);
-  margin-bottom: var(--sp-3);
 }
 .launcher__lead { margin: 0 0 var(--sp-6); font-size: var(--t-md); line-height: var(--lh-body); }
-.launcher__verbs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.launcher__verbs { display: grid; grid-template-columns: 1fr; gap: var(--sp-1); }
 .launcher__verb {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  min-height: 24px;
-  padding: var(--sp-4) var(--sp-5);
-  border: 1px solid var(--line);
+  align-items: baseline;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid transparent;
   border-radius: var(--r-md);
-  background: var(--s-1);
+  background: transparent;
   color: var(--fg);
-  font: inherit;
   text-align: left;
   cursor: pointer;
+  font: inherit;
 }
+/* The prompt line: a `>` in the mono face before every verb. */
+.launcher__verb-name::before { content: "> "; color: var(--fg-4); }
 .launcher__verb:hover:not(:disabled) { background: var(--s-4); border-color: var(--line-strong); }
 .launcher__verb:disabled { color: var(--fg-4); cursor: default; }
-.launcher__verb-name { font-size: var(--t-md); font-weight: 600; }
-.launcher__verb-hint { font-size: var(--t-xs); color: var(--fg-3); overflow-wrap: anywhere; }
+.launcher__verb-name { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 500; flex: none; }
+.launcher__verb-hint { font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); }
-.launcher__env { margin: var(--sp-6) 0 0; font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
+.launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
 .launcher__env-hint { color: var(--iris); }
-.launcher__keys { margin: var(--sp-4) 0 0; font-size: var(--t-xs); color: var(--fg-4); }
 
 /* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
    gesture has been used. Never a click target. */
@@ -3197,3 +3201,41 @@ body {
 .panel__port--s { bottom: 0; left: 50%; margin-left: -7px; }
 .panel__port--w { left: 0; top: 50%; margin-top: -7px; }
 .panel__port--e { right: 0; top: 50%; margin-top: -7px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M65. THE SPAWN SHEET, inside the palette's overlay: a short form. Labels
+   in caps micro-type on the left, values in the mono face, one hairline
+   between the fields and the foot. The suggestions list is the palette's
+   own row grammar under the `where` field.
+   ───────────────────────────────────────────────────────────────────────── */
+.sheet { padding: var(--sp-5) var(--sp-6) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); }
+.sheet__title { font-size: var(--t-lg); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); margin-bottom: var(--sp-2); }
+.sheet__select--mono { font-family: var(--font-mono); font-size: var(--t-sm); }
+/* The agent row: three controls in the field column, one label. */
+.sheet__how { flex: 1; min-width: 0; display: flex; gap: var(--sp-3); }
+.sheet__how > * { flex: 1; min-width: 0; }
+.sheet__field { display: flex; align-items: center; gap: var(--sp-5); position: relative; }
+.sheet__field--where { align-items: flex-start; }
+.sheet__label { flex: none; width: 5em; font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.sheet__input, .sheet__select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--t-md);
+  color: var(--fg);
+  background: var(--s-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+}
+.sheet__input--mono { font-family: var(--font-mono); font-size: var(--t-sm); }
+.sheet__input:focus, .sheet__select:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 1px var(--iris); }
+.sheet__suggestions { position: absolute; left: calc(5em + var(--sp-5)); right: 0; top: 100%; margin: var(--sp-1) 0 0; padding: var(--sp-2) 0; list-style: none; background: var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--e-3); z-index: 2; max-height: 200px; overflow: auto; }
+.sheet__suggestion { display: flex; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); cursor: pointer; }
+.sheet__suggestion--on { background: var(--s-5); color: var(--fg); }
+.sheet__suggestion-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet__suggestion-why { flex: none; color: var(--iris); font-family: var(--font-ui); font-size: var(--t-xs); }
+.sheet__foot { display: flex; align-items: baseline; gap: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); }
+.sheet__preview { flex: 1; min-width: 0; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet__refusal { color: var(--red); }
+.sheet__keys { flex: none; }

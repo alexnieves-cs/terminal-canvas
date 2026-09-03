@@ -4,7 +4,8 @@ import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chm
 import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
-import { PtyManager, resolveCwd } from './pty-manager'
+import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { resolveSpawnRequest } from './spawn-request'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
@@ -390,6 +391,8 @@ function rebuildMenu(): void {
     },
     presets: resolveAvailability(allPresets(layoutStore.presets()), which),
     onSpawnPreset,
+    // M65. The sheet is the renderer's; the menu only asks for it.
+    onOpenSheet: () => { mainWindow?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
     }
@@ -739,6 +742,19 @@ app.whenReady().then(async () => {
       spawn: (id) => {
         onSpawnPreset(id)
       },
+      spawnWith: (req) => {
+        // One pure resolver, shared with the verify harness — see
+        // spawn-request.ts for the rules (absent command stays absent, a
+        // file is refused like a missing path, a typed command is a task).
+        const resolved = resolveSpawnRequest(req, allPresets(layoutStore.presets()), {
+          expand: expandTilde,
+          isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
+        })
+        if (resolved.kind === 'refused') return resolved
+        mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, resolved.template)
+        return { kind: 'spawned' }
+      },
+      recentDirectories: () => layoutStore.recentDirectories(),
       savePanel: (captured) => {
         layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
         rebuildMenu()

@@ -1,5 +1,5 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
-import { IPC, IPC_EVENTS } from '../shared/ipc-contract'
+import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { RunRow } from '../shared/run-ledger'
@@ -69,6 +69,15 @@ export interface PaletteHandlers {
   savePanel(captured: CapturedPanel): void
   /** M37. See IPC.PRESET_SET_WORKTREE. */
   setWorktree(id: string, on: boolean): boolean
+  /**
+   * M65. The spawn sheet's request: resolve a preset (absent command stays
+   * absent) or a typed command into a template, refuse a directory that is
+   * not there, and send PRESET_SPAWN. Main's, so the sheet and the menu
+   * spawn through one path.
+   */
+  spawnWith(req: SpawnRequest): SpawnResult
+  /** M65. The last twelve spawn directories, newest first. */
+  recentDirectories(): string[]
   requestReset(): void
   listPrompts(cwd: string | null): PromptListRow[]
   savePrompt(name: string, body: string): void
@@ -190,7 +199,13 @@ export function registerIpcHandlers(
     }
     return scrollback.search([...ids], query)
   })
-  ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => ptyManager.create(spec))
+  ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => {
+    // M65. Every spawn's directory joins the recent list, here rather than
+    // in the sheet's handler, so ⌘N and a menu pick count too: the list is
+    // "where panels start", not "where the sheet was used".
+    layoutStore.addRecentDirectory(resolveCwd(spec.cwd))
+    return ptyManager.create(spec)
+  })
 
   // M37. `attached` is computed HERE, at list time, from the layout: a
   // record's panelId is in some workspace's panel list or it is not. Never
@@ -209,6 +224,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.WORKTREE_REMOVE, (_event, id: string) => worktrees.remove(id))
   ipcMain.handle(IPC.WORKTREE_REVEAL, (_event, id: string) => worktrees.reveal(id))
   ipcMain.handle(IPC.PRESET_SET_WORKTREE, (_event, id: string, on: boolean) => palette.setWorktree(id, on))
+  ipcMain.handle(IPC.SPAWN_SHEET, (_event, req: SpawnRequest) => palette.spawnWith(req))
+  ipcMain.handle(IPC.SPAWN_RECENT, () => palette.recentDirectories())
 
   ipcMain.handle(IPC.PTY_WRITE, (_event, req: PtyWriteRequest) => {
     ptyManager.write(req.panelId, req.data)

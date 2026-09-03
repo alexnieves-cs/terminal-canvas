@@ -7,7 +7,7 @@ import type { Command } from './palette-model'
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
 import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
-import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
+import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOptions } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import type { EnvReport } from '@shared/env-report'
 import type { CanvasGroup } from '@renderer/groups/groups'
@@ -50,6 +50,10 @@ export interface PresetRow {
   subtitle: string
   /** M37. Spawns in a fresh worktree. Absent means no. */
   worktree?: boolean
+  /** M65. The preset's agent kind and directory — see PresetListRow. */
+  agent?: AgentKind
+  cwd?: string
+  agentOptions?: AgentOptions
 }
 
 export interface PromptRow {
@@ -269,6 +273,8 @@ export interface PaletteActions {
   beginMovePanelsToNewWorkspace(panelIds: string[]): void
   /** Name the current multi-selection as one movable canvas region. */
   beginCreateGroup(panelIds: string[]): void
+  /** M65. Open the spawn sheet: where, what, how. */
+  beginSpawnSheet(): void
   /**
    * M61. Card or expand one group, and remove one. Ids rather than "the
    * captured panel's group", the rule every panel verb here obeys; both are
@@ -831,6 +837,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // reason: Panels holds verbs about a panel that already exists (go to,
   // rename, restart, review); this one mints a new one, exactly what every
   // row below it does.
+  // M65. The considered way to start a panel — where, what, how — first in
+  // the section that mints panels, with its chord. ⌘N stays the instant
+  // default (the row below carries that chip).
+  out.push({
+    id: 'spawn.sheet',
+    title: 'New panel…',
+    subtitle: 'choose the directory, the preset or a command, and the agent\'s mode',
+    searchText: 'new panel start spawn sheet directory command task where',
+    group: 'spawn',
+    shortcut: '⌘⇧N',
+    run: () => actions.beginSpawnSheet()
+  })
+
   out.push({
     id: 'panel.open-file',
     title: 'Open file…',

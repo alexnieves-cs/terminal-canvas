@@ -347,6 +347,8 @@ export interface LayoutSnapshot {
   sessions: Record<string, string>
   /** M37. Every worktree this app created. See WorktreeRecord. */
   worktrees: WorktreeRecord[]
+  /** M65. The last twelve spawn directories, newest first. Optional on disk for every earlier layout. */
+  recentDirectories: string[]
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -386,7 +388,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     preferences: {},
     baselines: {},
     sessions: {},
-    worktrees: []
+    worktrees: [],
+    recentDirectories: []
   }
 }
 
@@ -982,6 +985,33 @@ export function parseSessions(
  * M37 and read as [] with no warning, for the reason parseSessions gives; a
  * malformed entry costs that entry, never its siblings.
  */
+export const RECENT_DIRECTORIES_CAP = 12
+
+/**
+ * M65. Absent is every layout written before M65 and warns nothing; a
+ * non-array warns and is dropped; a non-string or empty entry costs that
+ * entry; duplicates keep their first (newest) position; capped so the spawn
+ * sheet never scrolls a list of temp directories.
+ */
+export function parseRecentDirectories(raw: unknown, warnings: string[]): string[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('recentDirectories was not an array; ignoring it')
+    return []
+  }
+  const out: string[] = []
+  for (const entry of raw) {
+    if (!isStr(entry) || entry === '') {
+      warnings.push(`dropped a recent directory that was not a path: ${JSON.stringify(entry)}`)
+      continue
+    }
+    if (out.includes(entry)) continue
+    out.push(entry)
+    if (out.length === RECENT_DIRECTORIES_CAP) break
+  }
+  return out
+}
+
 export function parseWorktrees(raw: unknown, warnings: string[]): WorktreeRecord[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) {
@@ -1362,7 +1392,8 @@ export function parseLayout(raw: string): {
       preferences,
       baselines: parseBaselines(parsed.baselines, warnings),
       sessions: parseSessions(parsed.sessions, warnings),
-      worktrees: parseWorktrees(parsed.worktrees, warnings)
+      worktrees: parseWorktrees(parsed.worktrees, warnings),
+      recentDirectories: parseRecentDirectories(parsed.recentDirectories, warnings)
     },
     warnings,
     futureVersion: false
