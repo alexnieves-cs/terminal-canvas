@@ -1,4 +1,5 @@
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
+import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NOT_CLAUDE_SESSION, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
@@ -26,8 +27,21 @@ export interface InspectorField {
   value: string
 }
 
+/**
+ * M74. The front-end verb a panel offers: a claude terminal can open as a
+ * chat, a chat can open in a terminal — each refused BY NAME otherwise, and
+ * ABSENT (never a disabled control) on the kinds that have no conversation.
+ */
+export interface FrontEndVerb {
+  verb: 'open-as-chat' | 'open-in-terminal'
+  enabled: boolean
+  reason?: string
+}
+
 export interface InspectorModel {
   id: string
+  /** M74. See FrontEndVerb. Absent on every kind but terminal and chat. */
+  frontEnd?: FrontEndVerb
   /**
    * Which kind of panel this model describes. `'review'` is what gates
    * Inspector.tsx's Restart and Save-as-preset controls — an optional
@@ -468,8 +482,15 @@ export function buildInspectorModel(
       turns: chat.turns,
       subagentTurns: 0
     }
+    const chatBusy = chat !== undefined && (chat.state.status === 'streaming' || chat.state.pending > 0)
+    const chatTurns = chat?.turns ?? 0
     return {
       kind: 'chat',
+      frontEnd: {
+        verb: 'open-in-terminal',
+        enabled: !chatBusy && chatTurns > 0,
+        ...(chatBusy ? { reason: REASON_CHAT_BUSY } : chatTurns === 0 ? { reason: REASON_CHAT_EMPTY } : {})
+      },
       state: { kind: 'chat', status: undefined, dormant: false, ...(chat === undefined ? {} : { chat: chat.state }) },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
@@ -662,8 +683,15 @@ export function buildInspectorModel(
   // adapter would be a confident wrong answer.
   const pinned =
     panel.spec.agent !== undefined && AGENT_CAPABILITIES[panel.spec.agent].transcriptAccounting
+  const isClaude = panel.spec.agent === 'claude-code'
+  const processLive = running !== undefined
   return {
     kind: 'terminal',
+    frontEnd: {
+      verb: 'open-as-chat',
+      enabled: isClaude && !processLive,
+      ...(!isClaude ? { reason: REASON_NOT_CLAUDE_SESSION } : processLive ? { reason: REASON_TERMINAL_LIVE } : {})
+    },
     id: panel.rect.id,
     ...(panel.title !== undefined ? { title: panel.title } : {}),
     heading: railLabel(panel, status),

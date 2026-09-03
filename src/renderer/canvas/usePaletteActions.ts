@@ -68,6 +68,9 @@ export interface PaletteActionsDeps {
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>
+  /** M74. The two front-end verbs. */
+  openAsChat: (id: string) => void
+  openInTerminal: (id: string) => void
   restartWithSpec: (id: string, nextSpec: PanelSpecTemplate) => void
   commitHistory: (next: Panel[]) => void
   switchWorkspace: (id: string) => Promise<boolean>
@@ -123,7 +126,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat,
+    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -1250,6 +1253,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     openJira: () => openJiraPanel(),
     newNote: () => beginNewNote(),
     newChat: () => { void beginNewChat() },
+    openAsChat: (id) => openAsChat(id),
+    openInTerminal: (id) => openInTerminal(id),
     setPresetWorktree: (id, on) => {
       // Main owns the store and refuses a built-in; the reload is what makes
       // the toggle row's own title flip.
@@ -1306,6 +1311,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
-       openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, reloadWorktrees,
+       openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef])
 }

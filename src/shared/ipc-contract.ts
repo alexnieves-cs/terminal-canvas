@@ -1,5 +1,5 @@
 import type { RunRow } from './run-ledger'
-import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent } from './agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportResult, CanvasPngExportResult } from './export'
@@ -428,7 +428,14 @@ export const IPC = {
   AGENT_DISPOSE: 'agent:dispose',
   AGENT_ANSWER: 'agent:answer',
   AGENT_LIST: 'agent:list',
-  AGENT_TRANSCRIPT: 'agent:transcript'
+  AGENT_TRANSCRIPT: 'agent:transcript',
+  /**
+   * M74. Open a terminal's Claude session as a chat: main reads the CLI's own
+   * transcript for the terminal's pinned session into the app's file under
+   * the NEW panel id, or refuses by name (the terminal is live; it was never
+   * pinned; the CLI has not written the file yet).
+   */
+  AGENT_IMPORT: 'agent:import'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -1015,6 +1022,8 @@ export interface CanvasBridge {
     answer(req: { id: string; requestId: string; answer: PermissionAnswer }): Promise<boolean>
     list(): Promise<AgentSessionSnapshot[]>
     transcript(id: string): Promise<AgentTranscriptResult>
+    /** M74. See AGENT_IMPORT. */
+    importSession(req: AgentImportRequest): Promise<AgentImportResult>
     onEvent(listener: (event: AgentSessionEvent) => void): () => void
   }
   spawn: {

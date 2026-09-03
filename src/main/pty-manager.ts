@@ -719,6 +719,19 @@ export class PtyManager {
     // without a real `claude` on PATH. The read-then-mint of the session id
     // stays HERE, because it writes to the store and is therefore not pure.
     let sessionId = this.pinnedSession(spec.panelId)
+    // M74. A spec that RESUMES a session (`Open in terminal` from a chat
+    // panel) adopts that id as its pin rather than minting one beside it: the
+    // pin is what M17's cost accounting reads and what a later `Open as chat`
+    // follows, and both must name the conversation actually running here.
+    // `spec.args` may be ABSENT (agentArgs's own comment: verify-panels.cjs
+    // omits it deliberately), so the read is guarded rather than assumed.
+    const specArgs = Array.isArray(spec.args) ? spec.args : []
+    const resumeAt = specArgs.indexOf('--resume')
+    const resumed = resumeAt >= 0 ? specArgs[resumeAt + 1] : undefined
+    if (spec.agent !== undefined && typeof resumed === 'string' && resumed !== '' && sessionId !== resumed) {
+      sessionId = resumed
+      this.setPinnedSession(spec.panelId, sessionId)
+    }
     if (
       spec.agent !== undefined &&
       AGENT_CAPABILITIES[spec.agent].sessionIdFlag !== undefined &&

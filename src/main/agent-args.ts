@@ -46,7 +46,12 @@ export function agentArgs(
   }
 
   const capability = AGENT_CAPABILITIES[spec.agent]
-  if (capability.sessionIdFlag !== undefined && sessionId !== '') {
+  // M74. A `--resume <id>` in the args NAMES the session; a `--session-id`
+  // beside it is a contradiction the CLI refuses outright, and the pin would
+  // name a transcript that never exists while the real one grows. The pin
+  // itself follows the resume in PtyManager.create.
+  const resumes = args.includes('--resume')
+  if (capability.sessionIdFlag !== undefined && sessionId !== '' && !resumes) {
     append(capability.sessionIdFlag, sessionId)
   }
 

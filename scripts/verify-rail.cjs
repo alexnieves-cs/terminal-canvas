@@ -2303,6 +2303,37 @@ const session = (id, over = {}) => ({
     JSON.stringify([arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }), arg({ command: 'x'.repeat(200) }).length]))
 }
 
+// M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
+//     arm named: a terminal opens as chat only when it was started as a claude
+//     session AND its process is not live; a chat opens in a terminal only when
+//     nothing is in flight and it has turns. Every other kind has no verb at
+//     all (undefined), never a disabled one — a review node cannot become a
+//     conversation. A row that disappears is indistinguishable from a feature
+//     never built, so each refusal carries its reason.
+{
+  const t = (over = {}) => ({ kind: 'terminal', rect: { id: 't1', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 't1', cwd: '~', args: [], agent: 'claude-code' }, ...over })
+  const chat = (over = {}) => ({ kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/r', sessionId: 'u' }, ...over })
+  const fe = (m) => m && m.frontEnd
+  const claudeExited = fe(R.buildInspectorModel(t(), { kind: 'exited', code: 0 }))
+  const claudeDormant = fe(R.buildInspectorModel(t(), { kind: 'idle' }, undefined, [], undefined, undefined, undefined, true))
+  const claudeLive = fe(R.buildInspectorModel(t(), { kind: 'running', pid: 4, command: 'claude', reattached: false, cwd: '~' }))
+  const shell = fe(R.buildInspectorModel(t({ spec: { panelId: 't1', cwd: '~', args: [] } }), { kind: 'exited', code: 0 }))
+  const chatRest = fe(R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { state: { status: 'ready', pending: 0, hasHistory: true }, usage: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, turns: 2 }))
+  const chatBusy = fe(R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { state: { status: 'streaming', pending: 0, hasHistory: true }, usage: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, turns: 1 }))
+  const chatEmpty = fe(R.buildInspectorModel(chat(), undefined))
+  const review = fe(R.buildInspectorModel({ kind: 'review', rect: { id: 'r1', x: 0, y: 0, w: 1, h: 1 }, z: 1, subject: { subjectId: 'p', repoRoot: '/r', baselineSha: 'a', label: 'x' } }, undefined))
+  ok('front.1 the front-end verb: a claude terminal opens as chat when exited or asleep, is refused by name while live or when it was a plain shell; a chat opens in a terminal at rest, is refused by name while answering or empty; other kinds have no verb',
+    claudeExited && claudeExited.verb === 'open-as-chat' && claudeExited.enabled === true &&
+      claudeDormant && claudeDormant.verb === 'open-as-chat' && claudeDormant.enabled === true &&
+      claudeLive && claudeLive.verb === 'open-as-chat' && claudeLive.enabled === false && /stop|front-end/.test(claudeLive.reason) &&
+      shell && shell.verb === 'open-as-chat' && shell.enabled === false && /claude session/.test(shell.reason) &&
+      chatRest && chatRest.verb === 'open-in-terminal' && chatRest.enabled === true &&
+      chatBusy && chatBusy.enabled === false && /interrupt/.test(chatBusy.reason) &&
+      chatEmpty && chatEmpty.enabled === false && /send a message/.test(chatEmpty.reason) &&
+      review === undefined,
+    JSON.stringify({ claudeExited, claudeDormant, claudeLive, shell, chatRest, chatBusy, chatEmpty, review }))
+}
+
 // M63 — state.1/.2/.3. THE ONE VOCABULARY. Every combination of kind, status,
 //     dormancy and agent state yields a word from the closed vocabulary and a
 //     tone from the closed tone set (state.1); no renderer file outside

@@ -110,7 +110,7 @@ const SCENES = [
     run: async (k) => { await k.loadMain(); for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-subagent-ambiguous]')`)); i++) await sleep(100); await k.shot('kinds') } },
   { name: 'kinds-dark', intent: 'The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy.',
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
-  { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading not started, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
+  { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
     run: async (k) => { await k.goTo('claude — api (2)'); await k.shot('subagents') } },
@@ -199,7 +199,9 @@ app.whenReady().then(async () => {
       id: 'w1', name: 'api', camera: { x: 0, y: 0, scale: 1 }, selectedId: 'live', focusedId: null,
       panels: [
         term('live', 30, 30, 380, 250, 1, { title: 'claude — api' }),
-        { id: 'dormant', x: 660, y: 30, w: 440, h: 250, z: 2, cwd: REPO, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'tests' },
+        // M74. Marked a claude session so the frame shows the terminal-side
+        // front-end verb (it is dormant: no live process, the precondition).
+        { id: 'dormant', x: 660, y: 30, w: 440, h: 250, z: 2, cwd: REPO, command: '/bin/sh', args: ['-c', 'sleep 600'], agent: 'claude-code', title: 'tests' },
         { id: 'review', kind: 'review', x: 30, y: 310, w: 350, h: 230, z: 3, subject: { subjectId: 'live', repoRoot: REPO, baselineSha, label: 'claude — api' } },
         { id: 'file', kind: 'file', x: 410, y: 310, w: 360, h: 230, z: 4, source: { path: join(REPO, 'src', 'server.ts') } },
         { id: 'note', kind: 'file', x: 800, y: 310, w: 300, h: 230, z: 5, source: { path: NOTE, prose: true } },

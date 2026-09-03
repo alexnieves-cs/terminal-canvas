@@ -3464,7 +3464,8 @@ body {
 .chat__row--tool { grid-template-columns: 52px auto minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--sp-2); }
 .chat__row--tool::before { content: 'tool'; font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
 .chat__tool-name { font-weight: 600; }
-.chat__tool-input { color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Wraps rather than ellipsises: the file name is the part that must survive (principle 3). */
+.chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
 .chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 .chat__row--tool-error .chat__tool-name { color: var(--red); }
 .chat__tool-toggle { min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
@@ -3484,3 +3485,10 @@ body {
 .chat__input:focus { outline: none; }
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
+/* M74. A kind's chrome verb (open as chat / open in terminal): the icon-button
+   family, disabled by name rather than hidden where it cannot apply. */
+.pf__verb--word { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: transparent; color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; white-space: nowrap; }
+.pf__verb--word:hover:not(:disabled) { color: var(--fg); background: var(--s-3); }
+/* A disabled verb is DASHED as well as dimmer: the M74 critic could not tell
+   Interrupt's disabled state from its enabled one by ink alone. */
+.pf__verb:disabled, .chat__verb:disabled { color: var(--fg-3); border-style: dashed; background: transparent; cursor: default; }

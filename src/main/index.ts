@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
@@ -35,6 +35,7 @@ import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { claudeCliRunner } from './claude-cli-runner'
 import { createAgentTranscriptLog } from './agent-transcript-log'
+import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
 import type { AgentCreateResult, AgentSessionSpec } from '../shared/agent-session'
@@ -780,6 +781,22 @@ app.whenReady().then(async () => {
     transcript: (id) => {
       const read = agentTranscripts.read(id)
       return { turns: read.turns, snapshot: agentSessions?.get(id) ?? null, ...(read.meta === undefined ? {} : { meta: read.meta }) }
+    },
+    // M74. Open a terminal's session as a chat. Three refusals, each named
+    // for its fix; the live check is the one-front-end-at-a-time rule.
+    importSession: ({ fromPanelId, toPanelId }) => {
+      const sessionId = layoutStore.session(fromPanelId)
+      if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }
+      if (ptyManager.list().some((s) => s.panelId === fromPanelId)) return { kind: 'refused', reason: 'stop the terminal first — one front-end at a time' }
+      const path = resolveTranscript(sessionId)
+      if (path === undefined) return { kind: 'refused', reason: 'claude has not written a transcript for that session yet' }
+      let text: string
+      try { text = readFileSync(path, 'utf8') } catch { return { kind: 'refused', reason: 'that session\'s transcript could not be read' } }
+      const imported = importClaudeTranscript(text)
+      agentTranscripts.drop(toPanelId)
+      for (const turn of imported.turns) agentTranscripts.appendTurn(toPanelId, turn)
+      agentTranscripts.appendMeta(toPanelId, imported.meta)
+      return { kind: 'imported', sessionId, turns: imported.meta.turns }
     }
   }
   registerIpcHandlers(

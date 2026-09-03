@@ -86,7 +86,7 @@ const {
   ToolboxCache,
   readFrom,
   FILE_MAX_LINES,
-  AgentSessionManager, createAgentTranscriptLog,
+  AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -894,7 +894,10 @@ app.whenReady().then(async () => {
   const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels chat ')), 'agent-transcripts') })
   const agentSessions = new AgentSessionManager({
     runner: chatRunner, command: '/fake/claude', env: { PATH: '/fake' },
-    newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16
+    newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16,
+    // M74. The fenced answer to "has the CLI written this session": the
+    // front-end fixture store, so an imported chat's first send resumes.
+    transcriptExists: (id) => frontTranscripts.has(id)
   })
   agentSessions.subscribe((event) => {
     if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
@@ -913,8 +916,24 @@ app.whenReady().then(async () => {
     dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
     answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
     list: () => agentSessions.list(),
-    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } }
+    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } },
+    // M74. main/index.ts's importSession over the harness's FENCED transcript
+    // store (frontTranscripts: session id -> a fixture file the check wrote),
+    // never the real ~/.claude/projects.
+    importSession: ({ fromPanelId, toPanelId }) => {
+      const sessionId = layoutStore.session(fromPanelId)
+      if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }
+      if (ptyManager.list().some((s) => s.panelId === fromPanelId)) return { kind: 'refused', reason: 'stop the terminal first — one front-end at a time' }
+      const path = frontTranscripts.get(sessionId)
+      if (path === undefined) return { kind: 'refused', reason: 'claude has not written a transcript for that session yet' }
+      const imported = importClaudeTranscript(readFileSync(path, 'utf8'))
+      agentTranscripts.drop(toPanelId)
+      for (const turn of imported.turns) agentTranscripts.appendTurn(toPanelId, turn)
+      agentTranscripts.appendMeta(toPanelId, imported.meta)
+      return { kind: 'imported', sessionId, turns: imported.meta.turns }
+    }
   }
+  const frontTranscripts = new Map()
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
       resolveAvailability(allPresets(layoutStore.presets()), whichHere),
@@ -15716,6 +15735,124 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onC)
+      }
+    }
+
+    // M74 — front.1 / front.2. SAME AGENT, TWO FRONT-ENDS, end to end.
+    //     front.1: a dormant terminal pinned to a fixture session whose CLI
+    //     transcript sits in the harness's fenced store is opened as chat
+    //     through the real verb: the chat panel takes its rect and renders the
+    //     imported turns (a typed prompt, a tool call, the answer), the
+    //     terminal is gone, and a LIVE terminal asked the same is refused by
+    //     name with nothing minted. front.2: the chat opened in a terminal
+    //     spawns with `--resume <its session id>` and no --session-id, the
+    //     terminal's pin EQUALS that id (M17's cost reads the right file), and
+    //     the chat is gone.
+    {
+      const IDS = [
+        'front.1 a claude terminal with no live process opens as chat: the imported turns render, the terminal is gone, a live one is refused by name, and the first send resumes the session',
+        'front.2 a chat opens in a terminal spawned with --resume its session id and the knobs, the pin follows the resume, and the chat is gone'
+      ]
+      const fLog = []
+      const onF = (_e, _l, m) => { fLog.push(String(m)) }
+      wc.on('console-message', onF)
+      try {
+        const fDir = mkdtempSync(join(tmpdir(), 'tc panels front-'))
+        const sessionId = 'front-11111111-2222-4333-8444-555555555555'
+        const transcript = [
+          JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: 'What does health.ts export?' } }),
+          JSON.stringify({ type: 'assistant', isSidechain: false, message: { id: 'fm1', model: 'claude-x', role: 'assistant', content: [{ type: 'tool_use', id: 'ft1', name: 'Read', input: { file_path: join(fDir, 'health.ts') } }], usage: { input_tokens: 3, output_tokens: 9 } } }),
+          JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'ft1', content: 'export const ok = () => true', is_error: false }] } }),
+          JSON.stringify({ type: 'assistant', isSidechain: false, message: { id: 'fm2', model: 'claude-x', role: 'assistant', content: [{ type: 'text', text: 'front-fixture: it exports ok()' }], usage: { input_tokens: 2, output_tokens: 8 } } })
+        ].join('\n') + '\n'
+        const transcriptPath = join(fDir, 'session.jsonl')
+        writeFileSync(transcriptPath, transcript)
+        frontTranscripts.set(sessionId, transcriptPath)
+        // A dormant claude terminal, restored from disk, pinned in the store.
+        // The composer's gate (`claudeAvailable`) reads the preset rows, so
+        // this block seeds its own claude-kind preset over /bin/sh — the chat
+        // block's reason — rather than depending on that block's leftovers.
+        layoutStore.addPreset({ id: 'front-claude', name: 'Claude (front)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        flushLayoutStore()
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const wsF = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+        const maxZ = wsF.panels.reduce((m, p) => Math.max(m, p.z), 0)
+        wsF.panels.push({ id: 'frontT', x: 200, y: 200, w: 500, h: 360, z: maxZ + 1, cwd: fDir, command: 'claude', args: [], agent: 'claude-code', agentOptions: { effort: 'high' }, title: 'front terminal' })
+        writeFileSync(LAYOUT_PATH, JSON.stringify(onDisk, null, 2), 'utf8')
+        layoutStore.load()
+        layoutStore.setSession('frontT', sessionId)
+        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reF
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="frontT"]') !== null`), 5000)
+        // A LIVE terminal is refused by name.
+        const liveId = await (async () => {
+          const before = new Set(await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+          wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: fDir, command: '/bin/sh', args: ['-c', 'sleep 30'], agent: 'claude-code', w: 400, h: 300 })
+          const ids = await waitUntil(async () => { const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`); return now.length > before.size ? now : false }, 5000)
+          return ids ? (ids.find((id) => !before.has(id)) ?? null) : null
+        })()
+        if (liveId !== null) await waitUntil(async () => (await sessionMap(wc)).has(liveId), 6000)
+        const refusedLive = liveId === null ? null : await wc.executeJavaScript(`window.__m74OpenAsChat(${JSON.stringify(liveId)})`)
+        // The refusal opened the palette's text line; close it through the
+        // element holding focus (the text mode's own input), then the window.
+        for (let i = 0; i < 3; i += 1) {
+          await wc.executeJavaScript(`(() => { const t = document.activeElement; if (t) t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return true })()`)
+          await settle()
+          if (await wc.executeJavaScript(`document.querySelector('.palette') === null`)) break
+        }
+        const paletteClosed = await wc.executeJavaScript(`document.querySelector('.palette') === null`)
+        const panelsBefore = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="chat"]').length`)
+        const opened = await wc.executeJavaScript(`window.__m74OpenAsChat('frontT')`)
+        const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')].find((el) => el.textContent.includes('front-fixture')); return p ? p.getAttribute('data-panel-id') : false })()`), 6000)
+        const terminalGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="frontT"]') === null`), 4000)
+        const chatRect = chatId ? await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); return p ? { w: p.style.width, h: p.style.height, title: p.querySelector('.pf__title')?.textContent, tools: p.querySelectorAll('[data-chat-row="tool"]').length, word: p.querySelector('[data-chat-state]')?.textContent } : null })()`) : null
+        const chatCount = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="chat"]').length`)
+        // The imported chat's FIRST send resumes the terminal's session: the
+        // fake runner's argv says --resume <the pinned id>, never --session-id.
+        const chatSpawnsBefore = chatSpawns.length
+        const sentIntoImport = chatId ? await waitUntil(() => wc.executeJavaScript(`(() => {
+          const ta = document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-input]'); if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, 'continue'); ta.dispatchEvent(new Event('input', { bubbles: true }))
+          const b = document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-send]'); if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 5000) : false
+        const presetDiag = await wc.executeJavaScript(`window.canvas.preset.list().then((rows) => rows.map((r) => [r.id, r.agent ?? null, r.available]))`)
+        const composerDiag = chatId ? await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); if (!p) return 'no-panel'; const ta = p.querySelector('[data-chat-input]'); const b = p.querySelector('[data-chat-send]'); return { hasInput: !!ta, inputDisabled: ta ? ta.disabled : null, placeholder: ta ? ta.placeholder : null, hasSend: !!b, sendDisabled: b ? b.disabled : null, refusal: p.querySelector('[data-chat-refusal]')?.textContent ?? null, palette: document.querySelector('.palette') !== null } })()`) : null
+        const resumed = await waitUntil(async () => chatSpawns.length > chatSpawnsBefore, 4000)
+        const resumeArgs = resumed ? chatSpawns[chatSpawns.length - 1].args : null
+        const answered = chatId ? await waitUntil(() => wc.executeJavaScript(`${JSON.stringify(chatId)} && document.querySelector('.panel[data-panel-id="${chatId}"] [data-chat-state]')?.textContent === 'idle'`), 8000) : false
+        ok(IDS[0],
+          liveId !== null && refusedLive && refusedLive.kind === 'refused' && /stop the terminal/.test(refusedLive.reason) &&
+            opened && opened.kind === 'opened' && typeof chatId === 'string' && terminalGone === true &&
+            chatRect && chatRect.w === '500px' && chatRect.h === '360px' && chatRect.title === 'front terminal' && chatRect.tools === 1 && chatRect.word === 'asleep' &&
+            chatCount === panelsBefore + 1 &&
+            sentIntoImport === true && resumeArgs !== null && resumeArgs.includes('--resume') && resumeArgs[resumeArgs.indexOf('--resume') + 1] === sessionId && !resumeArgs.includes('--session-id') && answered === true,
+          JSON.stringify({ liveId, refusedLive, opened, chatId, terminalGone, chatRect, chatCount, panelsBefore, paletteClosed, presetDiag, composerDiag, sentIntoImport, resumeArgs, answered, log: fLog.slice(-3) }))
+
+        // front.2. Back to a terminal.
+        const ptyBefore2 = ptyManager.list().length
+        const back = chatId ? await wc.executeJavaScript(`window.__m74OpenInTerminal(${JSON.stringify(chatId)})`) : null
+        const tid = back && back.kind === 'opened' ? back.reason : null
+        const spawned = tid ? await waitUntil(async () => (await sessionMap(wc)).has(tid), 8000) : false
+        const chatGone = chatId ? await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') === null`), 4000) : false
+        const spec = tid ? await wc.executeJavaScript(`window.__m5aSpecOf(${JSON.stringify(tid)})`) : null
+        const pin = tid ? layoutStore.session(tid) : undefined
+        const live = tid ? ptyManager.list().find((s) => s.panelId === tid) : undefined
+        ok(IDS[1],
+          back && back.kind === 'opened' && spawned === true && chatGone === true &&
+            spec && spec.spec.args.includes('--resume') && spec.spec.args[spec.spec.args.indexOf('--resume') + 1] === sessionId && spec.spec.agent === 'claude-code' && spec.spec.command === 'claude' &&
+            pin === sessionId && live !== undefined && ptyManager.list().length === ptyBefore2 + 1 &&
+            spec.spec.agentOptions && spec.spec.agentOptions.effort === 'high',
+          JSON.stringify({ back, spawned, chatGone, args: spec && spec.spec.args, knobs: spec && spec.spec.agentOptions, pin, log: fLog.slice(-3) }))
+        if (tid) await clickPanelClose(wc, tid)
+        if (liveId) await clickPanelClose(wc, liveId)
+        await settle()
+        try { rmSync(fDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (fErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (fLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onF)
       }
     }
 

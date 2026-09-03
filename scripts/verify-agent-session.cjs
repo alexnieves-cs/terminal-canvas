@@ -42,6 +42,7 @@ const S = M.session
 const A = M.args
 const Q = M.quit
 const LOG = M.log || {}
+const IMP = M.importer || {}
 const { mkdtempSync, rmSync, readdirSync, existsSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
@@ -817,6 +818,55 @@ const isResult = (l) => l.includes('"type":"result"')
         log !== null && readdirSync(dir).every((f) => !f.startsWith('p1')) && log.read('p1').turns.length === 0,
       JSON.stringify({ missing, files: log ? readdirSync(dir) : null }))
     rmSync(dir, { recursive: true, force: true })
+  }
+
+  // args.5 — M74. A resumed terminal must not be pinned to a SECOND id beside
+  // its --resume: `claude` would refuse the pair, and the pin would name a
+  // transcript that never exists while the real one grows.
+  {
+    const fresh = A.headlessArgs({ sessionId: 'u-1', resume: false })
+    const agentArgs = M.agentArgs && M.agentArgs.agentArgs
+    const viaTui = agentArgs ? agentArgs({ agent: 'claude-code', args: ['--resume', 'u-9'], agentOptions: { effort: 'high' } }, 'u-fresh') : null
+    ok('args.5 agentArgs skips the --session-id pin when the args already carry --resume, and still carries the knobs',
+      fresh.includes('--session-id') && viaTui !== null && !viaTui.includes('--session-id') && viaTui.includes('--resume') && viaTui[viaTui.indexOf('--effort') + 1] === 'high',
+      JSON.stringify({ viaTui }))
+  }
+
+  // import.1–.3 — M74. The CLI's own transcript, read for a terminal's session
+  // being opened as chat. Records are the stream's shapes plus the file's own
+  // wrapper; a subagent's records (isSidechain) and the CLI's meta records
+  // (isMeta) are not this conversation's turns; a typed prompt is a STRING.
+  {
+    const imp = typeof IMP.importClaudeTranscript === 'function' ? IMP.importClaudeTranscript : () => null
+    const msg = (id, blocks, usage) => ({ type: 'assistant', isSidechain: false, message: { id, model: 'claude-x', role: 'assistant', content: blocks, usage } })
+    const lines = [
+      JSON.stringify({ type: 'file-history-snapshot', snapshot: {} }),
+      JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: 'hello there' } }),
+      JSON.stringify({ type: 'user', isSidechain: false, isMeta: true, message: { role: 'user', content: '[Image: original 2880x1730]' } }),
+      JSON.stringify(msg('m1', [{ type: 'thinking', thinking: '', signature: 's' }], { input_tokens: 2, output_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 7 })),
+      JSON.stringify(msg('m1', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }], { input_tokens: 2, output_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 7 })),
+      JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'a\nb', is_error: false }] } }),
+      JSON.stringify({ type: 'assistant', isSidechain: true, message: { id: 'side1', role: 'assistant', content: [{ type: 'text', text: 'SUBAGENT' }], usage: { input_tokens: 999, output_tokens: 999 } } }),
+      JSON.stringify({ type: 'user', isSidechain: true, message: { role: 'user', content: 'subagent prompt' } }),
+      '{not json',
+      JSON.stringify({ type: 'attachment', attachment: {} }),
+      JSON.stringify(msg('m2', [{ type: 'text', text: 'done' }], { input_tokens: 1, output_tokens: 3, cache_creation_input_tokens: 0, cache_read_input_tokens: 9 })),
+      JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: [{ type: 'text', text: 'thanks' }] } })
+    ]
+    const r = imp(lines.join('\n') + '\n')
+    const roles = r ? r.turns.map((t) => t.role + ':' + t.blocks.map((b) => b.type).join('+')).join(',') : 'none'
+    ok('import.1 a typed prompt (string content) is a text turn, a meta record and every sidechain record are skipped, tool results are user turns, order is kept',
+      r !== null && roles === 'user:text,assistant:thinking+tool_use,user:tool_result,assistant:text,user:text' &&
+        r.turns[0].blocks[0].text === 'hello there' && !JSON.stringify(r.turns).includes('SUBAGENT'),
+      roles)
+    ok('import.2 assistant records sharing a message id are ONE turn, their repeated usage counted once, and meta counts user text turns',
+      r !== null && r.turns.filter((t) => t.role === 'assistant').length === 2 &&
+        r.meta.usage.input === 3 && r.meta.usage.output === 13 && r.meta.usage.cacheWrite === 5 && r.meta.usage.cacheRead === 16 &&
+        r.meta.turns === 2 && r.meta.costUsd === undefined && r.turns[1].model === 'claude-x',
+      JSON.stringify(r && r.meta))
+    ok('import.3 a garbage line and an unknown record type cost themselves, never the import; an empty file is an empty import',
+      r !== null && r.skipped.malformed === 1 && r.skipped.ignored >= 2 && imp('').turns.length === 0,
+      JSON.stringify(r && r.skipped))
   }
 
   // quit — the optional agents dependency

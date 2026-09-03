@@ -126,6 +126,10 @@ export const KindToolbox = (p: IconProps): JSX.Element => (
 export const KindJira = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M8 2v12M2 8h6" /></Svg>
 )
+/* M74. A terminal: the prompt chevron and a line. */
+export const KindTerminal = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 4l4 4-4 4" /><path d="M8 12h5" /></Svg>
+)
 /* M73. A conversation: a speech line with three dots. */
 export const KindChat = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M2 3h12v8H6l-3 3v-3H2z" /><path d="M5 7h.01M8 7h.01M11 7h.01" /></Svg>

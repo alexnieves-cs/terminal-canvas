@@ -48,6 +48,8 @@ export interface ChatNodeProps {
   linkTarget: boolean
   /** Whether `claude` was found on the login PATH — the composer's named reason otherwise. */
   claudeAvailable: boolean
+  /** M74. Continue this conversation in a terminal (`claude --resume`). */
+  onOpenInTerminal(id: string): void
 }
 
 const shortInput = toolArgument
@@ -185,7 +187,20 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       // front-ends render one state one way (principle 11). The turn count
       // left the chrome after M73's critic — two facts in one slot — and lives
       // in the inspector's Detail and on the root as data.
-      chrome={<span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>}
+      chrome={<>
+        <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
+        {/* M74. A LABELLED verb after the pill — the terminal's own row shape
+            (`title · pill · controls`), and a word rather than the `>_` glyph
+            the rail uses as a passive kind mark (M74's critic). Disabled by
+            name while answering or empty, never hidden. */}
+        {props.readOnly !== true && (() => {
+          const busy = snapshot !== null && (snapshot.status === 'streaming' || snapshot.pending.length > 0)
+          const reason = busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
+          return <button type="button" className="pf__verb pf__verb--word" data-open-in-terminal disabled={reason !== null}
+            title={reason ?? 'Open in a terminal — claude --resume this session'} aria-label="Open in terminal"
+            {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>to terminal</button>
+        })()}
+      </>}
     >
       <div className="pf__body chat__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
         <div className="chat__transcript" data-chat-transcript data-scroll-host ref={bodyRef} onScroll={onScroll}>
@@ -237,7 +252,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                 className="chat__input"
                 data-chat-input
                 value={draft}
-                placeholder={composer.send.enabled ? 'Message claude… (⌘↩ sends)' : composer.send.reason}
+                placeholder={composer.send.enabled ? 'your next message — ⌘↩ sends' : composer.send.reason}
                 disabled={!composer.send.enabled}
                 title={composer.send.enabled ? 'Your next message' : composer.send.reason}
                 spellCheck={false}

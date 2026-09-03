@@ -1,5 +1,5 @@
 import { useMemo, type RefObject } from 'react'
-import { useChat } from '@renderer/chat/chat-store'
+import { useChat, getChat } from '@renderer/chat/chat-store'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import type { ChatStateInput } from '@renderer/panels/panel-state'
 import type { Viewport } from './viewport'
@@ -7,7 +7,7 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isFilePanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isTerminalPanel, type Panel, isChatPanel } from '@renderer/panels/panels'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { panelName, panelPath } from '@renderer/palette/panel-name'
@@ -83,6 +83,20 @@ function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedA
   return out
 }
 
+/**
+ * M74. What the two front-end rows need from a CHAT panel: whether a turn is
+ * in flight and how many turns it holds — read once at palette open, like
+ * every other row field, from the chat store's mirror.
+ */
+function frontEndFields(p: Panel): { busy?: boolean; turns?: number } {
+  if (!isChatPanel(p)) return {}
+  const chat = getChat(p.rect.id)
+  return {
+    busy: chat.snapshot !== null && (chat.snapshot.status === 'streaming' || chat.snapshot.pending.length > 0),
+    turns: chat.turns.filter((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text')).length
+  }
+}
+
 export function useRailModels(deps: RailModelsDeps) {
   const {
     registry, palette, panelsRef, panels, displayPanels, dormantIds,
@@ -134,6 +148,8 @@ export function useRailModels(deps: RailModelsDeps) {
                 // M20. From the SESSION's spec, like everything else that
                 // reports what a panel is actually running.
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
+                claude: registry.get(p.rect.id)?.spec.agent === 'claude-code',
+                ...frontEndFields(p),
                 ...findingFields(p, registry, dormantIds)
               }
             : {
@@ -143,6 +159,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
+                ...frontEndFields(p),
                 ...findingFields(p, registry, dormantIds)
               }
         )

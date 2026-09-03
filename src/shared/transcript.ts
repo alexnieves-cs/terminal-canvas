@@ -286,7 +286,12 @@ export function parseStreamLine(line: string): TranscriptEvent {
     }
     case 'user': {
       const message = isRecord(parsed.message) ? parsed.message : {}
-      return { type: 'user', blocks: parseBlocks(message.content), replay: parsed.isReplay === true }
+      // M74. The CLI's own transcript writes a typed prompt as a bare STRING
+      // (the stream never does); it is one text block, never an empty turn.
+      const blocks = typeof message.content === 'string'
+        ? [{ type: 'text' as const, text: message.content }]
+        : parseBlocks(message.content)
+      return { type: 'user', blocks, replay: parsed.isReplay === true }
     }
     case 'result': {
       const subtype = str(parsed.subtype) ?? 'missing'
