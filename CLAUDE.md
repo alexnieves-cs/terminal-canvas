@@ -19,7 +19,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 1.0 (M60).** The run from M36 to M60 hardened the beta,
+running a coding-agent CLI. **This is 1.1 (M70).** The second run, M61 to M70, was a design
+pass with a screenshot harness and a design brief behind it: one state vocabulary and a state
+edge, panels found by name and state, a spawn sheet, every control named, a flat frame with no
+resting shadow, the context pane finished, a far view for every kind and a minimap — each with a
+spec, a plan, checks written first, a fresh-context critic and verifier, and a build log. The
+run before it, M36 to M60, hardened the beta,
 gave every panel a worktree, let agents outlive the app, made scrollback durable and
 searchable, added attention, keyboard reach, a visual language with two themes, a
 shell with a dock and a context pane, a first run, typography, placement, links, OSC 133

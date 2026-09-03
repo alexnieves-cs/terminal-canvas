@@ -37,6 +37,7 @@ shipped behaviour, documented in `CLAUDE.md` under the heading named here:
 | #7 subagent nodes on the canvas | M15 | "Subagent nodes are derived, not a `Panel` kind", "The slug is a hint" |
 | #11 a settings surface with search | M6b | "One map, and a typed view over it", "Settings are a drill-in, not a flat list" |
 | #29 restart a panel in place | M8c | "Restart is dispose-then-ensure at one id", "`bumpVersion()` exists because `ensure()` deliberately does not bump" |
+| #33 a minimap | M69 | "The minimap moves the camera only through `goToViewport`" (docs/load-bearing.md) |
 | #44 honest chrome | M6a | "`reattached` costs a probe because `-A` erased the question" |
 | #49 two copies of the app eating each other | M5c fix | "...and two copies of ONE build must not either" |
 | #71 CI on a macOS runner | oss-beta | `.github/workflows/verify.yml`, and `verify:meta` 16 |

@@ -8,7 +8,7 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v1.0.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v1.1.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story and
@@ -142,6 +142,26 @@ Think Figma, but the objects are terminals — and the terminals are running `cl
   CLIs** — `codex` and the rest write no such directory, so a panel running one
   of them shows no nodes, which is a CLI this feature does not support rather
   than a bug.
+
+## What it looks like
+
+`npm run shot` renders twenty-five scenes of the real renderer into `out/shots/` (after a
+build; nothing is asserted — the images are for eyes). Three of them, described:
+
+- **`kinds.png`** — one of every panel kind on the light ground, the same hairline frame on
+  each: a live terminal with a green left edge and its `idle` pill; a dormant card with its
+  recorded tail and a dashed grey edge, `click to start`; a review node listing two changed
+  files with `discard` beside each and `commit` in the chrome; a file panel and a note with
+  `editing` and `Save` in the chrome row; `toolbox · repo` with its slash commands and
+  permissions; the Jira panel with `Connect Jira…`. The flat ground, no dot grid, no shadow.
+- **`overview.png`** — the same canvas at 100% with the minimap in the top-right corner: one
+  block per panel in its state colour, the waiting panel amber, asleep panels dashed, the
+  camera an iris rectangle. The dock badge says `1`; the rail says `needs you` on the same
+  row; the status strip says the same word. One vocabulary, four places.
+- **`palette-query.png`** — the palette filtered by `group`: the matching letters lit in the
+  titles, every disabled row present with its reason (`click into a panel first`, `select at
+  least two panels to make a group`), the destructive row red, the settings rows with their
+  hints wrapped in one voice.
 
 ## What it does not do
 
@@ -282,7 +302,7 @@ npm run verify:panels        # LOD tiering, pointer correction, drag, resize, wh
 npm run package              # the unsigned .app and .dmg, into release/
 npm run verify:package       # the packaging config, as a value, plain node
 npm run verify:packaged      # packages for real and launches it — NOT in verify
-npm run shot                 # after a build: 23 PNGs of the real renderer into out/shots — asserts NOTHING
+npm run shot                 # after a build: 25 PNGs of the real renderer into out/shots — asserts NOTHING
 ```
 
 `npm run shot` is the visual loop (M61): it seeds a fixture canvas — every panel kind, a
@@ -800,6 +820,7 @@ price of not killing something.
 | M67 | The frame, second pass: flat ground, no resting shadow, dark hairlines, asleep dashed, Save in the chrome, `remove` labelled, `toolbox · repo`, the notice's leader line, notes in ink | ✅ done |
 | M68 | The context pane finished: Detail repeats nothing, Work's three headings each answer, Tools shows permissions, the Jira panel's Connect verb, the navigator names its root panel and carries the merged door | ✅ done |
 | M69 | The overview: summary and block tiers for every kind, and the minimap — every panel a block in its tone, the camera a rectangle, click or drag to move | ✅ done |
+| M70 | Ship 1.1.0: the version, the README's pictures in words, CLAUDE.md and `docs/load-bearing.md` reconciled, the manual-only list re-read, both packaging gates run with numbers, the graph refreshed | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
