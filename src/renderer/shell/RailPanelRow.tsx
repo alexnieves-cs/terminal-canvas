@@ -2,19 +2,19 @@ import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
-import { Close, KindFile, KindJira, KindNote, KindReview, KindToolbox, Play } from '@renderer/icons'
+import { Close, KIND_GLYPH } from '@renderer/icons'
 import { panelState } from '@renderer/panels/panel-state'
 
 /* M63. The rail's left column: a terminal's is its state dot, every other
    kind's is a glyph naming the kind — kind and state stop sharing a slot. */
-const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira } as const
-
 export interface RailPanelRowProps {
   row: RailRow
   selected: boolean
   onGoTo: (id: string) => void
   onStart: (id: string) => void
   onClose: (id: string) => void
+  /** M66. The merged view is read-only; its rows say so instead of starting. */
+  merged?: boolean
 }
 
 /**
@@ -34,7 +34,7 @@ export interface RailPanelRowProps {
  * defensible answer about which one a click meant.
  */
 function RailPanelRowImpl({
-  row, selected, onGoTo, onStart, onClose
+  row, selected, onGoTo, onStart, onClose, merged = false
 }: RailPanelRowProps): JSX.Element {
   const state = useAgentState(row.id)
   // M63. The word and the tone, from the one vocabulary, with the agent
@@ -81,17 +81,22 @@ function RailPanelRowImpl({
             saying its kind a second time. */}
         <span className="rail-row__tail" data-tone={shown.tone}>{shown.tone === 'kind' ? '' : shown.word}</span>
       </button>
-      {row.dormant && (
+      {/* M66. The wake control is a WORD, and every terminal row keeps its
+          slot so the state column lines up whether or not the row can be
+          started: ▶ was the rail's only unlabelled control (M61's critic,
+          finding 39) and rows without it ended at a different edge. */}
+      {row.dormant ? (
         <button
           type="button"
-          className="rail-row__start icon-button"
-          title={`Start ${row.label}`}
-          aria-label={`Start ${row.label}`}
+          className="rail-row__start"
+          disabled={merged}
+          title={merged ? 'leave merged view to start' : `Start ${row.label}`}
+          aria-label={merged ? `Start ${row.label} — leave merged view to start` : `Start ${row.label}`}
           {...shellControl(() => onStart(row.id))}
         >
-          <Play />
+          start
         </button>
-      )}
+      ) : (row.state.kind === 'terminal' ? <span className="rail-row__start rail-row__start--empty" aria-hidden="true" /> : null)}
       <button
         type="button"
         className="rail-row__close icon-button"

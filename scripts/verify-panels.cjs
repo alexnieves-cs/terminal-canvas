@@ -15376,7 +15376,9 @@ app.whenReady().then(async () => {
           const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
           set.call(i, 'go'); i.dispatchEvent(new Event('input', { bubbles: true }))
           await new Promise((r) => setTimeout(r, 150))
-          return { before, after: list.scrollTop }
+          const sel = document.querySelector('.palette__row--selected')
+          const lb = list.getBoundingClientRect(), sb = sel ? sel.getBoundingClientRect() : null
+          return { before, after: list.scrollTop, selectedVisible: sb !== null && sb.top >= lb.top - 1 && sb.bottom <= lb.bottom + 1 }
         })()`)
         // A marker svA (cat) echoes into its log, then a search for it.
         ptyManager.write('svA', 'zzfindmarker\r')
@@ -15390,8 +15392,11 @@ app.whenReady().then(async () => {
           const r = await wc.executeJavaScript(`(() => { const row = [...document.querySelectorAll('.palette__row')].find((r) => (r.getAttribute('data-command-id') || '').startsWith('search.hit.svA')); return row ? { title: row.querySelector('.palette__title').textContent, hint: row.querySelector('.palette__hint').textContent } : null })()`)
           return r || false
         }, 5000)
+        // The new query starts at the top and then shows its best match:
+        // the list moved back (never kept the old offset) and the selected
+        // row is inside the list's visible box.
         ok(ID,
-          scrolled.before > 0 && scrolled.after === 0 && hit !== false && !/\//.test(hit.title) && !/svA/.test(hit.title) && /zzfindmarker/.test(hit.hint),
+          scrolled.before > 0 && scrolled.after < scrolled.before && scrolled.selectedVisible === true && hit !== false && !/\//.test(hit.title) && !/svA/.test(hit.title) && /zzfindmarker/.test(hit.hint),
           JSON.stringify({ scrolled, hit, log: fLog.slice(-3) }))
         await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) { i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) } return true })()`)
       } catch (fErr) {
@@ -15480,6 +15485,74 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr) + ' | renderer: ' + (hLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onH)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M66 — labels.3 / labels.4. EVERY CONTROL SAYS WHAT IT IS. The merged
+    // view names itself in the top bar while it is on and its lane headers
+    // are chrome-sized screen-space elements naming the workspace (labels.3);
+    // an attention pip carries a chip naming its panel and the state word
+    // (labels.4) — an amber wedge at the canvas edge with no name was M61's
+    // finding 21, and lane names at 4px its finding 4.
+    // -------------------------------------------------------------------
+    {
+      const lLog = []
+      const onL = (_e, level, message) => { if (level >= 2) lLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onL)
+      const IDS = [
+        'labels.3 the merged view names itself in the top bar and its lane headers are chrome-sized and name the workspace',
+        'labels.4 an off-screen panel that needs you gets a pip with a chip naming it and its state word'
+      ]
+      try {
+        layoutStore.save({
+          panels: fromPanels([
+            { kind: 'terminal', rect: { id: 'lbA', x: 6000, y: 6000, w: 420, h: 280 }, z: 1, spec: { panelId: 'lbA', cwd: '/tmp', command: '/bin/cat', args: [] }, title: 'far away' },
+            { kind: 'terminal', rect: { id: 'lbB', x: 60, y: 60, w: 420, h: 280 }, z: 2, spec: { panelId: 'lbB', cwd: '/tmp', command: '/bin/cat', args: [] }, title: 'bell ringer' }
+          ]),
+          groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reL
+        await settle()
+        // Merged view: the button, then the label and the headers.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const merged = await wc.executeJavaScript(`(() => {
+          const label = document.querySelector('[data-merge-label]')
+          const headers = [...document.querySelectorAll('[data-lane-header]')].map((h) => ({ name: h.querySelector('.lane-header__name')?.textContent, size: getComputedStyle(h.querySelector('.lane-header__name')).fontSize, inWorld: h.closest('.world') !== null }))
+          return { label: label ? label.textContent : null, headers }
+        })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        ok(IDS[0], merged.label === 'merged view · read-only' && merged.headers.length >= 1 && merged.headers.every((h) => typeof h.name === 'string' && h.name.length > 0 && !h.inWorld && parseFloat(h.size) >= 11),
+          JSON.stringify({ merged, log: lLog.slice(-3) }))
+
+        // The near panel wakes (a dormant off-screen panel is never spawned,
+        // so a far one cannot ring), rings, and THEN the camera leaves it
+        // through the palette's Go-to for the far panel — a pip is what an
+        // off-screen bell looks like.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="lbB"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="lbB"] .panel__slot') !== null`), 6000)
+        ptyManager.write('lbB', String.fromCharCode(7) + String.fromCharCode(13))
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.rail-row[data-rail-row="lbB"] .rail-row__tail')?.textContent === 'needs you'`), 6000)
+        await wc.executeJavaScript(`window.__m56ReducedMotion(true); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'far away'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        await sleep(800)
+        const chip = await waitUntil(async () => {
+          const c = await wc.executeJavaScript(`(() => { const el = document.querySelector('[data-edge-label="lbB"]'); return el ? { name: el.querySelector('.edge-indicator__name')?.textContent, word: el.querySelector('.edge-indicator__word')?.textContent } : null })()`)
+          return c || false
+        }, 6000)
+        ok(IDS[1], chip !== false && chip.name === 'bell ringer' && chip.word === 'needs you', JSON.stringify({ chip, log: lLog.slice(-3) }))
+      } catch (lErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onL)
       }
     }
 

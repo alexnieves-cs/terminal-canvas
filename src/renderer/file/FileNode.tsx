@@ -503,14 +503,15 @@ function FileNodeImpl({
         )}
         <button
           type="button"
-          className="file-node__edit"
+          className={`file-node__edit${editing ? ' file-node__edit--on' : ''}`}
           data-file-node-edit
+          aria-pressed={editing}
           disabled={!model.editable || editing}
           // Present and DISABLED rather than hidden. verify:palette 31's rule:
           // a control that disappears is indistinguishable from a feature that
           // was never built, and a user who wants to edit a 40,000-line log is
           // precisely the person who will go looking for this button.
-          title={model.editable ? 'Edit this file' : model.editableNote}
+          title={model.editable ? (editing ? 'Editing — save or discard to finish' : 'Edit this file') : model.editableNote}
           onMouseDown={(event) => {
             // shellControl's rule, which every control in this app obeys:
             // preventDefault keeps DOM focus off the button, stopPropagation
@@ -532,7 +533,7 @@ function FileNodeImpl({
             capturedFocusRef.current = focusedId
           }}
         >
-          <Pencil />
+          <Pencil />{editing && <span className="file-node__edit-label">editing</span>}
         </button>
         <button
           type="button"

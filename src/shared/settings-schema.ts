@@ -99,7 +99,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'restore.layout',
     label: 'Restore panel layout',
-    description: 'Reopen the panels you had open when the app last quit.',
+    description: 'reopen the panels you had open when the app last quit',
     keywords: ['panels', 'layout', 'reopen', 'session', 'startup', 'launch'],
     type: 'boolean',
     default: true,
@@ -108,7 +108,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'restore.camera',
     label: 'Restore camera position',
-    description: 'Return the canvas to the pan and zoom you left it at.',
+    description: 'return the canvas to the pan and zoom you left it at',
     keywords: ['camera', 'zoom', 'pan', 'viewport', 'position', 'startup'],
     type: 'boolean',
     default: true,
@@ -117,7 +117,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'restore.focus',
     label: 'Restore selection & focus',
-    description: 'Reselect the panel that was selected when the app last quit.',
+    description: 'reselect the panel that was selected when the app last quit',
     keywords: ['focus', 'selection', 'selected', 'highlight', 'startup'],
     type: 'boolean',
     default: true,
@@ -126,7 +126,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agent.glow',
     label: 'Show agent state on panels',
-    description: 'Colour a panel’s border by what its agent is doing.',
+    description: 'colour a panel’s border by what its agent is doing',
     keywords: ['glow', 'border', 'colour', 'color', 'status', 'busy', 'idle', 'state', 'highlight'],
     type: 'boolean',
     default: true,
@@ -135,8 +135,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agent.bell',
     label: 'Detect the terminal bell',
-    description:
-      'Treat a bell as “this panel wants you”. Your CLI must be set to ring it — Claude Code’s notification channel defaults to auto.',
+    description: 'treat a bell as “this panel wants you” — your CLI must be set to ring it; Claude Code’s notification channel defaults to auto',
     keywords: ['bell', 'alert', 'notify', 'notification', 'attention', 'ping', 'sound'],
     type: 'boolean',
     default: true,
@@ -145,8 +144,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'attention.notify',
     label: 'Notify me when a panel needs me',
-    description:
-      'Post an OS notification when a panel wants you and this window is behind another. Clicking it flies here to that panel.',
+    description: 'post an OS notification when a panel wants you and this window is behind another; clicking it flies here to that panel',
     keywords: ['notify', 'notification', 'os', 'alert', 'attention', 'background', 'dock', 'badge'],
     type: 'boolean',
     default: true,
@@ -155,8 +153,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'attention.sound',
     label: 'Play a sound when a panel needs me',
-    description:
-      'Ring the system alert sound when a panel wants you. Off by default — it uses your own alert sound and volume, and works when this window is hidden.',
+    description: 'ring the system alert sound when a panel wants you — off by default; it uses your own alert sound and volume, and works when this window is hidden',
     keywords: ['sound', 'beep', 'alert', 'audio', 'attention', 'ping', 'chime'],
     type: 'boolean',
     default: false,
@@ -165,8 +162,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'accessibility.screenReaderMode',
     label: 'Screen reader mode',
-    description:
-      'Let a screen reader read each live terminal by keeping a text mirror of its buffer. Off by default — the mirror is costly, and a carded or off-screen panel has none to read.',
+    description: 'let a screen reader read each live terminal by keeping a text mirror of its buffer — off by default; the mirror is costly, and a carded or off-screen panel has none to read',
     keywords: ['screen', 'reader', 'accessibility', 'a11y', 'voiceover', 'aria', 'blind', 'sr'],
     type: 'boolean',
     default: false,
@@ -175,8 +171,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'appearance.theme',
     label: 'Theme',
-    description:
-      'Follow the system appearance, or force light or dark. The terminal follows the theme too.',
+    description: 'follow the system appearance, or force light or dark; the terminal follows the theme too',
     // "dark" and "light" are what a user types looking for this; the label
     // says neither.
     keywords: ['theme', 'dark', 'light', 'appearance', 'mode', 'system', 'colour', 'color'],
@@ -188,7 +183,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agent.idleAfterMs',
     label: 'Idle after',
-    description: 'Milliseconds of silence before a working panel is called idle.',
+    description: 'call a working panel idle after this many milliseconds of silence',
     keywords: ['idle', 'timeout', 'threshold', 'delay', 'quiet', 'silence', 'milliseconds'],
     type: 'number',
     // PROVISIONAL — a stand-in, not a measured value. Task 1 measures the
@@ -206,8 +201,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'agent.edgeIndicators',
     label: 'Point at off-screen panels that want you',
-    description:
-      'Draw an arrow on the edge of the canvas for each panel that wants you but is out of view.',
+    description: 'draw an arrow on the edge of the canvas for each panel that wants you but is out of view',
     keywords: ['edge', 'arrow', 'pip', 'indicator', 'offscreen', 'off-screen', 'attention', 'pointer', 'wants'],
     type: 'boolean',
     default: true,
@@ -216,7 +210,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.railOpen',
     label: 'Show the side rail',
-    description: 'Keep the left rail open beside the canvas.',
+    description: 'keep the left rail open beside the canvas',
     keywords: ['rail', 'sidebar', 'side bar', 'left', 'panel list', 'outline', 'shell', 'chrome', 'hide'],
     type: 'boolean',
     default: true,
@@ -225,7 +219,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.inspectorOpen',
     label: 'Show the inspector',
-    description: 'Keep the right inspector open beside the canvas.',
+    description: 'keep the right inspector open beside the canvas',
     keywords: ['inspector', 'details', 'properties', 'right', 'sidebar', 'info', 'shell', 'chrome', 'hide'],
     type: 'boolean',
     default: true,
@@ -234,7 +228,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.navigator',
     label: 'Navigator pane',
-    description: 'Which list the navigator shows: your panels, or your workspaces. The Files pane is its own toggle (⌘B).',
+    description: 'show your panels or your workspaces in the navigator; the Files pane is its own toggle (⌘B)',
     keywords: ['navigator', 'rail', 'sidebar', 'panels', 'workspaces', 'dock', 'pane', 'shell'],
     type: 'enum',
     values: ['panels', 'workspaces'],
@@ -244,7 +238,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.contextTab',
     label: 'Context tab',
-    description: 'Which tab the context pane opens on: Detail (what this panel is), Work (what it did and cost), or Tools (what it can do).',
+    description: 'open the context pane on Detail (what this panel is), Work (what it did and cost), or Tools (what it can do)',
     keywords: ['context', 'inspector', 'tab', 'detail', 'work', 'tools', 'shell'],
     type: 'enum',
     values: ['detail', 'work', 'tools'],
@@ -259,7 +253,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // full-screen agent TUI repainting its frame. Committed per press, never
     // live. The bounds are legibility on one end and a 24px grid that fits
     // nothing on the other.
-    description: 'The size of terminal text, in pixels. A panel can override it from the palette.',
+    description: 'size terminal text, in pixels; a panel can override it from the palette',
     keywords: ['font', 'size', 'text', 'terminal', 'bigger', 'smaller', 'zoom', 'type', 'typography'],
     type: 'number',
     default: 13,
@@ -270,7 +264,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'hints.seen',
     label: 'Gesture hints seen',
-    description: 'Which first-run gesture hints have been used once and faded.',
+    description: 'remember which first-run gesture hints have been used once and faded',
     keywords: ['hints'],
     // M48. A LIST — the second customer of a non-boolean type after M45's
     // enum. The palette mints no row for a list; hints are not a setting a
@@ -283,7 +277,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'placement.snap',
     label: 'Snap panels while dragging',
-    description: 'Snap a dragged panel’s edges and centre to nearby panels, with a guide line. Off, you align by eye.',
+    description: 'snap a dragged panel’s edges and centre to nearby panels, with a guide line; off, you align by eye',
     keywords: ['snap', 'snapping', 'align', 'guides', 'grid', 'placement', 'drag'],
     type: 'boolean',
     default: true,
@@ -294,7 +288,7 @@ export const SETTINGS: readonly SettingDef[] = [
     label: 'Show the file tree',
     // Says what it DOES, not what it is. M46: the tree is the navigator's
     // Files pane, so ON shows it in place of the panels/workspaces list.
-    description: 'Show the file tree in the navigator pane, in place of the panel list.',
+    description: 'show the file tree in the navigator pane, in place of the panel list',
     // A user who wants this has no vocabulary for "tree". They will type
     // "files", "explorer", "sidebar" or "browser" — so a setting findable only
     // by its own label is a setting most users will not find. The rail's own
@@ -311,7 +305,7 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'files.showHidden',
     label: 'Show hidden files',
-    description: 'List dotfiles and dot-directories in the file tree.',
+    description: 'list dotfiles and dot-directories in the file tree',
     keywords: ['hidden', 'dotfiles', 'dot files', 'invisible', 'git', 'files', 'tree'],
     type: 'boolean',
     // Off, because `.git` at a repository root is pure noise in a navigator.
@@ -326,8 +320,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // Says what it DOES and what it NEEDS. The direct backend has no sessions
     // to keep, and a toggle that is silently ignored is worse than one that
     // names its precondition.
-    description:
-      'Keep every panel’s process running after you quit, and reattach on the next launch. Needs tmux; without it processes end with the app either way.',
+    description: 'keep every panel’s process running after you quit, and reattach on the next launch; needs tmux — without it processes end with the app either way',
     keywords: ['quit', 'keep', 'running', 'survive', 'outlive', 'detach', 'reattach', 'tmux', 'background', 'agents', 'exit'],
     type: 'boolean',
     // OFF by default, and decided rather than defaulted into (M38's spec): a
@@ -343,8 +336,7 @@ export const SETTINGS: readonly SettingDef[] = [
     // The cap and the caveat, both: the cap is what bounds the disk, and the
     // caveat is backlog #31's rule stated where the switch is — agents print
     // secrets, and this is the honest reason a user would turn it off.
-    description:
-      'Keep each panel’s recent output on disk (up to 2 MB per panel) so a restored panel can show it and search can find it. Agents print secrets; turn this off if that worries you.',
+    description: 'keep each panel’s recent output on disk (up to 2 MB per panel) so a restored panel can show it and search can find it; agents print secrets — turn this off if that worries you',
     keywords: ['scrollback', 'history', 'log', 'output', 'persist', 'disk', 'search', 'secrets', 'restore'],
     type: 'boolean',
     // ON by default: a restored canvas whose every panel shows nothing is the

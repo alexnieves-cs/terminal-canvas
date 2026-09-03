@@ -23,6 +23,8 @@ export interface NavigatorProps {
   selectedId: string | null
   onGoToPanel: (id: string) => void
   onStartPanel: (id: string) => void
+  /** M66. While merged, every start control is disabled with its reason. */
+  merged?: boolean
   onClosePanel: (id: string) => void
   // Files
   treeRootPath: string | null
@@ -140,6 +142,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                     selected={row.id === props.selectedId}
                     onGoTo={props.onGoToPanel}
                     onStart={props.onStartPanel}
+                    merged={props.merged}
                     onClose={props.onClosePanel}
                   />
                 ))

@@ -25,6 +25,8 @@ export function HintStrip({ seen }: { seen: ReadonlySet<string> }): JSX.Element 
       {left.map((h) => (
         <span key={h.id} className="hint-strip__hint" data-hint={h.id}>{h.text}</span>
       ))}
+      {/* M66. The rule, said once: hints vanished with nothing saying why. */}
+      <span className="hint-strip__rule" data-hint-rule>hints fade once you have used them</span>
     </div>
   )
 }
