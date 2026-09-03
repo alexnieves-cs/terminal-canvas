@@ -2260,6 +2260,34 @@ const session = (id, over = {}) => ({
     JSON.stringify([sp('/Users/me/work/api'), sp('/tmp'), sp('/a/b')]))
 }
 
+// M66 — labels.1/.2. EVERY CONTROL SAYS WHAT IT IS. Read as text, like
+//     verify:styles: every <button in the renderer carries an aria-label, a
+//     title, or visible text inside its element (labels.1); every element
+//     that is an .icon-button carries an aria-label or a title on the SAME
+//     element (labels.2). M61's critic had a category the dead-end audit
+//     never had — "cannot identify" — and nine controls fell into it.
+{
+  const { readdirSync, statSync, readFileSync } = require('node:fs')
+  const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : (p.endsWith('.tsx') ? [p] : []) })
+  const unlabelled = [], iconBare = []
+  for (const file of walk(join(__dirname, '..', 'src', 'renderer'))) {
+    const text = readFileSync(file, 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    const rel = file.split('/src/renderer/')[1]
+    // Attributes may contain `=>` (a shellControl spread); a `>` closes the
+    // tag only when it is not an arrow's.
+    for (const m of text.matchAll(/<button\b((?:=>|[^>])*?)>([\s\S]*?)<\/button>/g)) {
+      const attrs = m[1], body = m[2]
+      const named = /aria-label=|title=/.test(attrs)
+      // A `{t.name}` / `{label}` expression is text a person reads too.
+      const visibleText = /[A-Za-z…]{2,}/.test(body.replace(/<[^>]*>/g, '').replace(/\{[^}]*\}/g, (x) => (/['"`][A-Za-z…]{2,}|\.(name|label|title)\b|\b(label|title|name|text|word)\b/.test(x) ? 'text' : '')))
+      if (!named && !visibleText) unlabelled.push(`${rel}: <button${attrs.trim().slice(0, 50)}`)
+      if (/icon-button/.test(attrs) && !named) iconBare.push(`${rel}: <button${attrs.trim().slice(0, 50)}`)
+    }
+  }
+  ok('labels.1 every <button in the renderer carries an aria-label, a title, or visible text', unlabelled.length === 0, unlabelled.join(' | ') || 'clean')
+  ok('labels.2 every .icon-button carries an aria-label or a title on the same element', iconBare.length === 0, iconBare.join(' | ') || 'clean')
+}
+
 console.log('\n' + '='.repeat(60))
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

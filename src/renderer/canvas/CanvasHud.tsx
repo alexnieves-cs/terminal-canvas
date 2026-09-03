@@ -51,7 +51,7 @@ export function CanvasHud({ viewport, cursor, selectedId, selected, backend, mac
         <button type="button" className="icon-button" data-hud-zoom-in title="Zoom in (⌘=)"
           aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
         <button type="button" className="icon-button" data-hud-fit title="Fit everything (⌘1)"
-          aria-label="Fit everything" {...shellControl(onFit)}><Maximize /></button>
+          aria-label="Fit everything" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">fit</span></button>
       </span>
       <span>
         {Math.round(cursor.x)}, {Math.round(cursor.y)}

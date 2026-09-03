@@ -4,7 +4,7 @@ import type { WorldRect } from '@renderer/canvas/viewport'
 import type { Panel } from '@renderer/panels/panels'
 import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
-import { Close } from '@renderer/icons'
+import { Close, KIND_GLYPH } from '@renderer/icons'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -94,7 +94,14 @@ export function PanelFrame({
         {/* The state dot (terminal) or the kind's accent mark — ONE rule set,
             keyed on data-agent-state, shared with the rail and the context
             pane (`.status-dot`). */}
-        <span className={`pf__state status-dot${kind === 'terminal' ? '' : ' pf__state--kind'}`} data-agent-state={kind === 'terminal' ? (agentState ?? 'none') : undefined} data-tone={rootAttrs?.['data-tone'] ?? 'kind'} aria-hidden="true" />
+        {kind === 'terminal' ? (
+          <span className="pf__state status-dot" data-agent-state={agentState ?? 'none'} data-tone={rootAttrs?.['data-tone'] ?? 'kind'} aria-hidden="true" />
+        ) : (
+          /* M66. A grey dot on a kind that has no state read as a state
+             nobody could name (M66's critic); the kind's own glyph, the one
+             the rail row shows, says what the panel is instead. */
+          <span className="pf__state pf__state--kind" data-tone="kind" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind]; return <G /> })()}</span>
+        )}
         <span className="pf__title panel__title">{title}</span>
         {chrome}
         {close !== null && (

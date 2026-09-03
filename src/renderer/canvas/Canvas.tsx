@@ -27,6 +27,7 @@ import { useCanvasTestHooks } from './useCanvasTestHooks'
 import { usePaletteActions } from './usePaletteActions'
 import { useWorkspaceVerbs } from './useWorkspaceVerbs'
 import { useCanvasPointer } from './useCanvasPointer'
+import { panelName } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { useInspectorDetail } from './useInspectorDetail'
@@ -37,7 +38,7 @@ import {
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
-  screenToWorld, type Point, type Viewport, type WorldRect, hitTest } from './viewport'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -3161,6 +3162,7 @@ export function Canvas({
       <TopBar
         presets={presetRows}
         onOpenSheet={paletteActions.beginSpawnSheet}
+        workspaceName={workspaceRows.find((w) => w.active)?.name}
         onSearch={palette.openPalette}
         onSettings={openSettingsScope}
         merged={merged}
@@ -3171,6 +3173,7 @@ export function Canvas({
       <Navigator
         navigator={chrome.navigator}
         onToggle={chrome.toggleNavigator}
+        merged={merged}
         workspaces={railWorkspaces}
         onSwitchWorkspace={paletteActions.switchWorkspace}
         onCreateWorkspace={paletteActions.beginCreateWorkspace}
@@ -3386,8 +3389,26 @@ export function Canvas({
           <SubagentLayer panels={terminalPanels} />
         </div>
         {pipsEnabled && (
-          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} />
+          <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p) }} />
         )}
+        {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
+            name inside .world scaled to 4px text at the zoom the merged view
+            is used at (M61's critic, finding 4). Positioned from the lane's
+            world rect through the viewport, so they ride a pan; the in-world
+            .merged-lane__name stays for the checks that read it and is not
+            painted. */}
+        {merged && mergedView && mergedView.lanes.map((lane) => {
+          const at = worldToScreen({ x: lane.bounds.x, y: lane.bounds.y - 56 }, viewport)
+          // The header hangs UP from its anchor (translate -100%), so an
+          // anchor above ~36px puts it outside the host: clamp, so a lane
+          // whose top is at the viewport's top still shows its name.
+          return (
+            <div key={lane.workspaceId} className={`lane-header${lane.active ? ' lane-header--active' : ''}`} data-lane-header={lane.workspaceId} style={{ left: Math.max(at.x, 8), top: Math.max(at.y, 36) }}>
+              <span className="lane-header__name">{lane.name}</span>
+              {lane.active && <span className="lane-header__note">this workspace</span>}
+            </div>
+          )
+        })}
         {/* Beside the pips and outside .world for the same reason — see
             Marquee.tsx. It renders null at rest, so there is no "no marquee"
             element for anything to find. */}

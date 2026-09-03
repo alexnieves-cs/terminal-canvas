@@ -302,6 +302,12 @@ body {
 }
 .shell--nav-drawer .shell__rail { left: var(--shell-dock-w); border-right: 1px solid var(--line); }
 .shell--ctx-drawer .shell__inspector { right: 0; border-left: 1px solid var(--line); }
+/* The strips sit ABOVE a drawer (compact.1), so a drawer's last rows — the
+   context pane's pinned Close, the navigator's last panel row — pad past the
+   strip band rather than hide under it: the compact shot showed Link to…
+   and Close cut off under the status strip. */
+.shell--ctx-drawer .inspector__actions { padding-bottom: calc(var(--sp-5) + 44px); }
+.shell--nav-drawer .rail-list { padding-bottom: calc(var(--sp-5) + 44px); }
 
 .shell__top { grid-area: top; }
 .shell__dock { grid-area: dock; }
@@ -342,9 +348,29 @@ body {
   height: 32px;
   color: var(--fg-3);
 }
+.dock__button {
+  position: relative;
+}
 .dock__button--on {
   color: var(--iris);
   background: var(--iris-dim);
+  /* A 1px iris ring on the tile: the fill alone was invisible at a glance
+     and the edge bar read as the window border (M66's critic). A line,
+     not a shadow. */
+  box-shadow: inset 0 0 0 1px var(--iris);
+}
+/* M66. A 2px iris bar on the dock's left edge for the active pane — the
+   same "bar in the left slot means selected" the rail uses. The fill alone
+   read as faint (M61's critic, finding 37). */
+.dock__button--on::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: var(--r-full);
+  background: var(--iris);
 }
 .dock__attention {
   position: relative;
@@ -779,7 +805,6 @@ body {
   opacity: 1;
 }
 
-.rail-row__start:hover,
 .rail-row__rename:hover,
 .rail-row__close:hover { color: var(--text); }
 
@@ -828,6 +853,31 @@ body {
 .rail-row__close {
   flex: none;
 }
+/* M66. The wake control is a word in the mono face with a fixed slot; the
+   empty slot on a running row keeps the state column aligned. */
+.rail-row__start {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 24px;
+  padding: 0 var(--sp-2);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--iris);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: center;
+}
+.rail-row__start:hover { background: var(--iris-dim); }
+.rail-row__start--empty { cursor: default; }
+/* Disabled while merged: still present, still iris-shaped, dimmed, and its
+   title carries the reason (`leave merged view to start`). */
+.rail-row__start:disabled { color: var(--fg-3); cursor: default; }
+.rail-row__start:disabled:hover { background: transparent; }
 
 /* The context pane (M46): a PINNED identity header, a tab strip, ONE
    scrolling body, and a PINNED action bar. Identity never scrolls away, so a
@@ -866,10 +916,15 @@ body {
    one — a defect no attribute-reading check could see. */
 .context__panel { display: block; }
 .context__panel[hidden] { display: none; }
-.context__actions {
+/* M66. A GRID, not a wrapped flex: the wrapped version let Restart become a
+   tall column beside the stacked chips (M61's critic, finding 6). Restart
+   takes its own full row; the secondary verbs and Close share the second. */
+.inspector__actions.context__actions {
+  /* Both classes, so this beats `.inspector__actions`' flex column declared
+     later in the sheet — the first cut lost to it and the bar stayed a stack. */
   flex: none;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-5);
   border-top: 1px solid var(--line);
@@ -877,9 +932,9 @@ body {
 }
 /* Three ranks. Primary keeps the full control; secondary shrinks to a text
    chip; destructive sits at the right and goes red the moment it is armed. */
-.context__actions [data-inspector-action="restart"] { flex: 1 1 100%; background: var(--s-3); font-weight: 600; }
-.inspector__action--secondary { flex: 1 1 auto; font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
-.inspector__action--destructive { flex: 0 0 auto; margin-left: auto; font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
+.context__actions [data-inspector-action="restart"] { grid-column: 1 / -1; background: var(--s-3); font-weight: 600; }
+.inspector__action--secondary { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); min-width: 0; white-space: nowrap; }
+.inspector__action--destructive { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
 .inspector__action--destructive:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
 .inspector__action--armed { color: var(--red); border-color: var(--red); background: var(--red-dim); }
 
@@ -1567,7 +1622,8 @@ body {
    working; a kind dot in either read as a state (the critic sampled the Jira
    dot at working-blue). The kind lives in the rail's glyph; M67 brings the
    glyph into the chrome and retires this dot. */
-.pf__state--kind { background: var(--line-strong); }
+.pf__state--kind { background: transparent; width: auto; height: auto; color: var(--fg-3); display: inline-flex; align-items: center; }
+.pf__state--kind svg { width: 12px; height: 12px; }
 /* A terminal's chrome dot duplicated the pill's own dot 300px to its right —
    the same state said twice on one frame. The element stays (checks read its
    attributes); it is not painted. */
@@ -1994,6 +2050,9 @@ body {
   background: var(--s-3);
   box-shadow: var(--e-1);
   color: var(--fg-3);
+  /* M66. Above the compact breakpoint's drawers (z-index 900): the strip is
+     one line at every breakpoint and never hides under a pane. */
+  z-index: 950;
   font-size: var(--t-sm);
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -2076,6 +2135,7 @@ body {
 /* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
    gesture has been used. Never a click target. */
 .hint-strip {
+  z-index: 950;
   position: absolute;
   left: var(--sp-5);
   bottom: var(--sp-5);
@@ -2089,7 +2149,6 @@ body {
   font-size: var(--t-xs);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 10;
 }
 
 /* M48. The probe banner: shown only when the login shell could not be read,
@@ -2416,6 +2475,10 @@ body {
 
 /* The edit control keeps its place beside the heading. */
 .file-node__edit { flex: none; }
+/* M66. The toggle shows its state. */
+.file-node__edit--on { color: var(--iris); background: var(--iris-dim); border-color: var(--iris); }
+.file-node__edit:has(.file-node__edit-label) { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 24px; padding: 0 var(--sp-2); }
+.file-node__edit-label { font-size: var(--t-xs); }
 
 /* The unsaved-work marker. Amber, the same "something here wants your
    attention" colour .file-node__note and .panel--agent-wants-you both use. */
@@ -3239,3 +3302,58 @@ body {
 .sheet__preview { flex: 1; min-width: 0; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet__refusal { color: var(--red); }
 .sheet__keys { flex: none; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   M66. Every control says what it is.
+   ───────────────────────────────────────────────────────────────────────── */
+/* The merged view's name in the top bar while the mode is on. */
+.shell__merge-label { font-size: var(--t-sm); white-space: nowrap; }
+.shell__merge--on { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-md); }
+/* Lane headers in screen space: chrome-sized names over the world's lanes. */
+.merged-lane__name { visibility: hidden; }
+.lane-header {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--s-3);
+  color: var(--fg-2);
+  font-size: var(--t-sm);
+  pointer-events: none;
+  z-index: 5;
+  transform: translate(0, -100%);
+}
+.lane-header__name { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.lane-header__note { color: var(--iris); }
+/* The attention pip's chip: the panel's name and the word, inward of the wedge. */
+.edge-indicator__label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--s-3);
+  font-size: var(--t-xs);
+  color: var(--fg-2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.edge-indicator__name { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.edge-indicator__word[data-tone] { color: var(--tone); }
+/* A settings row's hint is a sentence: it wraps, it is not cut mid-word. */
+.palette__row[data-group="setting"] { align-items: flex-start; }
+.palette__row[data-group="setting"] .palette__hint { white-space: normal; max-width: 55%; text-align: right; }
+/* The strip's rule line. */
+.hint-strip__rule { color: var(--fg-4); }
+/* The fit control names itself where there is room. */
+.canvas-hud__fit-label { font-size: var(--t-xs); }
+/* The word sits beside the glyph, on the strip's one line — stacked under
+   it, that cell was two lines tall (M66's critic). */
+.canvas-hud [data-hud-fit] { display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1); min-width: 24px; padding: 0 var(--sp-2); }
+.shell[data-bp="compact"] .canvas-hud__fit-label { display: none; }

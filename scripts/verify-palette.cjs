@@ -2035,6 +2035,28 @@ const WS = [
     JSON.stringify({ a, b, c }))
 }
 
+// M66 — voice.1 / rank.1. ONE VOICE PER COLUMN, and a match the user can SEE
+//     outranks one they cannot. Settings descriptions were Sentence case with
+//     full stops beside lower-case verb-first hints in the same column; and
+//     `Tidy everything` led a query for "group" through its hidden searchText
+//     with nothing highlighted in its title.
+{
+  const defs = P.SETTINGS ?? []
+  // Interior sentences too: "…another. Clicking it…" is two voices in one
+  // hint (M66's verifier). A capital after a stop is the tell; a name like
+  // "Claude Code" mid-sentence is not.
+  const loud = defs.filter((d) => /^[A-Z]/.test(d.description) || /\.$/.test(d.description) || /\. [A-Z]/.test(d.description)).map((d) => d.id)
+  ok('voice.1 every setting description starts lower-case, ends without a full stop, and holds no second sentence', defs.length >= 20 && loud.length === 0, JSON.stringify({ count: defs.length, loud }))
+  const list = [
+    // The hidden row's searchText holds the word contiguously and EARLY (the
+    // haystack leads with searchText), so on score alone it wins.
+    cmd('hidden', 'Tidy everything', { group: 'panel', searchText: 'group panels tidy' }),
+    cmd('visible', 'Card group', { group: 'panel' })
+  ]
+  const out = P.filterCommands(list, 'group').map((c) => c.id)
+  ok('rank.1 a row whose title visibly matches outranks a row matched only through its searchText', out.length === 2 && out[0] === 'visible', out.join(','))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

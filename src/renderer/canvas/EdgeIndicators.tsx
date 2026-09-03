@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { Fragment, useEffect, useRef, useState, type JSX } from 'react'
 import { edgeIndicator, type Size, type Viewport, type WorldRect } from './viewport'
+import { agentWord } from '@renderer/panels/panel-state'
 
 export interface EdgeIndicatorsProps {
   /** Every panel's rect, so a waiting id can be located. */
@@ -7,6 +8,8 @@ export interface EdgeIndicatorsProps {
   viewport: Viewport
   /** The wants-you queue, from agent-state-store's useAttentionIds. */
   ids: string[]
+  /** M66. The panel's name for the pip's chip; a wedge at the edge with no name was M61's finding 21. */
+  labelOf?: (id: string) => string
 }
 
 /**
@@ -24,7 +27,20 @@ export interface EdgeIndicatorsProps {
  * Palette.tsx's own stopPropagation guard documents. Cmd+J is the way to act
  * on one.
  */
-export function EdgeIndicators({ rects, viewport, ids }: EdgeIndicatorsProps): JSX.Element | null {
+/**
+ * Where the chip hangs relative to its inward anchor. A wedge on the right
+ * edge (cos > 0) gets its chip to the left; on the left edge, to the right;
+ * on the top or bottom edge the chip is centred and drops below or rises
+ * above. The percentages are of the chip's own box, so no measurement.
+ */
+function chipOffset(angle: number): string {
+  const c = Math.cos(angle), s = Math.sin(angle)
+  if (c > 0.3) return '-100%, -50%'
+  if (c < -0.3) return '0%, -50%'
+  return s > 0 ? '-50%, -100%' : '-50%, 0%'
+}
+
+export function EdgeIndicators({ rects, viewport, ids, labelOf }: EdgeIndicatorsProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size | null>(null)
 
@@ -62,14 +78,29 @@ export function EdgeIndicators({ rects, viewport, ids }: EdgeIndicatorsProps): J
   return (
     <div className="edge-indicators" ref={hostRef}>
       {pips.map((pip) => (
-        <div
-          key={pip.id}
-          className="edge-indicator"
-          data-panel-id={pip.id}
-          style={{
-            transform: `translate(${pip.x}px, ${pip.y}px) translate(-50%, -50%) rotate(${pip.angle}rad)`
-          }}
-        />
+        <Fragment key={pip.id}>
+          <div
+            className="edge-indicator"
+            data-panel-id={pip.id}
+            style={{
+              transform: `translate(${pip.x}px, ${pip.y}px) translate(-50%, -50%) rotate(${pip.angle}rad)`
+            }}
+          />
+          {labelOf !== undefined && (
+            /* Inward of the wedge along its own axis, upright, and hung on
+               the side AWAY from the edge the wedge sits on: a chip that
+               always extended left ran off the canvas for a left-edge pip
+               (M66's verifier), clipped by the host with nothing to see. */
+            <div
+              className="edge-indicator__label"
+              data-edge-label={pip.id}
+              style={{ transform: `translate(${pip.x}px, ${pip.y}px) rotate(${pip.angle}rad) translate(-18px, 0) rotate(${-pip.angle}rad) translate(${chipOffset(pip.angle)})` }}
+            >
+              <span className="edge-indicator__name">{labelOf(pip.id)}</span>
+              <span className="edge-indicator__word" data-tone={agentWord('wants-you').tone}>{agentWord('wants-you').word}</span>
+            </div>
+          )}
+        </Fragment>
       ))}
     </div>
   )

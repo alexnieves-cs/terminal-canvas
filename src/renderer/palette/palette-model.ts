@@ -246,9 +246,18 @@ const PATH_SCORE = 1
  * The fuzzy match over the haystack, and — only when that fails — a
  * contiguous, case-insensitive substring match over `pathText`.
  */
+/**
+ * M66. A match the user can SEE — in the title, where the highlight paints —
+ * outranks one carried only by hidden searchText at the scores short queries
+ * reach (a six-letter run contiguous in searchText still scores past it — the
+ * bonus is a thumb on the scale, not a section): a row that leads a list with
+ * nothing lit in it looks like a mistake.
+ */
+const VISIBLE_BONUS = 40
+
 export function matchCommand(query: string, command: Command): number | null {
   const fuzzy = fuzzyMatch(query, haystack(command))
-  if (fuzzy !== null) return fuzzy.score
+  if (fuzzy !== null) return fuzzy.score + (query.trim() !== '' && fuzzyMatch(query, command.title) !== null ? VISIBLE_BONUS : 0)
   const q = query.trim().toLowerCase()
   if (command.pathText !== undefined && q !== '' && command.pathText.toLowerCase().includes(q)) return PATH_SCORE
   return null

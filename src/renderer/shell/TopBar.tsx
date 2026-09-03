@@ -1,12 +1,14 @@
 import type { JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import { shellControl } from './shell-control'
-import { Gear, Layers, PanelRight, Search } from '@renderer/icons'
+import { Gear, Lanes, PanelRight, Search  } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
   /** M65. The button opens the spawn sheet; ⌘N (the menu's accelerator) stays the instant default. */
   onOpenSheet: () => void
+  /** M66. The active workspace's name, for the merged toggle's "back to …". */
+  workspaceName?: string
   onSearch: () => void
   onSettings: () => void
   /** Whether M14's merged view is currently showing. */
@@ -36,7 +38,7 @@ export interface TopBarProps {
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, onOpenSheet, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext
+  presets, onOpenSheet, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext, workspaceName
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -82,13 +84,19 @@ export function TopBar({
           pair for the reason PaletteActions.toggleMerged is one. */}
       <button
         type="button"
-        className={`shell__merge icon-button${merged ? ' shell__merge--on' : ''}`}
+        className={`shell__merge${merged ? ' shell__merge--on' : ' icon-button'}`}
         aria-pressed={merged}
-        aria-label={merged ? 'Back to this workspace' : 'Show every workspace at once'}
-        title={merged ? 'Back to this workspace' : 'Show every workspace at once'}
+        aria-label={merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view: every workspace at once, read-only'}
+        title={merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view: every workspace at once, read-only'}
         {...shellControl(onToggleMerged)}
       >
-        <Layers />
+        <Lanes />
+        {/* M66. While the mode is on, the BUTTON says so — the label is
+            inside it, so the pressed control and the words are one thing and
+            the door out is the thing that names the mode. The glyph alone
+            read as a duplicate of the dock's Workspaces (M61's critic), and a
+            label beside a bare glyph read as loose text (M66's critic). */}
+        {merged && <span className="shell__merge-label" data-merge-label>merged view · read-only</span>}
       </button>
 
       <div className="shell__spacer" />

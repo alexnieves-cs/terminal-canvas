@@ -126,3 +126,12 @@ export const KindToolbox = (p: IconProps): JSX.Element => (
 export const KindJira = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M8 2v12M2 8h6" /></Svg>
 )
+
+/* M66. The merged view's own glyph — three horizontal lanes — so the top
+   bar's button stops sharing the dock's Workspaces (layers) glyph. */
+export const Lanes = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="2.5" width="12" height="3" rx="1" /><rect x="2" y="6.5" width="12" height="3" rx="1" /><rect x="2" y="10.5" width="12" height="3" rx="1" /></Svg>
+)
+
+/** M66. One map from a sessionless kind to its glyph, for the rail row and the panel frame. */
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira } as const

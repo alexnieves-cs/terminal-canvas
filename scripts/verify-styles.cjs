@@ -379,5 +379,23 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ tones: tones.length, missing, stray: stray.slice(0, 4) }))
 }
 
+// M66 — compact.1. THE DRAWERS DO NOT COVER THE STRIP. At the compact
+// breakpoint the navigator and context panes are drawers over the canvas;
+// the status strip and the hint strip must sit ABOVE them (a higher
+// z-index, an opaque ground) and the drawers must run from the top bar down.
+// The critic saw "CPU 0% · RAM" cut off under the context drawer.
+{
+  const drawer = /\.shell--nav-drawer \.shell__rail,\s*\.shell--ctx-drawer \.shell__inspector\s*\{([^}]*)\}/.exec(bare)
+  const drawerZ = drawer ? Number((/z-index:\s*(\d+)/.exec(drawer[1]) || [])[1]) : NaN
+  const hudZ = Number((/\.canvas-hud\s*\{[^}]*z-index:\s*(\d+)/.exec(bare) || [])[1])
+  const hintZ = Number((/\.hint-strip\s*\{[^}]*z-index:\s*(\d+)/.exec(bare) || [])[1])
+  const hudOpaque = /\.canvas-hud\s*\{[^}]*background:\s*var\(--s-[0-9]\)/.test(bare)
+  const drawerTop = drawer ? /top:\s*var\(--shell-top-h\)/.test(drawer[1]) : false
+  const drawerBottom = drawer ? /bottom:\s*0\b/.test(drawer[1]) : false
+  ok('compact.1', 'the compact drawers run from the top bar to the bottom, under the status strip and the hint strip, which sit on an opaque ground',
+    Number.isFinite(drawerZ) && hudZ > drawerZ && hintZ > drawerZ && hudOpaque && drawerTop && drawerBottom,
+    JSON.stringify({ drawerZ, hudZ, hintZ, hudOpaque, drawerTop, drawerBottom }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

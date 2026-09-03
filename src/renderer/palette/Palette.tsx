@@ -632,6 +632,7 @@ export function Palette(props: PaletteProps): JSX.Element {
                   // M42. The command id, so a check (and only a check) can find
                   // one specific row without matching on its user-facing text.
                   data-command-id={row.id}
+                  data-group={row.group}
                   // M44. Listbox option; a stable DOM id so the input's
                   // aria-activedescendant can name the selected row.
                   id={`palette-row-${row.id}`}

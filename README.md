@@ -796,6 +796,7 @@ price of not killing something.
 | M63 | The state vocabulary: one word and one tone per panel, the state edge, iris selection | ✅ done |
 | M64 | Finding a panel: rows lead with the name, `state:` queries, contiguous path matching, the empty search names its term | ✅ done |
 | M65 | Starting a panel: the spawn sheet (where, what, how), one-off task panels, recent directories, the launcher as a panel | ✅ done |
+| M66 | Every control says what it is: the merged view named, lane headers at chrome size, a labelled `start`, the pip's chip, the action-bar grid, the hint strip's rule, settings hints in one voice | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
