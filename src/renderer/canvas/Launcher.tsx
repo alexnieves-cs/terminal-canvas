@@ -8,6 +8,8 @@ export interface LauncherProps {
   presets: PresetRow[]
   report: EnvReport | null
   onSpawnPreset: (id: string) => void
+  /** M65. The fifth line: choose where and what. */
+  onOpenSheet: () => void
   onOpenFile: () => void
   onNewNote: () => void
   /** A note is saved in a panel's directory; with no panel there is none. */
@@ -37,12 +39,18 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenFile, onNewNote, noteReason }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason }: LauncherProps): JSX.Element {
   const found = report ? report.clis.filter((c) => c.path !== null).map((c) => c.name) : []
   const missing = report ? report.clis.filter((c) => c.path === null).map((c) => c.name) : []
   return (
-    <div className="launcher" data-launcher role="region" aria-label="Get started">
-      <div className="launcher__title">An empty canvas</div>
+    // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
+    // frame family, a chrome row and a well, its verbs as prompt lines.
+    <div className="launcher pf" data-launcher data-tone="none" role="region" aria-label="Get started">
+      <div className="launcher__chrome pf__chrome">
+        <span className="launcher__title">terminal canvas</span>
+        <span className="launcher__chrome-hint">an empty canvas</span>
+      </div>
+      <div className="launcher__well">
       <p className="launcher__lead">
         Every panel is a terminal running your agent. Start one, then pan and zoom the canvas around it.
       </p>
@@ -74,6 +82,10 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenFile, onNewNote
           <span className="launcher__verb-name">New note…</span>
           <span className="launcher__verb-hint">{noteReason ?? 'a note panel'}</span>
         </button>
+        <button type="button" className="launcher__verb launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
+          <span className="launcher__verb-name">Choose where and what…</span>
+          <span className="launcher__verb-hint">a directory, a preset or a command, the agent's mode</span>
+        </button>
       </div>
       {report !== null && (
         <p className="launcher__env" data-launcher-env>
@@ -82,7 +94,7 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenFile, onNewNote
           {' — '}<span className="launcher__env-hint">Environment… in ⌘K</span>
         </p>
       )}
-      <p className="launcher__keys">⌘N new panel · ⌘K everything else · two-finger drag pans · pinch zooms</p>
+      </div>
     </div>
   )
 }

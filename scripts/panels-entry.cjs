@@ -167,6 +167,7 @@ module.exports = {
      commands" — the silent shape this suite exists for. */
   mergePrompts: require('../src/main/prompts').mergePrompts,
   readProjectPrompts: require('../src/main/prompts').readProjectPrompts,
+  expandTilde: require('../src/main/pty-manager').expandTilde,
   resolveCwd: require('../src/main/pty-manager').resolveCwd,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */

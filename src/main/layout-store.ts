@@ -11,8 +11,7 @@ import {
   type Prompt,
   type RestoreSettings,
   type Workspace,
-  type WorktreeRecord
-} from '../shared/layout-schema'
+  type WorktreeRecord, RECENT_DIRECTORIES_CAP } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
 import type { ReviewBaseline } from '../shared/review'
@@ -179,6 +178,9 @@ export interface LayoutStore {
   dropSession(panelId: string): void
   /** M37. Every worktree this app created. Copied out, like presets(). */
   worktrees(): WorktreeRecord[]
+  /** M65. Newest first, capped at twelve. */
+  recentDirectories(): string[]
+  addRecentDirectory(cwd: string): void
   /**
    * M37. The record a panel id should spawn into, if one exists for it IN THIS
    * ROOT. The root clause is the whole guard: a recycled id in a different
@@ -791,6 +793,14 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     dropSession(panelId) {
       if (snapshot.sessions[panelId] === undefined) return
       delete snapshot.sessions[panelId]
+      scheduleWrite()
+    },
+    recentDirectories() {
+      return [...snapshot.recentDirectories]
+    },
+    addRecentDirectory(cwd) {
+      if (cwd === '') return
+      snapshot.recentDirectories = [cwd, ...snapshot.recentDirectories.filter((d) => d !== cwd)].slice(0, RECENT_DIRECTORIES_CAP)
       scheduleWrite()
     },
     worktrees() {

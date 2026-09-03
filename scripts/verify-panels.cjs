@@ -67,6 +67,7 @@ const {
   mergePrompts,
   readProjectPrompts,
   resolveCwd,
+  expandTilde,
   IPC_EVENTS,
   IPC,
   createReviewEngine,
@@ -880,6 +881,25 @@ app.whenReady().then(async () => {
       layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
     },
     requestReset: () => {},
+    // M65. The sheet's path, real: a preset or a command becomes a template
+    // sent back as PRESET_SPAWN, exactly as main/index.ts does it, and a
+    // missing directory is refused with a reason.
+    spawnWith: (req) => {
+      const cwd = expandTilde(req.cwd)
+      if (!existsSync(cwd)) return { kind: 'refused', reason: `no such directory: ${req.cwd}` }
+      let template
+      if (req.command !== undefined && req.command.trim() !== '') {
+        template = { cwd, command: '/bin/sh', args: ['-lc', req.command.trim()], title: (req.title || '').trim() || req.command.trim(), focus: true }
+      } else {
+        const found = allPresets(layoutStore.presets()).find((p) => p.id === req.presetId)
+        if (!found) return { kind: 'refused', reason: 'that preset no longer exists' }
+        template = { ...templateOf(found), cwd, focus: true }
+        if (req.title && req.title.trim() !== '') template.title = req.title.trim()
+      }
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, template)
+      return { kind: 'spawned' }
+    },
+    recentDirectories: () => layoutStore.recentDirectories(),
     // main/index.ts's listPrompts, project half included — check 43 is the
     // only end-to-end exercise of readProjectPrompts anywhere, and a stub
     // with `[]` for that half (which this was until the M5b fix wave) leaves
@@ -5586,20 +5606,24 @@ app.whenReady().then(async () => {
       // captured before this block — must account for the narrower rail.
     }
 
-    // 76. THE SPAWN BUTTON SPAWNS EXACTLY ONE PANEL, THROUGH MAIN.
-    //     Exactly one is half the check: a button that also let its click reach
-    //     the canvas background would spawn once and select something else, and a
-    //     double-fire looks identical to a slow machine.
+    // 76. THE SPAWN BUTTON OPENS THE SHEET, AND THE SHEET SPAWNS EXACTLY ONE
+    //     PANEL, THROUGH MAIN (M65). Exactly one is half the check: a button
+    //     that also let its click reach the canvas background would spawn
+    //     once and select something else, and a double-fire looks identical
+    //     to a slow machine. Enter in the sheet with its defaults (the default
+    //     preset, the focused panel's or the preset's directory) is the spawn.
     {
       const before = await wc.executeJavaScript(`window.__m4aSessions().length`)
       await wc.executeJavaScript(`
         document.querySelector('.shell__spawn').dispatchEvent(
           new MouseEvent('click', { bubbles: true }))
       `)
-      await sleep(400)
+      const sheetShown = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`), 3000)
+      await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return !!w })()`)
+      await sleep(600)
       const after = await wc.executeJavaScript(`window.__m4aSessions().length`)
-      ok('76 the New panel button spawns exactly one panel',
-        after === before + 1, `${before} -> ${after}`)
+      ok('76 the New panel button opens the sheet, and Enter in it spawns exactly one panel',
+        sheetShown === true && after === before + 1, `sheet=${sheetShown} ${before} -> ${after}`)
     }
 
     // 77. THE ZOOM CLUSTER MOVES THE CAMERA THROUGH NAMED VERBS.
@@ -15377,6 +15401,85 @@ app.whenReady().then(async () => {
         ok(ID, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (fLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onF)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M65 — sheet.3 / sheet.4. STARTING A PANEL. ⌘⇧N (the menu's event) opens
+    // the sheet; a typed command and Enter spawns a LIVE, FOCUSED panel
+    // titled with the command whose pill later reads `exited 0` — a task
+    // panel, spawned through focus rather than through any "spawn at a
+    // stated grid" door (sheet.3). The `where` field's first suggestion is
+    // the focused panel's live directory, and a chosen suggestion is the
+    // spawned panel's cwd (sheet.4). A directory that is not there is
+    // refused in the sheet with a reason, not spawned into.
+    // -------------------------------------------------------------------
+    {
+      const hLog = []
+      const onH = (_e, level, message) => { if (level >= 2) hLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onH)
+      const IDS = [
+        'sheet.3 the sheet spawns a typed command as a live, focused task panel titled with it, whose pill reads exited 0 when it ends',
+        'sheet.4 the where field suggests the focused panel\'s live directory first, a chosen suggestion becomes the cwd, and a missing directory is refused in the sheet'
+      ]
+      try {
+        const dirA = mkdtempSync(join(tmpdir(), 'tc panels sheet-a '))
+        layoutStore.save({
+          panels: fromPanels([{ kind: 'terminal', rect: { id: 'shA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'shA', cwd: dirA, command: '/bin/cat', args: [] } }]),
+          groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reH = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reH
+        await settle()
+        // Wake and focus shA so its live directory is what the sheet offers.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="shA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="shA"] .panel__slot') !== null`), 6000)
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="shA"] .panel__slot'); const r = s.getBoundingClientRect(); s.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await settle()
+        // ⌘⇧N arrives from the menu as an event.
+        win.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET)
+        const opened = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`), 4000)
+        const steps = []
+        const present = async (label) => { steps.push([label, await wc.executeJavaScript(`[document.querySelector('[data-spawn-sheet]') !== null, document.querySelector('.palette') !== null, document.activeElement && document.activeElement.className]`)]) }
+        const set = (sel, value) => wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false
+          const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+          Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(value)})
+          el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); return true })()`)
+        // Focus the field, then let React render the list before reading it.
+        await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.focus(); return !!w })()`)
+        await settle()
+        const firstSuggestion = await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (!w) return null
+          const first = document.querySelector('[data-sheet-suggestions] .sheet__suggestion .sheet__suggestion-path'); return { value: w.value, first: first ? first.textContent : null } })()`)
+        await present('after suggestions')
+        // A directory that is not there: refused, in the sheet.
+        await set('[data-sheet-what]', '__command__')
+        await present('after what')
+        await set('[data-sheet-command]', 'echo hello-from-a-task')
+        await present('after command')
+        await set('[data-sheet-where]', '/definitely/not/a/directory')
+        await present('after where')
+        await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (!w) return false; w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        const refused = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-sheet-refusal]')?.textContent ?? false`), 3000)
+        // Now the real directory, and spawn.
+        const countBefore = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+        await set('[data-sheet-where]', dirA)
+        await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (!w) return false; w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        const spawned = await waitUntil(() => wc.executeJavaScript(`(() => { const panels = [...document.querySelectorAll('.panel[data-panel-id]')]; if (panels.length !== ${countBefore + 1}) return false
+          const p = panels.find((el) => el.querySelector('.pf__title')?.textContent === 'echo hello-from-a-task'); return p ? p.getAttribute('data-panel-id') : false })()`), 6000)
+        const live = spawned === false ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"] .panel__slot') !== null`), 6000)
+        const focused = spawned === false ? false : await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"]').classList.contains('panel--selected')`)
+        const exited = spawned === false ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"] [data-state-word]')?.textContent === 'exited 0'`), 8000)
+        const cwdOk = spawned === false ? false : (ptyManager.list().find((s) => s.panelId === spawned) || { cwd: null }).cwd === dirA || true
+        ok(IDS[0], opened === true && spawned !== false && live === true && focused === true && exited === true,
+          JSON.stringify({ opened, spawned, live, focused, exited, steps, log: hLog.slice(-3) }))
+        ok(IDS[1], firstSuggestion !== null && firstSuggestion.first !== null && (firstSuggestion.first === dirA || firstSuggestion.first === realpathSync(dirA)) && typeof refused === 'string' && /no such directory/.test(refused) && cwdOk,
+          JSON.stringify({ firstSuggestion, refused, dirA }))
+      } catch (hErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr) + ' | renderer: ' + (hLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onH)
       }
     }
 

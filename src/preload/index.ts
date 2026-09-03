@@ -5,6 +5,7 @@ import {
   type CanvasBridge,
   type PresetTemplate,
   type CapturedPanel,
+  type SpawnRequest,
   type FileReadRequest, type ToolboxReadRequest, type ToolboxPermissionsRequest,
   type FileWriteRequest,
   type FileCreateRequest,
@@ -110,6 +111,11 @@ const bridge: CanvasBridge = {
   },
   ledger: {
     list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit)
+  },
+  spawn: {
+    sheet: (req: SpawnRequest) => ipcRenderer.invoke(IPC.SPAWN_SHEET, req),
+    recent: () => ipcRenderer.invoke(IPC.SPAWN_RECENT),
+    onOpenSheet: (listener) => subscribe<void>(IPC_EVENTS.SPAWN_OPEN_SHEET, () => listener())
   },
   links: {
     open: (req: { panelId: string; target: string }) => ipcRenderer.invoke(IPC.LINK_OPEN, req)

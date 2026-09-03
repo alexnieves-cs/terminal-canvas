@@ -1,4 +1,5 @@
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { SpawnSheet, type SpawnSheetModel } from './SpawnSheet'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import {
   Fragment,
@@ -72,7 +73,12 @@ export interface InputMode {
    * masked, so there is nothing to correct by reading, and re-seeding only
    * extends how long the plaintext lives in renderer state for no benefit.
    */
-  kind: 'text' | 'confirm' | 'number' | 'secret'
+  /**
+   * M65. 'sheet' renders SpawnSheet in place of the bar and the list: a form
+   * with several fields rather than one input. `submit` is unused for it —
+   * the sheet submits through its own model — and `label` is its heading.
+   */
+  kind: 'text' | 'confirm' | 'number' | 'secret' | 'sheet'
   label: string
   initial: string
   submit(value: string): void
@@ -90,6 +96,8 @@ export interface InputMode {
    * because it holds the CURRENT value, not a rejected one.
    */
   feedback?: true
+  /** M65. Present when kind is 'sheet'. */
+  sheet?: SpawnSheetModel
 }
 
 export interface PaletteProps {
@@ -502,6 +510,7 @@ export function Palette(props: PaletteProps): JSX.Element {
   }, [inputMode])
 
   const confirming = inputMode?.kind === 'confirm'
+  const sheet = inputMode?.kind === 'sheet' ? inputMode.sheet ?? null : null
   const footer = inputMode
     ? confirming
       ? '↵ confirm · esc cancel'
@@ -540,7 +549,11 @@ export function Palette(props: PaletteProps): JSX.Element {
           to one preset. Rendering the bar anyway left the scope chip stranded
           above a border with an empty field beside it, which reads as a
           half-drawn overlay rather than as a question. */}
-      {confirming ? (
+      {sheet !== null ? (
+        // M65. The sheet owns the keyboard the way the input does: its first
+        // field takes focus on mount, so the ghost input is not needed.
+        <SpawnSheet model={sheet} onDone={() => controller.closePalette()} onCancel={() => controller.closePalette()} />
+      ) : confirming ? (
         <input
           ref={inputRef}
           // Kept in the document, invisible, because it is what holds DOM
@@ -701,7 +714,9 @@ export function Palette(props: PaletteProps): JSX.Element {
         </ul>
       )}
 
-      <div className="palette__footer">{footer}</div>
+      {/* M65. The sheet carries its own keys line; the overlay's footer would
+          say "save · cancel" under a form whose verb is "start". */}
+      {sheet === null && <div className="palette__footer">{footer}</div>}
     </div>
   )
 }

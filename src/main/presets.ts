@@ -260,6 +260,8 @@ export function presetRows(entries: PresetAvailability[], defaultId: string): Pr
     // "the user's login shell" spelled out, because only main can resolve an
     // absent command and the renderer must not guess (it would get zsh).
     subtitle: `${preset.command ?? 'login shell'} — ${preset.cwd}`,
+    cwd: preset.cwd,
+    ...(preset.agent !== undefined ? { agent: preset.agent } : {}),
     // M37. Absent stays absent, so the palette's toggle row can say "off"
     // for a preset that never asked and "on" for one that did.
     ...(preset.worktree !== undefined ? { worktree: preset.worktree } : {})

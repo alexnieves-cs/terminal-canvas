@@ -3044,6 +3044,34 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ absent: ws.bookmarks, absentWarnings: absent.warnings, kept, warnings: mixed.warnings }))
 }
 
+// M65 — recent.1. RECENT DIRECTORIES: main records every spawn's cwd, the
+//     spawn sheet offers them. Absent is every file written before M65 and
+//     must warn nothing; a non-array warns and is dropped; a non-string entry
+//     costs that entry; the list is deduplicated, most recent first, capped at
+//     twelve — a spawn sheet with a scrolling list of forty temp directories
+//     is the failure the cap exists for.
+{
+  const parse = typeof L.parseRecentDirectories === 'function' ? L.parseRecentDirectories : () => undefined
+  const w1 = [], w2 = [], w3 = []
+  const absent = parse(undefined, w1)
+  const bad = parse('nope', w2)
+  const mixed = parse(['/a', 42, '/b', '/a', '', '/c', '/d', '/e', '/f', '/g', '/h', '/i', '/j', '/k', '/l', '/m'], w3)
+  ok('recent.1 absent recent directories parse as [] silently; malformed entries are dropped with a warning; deduplicated and capped at twelve',
+    Array.isArray(absent) && absent.length === 0 && w1.length === 0 &&
+      Array.isArray(bad) && bad.length === 0 && w2.length === 1 &&
+      Array.isArray(mixed) && mixed.length === 12 && mixed[0] === '/a' && mixed[1] === '/b' && !mixed.includes('') && w3.length >= 2,
+    JSON.stringify({ absent, w1, bad, w2, mixed, w3 }))
+  const store = L.createLayoutStore ? L.createLayoutStore({ filePath: require('node:path').join(require('node:os').tmpdir(), `tc-recent-${Date.now()}.json`) }) : null
+  if (store && typeof store.addRecentDirectory === 'function') {
+    store.load()
+    for (const d of ['/one', '/two', '/one', '/three']) store.addRecentDirectory(d)
+    const list = store.recentDirectories()
+    ok('recent.2 addRecentDirectory puts the newest first and keeps one copy of a repeat', JSON.stringify(list) === JSON.stringify(['/three', '/one', '/two']), JSON.stringify(list))
+  } else {
+    ok('recent.2 addRecentDirectory puts the newest first and keeps one copy of a repeat', false, 'store has no addRecentDirectory')
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

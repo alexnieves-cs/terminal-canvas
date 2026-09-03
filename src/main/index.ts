@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chm
 import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
-import { PtyManager, resolveCwd } from './pty-manager'
+import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
@@ -44,7 +44,7 @@ import {
   templateOf
 } from './presets'
 import { mergePrompts, readProjectPrompts } from './prompts'
-import type { CapturedPanel } from '../shared/ipc-contract'
+import type { CapturedPanel, PresetTemplate } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
 /** M48. When the startup probe ran; the report says so, since it never re-runs. */
@@ -390,6 +390,8 @@ function rebuildMenu(): void {
     },
     presets: resolveAvailability(allPresets(layoutStore.presets()), which),
     onSpawnPreset,
+    // M65. The sheet is the renderer's; the menu only asks for it.
+    onOpenSheet: () => { mainWindow?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
     }
@@ -739,6 +741,36 @@ app.whenReady().then(async () => {
       spawn: (id) => {
         onSpawnPreset(id)
       },
+      spawnWith: (req) => {
+        // The directory is checked HERE, before any template exists: a panel
+        // spawned into a directory that is not there dies with a spawn error
+        // the user reads as the app's, and the sheet can show a reason.
+        // expandTilde, NOT resolveCwd: resolveCwd falls back to the home
+        // directory when the path is missing, which is right for a restored
+        // panel and exactly wrong here — a typo would spawn at ~ and say so
+        // nowhere (the first check run spawned two panels there).
+        const cwd = expandTilde(req.cwd)
+        if (!existsSync(cwd)) return { kind: 'refused', reason: `no such directory: ${req.cwd}` }
+        let template: PresetTemplate
+        if (req.command !== undefined && req.command.trim() !== '') {
+          // A one-off task: the login shell runs the command and the panel is
+          // titled with it. `-l` so the user's PATH applies, as it would in a
+          // terminal they typed it into.
+          template = { cwd, command: '/bin/sh', args: ['-lc', req.command.trim()], title: req.title?.trim() || req.command.trim(), focus: true }
+        } else {
+          const found = allPresets(layoutStore.presets()).find((p) => p.id === req.presetId)
+          if (!found) return { kind: 'refused', reason: 'that preset no longer exists' }
+          // templateOf keeps an absent command absent; the sheet only ever
+          // overrides the directory, the agent options and the title.
+          template = { ...templateOf(found), cwd, focus: true }
+          if (req.agentOptions !== undefined && template.agent !== undefined) template.agentOptions = { ...(template.agentOptions ?? {}), ...req.agentOptions }
+          if (req.worktree !== undefined) template.worktree = req.worktree
+          if (req.title !== undefined && req.title.trim() !== '') template.title = req.title.trim()
+        }
+        mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, template)
+        return { kind: 'spawned' }
+      },
+      recentDirectories: () => layoutStore.recentDirectories(),
       savePanel: (captured) => {
         layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
         rebuildMenu()

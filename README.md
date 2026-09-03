@@ -341,11 +341,12 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        diagnostics:sample / diagnostics:export
                        export:panel-text / export:canvas-png
                        env:report / link:open / ledger:list
+                       spawn:sheet / spawn:recent
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
-                       settings:changed
+                       settings:changed / spawn:open-sheet
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -794,6 +795,7 @@ price of not killing something.
 | M62 | The design brief and the 1.x scope decision — documents only | ✅ done |
 | M63 | The state vocabulary: one word and one tone per panel, the state edge, iris selection | ✅ done |
 | M64 | Finding a panel: rows lead with the name, `state:` queries, contiguous path matching, the empty search names its term | ✅ done |
+| M65 | Starting a panel: the spawn sheet (where, what, how), one-off task panels, recent directories, the launcher as a panel | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

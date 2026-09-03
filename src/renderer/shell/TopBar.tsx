@@ -5,7 +5,8 @@ import { Gear, Layers, PanelRight, Search } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
-  onSpawnPreset: (id: string) => void
+  /** M65. The button opens the spawn sheet; ⌘N (the menu's accelerator) stays the instant default. */
+  onOpenSheet: () => void
   onSearch: () => void
   onSettings: () => void
   /** Whether M14's merged view is currently showing. */
@@ -35,7 +36,7 @@ export interface TopBarProps {
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, onSpawnPreset, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext
+  presets, onOpenSheet, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -60,11 +61,13 @@ export function TopBar({
       <button
         type="button"
         className="shell__spawn"
-        disabled={preferred === undefined}
-        title={preferred ? `New ${preferred.name} panel (⌘N)` : 'No preset is available'}
-        {...shellControl(() => { if (preferred) onSpawnPreset(preferred.id) })}
+        // M65. The button is the considered door (the sheet); ⌘N — the menu's
+        // accelerator — stays the instant default. Never disabled: the sheet
+        // can always take a typed command.
+        title={preferred ? `New panel… (⌘⇧N) — ⌘N starts ${preferred.name} at once` : 'New panel… (⌘⇧N)'}
+        {...shellControl(onOpenSheet)}
       >
-        New panel <kbd>⌘N</kbd>
+        New panel… <kbd>⌘⇧N</kbd>
       </button>
 
       {/* M46: the zoom cluster moved to the canvas HUD — a VIEW control

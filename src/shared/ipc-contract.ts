@@ -402,7 +402,16 @@ export const IPC = {
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
   LINK_OPEN: 'link:open',
   /** M52. A panel's recent runs from the ledger, newest first. */
-  LEDGER_LIST: 'ledger:list'
+  LEDGER_LIST: 'ledger:list',
+  /**
+   * M65. The spawn sheet: main resolves a preset (absent command included)
+   * or a typed command into a template, refuses a directory that does not
+   * exist, and sends PRESET_SPAWN — the same path the menu takes — so a
+   * sheet spawn and a menu spawn cannot drift. `spawn:recent` is the last
+   * twelve spawn directories main recorded, for the sheet's suggestions.
+   */
+  SPAWN_SHEET: 'spawn:sheet',
+  SPAWN_RECENT: 'spawn:recent'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -476,6 +485,8 @@ export const IPC_EVENTS = {
    * wants to skip an unrelated write.
    */
   SETTINGS_CHANGED: 'settings:changed',
+  /** M65. The menu's ⌘⇧N: open the spawn sheet. An event, not an invoke, like every menu verb. */
+  SPAWN_OPEN_SHEET: 'spawn:open-sheet',
   /**
    * Where a panel is and what it is running, pushed when either CHANGES.
    *
@@ -681,7 +692,24 @@ export interface PresetTemplate {
   agentOptions?: AgentOptions
   /** M37. Spawn in a fresh git worktree. Absent means no; see PanelSpec.worktree. */
   worktree?: boolean
+  /** M65. A title the sheet chose (a typed task's command, or the user's word). Absent otherwise. */
+  title?: string
+  /** M65. Focus the new panel: a sheet spawn is a user-initiated one, and focus is what promotes it live. */
+  focus?: true
 }
+
+/** M65. What the spawn sheet submits. Exactly one of presetId / command. */
+export interface SpawnRequest {
+  presetId?: string
+  /** A one-off task, run as `/bin/sh -lc <command>` and titled with itself. */
+  command?: string
+  /** UNEXPANDED: main expands `~` and refuses a directory that does not exist. */
+  cwd: string
+  title?: string
+  agentOptions?: AgentOptions
+  worktree?: boolean
+}
+export type SpawnResult = { kind: 'spawned' } | { kind: 'refused'; reason: string }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
 export interface CapturedPanel {
@@ -794,6 +822,10 @@ export interface PresetListRow {
   subtitle: string
   /** M37. Spawns in a fresh worktree. Absent means no. */
   worktree?: boolean
+  /** M65. The preset's agent kind, so the spawn sheet shows mode/effort/model only for one. Absent for a shell. */
+  agent?: AgentKind
+  /** M65. The preset's own directory, the sheet's default `where` when no panel is focused. */
+  cwd: string
 }
 
 /**
@@ -943,6 +975,14 @@ export interface CanvasBridge {
   ledger: {
     /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
     list(panelId: string, limit: number): Promise<RunRow[]>
+  }
+  spawn: {
+    /** M65. See SPAWN_SHEET. Refuses with a reason rather than spawning into a directory that is not there. */
+    sheet(req: SpawnRequest): Promise<SpawnResult>
+    /** M65. The last twelve spawn directories, newest first. */
+    recent(): Promise<string[]>
+    /** M65. The menu's ⌘⇧N. */
+    onOpenSheet(listener: () => void): () => void
   }
   links: {
     /** M51. The text the terminal underlined and the panel it came from; main resolves and opens, or refuses with a reason. */

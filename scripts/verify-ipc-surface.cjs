@@ -205,7 +205,10 @@ app.whenReady().then(() => {
   // 61 = 60 plus M51's link:open, an optional trailing parameter with an
   // inert default like env:report before it.
   // 62 = 61 plus M52's ledger:list, inert by default like link:open.
-  const EXPECTED_CHANNELS = 65
+  // 67 = 65 plus M65's spawn:sheet and spawn:recent — the spawn sheet's
+  // request (main resolves the template, refuses a missing directory) and
+  // the recent-directories read.
+  const EXPECTED_CHANNELS = 67
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
