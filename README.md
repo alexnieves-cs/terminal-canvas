@@ -823,6 +823,7 @@ price of not killing something.
 | M69 | The overview: summary and block tiers for every kind, and the minimap — every panel a block in its tone, the camera a rectangle, click or drag to move | ✅ done |
 | M70 | Ship 1.1.0: the version, the README's pictures in words, CLAUDE.md and `docs/load-bearing.md` reconciled, the manual-only list re-read, both packaging gates run with numbers, the graph refreshed | ✅ done |
 | M71 | The agent-session runtime: a main-process conversation with the installed `claude` in headless mode — transcript schema, streaming deltas, interrupt, permission requests, resume — over an injected process runner; no UI by design | ✅ done |
+| M72 | The two documents: the 2.0 product thesis and design brief (extending the 1.x brief), and the M71–M95 scope decision with every backlog entry decided and the web panel declined | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
