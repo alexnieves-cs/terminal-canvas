@@ -3234,7 +3234,7 @@ body {
 .sheet__suggestions { position: absolute; left: calc(5em + var(--sp-5)); right: 0; top: 100%; margin: var(--sp-1) 0 0; padding: var(--sp-2) 0; list-style: none; background: var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--e-3); z-index: 2; max-height: 200px; overflow: auto; }
 .sheet__suggestion { display: flex; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); cursor: pointer; }
 .sheet__suggestion--on { background: var(--s-5); color: var(--fg); }
-.sheet__suggestion-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.sheet__suggestion-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet__suggestion-why { flex: none; color: var(--iris); font-family: var(--font-ui); font-size: var(--t-xs); }
 .sheet__foot { display: flex; align-items: baseline; gap: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); }
 .sheet__preview { flex: 1; min-width: 0; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

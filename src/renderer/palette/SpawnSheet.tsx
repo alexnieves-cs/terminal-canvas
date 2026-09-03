@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as R
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { buildSpawnRequest, directorySuggestions, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { shortPath } from './panel-name'
 
 /**
  * M65. THE SPAWN SHEET — where, what, how, in the palette's overlay.
@@ -152,7 +153,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
               <li key={dir} role="option" aria-selected={i === highlight}
                 className={`sheet__suggestion${i === highlight ? ' sheet__suggestion--on' : ''}${dir === model.focusedCwd ? ' sheet__suggestion--focused' : ''}`}
                 onMouseDown={(e) => { e.preventDefault(); setCwd(dir); setCwdTouched(true); setShowSuggestions(false); setHighlight(-1) }}>
-                <span className="sheet__suggestion-path">{dir}</span>
+                <span className="sheet__suggestion-path" title={dir}>{shortPath(dir, 3)}</span>
                 {dir === model.focusedCwd && <span className="sheet__suggestion-why">focused panel</span>}
               </li>
             ))}
