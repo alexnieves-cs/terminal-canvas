@@ -5,8 +5,9 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import { JiraTicket } from '@renderer/jira/JiraTicket'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
+import { shellControl } from '@renderer/shell/shell-control'
 
-export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string, additive?: boolean): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void; focusedId: string | null; restoreFocus(id: string): void; readOnly?: boolean; onBeginLink(panelId: string, event: ReactMouseEvent): void; linkTarget: boolean }): JSX.Element {
+export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string, additive?: boolean): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void; focusedId: string | null; restoreFocus(id: string): void; readOnly?: boolean; onBeginLink(panelId: string, event: ReactMouseEvent): void; linkTarget: boolean; onConnect(): void }): JSX.Element {
   const { panel } = props
   const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.jira.list>> | null>(null)
   const load = (): void => { void window.canvas.jira.list().then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'Jira could not be reached.' })) }
@@ -33,7 +34,21 @@ export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(
         key={item.id} item={item}
         focusedId={props.focusedId} restoreFocus={props.restoreFocus}
         onSpawn={props.onSpawn} onWritten={load}
-      />) : <p className="pf__note jira-node__note">{result.reason}</p>}
+      />) : (
+        <>
+          <p className="pf__note jira-node__note">{result.reason}</p>
+          {/* M68. The verb the note pointed at and did not offer: the dead-end
+              audit's Jira row. Opens the palette's Credentials scope — the
+              same door the palette's own row uses, so there is one path. */}
+          {result.kind === 'no-credential' && (
+            <button type="button" className="jira-node__connect" data-jira-connect
+              title="Add a Jira credential (opens the palette's Credentials scope)"
+              {...shellControl(props.onConnect)}>
+              Connect Jira…
+            </button>
+          )}
+        </>
+      )}
     </div>
     </PanelFrame>
   )

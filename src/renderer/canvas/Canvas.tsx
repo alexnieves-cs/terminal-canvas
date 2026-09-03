@@ -3074,6 +3074,8 @@ export function Canvas({
    * with no settings visible at all, which reads as a feature that was never
    * built.
    */
+  // M68. The Jira panel's Connect verb: the palette's Credentials scope.
+  const openCredentials = useCallback(() => palette.openPalette('credentials'), [palette.openPalette])
   const openSettingsScope = useCallback(() => {
     palette.openPalette('settings')
     // A useCallback for consistency with its sibling verbs, not for a
@@ -3122,7 +3124,10 @@ export function Canvas({
     toolboxModel, reviewModel, inspectorSummary, hasSelection
   } = useInspectorDetail({
     registry, palette, panels, selectedId, selectedPanel,
-    selectedIsSessionless, waitingIds
+    selectedIsSessionless, waitingIds,
+    // M68. Read from the registry, whose version() this component already
+    // re-renders on for status changes — so the flip is seen without a store.
+    selectedSpawned: selectedId !== null && registry.get(selectedId)?.status.kind === 'running'
   })
 
   return (
@@ -3186,6 +3191,9 @@ export function Canvas({
         onClosePanel={paletteActions.closePanel}
         treeRootPath={treeRoot}
         treeRootLabel={treeRootLabel}
+        // M68. The rail's own label for the panel (the honest chain, the user's title first), never the internal panelLabel.
+        treeRootPanel={selectedId === null ? null : (railRows.find((r) => r.id === selectedId)?.label ?? null)}
+        onToggleMerged={paletteActions.toggleMerged}
         treeRows={treeRows}
         treeRootPending={treeRootPending}
         // M48 (spec §5). Which panel, and why there is nothing to list.
@@ -3341,7 +3349,7 @@ export function Canvas({
                 />
               )
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

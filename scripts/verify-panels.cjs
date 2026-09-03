@@ -6332,12 +6332,13 @@ app.whenReady().then(async () => {
       const read = await wc.executeJavaScript(`(() => {
         const f = (k) => document.querySelector('[data-inspector-field="' + k + '"] .inspector__value')
         const g = (k) => { const el = f(k); return el ? el.textContent : null }
-        return { command: g('command'), spec: g('spec-command'), cwd: g('cwd'), pid: g('pid') }
+        // M68: the pid is the pinned header's, not a field's — the field is filtered out.
+        return { command: g('command'), spec: g('spec-command'), cwd: g('cwd'), pid: (document.querySelector('.inspector__pid')?.textContent ?? '').replace('pid', '').trim() || null, pidField: g('pid') }
       })()`)
-      ok('87 the inspector shows the RESOLVED command and the spec link separately',
+      ok('87 the inspector shows the RESOLVED command and the spec link separately, and the pid once (in the header)',
         read.command !== null && read.command.startsWith('/') &&
           read.spec !== null && read.spec !== read.command &&
-          read.pid === String(sessions.get(targetId)),
+          read.pid === String(sessions.get(targetId)) && read.pidField === null,
         JSON.stringify(read) + ` expected pid ${sessions.get(targetId)}`)
     }
 
@@ -7518,7 +7519,7 @@ app.whenReady().then(async () => {
         return text ? text : false
       }, 5000)
       ok('101 two panels in one repo are reported as unattributable',
-        typeof note === 'string' && note.includes("can't be attributed"), `note=${note}`)
+        typeof note === 'string' && note.includes('cannot be attributed'), `note=${note}`)
 
 
       /* A review node is seeded through DISK + RELOAD rather than through a
@@ -13398,8 +13399,11 @@ app.whenReady().then(async () => {
             wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 })
             wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 })
           }
+          // M68: a path field is left-truncated on screen and carries the
+          // whole path in its title — read that, since the check needs the
+          // path on disk, not what a 260px column shows.
           const read = (k) => wc.executeJavaScript(
-            `(() => { const el = document.querySelector('[data-inspector-field="${k}"] .inspector__value'); return el ? el.textContent : null })()`)
+            `(() => { const el = document.querySelector('[data-inspector-field="${k}"] .inspector__value'); return el ? (el.getAttribute('title') || el.textContent) : null })()`)
           branch = await waitUntil(async () => { const v = await read('worktree'); return v && v.startsWith('tc/') ? v : false }, 6000)
           path = await read('worktree-path')
           rawField = await read('worktree')
@@ -15564,6 +15568,93 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onL)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M68 — context.2 / context.3 / context.4. THE CONTEXT PANE FINISHED.
+    // Work shows three headings each with a first-arm line for a plain shell
+    // in a non-repository (context.2); the Jira panel's no-credential note
+    // offers a Connect verb that opens the palette's Credentials scope
+    // (context.3); the Files pane names its root panel and the Workspaces
+    // pane's merged row toggles the merged view and reads pressed (context.4).
+    // -------------------------------------------------------------------
+    {
+      const cLog = []
+      const onC = (_e, level, message) => { if (level >= 2) cLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onC)
+      const IDS = [
+        'context.2 the Work tab renders Changes, Runs and Cost with a first-arm line each for a plain shell outside a repository',
+        'context.3 the Jira panel with no credential offers Connect Jira…, which opens the palette in its Credentials scope',
+        'context.4 the Files pane names the panel its root belongs to, and the Workspaces pane\'s merged row toggles the merged view'
+      ]
+      try {
+        const { mkdtempSync } = require('node:fs')
+        const plainDir = mkdtempSync(join(tmpdir(), 'tc panels plain-'))
+        layoutStore.save({
+          panels: fromPanels([
+            { kind: 'terminal', rect: { id: 'cxA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'cxA', cwd: plainDir, command: '/bin/cat', args: [] }, title: 'plain shell' },
+            { kind: 'jira', rect: { id: 'cxJ', x: 520, y: 60, w: 320, h: 220 }, z: 2 }
+          ]),
+          groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reC
+        await settle()
+        // Wake and select the shell, open the context pane on Work.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="cxA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="cxA"] .panel__slot') !== null`), 6000)
+        // Spawned, not merely promoted: the Changes query answers "no session
+        // yet" for a panel whose PTY has not arrived, and that is a true arm
+        // of a different question than this check asks.
+        await waitUntil(async () => ptyManager.list().some((s) => s.panelId === 'cxA'), 6000)
+        await settle()
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="cxA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const open = document.querySelector('.shell__inspector')?.getBoundingClientRect().width > 0; if (!open) document.querySelector('.shell__inspector-toggle')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
+        let work = null
+        for (let i = 0; i < 60; i++) {
+          work = await wc.executeJavaScript(`(() => { const arm = (k) => document.querySelector('[data-work-arm="' + k + '"]')?.textContent ?? null
+            const heads = [...document.querySelectorAll('[data-context-panel="work"] .inspector__section-heading')].map((h) => h.textContent)
+            return { heads, changes: arm('changes'), runs: arm('runs'), cost: arm('cost'), heading: document.querySelector('[data-inspector-heading]')?.textContent ?? null, tab: document.querySelector('.context__tab--on')?.textContent ?? null, summary: document.querySelector('[data-review-summary]')?.textContent ?? null } })()`)
+          if (work && work.changes !== null && work.runs !== null && work.cost !== null) break
+          await sleep(100)
+        }
+        ok(IDS[0], work !== null && work.changes !== null && work.runs !== null && work.cost !== null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Runs', 'Cost']) && /not a repository/.test(work.changes) && work.runs === 'no runs yet' && /no agent on this panel/.test(work.cost),
+          JSON.stringify({ work, log: cLog.slice(-3) }))
+
+        // The Jira panel: the verb, then the scope it opens.
+        const connect = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="cxJ"] [data-jira-connect]'); return b ? b.textContent.trim() : false })()`), 6000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="cxJ"] [data-jira-connect]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        const scope = await wc.executeJavaScript(`(() => ({ open: document.querySelector('.palette') !== null, scope: document.querySelector('.palette__scope')?.textContent ?? null }))()`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+        await settle()
+        ok(IDS[1], connect === 'Connect Jira…' && scope.open === true && scope.scope === 'Credentials', JSON.stringify({ connect, scope, log: cLog.slice(-3) }))
+
+        // Files names its panel; Workspaces has the door.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="files"]') || document.querySelector('.dock__button[data-navigator="files"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const files = await wc.executeJavaScript(`(() => ({ root: document.querySelector('.shell__tree-root')?.textContent ?? null, panel: document.querySelector('[data-tree-panel]')?.textContent ?? null }))()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]') || document.querySelector('.dock__button[data-navigator="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const doorBefore = await wc.executeJavaScript(`document.querySelector('[data-rail-merged] .rail-row__main')?.getAttribute('aria-pressed') ?? null`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-merged] .rail-row__main'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const doorOn = await wc.executeJavaScript(`(() => ({ pressed: document.querySelector('[data-rail-merged] .rail-row__main')?.getAttribute('aria-pressed') ?? null, merged: document.querySelector('.shell__merge--on') !== null }))()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-merged] .rail-row__main'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const doorOff = await wc.executeJavaScript(`document.querySelector('.shell__merge--on') !== null`)
+        ok(IDS[2], files.root !== null && files.panel !== null && /plain shell/.test(files.panel) && doorBefore === 'false' && doorOn.pressed === 'true' && doorOn.merged === true && doorOff === false,
+          JSON.stringify({ files, doorBefore, doorOn, doorOff, log: cLog.slice(-3) }))
+      } catch (cErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onC)
       }
     }
 

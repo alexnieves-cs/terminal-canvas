@@ -149,7 +149,10 @@ const SCENES = [
   { name: 'zoomed-out-dark', intent: 'The zoomed-out canvas on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.shot('zoomed-out-dark'); await k.theme('light'); await k.zoom(1) } },
   { name: 'compact', intent: 'The shell at its compact breakpoint (1000px wide): the navigator and context become drawers, the canvas keeps the width.', size: [1000, 760],
-    run: async (k) => { await k.context(true); await sleep(400); await k.shot('compact'); await k.context(false) } },
+    run: async (k) => { await k.context(true); await sleep(400)
+      if (process.env.SHOT_PROBE) console.log('PROBE compact', await k.js(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [s, Math.round(b.top), Math.round(b.bottom), Math.round(b.height), getComputedStyle(e).display, getComputedStyle(e).height] }
+        return JSON.stringify([r('.shell'), r('.shell__inspector'), r('.shell__inspector > *'), r('.context'), r('.context__header'), r('.context__tabs'), r('.context__body'), r('.inspector__actions'), r('.context__panel[data-context-panel="tools"]')]) })()`))
+      await k.shot('compact'); await k.context(false) } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
     run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } }
 ]

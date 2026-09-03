@@ -50,3 +50,4 @@ copy here is deleted.
 | [m65-starting.md](m65-starting.md) | M65 — Starting a panel | finished |
 | [m66-labels.md](m66-labels.md) | M66 — Every control says what it is | finished |
 | [m67-frame.md](m67-frame.md) | M67 — The frame, second pass | finished |
+| [m68-context.md](m68-context.md) | M68 — The context pane finished | finished |

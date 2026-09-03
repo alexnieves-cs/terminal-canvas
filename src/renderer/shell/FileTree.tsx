@@ -13,6 +13,8 @@ export interface FileTreeProps {
    *  since one field cannot be both a short label and a disambiguating full
    *  path. */
   rootLabel: string | null
+  /** M68. Whose directory this is — the selected panel's label. */
+  rootPanel?: string | null
   rows: FileRow[]
   /** True while the ROOT's own read is in flight — a selection change, or the
    *  refresh control, which clears every cached read including the root's.
@@ -48,7 +50,7 @@ export interface FileTreeProps {
  * mousemove whether or not this pane is up.
  */
 function FileTreeImpl({
-  onToggle, rootPath, rootLabel, rows, rootPending, emptyReason, onToggleDir, onInsertPath, onRefresh
+  onToggle, rootPath, rootLabel, rootPanel, rows, rootPending, emptyReason, onToggleDir, onInsertPath, onRefresh
 }: FileTreeProps): JSX.Element {
   return (
     <div className="shell__tree" aria-label="File tree" data-file-tree>
@@ -63,6 +65,10 @@ function FileTreeImpl({
         <span className="shell__tree-root" title={rootPath ?? undefined}>
           {rootLabel ?? 'Files'}
         </span>
+        {/* M68. Whose: a tree rooted on a panel the user did not click says so. */}
+        {rootLabel !== null && rootPanel != null && (
+          <span className="shell__tree-panel" data-tree-panel title={`the directory of ${rootPanel}`}>· {rootPanel}</span>
+        )}
         <span className="navigator__header-actions">
           <button
             type="button"

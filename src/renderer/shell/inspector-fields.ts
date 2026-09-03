@@ -2,7 +2,7 @@ import { agentWord, panelState, type StateInput } from '@renderer/panels/panel-s
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
-import type { ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
+import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type LinkAutomation } from '@shared/handoff'
 import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
@@ -814,7 +814,7 @@ export function buildReviewFields(result: ReviewResult | undefined): ReviewField
     return {
       hidden: false,
       summary: `${plural(result.files.length, 'file')} changed`,
-      note: `${result.panelCount} panels share this repo — changes can't be attributed`,
+      note: `${result.panelCount} panels share this repository, so changes cannot be attributed`,
       files: rows,
       more
     }
@@ -856,6 +856,13 @@ export interface ToolboxFieldModel {
   /** True when the section renders nothing at all. */
   hidden: boolean
   summary: string
+  /**
+   * M68. The permissions line under the heading: absent while reading and
+   * for a hidden model, `no permission rules in this directory` when the
+   * inventory has no settings files with rules, else the counts by bucket
+   * across the files that carry them.
+   */
+  permissions?: string
   /** The honest arms' explanation. Absent when there is nothing to explain. */
   note?: string
   rows: ToolboxFieldRow[]
@@ -903,6 +910,15 @@ function activeLabel(active: ToolActive): string {
  *
  * Collapsing any two of those is a wrong answer rather than a simplification.
  */
+/** M68. One line for the permission rules, by bucket, across the files that carry any. */
+export function permissionsLine(counts: readonly PermissionCounts[]): string {
+  const carrying = counts.filter((c) => c.allow + c.deny + c.ask > 0)
+  if (carrying.length === 0) return 'no permission rules in this directory'
+  const sum = (k: 'allow' | 'deny' | 'ask'): number => carrying.reduce((n, c) => n + c[k], 0)
+  const parts = (['allow', 'deny', 'ask'] as const).map((k) => [k, sum(k)] as const).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`)
+  return `${parts.join(' · ')} in ${carrying.length} file${carrying.length === 1 ? '' : 's'}`
+}
+
 export function buildToolboxFields(result: ToolInventoryResult | undefined): ToolboxFieldModel {
   // undefined is "the query has not answered yet" — every selection change,
   // and every panel before the first read.
@@ -943,6 +959,7 @@ export function buildToolboxFields(result: ToolInventoryResult | undefined): Too
   return {
     hidden: false,
     summary: summary === '' ? 'nothing installed for this directory' : summary,
+    permissions: permissionsLine(inv.permissions),
     // Reported rather than silently dropped, the +N more rule REVIEW_FILE_CAP
     // already states.
     ...(broken.length > 0
@@ -965,4 +982,26 @@ export function toolboxSignature(model: ToolboxFieldModel | null): string {
 
 export function reviewSignature(model: ReviewFieldModel | null): string {
   return JSON.stringify(model)
+}
+
+/**
+ * M68. THE DETAIL TAB REPEATS NOTHING. The pinned header shows the pid, so
+ * the list does not; `asked for` earns its row only when it differs from the
+ * resolved command — an ABSENT spec always differs (main chose the login
+ * shell, and check 21's question needs both halves on screen), while a spec
+ * that resolved to itself says nothing twice. Pure and ordered, on the model's
+ * own field list, so the view has exactly one rule.
+ */
+export function visibleDetailFields(fields: readonly InspectorField[]): InspectorField[] {
+  const command = fields.find((f) => f.key === 'command')?.value
+  const spec = fields.find((f) => f.key === 'spec-command')?.value
+  const agree = command !== undefined && spec !== undefined && spec === command
+  return fields.flatMap((f) => {
+    if (f.key === 'pid') return []
+    if (f.key === 'spec-command') return agree ? [] : [f]
+    // The collapsed row SAYS it collapsed: a single `command` row cannot be
+    // told from an `asked for` row that was never built (M68's critic).
+    if (f.key === 'command' && agree) return [{ ...f, label: 'command · as asked' }]
+    return [f]
+  })
 }

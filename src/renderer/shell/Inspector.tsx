@@ -1,7 +1,8 @@
 import { memo, useEffect, useState, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import { agentStateLabel, handoffControl, KIND_NOUN } from './inspector-fields'
+import { agentStateLabel, handoffControl, KIND_NOUN, visibleDetailFields } from './inspector-fields'
+import { shortPath } from '@renderer/palette/panel-name'
 import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
 import type { LinkAutomation } from '@shared/handoff'
@@ -16,6 +17,8 @@ import type { RunRow } from '@shared/run-ledger'
  * same glyphs. By KEY rather than a flag on InspectorField: the model is what
  * verify:rail asserts on, and a presentation choice does not belong in it.
  */
+/** M68. Fields whose value is a path: shown left-truncated, full on hover. */
+const PATH_FIELDS = new Set(['cwd', 'live-cwd', 'worktree-path', 'repo', 'directory', 'toolbox-cwd'])
 const MONO_FIELDS = new Set(['command', 'spec-command', 'cwd', 'live-cwd', 'live-command', 'worktree-path', 'pid', 'repo', 'file', 'directory', 'toolbox-cwd'])
 
 export interface AutomationRow {
@@ -149,7 +152,15 @@ function RunsSection({ panelId, active }: { panelId: string; active: boolean }):
     void window.canvas.ledger.list(panelId, 20).then((r) => { if (live) setRows(r) }).catch(() => {})
     return () => { live = false }
   }, [panelId, active])
-  if (rows.length === 0) return null
+  // M68. The empty arm is a line, not an absent heading.
+  if (rows.length === 0) {
+    return (
+      <section className="inspector__section" data-work-section="runs">
+        <h3 className="inspector__section-heading">Runs</h3>
+        <p className="inspector__arm" data-work-arm="runs">no runs yet</p>
+      </section>
+    )
+  }
   return (
     <section className="inspector__section" data-runs-section>
       <h3 className="inspector__section-heading">Runs</h3>
@@ -343,10 +354,14 @@ function InspectorPanel({
       <div className="inspector__body context__body">
       <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
       <dl className="inspector__fields">
-        {model.fields.map((field) => (
+        {/* M68. Through the one filter: no pid (the header has it), no
+            `asked for` that only repeats `command`. */}
+        {visibleDetailFields(model.fields).map((field) => (
           <div className="inspector__field" key={field.key} data-inspector-field={field.key}>
             <dt className="inspector__label">{field.label}</dt>
-            <dd className={`inspector__value${MONO_FIELDS.has(field.key) ? ' inspector__value--mono' : ''}`}>{field.value}</dd>
+            {/* M68. A path is left-truncated so its last segments survive the
+                260px column, with the whole path on hover (brief, principle 3). */}
+            <dd className={`inspector__value${MONO_FIELDS.has(field.key) ? ' inspector__value--mono' : ''}`} title={PATH_FIELDS.has(field.key) ? field.value : undefined}>{PATH_FIELDS.has(field.key) ? shortPath(field.value, 3) : field.value}</dd>
           </div>
         ))}
       </dl>
@@ -439,6 +454,25 @@ function InspectorPanel({
       )}
       </section>
       <section className="context__panel" data-context-panel="work" role="tabpanel" hidden={tab !== 'work'}>
+      {/* M68. EVERY section renders, each with its first arm as a line: three
+          absent headings read as a broken tab (brief, principle 7), where a
+          heading whose line says WHY there is nothing is an answer. The
+          earlier rule — hide Changes for not-a-repo so a placeholder does
+          not teach the user to skip the tab — is overruled by that, and by
+          the line saying what would change the answer. */}
+      {(review === null || review.hidden) && (
+        <section className="inspector__section" data-work-section="changes">
+          <h3 className="inspector__section-heading">Changes</h3>
+          <p className="inspector__arm" data-work-arm="changes">
+            {model.kind === 'review' ? 'a review node reports its own changes in its body'
+              : model.kind !== 'terminal' ? `${KIND_NOUN[model.kind]} changes nothing`
+              /* null is asked-and-unanswered; hidden is answered not-a-repo.
+                 Two arms, two lines (M68's verifier caught them as one). */
+              : review === null ? 'reading…'
+              : 'this directory is not a repository'}
+          </p>
+        </section>
+      )}
       {review !== null && !review.hidden && (
         /*
           `hidden` (not-a-repo, or the invoke hasn't resolved yet) renders
@@ -489,14 +523,27 @@ function InspectorPanel({
           {review.more > 0 && <p className="inspector__review-more">+{review.more} more</p>}
         </section>
       )}
-      {!model.usage.hidden && (
+      {/* Runs before Cost: what it did, then what it cost (spec order). */}
+      {model.kind === 'terminal' ? <RunsSection panelId={model.id} active={tab === 'work'} /> : (
+        <section className="inspector__section" data-work-section="runs">
+          <h3 className="inspector__section-heading">Runs</h3>
+          <p className="inspector__arm" data-work-arm="runs">{KIND_NOUN[model.kind]} runs nothing</p>
+        </section>
+      )}
+      {model.usage.hidden && (
         /*
-          `hidden` is a panel whose preset declared no agent — a login shell,
-          most panels — and it renders NOTHING, the same "$0.00 beside a
-          working agent is a confident wrong answer" rule the Changes section
-          above states for not-a-repo. Everything else (pinned) always renders
-          the section, even with nothing to show yet.
+          M68. `hidden` is a panel whose preset declared no agent — a login
+          shell, most panels. It used to render NOTHING; it now renders the
+          heading and the reason, which is still not a figure: "$0.00 beside
+          a working agent is a confident wrong answer" holds, and "no agent
+          pinned" is not a number.
         */
+        <section className="inspector__section" data-work-section="cost">
+          <h3 className="inspector__section-heading">Cost</h3>
+          <p className="inspector__arm" data-work-arm="cost">{model.kind === 'terminal' ? 'no agent on this panel — nothing to cost' : `${KIND_NOUN[model.kind]} costs nothing`}</p>
+        </section>
+      )}
+      {!model.usage.hidden && (
         <section className="inspector__section" data-usage-section>
           <h3 className="inspector__section-heading">Cost</h3>
           {model.usage.note !== undefined && (
@@ -533,14 +580,6 @@ function InspectorPanel({
           )}
         </section>
       )}
-      {model.kind === 'terminal' && <RunsSection panelId={model.id} active={tab === 'work'} />}
-      {(review === null || review.hidden) && model.usage.hidden && (
-        <p className="inspector__review-note" data-context-empty="work">
-          {model.kind === 'terminal'
-            ? 'No changes to show: this panel is not in a repository, and no agent is pinned for cost.'
-            : `${KIND_NOUN[model.kind]} does no work of its own to report.`}
-        </p>
-      )}
       </section>
       <section className="context__panel" data-context-panel="tools" role="tabpanel" hidden={tab !== 'tools'}>
       <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
@@ -548,6 +587,10 @@ function InspectorPanel({
         <section className="inspector__section">
           <h3 className="inspector__section-heading">Toolbox</h3>
           <p className="inspector__review-summary" data-toolbox-summary>{toolbox.summary}</p>
+          {/* M68. Commands AND permissions: the rules by bucket, one line. */}
+          {toolbox.permissions !== undefined && (
+            <p className="inspector__arm" data-toolbox-permissions>permissions: {toolbox.permissions}</p>
+          )}
           {toolbox.note !== undefined && (
             <p className="inspector__review-note" data-toolbox-note>{toolbox.note}</p>
           )}
