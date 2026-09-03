@@ -11,6 +11,8 @@ import { useKeyboardNav } from './useKeyboardNav'
 import { useHandoff } from './useHandoff'
 import { shellControl } from '../shell/shell-control'
 import { EdgeIndicators } from './EdgeIndicators'
+import { Minimap } from './MinimapOverlay'
+import { CardDetailContext } from '@renderer/components/card-detail-context'
 import { LinkLayer } from './LinkLayer'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
@@ -859,6 +861,10 @@ export function Canvas({
     // world underneath them. The rest of the HUD is pointer-events: none and
     // never becomes a target, so this rule fires only over the cluster.
     if (target?.closest?.('.canvas-hud')) return true
+
+    // M69. The minimap takes the pointer (its own mousedown says so); a wheel
+    // over it must not zoom the world under a thumb of the world.
+    if (target?.closest?.('.minimap')) return true
 
     // 2. A zoom gesture is otherwise always the camera's, never a terminal
     // scroll, regardless of what is under the cursor. Both spellings are
@@ -2298,11 +2304,22 @@ export function Canvas({
   // loaded only when the palette OPENS, so it cannot be the source — the pips
   // must know this whether or not the palette has ever been opened.
   const [pipsEnabled, setPipsEnabled] = useState(true)
+  // M69. The overview, read the same way.
+  const [minimapEnabled, setMinimapEnabled] = useState(true)
   useEffect(() => {
-    void window.canvas.settings.list().then((rows) => {
-      const row = rows.find((r) => r.id === 'agent.edgeIndicators')
-      if (row) setPipsEnabled(row.value === true)
-    })
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        const row = rows.find((r) => r.id === 'agent.edgeIndicators')
+        if (row) setPipsEnabled(row.value === true)
+        const mm = rows.find((r) => r.id === 'canvas.minimap')
+        if (mm) setMinimapEnabled(mm.value === true)
+      })
+    }
+    read()
+    // M69. And on settings:changed, the way the theme is: a toggle from the
+    // menu or the `tc` CLI must apply without a palette ever opening.
+    const off = window.canvas.settings.onChanged(read)
+    return off
   }, [settingRows])
 
   // M44: xterm's screen-reader mode, fanned across every session (live and
@@ -3235,8 +3252,11 @@ export function Canvas({
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
+        {/* M69. The far-view tier, provided once for every kind's frame. */}
+        <CardDetailContext.Provider value={cardDetail}>
         <div
           className="world"
+          data-detail={cardDetail}
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
           <GroupLayer
@@ -3396,8 +3416,15 @@ export function Canvas({
               outside assignTiers' input. */}
           <SubagentLayer panels={terminalPanels} />
         </div>
+        </CardDetailContext.Provider>
         {pipsEnabled && (
           <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p) }} />
+        )}
+        {/* M69. The overview: outside .world like the pips, in the top-right
+            corner, hidden while merged (the merged view's geometry is not this
+            canvas's) and by `canvas.minimap`. */}
+        {minimapEnabled && !merged && (
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view

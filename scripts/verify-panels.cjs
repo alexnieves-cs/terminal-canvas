@@ -4814,7 +4814,7 @@ app.whenReady().then(async () => {
           document.body.appendChild(probe)
           const want = getComputedStyle(probe).color
           probe.remove()
-          return { border: getComputedStyle(el).borderTopColor, want }
+          /* M69: the state hue is the LEFT EDGE only; selection is iris on the other sides. */ return { border: getComputedStyle(el).borderLeftColor, want }
         })()`)
         ok('62 the jump does not acknowledge, and wants-you outranks the selection ring',
           selected === true && state === 'wants-you' &&
@@ -7205,7 +7205,7 @@ app.whenReady().then(async () => {
         document.body.appendChild(probe)
         const want = getComputedStyle(probe).color
         probe.remove()
-        return { border: getComputedStyle(el).borderTopColor, want }
+        /* M69: the state hue is the LEFT EDGE only; selection is iris on the other sides. */ return { border: getComputedStyle(el).borderLeftColor, want }
       })()`)
       ok('97 the attention row navigates to its panel and leaves it amber',
         rowAppeared === true && clicked === true &&
@@ -15655,6 +15655,96 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onC)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M69 — overview.1 / overview.2. THE FAR VIEW FOR EVERY KIND, AND THE
+    // MINIMAP. Below BLOCK_ENTER a sessionless kind's frame is a block in the
+    // kind tone with its title; below SUMMARY_ENTER a summary with the kind's
+    // word (overview.1). The minimap draws one block per panel in its tone, a
+    // click flies the camera to the clicked world point, and `canvas.minimap`
+    // off removes it (overview.2).
+    // -------------------------------------------------------------------
+    {
+      const oLog = []
+      const onO = (_e, level, message) => { if (level >= 2) oLog.push(String(message).slice(0, 180)) }
+      wc.on('console-message', onO)
+      const IDS = [
+        'overview.1 below BLOCK_ENTER every sessionless kind is a block in the kind tone with its title, and below SUMMARY_ENTER a summary with the kind word',
+        'overview.2 the minimap draws one block per panel in its tone, a click flies the camera to that world point, and canvas.minimap off removes it'
+      ]
+      try {
+        const { mkdtempSync, writeFileSync } = require('node:fs')
+        const oDir = mkdtempSync(join(tmpdir(), 'tc panels overview-'))
+        writeFileSync(join(oDir, 'note.txt'), 'hello\n')
+        writeFileSync(join(oDir, 'plan.md'), '# plan\n')
+        layoutStore.save({
+          panels: fromPanels([
+            { kind: 'terminal', rect: { id: 'ovA', x: 60, y: 60, w: 420, h: 280 }, z: 1, spec: { panelId: 'ovA', cwd: oDir, command: '/bin/cat', args: [] }, title: 'ringer' },
+            { kind: 'file', rect: { id: 'ovF', x: 540, y: 60, w: 300, h: 200 }, z: 2, source: { path: join(oDir, 'note.txt') } },
+            { kind: 'toolbox', rect: { id: 'ovT', x: 900, y: 60, w: 300, h: 200 }, z: 3, source: { cwd: oDir, label: 'overview' } },
+            { kind: 'jira', rect: { id: 'ovJ', x: 60, y: 400, w: 300, h: 200 }, z: 4 },
+            { kind: 'file', rect: { id: 'ovN', x: 400, y: 400, w: 300, h: 200 }, z: 6, source: { path: join(oDir, 'plan.md'), prose: true } },
+            { kind: 'terminal', rect: { id: 'ovB', x: 3000, y: 1800, w: 420, h: 280 }, z: 5, spec: { panelId: 'ovB', cwd: oDir, command: '/bin/cat', args: [] }, title: 'far' }
+          ]),
+          groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reO
+        await settle()
+        await wc.executeJavaScript(`window.__m56ReducedMotion(true)`)
+        const cmd = (key) => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, metaKey: true, bubbles: true }))`)
+        const scale = () => wc.executeJavaScript(`window.__m4aViewport().scale`)
+        const zoomBelow = async (target) => { for (let i = 0; i < 80; i += 1) { if ((await scale()) < target) return true; await cmd('-'); await sleep(20) } return false }
+        const readFar = () => wc.executeJavaScript(`(() => { const out = {}
+          for (const id of ['ovF', 'ovT', 'ovJ', 'ovN']) { const p = document.querySelector('.panel[data-panel-id="' + id + '"]')
+            out[id] = p ? { block: p.querySelector('[data-card-block]')?.getAttribute('data-tone') ?? null, blockTitle: p.querySelector('[data-card-block] .panel__card-block-title')?.textContent ?? null, summary: p.querySelector('[data-card-summary] .panel__card-summary-state')?.textContent ?? null } : null }
+          return out })()`)
+        const atSummary = await zoomBelow(0.24); await settle()
+        const summary = await readFar()
+        // MIN_SCALE is 0.1 and BLOCK_ENTER 0.11: the floor IS below the band.
+        const atBlock = await zoomBelow(0.105); await settle()
+        const block = await readFar()
+        await cmd('0'); await settle()
+        const words = { ovF: 'file', ovT: 'toolbox', ovJ: 'Jira', ovN: 'note' }
+        ok(IDS[0], atSummary && atBlock &&
+          ['ovF', 'ovT', 'ovJ', 'ovN'].every((id) => summary[id] && summary[id].summary === words[id] && summary[id].block === null) &&
+          ['ovF', 'ovT', 'ovJ', 'ovN'].every((id) => block[id] && block[id].block === 'kind' && typeof block[id].blockTitle === 'string' && block[id].blockTitle.length > 0),
+          JSON.stringify({ atSummary, atBlock, summary, block, log: oLog.slice(-3) }))
+
+        // The minimap: five blocks, the ringer's turning amber, a click that lands.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="ovA"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await waitUntil(async () => ptyManager.list().some((s) => s.panelId === 'ovA'), 6000)
+        // Focus elsewhere (the file panel's body), then ring.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="ovF"] .pf__body'); if (b) { const r = b.getBoundingClientRect(); b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + 10, clientY: r.top + 10 })) } return !!b })()`)
+        await settle()
+        ptyManager.write('ovA', String.fromCharCode(7) + String.fromCharCode(13))
+        const amber = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-minimap-block="ovA"]')?.getAttribute('data-tone') === 'needs-you'`), 6000)
+        const blocks = await wc.executeJavaScript(`[...document.querySelectorAll('[data-minimap-block]')].map((b) => [b.getAttribute('data-minimap-block'), b.getAttribute('data-tone')])`)
+        // Click the far panel's block: the camera's centre lands near it.
+        const before = await wc.executeJavaScript(`window.__m4aViewport()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-minimap-block="ovB"]'); if (!b) return false; const r = b.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2
+          const m = document.querySelector('[data-minimap]'); m.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: x, clientY: y })); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: x, clientY: y })); return true })()`)
+        await sleep(600)
+        const after = await wc.executeJavaScript(`(() => { const v = window.__m4aViewport(); const host = document.querySelector('.canvas').getBoundingClientRect()
+          return { v, centre: { x: (host.width / 2 - v.x) / v.scale, y: (host.height / 2 - v.y) / v.scale } } })()`)
+        const nearFar = Math.abs(after.centre.x - 3210) < 120 && Math.abs(after.centre.y - 1940) < 120 && after.v.scale === before.scale
+        await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', false)`)
+        await settle()
+        const gone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-minimap]') === null`), 4000)
+        await wc.executeJavaScript(`window.canvas.settings.set('canvas.minimap', true)`)
+        await settle()
+        const tones = Object.fromEntries(blocks)
+        const tonesRight = tones.ovA === 'needs-you' && tones.ovF === 'kind' && tones.ovT === 'kind' && tones.ovJ === 'kind' && tones.ovN === 'kind' && tones.ovB === 'asleep'
+        ok(IDS[1], amber === true && blocks.length === 6 && tonesRight && nearFar && gone === true,
+          JSON.stringify({ amber, blocks, before, after, nearFar, gone, log: oLog.slice(-3) }))
+      } catch (oErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(oErr && oErr.message || oErr) + ' | renderer: ' + (oLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onO)
       }
     }
 

@@ -208,6 +208,15 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    id: 'canvas.minimap',
+    label: 'Show the overview',
+    description: 'draw every panel as a block in its state colour in the top corner of the canvas, with the camera as a rectangle; click or drag it to move',
+    keywords: ['minimap', 'overview', 'map', 'thumbnail', 'status board', 'blocks'],
+    type: 'boolean',
+    default: true,
+    category: SHELL_CATEGORY
+  },
+  {
     id: 'shell.railOpen',
     label: 'Show the side rail',
     description: 'keep the left rail open beside the canvas',
