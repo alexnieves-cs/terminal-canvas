@@ -52,3 +52,4 @@ copy here is deleted.
 | [m67-frame.md](m67-frame.md) | M67 — The frame, second pass | finished |
 | [m68-context.md](m68-context.md) | M68 — The context pane finished | finished |
 | [m69-overview.md](m69-overview.md) | M69 — The overview | finished |
+| [m70-ship.md](m70-ship.md) | M70 — Ship 1.1.0 | finished |

@@ -2160,6 +2160,13 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   design) or from one list-level read passed down** — both paint identical DOM, and no test in
   this repo can tell them apart without adding an impure render-counting side effect to
   production code, which was deliberately declined.
+- **Every pixel (M61–M70).** `npm run shot` renders twenty-five scenes and asserts nothing;
+  each milestone's look was a person's (and a fresh-context critic's) reading of the PNGs,
+  recorded in the build logs. A green `npm run verify` is silent on how anything LOOKS —
+  the state edge's hue, the minimap's legibility, the compact drawer at 1000px on a real
+  display, the dark theme's hairlines — and the harness renders one machine's Chromium at
+  one device pixel ratio. The minimap's drag on a real trackpad (a preview, then a flight on
+  release) was confirmed once by hand; `verify:panels overview.2` drives a synthetic click.
 
 **A note is a file panel in PROSE mode, and refusing a sixth `kind` is the
 whole of M27's design (`shared/file-panel.ts`'s `FileSource.prose`).** Every
@@ -2959,3 +2966,23 @@ nothing, off reads nothing, the bytes written are the bytes captured — runs un
 in `verify:file`; `registerIpcHandlers` takes the exporters as a trailing parameter with an
 INERT default that answers `failed`, which is exactly the red `verify:panels export.1` was
 watched at before the harness wired its own.
+
+**The minimap moves the camera only through `goToViewport`, and previews a drag rather than
+tracking it (`canvas/MinimapOverlay.tsx`, `canvas/minimap.ts`).** `useViewport` keeps the
+camera's setter private on purpose — nothing outside it should move the camera — and the
+minimap is the first control that wanted to. It got the public verb, not the setter: a click
+flies there (one trail entry, `Cmd+[` returns), a drag draws the camera's rectangle under the
+pointer and flies on release. A live-tracking drag would have needed the setter, and the
+obvious way to get it is to export it, after which the next control wants it too and the trail
+stops being complete. The projection is pure (`verify:viewport minimap.1–.3`): one uniform
+scale over every rect AND the camera's own world rectangle, so the camera is always inside the
+map even when it is far from every panel — the case a map fitted to panels alone gets wrong
+silently, drawing the rectangle off its edge.
+
+**The frame's far tiers HIDE a kind's body; they never unmount it (`components/PanelFrame.tsx`,
+`.pf__keep`).** Below `SUMMARY_ENTER` every sessionless kind renders `edge · title · word` in
+place of its body, and the first cut did that with `farBody ?? children`. A Jira ticket's
+comment draft lives in that child subtree; zooming out past 26% discarded typed, unsent text
+with no sign. The body is wrapped in `.pf__keep` (`display: contents`, so the DOM the checks
+select is unchanged) and given the `hidden` attribute under the far tiers. `hidden.1` in
+`verify:styles` is why the class carries its own `[hidden]` reset.
