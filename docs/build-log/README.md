@@ -49,3 +49,4 @@ copy here is deleted.
 | [m64-finding.md](m64-finding.md) | M64 — Finding a panel | finished |
 | [m65-starting.md](m65-starting.md) | M65 — Starting a panel | finished |
 | [m66-labels.md](m66-labels.md) | M66 — Every control says what it is | finished |
+| [m67-frame.md](m67-frame.md) | M67 — The frame, second pass | finished |

@@ -104,7 +104,10 @@ const SCENES = [
   { name: 'launcher', intent: 'The empty canvas a fresh install sees: the launcher of real verbs, nothing else on the canvas.',
     run: async (k) => { await k.theme('light'); await k.shot('launcher') } },
   { name: 'kinds', intent: 'One of every panel kind side by side on the light theme: a live terminal, a dormant card with a recorded tail, a review node listing a changed file, a file panel, a note, a toolbox, and a Jira panel with no credential. Each should read as the same family of frame.',
-    run: async (k) => { await k.loadMain(); await k.shot('kinds') } },
+    // The subagent scan lands a beat after the layout: wait for the notice
+    // (up to 3s) so the scene does not depend on a race. M67's first shots
+    // showed the notice in one scene and not the next for exactly this reason.
+    run: async (k) => { await k.loadMain(); for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-subagent-ambiguous]')`)); i++) await sleep(100); await k.shot('kinds') } },
   { name: 'kinds-dark', intent: 'The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy.',
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',

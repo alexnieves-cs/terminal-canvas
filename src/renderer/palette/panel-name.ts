@@ -37,7 +37,7 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   if (isJiraPanel(panel)) return 'Jira tickets'
   if (isToolboxPanel(panel)) {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
-    return `toolbox: ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+    return `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
   }
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'

@@ -138,7 +138,13 @@ export function buildToolboxNodeModel(input: {
 }): ToolboxNodeModel {
   // The honest chain's first link, reaching a fifth kind: a user's own title
   // outranks everything derived.
-  const heading = input.title ?? `toolbox · ${input.source.label}`
+  // M67. The DIRECTORY's basename, the split the rail row already makes:
+  // the source panel's label made a heading like `toolbox · claude — api`
+  // (or, from the harness, a forty-character path) that named the wrong
+  // thing — a toolbox is a directory's, not a panel's. The full directory
+  // still leads the body.
+  const cwd = input.source.cwd.replace(/\/+$/, '')
+  const heading = input.title ?? `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
   const base = {
     heading,
     directory: input.source.cwd,

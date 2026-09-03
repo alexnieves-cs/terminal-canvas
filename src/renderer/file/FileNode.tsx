@@ -535,6 +535,20 @@ function FileNodeImpl({
         >
           <Pencil />{editing && <span className="file-node__edit-label">editing</span>}
         </button>
+        {/* M67. Save lives in the chrome row beside the toggle that opened
+            the draft, never over the body (brief, The panel frame). Same
+            class and hook as before, so the save-error check still finds it. */}
+        {editing && (
+          <button
+            type="button"
+            className="file-node__save"
+            data-file-node-save
+            title="Save (⌘S)"
+            onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); save(false) }}
+          >
+            Save
+          </button>
+        )}
         <button
           type="button"
           className="file-node__refresh icon-button"
@@ -645,14 +659,6 @@ function FileNodeImpl({
                 }
               }}
             />
-            <button
-              type="button"
-              className="file-node__save"
-              data-file-node-save
-              onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); save(false) }}
-            >
-              Save
-            </button>
           </>
         ) : model.note !== undefined ? (
           <p className="pf__note file-node__note" data-file-node-note>{model.note}</p>

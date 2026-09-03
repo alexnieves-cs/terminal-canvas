@@ -98,7 +98,6 @@ const bodyText = bodyRules.map((r) => r.body).join('\n')
 //     split this check exists to enforce. Each is commented at its site.
 //     Anything not on this list is a colour and belongs in the theme block.
 const ALLOW = new Set([
-  'rgba(103,232,249,.05)', // .canvas dot grid
   'rgba(255,255,255,.07)', // .palette top-edge highlight
   'rgb(255255255/.04)'     // .shell rail and inspector inner highlights
 ])
@@ -395,6 +394,41 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   ok('compact.1', 'the compact drawers run from the top bar to the bottom, under the status strip and the hint strip, which sit on an opaque ground',
     Number.isFinite(drawerZ) && hudZ > drawerZ && hintZ > drawerZ && hudOpaque && drawerTop && drawerBottom,
     JSON.stringify({ drawerZ, hudZ, hintZ, hudOpaque, drawerTop, drawerBottom }))
+}
+
+// M67 — ground.1 / shadow.1 / hairline.1. THE FRAME, SECOND PASS. The brief
+// overrules three beta decisions in one sentence each: the ground is flat
+// (no dot grid, no vignette), nothing at rest carries a shadow (`--line` is
+// the boundary; `--e-3`/`--e-4` are for overlays only), and a dark-theme
+// frame has a hairline a person can see. Each fails silently if undone: a
+// shadow creeps back on one selector and the frame reads "raised" again.
+{
+  // EVERY `.canvas {` rule, not the first: the first is the grid-area
+  // one-liner, and a gradient reinstated in the real rule would have passed
+  // (M67's verifier).
+  const canvasRules = bodyRules.filter((r) => r.sel === '.canvas')
+  const canvas = canvasRules.length > 0 ? canvasRules : null
+  const canvasBg = canvasRules.map((r) => (r.body.match(/background[^;]*;/g) || []).join(' ')).join(' ')
+  const dotUses = (bare.match(/var\(--dot\)/g) || []).length
+  const dotDeclared = (src.match(/--dot:/g) || []).length
+  ok('ground.1', 'the canvas ground is flat: no gradient, no --dot token',
+    canvas !== null && !/gradient/.test(canvasBg) && dotUses === 0 && dotDeclared === 0,
+    JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared }))
+
+  const restingUses = bodyRules.filter((r) => /var\(--e-[12]\)/.test(r.body)).map((r) => r.sel)
+  const OVERLAY = /\.palette\b|\.dock__popover|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
+  const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
+  ok('shadow.1', 'no resting shadow: --e-1/--e-2 unused in the body, --e-3/--e-4 only on overlays',
+    restingUses.length === 0 && overlayMisuse.length === 0,
+    JSON.stringify({ restingUses: restingUses.slice(0, 6), overlayMisuse: overlayMisuse.slice(0, 6) }))
+
+  const dark = /\[data-theme="dark"\]\s*\{([^}]*)\}/.exec(bare)
+  const darkBinds = dark ? /--frame-line:\s*var\(--line-strong\)/.test(dark[1]) : false
+  const declared = (bare.match(/--frame-line:/g) || []).length
+  const panel = /\n\.panel\s*\{([^}]*)\}/.exec(bare)
+  const panelUses = panel ? /border:[^;]*var\(--frame-line\)/.test(panel[1]) : false
+  ok('hairline.1', 'the frame border is --frame-line, declared in both blocks and --line-strong in the dark one',
+    declared >= 2 && darkBinds && panelUses, JSON.stringify({ declared, darkBinds, panelUses }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

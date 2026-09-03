@@ -62,7 +62,7 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // path, and the full cwd is the inspector's job.
   if (isToolboxPanel(panel)) {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
-    return `toolbox: ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+    return `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
   }
   return (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
