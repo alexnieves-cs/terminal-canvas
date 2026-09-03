@@ -80,6 +80,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:tmux` | plain node | 35 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
 | `verify:control` | plain node | 7 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
+| `verify:agent-session` | plain node | 54 checks (M71): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `shot` (`npm run shot`) | real Electron, **not in `npm run verify`**, asserts nothing | M61. 23 PNGs of the real renderer plus a `manifest.json` of intents, from a seeded fixture canvas — the visual loop. Read the images; hand them to a fresh-context critic. See `docs/build-log/m61-visual-loop.md` |
@@ -209,6 +210,16 @@ check does not, and should not, cover it.
   `layout.json` beside baselines. `PtyManager.create()` consults it BEFORE the baseline
   capture, which is why the review engine needed no change. Records outlive their panel;
   see "A worktree record OUTLIVES its panel" in `docs/load-bearing.md`.
+- `src/main/agent-session.ts` — M71. `AgentSessionManager`: a main-process CONVERSATION with
+  the installed `claude` in headless mode (`-p --input-format stream-json`), not a PTY.
+  Ids are the caller's; the CLI session UUID is minted here and pinned with `--session-id`,
+  then named by `--resume` on every later spawn; the process is spawned on the first `send`,
+  not on create; turns are assembled from the CLI's complete records and deltas are batched
+  at 16ms for the screen; usage is summed per result and cost is the latest result's
+  cumulative figure; every process callback is gated on session AND process identity (the
+  M61 rule, second layer). `shared/transcript.ts` is its schema and line parser,
+  `agent-runner.ts` the injected process seam, `claude-cli-runner.ts` the real one (never
+  bundled into a suite). No IPC channel names it until M72.
 - `src/main/scrollback-log.ts` — M39. One append-only file per panel under `userData/scrollback`,
   written from `PtyManager.flush()` through a per-panel queue, ring-trimmed at 1.25× the cap.
   An append stream, deliberately not `layout-store.ts`'s temp-and-rename. Read by the dormant

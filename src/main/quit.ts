@@ -15,6 +15,14 @@ export interface QuitDeps {
   backend: { shutdown(): void }
   /** The layout store's synchronous write. */
   flush: () => void
+  /**
+   * M71. The agent-session runtime, disposed in BOTH arms: a headless
+   * `claude` process cannot be reattached after its parent dies, and what
+   * survives it is the CLI's own transcript, which `--resume` reads — so the
+   * keep-on-quit setting has nothing to keep here and is not consulted.
+   * Optional so every existing caller and check is unchanged.
+   */
+  agents?: { disposeAll(): void }
 }
 
 /**
@@ -50,6 +58,11 @@ export function runQuit(deps: QuitDeps): void {
     else deps.manager.killAll()
   } catch (error) {
     console.warn('[quit] session teardown failed', error)
+  }
+  try {
+    deps.agents?.disposeAll()
+  } catch (error) {
+    console.warn('[quit] agent session teardown failed', error)
   }
   deps.flush()
   if (deps.keep) return

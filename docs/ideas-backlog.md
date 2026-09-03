@@ -110,54 +110,42 @@ changes have reached GitHub or are still local.
   they already carry the resolved-by-absolute-path rule, the per-call timeout, and the
   `not-a-repo` / `repo-unreadable` split this feature would otherwise rediscover.
 
-## 8. Chat-box mode and model choice — M23 shipped part (1); parts (2) and (3) are what is left
+## 8. Chat-box mode and model choice — M23 shipped (1); M71 built the runtime under (3); the chat panel itself and (2) are what is left
 
 This entry called itself **"three features wearing one coat"** and recommended doing (1)
-alone first. M23 did exactly that, so what follows is the entry rewritten down to the two
-parts that are still open — the file's own rule for a milestone that ships most of an entry
-and stops somewhere deliberate.
+alone first. M23 did exactly that. **M71 answered the constraint that kept (3) expensive**, so
+what follows is the entry rewritten down to what is still open.
 
-**What shipped (part 1).** Per-panel permission mode, effort and model for the agent CLI a
-panel already spawns, carried as one `agentOptions` record on `PanelSpec`/`Preset`/the
-persisted panel, emitted as argv by a pure `agentArgs`, shown as an inspector row set and a
-header chip, chosen either by a preset (there is a built-in "Claude (plan mode)") or by the
-compound **"Restart in \<mode\>"** palette gesture. `CLAUDE.md` records the mechanisms; the
-one worth knowing before extending this is that the compound gesture is what makes the
-display honest, because tmux `new-session -A` ignores the argv on a reattach.
+**What shipped (part 1, M23).** Per-panel permission mode, effort and model for the agent CLI a
+panel already spawns, carried as one `agentOptions` record, emitted as argv by a pure
+`agentArgs`, shown as an inspector row set and a header chip.
 
-**Still open — (2) model choice ACROSS VENDORS.** M23 ships `--model`, but only as a flag on
-`claude`. The cross-vendor version is still a presets problem: a preset is a command, its
-args, its env and a label, and a second vendor needs a second `AgentKind` before its flags
-can be validated or emitted at all. That is the concrete trigger recorded in
-`shared/cost.ts`'s `AGENT_FLAGS` comment: **the per-agent capability table gets built when
-the second `AgentKind` lands, and not before** — with one member it would have one row, one
-consumer, and would still leave exactly the one `spec.agent` branch it claims to remove.
+**What shipped under part 3 (M71): the runtime, with no screen.** `main/agent-session.ts` is a
+main-process CONVERSATION with the installed `claude` in headless mode — a structured streaming
+transcript (`shared/transcript.ts`) with create / send / interrupt / dispose, permission
+requests as first-class pending questions, and `--resume` across exits — over an injected
+process runner, checked in `verify:agent-session` against streams recorded from the real CLI.
+**The constraint this entry carried for three runs is dissolved, and the way it dissolved is
+the finding:** the "chat panel talks to an API, which means a key, which means the credential
+boundary" chain assumed the model backend had to be a network client. The installed CLI is
+already authenticated as the user, speaks JSON on stdio, and never crosses the CSP — so the
+chat panel needs no credential, stores no token, and is the SAME agent as the terminal panel
+(same `CLAUDE.md`, hooks, skills, memory), which is the "same agent, two front-ends" claim this
+entry called the strong version. `credential-store.ts` is untouched by it.
 
-**Still open — (3) a native chat box that is not a terminal.** Unchanged, and still the
-expensive one. Every invariant in this codebase assumes a panel is a PTY behind an xterm:
-the two-lifetimes registry, `fit()`-before-spawn, cols/rows, the pointer correction,
-`LIVE_BUDGET`'s WebGL accounting, the capture-phase wheel ownership. A chat panel has none
-of that — plain DOM, cheap to render, no WebGL context, and it does not belong in the live
-budget at all.
+**Still open — the chat panel kind (the screen half of 3).** The sixth arm of the `Panel`
+union over M71's runtime: plain DOM, no WebGL, never in `LIVE_BUDGET`, never near
+`registry.ensure` — `verify:viewport` `90b` is the one-line obligation the sixth kind
+inherits. Streaming deltas rendered per 16ms batch, tool calls as they happen, an interrupt
+that interrupts, a transcript file this app writes so a restored panel renders yesterday's
+turns before any process exists (the CLI's own transcript is what `--resume` reads; it is not
+what the panel renders). Next in the M71+ run.
 
-- **The `Panel` union it wanted already exists.** This entry used to say the discriminated
-  union "needs to happen before this lands". It has: M9b added `kind`, and M16 and the Jira
-  work added a third and fourth arm. A chat panel is a fifth, and the partition in
-  `Canvas.tsx` is what keeps it away from `assignTiers` and `registry.ensure` structurally
-  rather than by a guard someone has to remember.
-- **Constraint, unchanged:** a chat panel talks to an API, which means a key, which means
-  the credential boundary. M14 built that too — `credential-store.ts`, encrypted at rest,
-  with no `credential:get` — so the storage half is answered. What is NOT answered is the
-  request path: the renderer's CSP is `default-src 'self'` and must stay that way, so the
-  call goes through main over a new IPC channel, never `fetch` from the renderer. Note that
-  M14's rule is stricter than it first looks: a credential this app obtained must never
-  reach a PTY, so a chat panel's key is main's alone.
-- **Open question, unchanged and still the interesting one:** does the chat box share
-  history with the CLI session, or are they separate conversations? "Same agent, two
-  front-ends" is a much stronger product claim than "two unrelated panel types" — and much
-  harder. M17's transcript reading is the first thing that makes it even conceivable, since
-  a Claude Code session's history is a file this app can already find and parse.
-
+**Still open — (2) model choice ACROSS VENDORS.** `AGENT_CAPABILITIES` is a real two-row
+table since M33 and `shared/cost.ts`'s trigger has fired; what a third row needs is a third
+CLI worth supporting and a named disabled reason for its absence. M71's runner seam is where
+a second headless backend would plug in, and the rule stands: not before a second instance
+exists.
 
 ## 9. App and service integrations — the Agentic Super App
 
