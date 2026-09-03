@@ -114,6 +114,10 @@
   /* Hairlines. Every surface has one. */
   --line:        #d3d7de;
   --line-strong: #b5bcc7;
+  /* M67. The panel frame's hairline: --line on a light ground, --line-strong
+     on a dark one, where --line vanishes into the well with no shadow to find
+     the frame by. */
+  --frame-line: var(--line);
 
   /* Agent-state accents — borders, dots and icons, so the floor is the
      non-text 3:1. --amber MUST stay a literal colour declared here, and
@@ -137,12 +141,6 @@
   --e-2: 0 2px 8px rgba(15, 18, 26, .12);
   --e-3: 0 6px 20px rgba(15, 18, 26, .16);
   --e-4: 0 14px 40px rgba(15, 18, 26, .22);
-
-  /* The canvas tick. Visible — a person can perceive it on this ground — and
-     a colour rather than an alpha over "whatever is behind", because a light
-     tick over a light ground is invisible: it has to DARKEN here and LIGHTEN
-     in the dark block, which is a different colour, not a different alpha. */
-  --dot: rgba(50, 60, 80, .18);
 
   /* Back-compat aliases. Recorded as debt in M45's build log: they let the
      migration land task by task, and they go when their last user does. */
@@ -175,6 +173,7 @@
 
   --line:        #2c323e;
   --line-strong: #414959;
+  --frame-line: var(--line-strong);
 
   --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .16);
   --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .16);
@@ -188,8 +187,6 @@
   --e-2: 0 2px 8px rgba(0, 0, 0, .40);
   --e-3: 0 6px 20px rgba(0, 0, 0, .50);
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
-
-  --dot: rgba(255, 255, 255, .08);
 
   --text:      var(--fg);
   --muted:     var(--fg-3);
@@ -493,7 +490,6 @@ body {
   background: var(--s-3);
   color: var(--fg);
   font-weight: 600;
-  box-shadow: var(--e-1);
 }
 .shell__top .shell__spawn:hover:not(:disabled) {
   background: var(--s-3);
@@ -682,7 +678,10 @@ body {
    the lighter. The critic found a dashed asleep edge invisible at 100% and
    gone at 22%: a solid edge in a darker grey says the same thing legibly. */
 [data-tone="asleep"] { --tone: var(--line-strong); --tone-dim: var(--s-2); }
-[data-tone="none"] { --tone: var(--line); --tone-dim: var(--s-4); }
+/* M67. Not started is a grey edge a person can see, not the frame's own
+   hairline colour (the critic found asleep and not-started frames with no
+   edge at all). */
+[data-tone="none"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
 [data-tone="starting"] { --tone: var(--line); --tone-dim: var(--s-4); }
 [data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); }
 [data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
@@ -767,6 +766,10 @@ body {
    row. max-width caps how much of the row a long error can claim. */
 .rail-row__tail {
   flex: none;
+  /* M67 tried a fixed 6.5em column here so the state would never push the
+     title, and every title lost a third of its room: the rail is 260px and
+     `not started` is the widest word. The honest fix is width, not a
+     column; the cap stays at 45% so the state can never take the row. */
   min-width: 0;
   max-width: 45%;
   overflow: hidden;
@@ -1233,16 +1236,10 @@ body {
      row track. Keeping the old declaration would resolve it against .app's
      full height and push the canvas back out of the frame. */
   overflow: hidden;
-  /* The dot grid is the canvas's only parallax cue — with none at all,
-     panning reads as stuck — and it is VISIBLE: --dot is a colour a person
-     can perceive on both grounds (M10's own open question, answered). Under
-     it a soft radial vignette keeps a large flat field from reading as a
-     void; the centre is --s-1, the nearest declared surface, rather than a
-     hand-picked literal that would belong to no ramp. */
-  background:
-    radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0)
-      0 0 / 28px 28px,
-    radial-gradient(120% 90% at 50% 0%, var(--s-1) 0%, var(--s-0) 60%);
+  /* M67. FLAT. The dot grid was a whiteboard's promise that you will draw;
+     this canvas is for reading (brief, Colour). Panning is read from the
+     panels moving and the HUD's coordinates; nothing under them. */
+  background: var(--s-0);
   cursor: default;
 }
 
@@ -1393,7 +1390,6 @@ body {
   border: 1px solid var(--line-strong);
   border-radius: var(--r-full);
   background: var(--s-3);
-  box-shadow: var(--e-2);
   color: var(--fg-2);
   font-size: var(--t-sm);
   pointer-events: none;
@@ -1573,6 +1569,7 @@ body {
   font: inherit;
   cursor: pointer;
 }
+.canvas-group__toggle, .canvas-group__remove { min-height: 24px; }
 .canvas-group__toggle { margin-left: auto; }
 .canvas-group__toggle:hover,
 .canvas-group__remove:hover { color: var(--fg); }
@@ -1587,11 +1584,12 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line);
+  /* M67. A hairline, no shadow: --line carried the boundary under an --e-2
+     that made every panel at rest look lifted (brief, principle 4). */
+  border: 1px solid var(--frame-line);
   border-radius: var(--r-lg);
   background: var(--panel-bg);
   user-select: none;
-  box-shadow: var(--e-2);
   transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
 
@@ -1644,11 +1642,14 @@ body {
 }
 /* In the chrome row, beside the title. --fg-3, not --fg-4: --fg-4 is the
    DISABLED step and this is ordinary running text. */
-.pf__summary { flex: none; color: var(--fg-3); font-size: var(--t-xs); }
-/* Amber, like every other honest note in this app: every non-text arm
-   (missing, too-large, binary, unreadable, not a repository) lands here,
-   and each is a state the user may want to act on rather than an error. */
-.pf__note { margin: 0 0 var(--sp-4); color: var(--amber); }
+/* M67. The summary yields before the title: with six controls in an editing
+   file panel's chrome the title shrank to nothing (the critic's blocking
+   finding). Identity leads; the meta is the first thing to go. */
+.pf__summary { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); }
+/* M67. Ink, not amber: amber is `needs you` and nothing else (brief, Colour).
+   A note is a fact — missing, too-large, binary, not a repository — and it
+   reads as one in the muted ink, with the frame's edge carrying no state. */
+.pf__note { margin: 0 0 var(--sp-4); color: var(--fg-2); }
 .pf__more { margin: var(--sp-4) 0 0; color: var(--fg-3); }
 
 /* A panel enters once, at its spawn point. This wrapper is intentionally the
@@ -1673,17 +1674,16 @@ body {
    own accent answers selection everywhere (brief, principle 5). */
 .panel--selected {
   border-color: var(--iris);
-  box-shadow: 0 0 0 1px var(--iris), var(--e-3);
+  /* M67. A ring, never a lift: the elevation left with every other resting shadow. */
+  box-shadow: 0 0 0 1px var(--iris);
 }
 
 /* M35 Task 5. The panel a release right now would link to. A ring rather
    than a fill: a fill would hide the agent output this app exists to show.
-   var(--e-2) belongs here for the identical reason .panel--selected's own
-   comment states for var(--e-3): the attribute selector's specificity (0,2,0)
-   beats the plain .panel rule (0,1,0) that supplies the base elevation, so
-   without it the target ring REPLACED box-shadow wholesale. */
+   (M67: the ring is the whole shadow now — resting elevation left every
+   panel, so there is no base box-shadow for this rule to preserve.) */
 .panel[data-link-target] {
-  box-shadow: 0 0 0 2px var(--iris), var(--e-2);
+  box-shadow: 0 0 0 2px var(--iris);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
@@ -1704,8 +1704,8 @@ body {
    read borderTopColor, and border-color stays a plain, untransformed
    var(--amber) below, outside the keyframes. Do not fold it in. */
 @keyframes wants-you-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim), var(--e-2); }
-  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px var(--amber-dim), var(--e-2); }
+  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim); }
+  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px var(--amber-dim); }
 }
 .panel--agent-wants-you {
   border-color: var(--amber);
@@ -1716,7 +1716,7 @@ body {
      whatever is declared HERE. Without this line an unselected waiting panel
      shows no amber ring at all, for exactly the users who asked for less
      motion — silently removing the app's one attention signal. */
-  box-shadow: 0 0 0 2px var(--amber), var(--e-2);
+  box-shadow: 0 0 0 2px var(--amber);
   animation: wants-you-pulse 2.4s ease-in-out infinite;
 }
 .panel--agent-exited { border-color: var(--red); }
@@ -1733,11 +1733,9 @@ body {
      this later, equal-specificity one kept painting the ring blue — the
      critic sampled it. Blue is now only ever "working". */
   border-color: var(--iris);
-  /* var(--e-3) belongs here as well as on .panel--selected above. This rule is
-     the LATER one at equal specificity, so a ring-only box-shadow here wins
-     outright — a selected panel is the raised one by definition, in every
-     agent state. */
-  box-shadow: 0 0 0 1px var(--iris), var(--e-3);
+  /* The ring, restated: this rule is the LATER one at equal specificity and
+     would otherwise drop it (M67: the ring is the only shadow a panel has). */
+  box-shadow: 0 0 0 1px var(--iris);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -1747,7 +1745,7 @@ body {
    hide the very reason it took you there. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--amber);
-  box-shadow: 0 0 0 2px var(--amber), var(--e-3);
+  box-shadow: 0 0 0 2px var(--amber);
 }
 
 /* STATE EDGE, the last word (M63/M64). Declared AFTER every rule above that
@@ -1762,6 +1760,9 @@ body {
   border-left-width: 3px;
   border-left-color: var(--tone);
 }
+/* M67. Asleep is DASHED grey (brief, principle 1: a state that has no
+   process is drawn as one) — solid grey is not-started or a sessionless kind. */
+.panel.pf[data-tone="asleep"] { border-left-style: dashed; }
 
 .panel__chrome {
   /* The drag surface for a move gesture — see TerminalPanel's chrome
@@ -1795,8 +1796,10 @@ body {
      min-width: auto, which refuses to shrink below its content's intrinsic
      width — so without this, a long title pushes the badge and close button
      out past `.panel`'s overflow: hidden, and the panel becomes unclosable by
-     mouse. */
-  min-width: 0;
+     mouse. M67: 8ch rather than 0 — a bounded floor still cannot push the
+     close button out, and a title that shrank to NOTHING beside six chrome
+     controls (the editing file panel) was the critic's blocking finding. */
+  min-width: 8ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2048,7 +2051,6 @@ body {
      world layer that repaints on every frame of a pan, so it must never cost
      a composited blur. */
   background: var(--s-3);
-  box-shadow: var(--e-1);
   color: var(--fg-3);
   /* M66. Above the compact breakpoint's drawers (z-index 900): the strip is
      one line at every breakpoint and never hides under a pane. */
@@ -2149,6 +2151,21 @@ body {
   font-size: var(--t-xs);
   white-space: nowrap;
   pointer-events: none;
+  /* M67. One line, and it yields to the HUD: whole hints drop from the
+     OLDEST end when the strip does not fit (they wrap onto rows the strip
+     is too short to show; the last row, with the newest hints and the rule
+     line, is the one kept), so the strips never collide at 1440 (M66's
+     critic, finding 12) and no hint is ever cut mid-word. */
+  max-width: 40%;
+}
+.hint-strip__row {
+  display: flex;
+  gap: var(--sp-5);
+  row-gap: 0;
+  flex-wrap: wrap;
+  align-content: flex-end;
+  max-height: 1lh;
+  overflow: hidden;
 }
 
 /* M48. The probe banner: shown only when the login shell could not be read,
@@ -2413,7 +2430,7 @@ body {
 }
 .review-node__commit-outcome {
   margin: 0 0 var(--sp-4);
-  color: var(--amber);
+  color: var(--fg-2);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -2522,7 +2539,7 @@ body {
   cursor: pointer;
   padding: var(--sp-1) var(--sp-3);
 }
-.file-node__save { align-self: flex-start; margin-top: var(--sp-2); }
+.file-node__save { min-height: 22px; padding: 0 var(--sp-3); font-size: var(--t-xs); }
 .file-node__save:hover,
 .file-node__conflict button:hover,
 .jira-node__actions button:hover,
@@ -2647,10 +2664,9 @@ body {
   position: absolute;
   box-sizing: border-box;
   padding: var(--sp-3);
-  border: 1px solid var(--line);
+  border: 1px solid var(--frame-line);
   border-radius: var(--r-md);
   background: var(--s-1);
-  box-shadow: var(--e-1);
   overflow: hidden;
   pointer-events: none;
 }
@@ -2702,7 +2718,7 @@ body {
   position: absolute;
   box-sizing: border-box;
   padding: var(--sp-3);
-  border: 1px dashed var(--line);
+  border: 1px dashed var(--frame-line);
   border-radius: var(--r-md);
   background: var(--s-1);
   font: var(--t-sm) / var(--lh-tight) var(--font-mono);
@@ -3091,7 +3107,6 @@ body {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--s-1);
-  box-shadow: var(--e-2);
   color: var(--fg-2);
   font-size: var(--t-md);
   animation: navgrid-cell-enter var(--dur-1) var(--ease) both;
@@ -3139,7 +3154,7 @@ body {
   margin: 0 0 var(--sp-4);
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-sm);
-  color: var(--amber);
+  color: var(--fg-2);
   background: var(--amber-dim);
 }
 
@@ -3176,7 +3191,7 @@ body {
 
 .toolbox-node__name { color: var(--fg); }
 .toolbox-node__scope { color: var(--fg-3); }
-.toolbox-node__state { color: var(--amber); }
+.toolbox-node__state { color: var(--fg-2); }
 
 .toolbox-node__detail {
   flex-basis: 100%;
@@ -3210,7 +3225,7 @@ body {
 }
 
 .inspector__toolbox-scope { flex: none; color: var(--fg-4); }
-.inspector__toolbox-state { flex: none; color: var(--amber); }
+.inspector__toolbox-state { flex: none; color: var(--fg-2); }
 
 /* M35. The four link handles. Children of .panel, so they ride .world's
    transform with the rest of the panel — a handle sized in screen pixels

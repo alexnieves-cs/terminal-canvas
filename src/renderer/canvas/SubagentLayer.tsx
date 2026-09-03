@@ -87,15 +87,21 @@ const SubagentGroup = memo(function SubagentGroup({ panel }: SubagentGroupProps)
     // feature speaks to the user in a sentence — and a sentence that is
     // wrong about something checkable is worse than one that says nothing.
     return (
-      <div
-        className="subagent-ambiguous"
-        data-panel-id={rect.id}
-        data-subagent-ambiguous
-        style={{ left: nodeX, top: rect.y, width: NODE_W, zIndex: z }}
-      >
-        <div className="subagent-ambiguous__type">subagents</div>
-        {subagents.sharing} panels share this repository, so their subagents cannot be told apart
-      </div>
+      <>
+        {/* M67. The same leader a node gets, so the notice reads as this
+            panel's: without it the box floated beside two panels and
+            belonged to neither (M61's critic). Aimed at the cap's line. */}
+        <div className="subagent-edge" style={{ left: rect.x + rect.w, top: rect.y + 14, width: REVIEW_GAP }} />
+        <div
+          className="subagent-ambiguous"
+          data-panel-id={rect.id}
+          data-subagent-ambiguous
+          style={{ left: nodeX, top: rect.y, width: NODE_W, zIndex: z }}
+        >
+          <div className="subagent-ambiguous__type">subagents</div>
+          {subagents.sharing} panels share this repository, so their subagents cannot be told apart
+        </div>
+      </>
     )
   }
 

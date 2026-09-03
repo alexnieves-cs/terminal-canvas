@@ -1807,7 +1807,7 @@ const inventory = (over) => ({
   const model = R.buildInspectorModel(panel, undefined)
   ok(104,
     rows.length === 1 && rows[0].dormant === false && rows[0].tail === 'toolbox'
-      && rows[0].label === 'toolbox: repo'
+      && rows[0].label === 'toolbox · repo'
       && model.kind === 'toolbox' && model.restartable === false && model.reattached === false
       && model.fields.some((f) => f.key === 'toolbox-cwd' && f.value === '/Users/me/repo'),
     `never dormant, tail '${rows[0].tail}', label '${rows[0].label}', process verbs refused`)

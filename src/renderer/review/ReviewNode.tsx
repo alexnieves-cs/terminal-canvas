@@ -5,7 +5,7 @@ import type { ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { buildReviewNodeModel } from './review-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { Commit, Refresh } from '@renderer/icons'
+import { Refresh } from '@renderer/icons'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -392,7 +392,7 @@ function ReviewNodeImpl({
               setDraft((d) => d ?? '')
             }}
           >
-            {committing ? 'committing…' : <><Commit /> commit</>}
+            {committing ? 'committing…' : 'commit'}
           </button>
         )}
       </>}

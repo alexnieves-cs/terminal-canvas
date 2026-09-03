@@ -12305,6 +12305,12 @@ app.whenReady().then(async () => {
         `)
         await waitUntil(() => wc.executeJavaScript(
           `!!document.querySelector('[data-file-node-editor]')`), 5000)
+        // M67 — frame.2a. Save lives in the CHROME row beside the toggle,
+        // never over the body (brief, The panel frame): a Save at the foot of
+        // the body was the one control the frame rule did not cover.
+        const saveInChrome = await wc.executeJavaScript(`(() => { const n = document.querySelector('[data-panel-kind="file"] [data-file-node-editor]')?.closest('.panel'); if (!n) return 'no panel'
+          const s = n.querySelector('[data-file-node-save]'); return s ? (s.closest('.pf__chrome') !== null ? true : 'in body') : 'absent' })()`)
+        ok('frame.2a the file panel\'s Save sits in the chrome row while a draft is open', saveInChrome === true, JSON.stringify({ saveInChrome }))
         await wc.executeJavaScript(`
           (() => {
             const ta = document.querySelector('[data-file-node-editor]')
@@ -15226,6 +15232,11 @@ app.whenReady().then(async () => {
         const t2 = await click('.canvas-group[data-group-id="g1"] .canvas-group__toggle')
         await settle()
         const expanded = await wc.executeJavaScript(`!document.querySelector('.canvas-group[data-group-id="g1"]').classList.contains('canvas-group--collapsed')`)
+        // M67 — frame.2b. The group's remove control is a labelled WORD, like
+        // `card`/`expand` beside it, not the panel-close × (a group is not
+        // closed; its panels stay).
+        const removeWord = await wc.executeJavaScript(`(document.querySelector('.canvas-group[data-group-id="g1"] .canvas-group__remove')?.textContent ?? '').trim()`)
+        ok('frame.2b the group header\'s remove control reads "remove"', removeWord === 'remove', JSON.stringify({ removeWord }))
         const r1 = await click('.canvas-group[data-group-id="g1"] .canvas-group__remove')
         await settle()
         const removed = await wc.executeJavaScript(`document.querySelector('.canvas-group') === null && document.querySelectorAll('.panel[data-panel-id]').length === 2`)
