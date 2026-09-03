@@ -101,7 +101,8 @@ import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
-import { REASON_NO_CLAUDE } from '@renderer/palette/commands'
+import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY } from '@renderer/palette/commands'
+import { getChat } from '@renderer/chat/chat-store'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
@@ -2741,6 +2742,8 @@ export function Canvas({
   const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
+  const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
+  const openInTerminalRef = useRef<(id: string) => { kind: string; reason?: string }>(() => ({ kind: 'refused', reason: 'not ready' }))
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
@@ -2761,6 +2764,10 @@ export function Canvas({
     // assign-below shape this file already uses. Resolves main's answer, so a
     // check can read a refusal by name.
     w.__m73Chat = (cwd: string): Promise<{ kind: string; reason?: string }> => beginNewChatRef.current({ cwd })
+    // M74's two verbs, through the same functions the palette rows, the
+    // action bar and the chrome buttons call.
+    w.__m74OpenAsChat = (id: string): Promise<{ kind: string; reason?: string }> => openAsChatRef.current(id)
+    w.__m74OpenInTerminal = (id: string): { kind: string; reason?: string } => openInTerminalRef.current(id)
   }, [openFilePanel, worldCentre, openJiraPanel, dropPath])
 
   /**
@@ -3012,6 +3019,85 @@ export function Canvas({
     return { kind: 'spawned' }
   }, [commitHistory, selectOnly])
   beginNewChatRef.current = beginNewChat
+  // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
+  // pin, the live process and the CLI's file, and writes the turns under the
+  // NEW id); a refusal is shown by name in the palette's line and nothing
+  // is minted. Then the terminal leaves through the ordinary close path (its
+  // process is not live — the precondition) and the chat takes its rect.
+  const openAsChat = useCallback(async (id: string): Promise<{ kind: string; reason?: string }> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    if (!panel || !isTerminalPanel(panel)) return { kind: 'refused', reason: 'only a terminal panel can open as chat' }
+    const newId = `c${nextIdRef.current++}`
+    const result = await window.canvas.agentSession.importSession({ fromPanelId: id, toPanelId: newId })
+    if (result.kind === 'refused') {
+      setInputMode({ kind: 'text', label: result.reason, initial: '', feedback: true, submit: () => setInputMode(null) })
+      palette.openPalette()
+      return result
+    }
+    const rect = panel.rect
+    const knobs = panel.spec.agentOptions
+    const title = panel.title
+    onClosePanel(id)
+    setPanels((current) => {
+      const chat = makeChatPanel(newId, { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, nextZ(current),
+        { cwd: panel.spec.cwd, sessionId: result.sessionId, ...(knobs === undefined ? {} : { agentOptions: knobs }) }, { w: rect.w, h: rect.h })
+      const next = [...current, title === undefined ? chat : { ...chat, title }]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(newId)
+    return { kind: 'opened' }
+  }, [commitHistory, onClosePanel, selectOnly, palette])
+  // M74. Chat → terminal. The chat leaves through its own close path (the
+  // session disposed with its file — the CLI's transcript is the durable
+  // one) and a terminal spawns at its rect with `claude --resume <id>`, the
+  // chat's knobs and title, focused so it is live before the hand leaves
+  // the keyboard. main adopts the resumed id as the terminal's pin.
+  const openInTerminal = useCallback((id: string): { kind: string; reason?: string } => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    if (!panel || !isChatPanel(panel)) return { kind: 'refused', reason: 'only a chat panel can open in a terminal' }
+    // The precondition IN the verb, not only on its three doors (M74's
+    // verifier): a turn in flight or a permission waiting is one front-end
+    // still working, and an empty chat has nothing to resume.
+    const mirror = getChat(id)
+    if (mirror.snapshot !== null && (mirror.snapshot.status === 'streaming' || mirror.snapshot.pending.length > 0)) return { kind: 'refused', reason: REASON_CHAT_BUSY }
+    if (!mirror.turns.some((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text'))) return { kind: 'refused', reason: REASON_CHAT_EMPTY }
+    const rect = panel.rect
+    const tid = `n${nextIdRef.current++}`
+    const knobs = panel.chat.agentOptions
+    const title = panel.title
+    // The session goes, the FILE stays (drop: false): one Cmd+Z past the
+    // move restores the chat panel, and it must render its turns. The
+    // ordinary close path would drop the file, so this is the one removal
+    // that does not go through it.
+    disposeChat(id, false)
+    setPanels((current) => { const next = removePanel(current, id); commitHistory(next); return next })
+    setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
+    setFocusedId((current) => (current === id ? null : current))
+    setPendingFocusId(tid)
+    setEnteringPanelIds((current) => new Set(current).add(tid))
+    setPanels((current) => {
+      const term = makePanel(tid, { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, nextZ(current),
+        { panelId: tid, cwd: panel.chat.cwd, command: 'claude', args: ['--resume', panel.chat.sessionId], agent: 'claude-code', ...(knobs === undefined ? {} : { agentOptions: knobs }) },
+        { w: rect.w, h: rect.h })
+      const next = [...current, title === undefined ? term : { ...term, title }]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(tid)
+    return { kind: 'opened', reason: tid }
+  }, [commitHistory, onClosePanel, selectOnly])
+  openAsChatRef.current = openAsChat
+  openInTerminalRef.current = openInTerminal
+  // A void wrapper with a stable identity for the memoised terminal panel.
+  const openAsChatVoid = useCallback((id: string) => { void openAsChat(id) }, [openAsChat])
+  const onFrontEnd = useCallback((id: string) => {
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    if (panel && isChatPanel(panel)) openInTerminal(id)
+    else void openAsChat(id)
+  }, [openAsChat, openInTerminal])
   const beginNewNote = useCallback(() => {
     const root = noteRootRef.current
     // The row is already disabled without a root; this is the second half of
@@ -3086,7 +3172,7 @@ export function Canvas({
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat,
+    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -3446,6 +3532,7 @@ export function Canvas({
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   claudeAvailable={claudeAvailable(presetRows)}
+                  onOpenInTerminal={openInTerminal}
                 />
               )
             }
@@ -3476,6 +3563,7 @@ export function Canvas({
                 onEntryEnd={onPanelEntryEnd}
                 onBeginLink={onBeginLink}
                 linkTarget={linkDraw.state?.target === panel.rect.id}
+                onOpenAsChat={openAsChatVoid}
               />
             )
           })}
@@ -3639,6 +3727,7 @@ export function Canvas({
         onClose={paletteActions.closePanel}
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
+        onFrontEnd={onFrontEnd}
         onOpenReview={paletteActions.openReview}
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}

@@ -36,6 +36,11 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | `REASON_ALREADY_ACTIVE` | already the active workspace | — (informational) |
 | `REASON_ALREADY_DEFAULT` | already the default | — (informational) |
 | `REASON_NOT_ON_PATH` | not found on PATH | install the CLI; the Environment rows say which |
+| `REASON_TERMINAL_LIVE` | stop the terminal first — one front-end at a time | let the agent exit, or close its process; then Open as chat (M74) |
+| `REASON_NOT_CLAUDE_SESSION` | only a terminal started as a claude session can open as chat | start the terminal from the Claude preset (a hand-typed `claude` has no pinned session, M17's rule) |
+| `REASON_CHAT_BUSY` | the chat is still answering — interrupt it first | press Interrupt, then Open in terminal (M74) |
+| `REASON_CHAT_EMPTY` | send a message first — an empty chat has nothing to move | send one message; the session then exists to resume |
+| `REASON_NOT_CHAT` | only a chat panel can open in a terminal | focus a chat panel |
 | `REASON_NO_CLAUDE` | claude was not found on the login PATH — install it, or check the environment report | install `claude`; the same sentence disables the launcher's chat line and the chat panel's composer (M73) |
 | `REASON_BUILT_IN_RENAME` | built-in presets can't be renamed | save your own preset (`Save panel as preset`) and rename that |
 | `REASON_BUILT_IN_DELETE` | built-in presets can't be deleted | — (they are the floor the launcher stands on) |

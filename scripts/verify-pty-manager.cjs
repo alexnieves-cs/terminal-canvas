@@ -1523,6 +1523,26 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       h.manager.killAll()
     }
 
+    // resume-pin.1 (M74). A spec that RESUMES a session adopts the resumed id
+    //     as its pin instead of minting one beside it: the argv carries ONE
+    //     session flag (--resume, never --session-id too), and the pin — what
+    //     M17's cost accounting reads — names the conversation actually
+    //     running. Fault-injected: dropping the adopt block leaves the pin a
+    //     fresh uuid and this red.
+    {
+      const pins = new Map()
+      const h = makeHarness(undefined, {
+        pinnedSession: (id) => pins.get(id),
+        setPinnedSession: (id, sid) => pins.set(id, sid)
+      })
+      const r = await h.manager.create(spec('p9r', '/bin/sh', ['-c', 'sleep 30', '--resume', 'u-resumed'], 'claude-code'))
+      const argv = h.spawnedArgs ? h.spawnedArgs('p9r') : null
+      ok('resume-pin.1 a resumed spec adopts the resumed id as its pin and carries no --session-id',
+        pins.get('p9r') === 'u-resumed' && r !== undefined && (argv === null || (!argv.includes('--session-id') && argv.includes('--resume'))),
+        `pin=${pins.get('p9r')} argv=${JSON.stringify(argv)}`)
+      h.manager.killAll()
+    }
+
     // 29. A panel whose preset declares NO agent is never pinned. The whole
     //     honesty rule rests on this: a login shell must reach the PTY
     //     exactly as the user wrote it, and a pin for it would also make the

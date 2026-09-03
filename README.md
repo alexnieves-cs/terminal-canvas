@@ -364,7 +364,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        env:report / link:open / ledger:list
                        spawn:sheet / spawn:recent
                        agent:create / agent:send / agent:interrupt / agent:dispose
-                       agent:answer / agent:list / agent:transcript
+                       agent:answer / agent:list / agent:transcript / agent:import
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
@@ -828,6 +828,7 @@ price of not killing something.
 | M71 | The agent-session runtime: a main-process conversation with the installed `claude` in headless mode — transcript schema, streaming deltas, interrupt, permission requests, resume — over an injected process runner; no UI by design | ✅ done |
 | M72 | The two documents: the 2.0 product thesis and design brief (extending the 1.x brief), and the M71–M95 scope decision with every backlog entry decided and the web panel declined | ✅ done |
 | M73 | The chat panel: the sixth `Panel` kind — a conversation with the installed `claude` over M71's runtime, streaming, interruptible, its permission questions answered inline, its transcript a file that survives a relaunch, in the one state vocabulary | ✅ done |
+| M74 | Same agent, two front-ends: a claude terminal opens as a chat with its session's own transcript rendered and continued, a chat opens in a terminal with `claude --resume`; one front-end at a time, refused by name otherwise | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

@@ -45,6 +45,8 @@ export interface InspectorProps {
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  /** M74. The panel's front-end verb (open as chat / open in terminal). */
+  onFrontEnd: (id: string) => void
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -98,7 +100,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -123,6 +125,7 @@ function InspectorImpl({
             onClose={onClose}
             onSavePreset={onSavePreset}
             onRestart={onRestart}
+            onFrontEnd={onFrontEnd}
             onOpenReview={onOpenReview}
             onLink={onLink}
             onRemoveLink={onRemoveLink}
@@ -264,7 +267,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   tab, onSelectTab, automations,
-  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onOpenReview,
+  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults
 }: {
   tab: ContextTab
@@ -278,6 +281,7 @@ function InspectorPanel({
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  onFrontEnd: (id: string) => void
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -669,6 +673,23 @@ function InspectorPanel({
         >
           Restart
         </button>
+        {/* M74. The front-end verb — present only on the two kinds that have
+            a conversation, disabled by name when it cannot apply. */}
+        {model.frontEnd !== undefined && (
+          <button
+            type="button"
+            className="inspector__action"
+            data-inspector-action="front-end"
+            data-front-end={model.frontEnd.verb}
+            disabled={!model.frontEnd.enabled}
+            title={model.frontEnd.enabled
+              ? (model.frontEnd.verb === 'open-as-chat' ? `Open ${model.heading} as a chat — the same session, rendered as a transcript` : `Open ${model.heading} in a terminal — claude --resume this session`)
+              : (model.frontEnd.reason ?? '')}
+            {...shellControl(() => onFrontEnd(model.id))}
+          >
+            {model.frontEnd.verb === 'open-as-chat' ? 'Open as chat' : 'Open in terminal'}
+          </button>
+        )}
         <button
           type="button"
           className="inspector__action inspector__action--secondary"

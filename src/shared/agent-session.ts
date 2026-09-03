@@ -91,6 +91,16 @@ export type AgentCreateResult =
   | { kind: 'created'; snapshot: AgentSessionSnapshot }
   | { kind: 'refused'; reason: string }
 
+/** M74. `agent:import`: a terminal's pinned session, read into a chat panel's file. */
+export interface AgentImportRequest {
+  fromPanelId: string
+  toPanelId: string
+}
+
+export type AgentImportResult =
+  | { kind: 'imported'; sessionId: string; turns: number }
+  | { kind: 'refused'; reason: string }
+
 /** What `agent:transcript` answers: the durable file plus the live snapshot, if any. */
 export interface AgentTranscriptResult {
   turns: TranscriptTurn[]

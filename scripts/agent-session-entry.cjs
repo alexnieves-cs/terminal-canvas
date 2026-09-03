@@ -14,5 +14,9 @@ module.exports = {
   quit: require('../src/main/quit'),
   /* M73. The durable per-panel transcript file: node:fs against an injected
      directory, the scrollback log's shape. */
-  log: require('../src/main/agent-transcript-log')
+  log: require('../src/main/agent-transcript-log'),
+  /* M74. The CLI-transcript importer: pure over lines. */
+  importer: require('../src/main/claude-transcript-import'),
+  /* M74. The TUI argv builder, for the resume rule. */
+  agentArgs: require('../src/main/agent-args')
 }

@@ -208,8 +208,8 @@ app.whenReady().then(() => {
   // 67 = 65 plus M65's spawn:sheet and spawn:recent — the spawn sheet's
   // request (main resolves the template, refuses a missing directory) and
   // the recent-directories read.
-  // M73 added the seven agent:* invokes (67 -> 74).
-  const EXPECTED_CHANNELS = 74
+  // M73 added the seven agent:* invokes (67 -> 74); M74 agent:import (75).
+  const EXPECTED_CHANNELS = 75
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -1,5 +1,5 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
-import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult } from '../shared/agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
@@ -115,6 +115,8 @@ export interface AgentHandlers {
   answer(req: { id: string; requestId: string; answer: PermissionAnswer }): boolean
   list(): AgentSessionSnapshot[]
   transcript(id: string): AgentTranscriptResult
+  /** M74. */
+  importSession(req: AgentImportRequest): AgentImportResult
 }
 
 const INERT_AGENTS: AgentHandlers = {
@@ -124,7 +126,8 @@ const INERT_AGENTS: AgentHandlers = {
   dispose: () => {},
   answer: () => false,
   list: () => [],
-  transcript: () => ({ turns: [], snapshot: null })
+  transcript: () => ({ turns: [], snapshot: null }),
+  importSession: () => ({ kind: 'refused', reason: 'the agent runtime is not available' })
 }
 
 const INERT_SCROLLBACK: ScrollbackHandlers = {
@@ -227,6 +230,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer }) => agents.answer(req))
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
+  ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())

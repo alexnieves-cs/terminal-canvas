@@ -83,6 +83,12 @@ export interface PanelRow {
   path?: string
   /** The vocabulary's input, so the row can render the word live in its tone. */
   state?: StateInput
+  /** M74. Whether the SESSION's agent is claude — the only session `Open as chat` can follow. */
+  claude?: boolean
+  /** M74. A chat panel with a turn in flight or a permission waiting — the open-in-terminal row's named refusal. */
+  busy?: boolean
+  /** M74. A chat panel's completed turns; zero refuses open-in-terminal by name. */
+  turns?: number
   /** The word at build time — the `state:` query's key and order. */
   stateWord?: string
   /**
@@ -371,6 +377,10 @@ export interface PaletteActions {
   newNote(): void
   /** M73. Mint a chat panel in the focused panel's directory (or home). */
   newChat(): void
+  /** M74. A claude terminal's session, rendered and continued as a chat. */
+  openAsChat(id: string): void
+  /** M74. A chat's session, continued in a terminal with `claude --resume`. */
+  openInTerminal(id: string): void
   openJira(): void
 }
 
@@ -541,6 +551,12 @@ export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal pan
 export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
+/** M74. The two front-end verbs' refusals, each naming its fix. */
+export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
+export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
+export const REASON_CHAT_BUSY = 'the chat is still answering — interrupt it first'
+export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has nothing to move'
+export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
 
 /** M73. Whether a claude preset is available — the one fact the three chat doors share. */
 export function claudeAvailable(presets: readonly PresetRow[]): boolean {
@@ -692,6 +708,40 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         // focusedId alone, and that captured id is what every panel-acting
         // command targets.
         ctx.capturedId === null ? REASON_NO_FOCUS : undefined
+      )
+    )
+    // M74. The two front-end verbs, aimed at the captured panel like Restart,
+    // each refused BY NAME in every situation it cannot apply — never hidden.
+    const termLive = target !== undefined && target.kind === 'terminal' && target.state?.status?.kind === 'running'
+    out.push(
+      withReason(
+        {
+          id: 'panel.open-as-chat',
+          title: 'Open as chat',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          searchText: 'open as chat conversation front-end claude session transcript',
+          group: 'panel',
+          run: () => actions.openAsChat(ctx.capturedId!)
+        },
+        ctx.capturedId === null ? REASON_NO_FOCUS
+          : target === undefined || target.kind !== 'terminal' || target.claude !== true ? REASON_NOT_CLAUDE_SESSION
+            : termLive ? REASON_TERMINAL_LIVE : undefined
+      )
+    )
+    out.push(
+      withReason(
+        {
+          id: 'panel.open-in-terminal',
+          title: 'Open in terminal',
+          subtitle: target ? (target.title ?? target.label) : 'no panel',
+          searchText: 'open in terminal front-end resume claude session',
+          group: 'panel',
+          run: () => actions.openInTerminal(ctx.capturedId!)
+        },
+        ctx.capturedId === null ? REASON_NO_FOCUS
+          : target === undefined || target.kind !== 'chat' ? REASON_NOT_CHAT
+            : target.busy === true ? REASON_CHAT_BUSY
+              : (target.turns ?? 0) === 0 ? REASON_CHAT_EMPTY : undefined
       )
     )
     out.push(

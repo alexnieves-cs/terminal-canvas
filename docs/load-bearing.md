@@ -3080,3 +3080,27 @@ resolution of the CLI on the login PATH — so no two of them can disagree about
 seeds a claude-kind preset over `/bin/sh` to make that gate answer the way a machine with
 the CLI does, through the real path.
 
+**One front-end at a time: a Claude session moves between a terminal and a chat, it is never
+shared (`main/index.ts`'s `importSession`, `Canvas.tsx`'s `openAsChat`/`openInTerminal`).**
+Two processes on one session id would both append to the CLI's transcript, and the CLI's
+`--resume` reads that file: the conversation would fork silently and each front-end would
+show a different half. So `Open as chat` refuses BY NAME while the terminal's process is
+live (`ptyManager.list()` names it), and moving either way REMOVES the panel it came from
+through its ordinary close path before the new one is minted at its rect. The verbs move a
+conversation; nothing copies one. `verify:panels front.1` drives the refusal and the move.
+
+**The pin FOLLOWS the resume (`main/agent-args.ts`, `main/pty-manager.ts`).** A terminal
+spawned with `claude --resume <id>` must not also be given `--session-id <fresh>`: the CLI
+refuses the pair, and had it not, M17's cost accounting would read a transcript that never
+exists while the real one grew. `agentArgs` skips the pin when the args carry `--resume`, and
+`PtyManager.create` adopts the resumed id as the panel's pinned session, so cost and a later
+`Open as chat` both name the conversation actually running. `verify:agent-session args.5` and
+`verify:pty-manager resume-pin.1`; both fault-injected.
+
+**The CLI's transcript is imported with its subagents and its meta records left out
+(`main/claude-transcript-import.ts`).** `isSidechain: true` records are a subagent's own
+turns in the same file (M15's finding, reached again); `isMeta: true` records are the CLI's
+injected notes. Either rendered as the user's conversation would show turns nobody typed. A
+typed prompt is a bare STRING in that file — the one shape the stream never produces — and
+is one text block, never an empty turn. `verify:agent-session import.1–.3`.
+

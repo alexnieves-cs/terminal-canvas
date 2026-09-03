@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { shellControl } from '@renderer/shell/shell-control'
 import { panelState } from '@renderer/panels/panel-state'
 import type { PanelSession } from '@renderer/session/panel-session'
 import { useMachineCost } from '@renderer/session/machine-cost-store'
@@ -55,6 +56,8 @@ export interface TerminalPanelProps {
   onSlotUnmount: (id: string) => void
   /** Close this panel for good: the canvas disposes its session and drops it. */
   onClose: (id: string) => void
+  /** M74. Open this claude session as a chat. Shown only when it can apply (an agent spec, no live process). */
+  onOpenAsChat?: (id: string) => void
   /** True only for a newly created panel, never for an LOD remount. */
   entering: boolean
   /** Clears the one-shot entry marker once its wrapper animation finishes. */
@@ -119,7 +122,7 @@ const CONFIRM_CLOSE_MS = 3000
 function TerminalPanelImpl({
   session, rect, z, title, cardDetail, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
-  onBeginLink, linkTarget
+  onBeginLink, linkTarget, onOpenAsChat
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
   const live = session.tier === 'live'
@@ -257,6 +260,13 @@ function TerminalPanelImpl({
           </span>
         )}
         <span className="badge pf__word" data-tone={shown.tone} data-state-word>{shown.word}</span>
+        {/* M74. Never a control that cannot work: shown only for a claude
+            session whose process is not live (one front-end at a time). A
+            LABELLED word after the pill, the row's own control slot. */}
+        {onOpenAsChat !== undefined && session.spec.agent === 'claude-code' && session.status.kind !== 'running' && !readOnly && (
+          <button type="button" className="pf__verb pf__verb--word" data-open-as-chat title="Open as chat — the same session, rendered as a transcript" aria-label="Open as chat"
+            {...shellControl(() => onOpenAsChat(session.id))}>to chat</button>
+        )}
         {live && machineCost !== undefined && <MachineCostBadge cost={machineCost} />}
       </>}
     >

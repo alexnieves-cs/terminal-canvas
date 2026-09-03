@@ -2077,6 +2077,35 @@ const WS = [
     JSON.stringify({ a: a && a.disabledReason, b: b && b.disabledReason, c: c && c.disabledReason }))
 }
 
+// M74 — front.1. The two front-end rows, each aimed at the captured panel and
+//     each disabled BY NAME in every situation it cannot apply: a claude
+//     terminal opens as chat only when its process is not live, a plain
+//     shell never can, a chat opens in a terminal only at rest and with turns.
+//     Neither row is hidden — the rule verify:palette 31 states.
+{
+  const term = (over = {}) => ({ id: 't1', label: 'claude — api', kind: 'terminal', restartable: true, agent: true, claude: true, ...over })
+  const rows = (c) => P.buildCommands(c)
+  const exited = byId(rows(ctx({ panels: [term({ state: { kind: 'terminal', status: { kind: 'exited', code: 0 }, dormant: false } })], capturedId: 't1' })), 'panel.open-as-chat')
+  const live = byId(rows(ctx({ panels: [term({ state: { kind: 'terminal', status: { kind: 'running', pid: 1, command: 'claude' }, dormant: false } })], capturedId: 't1' })), 'panel.open-as-chat')
+  const shell = byId(rows(ctx({ panels: [term({ agent: false, claude: false })], capturedId: 't1' })), 'panel.open-as-chat')
+  const codex = byId(rows(ctx({ panels: [term({ agent: true, claude: false })], capturedId: 't1' })), 'panel.open-as-chat')
+  const noFocus = byId(rows(ctx({ panels: [term()] })), 'panel.open-as-chat')
+  const chatRow = (over = {}) => ({ id: 'c1', label: 'chat · repo', kind: 'chat', restartable: false, agent: false, turns: 2, ...over })
+  const rest = byId(rows(ctx({ panels: [chatRow()], capturedId: 'c1' })), 'panel.open-in-terminal')
+  const busy = byId(rows(ctx({ panels: [chatRow({ busy: true })], capturedId: 'c1' })), 'panel.open-in-terminal')
+  const empty = byId(rows(ctx({ panels: [chatRow({ turns: 0 })], capturedId: 'c1' })), 'panel.open-in-terminal')
+  const wrongKind = byId(rows(ctx({ panels: [term({ state: { kind: 'terminal', status: { kind: 'exited', code: 0 }, dormant: false } })], capturedId: 't1' })), 'panel.open-in-terminal')
+  const asChatOnChat = byId(rows(ctx({ panels: [chatRow()], capturedId: 'c1' })), 'panel.open-as-chat')
+  ok('front.1 Open as chat is enabled for an exited claude terminal and refused by name while live, for a plain shell, with no focus, or on a chat; Open in terminal is enabled for a chat at rest and refused by name while answering, when empty, or on a terminal',
+    exited && exited.disabledReason === undefined && live && live.disabledReason === P.REASON_TERMINAL_LIVE &&
+      shell && shell.disabledReason === P.REASON_NOT_CLAUDE_SESSION && codex && codex.disabledReason === P.REASON_NOT_CLAUDE_SESSION && noFocus && noFocus.disabledReason === P.REASON_NO_FOCUS &&
+      asChatOnChat && asChatOnChat.disabledReason === P.REASON_NOT_CLAUDE_SESSION &&
+      rest && rest.disabledReason === undefined && busy && busy.disabledReason === P.REASON_CHAT_BUSY &&
+      empty && empty.disabledReason === P.REASON_CHAT_EMPTY && wrongKind && wrongKind.disabledReason === P.REASON_NOT_CHAT &&
+      /stop/.test(P.REASON_TERMINAL_LIVE) && /interrupt/.test(P.REASON_CHAT_BUSY),
+    JSON.stringify({ exited: exited && exited.disabledReason, live: live && live.disabledReason, shell: shell && shell.disabledReason, rest: rest && rest.disabledReason, busy: busy && busy.disabledReason, empty: empty && empty.disabledReason, wrongKind: wrongKind && wrongKind.disabledReason }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

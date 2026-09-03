@@ -238,5 +238,7 @@ module.exports = {
      stream — the same injected-runner trade verify:agent-session makes, in a
      real renderer. The real claude-cli-runner is deliberately NOT here. */
   AgentSessionManager: require('../src/main/agent-session').AgentSessionManager,
-  createAgentTranscriptLog: require('../src/main/agent-transcript-log').createAgentTranscriptLog
+  createAgentTranscriptLog: require('../src/main/agent-transcript-log').createAgentTranscriptLog,
+  /* M74. The CLI-transcript importer, pure. */
+  importClaudeTranscript: require('../src/main/claude-transcript-import').importClaudeTranscript
 }
