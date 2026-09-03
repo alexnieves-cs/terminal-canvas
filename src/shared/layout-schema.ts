@@ -3,6 +3,7 @@ import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
+import type { ChatSource } from './chat-panel'
 import type { LinkAutomation } from './handoff'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import {
@@ -175,12 +176,24 @@ export interface PersistedToolboxPanel extends PersistedPanelBase {
   source: ToolboxSource
 }
 
+/**
+ * M73's chat panel. Like every sessionless kind it carries NO top-level cwd
+ * and NO args: its `chat.cwd` is the directory its agent works in, a field
+ * with a different meaning from a terminal's spawn cwd, and a reader that
+ * keyed on the top-level field would mistake it for a terminal.
+ */
+export interface PersistedChatPanel extends PersistedPanelBase {
+  kind: 'chat'
+  chat: ChatSource
+}
+
 export type PersistedPanel =
   | PersistedTerminalPanel
   | PersistedReviewPanel
   | PersistedFilePanel
   | PersistedJiraPanel
   | PersistedToolboxPanel
+  | PersistedChatPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -509,6 +522,33 @@ function parseToolboxSource(raw: unknown, id: string, warnings: string[]): Toolb
   return { cwd, label: isStr(label) ? label : cwd }
 }
 
+/**
+ * M73. A chat panel's record. `cwd` and `sessionId` are both required — a
+ * chat with no session id could only ever start a NEW conversation, silently
+ * discarding the one the panel was showing — so either missing drops the
+ * panel with a warning. The knobs go through `parseAgentOptions`, the ONE
+ * parser for that shape, so an unknown knob costs the knob and never the
+ * panel, exactly as it does on a terminal panel or a preset.
+ */
+function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSource | null {
+  if (!isRecord(raw)) {
+    warnings.push(`dropped panel ${id}: chat record was ${raw === undefined ? 'absent' : 'not an object'}`)
+    return null
+  }
+  if (!isStr(raw.cwd)) {
+    warnings.push(`dropped panel ${id}: chat cwd was not a string`)
+    return null
+  }
+  if (!isStr(raw.sessionId) || raw.sessionId === '') {
+    warnings.push(`dropped panel ${id}: chat sessionId was missing`)
+    return null
+  }
+  const chat: ChatSource = { cwd: raw.cwd, sessionId: raw.sessionId }
+  const agentOptions = parseAgentOptions(raw.agentOptions, `panel ${id}`, warnings)
+  if (agentOptions !== undefined) chat.agentOptions = agentOptions
+  return chat
+}
+
 function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped file panel ${id}: source was not an object`)
@@ -607,6 +647,11 @@ function parsePanel(
     const source = parseToolboxSource(raw.source, id, warnings)
     if (source === null) return null
     return { ...base, kind: 'toolbox', source }
+  }
+  if (kind === 'chat') {
+    const chat = parseChatSource((raw as Record<string, unknown>).chat, id, warnings)
+    if (chat === null) return null
+    return { ...base, kind: 'chat', chat }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)

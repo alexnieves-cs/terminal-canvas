@@ -232,5 +232,11 @@ module.exports = {
      rather than reimplement: the harness supplies its OWN fenced
      resolveTranscript (never this module's), and the only path readFrom is
      ever called with is the harness's own fixture file. */
-  readFrom: require('../src/main/transcript-reader').readFrom
+  readFrom: require('../src/main/transcript-reader').readFrom,
+  /* M73. The agent-session runtime and its transcript log, so the chat checks
+     drive a REAL manager over a FAKE process runner replaying a recorded
+     stream — the same injected-runner trade verify:agent-session makes, in a
+     real renderer. The real claude-cli-runner is deliberately NOT here. */
+  AgentSessionManager: require('../src/main/agent-session').AgentSessionManager,
+  createAgentTranscriptLog: require('../src/main/agent-transcript-log').createAgentTranscriptLog
 }

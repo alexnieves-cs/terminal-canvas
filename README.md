@@ -363,11 +363,14 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        export:panel-text / export:canvas-png
                        env:report / link:open / ledger:list
                        spawn:sheet / spawn:recent
+                       agent:create / agent:send / agent:interrupt / agent:dispose
+                       agent:answer / agent:list / agent:transcript
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
+                       agent:event (batched ~16ms)
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -824,6 +827,7 @@ price of not killing something.
 | M70 | Ship 1.1.0: the version, the README's pictures in words, CLAUDE.md and `docs/load-bearing.md` reconciled, the manual-only list re-read, both packaging gates run with numbers, the graph refreshed | ✅ done |
 | M71 | The agent-session runtime: a main-process conversation with the installed `claude` in headless mode — transcript schema, streaming deltas, interrupt, permission requests, resume — over an injected process runner; no UI by design | ✅ done |
 | M72 | The two documents: the 2.0 product thesis and design brief (extending the 1.x brief), and the M71–M95 scope decision with every backlog entry decided and the web panel declined | ✅ done |
+| M73 | The chat panel: the sixth `Panel` kind — a conversation with the installed `claude` over M71's runtime, streaming, interruptible, its permission questions answered inline, its transcript a file that survives a relaunch, in the one state vocabulary | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

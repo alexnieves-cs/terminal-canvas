@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import type { AgentSessionEvent } from '../shared/agent-session'
 import {
   IPC,
   IPC_EVENTS,
@@ -111,6 +112,16 @@ const bridge: CanvasBridge = {
   },
   ledger: {
     list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit)
+  },
+  agentSession: {
+    create: (spec) => ipcRenderer.invoke(IPC.AGENT_CREATE, spec),
+    send: (id, text) => ipcRenderer.invoke(IPC.AGENT_SEND, id, text),
+    interrupt: (id) => ipcRenderer.invoke(IPC.AGENT_INTERRUPT, id),
+    dispose: (req) => ipcRenderer.invoke(IPC.AGENT_DISPOSE, req),
+    answer: (req) => ipcRenderer.invoke(IPC.AGENT_ANSWER, req),
+    list: () => ipcRenderer.invoke(IPC.AGENT_LIST),
+    transcript: (id) => ipcRenderer.invoke(IPC.AGENT_TRANSCRIPT, id),
+    onEvent: (listener) => subscribe<AgentSessionEvent>(IPC_EVENTS.AGENT_EVENT, listener)
   },
   spawn: {
     sheet: (req: SpawnRequest) => ipcRenderer.invoke(IPC.SPAWN_SHEET, req),

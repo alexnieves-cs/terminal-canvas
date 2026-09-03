@@ -4,6 +4,8 @@ import type { RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
 import { Close, KIND_GLYPH } from '@renderer/icons'
 import { panelState } from '@renderer/panels/panel-state'
+import { useChat } from '@renderer/chat/chat-store'
+import { chatStateInput } from '@renderer/chat/chat-model'
 
 /* M63. The rail's left column: a terminal's is its state dot, every other
    kind's is a glyph naming the kind — kind and state stop sharing a slot. */
@@ -37,10 +39,15 @@ function RailPanelRowImpl({
   row, selected, onGoTo, onStart, onClose, merged = false
 }: RailPanelRowProps): JSX.Element {
   const state = useAgentState(row.id)
+  // M73. A chat row subscribes to its own session mirror for the same reason
+  // it subscribes to its agent state: a delta for c3 re-renders c3's row and
+  // nothing else, and none of it rides the rail's signature.
+  const chat = useChat(row.id)
   // M63. The word and the tone, from the one vocabulary, with the agent
   // state this row subscribes to applied — `row.tail` is the same answer
   // without it, kept for the signature and the plain-node checks.
-  const shown = panelState(row.state, state)
+  const chatInput = row.state.kind === 'chat' ? chatStateInput(chat.snapshot, chat.turns.length > 0) : undefined
+  const shown = panelState(row.state.kind === 'chat' ? { ...row.state, ...(chatInput === undefined ? {} : { chat: chatInput }) } : row.state, state)
   const Glyph = row.state.kind === 'terminal' ? null : KIND_GLYPH[row.state.kind]
   return (
     <li

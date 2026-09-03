@@ -3,6 +3,7 @@ import { CardDetailContext } from './card-detail-context'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import type { Panel } from '@renderer/panels/panels'
+import type { PanelStateWord } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
 import { Close, KIND_GLYPH } from '@renderer/icons'
@@ -67,6 +68,12 @@ export interface PanelFrameProps {
   agentState?: AgentState
   /** M69. The word the summary tier shows for a sessionless kind, when the kind's own name is not it (a prose file is a `note`). */
   kindWord?: string
+  /**
+   * M73. A PROCESS kind that is not a terminal (a chat panel) supplies its
+   * state word and tone from the one vocabulary: the dot, the far tiers and
+   * the edge read it instead of the kind. Absent for every document kind.
+   */
+  state?: PanelStateWord
   /** null: no close control (the merged view's read-only geometry). */
   close: PanelFrameClose | null
   /** The terminal's enter animation, on the motion wrapper. */
@@ -78,12 +85,15 @@ export interface PanelFrameProps {
 }
 
 /** M69. The word a sessionless kind shows in its summary's state slot. */
-const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira' }
+const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', chat: 'chat' }
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentState,
-  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord
+  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state
 }: PanelFrameProps): JSX.Element {
+  // M73. The tone every mark below reads: a terminal's rides rootAttrs, a
+  // process kind's is its state's, a document kind's is `kind`.
+  const tone = state?.tone ?? rootAttrs?.['data-tone'] ?? 'kind'
   // M69. Below SUMMARY_ENTER every kind — not only a terminal — renders its
   // summary in place of its body; below BLOCK_ENTER, a block in its tone. The
   // chrome row stays and the state edge is the border, so the edge survives
@@ -91,14 +101,14 @@ export function PanelFrame({
   const detail = useContext(CardDetailContext)
   const farBody: ReactNode | null = kind === 'terminal' ? null
     : detail === 'block' ? (
-      <div className="pf__body pf__far pf__far--block" data-card-block data-tone="kind">
-        <div className="panel__card-block" data-tone="kind"><span className="panel__card-block-title">{title}</span></div>
+      <div className="pf__body pf__far pf__far--block" data-card-block data-tone={tone}>
+        <div className="panel__card-block" data-tone={tone}><span className="panel__card-block-title">{title}</span></div>
       </div>
     ) : detail === 'summary' ? (
       <div className="pf__body pf__far" data-card-summary>
         <div className="panel__card-summary">
           <div className="panel__card-summary-title">{title}</div>
-          <div className="panel__card-summary-state" data-tone="kind">{kindWord ?? KIND_WORD[kind as Exclude<Panel['kind'], 'terminal'>]}</div>
+          <div className="panel__card-summary-state" data-tone={tone}>{state?.word ?? kindWord ?? KIND_WORD[kind as Exclude<Panel['kind'], 'terminal'>]}</div>
         </div>
       </div>
     ) : null
@@ -178,7 +188,7 @@ export function PanelFrame({
       style={style}
       // M63. The state edge reads this: a terminal supplies its tone through
       // rootAttrs; every other kind is its kind.
-      data-tone={rootAttrs?.['data-tone'] ?? 'kind'}
+      data-tone={tone}
       {...(rootAttrs ?? {})}
     >
       {motion ? (

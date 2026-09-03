@@ -1,4 +1,4 @@
-import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel } from '@renderer/panels/panels'
 
 /**
  * M64. IDENTITY LEADS, PROVENANCE FOLLOWS (brief, principle 3).
@@ -39,6 +39,12 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
     return `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
   }
+  // M73. `chat · <directory basename>`, the toolbox's split for the same
+  // reason: the row has room for one thing, and the path is the trailing hint.
+  if (isChatPanel(panel)) {
+    const cwd = panel.chat.cwd.replace(/\/+$/, '')
+    return `chat · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+  }
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -48,5 +54,6 @@ export function panelPath(panel: Panel): string | undefined {
   if (isReviewPanel(panel) || isJiraPanel(panel)) return undefined
   if (isFilePanel(panel)) return panel.source.path.slice(0, Math.max(0, panel.source.path.lastIndexOf('/'))) || '/'
   if (isToolboxPanel(panel)) return panel.source.cwd
+  if (isChatPanel(panel)) return panel.chat.cwd
   return panel.spec.cwd
 }

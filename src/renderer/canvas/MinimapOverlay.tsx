@@ -3,6 +3,8 @@ import { minimapProjection, minimapToWorld, viewportCentredAt, type MinimapProje
 import type { Size, Viewport, WorldRect } from './viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { useChat } from '@renderer/chat/chat-store'
+import { chatStateInput } from '@renderer/chat/chat-model'
 
 /**
  * M69. THE MINIMAP — the status board at thumbnail scale, in the canvas's
@@ -29,7 +31,11 @@ export interface MinimapProps {
 
 function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: number; h: number } }): JSX.Element {
   const agent = useAgentState(row.id)
-  const shown = panelState(row.state, agent)
+  // M73. A chat block reads its session mirror, as the rail row does, so the
+  // status board shows a conversation's state and not its kind.
+  const chat = useChat(row.id)
+  const chatInput = row.state.kind === 'chat' ? chatStateInput(chat.snapshot, chat.turns.length > 0) : undefined
+  const shown = panelState(chatInput === undefined ? row.state : { ...row.state, chat: chatInput }, agent)
   return (
     <div className="minimap__block" data-minimap-block={row.id} data-tone={shown.tone} title={`${row.label} — ${shown.word}`}
       style={{ left: box.x, top: box.y, width: Math.max(2, box.w), height: Math.max(2, box.h) }} />

@@ -1,4 +1,8 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import type { AgentOptions } from '@shared/cost'
+import { claudeAvailable } from '@renderer/palette/commands'
+import { disposeChat } from '@renderer/chat/useChatSessions'
+import type { SpawnResult } from '@shared/ipc-contract'
 import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
@@ -12,7 +16,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
+  isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
 import { expandGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
@@ -62,6 +66,8 @@ export interface PaletteActionsDeps {
   openToolboxPanel: (cwd: string, label: string, centre: Point) => void
   openJiraPanel: () => void
   beginNewNote: () => void
+  /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
+  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>
   restartWithSpec: (id: string, nextSpec: PanelSpecTemplate) => void
   commitHistory: (next: Panel[]) => void
   switchWorkspace: (id: string) => Promise<boolean>
@@ -117,7 +123,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote,
+    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -336,6 +342,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               if (isToolboxPanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M73. The sixth arm; `verify:layout chat.1` is the parse side of
+              // the same field-by-field rule this rename obeys.
+              if (isChatPanel(p)) {
+                return { kind: p.kind, rect: p.rect, chat: p.chat, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them
@@ -777,6 +788,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     // And, like the reset and undo loops, it skips a
                     // sessionless panel's id — see doomedSessionlessIds above
                     // for what the skip buys and exactly how far it reaches.
+                    // M73. A chat's session is main's and the record is
+                    // going, so it is disposed WITH its file — for every
+                    // doomed id, since a hidden workspace's chat is not in
+                    // panelsRef to be told apart: for any other kind this is
+                    // a no-op in main (no session) and on disk (no file).
+                    disposeChat(panelId, true)
                     if (doomedSessionlessIds.has(panelId)) {
                       clearFileResult(panelId)
                       clearToolbox(panelId)
@@ -1008,7 +1025,13 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           submit: () => {},
           sheet: {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
-            submit: (values) => window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
+            claudeAvailable: claudeAvailable(presetRows),
+            // M73. A chat is minted HERE, never sent to spawn:sheet: main
+            // validates the directory and the CLI through agent:create and
+            // the refusal is shown in the sheet like any other.
+            submit: (values) => values.what.kind === 'chat'
+              ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
+              : window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
           }
         })
         palette.openPalette()
@@ -1226,6 +1249,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     openJira: () => openJiraPanel(),
     newNote: () => beginNewNote(),
+    newChat: () => { void beginNewChat() },
     setPresetWorktree: (id, on) => {
       // Main owns the store and refuses a built-in; the reload is what makes
       // the toggle row's own title flip.
@@ -1282,6 +1306,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
-       openFilePanel, openJiraPanel, worldCentre, beginNewNote, reloadWorktrees,
+       openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, reloadWorktrees,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef])
 }

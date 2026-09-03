@@ -3094,6 +3094,79 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ a, b, c, d, e }))
 }
 
+// ======================= M73: the chat panel on disk ====================
+// chat.1 — a chat panel round-trips with its WHOLE `chat` record: the
+// directory, the CLI session id the renderer minted, and the agent knobs —
+// and an ABSENT agentOptions stays absent (a spread that wrote
+// `agentOptions: undefined` reads as present after IPC, the trap every copy
+// site in this repo already names).
+{
+  const out = L.parseLayout(JSON.stringify({
+    version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+      { id: 'c1', kind: 'chat', x: 1, y: 2, w: 560, h: 620, z: 3, title: 'api chat',
+        chat: { cwd: '/Users/me/repo', sessionId: '11111111-1111-4111-8111-111111111111', agentOptions: { model: 'opus', effort: 'high' } } },
+      { id: 'c2', kind: 'chat', x: 1, y: 2, w: 560, h: 620, z: 4, chat: { cwd: '~', sessionId: 'u-2' } }
+    ] }]
+  }))
+  // Guarded reads: a parser that drops both panels (the red state) must
+  // print this check RED rather than throw and take every check below it.
+  const ws = out.snapshot.workspaces[0]
+  const p0 = (ws && ws.panels[0]) || {}
+  const p1 = (ws && ws.panels[1]) || {}
+  ok('chat.1 a chat panel round-trips with its whole chat record, and an absent agentOptions stays absent',
+    ws !== undefined && ws.panels.length === 2 && !out.warnings.some((w) => /c1|c2/.test(w)) &&
+      p0.kind === 'chat' && p0.chat && p0.chat.cwd === '/Users/me/repo' && p0.chat.sessionId === '11111111-1111-4111-8111-111111111111' &&
+      p0.chat.agentOptions && p0.chat.agentOptions.model === 'opus' && p0.chat.agentOptions.effort === 'high' && p0.title === 'api chat' &&
+      !('cwd' in p0) && !('args' in p0) &&
+      p1.kind === 'chat' && p1.chat && p1.chat.cwd === '~' && !('agentOptions' in p1.chat),
+    JSON.stringify({ warnings: out.warnings, p0, p1 }))
+}
+
+// chat.2 — a malformed chat record drops that panel ALONE (parseLayout's
+// individual-drop rule, reached by a sixth kind), a sibling survives, and an
+// unknown agent knob costs the FIELD, never the panel (parseAgentOptions is
+// reused, not re-implemented — two parsers for one shape drift).
+{
+  const out = L.parseLayout(JSON.stringify({
+    version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+      { id: 'c1', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 1, chat: { cwd: '/r' } },
+      { id: 'c2', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 2, chat: { cwd: 7, sessionId: 'u' } },
+      { id: 'c3', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 3 },
+      { id: 'c4', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 4, chat: { cwd: '/r', sessionId: 'u-4', agentOptions: { permissionMode: 'yolo', model: 'opus' } } }
+    ] }]
+  }))
+  const ws = out.snapshot.workspaces[0]
+  const ids = ws ? ws.panels.map((p) => p.id) : []
+  const c4 = ws && ws.panels.find((p) => p.id === 'c4')
+  ok('chat.2 a chat record missing its session id, with a non-string cwd, or absent entirely drops that panel alone; an unknown knob drops only the knob',
+    ids.join(',') === 'c4' && out.warnings.filter((w) => /c1|c2|c3/.test(w)).length === 3 &&
+      c4 !== undefined && c4.chat && c4.chat.agentOptions !== undefined && !('permissionMode' in c4.chat.agentOptions) &&
+      c4.chat.agentOptions.model === 'opus',
+    JSON.stringify({ ids, warnings: out.warnings }))
+}
+
+// chat.3 — toPanels/fromPanels carry the record both ways with no top-level
+// cwd/args keys (a chat panel HAS a cwd, inside `chat`, and a top-level one
+// would make it look like a terminal to any reader that keys on that field),
+// and hand back a record that is not the same reference.
+{
+  const toPanels = typeof L.toPanels === 'function' ? L.toPanels : () => []
+  const fromPanels = typeof L.fromPanels === 'function' ? L.fromPanels : () => []
+  const persisted = [{ id: 'c1', kind: 'chat', x: 1, y: 2, w: 560, h: 620, z: 3, title: 'chat', chat: { cwd: '/Users/me/repo', sessionId: 'u-1' } }]
+  // Try/catch so the red state (an adapter with no chat arm reading a
+  // terminal's absent `args`) prints RED here rather than aborting the suite.
+  let panels = [], back = []
+  try { panels = toPanels(persisted); back = fromPanels(panels) } catch (error) { panels = []; back = [] }
+  const p = panels[0] || {}
+  const b = back[0] || {}
+  ok('chat.3 a chat panel survives toPanels/fromPanels with its record, no top-level cwd or args, and no shared reference',
+    panels.length === 1 && p.kind === 'chat' && p.chat && p.chat.cwd === '/Users/me/repo' && p.chat.sessionId === 'u-1' &&
+      p.chat !== persisted[0].chat && !('agentOptions' in p.chat) &&
+      back.length === 1 && b.kind === 'chat' && b.chat && b.chat.cwd === '/Users/me/repo' && b.chat.sessionId === 'u-1' &&
+      b.title === 'chat' && !('cwd' in b) && !('args' in b) && b.chat !== p.chat,
+    JSON.stringify({ panels, back }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

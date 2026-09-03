@@ -2057,6 +2057,26 @@ const WS = [
   ok('rank.1 a row whose title visibly matches outranks a row matched only through its searchText', out.length === 2 && out[0] === 'visible', out.join(','))
 }
 
+// M73 — chat.1. `New chat…` is a CREATE verb beside New note…, visible at
+//     rest for the same reason (it is the only gesture that makes one), and
+//     disabled BY NAME when claude is not on the login PATH — derived from
+//     the preset rows' own availability, so the palette and the launcher
+//     cannot disagree about whether the CLI was found.
+{
+  const found = P.buildCommands(ctx({ presets: [SHELL, { ...CLAUDE, available: true, agent: 'claude-code' }] }))
+  const missing = P.buildCommands(ctx({ presets: [SHELL, { ...CLAUDE, available: false, agent: 'claude-code' }] }))
+  const none = P.buildCommands(ctx({ presets: [SHELL] }))
+  const a = byId(found, 'panel.new-chat')
+  const b = byId(missing, 'panel.new-chat')
+  const c = byId(none, 'panel.new-chat')
+  const resting = P.filterCommands(found, '')
+  ok('chat.1 New chat… is a spawn-group row at rest, enabled when a claude preset is available and disabled by name (the PATH) when it is not or when no claude preset exists',
+    a && a.group === 'spawn' && a.disabledReason === undefined && resting.some((r) => r.id === 'panel.new-chat') &&
+      b && b.disabledReason === P.REASON_NO_CLAUDE && /PATH/.test(P.REASON_NO_CLAUDE) &&
+      c && c.disabledReason === P.REASON_NO_CLAUDE,
+    JSON.stringify({ a: a && a.disabledReason, b: b && b.disabledReason, c: c && c.disabledReason }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

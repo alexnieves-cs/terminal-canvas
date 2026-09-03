@@ -11,7 +11,16 @@ import type { SpawnRequest } from '@shared/ipc-contract'
  * component (`SpawnSheet.tsx`) only renders and moves focus.
  */
 
-export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string }
+export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' }
+
+/**
+ * M73. The chat arm's stand-in preset id in the request the sheet PREVIEWS.
+ * A chat is never sent to `spawn:sheet` — the sheet's submit branches on
+ * `what.kind` first and mints renderer-side — so this id reaches main only
+ * if that branch is lost, where it is refused as a preset that does not
+ * exist rather than spawning anything.
+ */
+export const CHAT_WHAT_ID = '__chat__'
 
 export interface SheetValues {
   what: SheetWhat
@@ -49,6 +58,12 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
   const cwd = values.cwd.trim()
   const title = values.title.trim()
   const what = values.what
+  if (what.kind === 'chat') {
+    const req: SpawnRequest = { presetId: CHAT_WHAT_ID, cwd }
+    if (title !== '') req.title = title
+    if (Object.keys(values.agentOptions).length > 0) req.agentOptions = { ...values.agentOptions }
+    return req
+  }
   if (what.kind === 'command') {
     const command = what.command.trim()
     return { command, cwd, title: title === '' ? command : title }

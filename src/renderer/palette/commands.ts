@@ -1,4 +1,5 @@
 import type { Command } from './palette-model'
+import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 // Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
 // Erased by esbuild, so it costs verify:palette nothing that the bundle
 // otherwise has no @shared VALUE import at all (that alias is wired
@@ -67,7 +68,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox' | 'chat'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -368,6 +369,8 @@ export interface PaletteActions {
    * mistaken for an open is a create nothing here could pin.
    */
   newNote(): void
+  /** M73. Mint a chat panel in the focused panel's directory (or home). */
+  newChat(): void
   openJira(): void
 }
 
@@ -536,6 +539,13 @@ export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal pan
  * sends them to the wrong gesture.
  */
 export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
+/** M73. One sentence for the palette row, the launcher line and the composer. */
+export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
+
+/** M73. Whether a claude preset is available — the one fact the three chat doors share. */
+export function claudeAvailable(presets: readonly PresetRow[]): boolean {
+  return presets.some((p) => p.agent === 'claude-code' && p.available)
+}
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
 const withReason = (command: Command, reason: string | undefined): Command =>
@@ -874,6 +884,24 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         run: () => actions.newNote()
       },
       ctx.noteRoot === null ? REASON_NO_NOTE_ROOT : undefined
+    )
+  )
+
+  // M73. A chat with claude is the third CREATE verb, beside Open file… and
+  // New note…, visible at rest for their reason. Disabled BY NAME when the
+  // CLI is not on the login PATH — derived from the claude preset row's own
+  // availability, so the palette, the launcher and the sheet cannot
+  // disagree about whether it was found.
+  out.push(
+    withReason(
+      {
+        id: 'panel.new-chat',
+        title: 'New chat…',
+        searchText: 'new chat claude conversation agent talk ask',
+        group: 'spawn',
+        run: () => actions.newChat()
+      },
+      claudeAvailable(ctx.presets) ? undefined : REASON_NO_CLAUDE
     )
   )
 

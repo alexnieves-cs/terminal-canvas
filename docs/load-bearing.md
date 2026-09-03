@@ -3039,3 +3039,44 @@ A `send` during a turn is queued in the session (the transcript shows it, dispos
 a `send` after an exit is a respawn, so a crashed or interrupt-killed process costs the user
 one message, never the conversation.
 
+**A chat panel is a PROCESS node that is not a terminal, and the partition is the one line
+that keeps it out of tiering (`renderer/panels/panels.ts`, `Canvas.tsx`).** M73's `ChatPanel`
+is the sixth kind and the first with a process behind it that is not a PTY. Its process is
+MAIN's (`AgentSessionManager`, keyed by the panel id); the renderer holds a store mirror
+(`chat/chat-store.ts`) and never a `PanelSession`. `isTerminalPanel` gained a sixth clause and
+`verify:viewport 92` reads all six kinds in one assertion, because a partition that admitted
+a chat panel would hand it to `assignTiers` and `registry.ensure` with no spec — a
+`LIVE_BUDGET` slot and a WebGL context spent on a transcript, and nothing on screen to say
+so. `verify:panels chat.1` pins the other side: minting one creates no PTY and no xterm.
+
+**A chat panel's disposal is EXPLICIT at the panel-removing sites, never a diff of the
+visible list (`chat/useChatSessions.ts`).** `useChatSessions` keeps main told about every
+chat panel on the canvas (`agent:create` once per id, idempotent) and seeds the store from
+the durable file; it never disposes. A reconciler that disposed whatever left `panels` would
+kill every conversation on a WORKSPACE SWITCH, exactly the case the registry keeps a
+switched-away terminal alive for. `disposeChat(id, drop)` therefore sits beside each
+`registry.dispose` (close, undo/redo, reset, workspace delete) and is not one — the
+`pty.kill` caller count and `verify:panels` 94 are unchanged, and `chat.4` pins that a chat
+close sends no kill and does drop the session and its file.
+
+**The durable chat transcript is written by MAIN from the runtime's own events, and a
+restored panel renders it before any process exists (`main/agent-transcript-log.ts`,
+`main/index.ts`).** One append-only file per panel under `userData/agent-transcripts`,
+a `turn` line per `turn` event (a merged turn re-written whole; the reader keeps the last
+line per turn id in first-seen order) and a `meta` line per `result`. The renderer never
+echoes a turn back, so a chat that streamed while the window was closed is still on disk.
+Whether the first spawn says `--session-id` or `--resume` is decided at spawn by the CLI's
+own transcript (`transcriptExists`, M17's glob), never by a flag this app persists.
+`verify:panels chat.3` disposes main's session to stand in for a relaunch and reads the
+file back through the real panel; the turn count in the chrome is counted from the
+transcript for the same reason (a fresh session reports zero while the file holds
+yesterday's).
+
+**`claudeAvailable(presets)` is the ONE fact the three chat doors share
+(`palette/commands.ts`).** The palette row, the launcher line, the spawn sheet's arm and the
+composer all read whether a claude-kind preset is available — the preset rows' own
+resolution of the CLI on the login PATH — so no two of them can disagree about whether
+`claude` was found, and each names the same fix (`REASON_NO_CLAUDE`). The panels harness
+seeds a claude-kind preset over `/bin/sh` to make that gate answer the way a machine with
+the CLI does, through the real path.
+

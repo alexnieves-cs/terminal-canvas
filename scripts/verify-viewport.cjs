@@ -1415,13 +1415,40 @@ ok('74 a panel with no kind is not a review panel',
   const j = V.makeJiraPanel('j1', { x: 0, y: 0 }, 1)
   const tb = V.makeToolboxPanel('t2', { x: 0, y: 0 }, 1, { cwd: '/r', label: 'r' })
   const legacy = { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } }
-  ok('92 isTerminalPanel excludes ALL FOUR non-terminal kinds and still admits a kind-less panel',
+  // M73. The SIXTH kind: a chat panel is plain DOM over a main-process
+  // conversation, and a partition that admitted it would hand it to
+  // assignTiers and registry.ensure with no spec — a LIVE_BUDGET slot and a
+  // WebGL context burnt on a transcript. Guarded so the five-kind checks
+  // above keep running red-by-name rather than throwing before this line.
+  const ch = typeof V.makeChatPanel === 'function' ? V.makeChatPanel('c1', { x: 0, y: 0 }, 1, { cwd: '/r', sessionId: 'u' }) : null
+  const isChat = typeof V.isChatPanel === 'function' ? V.isChatPanel : () => 'missing'
+  ok('92 isTerminalPanel excludes ALL FIVE non-terminal kinds and still admits a kind-less panel',
     V.isTerminalPanel(t) === true && V.isTerminalPanel(legacy) === true
       && V.isTerminalPanel(f) === false && V.isTerminalPanel(r) === false
       && V.isTerminalPanel(j) === false && V.isTerminalPanel(tb) === false
+      && ch !== null && V.isTerminalPanel(ch) === false
       && V.isToolboxPanel(tb) === true && V.isToolboxPanel(t) === false
-      && V.isToolboxPanel(f) === false,
-    `terminal=${V.isTerminalPanel(t)} legacy=${V.isTerminalPanel(legacy)} toolbox=${V.isTerminalPanel(tb)}`)
+      && V.isToolboxPanel(f) === false
+      && isChat(ch) === true && isChat(t) === false && isChat(tb) === false,
+    `terminal=${V.isTerminalPanel(t)} legacy=${V.isTerminalPanel(legacy)} toolbox=${V.isTerminalPanel(tb)} chat=${ch && V.isTerminalPanel(ch)}`)
+}
+
+// chat.1 — makeChatPanel centres exactly (makePanel's contract, check 48,
+// inherited by a SIXTH constructor), copies its source rather than sharing
+// the caller's object, never stamps the minted id into it, and keeps an
+// absent agentOptions ABSENT (`'agentOptions' in source` must read false,
+// which a spread that copied the key as undefined would break after IPC).
+{
+  const src = { cwd: '/r', sessionId: 'u-9' }
+  const c = typeof V.makeChatPanel === 'function' ? V.makeChatPanel('c9', { x: 100, y: 200 }, 4, src) : null
+  const withKnobs = typeof V.makeChatPanel === 'function' ? V.makeChatPanel('c8', { x: 0, y: 0 }, 1, { cwd: '/r', sessionId: 'u-8', agentOptions: { model: 'opus' } }) : null
+  ok('chat.1 makeChatPanel centres exactly, copies its source, stamps no panelId into it, and keeps an absent agentOptions absent',
+    c !== null && c.kind === 'chat' && c.z === 4 && c.rect.id === 'c9'
+      && Math.abs(c.rect.x + c.rect.w / 2 - 100) < 1e-9 && Math.abs(c.rect.y + c.rect.h / 2 - 200) < 1e-9
+      && c.chat !== src && c.chat.cwd === '/r' && c.chat.sessionId === 'u-9'
+      && !('panelId' in c.chat) && !('agentOptions' in c.chat)
+      && withKnobs !== null && withKnobs.chat.agentOptions.model === 'opus',
+    c ? JSON.stringify(c) : 'no makeChatPanel')
 }
 
 // 93 — makeFilePanel carries `prose` VERBATIM, omits the key entirely when it

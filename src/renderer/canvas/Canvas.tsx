@@ -85,7 +85,7 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import {
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
-  makeToolboxPanel,
+  makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
   type Panel, type TerminalPanel as TerminalPanelModel
@@ -100,6 +100,12 @@ import type { PaletteActions, PresetRow, PromptRow } from '@renderer/palette/com
 import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
+import { ChatNode } from '@renderer/chat/ChatNode'
+import { REASON_NO_CLAUDE } from '@renderer/palette/commands'
+import type { SpawnResult } from '@shared/ipc-contract'
+import type { AgentOptions } from '@shared/cost'
+import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
+import { claudeAvailable } from '@renderer/palette/commands'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -653,7 +659,11 @@ export function Canvas({
         // undo that merely moved a panel leaves it mounted, and clearing a
         // mounted panel's result puts it back to "reading…" with nothing left
         // to re-read it, because the effect's deps did not change.
-        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id) }
+        // The file is KEPT here (drop: false): an undo that removes a chat
+        // panel can be redone, and the redone panel carries the same session
+        // id — its transcript must still be there to render. Only an
+        // explicit close, a reset and a workspace delete drop the file.
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -1326,6 +1336,8 @@ export function Canvas({
         // makes recycled ids reachable from this very function.
         clearFileResult(panel.rect.id)
         clearToolbox(panel.rect.id)
+        // M73. See onClosePanel: main's session, main's file, no registry.
+        disposeChat(panel.rect.id, true)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1695,6 +1707,11 @@ export function Canvas({
       // for a review node, which has no entry.
       clearFileResult(id)
       clearToolbox(id)
+      // M73. A chat panel's session is MAIN's, not the registry's, so this
+      // is still not a registry.dispose call site: the close ends the
+      // process through agent:dispose and drops the durable file. A no-op
+      // for the other sessionless kinds.
+      disposeChat(id, true)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -2720,6 +2737,10 @@ export function Canvas({
    * render at the line it sits on, and openFilePanel is a `const` declared
    * further down — naming it up there is a TDZ error, not a style preference.
    */
+  // M73. Assigned below, after beginNewChat is declared; read by the test hook.
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>>(
+    async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
+  )
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
@@ -2734,6 +2755,12 @@ export function Canvas({
     // the hook proves the real gesture rather than a parallel mint, the rule
     // __m13Open and __m20Toolbox already obey.
     w.__m24Jira = (): void => openJiraPanel()
+    // M73's mint, through the SAME beginNewChat the palette row, the launcher
+    // line and the sheet call — read through a ref because beginNewChat is
+    // declared below this block (it needs selectOnly), the create-above /
+    // assign-below shape this file already uses. Resolves main's answer, so a
+    // check can read a refusal by name.
+    w.__m73Chat = (cwd: string): Promise<{ kind: string; reason?: string }> => beginNewChatRef.current({ cwd })
   }, [openFilePanel, worldCentre, openJiraPanel, dropPath])
 
   /**
@@ -2953,6 +2980,38 @@ export function Canvas({
    * with the existing bytes untouched either way, since main refuses at the
    * `wx` flag rather than after a check.
    */
+  // M73. Keep main told about every chat panel on this canvas; disposal is
+  // explicit at the removing sites (see useChatSessions).
+  useChatSessions(panels)
+  // M73. Mint a chat panel. The CLI session id is minted HERE so the panel
+  // record is complete before any invoke resolves; main's agent:create is
+  // asked FIRST so a refusal (no such directory, no claude) is answered by
+  // name with no panel minted, and the hook's later create is idempotent.
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }): Promise<SpawnResult> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const focused = focusedIdRef.current
+    const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
+    const fallback = focusedPanel !== undefined && isTerminalPanel(focusedPanel)
+      ? (getLiveSession(focusedPanel.rect.id)?.cwd ?? focusedPanel.spec.cwd)
+      : focusedPanel !== undefined && isChatPanel(focusedPanel) ? focusedPanel.chat.cwd : '~'
+    const cwd = (opts?.cwd ?? '').trim() === '' ? fallback : (opts?.cwd ?? '').trim()
+    const id = `c${nextIdRef.current++}`
+    const sessionId = crypto.randomUUID()
+    const agentOptions = opts?.agentOptions !== undefined && Object.keys(opts.agentOptions).length > 0 ? opts.agentOptions : undefined
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...(agentOptions === undefined ? {} : { agentOptions }) })
+    if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
+    const title = (opts?.title ?? '').trim()
+    setPanels((current) => {
+      const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const next = [...current, title === '' ? panel : { ...panel, title }]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(id)
+    return { kind: 'spawned' }
+  }, [commitHistory, selectOnly])
+  beginNewChatRef.current = beginNewChat
   const beginNewNote = useCallback(() => {
     const root = noteRootRef.current
     // The row is already disabled without a root; this is the second half of
@@ -3027,7 +3086,7 @@ export function Canvas({
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote,
+    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -3369,6 +3428,27 @@ export function Canvas({
                 />
               )
             }
+            // M73. The fifth sessionless arm on the canvas and the first
+            // process kind that is not a terminal: selectAndRaise, never
+            // onSelectPanel, for the same reason as the four above — the
+            // spawn gesture belongs to the composer's Send, not to a click.
+            if (isChatPanel(panel)) {
+              return (
+                <ChatNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                  claudeAvailable={claudeAvailable(presetRows)}
+                />
+              )
+            }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
@@ -3493,6 +3573,8 @@ export function Canvas({
             onOpenFile={paletteActions.openFile}
             onNewNote={paletteActions.newNote}
             noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
+            onNewChat={paletteActions.newChat}
+            chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
           />
         )}
         {envReport !== null && !envReport.shell.ok && (

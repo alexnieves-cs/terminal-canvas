@@ -1995,9 +1995,14 @@ const inventory = (over) => ({
   // copy-paste that produced this defect's sibling in inspector-fields.ts.
   const distinct = new Set(SESSIONLESS.map((k) => tails[k])).size === SESSIONLESS.length
   const terminalStillHonest = R.railTail(undefined, false, 'terminal') === 'not started'
+  // M73. A chat panel is a PROCESS node: with no session answer yet its tail
+  // is the honest process word, like a terminal's — deliberately NOT in the
+  // sessionless list above, and asserted so a chat arm that fell through to
+  // its kind name ("chat") would be caught here.
+  const chatHonest = R.railTail(undefined, false, 'chat') === 'not started'
   ok('kind-tail.1 every sessionless kind has its own tail and only terminal speaks of processes',
-    bad.length === 0 && distinct && terminalStillHonest,
-    JSON.stringify({ tails, bad, distinct, terminalStillHonest }))
+    bad.length === 0 && distinct && terminalStillHonest && chatHonest,
+    JSON.stringify({ tails, bad, distinct, terminalStillHonest, chatHonest }))
 }
 
 // kind-tail.2. buildInspectorModel reports each kind AS ITSELF. InspectorModel.kind
@@ -2016,7 +2021,8 @@ const inventory = (over) => ({
     review: R_.buildInspectorModel(mk('review', { subject: { subjectId: 'p1', repoRoot: '/r', baselineSha: 'abc', label: 'x' } }), undefined, undefined, []).kind,
     file: R_.buildInspectorModel(mk('file', { source: { path: '/a/b.txt' } }), undefined, undefined, []).kind,
     toolbox: R_.buildInspectorModel(mk('toolbox', { source: { cwd: '/a', label: 'a' } }), undefined, undefined, []).kind,
-    jira: R_.buildInspectorModel(mk('jira', { title: 'Jira tickets' }), undefined, undefined, []).kind
+    jira: R_.buildInspectorModel(mk('jira', { title: 'Jira tickets' }), undefined, undefined, []).kind,
+    chat: R_.buildInspectorModel(mk('chat', { chat: { cwd: '/a', sessionId: 'u-1' } }), undefined, undefined, []).kind
   }
   const allSelf = Object.entries(got).every(([k, v]) => k === v)
   ok('kind-tail.2 the inspector model reports every sessionless kind as itself',
@@ -2195,6 +2201,108 @@ const session = (id, over = {}) => ({
     buttons.length >= 2 && bad.length === 0 && wrapperComposes, JSON.stringify({ buttons: buttons.length, bad: bad.length, wrapperComposes }))
 }
 
+// M73 — state.chat. The chat arm of the one vocabulary: a chat panel is a
+//     process node and speaks the terminal's words. Tested in the order the
+//     arm states: a pending permission is `needs you` WHATEVER the process is
+//     doing (the process is waiting on the answer), then streaming → working,
+//     starting → starting, ready → idle, exited → `exited N` as a template
+//     (0 is the common exit; a signal exit has no code and says `exited`),
+//     and no answer yet → not started. No new word, no new tone.
+{
+  const st = (status, pending = 0, exitCode) => R.panelState({ kind: 'chat', status: undefined, dormant: false, chat: { status, pending, exitCode } }, undefined)
+  const got = {
+    none: R.panelState({ kind: 'chat', status: undefined, dormant: false }, undefined),
+    notStarted: st('not-started'), starting: st('starting'), streaming: st('streaming'), ready: st('ready'),
+    exited0: st('exited', 0, 0), exited1: st('exited', 0, 1), signal: st('exited', 0, null),
+    pendingWhileStreaming: st('streaming', 1), pendingWhileReady: st('ready', 2), disposed: st('disposed'),
+    // A transcript with turns and no process is ASLEEP (the restored
+    // terminal's word for the same fact), never `not started`; a live
+    // process with history speaks its own state.
+    historyNoProcess: R.panelState({ kind: 'chat', status: undefined, dormant: false, chat: { status: 'not-started', pending: 0, hasHistory: true } }, undefined),
+    historyNoAnswer: R.panelState({ kind: 'chat', status: undefined, dormant: false, chat: (typeof R.chatStateInput === 'function' ? R.chatStateInput(null, true) : undefined) }, undefined),
+    historyReady: R.panelState({ kind: 'chat', status: undefined, dormant: false, chat: { status: 'ready', pending: 0, hasHistory: true } }, undefined),
+    historyExited: R.panelState({ kind: 'chat', status: undefined, dormant: false, chat: { status: 'exited', pending: 0, exitCode: 1, hasHistory: true } }, undefined)
+  }
+  ok('state.chat the chat arm speaks the process words: needs you outranks everything, working/starting/idle/exited N, and no answer yet is not started',
+    got.none.word === 'not started' && got.none.tone === 'none' &&
+      got.notStarted.word === 'not started' && got.starting.word === 'starting' && got.starting.tone === 'starting' &&
+      got.streaming.word === 'working' && got.streaming.tone === 'working' &&
+      got.ready.word === 'idle' && got.ready.tone === 'idle' &&
+      got.exited0.word === 'exited 0' && got.exited1.word === 'exited 1' && got.exited1.tone === 'exited' &&
+      got.signal.word === 'exited' && got.signal.tone === 'exited' &&
+      got.pendingWhileStreaming.word === 'needs you' && got.pendingWhileStreaming.tone === 'needs-you' &&
+      got.pendingWhileReady.word === 'needs you' && got.disposed.word === 'not started' &&
+      got.historyNoProcess.word === 'asleep' && got.historyNoProcess.tone === 'asleep' &&
+      got.historyNoAnswer.word === 'asleep' && got.historyReady.word === 'idle' && got.historyExited.word === 'exited 1' &&
+      Object.values(got).every((r) => R.TONES.includes(r.tone)),
+    JSON.stringify(got))
+}
+
+// M73 — chat-model.1–.4. The chat panel's pure model: rows from turns, the
+//     live-block merge that keeps a token from rendering twice, the
+//     composer's arms with their reasons, and the snapshot → state input.
+{
+  const rows = typeof R.chatRows === 'function' ? R.chatRows : () => null
+  const turns = [
+    { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'run it' }], at: 1 },
+    { id: 'm1', role: 'assistant', blocks: [{ type: 'thinking', text: '' }, { type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'echo hi' } }], model: 'haiku', at: 2 },
+    { id: 'u-2', role: 'user', blocks: [{ type: 'tool_result', toolUseId: 't1', content: 'hi', isError: false }], at: 3 },
+    { id: 'm2', role: 'assistant', blocks: [{ type: 'text', text: 'done' }, { type: 'unknown', kind: 'server_tool_use' }], model: 'haiku', at: 4 }
+  ]
+  const got = rows(turns, null)
+  const kinds = got ? got.map((r) => r.kind).join(',') : 'none'
+  const tool = got && got.find((r) => r.kind === 'tool')
+  ok('chat-model.1 rows: a user text turn is a user row, a tool result folds into its tool row by id (never its own row), an unknown block is an unknown row naming its kind',
+    kinds === 'user,thinking,tool,text,unknown' && tool && tool.name === 'Bash' && tool.input.command === 'echo hi' &&
+      tool.result && tool.result.content === 'hi' && tool.result.isError === false &&
+      got[4].kindName === 'server_tool_use' && got[0].text === 'run it',
+    JSON.stringify(got))
+  // A stored turn for the live message holds its first TWO blocks; the live
+  // block at index 1 is a duplicate and must not render; index 2 is still
+  // streaming and must.
+  const live = { messageId: 'm2', blocks: [
+    { index: 1, block: { type: 'text', text: '' }, text: 'done' },
+    { index: 2, block: { type: 'text', text: '' }, text: 'and mo' }
+  ] }
+  const merged = rows(turns, live)
+  const texts = merged ? merged.filter((r) => r.kind === 'text').map((r) => [r.text, r.live === true]) : null
+  ok('chat-model.2 a live block whose index the stored turn already covers is dropped, and the one beyond it renders as live — a token never renders twice',
+    texts !== null && texts.length === 2 && texts[0][0] === 'done' && texts[0][1] === false && texts[1][0] === 'and mo' && texts[1][1] === true,
+    JSON.stringify(texts))
+  const otherLive = rows(turns, { messageId: 'm3', blocks: [{ index: 0, block: { type: 'text', text: '' }, text: 'new' }] })
+  ok('chat-model.2b a live message with no stored turn yet renders every live block',
+    otherLive !== null && otherLive[otherLive.length - 1].kind === 'text' && otherLive[otherLive.length - 1].text === 'new' && otherLive[otherLive.length - 1].live === true,
+    JSON.stringify(otherLive && otherLive.slice(-1)))
+  const composer = typeof R.composerState === 'function' ? R.composerState : () => null
+  const snap = (status, pending = []) => ({ id: 'c', cwd: '/r', status, sessionId: 'u', turns: 0, usage: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, pending, queued: 0, counters: { ignored: 0, unknown: 0, malformed: 0 } })
+  const a = composer(snap('streaming'), true)
+  const b = composer(snap('ready'), true)
+  const c = composer(null, false)
+  const d = composer(null, true)
+  const e = composer(snap('exited'), true)
+  ok('chat-model.3 the composer: mid-turn Send is disabled by name and Interrupt enabled; at rest the reverse; with no claude Send names the PATH; before any answer Send is enabled; after an exit Send resumes',
+    a && a.send.enabled === false && typeof a.send.reason === 'string' && a.interrupt.enabled === true &&
+      b && b.send.enabled === true && b.interrupt.enabled === false && typeof b.interrupt.reason === 'string' &&
+      c && c.send.enabled === false && /PATH/.test(c.send.reason) &&
+      d && d.send.enabled === true && e && e.send.enabled === true,
+    JSON.stringify({ a, b, c, d, e }))
+  const input = typeof R.chatStateInput === 'function' ? R.chatStateInput : () => null
+  const i1 = input(snap('streaming', [{ requestId: 'r', toolName: 'Bash', input: {} }]))
+  const i2 = input(null)
+  const i3 = input({ ...snap('exited'), exitCode: 2 })
+  const i4 = input(null, true)
+  const i5 = input(snap('ready'), true)
+  ok('chat-model.4 the state input carries the status, the pending COUNT, the exit code and whether a transcript exists; no snapshot and no history is undefined',
+    i1 && i1.status === 'streaming' && i1.pending === 1 && i2 === undefined && i3 && i3.status === 'exited' && i3.exitCode === 2 &&
+      i4 && i4.hasHistory === true && i4.status === 'not-started' && i5 && i5.hasHistory === true && i5.status === 'ready',
+    JSON.stringify({ i1, i2, i3, i4, i5 }))
+  const arg = typeof R.toolArgument === 'function' ? R.toolArgument : () => null
+  ok('chat-model.5 a tool row\'s path argument is shortened from the LEFT so the file name survives; a command is cut from the right',
+    arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }) === '…/repo/src/server.ts' &&
+      arg({ command: 'echo hi' }) === 'echo hi' && arg({ command: 'x'.repeat(200) }).length === 94 && arg({}) === '',
+    JSON.stringify([arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }), arg({ command: 'x'.repeat(200) }).length]))
+}
+
 // M63 — state.1/.2/.3. THE ONE VOCABULARY. Every combination of kind, status,
 //     dormancy and agent state yields a word from the closed vocabulary and a
 //     tone from the closed tone set (state.1); no renderer file outside
@@ -2203,7 +2311,7 @@ const session = (id, over = {}) => ({
 //     file locally consistent); and railTail, now a wrapper, agrees with
 //     panelState for every fixture the older checks use (state.3).
 {
-  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'jira']
+  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'jira', 'chat']
   const STATUSES = [undefined, { kind: 'idle' }, { kind: 'starting' }, { kind: 'running', pid: 4, command: '/bin/sh' }, { kind: 'exited', code: 0 }, { kind: 'exited', code: 1 }, { kind: 'error', message: 'spawn failed' }]
   const AGENTS = [undefined, 'starting', 'busy', 'idle', 'wants-you', 'exited']
   const WORDS = new Set(['asleep', 'not started', 'starting', 'running', 'working', 'idle', 'needs you', 'exited', 'review', 'file', 'note', 'toolbox', 'jira'])

@@ -1,4 +1,5 @@
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
+import type { ChatSource } from '@shared/chat-panel'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
@@ -135,7 +136,20 @@ export interface ToolboxPanel extends PanelBase {
   source: ToolboxSource
 }
 
-export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel
+/**
+ * M73. A conversation with an agent — the SIXTH kind, and the first that is
+ * a process node without being a terminal. Its process is main's
+ * (`AgentSessionManager`), addressed by this panel's id; the renderer holds a
+ * per-panel store mirror, never a session. No spec, so it never reaches
+ * assignTiers or registry.ensure — isTerminalPanel's sixth clause is the one
+ * line that keeps that structural.
+ */
+export interface ChatPanel extends PanelBase {
+  kind: 'chat'
+  chat: ChatSource
+}
+
+export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel | ChatPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -167,6 +181,10 @@ export function isToolboxPanel(panel: Panel): panel is ToolboxPanel {
   return panel.kind === 'toolbox'
 }
 
+export function isChatPanel(panel: Panel): panel is ChatPanel {
+  return panel.kind === 'chat'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -186,7 +204,8 @@ export function isToolboxPanel(panel: Panel): panel is ToolboxPanel {
  */
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
-    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel)
+    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel) &&
+    !isChatPanel(panel)
   )
 }
 
@@ -654,6 +673,37 @@ export function makeToolboxPanel(
     rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
     z,
     source: { cwd: source.cwd, label: source.label }
+  }
+}
+
+export const CHAT_W = 560
+export const CHAT_H = 620
+
+/**
+ * M73. Centred exactly (makePanel's contract). The record is copied FIELD BY
+ * FIELD and never spread: a shared reference lets the caller's later mutation
+ * rewrite a panel already on the canvas, and a spread would write
+ * `agentOptions: undefined`, which survives IPC and reads as present. The
+ * minted id is never stamped into the record — makeReviewPanel's trap.
+ */
+export function makeChatPanel(
+  id: string,
+  centre: Point,
+  z: number,
+  chat: ChatSource,
+  size?: { w?: number; h?: number }
+): ChatPanel {
+  const w = size?.w ?? CHAT_W
+  const h = size?.h ?? CHAT_H
+  return {
+    kind: 'chat',
+    rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
+    z,
+    chat: {
+      cwd: chat.cwd,
+      sessionId: chat.sessionId,
+      ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } })
+    }
   }
 }
 

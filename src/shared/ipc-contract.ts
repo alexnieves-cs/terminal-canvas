@@ -1,4 +1,6 @@
 import type { RunRow } from './run-ledger'
+import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent } from './agent-session'
+import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
@@ -411,7 +413,22 @@ export const IPC = {
    * twelve spawn directories main recorded, for the sheet's suggestions.
    */
   SPAWN_SHEET: 'spawn:sheet',
-  SPAWN_RECENT: 'spawn:recent'
+  SPAWN_RECENT: 'spawn:recent',
+  /**
+   * M73. The agent-session runtime (M71) reached from the chat panel. Every
+   * verb is keyed by the PANEL id the renderer minted — main never mints one
+   * — and every answer is a snapshot or a named refusal. `agent:transcript`
+   * reads the durable file this app writes plus the live snapshot, which is
+   * what a restored panel renders before any process exists. Deltas and
+   * turns arrive on AGENT_EVENT, already batched at 16ms by the manager.
+   */
+  AGENT_CREATE: 'agent:create',
+  AGENT_SEND: 'agent:send',
+  AGENT_INTERRUPT: 'agent:interrupt',
+  AGENT_DISPOSE: 'agent:dispose',
+  AGENT_ANSWER: 'agent:answer',
+  AGENT_LIST: 'agent:list',
+  AGENT_TRANSCRIPT: 'agent:transcript'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -487,6 +504,13 @@ export const IPC_EVENTS = {
   SETTINGS_CHANGED: 'settings:changed',
   /** M65. The menu's ⌘⇧N: open the spawn sheet. An event, not an invoke, like every menu verb. */
   SPAWN_OPEN_SHEET: 'spawn:open-sheet',
+  /**
+   * M73. One agent-session event, tagged with its panel id. A SEND, not an
+   * invoke, for the reason PTY_DATA is: main owns the process and pushes what
+   * it says; the renderer never polls. Batched at the manager (16ms), so a
+   * token never costs a render.
+   */
+  AGENT_EVENT: 'agent:event',
   /**
    * Where a panel is and what it is running, pushed when either CHANGES.
    *
@@ -977,6 +1001,21 @@ export interface CanvasBridge {
   ledger: {
     /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
     list(panelId: string, limit: number): Promise<RunRow[]>
+  }
+  /** M73. The agent-session runtime. `agent` below is the older agent-STATE surface (M6c/M6d); the two are different facts. */
+  agentSession: {
+    /** M73. Idempotent at an id; spawns nothing. Refuses by name (no such directory; claude not found). */
+    create(spec: AgentSessionSpec): Promise<AgentCreateResult>
+    /** Writes one user turn; queues it if one is in flight; respawns after an exit. */
+    send(id: string, text: string): Promise<SendResult>
+    /** True when a request was written; false with no turn in flight. */
+    interrupt(id: string): Promise<boolean>
+    /** `drop`: also remove the durable transcript (an explicit close, never a quit). */
+    dispose(req: { id: string; drop: boolean }): Promise<void>
+    answer(req: { id: string; requestId: string; answer: PermissionAnswer }): Promise<boolean>
+    list(): Promise<AgentSessionSnapshot[]>
+    transcript(id: string): Promise<AgentTranscriptResult>
+    onEvent(listener: (event: AgentSessionEvent) => void): () => void
   }
   spawn: {
     /** M65. See SPAWN_SHEET. Refuses with a reason rather than spawning into a directory that is not there. */

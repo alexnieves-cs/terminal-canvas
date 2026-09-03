@@ -1,4 +1,6 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
+import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult } from '../shared/agent-session'
+import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
@@ -100,6 +102,31 @@ export interface ScrollbackHandlers {
   search(panelIds: PanelId[], query: string): Promise<ScrollbackSearchHit[]>
 }
 
+/**
+ * M73. What main/index.ts wires over AgentSessionManager and the transcript
+ * log. `create` validates the directory and the CLI's presence and refuses by
+ * name; `transcript` reads the file and the live snapshot together.
+ */
+export interface AgentHandlers {
+  create(spec: AgentSessionSpec): AgentCreateResult
+  send(id: string, text: string): SendResult
+  interrupt(id: string): boolean
+  dispose(req: { id: string; drop: boolean }): void
+  answer(req: { id: string; requestId: string; answer: PermissionAnswer }): boolean
+  list(): AgentSessionSnapshot[]
+  transcript(id: string): AgentTranscriptResult
+}
+
+const INERT_AGENTS: AgentHandlers = {
+  create: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
+  send: () => 'no-session',
+  interrupt: () => false,
+  dispose: () => {},
+  answer: () => false,
+  list: () => [],
+  transcript: () => ({ turns: [], snapshot: null })
+}
+
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
@@ -184,8 +211,22 @@ export function registerIpcHandlers(
   /** M53. Inert by default: a harness that does not wire discard gets a refusal, never a write. */
   reviewDiscard: (req: ReviewDiscardRequest) => Promise<ReviewDiscardResult> = async () => ({ kind: 'refused', detail: 'discard is not wired' }),
   /** M58. Inert by default: a harness that does not wire export gets `failed`, never a dialog. */
-  exporters: Exporters = INERT_EXPORTERS
+  exporters: Exporters = INERT_EXPORTERS,
+  /**
+   * M73. The agent-session runtime's verbs. Inert by default for the same
+   * reason as every collaborator before it: every channel keeps a handler
+   * (verify:ipc) and a harness that did not wire the runtime gets a NAMED
+   * refusal, never a process.
+   */
+  agents: AgentHandlers = INERT_AGENTS
 ): void {
+  ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
+  ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string) => agents.send(id, text))
+  ipcMain.handle(IPC.AGENT_INTERRUPT, (_event, id: string) => agents.interrupt(id))
+  ipcMain.handle(IPC.AGENT_DISPOSE, (_event, req: { id: string; drop: boolean }) => agents.dispose(req))
+  ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer }) => agents.answer(req))
+  ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
+  ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())
