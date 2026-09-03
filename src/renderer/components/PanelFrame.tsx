@@ -1,4 +1,5 @@
-import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
+import { useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { CardDetailContext } from './card-detail-context'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import type { Panel } from '@renderer/panels/panels'
@@ -64,6 +65,8 @@ export interface PanelFrameProps {
   chrome?: ReactNode
   /** Terminal panels have an agent; the frame paints its state dot. */
   agentState?: AgentState
+  /** M69. The word the summary tier shows for a sessionless kind, when the kind's own name is not it (a prose file is a `note`). */
+  kindWord?: string
   /** null: no close control (the merged view's read-only geometry). */
   close: PanelFrameClose | null
   /** The terminal's enter animation, on the motion wrapper. */
@@ -74,10 +77,31 @@ export interface PanelFrameProps {
   children: ReactNode
 }
 
+/** M69. The word a sessionless kind shows in its summary's state slot. */
+const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira' }
+
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentState,
-  close, motion, onSelect, onBeginDrag, onBeginLink, children
+  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord
 }: PanelFrameProps): JSX.Element {
+  // M69. Below SUMMARY_ENTER every kind — not only a terminal — renders its
+  // summary in place of its body; below BLOCK_ENTER, a block in its tone. The
+  // chrome row stays and the state edge is the border, so the edge survives
+  // every tier. The terminal's own tiers are its own (TerminalPanel).
+  const detail = useContext(CardDetailContext)
+  const farBody: ReactNode | null = kind === 'terminal' ? null
+    : detail === 'block' ? (
+      <div className="pf__body pf__far pf__far--block" data-card-block data-tone="kind">
+        <div className="panel__card-block" data-tone="kind"><span className="panel__card-block-title">{title}</span></div>
+      </div>
+    ) : detail === 'summary' ? (
+      <div className="pf__body pf__far" data-card-summary>
+        <div className="panel__card-summary">
+          <div className="panel__card-summary-title">{title}</div>
+          <div className="panel__card-summary-state" data-tone="kind">{kindWord ?? KIND_WORD[kind as Exclude<Panel['kind'], 'terminal'>]}</div>
+        </div>
+      </div>
+    ) : null
   const style: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }
   const beginMove = (event: ReactMouseEvent): void => {
     // Chrome selects, and starts a move. stopPropagation keeps the canvas
@@ -117,7 +141,11 @@ export function PanelFrame({
           </button>
         )}
       </header>
-      {children}
+      {farBody}
+      {/* Mounted under every tier and hidden under the far ones: a body
+          subtree can hold a draft (a Jira comment), and unmounting it on a
+          zoom would discard typed work with no sign (M69's verifier). */}
+      <div className="pf__keep" hidden={farBody !== null}>{children}</div>
       {/* East, south and south-east only — see ResizeEdge. Each handle is a
           child of the frame, so it rides .world's transform with the rest of
           the panel instead of sitting in screen pixels and drifting on zoom.

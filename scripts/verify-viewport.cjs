@@ -1843,6 +1843,50 @@ console.log('\n' + '='.repeat(60))
     can ? JSON.stringify({ t029: at('tail', 0.29), s029: at('summary', 0.29), s013: at('summary', 0.13), b013: at('block', 0.13) }) : 'absent')
 }
 
+// M69 — minimap.1 / minimap.2 / minimap.3. THE OVERVIEW'S PROJECTION. One
+// uniform scale fits every rect AND the viewport's world rect into the thumb
+// with PAD clear on every side; the inverse lands back on the world point;
+// the centred camera keeps its scale. Pure, so the status board's geometry
+// is checked without a window.
+{
+  const P = V.minimapProjection, W = V.minimapToWorld, C = V.viewportCentredAt
+  const have = typeof P === 'function' && typeof W === 'function' && typeof C === 'function'
+  const rects = [
+    { id: 'a', x: 0, y: 0, w: 400, h: 300 }, { id: 'b', x: 2000, y: 100, w: 300, h: 300 }, { id: 'c', x: -600, y: 900, w: 500, h: 200 }
+  ]
+  const vp = { x: -100, y: -50, scale: 0.5 }, size = { width: 1200, height: 800 }, thumb = { w: 200, h: 120 }
+  const pr = have ? P({ rects, viewport: vp, size, thumb }) : null
+  const PAD = have ? V.MINIMAP_PAD : NaN
+  const inside = (b) => b.x >= PAD - 1e-6 && b.y >= PAD - 1e-6 && b.x + b.w <= thumb.w - PAD + 1e-6 && b.y + b.h <= thumb.h - PAD + 1e-6
+  const uniform = pr ? rects.every((r) => { const b = pr.blocks.find((x) => x.id === r.id); return b && Math.abs(b.w / r.w - pr.scale) < 1e-9 && Math.abs(b.h / r.h - pr.scale) < 1e-9 }) : false
+  // Centred: the slack on each axis is split, so the left/top clearance
+  // equals the right/bottom one (a left-aligned projection passed the
+  // first cut — M69's verifier).
+  const boxes = pr ? [...pr.blocks, pr.view] : []
+  const minL = Math.min(...boxes.map((b) => b.x)), maxR = Math.max(...boxes.map((b) => b.x + b.w))
+  const minT = Math.min(...boxes.map((b) => b.y)), maxB = Math.max(...boxes.map((b) => b.y + b.h))
+  const centred = pr !== null && Math.abs(minL - (thumb.w - maxR)) < 1e-6 && Math.abs(minT - (thumb.h - maxB)) < 1e-6
+  ok('minimap.1 the projection fits every rect and the viewport inside the thumb with PAD clear, centred, at one uniform scale',
+    pr !== null && pr.blocks.length === 3 && pr.blocks.every(inside) && inside(pr.view) && uniform && pr.scale > 0 && centred,
+    JSON.stringify(pr))
+
+  const back = pr ? W({ x: pr.blocks[1].x + pr.blocks[1].w / 2, y: pr.blocks[1].y + pr.blocks[1].h / 2 }, pr) : null
+  const empty = have ? P({ rects: [], viewport: vp, size, thumb }) : null
+  const viewWorld = { w: size.width / vp.scale, h: size.height / vp.scale }
+  ok('minimap.2 the inverse lands on the world point, and with no rects the viewport alone fills the thumb',
+    back !== null && Math.abs(back.x - 2150) < 1e-6 && Math.abs(back.y - 250) < 1e-6 &&
+      empty !== null && empty.blocks.length === 0 && inside(empty.view) &&
+      (Math.abs(empty.view.w - (thumb.w - 2 * PAD)) < 1e-6 || Math.abs(empty.view.h - (thumb.h - 2 * PAD)) < 1e-6) &&
+      Math.abs(empty.view.w / empty.view.h - viewWorld.w / viewWorld.h) < 1e-6,
+    JSON.stringify({ back, empty }))
+
+  const cam = have ? C({ x: 2150, y: 250 }, vp, size) : null
+  const centre = cam ? V.screenToWorld({ x: size.width / 2, y: size.height / 2 }, cam) : null
+  ok('minimap.3 the centred camera keeps its scale and puts the point at the viewport centre',
+    cam !== null && cam.scale === vp.scale && Math.abs(centre.x - 2150) < 1e-6 && Math.abs(centre.y - 250) < 1e-6,
+    JSON.stringify({ cam, centre }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

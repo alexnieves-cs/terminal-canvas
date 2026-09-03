@@ -16,6 +16,8 @@ module.exports = {
   ...require('../src/renderer/panels/recover'),
   ...require('../src/renderer/canvas/flight'),
   ...require('../src/renderer/canvas/card-detail'),
+  // M69. The minimap's projection, its inverse, the centred camera.
+  ...require('../src/renderer/canvas/minimap'),
   // M51. The link scanner, shared and pure.
   ...require('../src/shared/link-scan'),
   /* M13: the link geometry. Pure — its only value import is linksOf from

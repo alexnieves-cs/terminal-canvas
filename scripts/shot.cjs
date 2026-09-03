@@ -138,6 +138,8 @@ const SCENES = [
     run: async (k) => { await k.dock('files'); await sleep(500); await k.shot('navigator-files'); await k.dock('panels') } },
   { name: 'attention', intent: 'A panel rang its bell: the dock badge counts one, and the popover lists the waiting panel with a way to jump to it.',
     run: async (k) => { await k.focus('live'); await k.ring(); await k.click('[data-dock="attention"]'); await sleep(400); await k.shot('attention'); await k.press('Escape'); await sleep(200) } },
+  { name: 'overview', intent: 'The minimap in the top-right corner at 100%: one block per panel in its state colour — the waiting panel amber — and the camera as an iris rectangle; the status board while working.',
+    run: async (k) => { await k.shot('overview') } },
   { name: 'group', intent: 'A named, coloured group frame around two panels, with its label, member count, and its card and remove controls in the header.',
     run: async (k) => { await k.goTo('the workers'); await k.wake('groupA'); await k.shot('group') } },
   { name: 'group-collapsed', intent: 'The same group carded: its live member is now a card inside a dashed frame, and nothing was closed.',

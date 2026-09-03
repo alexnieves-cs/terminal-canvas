@@ -1700,7 +1700,10 @@ body {
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
    terminal, and tinting it would fight the agent's own colours — which
    tmux-args.ts goes out of its way to pass through at 24-bit. */
-.panel--agent-busy { border-color: var(--blue); }
+/* M69. The agent's hue is the LEFT EDGE only (brief, Colour): a tint on all
+   four sides read, at 22%, as a ring in the state colour — the interface's
+   mark, not the agent's. The edge rule below still paints the left side. */
+.panel--agent-busy { border-color: var(--frame-line); }
 /* Same colour as .panel's own base border-color — deliberately, not left out.
    agent-state.ts refuses to alias `starting` to `idle`, so the state machine
    treats them as distinct even though they currently render alike on this
@@ -1719,7 +1722,7 @@ body {
   50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px var(--amber-dim); }
 }
 .panel--agent-wants-you {
-  border-color: var(--amber);
+  border-color: var(--frame-line);
   /* The STATIC ring is not redundant with the keyframes and must not be
      deleted as such. The reduced-motion block forces every animation to
      .01ms with one iteration and no fill-mode, so the moment it applies the
@@ -1730,7 +1733,7 @@ body {
   box-shadow: 0 0 0 2px var(--amber);
   animation: wants-you-pulse 2.4s ease-in-out infinite;
 }
-.panel--agent-exited { border-color: var(--red); }
+.panel--agent-exited { border-color: var(--frame-line); }
 
 /* .panel--selected must still win: selection is where the USER is, and a
    border that stopped tracking the click would make the canvas feel broken
@@ -1754,9 +1757,12 @@ body {
    landing on a panel selects it while it is still waiting. If selection
    painted over the amber here, the jump key would take you to a panel and
    hide the very reason it took you there. */
+/* M69: iris like every other selection. M6d kept this amber so a jump would
+   not hide the reason it landed here; the reason is the LEFT EDGE now, which
+   selection never paints over. */
 .panel--selected.panel--agent-wants-you {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 2px var(--amber);
+  border-color: var(--iris);
+  box-shadow: 0 0 0 1px var(--iris);
 }
 
 /* STATE EDGE, the last word (M63/M64). Declared AFTER every rule above that
@@ -2048,6 +2054,58 @@ body {
 .pf__word[data-tone="asleep"],
 .pf__word[data-tone="none"],
 .pf__word[data-tone="starting"] { color: var(--muted); border-color: var(--border); }
+
+/* M69. THE MINIMAP: the status board at thumbnail scale, top-right, outside
+   .world. A hairline frame on --s-2 (line, not shadow); blocks in their
+   tone's dim fill with a tone hairline; the camera an iris rectangle. It is
+   the one overlay besides the HUD's zoom cluster that takes the pointer. */
+/* M69. Below the summary band a subagent node's description is 3pt noise. */
+.world[data-detail="summary"] .subagent-node__desc, .world[data-detail="block"] .subagent-node__desc { display: none; }
+/* The frame keeps its body MOUNTED under the far tiers (a Jira comment
+   draft lives in that subtree and must not be discarded by a zoom) — hidden,
+   not unmounted. */
+.pf__keep { display: contents; }
+.pf__keep[hidden] { display: none; }
+.panel__card-summary-state[data-tone="kind"] { color: var(--fg-2); }
+.pf__far { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-5); overflow: hidden; min-height: 0; }
+.pf__far--block { padding: 0; }
+.pf__far .panel__card-summary { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.minimap {
+  position: absolute;
+  top: var(--sp-5);
+  right: var(--sp-5);
+  z-index: 940;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--s-2);
+  cursor: crosshair;
+  user-select: none;
+}
+.minimap__block {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--tone);
+  background: var(--tone-dim);
+}
+.minimap__block[data-tone="none"], .minimap__block[data-tone="starting"] { border-color: var(--line-strong); background: var(--s-4); }
+/* Asleep is DASHED and empty; a sessionless kind is a hairline and empty;
+   a grey FILL means exactly not-started (M69's critic). */
+.minimap__block[data-tone="asleep"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+.minimap__block[data-tone="kind"] { border-color: var(--line-strong); background: transparent; }
+/* When the camera covers nearly the whole map the iris rectangle was the
+   loudest thing on the screen: a hairline then, no fill. */
+.minimap[data-cover="full"] .minimap__view { border-color: var(--line-strong); background: transparent; }
+.minimap__view {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--iris);
+  background: var(--iris-dim);
+  pointer-events: none;
+}
+.minimap__view--dragging { border-style: dashed; }
+.shell[data-bp="compact"] .minimap { display: none; }
 
 .canvas-hud {
   position: absolute;

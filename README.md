@@ -799,6 +799,7 @@ price of not killing something.
 | M66 | Every control says what it is: the merged view named, lane headers at chrome size, a labelled `start`, the pip's chip, the action-bar grid, the hint strip's rule, settings hints in one voice | ✅ done |
 | M67 | The frame, second pass: flat ground, no resting shadow, dark hairlines, asleep dashed, Save in the chrome, `remove` labelled, `toolbox · repo`, the notice's leader line, notes in ink | ✅ done |
 | M68 | The context pane finished: Detail repeats nothing, Work's three headings each answer, Tools shows permissions, the Jira panel's Connect verb, the navigator names its root panel and carries the merged door | ✅ done |
+| M69 | The overview: summary and block tiers for every kind, and the minimap — every panel a block in its tone, the camera a rectangle, click or drag to move | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
