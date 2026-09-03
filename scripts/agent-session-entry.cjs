@@ -11,5 +11,8 @@ module.exports = {
   transcript: require('../src/shared/transcript'),
   session: require('../src/main/agent-session'),
   args: require('../src/main/agent-session-args'),
-  quit: require('../src/main/quit')
+  quit: require('../src/main/quit'),
+  /* M73. The durable per-panel transcript file: node:fs against an injected
+     directory, the scrollback log's shape. */
+  log: require('../src/main/agent-transcript-log')
 }

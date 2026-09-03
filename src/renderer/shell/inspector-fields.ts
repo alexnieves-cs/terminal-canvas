@@ -1,11 +1,11 @@
-import { agentWord, panelState, type StateInput } from '@renderer/panels/panel-state'
+import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
-import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage } from '@shared/cost'
+import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type LinkAutomation } from '@shared/handoff'
-import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -382,7 +382,17 @@ export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
   review: 'A review node',
   file: 'A file panel',
   toolbox: 'A toolbox node',
-  jira: 'A Jira panel'
+  jira: 'A Jira panel',
+  chat: 'A chat panel'
+}
+
+/** M73. What the inspector needs from a chat session's snapshot. */
+export interface ChatInspectorInput {
+  state: ChatStateInput
+  usage: TokenTotals
+  costUsd?: number
+  model?: string
+  turns: number
 }
 
 export function buildInspectorModel(
@@ -436,9 +446,48 @@ export function buildInspectorModel(
    */
   typography?: { fontSize: number; isDefault: boolean } | undefined,
   /** M63. Whether the panel is asleep — the one fact the status cannot say. Optional, as every parameter after `status` is. */
-  dormant?: boolean
+  dormant?: boolean,
+  /**
+   * M73. A chat panel's session facts from the chat store, when main has
+   * answered. OPTIONAL and defaulted like every parameter before it; absent
+   * on a chat panel renders `not started` and no cost — the honest first
+   * seconds of every restored chat.
+   */
+  chat?: ChatInspectorInput | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
+  if (isChatPanel(panel)) {
+    const cwd = panel.chat.cwd
+    // The SAME price table the terminal's Cost section uses (brief principle
+    // 11: one vocabulary whichever front-end produced it), so a chat and a
+    // terminal running the same agent price the same tokens the same way.
+    // The CLI's own dollar figure is a Detail field, labelled as its claim.
+    const usage: PanelUsage | undefined = chat === undefined ? undefined : {
+      totals: chat.usage,
+      byModel: { [chat.model ?? 'unknown']: chat.usage },
+      turns: chat.turns,
+      subagentTurns: 0
+    }
+    return {
+      kind: 'chat',
+      state: { kind: 'chat', status: undefined, dormant: false, ...(chat === undefined ? {} : { chat: chat.state }) },
+      id: panel.rect.id,
+      heading: railLabel(panel, undefined),
+      ...(panel.title !== undefined ? { title: panel.title } : {}),
+      restartable: false,
+      reattached: false,
+      links,
+      usage: buildUsageFields(usage, true),
+      fields: [
+        { key: 'chat-cwd', label: 'directory', value: cwd },
+        { key: 'chat-session', label: 'session', value: panel.chat.sessionId.slice(0, 8) },
+        { key: 'chat-model', label: 'model', value: chat?.model ?? 'none yet' },
+        { key: 'chat-cost', label: 'cost reported by claude', value: chat?.costUsd === undefined ? '—' : `$${chat.costUsd.toFixed(4)}` },
+        ...(panel.chat.agentOptions?.permissionMode === undefined ? [] : [{ key: 'chat-mode', label: 'permission mode', value: panel.chat.agentOptions.permissionMode }]),
+        ...(panel.chat.agentOptions?.effort === undefined ? [] : [{ key: 'chat-effort', label: 'effort', value: panel.chat.agentOptions.effort }])
+      ]
+    }
+  }
   if (isReviewPanel(panel)) {
     return {
       kind: 'review',

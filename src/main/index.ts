@@ -34,6 +34,10 @@ import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { claudeCliRunner } from './claude-cli-runner'
+import { createAgentTranscriptLog } from './agent-transcript-log'
+import { resolveTranscript } from './transcript-reader'
+import type { AgentHandlers } from './ipc'
+import type { AgentCreateResult, AgentSessionSpec } from '../shared/agent-session'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { ToolboxCache } from './toolbox-cache'
@@ -225,6 +229,8 @@ const dropBaseline = (panelId: string): void => {
  * through its own append writer, capped. No output bytes: metadata only.
  */
 const runLedger = createRunLedger({ file: join(app.getPath('userData'), 'runs.jsonl') })
+// M73. One append-only transcript per chat panel, beside the scrollback logs.
+const agentTranscripts = createAgentTranscriptLog({ dir: join(app.getPath('userData'), 'agent-transcripts') })
 
 // M54. Declared ABOVE the manager, which carries them into every spawn's env.
 const controlSocketPath = join(app.getPath('userData'), 'control.sock')
@@ -621,7 +627,23 @@ app.whenReady().then(async () => {
     runner: claudeCliRunner,
     command: claudePath ?? 'claude',
     env,
-    newSessionId: () => randomUUID()
+    newSessionId: () => randomUUID(),
+    // M73. Whether the CLI already holds a transcript for a session id —
+    // M17's glob, so a restored chat panel that has had a turn resumes and
+    // one that never did pins. Decided at spawn, never persisted.
+    transcriptExists: (sessionId) => resolveTranscript(sessionId) !== undefined
+  })
+  // M73. The durable transcript, written from the manager's own events so
+  // the renderer never has to echo a turn back; and every event forwarded
+  // to the renderer on ONE channel, already batched at the manager.
+  const agentSessionsHere = agentSessions
+  agentSessionsHere.subscribe((event) => {
+    if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
+    if (event.type === 'result') {
+      const snap = agentSessionsHere.get(event.id)
+      if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns })
+    }
+    mainWindow?.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
   })
 
   // After the env probe, because tmux must be resolved from the LOGIN PATH:
@@ -731,6 +753,35 @@ app.whenReady().then(async () => {
   }
 
   rebuildMenu()
+  // M73. The chat panel's verbs over the runtime and the transcript log.
+  // `create` refuses BY NAME before any process exists: a directory that is
+  // not there (a file is refused too, spawn-request.ts's rule) and a CLI the
+  // probe did not find — the two facts a first send would otherwise discover
+  // as an `exited` session with an ENOENT in its stderr.
+  const agentHandlers: AgentHandlers = {
+    create: (spec: AgentSessionSpec): AgentCreateResult => {
+      const manager = agentSessions
+      if (manager === null) return { kind: 'refused', reason: 'the agent runtime has not started yet' }
+      if (claudePath === null) return { kind: 'refused', reason: 'claude was not found on the login PATH — install it, or check the environment report' }
+      const cwd = resolveCwd(spec.cwd)
+      let isDir = false
+      try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
+      if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
+      return { kind: 'created', snapshot: manager.create({ ...spec, cwd }) }
+    },
+    send: (id, text) => agentSessions?.send(id, text) ?? 'no-session',
+    interrupt: (id) => agentSessions?.interrupt(id) ?? false,
+    dispose: ({ id, drop }) => {
+      agentSessions?.dispose(id)
+      if (drop) agentTranscripts.drop(id)
+    },
+    answer: ({ id, requestId, answer }) => agentSessions?.answerPermission(id, requestId, answer) ?? false,
+    list: () => agentSessions?.list() ?? [],
+    transcript: (id) => {
+      const read = agentTranscripts.read(id)
+      return { turns: read.turns, snapshot: agentSessions?.get(id) ?? null, ...(read.meta === undefined ? {} : { meta: read.meta }) }
+    }
+  }
   registerIpcHandlers(
     ptyManager,
     layoutStore,
@@ -885,7 +936,8 @@ app.whenReady().then(async () => {
         if (mainWindow === null || mainWindow.isDestroyed()) throw new Error('no window to capture')
         return (await mainWindow.webContents.capturePage()).toPNG()
       }
-    })
+    }),
+    agentHandlers
   )
   createWindow()
 

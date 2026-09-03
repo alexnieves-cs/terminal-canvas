@@ -66,11 +66,11 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | ~182 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | ~185 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:palette` | plain node | ~116 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~137 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:rail` | plain node | ~143 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~96 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
 | `verify:file` | plain node | ~38 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
@@ -80,7 +80,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:tmux` | plain node | 35 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
 | `verify:control` | plain node | 7 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
-| `verify:agent-session` | plain node | 54 checks (M71): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm |
+| `verify:agent-session` | plain node | 58 checks (M71, M73): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `shot` (`npm run shot`) | real Electron, **not in `npm run verify`**, asserts nothing | M61. 23 PNGs of the real renderer plus a `manifest.json` of intents, from a seeded fixture canvas — the visual loop. Read the images; hand them to a fresh-context critic. See `docs/build-log/m61-visual-loop.md` |
@@ -88,10 +88,10 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 62 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 67 channels as of the newest milestone that added one — re-derive i |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 74 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | ~265 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | ~270 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -149,6 +149,8 @@ renderer --invoke--> env:report                                                 
 renderer --invoke--> link:open                                                    --> main
 renderer --invoke--> ledger:list                                                  --> main
 renderer --invoke--> spawn:sheet / spawn:recent                                   --> main
+renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
+renderer --invoke--> agent:answer / agent:list / agent:transcript                 --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:reset                              --> renderer
@@ -161,6 +163,7 @@ main     --send-->   usage:panel                                               -
 main     --send-->   attention:jump                                            --> renderer
 main     --send-->   settings:changed                                          --> renderer
 main     --send-->   spawn:open-sheet                                          --> renderer
+main     --send-->   agent:event (batched ~16ms)                                 --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
@@ -220,6 +223,13 @@ check does not, and should not, cover it.
   M61 rule, second layer). `shared/transcript.ts` is its schema and line parser,
   `agent-runner.ts` the injected process seam, `claude-cli-runner.ts` the real one (never
   bundled into a suite). No IPC channel names it until M72.
+- `src/renderer/chat/` — M73. The chat panel: `ChatNode.tsx` through `PanelFrame` (which
+  gained a `state` prop so a process kind that is not a terminal paints its state), a
+  per-panel store mirror (`chat-store.ts`, never `registry.version()`), a pure model
+  (`chat-model.ts`: rows, the live-block merge, the composer's named arms), and
+  `useChatSessions.ts` (create once per id; disposal explicit at the removing sites).
+  `main/agent-transcript-log.ts` is its durable file. The three doors (palette row, launcher
+  line, spawn sheet) share `claudeAvailable(presets)` and `REASON_NO_CLAUDE`.
 - `src/main/scrollback-log.ts` — M39. One append-only file per panel under `userData/scrollback`,
   written from `PtyManager.flush()` through a per-panel queue, ring-trimmed at 1.25× the cap.
   An append stream, deliberately not `layout-store.ts`'s temp-and-rename. Read by the dormant

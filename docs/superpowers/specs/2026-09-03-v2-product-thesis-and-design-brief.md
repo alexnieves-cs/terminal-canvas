@@ -125,7 +125,12 @@ frame carries the nature before it carries the kind:
   nodes, the supervisor. The left edge is the state hue; the pill reads the state word.
 - A **conversation** node has *turns*. A chat panel is a process while streaming and a
   conversation at rest, and the frame says which: streaming, the edge is blue and the pill
-  reads `working`; at rest, the edge is the resting green and the pill reads the turn count.
+  reads `working`; alive and resting, the edge is green and the pill reads `idle`. **Amended
+  2026-09-03 after M73's critic:** a conversation with turns and NO process is `asleep`
+  (the dashed edge, the restored terminal's word for the same fact — it resumes on your
+  gesture, here a send), and only a conversation that has never had a turn is `not started`.
+  The pill carries ONE fact, the state word; the turn count is the inspector's. This keeps
+  principle 1's closed vocabulary rather than minting a "turn count" pill state.
   The body is a transcript, always scrolled to the newest turn unless the user scrolled
   away, and the composer is pinned to the bottom of the body, never floating over it.
 - A **document** node has *content* and possibly a *dirty* flag — file, note, review,

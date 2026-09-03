@@ -41,6 +41,9 @@ const T = M.transcript
 const S = M.session
 const A = M.args
 const Q = M.quit
+const LOG = M.log || {}
+const { mkdtempSync, rmSync, readdirSync, existsSync } = require('node:fs')
+const { tmpdir } = require('node:os')
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -752,6 +755,68 @@ const isResult = (l) => l.includes('"type":"result"')
     manager.disposeAll()
     ok('session.disposeAll every live process is killed, and the list is empty',
       spawns.length === 2 && spawns.every((s) => s.proc.killed === 1) && manager.list().length === 0, String(spawns.length))
+  }
+
+  // session.exists — M73. Whether the FIRST spawn says --session-id or
+  // --resume is decided by an injected probe for the CLI's own transcript,
+  // never by a persisted flag: a restored panel that has had a turn resumes,
+  // one that never did pins, and a `sessionId` given at create is the id to
+  // pin (distinct from `resume`, which asserts the conversation exists).
+  {
+    const seen = []
+    const { manager, spawns } = makeManager({ transcriptExists: (id) => { seen.push(id); return id === 'u-old' } })
+    manager.create({ id: 'fresh', cwd: '/r', sessionId: 'u-new' })
+    manager.create({ id: 'old', cwd: '/r', sessionId: 'u-old' })
+    manager.send('fresh', 'x')
+    manager.send('old', 'y')
+    const a = spawns[0], b = spawns[1]
+    ok('session.exists a caller-supplied sessionId is pinned when the CLI has no transcript for it, and resumed when it has — decided by the injected probe at spawn',
+      manager.get('fresh').sessionId === 'u-new' && manager.get('old').sessionId === 'u-old' &&
+        a && a.args.includes('--session-id') && a.args[a.args.indexOf('--session-id') + 1] === 'u-new' && !a.args.includes('--resume') &&
+        b && b.args.includes('--resume') && b.args[b.args.indexOf('--resume') + 1] === 'u-old' && !b.args.includes('--session-id') &&
+        seen.includes('u-new') && seen.includes('u-old'),
+      JSON.stringify({ a: a && a.args, b: b && b.args, seen }))
+  }
+
+  // log.1–.3 — M73. The durable per-panel transcript: an append stream (the
+  // scrollback log's shape, never layout-store's rename) that a restored
+  // panel reads before any process exists.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'tc agent log '))
+    const log = typeof LOG.createAgentTranscriptLog === 'function' ? LOG.createAgentTranscriptLog({ dir }) : null
+    const turnA = { id: 'm1', role: 'assistant', blocks: [{ type: 'thinking', text: '' }], model: 'haiku', at: 1 }
+    const turnA2 = { id: 'm1', role: 'assistant', blocks: [{ type: 'thinking', text: '' }, { type: 'text', text: 'pong' }], model: 'haiku', at: 1 }
+    const user = { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'hi' }], at: 0 }
+    if (log) {
+      log.appendTurn('p1', user)
+      log.appendTurn('p1', turnA)
+      log.appendTurn('p1', turnA2)
+      log.appendMeta('p1', { usage: { input: 1, output: 2, cacheWrite: 3, cacheRead: 4 }, costUsd: 0.5, turns: 1 })
+      log.appendMeta('p1', { usage: { input: 2, output: 4, cacheWrite: 6, cacheRead: 8 }, costUsd: 0.9, turns: 2 })
+    }
+    const read = log ? log.read('p1') : null
+    ok('log.1 a merged turn re-written whole replaces its earlier line (last per turn id wins, order kept), and the meta line is the latest',
+      read !== null && read.turns.length === 2 && read.turns[0].id === 'u-1' && read.turns[1].id === 'm1' &&
+        read.turns[1].blocks.length === 2 && read.turns[1].blocks[1].text === 'pong' &&
+        read.meta !== undefined && read.meta.turns === 2 && read.meta.costUsd === 0.9 && read.meta.usage.output === 4,
+      JSON.stringify(read))
+    // A file with a torn last line (the app died mid-append) and a garbage
+    // line costs those lines, never the file — parseLayout's rule again.
+    if (log) {
+      const file = readdirSync(dir).find((f) => f.startsWith('p1'))
+      require('node:fs').appendFileSync(join(dir, file), 'not json\n{"t":"turn","turn":{"id":"m2","role":"assistant","blocks":[],"at":2}}\n{"t":"tu')
+    }
+    const torn = log ? log.read('p1') : null
+    ok('log.2 a garbage line and a torn tail cost only themselves; the turns before and between them survive',
+      torn !== null && torn.turns.length === 3 && torn.turns[2].id === 'm2' && torn.meta.turns === 2,
+      JSON.stringify(torn && torn.turns.map((t) => t.id)))
+    const missing = log ? log.read('never') : null
+    if (log) log.drop('p1')
+    ok('log.3 an unknown panel reads as empty (not an error), drop removes the file, and a dropped panel reads as empty again',
+      missing !== null && missing.turns.length === 0 && missing.meta === undefined &&
+        log !== null && readdirSync(dir).every((f) => !f.startsWith('p1')) && log.read('p1').turns.length === 0,
+      JSON.stringify({ missing, files: log ? readdirSync(dir) : null }))
+    rmSync(dir, { recursive: true, force: true })
   }
 
   // quit — the optional agents dependency

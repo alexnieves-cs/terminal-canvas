@@ -1,5 +1,5 @@
 import {
-  isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, type Panel
+  isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 import type { CredentialMeta } from '@shared/credential-schema'
@@ -95,6 +95,8 @@ export function panelLabel(panel: Panel): string {
   // The DIRECTORY, not a basename: a toolbox answers for a whole cwd, and two
   // repositories with the same leaf name are the ordinary case.
   if (isToolboxPanel(panel)) return `toolbox: ${panel.source.cwd} (${panel.rect.id})`
+  // M73. The directory, stated in full for the toolbox's reason.
+  if (isChatPanel(panel)) return `chat: ${panel.chat.cwd} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it

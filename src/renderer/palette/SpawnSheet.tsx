@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { buildSpawnRequest, directorySuggestions, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
 import { shortPath } from './panel-name'
 
 /**
@@ -34,6 +34,8 @@ export interface SpawnSheetModel {
   recents: readonly string[]
   panelDirs: readonly string[]
   submit(values: SheetValues): Promise<SpawnResult>
+  /** M73. Whether claude was found — the chat arm is offered disabled by name otherwise. */
+  claudeAvailable: boolean
 }
 
 export interface SpawnSheetProps {
@@ -79,7 +81,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   )
 
   const values = (): SheetValues => {
-    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : { kind: 'preset', id: whatId }
+    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : { kind: 'preset', id: whatId }
     const agentOptions: AgentOptions = {}
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
@@ -123,10 +125,13 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
     onKey(event)
   }
 
-  const isAgent = preset?.agent !== undefined
+  // M73. A chat is an agent panel: the how fields apply, with the CLI's own
+  // defaults as the placeholders.
+  const isChat = whatId === CHAT_WHAT_ID
+  const isAgent = preset?.agent !== undefined || isChat
   const own = preset?.agentOptions ?? {}
   const request = buildSpawnRequest(values(), model.presets)
-  const what = request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
+  const what = isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
@@ -159,6 +164,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
             <option key={p.id} value={p.id} disabled={p.available === false}>{p.name}{p.available === false ? ' — not on PATH' : ''}</option>
           ))}
           <option value={COMMAND}>type a command…</option>
+          {/* M73. The conversation arm, disabled by name when claude is absent. */}
+          <option value={CHAT_WHAT_ID} disabled={!model.claudeAvailable}>chat with claude{model.claudeAvailable ? '' : ' — not on PATH'}</option>
         </select>
       </label>
 

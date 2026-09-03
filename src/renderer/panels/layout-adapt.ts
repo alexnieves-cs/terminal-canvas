@@ -1,6 +1,7 @@
 import type { PersistedPanel } from '@shared/layout-schema'
+import type { ChatSource } from '@shared/chat-panel'
 import { isFilePanel, isJiraPanel,
-  isToolboxPanel, isReviewPanel, type Panel } from './panels'
+  isToolboxPanel, isChatPanel, isReviewPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -15,6 +16,14 @@ import { isFilePanel, isJiraPanel,
  * carries the command) and the file must not be shaped by those internal
  * choices. Refactoring Panel should never invalidate a saved canvas.
  */
+
+/**
+ * M73. One copy of the chat record for both directions — two copies drift
+ * the first time only one gains a field. Absent knobs stay absent.
+ */
+function copyChatSource(chat: ChatSource): ChatSource {
+  return { cwd: chat.cwd, sessionId: chat.sessionId, ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } }) }
+}
 
 export function toPanels(persisted: PersistedPanel[]): Panel[] {
   return persisted.map((p) => {
@@ -51,6 +60,11 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
         kind: 'toolbox' as const,
         source: { cwd: p.source.cwd, label: p.source.label }
       }
+    }
+    // M73. Field by field, absent staying absent — the chat record's
+    // agentOptions is the seventh optional field this file copies that way.
+    if (p.kind === 'chat') {
+      return { ...base, kind: 'chat' as const, chat: copyChatSource(p.chat) }
     }
     return {
       ...base,
@@ -121,6 +135,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
         source: { cwd: panel.source.cwd, label: panel.source.label }
       }
     }
+    if (isChatPanel(panel)) return { ...base, kind: 'chat' as const, chat: copyChatSource(panel.chat) }
     return {
       ...base,
       kind: 'terminal' as const,

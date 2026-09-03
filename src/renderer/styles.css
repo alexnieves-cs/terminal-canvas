@@ -3441,3 +3441,46 @@ body {
    it, that cell was two lines tall (M66's critic). */
 .canvas-hud [data-hud-fit] { display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1); min-width: 24px; padding: 0 var(--sp-2); }
 .shell[data-bp="compact"] .canvas-hud__fit-label { display: none; }
+
+/* ===================== M73. The chat panel ===================== */
+/* Principle 12: the transcript is a well. No bubbles, no avatars; the role is a
+   caps micro-label in the margin, the agent's words are mono at --t-md, a tool
+   call is one collapsed row, thinking is dim, the composer is pinned below a
+   hairline. Every colour is a token; the state hues appear only on the frame's
+   marks through [data-tone], never here. */
+.chat__body { display: flex; flex-direction: column; min-height: 0; }
+.chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg); }
+.chat__row { display: grid; grid-template-columns: 52px 1fr; column-gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+.chat__row:last-child { border-bottom: 0; }
+.chat__role { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); padding-top: var(--sp-1); }
+.chat__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.chat__row--user .chat__text { color: var(--fg-2); }
+.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-3); }
+.chat__row--thinking, .chat__row--tool { grid-template-columns: 52px 1fr; }
+.chat__thinking-toggle { grid-column: 2; justify-self: start; min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
+.chat__thinking-toggle:disabled { cursor: default; }
+.chat__thinking-toggle:hover:not(:disabled), .chat__tool-toggle:hover { color: var(--fg-2); }
+.chat__thinking-text { grid-column: 2; margin: var(--sp-1) 0 0; white-space: pre-wrap; color: var(--fg-3); font: inherit; font-size: var(--t-sm); }
+.chat__row--tool { grid-template-columns: 52px auto minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--sp-2); }
+.chat__row--tool::before { content: 'tool'; font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.chat__tool-name { font-weight: 600; }
+.chat__tool-input { color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
+.chat__row--tool-error .chat__tool-name { color: var(--red); }
+.chat__tool-toggle { min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
+.chat__tool-toggle:hover { color: var(--fg-2); }
+.chat__tool-result { grid-column: 2 / -1; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--t-sm); max-height: 240px; overflow: auto; }
+.chat__empty, .chat__queued, .chat__exited { margin: var(--sp-2) 0; }
+.chat__permission { margin: var(--sp-3) 0; padding: var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-1); display: flex; flex-direction: column; gap: var(--sp-2); }
+.chat__permission-title { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
+.chat__permission-input { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--t-sm); color: var(--fg-2); }
+.chat__permission-verbs, .chat__verbs { display: flex; gap: var(--sp-2); }
+.chat__verb { min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
+.chat__verb:hover:not(:disabled) { background: var(--s-4); }
+.chat__verb:disabled { color: var(--fg-3); border-color: var(--line); background: transparent; cursor: default; }
+.chat__composer { flex: none; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); background: var(--s-1); }
+/* Plain: the composer's hairline above is its boundary (principles 4, 12); no box, no grip. */
+.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-2) 0; border: 0; background: transparent; color: var(--fg); font-family: var(--font-mono); font-size: var(--t-md); }
+.chat__input:focus { outline: none; }
+.chat__input:disabled { color: var(--fg-3); }
+.chat__refusal { margin: 0; }

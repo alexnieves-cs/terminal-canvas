@@ -9,6 +9,15 @@ import {
   type TranscriptTurn
 } from '@shared/transcript'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
+import type {
+  AgentSessionStatus,
+  AgentSessionSpec,
+  PendingPermission,
+  AgentSessionCounters,
+  AgentSessionSnapshot,
+  AgentSessionEvent,
+  SendResult
+} from '@shared/agent-session'
 import { headlessArgs } from './agent-session-args'
 
 /**
@@ -50,77 +59,16 @@ import { headlessArgs } from './agent-session-args'
  *     from the new one's stream.
  */
 
-export type AgentSessionStatus =
-  | 'not-started'
-  | 'starting'
-  | 'ready'
-  | 'streaming'
-  | 'exited'
-  | 'disposed'
-
-export interface AgentSessionSpec {
-  id: string
-  cwd: string
-  agentOptions?: AgentOptions
-  /**
-   * A CLI session UUID from a previous run of the app (M72 stores it beside
-   * the panel). The first spawn then says `--resume` rather than
-   * `--session-id`, and the conversation continues from the transcript the
-   * CLI itself keeps.
-   */
-  resume?: string
-}
-
-export interface PendingPermission {
-  requestId: string
-  toolName: string
-  input: Record<string, unknown>
-  description?: string
-  toolUseId?: string
-}
-
-export interface AgentSessionCounters {
-  ignored: number
-  unknown: number
-  malformed: number
-}
-
-export interface AgentSessionSnapshot {
-  id: string
-  cwd: string
-  status: AgentSessionStatus
-  /** The CLI session UUID — what `--resume` names. */
-  sessionId: string
-  model?: string
-  pid?: number
-  exitCode?: number | null
-  exitSignal?: string
-  /** Results seen, i.e. completed turns. */
-  turns: number
-  usage: TokenTotals
-  /** The CLI's cumulative figure for the current process. Undefined until priced. */
-  costUsd?: number
-  pending: PendingPermission[]
-  queued: number
-  counters: AgentSessionCounters
-}
-
-export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
-  /** Set from this session's own state, never from the record. */
-  interrupted: boolean
-}
-
-export type AgentSessionEvent = { id: string } & (
-  | Exclude<TranscriptEvent, { type: 'result' | 'assistant' | 'user' | 'ignored' }>
-  | ResultEvent
-  | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
-  | { type: 'turn'; turn: TranscriptTurn }
-  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' }
-  | { type: 'queued'; text: string }
-  | { type: 'queue-dropped'; count: number }
-  | { type: 'permission-answered'; requestId: string; allow: boolean }
-  | { type: 'permission-dropped'; requestId: string }
-)
+export type {
+  AgentSessionStatus,
+  AgentSessionSpec,
+  PendingPermission,
+  AgentSessionCounters,
+  AgentSessionSnapshot,
+  ResultEvent,
+  AgentSessionEvent,
+  SendResult
+} from '@shared/agent-session'
 
 export interface AgentSessionDeps {
   runner: AgentRunner
@@ -129,6 +77,13 @@ export interface AgentSessionDeps {
   /** The login environment every PTY gets — how the CLI finds its config. */
   env: Record<string, string>
   newSessionId: () => string
+  /**
+   * M73. Whether the CLI already holds a transcript for this session id
+   * (main answers with M17's `resolveTranscript`). Consulted at the FIRST
+   * spawn only; after that the session knows it has run. Absent means never,
+   * which is what every M71 check assumes.
+   */
+  transcriptExists?: (sessionId: string) => boolean
   now?: () => number
   /** How long an interrupt may go unanswered before the process is killed. */
   interruptGraceMs?: number
@@ -136,7 +91,6 @@ export interface AgentSessionDeps {
   coalesceMs?: number
 }
 
-export type SendResult = 'sent' | 'queued' | 'no-session'
 
 interface Session {
   id: string
@@ -191,7 +145,7 @@ export class AgentSessionManager {
       id: spec.id,
       cwd: spec.cwd,
       agentOptions: spec.agentOptions,
-      sessionId: spec.resume ?? this.deps.newSessionId(),
+      sessionId: spec.resume ?? spec.sessionId ?? this.deps.newSessionId(),
       status: 'not-started',
       // A resumed conversation spawns with --resume from its first process.
       everSpawned: spec.resume !== undefined,
@@ -318,9 +272,12 @@ export class AgentSessionManager {
 
   private ensureProcess(session: Session): void {
     if (session.proc) return
+    // The probe runs only while this session has never spawned: a CLI
+    // transcript exists for a conversation that ran in a previous launch.
+    const resume = session.everSpawned || (this.deps.transcriptExists?.(session.sessionId) ?? false)
     const args = headlessArgs({
       sessionId: session.sessionId,
-      resume: session.everSpawned,
+      resume,
       agentOptions: session.agentOptions
     })
     const proc = this.deps.runner({
@@ -419,7 +376,10 @@ export class AgentSessionManager {
         if (session.proc && session.status !== 'starting') this.setStatus(session, 'ready')
         this.emit({ id, ...event, interrupted })
         const next = session.queue.shift()
-        if (next !== undefined) this.writeUser(session, next)
+        if (next !== undefined) {
+          this.writeUser(session, next)
+          this.emit({ id, type: 'dequeued', text: next })
+        }
         return
       }
       case 'permission-request':

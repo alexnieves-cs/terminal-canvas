@@ -14,6 +14,10 @@ export interface LauncherProps {
   onNewNote: () => void
   /** A note is saved in a panel's directory; with no panel there is none. */
   noteReason: string | null
+  /** M73. A chat with claude. */
+  onNewChat: () => void
+  /** Null when claude is on the login PATH; otherwise the reason. */
+  chatReason: string | null
 }
 
 /**
@@ -39,7 +43,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason }: LauncherProps): JSX.Element {
   const found = report ? report.clis.filter((c) => c.path !== null).map((c) => c.name) : []
   const missing = report ? report.clis.filter((c) => c.path === null).map((c) => c.name) : []
   return (
@@ -75,6 +79,13 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
             </button>
           )
         })}
+        {/* M73. The conversation door: the same agent the claude preset
+            starts in a terminal, rendered as a transcript. */}
+        <button type="button" className="launcher__verb" data-launcher-new-chat disabled={chatReason !== null}
+          title={chatReason === null ? 'A chat with claude, in your home directory' : chatReason} {...shellControl(() => { if (chatReason === null) onNewChat() })}>
+          <span className="launcher__verb-name">Chat with claude…</span>
+          <span className="launcher__verb-hint">{chatReason === null ? 'a conversation panel — the same agent, no terminal' : chatReason}</span>
+        </button>
         <button type="button" className="launcher__verb" data-launcher-open-file title="Open a file as a panel" {...shellControl(onOpenFile)}>
           <span className="launcher__verb-name">Open a file…</span>
           <span className="launcher__verb-hint">a file panel, editable</span>

@@ -1,4 +1,7 @@
 import { useMemo, type RefObject } from 'react'
+import { useChat } from '@renderer/chat/chat-store'
+import { chatStateInput } from '@renderer/chat/chat-model'
+import type { ChatStateInput } from '@renderer/panels/panel-state'
 import type { Viewport } from './viewport'
 import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
@@ -253,6 +256,9 @@ export function useRailModels(deps: RailModelsDeps) {
   // `selectedId ?? ''` is a panel id that matches nothing, which the store
   // answers undefined for.
   const selectedUsage = useUsage(selectedId ?? '')
+  // M73. Unconditional, for the reason the two above are; an id that is not
+  // a chat panel's answers the store's empty state.
+  const selectedChat = useChat(selectedId ?? '')
   const inspectorBuilt = selectedPanel === undefined
     ? null
     : buildInspectorModel(
@@ -279,7 +285,23 @@ export function useRailModels(deps: RailModelsDeps) {
           ? { fontSize: selectedPanel.fontSize ?? globalFontSize, isDefault: selectedPanel.fontSize === undefined }
           : undefined,
         // M63. Asleep is the one state the status cannot say.
-        dormantIds.has(selectedPanel.rect.id)
+        dormantIds.has(selectedPanel.rect.id),
+        // M73. The chat session's facts, when main has answered.
+        // A restored panel's fresh session reports nothing spent; the file's
+        // last `meta` line holds yesterday's figures, and is the answer until
+        // this launch's session has priced a turn of its own.
+        selectedChat.snapshot === null ? undefined : (() => {
+          const snap = selectedChat.snapshot
+          const meta = selectedChat.meta
+          const useMeta = snap.turns === 0 && meta !== undefined
+          return {
+            state: chatStateInput(snap, selectedChat.turns.length > 0) as ChatStateInput,
+            usage: useMeta ? meta.usage : snap.usage,
+            costUsd: useMeta ? meta.costUsd : snap.costUsd,
+            model: snap.model ?? selectedChat.turns.find((t) => t.model !== undefined)?.model,
+            turns: useMeta ? meta.turns : snap.turns
+          }
+        })()
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

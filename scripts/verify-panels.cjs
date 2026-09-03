@@ -85,7 +85,8 @@ const {
   FileWatchers,
   ToolboxCache,
   readFrom,
-  FILE_MAX_LINES
+  FILE_MAX_LINES,
+  AgentSessionManager, createAgentTranscriptLog,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -854,6 +855,66 @@ app.whenReady().then(async () => {
   const registeredHandlers = new Map()
   const realIpcMainHandle = ipcMain.handle.bind(ipcMain)
   ipcMain.handle = (channel, listener) => { registeredHandlers.set(channel, listener); return realIpcMainHandle(channel, listener) }
+  // M73. A REAL AgentSessionManager over a FAKE process runner: each spawn
+  // records its argv and replays scripts/fixtures/agent-session/turn.jsonl
+  // (recorded from claude 2.1.259) on the first user line it is written, in
+  // two chunks with a short gap so the renderer sees deltas arrive; kill
+  // exits it. The transcript log lives in a scratch directory the harness
+  // owns. Exactly main/index.ts's handlers, over these.
+  const chatFixture = readFileSync(join(__dirname, 'fixtures', 'agent-session', 'turn.jsonl'), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  const chatSpawns = []
+  const chatRunner = ({ command, args, cwd, env }) => {
+    const dataCbs = []
+    const exitCbs = []
+    let exited = false
+    const proc = {
+      pid: 40000 + chatSpawns.length,
+      stdin: [],
+      killed: 0,
+      write(line) {
+        proc.stdin.push(line)
+        let parsed = null
+        try { parsed = JSON.parse(line) } catch { parsed = null }
+        if (parsed && parsed.type === 'user') {
+          const cut = Math.floor(chatFixture.length / 2)
+          setTimeout(() => { if (!exited) for (const cb of dataCbs) cb(chatFixture.slice(0, cut).join('\n') + '\n') }, 40)
+          setTimeout(() => { if (!exited) for (const cb of dataCbs) cb(chatFixture.slice(cut).join('\n') + '\n') }, 160)
+        }
+      },
+      onData(cb) { dataCbs.push(cb) },
+      onExit(cb) { exitCbs.push(cb) },
+      kill() {
+        proc.killed += 1
+        setTimeout(() => { if (exited) return; exited = true; for (const cb of exitCbs) cb({ code: null, signal: 'SIGTERM' }) }, 10)
+      }
+    }
+    chatSpawns.push({ command, args, cwd, env, proc })
+    return proc
+  }
+  const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels chat ')), 'agent-transcripts') })
+  const agentSessions = new AgentSessionManager({
+    runner: chatRunner, command: '/fake/claude', env: { PATH: '/fake' },
+    newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16
+  })
+  agentSessions.subscribe((event) => {
+    if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
+    if (event.type === 'result') { const snap = agentSessions.get(event.id); if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns }) }
+    if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
+  })
+  const agentHandlers = {
+    create: (spec) => {
+      let isDir = false
+      try { isDir = statSync(expandTilde(spec.cwd)).isDirectory() } catch { isDir = false }
+      if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
+      return { kind: 'created', snapshot: agentSessions.create({ ...spec, cwd: expandTilde(spec.cwd) }) }
+    },
+    send: (id, text) => agentSessions.send(id, text),
+    interrupt: (id) => agentSessions.interrupt(id),
+    dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
+    answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
+    list: () => agentSessions.list(),
+    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } }
+  }
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
       resolveAvailability(allPresets(layoutStore.presets()), whichHere),
@@ -988,7 +1049,7 @@ app.whenReady().then(async () => {
     persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
     askPath: async () => exportTarget,
     capture: async () => (await win.webContents.capturePage()).toPNG()
-  }))
+  }), agentHandlers)
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -15745,6 +15806,152 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(oErr && oErr.message || oErr) + ' | renderer: ' + (oLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onO)
+      }
+    }
+
+    // M73 — chat.1 / chat.2 / chat.3 / chat.4. THE CHAT PANEL, END TO END, in
+    //     a real renderer over a REAL AgentSessionManager and a FAKE process
+    //     runner replaying a stream recorded from claude (the harness's
+    //     chatRunner). chat.1: minting through the SAME beginNewChat the
+    //     palette row calls spawns NO PTY and takes NO xterm (checks 103/164's
+    //     argument reaching a sixth kind — the FIRST process kind that is not
+    //     a terminal, so "no PtyManager session" is the clause that matters),
+    //     a missing directory is refused BY NAME with no panel minted, and a
+    //     send through the composer streams the recorded `pong` into the
+    //     transcript. chat.2: the one vocabulary — the frame's pill reads
+    //     `working` while the turn streams and `idle` after, the rail row
+    //     agrees, and the chrome counts the turn. chat.3: a RESTORE renders
+    //     the durable file — main's session is disposed to stand in for a
+    //     relaunch, the renderer reloads, and the panel shows yesterday's
+    //     `pong` with `not started` for a state, before any process exists.
+    //     chat.4: closing it sends NO pty.kill for its id while a terminal
+    //     closed in the same window IS recorded (165's non-vacuity shape),
+    //     and the session and its file are gone.
+    {
+      const IDS = [
+        'chat.1 a chat panel minted through the real verb spawns no PTY and no xterm, a missing directory is refused by name, and a send streams the recorded answer',
+        'chat.2 the pill reads working while the turn streams and idle after, the rail row agrees, and the chrome counts one turn',
+        'chat.3 a restored chat panel renders the durable transcript with no process — asleep, one turn, yesterday\'s answer',
+        'chat.4 closing a chat panel sends no pty.kill and drops its session and its file, while a terminal close in the same window is recorded',
+        'chat.5 the menu\'s paste reaches the focused composer and not a terminal — the fifth text surface serves itself'
+      ]
+      const cLog = []
+      const onC = (_e, _l, m) => { cLog.push(String(m)) }
+      wc.on('console-message', onC)
+      try {
+        const cDir = mkdtempSync(join(tmpdir(), 'tc panels chat-'))
+        // `claudeAvailable` is derived from the preset rows' own availability
+        // (a claude-kind preset whose command resolves), and this harness's
+        // PATH need not carry a real `claude`: a user preset of that kind
+        // over /bin/sh makes the composer's gate answer the way it does on a
+        // machine with the CLI, through the real availability path. Added
+        // here rather than at setup so no earlier preset-count check moves;
+        // the renderer reloads so its rows pick it up.
+        layoutStore.addPreset({ id: 'chat-claude', name: 'Claude (harness)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        flushLayoutStore()
+        const reP = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reP
+        await settle()
+        const xtermsBefore = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+        const spawnsBefore = chatSpawns.length
+        const ptyBefore = ptyManager.list().length
+        const refused = await wc.executeJavaScript(`window.__m73Chat('/nope/never/here/' + Date.now())`)
+        const minted = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(cDir)})`)
+        const chatId = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 5000)
+        const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
+        // The composer: a React-controlled textarea, so the value goes through
+        // the prototype setter and an input event; then the labelled Send.
+        const sent = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const ta = ${sel('[data-chat-input]')}; if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, 'Reply with exactly the word: pong'); ta.dispatchEvent(new Event('input', { bubbles: true }))
+          const b = ${sel('[data-chat-send]')}; if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 5000)
+        const working = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'working' || false`), 4000)
+        const pong = await waitUntil(() => wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-assistant-text]')].map((e) => e.textContent).join('|'); return t.includes('pong') ? t : false })()`), 6000)
+        const idle = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 6000)
+        const hasSession = await wc.executeJavaScript(`Object.prototype.hasOwnProperty.call(window.__m4aSessions(), ${JSON.stringify(chatId)})`)
+        const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+        const spawn = chatSpawns[spawnsBefore]
+        const noPty = ptyManager.list().length === ptyBefore && ptyManager.list().every((s) => s.panelId !== chatId)
+        ok(IDS[0],
+          refused && refused.kind === 'refused' && /no such directory/.test(String(refused.reason)) &&
+            minted && minted.kind === 'spawned' && typeof chatId === 'string' && sent === true &&
+            typeof pong === 'string' && hasSession === false && xtermsAfter === xtermsBefore && noPty &&
+            chatSpawns.length === spawnsBefore + 1 && spawn.cwd === cDir && spawn.args.includes('--session-id') && spawn.args.includes('--permission-prompt-tool'),
+          JSON.stringify({ refused, minted, chatId, sent, pong: String(pong).slice(0, 40), hasSession, xterms: [xtermsBefore, xtermsAfter], noPty, args: spawn && spawn.args, log: cLog.slice(-3) }))
+
+        // The rail may be collapsed by an earlier check; its row is what the
+        // vocabulary is being read from, so open it through the real setting.
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
+        // And the dock on the Panels pane — an earlier check may have left it
+        // on Files or Workspaces, where no panel row exists at all.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const railWord = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-row="${chatId}"]'); return r && r.textContent.includes('idle') ? r.textContent : false })()`), 4000)
+        const railRow = await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-row="${chatId}"]'); return r ? r.textContent : 'no-row' })()`)
+        const turns = await wc.executeJavaScript(`${sel('')}?.getAttribute('data-chat-turns') ?? null`)
+        const tone = await wc.executeJavaScript(`${sel('')}?.getAttribute('data-tone') ?? null`)
+        ok(IDS[1], working === true && idle === true && typeof railWord === 'string' && turns === '1' && tone === 'idle',
+          JSON.stringify({ working, idle, railWord: String(railWord).slice(0, 60), railRow: String(railRow).slice(0, 80), turns, tone, log: cLog.slice(-3) }))
+
+        // chat.3. Stand in for a relaunch: the layout on disk holds the chat
+        // panel (committed at the mint), main's session is disposed WITHOUT
+        // dropping the file, the renderer reloads.
+        flushLayoutStore()
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const wsNow = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
+        const persisted = wsNow.panels.find((p) => p.id === chatId)
+        agentSessions.dispose(chatId)
+        const fileTurns = agentTranscripts.read(chatId).turns.length
+        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reC
+        await settle()
+        const restoredPong = await waitUntil(() => wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-assistant-text]')].map((e) => e.textContent).join('|'); return t.includes('pong') ? t : false })()`), 8000)
+        const restoredWord = await wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent ?? null`)
+        const restoredTurns = await wc.executeJavaScript(`${sel('')}?.getAttribute('data-chat-turns') ?? null`)
+        const restoredSpawns = chatSpawns.length
+        ok(IDS[2],
+          persisted && persisted.kind === 'chat' && persisted.chat && persisted.chat.cwd === cDir && typeof persisted.chat.sessionId === 'string' &&
+            fileTurns >= 2 && typeof restoredPong === 'string' && restoredWord === 'asleep' && restoredTurns === '1' &&
+            restoredSpawns === spawnsBefore + 1,
+          JSON.stringify({ persisted, fileTurns, restoredPong: String(restoredPong).slice(0, 40), restoredWord, restoredTurns, spawns: [spawnsBefore, restoredSpawns], log: cLog.slice(-3) }))
+
+        // chat.5. The menu's Cmd+V arrives as edit:paste over IPC (check 35's
+        // shape for the palette): with the composer focused, the text lands in
+        // it; the canvas-level route to a terminal finds none for a chat id.
+        await wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; if (ta) ta.focus(); return !!ta })()`)
+        wc.send(IPC_EVENTS.EDIT_PASTE, 'pasted-into-chat')
+        const pasted = await waitUntil(() => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; return ta && ta.value.includes('pasted-into-chat') ? ta.value : false })()`), 3000)
+        ok(IDS[4], typeof pasted === 'string', JSON.stringify({ pasted }))
+
+        // chat.4. 165's shape: its own terminal, so the positive clause is real.
+        const killsBefore = killedPanelIds.length
+        const termId3 = await (async () => {
+          const before = new Set(await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+          wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: cDir, command: '/bin/sh', args: [], w: 400, h: 300 })
+          const ids = await waitUntil(async () => {
+            const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+            return now.length > before.size ? now : false
+          }, 5000)
+          return ids ? (ids.find((id) => !before.has(id)) ?? null) : null
+        })()
+        if (termId3 !== null) await waitUntil(async () => (await sessionMap(wc)).has(termId3), 6000)
+        await clickPanelClose(wc, chatId)
+        if (termId3 !== null) await clickPanelClose(wc, termId3)
+        await settle()
+        const killsSince = killedPanelIds.slice(killsBefore)
+        const goneFromDom = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') === null`), 4000)
+        const sessionGone = await waitUntil(async () => agentSessions.get(chatId) === undefined, 4000)
+        const fileGone = await waitUntil(async () => agentTranscripts.read(chatId).turns.length === 0, 4000)
+        ok(IDS[3],
+          termId3 !== null && !killsSince.includes(chatId) && killsSince.includes(termId3) && goneFromDom === true && sessionGone === true && fileGone === true,
+          JSON.stringify({ chatId, termId3, killsSince, goneFromDom, sessionGone, fileGone, log: cLog.slice(-3) }))
+        try { rmSync(cDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (cErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onC)
       }
     }
 

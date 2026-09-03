@@ -110,6 +110,8 @@ const SCENES = [
     run: async (k) => { await k.loadMain(); for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-subagent-ambiguous]')`)); i++) await sleep(100); await k.shot('kinds') } },
   { name: 'kinds-dark', intent: 'The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy.',
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
+  { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading not started, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
+    run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
     run: async (k) => { await k.goTo('claude — api (2)'); await k.shot('subagents') } },
   { name: 'palette', intent: 'The command palette at rest (Cmd+K) over the canvas: sections, rows, disabled rows with their reasons, and the footer.',
@@ -202,7 +204,10 @@ app.whenReady().then(async () => {
         { id: 'file', kind: 'file', x: 410, y: 310, w: 360, h: 230, z: 4, source: { path: join(REPO, 'src', 'server.ts') } },
         { id: 'note', kind: 'file', x: 800, y: 310, w: 300, h: 230, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
-        { id: 'jira', kind: 'jira', x: 440, y: 570, w: 380, h: 210, z: 7 },
+        { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
+        // M73. A chat panel with a recorded conversation in its durable file
+        // (seeded below), so the scene shows a transcript with no process.
+        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' } },
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
         term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX }),
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })
@@ -255,6 +260,37 @@ app.whenReady().then(async () => {
       enabled: () => layoutStore.getSetting('scrollback.persist') === true
     }
   )
+  // M73. The agent-session runtime over a FAKE runner (nothing is sent in a
+  // scene; the manager exists so agent:create answers a real snapshot), and
+  // a transcript log seeded with a recorded conversation so the chat panel
+  // renders yesterday's turns exactly as a restored panel does.
+  // From the bundled kit (panels-entry.cjs), never a direct require of a
+  // TypeScript module: Electron's main loader cannot read one, and the
+  // throw lands at module scope where it reads as a hang.
+  const { AgentSessionManager, createAgentTranscriptLog } = require(ENTRY_OUT)
+  const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc-shot-chat-')), 'agent-transcripts') })
+  const agentSessions = new AgentSessionManager({
+    runner: () => ({ pid: 1, write() {}, onData() {}, onExit() {}, kill() {} }),
+    command: '/fake/claude', env: {}, newSessionId: () => 'shot-session'
+  })
+  const seedChatTranscript = (panelId) => {
+    const at = Date.now() - 3600000
+    agentTranscripts.appendTurn(panelId, { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'What does src/server.ts export, and is the health check wired?' }], at })
+    agentTranscripts.appendTurn(panelId, { id: 'm1', role: 'assistant', blocks: [{ type: 'thinking', text: '' }, { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: join(REPO, 'src', 'server.ts') } }], model: 'claude-haiku-4-5-20251001', at: at + 1000 })
+    agentTranscripts.appendTurn(panelId, { id: 'u-2', role: 'user', blocks: [{ type: 'tool_result', toolUseId: 't1', content: 'export const start = () => listen(3000)\nexport const health = () => ok()', isError: false }], at: at + 1500 })
+    agentTranscripts.appendTurn(panelId, { id: 'm2', role: 'assistant', blocks: [{ type: 'text', text: 'It exports `start` and `health`. The health check exists but nothing routes to it yet — `start` only calls `listen(3000)`.\n\nWant me to wire `/health` to it?' }], model: 'claude-haiku-4-5-20251001', at: at + 4000 })
+    agentTranscripts.appendMeta(panelId, { usage: { input: 18, output: 96, cacheWrite: 40101, cacheRead: 79671 }, costUsd: 0.0895, turns: 1 })
+  }
+  seedChatTranscript('chat')
+  const agentHandlers = {
+    create: (spec) => ({ kind: 'created', snapshot: agentSessions.create(spec) }),
+    send: (id, text) => agentSessions.send(id, text),
+    interrupt: (id) => agentSessions.interrupt(id),
+    dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
+    answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
+    list: () => agentSessions.list(),
+    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } }
+  }
   registerIpcHandlers(
     ptyManager, layoutStore,
     () => { const b = backend(); return { kind: b.kind, reason: b.reason } },
@@ -284,7 +320,8 @@ app.whenReady().then(async () => {
     { open: () => ({ kind: 'opened' }) },
     () => [],
     undefined,
-    undefined
+    undefined,
+    agentHandlers
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

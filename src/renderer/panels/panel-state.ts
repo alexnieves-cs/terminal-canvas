@@ -21,7 +21,7 @@ import type { AgentState } from '@shared/types'
  */
 
 /** The display kind, `Panel['kind']` plus M27's `note` — see rail-rows.ts. */
-export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira'
+export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'chat'
 
 export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-you' | 'idle' | 'exited'
 
@@ -32,6 +32,28 @@ export interface StateInput {
   status: PanelStatus | undefined
   /** A restored panel waiting for permission to start — outranks the status. */
   dormant: boolean
+  /**
+   * M73. A chat panel's process facts, from the chat store's snapshot. Absent
+   * for every other kind, and absent for a chat panel whose session main has
+   * not answered for yet — which reads `not started`, the honest word.
+   */
+  chat?: ChatStateInput
+}
+
+/** M73. What the vocabulary needs from an agent session's snapshot. */
+export interface ChatStateInput {
+  status: 'not-started' | 'starting' | 'ready' | 'streaming' | 'exited' | 'disposed'
+  /** Permission requests waiting for an answer. Outranks everything. */
+  pending: number
+  exitCode?: number | null
+  /**
+   * The transcript holds turns. With no process this is `asleep` — the word a
+   * restored terminal uses for the same fact (it resumes on your gesture;
+   * here the gesture is a send) — and never `not started`, which is only
+   * honest for a conversation that has never had a turn. Amended after M73's
+   * critic: a chat with a visible answer read `not started`.
+   */
+  hasHistory?: boolean
 }
 
 export interface PanelStateWord {
@@ -56,6 +78,12 @@ export interface PanelStateWord {
  * `code` is 0 for the most common exit there is.
  */
 export function panelState(input: StateInput, agent: AgentState | undefined): PanelStateWord {
+  // M73. A chat panel is a PROCESS node (brief principle 10), so it speaks
+  // the process words, not its kind — and the same words a terminal running
+  // the same agent speaks (principle 11). A pending permission is `needs you`
+  // whatever the process is doing, because the process is waiting on the
+  // answer; nothing else about the vocabulary is new.
+  if (input.kind === 'chat') return chatState(input.chat)
   if (input.kind !== 'terminal') return { word: input.kind, tone: 'kind' }
   if (input.dormant) return { word: 'asleep', tone: 'asleep' }
   const status = input.status
@@ -98,4 +126,21 @@ export const STATE_PRIORITY: readonly string[] = ['needs you', 'working', 'idle'
 export function statePriority(word: string): number {
   const i = STATE_PRIORITY.findIndex((w) => word === w || word.startsWith(w + ' '))
   return i === -1 ? STATE_PRIORITY.length : i
+}
+
+function chatState(chat: ChatStateInput | undefined): PanelStateWord {
+  if (chat === undefined) return { word: 'not started', tone: 'none' }
+  if (chat.pending > 0) return { word: 'needs you', tone: 'needs-you' }
+  if ((chat.status === 'not-started' || chat.status === 'disposed') && chat.hasHistory === true) {
+    return { word: 'asleep', tone: 'asleep' }
+  }
+  switch (chat.status) {
+    case 'streaming': return { word: 'working', tone: 'working' }
+    case 'starting': return { word: 'starting', tone: 'starting' }
+    case 'ready': return { word: 'idle', tone: 'idle' }
+    // `exited ${code}` as a template, never a truthiness test: 0 is the
+    // common exit; a signal exit has a null code and names the signal's absence.
+    case 'exited': return { word: typeof chat.exitCode === 'number' ? `exited ${chat.exitCode}` : 'exited', tone: 'exited' }
+    default: return { word: 'not started', tone: 'none' }
+  }
 }

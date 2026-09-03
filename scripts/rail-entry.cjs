@@ -41,5 +41,8 @@ module.exports = {
      reason every module above did. */
   ...require('../src/renderer/panels/panel-state'),
   /* M64. Names and paths for the palette's rows — pure. */
-  ...require('../src/renderer/palette/panel-name')
+  ...require('../src/renderer/palette/panel-name'),
+  /* M73. The chat panel's rows, live-block merge and composer arms — pure,
+     type-only imports, the reason every model above joined. */
+  ...require('../src/renderer/chat/chat-model')
 }

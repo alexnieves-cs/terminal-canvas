@@ -1,0 +1,27 @@
+import type { AgentOptions } from './cost'
+
+/**
+ * M73. What a chat PANEL persists: the directory its agent works in, the CLI
+ * session id that names its conversation, and the agent knobs.
+ *
+ * Declared here rather than in renderer/panels/panels.ts for the reason
+ * `FileSource` and `ToolboxSource` are where they are: `layout-schema.ts`
+ * parses this record off disk, and `shared` never imports from `renderer`.
+ *
+ * `sessionId` is minted by the RENDERER at panel creation (`crypto.randomUUID`
+ * is available there), not by main, so the panel record is complete before
+ * any invoke resolves and a reload finds the same conversation. Main pins it
+ * on the first spawn (`--session-id`) and names it on every later one
+ * (`--resume`); whether the CLI's own transcript for it exists yet is main's
+ * to find out at spawn, never a field here — see AgentSessionDeps.transcriptExists.
+ *
+ * `agentOptions` ABSENT means the CLI's own defaults, and absent must stay
+ * absent through every copy site: a spread that writes `agentOptions:
+ * undefined` survives IPC and reads as present.
+ */
+export interface ChatSource {
+  /** Unexpanded, like ToolboxSource.cwd — main expands it with resolveCwd. */
+  cwd: string
+  sessionId: string
+  agentOptions?: AgentOptions
+}
