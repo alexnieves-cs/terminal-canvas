@@ -5,6 +5,7 @@ import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { resolveSpawnRequest } from './spawn-request'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
@@ -44,7 +45,7 @@ import {
   templateOf
 } from './presets'
 import { mergePrompts, readProjectPrompts } from './prompts'
-import type { CapturedPanel, PresetTemplate } from '../shared/ipc-contract'
+import type { CapturedPanel } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
 /** M48. When the startup probe ran; the report says so, since it never re-runs. */
@@ -742,32 +743,15 @@ app.whenReady().then(async () => {
         onSpawnPreset(id)
       },
       spawnWith: (req) => {
-        // The directory is checked HERE, before any template exists: a panel
-        // spawned into a directory that is not there dies with a spawn error
-        // the user reads as the app's, and the sheet can show a reason.
-        // expandTilde, NOT resolveCwd: resolveCwd falls back to the home
-        // directory when the path is missing, which is right for a restored
-        // panel and exactly wrong here — a typo would spawn at ~ and say so
-        // nowhere (the first check run spawned two panels there).
-        const cwd = expandTilde(req.cwd)
-        if (!existsSync(cwd)) return { kind: 'refused', reason: `no such directory: ${req.cwd}` }
-        let template: PresetTemplate
-        if (req.command !== undefined && req.command.trim() !== '') {
-          // A one-off task: the login shell runs the command and the panel is
-          // titled with it. `-l` so the user's PATH applies, as it would in a
-          // terminal they typed it into.
-          template = { cwd, command: '/bin/sh', args: ['-lc', req.command.trim()], title: req.title?.trim() || req.command.trim(), focus: true }
-        } else {
-          const found = allPresets(layoutStore.presets()).find((p) => p.id === req.presetId)
-          if (!found) return { kind: 'refused', reason: 'that preset no longer exists' }
-          // templateOf keeps an absent command absent; the sheet only ever
-          // overrides the directory, the agent options and the title.
-          template = { ...templateOf(found), cwd, focus: true }
-          if (req.agentOptions !== undefined && template.agent !== undefined) template.agentOptions = { ...(template.agentOptions ?? {}), ...req.agentOptions }
-          if (req.worktree !== undefined) template.worktree = req.worktree
-          if (req.title !== undefined && req.title.trim() !== '') template.title = req.title.trim()
-        }
-        mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, template)
+        // One pure resolver, shared with the verify harness — see
+        // spawn-request.ts for the rules (absent command stays absent, a
+        // file is refused like a missing path, a typed command is a task).
+        const resolved = resolveSpawnRequest(req, allPresets(layoutStore.presets()), {
+          expand: expandTilde,
+          isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
+        })
+        if (resolved.kind === 'refused') return resolved
+        mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, resolved.template)
         return { kind: 'spawned' }
       },
       recentDirectories: () => layoutStore.recentDirectories(),

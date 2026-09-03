@@ -262,6 +262,7 @@ export function presetRows(entries: PresetAvailability[], defaultId: string): Pr
     subtitle: `${preset.command ?? 'login shell'} — ${preset.cwd}`,
     cwd: preset.cwd,
     ...(preset.agent !== undefined ? { agent: preset.agent } : {}),
+    ...(preset.agentOptions !== undefined ? { agentOptions: { ...preset.agentOptions } } : {}),
     // M37. Absent stays absent, so the palette's toggle row can say "off"
     // for a preset that never asked and "on" for one that did.
     ...(preset.worktree !== undefined ? { worktree: preset.worktree } : {})

@@ -2041,7 +2041,6 @@ body {
   overflow: hidden;
 }
 .launcher__chrome { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--line); background: var(--s-2); }
-.launcher__chrome-hint { margin-left: auto; font-size: var(--t-xs); color: var(--fg-3); }
 .launcher__well { padding: var(--sp-6); background: var(--well); }
 .launcher__title {
   font-family: var(--font-mono);
@@ -2068,12 +2067,11 @@ body {
 .launcher__verb-name::before { content: "> "; color: var(--fg-4); }
 .launcher__verb:hover:not(:disabled) { background: var(--s-4); border-color: var(--line-strong); }
 .launcher__verb:disabled { color: var(--fg-4); cursor: default; }
-.launcher__verb-name { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 600; flex: none; }
+.launcher__verb-name { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 500; flex: none; }
 .launcher__verb-hint { font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); }
 .launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
 .launcher__env-hint { color: var(--iris); }
-.launcher__keys { margin: var(--sp-4) 0 0; font-size: var(--t-xs); color: var(--fg-4); }
 
 /* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
    gesture has been used. Never a click target. */
@@ -3212,12 +3210,13 @@ body {
    ───────────────────────────────────────────────────────────────────────── */
 .sheet { padding: var(--sp-5) var(--sp-6) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); }
 .sheet__title { font-size: var(--t-lg); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); margin-bottom: var(--sp-2); }
+.sheet__select--mono { font-family: var(--font-mono); font-size: var(--t-sm); }
+/* The agent row: three controls in the field column, one label. */
+.sheet__how { flex: 1; min-width: 0; display: flex; gap: var(--sp-3); }
+.sheet__how > * { flex: 1; min-width: 0; }
 .sheet__field { display: flex; align-items: center; gap: var(--sp-5); position: relative; }
 .sheet__field--where { align-items: flex-start; }
-.sheet__row { display: flex; gap: var(--sp-5); }
-.sheet__field--third { flex: 1; min-width: 0; }
 .sheet__label { flex: none; width: 5em; font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
-.sheet__field--third .sheet__label { width: auto; }
 .sheet__input, .sheet__select {
   flex: 1;
   min-width: 0;

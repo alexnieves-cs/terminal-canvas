@@ -13,7 +13,12 @@ import { shortPath } from './panel-name'
  * input does (usePalette's rules): a field in this form holds DOM focus
  * away from xterm, `Enter` anywhere submits, `Escape` cancels in one stage
  * (a sheet is not a scope), `Tab` moves between fields, and in the `where`
- * field `↑`/`↓` walk the suggestions and `Tab` accepts one.
+ * field `↑`/`↓` walk the suggestions and `Tab` or `Enter` accepts one.
+ *
+ * WHERE is first and holds focus on open, pre-filled and selected, so the
+ * common case — start the default here — is one Enter (brief §6). The
+ * critic's first render led with WHAT and read the mode fields as
+ * "preset's": the preset's own values are now the placeholders.
  *
  * Nothing here spawns. Submit hands main a `SpawnRequest`; main resolves
  * the preset (an absent command stays absent), refuses a directory that is
@@ -53,11 +58,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const [refusal, setRefusal] = useState<string | null>(null)
   const [highlight, setHighlight] = useState(-1)
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const whatRef = useRef<HTMLSelectElement | null>(null)
+  const whereRef = useRef<HTMLInputElement | null>(null)
 
-  // The first field takes focus on mount — the sheet is now what holds the
-  // keyboard away from xterm, as the palette's input did a moment ago.
-  useEffect(() => { whatRef.current?.focus() }, [])
+  // WHERE takes focus on mount, its default selected: Enter starts the
+  // default preset here, typing replaces the directory. The sheet is now
+  // what holds the keyboard away from xterm, as the palette's input did.
+  useEffect(() => { whereRef.current?.focus(); whereRef.current?.select() }, [])
 
   // Choosing a preset re-seeds `where` with the preset's own directory
   // unless the user has typed one: a directory typed by hand outranks a
@@ -99,6 +105,11 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit() }
   }
 
+  const accept = (i: number): void => {
+    const s = suggestions[i]
+    if (s === undefined) return
+    setCwd(s.dir); setCwdTouched(true); setHighlight(-1); setShowSuggestions(false)
+  }
   const onWhereKey = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'ArrowDown' && suggestions.length > 0) {
       event.preventDefault(); setShowSuggestions(true); setHighlight((h) => Math.min(suggestions.length - 1, h + 1)); return
@@ -106,30 +117,48 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
     if (event.key === 'ArrowUp' && suggestions.length > 0) {
       event.preventDefault(); setHighlight((h) => Math.max(-1, h - 1)); return
     }
-    if (event.key === 'Tab' && highlight >= 0 && suggestions[highlight] !== undefined) {
-      // Accept the highlighted directory and let Tab move on as usual.
-      setCwd(suggestions[highlight]); setCwdTouched(true); setHighlight(-1); setShowSuggestions(false); return
-    }
-    if (event.key === 'Enter' && highlight >= 0 && suggestions[highlight] !== undefined) {
-      event.preventDefault(); setCwd(suggestions[highlight]); setCwdTouched(true); setHighlight(-1); setShowSuggestions(false); return
-    }
+    if (event.key === 'Tab' && highlight >= 0) { accept(highlight); return }
+    // A highlighted suggestion is what Enter means here; with none, Enter starts.
+    if (event.key === 'Enter' && highlight >= 0) { event.preventDefault(); event.stopPropagation(); accept(highlight); return }
     onKey(event)
   }
 
   const isAgent = preset?.agent !== undefined
+  const own = preset?.agentOptions ?? {}
   const request = buildSpawnRequest(values(), model.presets)
+  const what = request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
-      <div className="sheet__title">New panel</div>
+      <div className="sheet__title">New panel…</div>
+
+      <label className="sheet__field sheet__field--where">
+        <span className="sheet__label">where</span>
+        <input ref={whereRef} className="sheet__input sheet__input--mono" data-sheet-where value={cwd} placeholder="a directory" spellCheck={false}
+          onChange={(e) => { setCwd(e.target.value); setCwdTouched(true); setShowSuggestions(true); setHighlight(-1); setRefusal(null) }}
+          onFocus={() => setShowSuggestions(true)}
+          onKeyDown={onWhereKey} />
+        {showSuggestions && suggestions.length > 0 && (
+          <ul className="sheet__suggestions" role="listbox" aria-label="Directories" data-sheet-suggestions>
+            {suggestions.map((s, i) => (
+              <li key={s.dir} role="option" aria-selected={i === highlight}
+                className={`sheet__suggestion${i === highlight ? ' sheet__suggestion--on' : ''}`}
+                onMouseDown={(e) => { e.preventDefault(); accept(i) }}>
+                <span className="sheet__suggestion-path" title={s.dir}>{shortPath(s.dir, 3)}</span>
+                <span className="sheet__suggestion-why">{s.why}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </label>
 
       <label className="sheet__field">
         <span className="sheet__label">what</span>
-        <select ref={whatRef} className="sheet__select" data-sheet-what value={whatId} onChange={(e) => { setWhatId(e.target.value); setRefusal(null) }}>
+        <select className="sheet__select sheet__select--mono" data-sheet-what value={whatId} onChange={(e) => { setWhatId(e.target.value); setRefusal(null) }}>
           {model.presets.map((p) => (
             <option key={p.id} value={p.id} disabled={p.available === false}>{p.name}{p.available === false ? ' — not on PATH' : ''}</option>
           ))}
-          <option value={COMMAND}>a command…</option>
+          <option value={COMMAND}>type a command…</option>
         </select>
       </label>
 
@@ -141,60 +170,32 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         </label>
       )}
 
-      <label className="sheet__field sheet__field--where">
-        <span className="sheet__label">where</span>
-        <input className="sheet__input sheet__input--mono" data-sheet-where value={cwd} placeholder="a directory" spellCheck={false}
-          onChange={(e) => { setCwd(e.target.value); setCwdTouched(true); setShowSuggestions(true); setHighlight(-1); setRefusal(null) }}
-          onFocus={() => setShowSuggestions(true)}
-          onKeyDown={onWhereKey} />
-        {showSuggestions && suggestions.length > 0 && (
-          <ul className="sheet__suggestions" role="listbox" aria-label="Directories" data-sheet-suggestions>
-            {suggestions.map((dir, i) => (
-              <li key={dir} role="option" aria-selected={i === highlight}
-                className={`sheet__suggestion${i === highlight ? ' sheet__suggestion--on' : ''}${dir === model.focusedCwd ? ' sheet__suggestion--focused' : ''}`}
-                onMouseDown={(e) => { e.preventDefault(); setCwd(dir); setCwdTouched(true); setShowSuggestions(false); setHighlight(-1) }}>
-                <span className="sheet__suggestion-path" title={dir}>{shortPath(dir, 3)}</span>
-                {dir === model.focusedCwd && <span className="sheet__suggestion-why">focused panel</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </label>
-
       <label className="sheet__field">
         <span className="sheet__label">title</span>
         <input className="sheet__input" data-sheet-title value={title} placeholder={whatId === COMMAND ? (command.trim() || 'the command') : 'optional'} onChange={(e) => setTitle(e.target.value)} />
       </label>
 
       {isAgent && (
-        <div className="sheet__row">
-          <label className="sheet__field sheet__field--third">
-            <span className="sheet__label">mode</span>
-            <select className="sheet__select" data-sheet-mode value={mode} onChange={(e) => setMode(e.target.value as PermissionMode | '')}>
-              <option value="">preset's</option>
-              {PERMISSION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+        <div className="sheet__field sheet__field--how">
+          <span className="sheet__label">how</span>
+          <div className="sheet__how">
+            <select className="sheet__select" data-sheet-mode value={mode} aria-label="permission mode" onChange={(e) => setMode(e.target.value as PermissionMode | '')}>
+              <option value="">{own.permissionMode ?? 'default'} mode</option>
+              {PERMISSION_MODES.map((m) => <option key={m} value={m}>{m} mode</option>)}
             </select>
-          </label>
-          <label className="sheet__field sheet__field--third">
-            <span className="sheet__label">effort</span>
-            <select className="sheet__select" data-sheet-effort value={effort} onChange={(e) => setEffort(e.target.value as Effort | '')}>
-              <option value="">preset's</option>
-              {EFFORTS.map((m) => <option key={m} value={m}>{m}</option>)}
+            <select className="sheet__select" data-sheet-effort value={effort} aria-label="effort" onChange={(e) => setEffort(e.target.value as Effort | '')}>
+              <option value="">{own.effort ?? 'default'} effort</option>
+              {EFFORTS.map((m) => <option key={m} value={m}>{m} effort</option>)}
             </select>
-          </label>
-          <label className="sheet__field sheet__field--third">
-            <span className="sheet__label">model</span>
-            <input className="sheet__input sheet__input--mono" data-sheet-model value={modelName} placeholder="preset's" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
-          </label>
+            <input className="sheet__input sheet__input--mono" data-sheet-model value={modelName} placeholder={own.model ?? 'default model'} aria-label="model" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
+          </div>
         </div>
       )}
 
       <div className="sheet__foot">
-        <span className="sheet__preview" data-sheet-preview>
-          {request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')} · {request.cwd || '—'}
-        </span>
+        <span className="sheet__preview" data-sheet-preview>{what} · {request.cwd ? shortPath(request.cwd, 3) : '—'}</span>
         {refusal !== null && <span className="sheet__refusal" data-sheet-refusal role="alert">{refusal}</span>}
-        <span className="sheet__keys">↵ start · tab next field · esc close</span>
+        <span className="sheet__keys">↵ start · esc close · ⌘N starts the default without asking</span>
       </div>
     </div>
   )

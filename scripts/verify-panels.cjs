@@ -68,6 +68,7 @@ const {
   readProjectPrompts,
   resolveCwd,
   expandTilde,
+  resolveSpawnRequest,
   IPC_EVENTS,
   IPC,
   createReviewEngine,
@@ -885,18 +886,14 @@ app.whenReady().then(async () => {
     // sent back as PRESET_SPAWN, exactly as main/index.ts does it, and a
     // missing directory is refused with a reason.
     spawnWith: (req) => {
-      const cwd = expandTilde(req.cwd)
-      if (!existsSync(cwd)) return { kind: 'refused', reason: `no such directory: ${req.cwd}` }
-      let template
-      if (req.command !== undefined && req.command.trim() !== '') {
-        template = { cwd, command: '/bin/sh', args: ['-lc', req.command.trim()], title: (req.title || '').trim() || req.command.trim(), focus: true }
-      } else {
-        const found = allPresets(layoutStore.presets()).find((p) => p.id === req.presetId)
-        if (!found) return { kind: 'refused', reason: 'that preset no longer exists' }
-        template = { ...templateOf(found), cwd, focus: true }
-        if (req.title && req.title.trim() !== '') template.title = req.title.trim()
-      }
-      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, template)
+      // The SAME resolver main/index.ts runs (spawn-request.ts), over the
+      // harness's own presets and a real directory test.
+      const resolved = resolveSpawnRequest(req, allPresets(layoutStore.presets()), {
+        expand: expandTilde,
+        isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
+      })
+      if (resolved.kind === 'refused') return resolved
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, resolved.template)
       return { kind: 'spawned' }
     },
     recentDirectories: () => layoutStore.recentDirectories(),
@@ -15451,7 +15448,7 @@ app.whenReady().then(async () => {
         await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.focus(); return !!w })()`)
         await settle()
         const firstSuggestion = await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (!w) return null
-          const first = document.querySelector('[data-sheet-suggestions] .sheet__suggestion .sheet__suggestion-path'); return { value: w.value, first: first ? first.textContent : null } })()`)
+          const first = document.querySelector('[data-sheet-suggestions] .sheet__suggestion .sheet__suggestion-path'); return { value: w.value, first: first ? first.getAttribute('title') : null, why: first ? first.nextElementSibling?.textContent : null } })()`)
         await present('after suggestions')
         // A directory that is not there: refused, in the sheet.
         await set('[data-sheet-what]', '__command__')
@@ -15469,13 +15466,16 @@ app.whenReady().then(async () => {
         const spawned = await waitUntil(() => wc.executeJavaScript(`(() => { const panels = [...document.querySelectorAll('.panel[data-panel-id]')]; if (panels.length !== ${countBefore + 1}) return false
           const p = panels.find((el) => el.querySelector('.pf__title')?.textContent === 'echo hello-from-a-task'); return p ? p.getAttribute('data-panel-id') : false })()`), 6000)
         const live = spawned === false ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"] .panel__slot') !== null`), 6000)
+        // Read the cwd NOW, while the task's process is alive — it exits in
+        // milliseconds and leaves the PTY list.
+        const spawnedCwd = spawned === false ? null : (ptyManager.list().find((s) => s.panelId === spawned) || { cwd: null }).cwd
         const focused = spawned === false ? false : await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"]').classList.contains('panel--selected')`)
         const exited = spawned === false ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${spawned}"] [data-state-word]')?.textContent === 'exited 0'`), 8000)
-        const cwdOk = spawned === false ? false : (ptyManager.list().find((s) => s.panelId === spawned) || { cwd: null }).cwd === dirA || true
+        const cwdOk = spawnedCwd !== null && (spawnedCwd === dirA || spawnedCwd === realpathSync(dirA))
         ok(IDS[0], opened === true && spawned !== false && live === true && focused === true && exited === true,
           JSON.stringify({ opened, spawned, live, focused, exited, steps, log: hLog.slice(-3) }))
-        ok(IDS[1], firstSuggestion !== null && firstSuggestion.first !== null && (firstSuggestion.first === dirA || firstSuggestion.first === realpathSync(dirA)) && typeof refused === 'string' && /no such directory/.test(refused) && cwdOk,
-          JSON.stringify({ firstSuggestion, refused, dirA }))
+        ok(IDS[1], firstSuggestion !== null && firstSuggestion.first !== null && (firstSuggestion.first === dirA || firstSuggestion.first === realpathSync(dirA)) && firstSuggestion.why === 'focused panel' && typeof refused === 'string' && /no such directory/.test(refused) && cwdOk,
+          JSON.stringify({ firstSuggestion, refused, dirA, spawnedCwd }))
       } catch (hErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr) + ' | renderer: ' + (hLog.slice(-4).join(' || ') || '(none)'))
       } finally {

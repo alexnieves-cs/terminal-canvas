@@ -7,7 +7,7 @@ import type { Command } from './palette-model'
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
 import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
-import { PERMISSION_MODES, type PermissionMode, type AgentKind } from '@shared/cost'
+import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOptions } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import type { EnvReport } from '@shared/env-report'
 import type { CanvasGroup } from '@renderer/groups/groups'
@@ -53,6 +53,7 @@ export interface PresetRow {
   /** M65. The preset's agent kind and directory — see PresetListRow. */
   agent?: AgentKind
   cwd?: string
+  agentOptions?: AgentOptions
 }
 
 export interface PromptRow {

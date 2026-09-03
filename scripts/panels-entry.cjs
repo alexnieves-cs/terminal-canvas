@@ -168,6 +168,8 @@ module.exports = {
   mergePrompts: require('../src/main/prompts').mergePrompts,
   readProjectPrompts: require('../src/main/prompts').readProjectPrompts,
   expandTilde: require('../src/main/pty-manager').expandTilde,
+  /* M65. The sheet's resolver, so the harness runs main's own function. */
+  resolveSpawnRequest: require('../src/main/spawn-request').resolveSpawnRequest,
   resolveCwd: require('../src/main/pty-manager').resolveCwd,
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */

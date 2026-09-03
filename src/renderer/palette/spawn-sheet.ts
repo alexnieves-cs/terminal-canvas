@@ -28,6 +28,14 @@ export interface SheetPreset {
   agent?: string
   cwd?: string
   available?: boolean
+  /** The preset's own agent options — the resolved defaults the sheet shows. */
+  agentOptions?: AgentOptions
+}
+
+/** A directory and where it came from — every suggestion says what it is. */
+export interface DirectorySuggestion {
+  dir: string
+  why: 'focused panel' | 'recent' | 'open panel'
 }
 
 /**
@@ -68,21 +76,21 @@ export function directorySuggestions(input: {
   focusedCwd?: string
   recents: readonly string[]
   panelDirs: readonly string[]
-}, cap = 8): string[] {
+}, cap = 8): DirectorySuggestion[] {
   const seen = new Set<string>()
-  const out: string[] = []
+  const out: DirectorySuggestion[] = []
   // An untouched default (the focused panel's or the preset's directory)
   // must not filter the list down to itself — the first check run showed
   // no suggestions at all under a default of /tmp.
   const q = input.touched === false ? '' : input.typed.trim().toLowerCase()
-  const consider = (dir: string | undefined): void => {
+  const consider = (dir: string | undefined, why: DirectorySuggestion['why']): void => {
     if (dir === undefined || dir === '' || seen.has(dir)) return
     if (q !== '' && !dir.toLowerCase().includes(q)) return
     seen.add(dir)
-    if (out.length < cap) out.push(dir)
+    if (out.length < cap) out.push({ dir, why })
   }
-  consider(input.focusedCwd)
-  for (const d of input.recents) consider(d)
-  for (const d of input.panelDirs) consider(d)
+  consider(input.focusedCwd, 'focused panel')
+  for (const d of input.recents) consider(d, 'recent')
+  for (const d of input.panelDirs) consider(d, 'open panel')
   return out
 }

@@ -48,13 +48,15 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
     <div className="launcher pf" data-launcher data-tone="none" role="region" aria-label="Get started">
       <div className="launcher__chrome pf__chrome">
         <span className="launcher__title">terminal canvas</span>
-        <span className="launcher__chrome-hint">an empty canvas</span>
       </div>
       <div className="launcher__well">
-      <p className="launcher__lead">
-        Every panel is a terminal running your agent. Start one, then pan and zoom the canvas around it.
-      </p>
       <div className="launcher__verbs">
+        {/* The considered door first: `claude` at `~` is almost never the
+            right place, and the line that asks where should lead. */}
+        <button type="button" className="launcher__verb launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
+          <span className="launcher__verb-name">New panel…</span>
+          <span className="launcher__verb-hint">a directory, a preset or a command, the agent's mode</span>
+        </button>
         {presets.map((p) => {
           const cli = p.subtitle.split(' ')[0]
           const install = p.available ? undefined : (INSTALL[cli] ?? INSTALL[p.name.toLowerCase().split(' ')[0]])
@@ -69,7 +71,7 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
               {...shellControl(() => { if (p.available) onSpawnPreset(p.id) })}
             >
               <span className="launcher__verb-name">{p.name}</span>
-              <span className="launcher__verb-hint">{p.available ? p.subtitle : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
+              <span className="launcher__verb-hint">{p.available ? `in ${p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
             </button>
           )
         })}
@@ -77,14 +79,12 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
           <span className="launcher__verb-name">Open a file…</span>
           <span className="launcher__verb-hint">a file panel, editable</span>
         </button>
+        {/* On an empty canvas "select a panel first" names an impossible fix;
+            the launcher's own reason says what to do here. */}
         <button type="button" className="launcher__verb" data-launcher-new-note disabled={noteReason !== null}
-          title={noteReason ?? 'A note, saved beside the selected panel'} {...shellControl(() => { if (noteReason === null) onNewNote() })}>
+          title={noteReason === null ? 'A note, saved beside the selected panel' : 'start a panel first — a note is saved in its directory'} {...shellControl(() => { if (noteReason === null) onNewNote() })}>
           <span className="launcher__verb-name">New note…</span>
-          <span className="launcher__verb-hint">{noteReason ?? 'a note panel'}</span>
-        </button>
-        <button type="button" className="launcher__verb launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
-          <span className="launcher__verb-name">Choose where and what…</span>
-          <span className="launcher__verb-hint">a directory, a preset or a command, the agent's mode</span>
+          <span className="launcher__verb-hint">{noteReason === null ? 'a note panel' : 'start a panel first — a note is saved in its directory'}</span>
         </button>
       </div>
       {report !== null && (

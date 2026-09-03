@@ -3072,6 +3072,28 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M65 — spawn.1. THE RESOLVER main and the harness both run. An absent
+//     command stays absent; a typed command is `/bin/sh -lc` titled with
+//     itself; agent options merge only onto an agent preset; a FILE is
+//     refused like a missing path (existsSync passed it and the panel died
+//     at spawn); the reason names the typed path.
+{
+  const resolve = typeof L.resolveSpawnRequest === 'function' ? L.resolveSpawnRequest : () => null
+  const presets = [{ id: 'shell', name: 'Login shell', cwd: '~', args: [] }, { id: 'claude', name: 'Claude', cwd: '~', command: 'claude', args: [], agent: 'claude-code', agentOptions: { effort: 'high' } }]
+  const fs = { expand: (p) => p.replace(/^~/, '/home/me'), isDirectory: (p) => p === '/home/me' || p === '/work' }
+  const a = resolve({ presetId: 'shell', cwd: '~' }, presets, fs)
+  const b = resolve({ presetId: 'claude', cwd: '/work', agentOptions: { permissionMode: 'plan' }, title: 'api' }, presets, fs)
+  const c = resolve({ command: 'npm test', cwd: '/work' }, presets, fs)
+  const d = resolve({ presetId: 'shell', cwd: '/work/file.txt' }, presets, fs)
+  const e = resolve({ presetId: 'gone', cwd: '/work' }, presets, fs)
+  ok('spawn.1 resolveSpawnRequest keeps an absent command absent, merges agent options onto an agent preset only, wraps a typed command as a titled task, and refuses a file or a missing preset with a reason',
+    a && a.kind === 'spawned' && !('command' in a.template) && a.template.cwd === '/home/me' && a.template.focus === true &&
+      b && b.kind === 'spawned' && b.template.agentOptions && b.template.agentOptions.permissionMode === 'plan' && b.template.agentOptions.effort === 'high' && b.template.title === 'api' &&
+      c && c.kind === 'spawned' && c.template.command === '/bin/sh' && c.template.args[0] === '-lc' && c.template.args[1] === 'npm test' && c.template.title === 'npm test' &&
+      d && d.kind === 'refused' && /file\.txt/.test(d.reason) && e && e.kind === 'refused',
+    JSON.stringify({ a, b, c, d, e }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

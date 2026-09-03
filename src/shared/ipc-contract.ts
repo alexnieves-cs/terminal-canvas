@@ -826,6 +826,8 @@ export interface PresetListRow {
   agent?: AgentKind
   /** M65. The preset's own directory, the sheet's default `where` when no panel is focused. */
   cwd: string
+  /** M65. The preset's own agent options, so the sheet can show them as the resolved defaults. */
+  agentOptions?: AgentOptions
 }
 
 /**

@@ -203,7 +203,7 @@ export function registerIpcHandlers(
     // M65. Every spawn's directory joins the recent list, here rather than
     // in the sheet's handler, so ⌘N and a menu pick count too: the list is
     // "where panels start", not "where the sheet was used".
-    layoutStore.addRecentDirectory(spec.cwd)
+    layoutStore.addRecentDirectory(resolveCwd(spec.cwd))
     return ptyManager.create(spec)
   })
 
