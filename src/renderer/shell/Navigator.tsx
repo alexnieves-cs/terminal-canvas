@@ -7,7 +7,7 @@ import { RailPanelRow } from './RailPanelRow'
 import { RailWorkspaceRow } from './RailWorkspaceRow'
 import { FileTree } from './FileTree'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Plus } from '@renderer/icons'
+import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
 
 export interface NavigatorProps {
   navigator: NavigatorPane
@@ -29,6 +29,10 @@ export interface NavigatorProps {
   // Files
   treeRootPath: string | null
   treeRootLabel: string | null
+  /** M68. The selected panel the tree is rooted on, by its label. */
+  treeRootPanel: string | null
+  /** M68. The Workspaces pane's door to the merged view. */
+  onToggleMerged: () => void
   treeRows: FileRow[]
   treeRootPending: boolean
   treeEmptyReason: string
@@ -72,6 +76,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
           onToggle={onToggle}
           rootPath={props.treeRootPath}
           rootLabel={props.treeRootLabel}
+          rootPanel={props.treeRootPanel}
           rows={props.treeRows}
           rootPending={props.treeRootPending}
           emptyReason={props.treeEmptyReason}
@@ -126,6 +131,22 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                   />
                 ))
               )}
+              {/* M68. The merged view's door lives with the workspaces it
+                  shows, not only in the top bar: a pressed toggle, the same
+                  verb the bar's button runs. */}
+              <li className="rail-row rail-row--door" data-rail-merged>
+                <button
+                  type="button"
+                  className="rail-row__main"
+                  aria-pressed={props.merged === true}
+                  title={props.merged ? 'Back to this workspace' : 'Every workspace at once, read-only'}
+                  {...shellControl(props.onToggleMerged)}
+                >
+                  <span className="rail-row__kind" aria-hidden="true"><Lanes /></span>
+                  <span className="rail-row__label">merged view</span>
+                  <span className="rail-row__tail">{props.merged ? 'on · read-only' : 'all workspaces'}</span>
+                </button>
+              </li>
             </ul>
           ) : (
             <ul className="rail-list rail-list--panels" aria-label="Panels">

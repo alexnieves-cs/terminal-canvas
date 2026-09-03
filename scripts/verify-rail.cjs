@@ -2289,6 +2289,44 @@ const session = (id, over = {}) => ({
 }
 
 console.log('\n' + '='.repeat(60))
+// M68 — context.1. THE DETAIL TAB REPEATS NOTHING. The pinned header shows
+// the pid, so the field list must not; `asked for` earns its row only when
+// it differs from the resolved command (an ABSENT spec always differs — the
+// login-shell question check 21 protects keeps its answer). Pure, on the
+// model's field list, so the view has one rule and the checks read it.
+{
+  const vf = R.visibleDetailFields
+  const fields = [
+    { key: 'command', label: 'command', value: '/bin/zsh' },
+    { key: 'spec-command', label: 'asked for', value: '/bin/zsh' },
+    { key: 'cwd', label: 'cwd', value: '/tmp' },
+    { key: 'pid', label: 'pid', value: '123' },
+    { key: 'font-size', label: 'font size', value: '13 (default)' }
+  ]
+  const same = typeof vf === 'function' ? vf(fields).map((f) => f.key) : null
+  const sameLabel = typeof vf === 'function' ? vf(fields).find((f) => f.key === 'command')?.label : null
+  const differ = typeof vf === 'function' ? vf(fields.map((f) => f.key === 'spec-command' ? { ...f, value: 'nothing — main chose the login shell' } : f)).map((f) => f.key) : null
+  ok('context.1 the visible Detail fields drop pid and drop asked-for only when it equals the command, in order',
+    same !== null && JSON.stringify(same) === JSON.stringify(['command', 'cwd', 'font-size']) &&
+      sameLabel === 'command · as asked' &&
+      differ !== null && JSON.stringify(differ) === JSON.stringify(['command', 'spec-command', 'cwd', 'font-size']),
+    JSON.stringify({ same, sameLabel, differ }))
+}
+
+// M68 — context.5. THE PERMISSIONS LINE'S ARMS: no rules anywhere, else the
+// buckets that are non-zero, counted across only the files that carry any.
+{
+  const pl = R.permissionsLine
+  const none = typeof pl === 'function' ? pl([{ path: '/a', scope: 'project', allow: 0, deny: 0, ask: 0, additionalDirectories: 0 }]) : null
+  const some = typeof pl === 'function' ? pl([
+    { path: '/a', scope: 'project', allow: 2, deny: 0, ask: 1, additionalDirectories: 0 },
+    { path: '/b', scope: 'user', allow: 1, deny: 1, ask: 0, additionalDirectories: 0 },
+    { path: '/c', scope: 'local', allow: 0, deny: 0, ask: 0, additionalDirectories: 0 }
+  ]) : null
+  ok('context.5 the permissions line says none, or the non-zero buckets across the files that carry rules',
+    none === 'no permission rules in this directory' && some === '3 allow · 1 deny · 1 ask in 2 files',
+    JSON.stringify({ none, some }))
+}
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

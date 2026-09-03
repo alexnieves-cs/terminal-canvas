@@ -298,12 +298,16 @@ body {
   box-shadow: var(--e-3);
 }
 .shell--nav-drawer .shell__rail { left: var(--shell-dock-w); border-right: 1px solid var(--line); }
-.shell--ctx-drawer .shell__inspector { right: 0; border-left: 1px solid var(--line); }
+.shell--ctx-drawer .shell__inspector { right: 0; border-left: 1px solid var(--line-strong); }
 /* The strips sit ABOVE a drawer (compact.1), so a drawer's last rows — the
    context pane's pinned Close, the navigator's last panel row — pad past the
    strip band rather than hide under it: the compact shot showed Link to…
    and Close cut off under the status strip. */
-.shell--ctx-drawer .inspector__actions { padding-bottom: calc(var(--sp-5) + 44px); }
+/* Three classes: `.inspector__actions.context__actions` (the grid, declared
+   later) sets the padding shorthand at (0,2,0) and silently won over the
+   two-class form of this rule — the compact shot showed Close under the
+   strip again two milestones after it was fixed (M68's critic). */
+.shell--ctx-drawer .inspector__actions.context__actions { padding-bottom: calc(var(--sp-5) + 44px); }
 .shell--nav-drawer .rail-list { padding-bottom: calc(var(--sp-5) + 44px); }
 
 .shell__top { grid-area: top; }
@@ -723,6 +727,13 @@ body {
 .rail-row__tail[data-tone="none"],
 .rail-row__tail[data-tone="starting"],
 .rail-row__tail[data-tone="kind"] { color: var(--muted); }
+/* M68. A section's first-arm line and the navigator's provenance. */
+.inspector__arm { margin: 0 0 var(--sp-3); color: var(--fg-3); font-size: var(--t-xs); }
+.rail-row--door { margin-top: var(--sp-3); border-top: 1px solid var(--line); padding-top: var(--sp-2); }
+.rail-row--door .rail-row__main[aria-pressed="true"] .rail-row__label { color: var(--iris); }
+.shell__tree-panel { text-transform: none; letter-spacing: 0; font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); margin-left: var(--sp-2); }
+.jira-node__connect { align-self: flex-start; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.jira-node__connect:hover { background: var(--s-4); }
 .rail-row__go {
   flex: none;
   font-size: var(--t-xs);

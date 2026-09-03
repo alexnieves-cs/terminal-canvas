@@ -140,7 +140,7 @@ export function buildReviewNodeModel(input: {
       heading,
       root,
       summary: `${plural(result.files.length, 'file')} changed`,
-      note: `${result.panelCount} panels share this repo — changes can't be attributed`,
+      note: `${result.panelCount} panels share this repository, so changes cannot be attributed`,
       files: rows,
       more,
       commit: {

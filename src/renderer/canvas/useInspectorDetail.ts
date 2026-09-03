@@ -17,6 +17,13 @@ export interface InspectorDetailDeps {
   selectedId: string | null
   selectedPanel: Panel | undefined
   /**
+   * M68. Whether the selected panel's process has arrived. The Changes query
+   * answered "no session yet" for a panel selected while it was starting and
+   * never asked again (only an idle ARRIVAL re-fired it, which a plain shell
+   * never produces); this flips once, on spawn, and re-asks.
+   */
+  selectedSpawned: boolean
+  /**
    * Every sessionless kind, not review nodes alone. Main holds no baseline
    * for a panel that never spawned, so querying for one renders a correct
    * answer to a question nobody should be asking.
@@ -43,7 +50,7 @@ export interface InspectorDetailDeps {
 export function useInspectorDetail(deps: InspectorDetailDeps) {
   const {
     registry, palette, panels, selectedId, selectedPanel,
-    selectedIsSessionless, waitingIds
+    selectedIsSessionless, selectedSpawned, waitingIds
   } = deps
 
   // The Changes section's own data, queried through review:panel rather than
@@ -80,6 +87,13 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
     }
   }, [selectedId, selectedAgentState])
 
+  // M68. `never-started` for a panel that HAS spawned is the capture still
+  // running — main fires it at create and answers the review before git has
+  // said whether the cwd is a repository — so the answer is re-asked, a few
+  // times, half a second apart, until it says something else. Bounded: a
+  // panel that genuinely never started stays that way and this stops.
+  const [reask, setReask] = useState(0)
+  useEffect(() => { setReask(0) }, [selectedId])
   useEffect(() => {
     // Cleared UNCONDITIONALLY, before the invoke, not only when the selection
     // goes to null. The `live` flag below prevents a stale WRITE; nothing
@@ -100,15 +114,17 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
     // verify:panels 112.
     if (selectedId === null || selectedIsSessionless) return
     let live = true
+    let timer: ReturnType<typeof setTimeout> | null = null
     void window.canvas.review.panel(selectedId).then((result) => {
+      if (live && result.kind === 'never-started' && selectedSpawned && reask < 6) timer = setTimeout(() => { if (live) setReask((n) => n + 1) }, 500)
       // The guard is not defensiveness: an invoke issued for panel A can
       // resolve AFTER the user has selected panel B, and writing it then
       // would show A's changes under B's name — the same wrong-panel
       // attribution, from the other direction.
       if (live) setReview(buildReviewFields(result))
     })
-    return () => { live = false }
-  }, [selectedId, selectedIsSessionless, idleArrivals])
+    return () => { live = false; if (timer !== null) clearTimeout(timer) }
+  }, [selectedId, selectedIsSessionless, selectedSpawned, idleArrivals, reask])
   /**
    * The Toolbox section's own query, and it copies the review effect above
    * line for line — including the two comments that ARE the design.

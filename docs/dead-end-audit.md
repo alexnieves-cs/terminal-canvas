@@ -80,7 +80,7 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   the path is pasted; with the palette or nav grid open the drop is ignored.
 - **Review node.** Refresh, commit (blocked by name on shared), per-file discard (M53,
   blocked by name on shared), the armed sentences, outcome lines.
-- **File / Jira / Toolbox nodes.** Editor save, comment, transition (Move…), refresh —
+- **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
   each with a three-state result.
 - **Groups, merged view, first run, orphans, `tc`, the URL scheme.** Each refuses by name
   where it refuses (merged: every geometry write; `tc`: unknown preset / no default /
