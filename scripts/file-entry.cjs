@@ -6,6 +6,9 @@
    main/git-runner. Mirrors scripts/rail-entry.cjs for the two main-side
    modules the suite actually drives. */
 module.exports = {
+  /* M83. The project memory store: node:fs against an injected directory,
+     the scrollback log's own shape, with the M39 scrubber on every write. */
+  ...require('../src/main/memory-store'),
   ...require('../src/shared/file-panel'),
   ...require('../src/main/file-read.ts'),
   ...require('../src/main/file-watch.ts'),

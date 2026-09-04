@@ -142,4 +142,9 @@ export const Lanes = (p: IconProps): JSX.Element => (
 )
 
 /** M66. One map from a sessionless kind to its glyph, for the rail row and the panel frame. */
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, chat: KindChat } as const
+/** M83. The project memory: a book's spine. */
+export const KindMemory = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 4h10" /><path d="M3 8h10" /><path d="M3 12h6" /></Svg>
+)
+
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, chat: KindChat, memory: KindMemory } as const

@@ -83,7 +83,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import {
+import { makeMemoryPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -101,7 +101,7 @@ import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
-import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY } from '@renderer/palette/commands'
+import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
 import { getChat, insertIntoComposer, attachToComposer } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
@@ -112,6 +112,7 @@ import { panelState } from '@renderer/panels/panel-state'
 import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
+import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { useRuns } from './useRuns'
 import type { PersistedTemplate } from '@shared/templates'
 import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette/template-model'
@@ -3513,13 +3514,41 @@ export function Canvas({
   // Every verb the palette, top bar, rail and inspector share, lifted into
   // usePaletteActions.ts. Still ONE memoized object with the same dependency
   // array — Palette.tsx memoizes its command list on this prop's identity.
+  /**
+   * M83. The memory node for a panel's directory. The node carries the
+   * DIRECTORY; main resolves it to the repository root on every read and
+   * write (`memoryRoot` in `main/index.ts`), which is what keeps this door,
+   * the chat's first-send context and `tc memory add` on one list. Doing the
+   * resolution here instead would put a second resolver in the renderer and
+   * the two would disagree only for panels below the root.
+   */
+  const openMemoryPanel = useCallback(async (): Promise<void> => {
+    // The SAME directory the two doors are enabled from (`noteRoot`, the
+    // SELECTED panel's, which every kind that has one supplies). Reading the
+    // captured or focused panel instead — as the first version did — made the
+    // enabling fact and the acting fact two different panels: a selected file
+    // node lit the control and clicking it did nothing at all, and a terminal
+    // focused in another repository opened THAT repository's memory under the
+    // tree of this one. Both are silent (M83's verifier).
+    const root = noteRootRef.current
+    if (root === null) return
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const memoryId = `m${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeMemoryPanel(memoryId, cascadeCentre(centre, current), nextZ(current), { root })]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(memoryId)
+  }, [commitHistory, selectOnly])
+
   const paletteActions = usePaletteActions({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
@@ -3717,6 +3746,10 @@ export function Canvas({
         onToggleDir={toggleDir}
         onInsertPath={insertPath}
         onRefreshTree={refreshTree}
+        // M83. The Files pane's door to the memory of the directory it is
+        // standing in — disabled by NAME, never hidden, when there is none.
+        onOpenMemory={paletteActions.openMemory}
+        memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
@@ -3853,6 +3886,23 @@ export function Canvas({
                   // ReviewNode's restoreFocus prop for the precedent.
                   restoreFocus={restoreFocus}
                   focusedId={focusedId}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                />
+              )
+            }
+            // M83. The seventh kind, sessionless like the four before it.
+            if (isMemoryPanel(panel)) {
+              return (
+                <MemoryNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}

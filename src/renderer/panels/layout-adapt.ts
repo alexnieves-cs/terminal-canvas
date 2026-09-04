@@ -1,6 +1,6 @@
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
-import { isFilePanel, isJiraPanel,
+import { isMemoryPanel, isFilePanel, isJiraPanel,
   isToolboxPanel, isChatPanel, isReviewPanel, type Panel } from './panels'
 
 /**
@@ -69,6 +69,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     if (p.kind === 'chat') {
       return { ...base, kind: 'chat' as const, chat: copyChatSource(p.chat) }
     }
+    // M83. The memory node, its root copied field by field.
+    if (p.kind === 'memory') return { ...base, kind: 'memory' as const, source: { root: p.source.root } }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -139,6 +141,8 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       }
     }
     if (isChatPanel(panel)) return { ...base, kind: 'chat' as const, chat: copyChatSource(panel.chat) }
+    // M83. The memory node's own root, field by field.
+    if (isMemoryPanel(panel)) return { ...base, kind: 'memory' as const, source: { root: panel.source.root } }
     return {
       ...base,
       kind: 'terminal' as const,

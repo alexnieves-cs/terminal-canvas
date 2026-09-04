@@ -62,11 +62,18 @@ const ok = (n, pass, detail = '') => {
     const cmd = p ? p('terminal-canvas://open?command=rm') : null
     const other = p ? p('terminal-canvas://focus?id=n1') : null
     const wrong = p ? p('https://example.com/open?preset=x') : null
-    ok('url.1 the URL door yields the same open request, decoded; a command, another verb and another scheme are refused',
+    // M83. The URL door is the one an ATTACKER can reach — a link in a page.
+    // `memory` is the first verb that writes anything, so its refusal here is
+    // load-bearing and was asserted nowhere until the milestone's verifier
+    // said so. `status` is read-only and refused for the same reason: the
+    // door opens panels, and nothing else.
+    const mem = p ? p('terminal-canvas://memory?op=add&root=/repo&kind=note&text=x') : null
+    const stat = p ? p('terminal-canvas://status') : null
+    ok('url.1 the URL door yields the same open request, decoded; a command, another verb (memory and status included), and another scheme are refused',
       p !== null && u.kind === 'ok' && u.req.verb === 'open' && u.req.preset === 'claude' && u.req.cwd === '/Users/x/my repo' &&
         bare.kind === 'ok' && bare.req.preset === undefined && bare.req.cwd === undefined &&
-        cmd.kind === 'bad' && other.kind === 'bad' && wrong.kind === 'bad',
-      p ? JSON.stringify({ u, bare, cmd, other, wrong }) : 'parseControlUrl is not exported')
+        cmd.kind === 'bad' && other.kind === 'bad' && wrong.kind === 'bad' && mem.kind === 'bad' && stat.kind === 'bad',
+      p ? JSON.stringify({ u, bare, cmd, other, wrong, mem, stat }) : 'parseControlUrl is not exported')
   }
   // open.1 — resolution by name, by id, by default; refusals for an unknown
   // preset, no default, and a cwd that is not on disk (the spawn would land
@@ -268,6 +275,77 @@ const ok = (n, pass, detail = '') => {
         triggers.length === 5 && new Set(triggers).size === 5 && triggers.every((t) => typeof t === 'string' && t !== '') &&
         triggers.includes('on exit 0') && triggers.includes('after a turn'),
       JSON.stringify({ words, exited, triggers }))
+  }
+
+  // M83 — memory.2. THE CLI's OWN MEMORY VERBS, and the limit refusal.
+  //      `verify:control memory.1` drives the parser and the handler, so it
+  //      is green over a CLI that never learned the verb — which is exactly
+  //      what happened (M83's verifier: `buildRequest` had four cases and
+  //      `tc memory add` fell through to a usage error). This drives
+  //      `buildRequest` itself, including the panel-cwd default that lets an
+  //      agent write a memory with no --root at all, and the non-positive
+  //      limit that the handler refuses BY NAME rather than answering with an
+  //      empty list that reads like a repository nobody has written about.
+  {
+    const build = can('buildRequest') ? C.buildRequest : null
+    const line = (argv, env) => { const b = build ? build(argv, env ?? {}) : null; return b && b.kind === 'ok' ? JSON.parse(b.line) : b }
+    const add = line(['memory', 'add', '--kind', 'decided', '--text', 'we use tmux'], { TC_PANEL_CWD: '/repo/sub' })
+    const listed = line(['memory', 'list', '--limit', '5'], { TC_PANEL_CWD: '/repo' })
+    const status = line(['status'], {})
+    const noKind = line(['memory', 'add', '--text', 'x'], { TC_PANEL_CWD: '/repo' })
+    const badLimit = line(['memory', 'list', '--limit', '0'], { TC_PANEL_CWD: '/repo' })
+    const badOpCli = line(['memory', 'forget'], {})
+    const handler2 = C.createControlHandler({
+      presets: () => [], defaultId: () => null, exists: () => true,
+      spawn: () => {}, list: () => [], focus: () => true,
+      memory: { list: async (root, limit) => ({ root, entries: [], skipped: 0, limit }), add: async () => ({ ok: true, entry: {} }) }
+    })
+    const zeroLimit = await handler2({ verb: 'memory', op: 'list', root: '/repo', limit: 0 })
+    ok('memory.2 the CLI builds the memory and status verbs, defaults the root to the panel\'s own directory, refuses a missing --kind and a non-positive --limit by name, and the handler refuses limit 0 rather than answering empty',
+      build !== null &&
+        add && add.verb === 'memory' && add.op === 'add' && add.kind === 'decided' && add.text === 'we use tmux' && add.root === '/repo/sub' &&
+        listed && listed.op === 'list' && listed.limit === 5 && listed.root === '/repo' &&
+        status && status.verb === 'status' &&
+        noKind && noKind.kind === 'usage' && /--kind/.test(noKind.error) &&
+        badLimit && badLimit.kind === 'usage' && /limit/.test(badLimit.error) &&
+        badOpCli && badOpCli.kind === 'usage' && /list or add/.test(badOpCli.error) &&
+        zeroLimit.ok === false && /limit/.test(zeroLimit.error),
+      JSON.stringify({ add, listed, status, noKind, badLimit, badOpCli, zeroLimit }))
+  }
+
+  // M83 — memory.1. THE MEMORY VERBS. `list` reads and `add` writes — the
+  //      first control verb that writes anything, and it writes ONLY into the
+  //      store: a command key is refused here as everywhere, an unusable op
+  //      and an unusable kind are refused BY NAME, and a root with no file
+  //      reads empty rather than erroring.
+  {
+    const written = []
+    const memory = {
+      list: (root, limit) => ({ root, entries: root === '/repo' ? [{ kind: 'decided', text: 'we use tmux', at: 1 }] : [], skipped: 0, limit }),
+      add: (req) => { if (req.kind === 'pondered') return { ok: false, reason: 'pondered is not a memory kind — use decided, tried, failed or note' }; written.push(req); return { ok: true, entry: { kind: req.kind, text: req.text, at: 2 } } }
+    }
+    const spawns = []
+    const handler = C.createControlHandler({
+      presets: () => [], defaultId: () => null, exists: () => true,
+      spawn: (p) => spawns.push(p), list: () => [], focus: () => true, memory
+    })
+    const parsedList = C.parseControlLine(JSON.stringify({ verb: 'memory', op: 'list', root: '/repo' }))
+    const parsedAdd = C.parseControlLine(JSON.stringify({ verb: 'memory', op: 'add', root: '/repo', kind: 'decided', text: 'we use tmux' }))
+    const withCommand = C.parseControlLine(JSON.stringify({ verb: 'memory', op: 'list', command: 'rm -rf /' }))
+    const badOp = C.parseControlLine(JSON.stringify({ verb: 'memory', op: 'forget' }))
+    const listed = parsedList.kind === 'ok' ? await handler(parsedList.req) : null
+    const added = parsedAdd.kind === 'ok' ? await handler(parsedAdd.req) : null
+    const emptyRoot = await handler({ verb: 'memory', op: 'list', root: '/elsewhere' })
+    const badKind = await handler({ verb: 'memory', op: 'add', root: '/repo', kind: 'pondered', text: 'x' })
+    ok('memory.1 memory list reads and memory add writes, a command key and an unusable op are refused at the parser, an unusable kind is refused by name at the handler, an unknown root reads empty, and nothing is spawned',
+      parsedList.kind === 'ok' && parsedAdd.kind === 'ok' && withCommand.kind === 'bad' && /command/.test(withCommand.error) &&
+        badOp.kind === 'bad' && /op/.test(badOp.error) &&
+        listed && listed.ok === true && listed.memory.entries.length === 1 &&
+        added && added.ok === true && written.length === 1 && written[0].text === 'we use tmux' &&
+        emptyRoot.ok === true && emptyRoot.memory.entries.length === 0 &&
+        badKind.ok === false && /memory kind/.test(badKind.error) &&
+        spawns.length === 0,
+      JSON.stringify({ parsedList, parsedAdd, withCommand, badOp, listed, added, emptyRoot, badKind, written }))
   }
 
   const failed = results.filter((r) => !r.pass)

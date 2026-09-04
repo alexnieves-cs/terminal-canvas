@@ -137,6 +137,17 @@ export interface ToolboxPanel extends PanelBase {
 }
 
 /**
+ * M83. The project memory — the SEVENTH kind, and a document one: what this
+ * repository has decided, tried and failed. Sessionless like the review,
+ * file, Jira and toolbox nodes: no spec, so it never reaches assignTiers,
+ * registry.ensure or the live budget.
+ */
+export interface MemoryPanel extends PanelBase {
+  kind: 'memory'
+  source: { root: string }
+}
+
+/**
  * M73. A conversation with an agent — the SIXTH kind, and the first that is
  * a process node without being a terminal. Its process is main's
  * (`AgentSessionManager`), addressed by this panel's id; the renderer holds a
@@ -149,7 +160,7 @@ export interface ChatPanel extends PanelBase {
   chat: ChatSource
 }
 
-export type Panel = TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel | ChatPanel
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel | ChatPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -176,6 +187,10 @@ export function isFilePanel(panel: Panel): panel is FilePanel {
   return panel.kind === 'file'
 }
 export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kind === 'jira' }
+
+export function isMemoryPanel(panel: Panel): panel is MemoryPanel {
+  return panel.kind === 'memory'
+}
 
 export function isToolboxPanel(panel: Panel): panel is ToolboxPanel {
   return panel.kind === 'toolbox'
@@ -205,6 +220,7 @@ export function isChatPanel(panel: Panel): panel is ChatPanel {
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel) &&
+    !isMemoryPanel(panel) &&
     !isChatPanel(panel)
   )
 }
@@ -679,6 +695,19 @@ export function makeToolboxPanel(
     rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
     z,
     source: { cwd: source.cwd, label: source.label }
+  }
+}
+
+/** M83. A memory node: the project memory for one repository, as a document. */
+export const MEMORY_W = 460
+export const MEMORY_H = 420
+
+export function makeMemoryPanel(id: string, centre: Point, z: number, source: { root: string }): MemoryPanel {
+  return {
+    kind: 'memory',
+    rect: { id, x: centre.x - MEMORY_W / 2, y: centre.y - MEMORY_H / 2, w: MEMORY_W, h: MEMORY_H },
+    z,
+    source: { root: source.root }
   }
 }
 

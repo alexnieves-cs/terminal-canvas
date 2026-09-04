@@ -43,6 +43,9 @@ export interface NavigatorProps {
   onToggleDir: (path: string) => void
   onInsertPath: (path: string) => void
   onRefreshTree: () => void
+  /** M83. The Files pane's memory door and its named reason. */
+  onOpenMemory: () => void
+  memoryReason?: string
 }
 
 /**
@@ -87,6 +90,8 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
           onToggleDir={props.onToggleDir}
           onInsertPath={props.onInsertPath}
           onRefresh={props.onRefreshTree}
+          onOpenMemory={props.onOpenMemory}
+          memoryReason={props.memoryReason}
         />
       ) : (
         <>

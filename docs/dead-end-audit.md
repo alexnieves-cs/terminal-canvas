@@ -92,6 +92,14 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   blocked by name on shared), the armed sentences, outcome lines.
 - **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
   each with a three-state result.
+- **Memory node (M83).** Refresh, the kind select, the add line and its `Add` verb, each
+  refusal from the store rendered by name (`a memory needs text`, an unknown kind, a missing
+  root), the named empty arm, and the skipped-line count. Its two doors — the palette's
+  `Open memory…` row and the Files pane's memory control — are disabled with the SAME named
+  reason (`REASON_NO_REPO_MEMORY`) when no panel with a directory is selected, never hidden;
+  and the chat's first-send context is stated above the composer before it is sent, which is
+  the one place in the app where a dead end would be a disclosure failure rather than a
+  usability one.
 - **Groups, merged view, first run, orphans, `tc`, the URL scheme.** Each refuses by name
   where it refuses (merged: every geometry write; `tc`: unknown preset / no default /
   missing cwd; the URL door: anything but `open`).

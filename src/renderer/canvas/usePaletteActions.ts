@@ -23,6 +23,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
+  isMemoryPanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -72,6 +73,8 @@ export interface PaletteActionsDeps {
   openFilePanel: (path: string, centre: Point, opts?: { prose?: true }) => void
   openToolboxPanel: (cwd: string, label: string, centre: Point) => void
   openJiraPanel: () => void
+  /** M83. Open the memory node for the captured panel's repository. */
+  openMemoryPanel: () => Promise<void>
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }) => Promise<SpawnResult>
@@ -135,7 +138,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -381,6 +384,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               }
               if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               if (isToolboxPanel(p)) {
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M83. The seventh arm — a memory node carries its root.
+              if (isMemoryPanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M73. The sixth arm; `verify:layout chat.1` is the parse side of
@@ -1355,6 +1362,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         openFilePanel(path, worldCentre())
       })
     },
+    // M83. The project memory for the captured panel's repository — resolved
+    // by MAIN (only it knows what a directory's repository root is), so the
+    // node's subject is the same root `tc memory` writes under.
+    openMemory: () => { void openMemoryPanel() },
     openJira: () => openJiraPanel(),
     newNote: () => beginNewNote(),
     newChat: () => { void beginNewChat() },

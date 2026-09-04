@@ -22,6 +22,12 @@ export type ControlRequest =
   | { verb: 'ping' }
   /** M81. READ-ONLY: the canvas model, for a supervisor that answers about it. */
   | { verb: 'status' }
+  /**
+   * M83. The project memory. `add` is the first control verb that WRITES,
+   * and it writes only into that store — it cannot spawn, focus or run.
+   */
+  | { verb: 'memory'; op: 'list'; root?: string; limit?: number }
+  | { verb: 'memory'; op: 'add'; root: string; kind: string; text: string; panelId?: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -62,6 +68,33 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       return { kind: 'ok', req: { verb: 'ping' } }
     case 'status':
       return { kind: 'ok', req: { verb: 'status' } }
+    case 'memory': {
+      const op = fields['op']
+      if (op === 'list') {
+        const root = optionalString(fields['root'])
+        if (root === null) return { kind: 'bad', error: 'root must be a non-empty string' }
+        const limitRaw = fields['limit']
+        const limit = typeof limitRaw === 'number' && Number.isFinite(limitRaw) ? limitRaw : undefined
+        const req: ControlRequest = { verb: 'memory', op: 'list' }
+        if (root !== undefined) req.root = root
+        if (limit !== undefined) req.limit = limit
+        return { kind: 'ok', req }
+      }
+      if (op === 'add') {
+        const root = optionalString(fields['root'])
+        const kind = optionalString(fields['kind'])
+        const text = optionalString(fields['text'])
+        const panelId = optionalString(fields['panelId'])
+        if (root === null || root === undefined) return { kind: 'bad', error: 'memory add needs a root' }
+        if (kind === null || kind === undefined) return { kind: 'bad', error: 'memory add needs a kind — decided, tried, failed or note' }
+        if (text === null || text === undefined) return { kind: 'bad', error: 'memory add needs text' }
+        if (panelId === null) return { kind: 'bad', error: 'panelId must be a non-empty string' }
+        const req: ControlRequest = { verb: 'memory', op: 'add', root, kind, text }
+        if (panelId !== undefined) req.panelId = panelId
+        return { kind: 'ok', req }
+      }
+      return { kind: 'bad', error: `unknown memory op ${JSON.stringify(op)} — use list or add` }
+    }
     case 'focus': {
       const id = fields['id']
       if (typeof id !== 'string' || id.length === 0) return { kind: 'bad', error: 'focus needs an id' }

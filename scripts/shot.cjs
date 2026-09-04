@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -112,6 +112,12 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
+    run: async (kit) => {
+      await kit.goTo('memory · repo')
+      await sleep(700)
+      await kit.shot('memory')
+    } },
   { name: 'supervisor', intent: 'The spawn sheet\'s supervisor row: `what` reads `supervisor of this canvas` and the preview says what it is — a chat that reads this canvas with `tc status`. One per canvas; the row says so when there already is one.',
     run: async (kit) => {
       await kit.press('k', { metaKey: true }); await sleep(400)
@@ -301,6 +307,8 @@ app.whenReady().then(async () => {
         { id: 'note', kind: 'file', x: 800, y: 310, w: 300, h: 230, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
+        // M83. The project memory as a document node.
+        { id: 'memory', kind: 'memory', x: 1200, y: 570, w: 460, h: 420, z: 12, source: { root: REPO } },
         // M73. A chat panel with a recorded conversation in its durable file
         // (seeded below), so the scene shows a transcript with no process.
         { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
@@ -406,6 +414,14 @@ app.whenReady().then(async () => {
     agentTranscripts.appendMeta(panelId, { usage: { input: 18, output: 96, cacheWrite: 40101, cacheRead: 79671 }, costUsd: 0.0895, turns: 1 })
   }
   seedChatTranscript('chat')
+  // M83. A few memories, so the node's scene shows a list rather than its
+  // empty arm — written through the store the app itself writes through.
+  const shotMemory = createMemoryStore({ dir: join(mkdtempSync(join(tmpdir(), 'tc-shot-memory-')), 'memory') })
+  const memAt = Date.now() - 7200000
+  shotMemory.add({ root: REPO, kind: 'decided', text: 'sessions live in tmux so agents outlive the app', at: memAt })
+  shotMemory.add({ root: REPO, kind: 'tried', text: 'a worker pool per repository — one agent per panel reads better', at: memAt + 60000 })
+  shotMemory.add({ root: REPO, kind: 'failed', text: 'parsing the CLI\'s pretty output; the stream-json door is the contract', at: memAt + 120000 })
+
   const agentHandlers = {
     create: (spec) => { const snapshot = agentSessions.create(spec); baselineCapture.capture(spec.id, spec.cwd); return { kind: 'created', snapshot } },
     send: (id, text) => agentSessions.send(id, text),
@@ -424,6 +440,8 @@ app.whenReady().then(async () => {
       spawn: () => {}, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
       // M80. Templates: the built-ins plus the store's own.
       presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
+      memoryList: (root, limit) => shotMemory.list(root, limit),
+      memoryAdd: (req) => { const r = shotMemory.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
       listTemplates: () => allTemplates(layoutStore.templates()),
       saveTemplate: (t) => { const saved = { ...t, id: t.id || `tpl-${Date.now().toString(36)}` }; layoutStore.saveTemplate(saved); return saved },
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),

@@ -110,6 +110,11 @@ const bridge: CanvasBridge = {
   // M80. A preset's resolved template, for a template's node.
   // (declared inside `preset` below)
   // Saved shapes of work.
+  // M83. The project memory.
+  memory: {
+    list: (root: string, limit: number) => ipcRenderer.invoke(IPC.MEMORY_LIST, root, limit),
+    add: (req) => ipcRenderer.invoke(IPC.MEMORY_ADD, req)
+  },
   template: {
     list: () => ipcRenderer.invoke(IPC.TEMPLATE_LIST),
     save: (template) => ipcRenderer.invoke(IPC.TEMPLATE_SAVE, template),
