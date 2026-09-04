@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -112,6 +112,12 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'watcher', intent: 'A watcher: a node that runs a command when something changes. The chrome row says WHEN in the same words everywhere (`on a change in src`), the body is the last run\'s output and one line saying how it ended, and the state is the ordinary vocabulary — a passing watcher reads `idle` in green on its own edge, in the rail and in the minimap, with no word invented for it.',
+    run: async (kit) => {
+      await kit.goTo('watcher · sh')
+      await sleep(900)
+      await kit.shot('watcher')
+    } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
       await kit.goTo('memory · repo')
@@ -307,6 +313,9 @@ app.whenReady().then(async () => {
         { id: 'note', kind: 'file', x: 800, y: 310, w: 300, h: 230, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
+        // M84. A watcher: a command run on a trigger, mid-canvas.
+        { id: 'watch', kind: 'watcher', x: 440, y: 900, w: 520, h: 340, z: 13,
+          watch: { cwd: REPO, command: '/bin/sh', args: ['-c', 'echo "tests 41 passed, 0 failed"; echo "typecheck clean"; exit 0'], trigger: { kind: 'path', path: REPO + '/src' } } },
         // M83. The project memory as a document node.
         { id: 'memory', kind: 'memory', x: 1200, y: 570, w: 460, h: 420, z: 12, source: { root: REPO } },
         // M73. A chat panel with a recorded conversation in its durable file
@@ -422,6 +431,29 @@ app.whenReady().then(async () => {
   shotMemory.add({ root: REPO, kind: 'tried', text: 'a worker pool per repository — one agent per panel reads better', at: memAt + 60000 })
   shotMemory.add({ root: REPO, kind: 'failed', text: 'parsing the CLI\'s pretty output; the stream-json door is the contract', at: memAt + 120000 })
 
+  /* M84. A watcher whose runs are real, so the scene shows a real tail: the
+     same runner main uses, over an ordinary child process. */
+  const shotWatch = createWatchRunner({
+    spawn: (spec, handlers) => {
+      const child = require('node:child_process').spawn(spec.command, [...spec.args], { cwd: spec.cwd, shell: false })
+      child.stdout?.on('data', (c) => handlers.onData(c.toString('utf8')))
+      child.stderr?.on('data', (c) => handlers.onData(c.toString('utf8')))
+      child.on('error', (e) => handlers.onData(`${e.message}\n`))
+      child.on('exit', (code, signal) => handlers.onExit(code, signal))
+      return { kill: () => { try { child.kill('SIGTERM') } catch { /* gone */ } } }
+    },
+    now: () => Date.now(),
+    ledger: { append: () => {} },
+    onState: (id, state) => { if (!wc.isDestroyed()) wc.send(SHOT_EVENTS.WATCHER_STATE, { id, ...state }) }
+  })
+  const watcherHandlers = {
+    create: (req) => { shotWatch.add({ id: req.id, cwd: req.cwd, command: req.command, args: req.args, trigger: req.trigger }); shotWatch.fire(req.id); return { ok: true } },
+    run: (id) => shotWatch.fire(id),
+    stop: (id) => shotWatch.stop(id),
+    dispose: (id) => shotWatch.remove(id),
+    list: () => shotWatch.ids().map((id) => ({ id, ...(shotWatch.stateOf(id) ?? { status: 'not-started', tail: '', pending: false }) }))
+  }
+
   const agentHandlers = {
     create: (spec) => { const snapshot = agentSessions.create(spec); baselineCapture.capture(spec.id, spec.cwd); return { kind: 'created', snapshot } },
     send: (id, text) => agentSessions.send(id, text),
@@ -468,7 +500,8 @@ app.whenReady().then(async () => {
     () => [],
     undefined,
     undefined,
-    agentHandlers
+    agentHandlers,
+    watcherHandlers
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

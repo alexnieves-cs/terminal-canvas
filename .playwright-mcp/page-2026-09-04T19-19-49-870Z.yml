@@ -1,0 +1,201 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - complementary [ref=f4e3]:
+      - generic [ref=f4e4]:
+        - generic [ref=f4e5]:
+          - link "BridgeMind One Docs" [ref=f4e6] [cursor=pointer]:
+            - /url: /docs
+            - generic [ref=f4e7]:
+              - generic [ref=f4e8]: BridgeMind One
+              - generic [ref=f4e9]: Docs
+          - button "Collapse Sidebar" [ref=f4e10]
+        - button "Search ⌘ K" [ref=f4e13]:
+          - text: Search
+          - generic [ref=f4e17]:
+            - generic [ref=f4e18]: ⌘
+            - generic [ref=f4e19]: K
+      - generic [ref=f4e22]:
+        - link "BridgeMind One" [ref=f4e23] [cursor=pointer]:
+          - /url: https://bridgemind.ai/#product
+        - link "Discord" [ref=f4e28] [cursor=pointer]:
+          - /url: https://bridgemind.ai/discord
+        - link "BridgeMind One Documentation" [ref=f4e33] [cursor=pointer]:
+          - /url: /docs
+        - link "Getting Started" [ref=f4e34] [cursor=pointer]:
+          - /url: /docs/getting-started
+        - paragraph [ref=f4e35]: Work in BridgeMind One
+        - link "Agent Mode" [ref=f4e36] [cursor=pointer]:
+          - /url: /docs/agent-mode
+        - link "Code Mode" [ref=f4e37] [cursor=pointer]:
+          - /url: /docs/code-mode
+        - link "Chat Mode" [ref=f4e38] [cursor=pointer]:
+          - /url: /docs/chat-mode
+        - link "Dictation" [ref=f4e39] [cursor=pointer]:
+          - /url: /docs/dictation
+        - link "Skills and Plugins" [ref=f4e40] [cursor=pointer]:
+          - /url: /docs/skills-and-plugins
+        - link "Routines" [ref=f4e41] [cursor=pointer]:
+          - /url: /docs/routines
+        - paragraph [ref=f4e42]: Platforms
+        - link "BridgeMind One for macOS" [ref=f4e43] [cursor=pointer]:
+          - /url: /docs/macos
+        - link "BridgeMind One for Windows" [ref=f4e44] [cursor=pointer]:
+          - /url: /docs/windows
+      - button "Toggle Theme" [ref=f4e47]
+    - generic:
+      - button "Collapse Sidebar"
+      - button "Open Search"
+    - banner [ref=f4e57]:
+      - button "0.125 Agent Mode What an Agent Contains" [ref=f4e58]:
+        - progressbar [ref=f4e59]
+        - generic [ref=f4e62]:
+          - generic: Agent Mode
+          - generic [ref=f4e63]: What an Agent Contains
+    - main [ref=f4e66]:
+      - article [ref=f4e67]:
+        - generic [ref=f4e68]:
+          - heading "Agent Mode" [level=1] [ref=f4e69]
+          - paragraph [ref=f4e70]: Create persistent AI teammates with a brief, durable memory, reusable skills, ongoing chats, and access you control.
+          - paragraph [ref=f4e71]:
+            - text: Agent Mode organizes work around
+            - strong [ref=f4e72]: persistent AI teammates
+            - text: . Each agent has a role, its own history and working context, and the ability to improve how it handles repeated work.
+          - paragraph [ref=f4e73]: The agent is the teammate. Claude Code or Codex can power its chats, but the engine does not define the teammate's role.
+          - heading [level=2] [ref=f4e74]:
+            - link "What an Agent Contains" [ref=f4e75] [cursor=pointer]:
+              - /url: "#what-an-agent-contains"
+            - button "Copy Anchor Link" [ref=f4e76]
+          - table [ref=f4e81]:
+            - rowgroup [ref=f4e82]:
+              - row [ref=f4e83]:
+                - columnheader "Part" [ref=f4e84]
+                - columnheader "Purpose" [ref=f4e85]
+            - rowgroup [ref=f4e86]:
+              - row [ref=f4e87]:
+                - cell [ref=f4e88]:
+                  - strong [ref=f4e89]: Name
+                - cell "A recognizable identity in your roster" [ref=f4e90]
+              - row [ref=f4e91]:
+                - cell [ref=f4e92]:
+                  - strong [ref=f4e93]: Brief
+                - cell "The job, standards, tone, and boundaries you define" [ref=f4e94]
+              - row [ref=f4e95]:
+                - cell [ref=f4e96]:
+                  - strong [ref=f4e97]: Memory
+                - cell "Durable facts and context the agent records for future work" [ref=f4e98]
+              - row [ref=f4e99]:
+                - cell [ref=f4e100]:
+                  - strong [ref=f4e101]: Skills
+                - cell "Reusable procedures the agent can follow and improve" [ref=f4e102]
+              - row [ref=f4e103]:
+                - cell [ref=f4e104]:
+                  - strong [ref=f4e105]: Places
+                - cell "Folders you explicitly approve for the agent's work" [ref=f4e106]
+              - row [ref=f4e107]:
+                - cell [ref=f4e108]:
+                  - strong [ref=f4e109]: Chats
+                - cell "Separate conversation threads with the same teammate" [ref=f4e110]
+          - heading [level=2] [ref=f4e111]:
+            - link "Create an Agent" [ref=f4e112] [cursor=pointer]:
+              - /url: "#create-an-agent"
+            - button "Copy Anchor Link" [ref=f4e113]
+          - list [ref=f4e117]:
+            - listitem [ref=f4e118]:
+              - text: Open
+              - strong [ref=f4e119]: Agent
+              - text: from the title-bar mode switcher.
+            - listitem [ref=f4e120]:
+              - text: Select
+              - strong [ref=f4e121]: New Agent
+              - text: .
+            - listitem [ref=f4e122]: Give the teammate a specific name.
+            - listitem [ref=f4e123]: Write a brief that defines what it owns and what good work looks like.
+            - listitem [ref=f4e124]: Choose an installed engine. Claude Code and Codex support chat; other detected engines can run as terminal sessions.
+            - listitem [ref=f4e125]: Save, then start the first chat from the agent's page.
+          - paragraph [ref=f4e126]: BridgeMind One does not bundle either engine. Install the corresponding command-line app first so it can be detected on your Mac.
+          - paragraph [ref=f4e127]:
+            - text: You can also describe the teammate you need and use
+            - strong [ref=f4e128]: Create with AI
+            - text: to draft its name and brief. Review the result before saving it.
+          - heading [level=2] [ref=f4e129]:
+            - link "Write a Useful Brief" [ref=f4e130] [cursor=pointer]:
+              - /url: "#write-a-useful-brief"
+            - button "Copy Anchor Link" [ref=f4e131]
+          - paragraph [ref=f4e135]: "A strong brief answers four questions:"
+          - list [ref=f4e136]:
+            - listitem [ref=f4e137]:
+              - strong [ref=f4e138]: What do you own?
+              - text: Define the recurring responsibility.
+            - listitem [ref=f4e139]:
+              - strong [ref=f4e140]: What context matters?
+              - text: Name the audience, product, or working style.
+            - listitem [ref=f4e141]:
+              - strong [ref=f4e142]: What standards apply?
+              - text: State quality, tone, safety, and verification expectations.
+            - listitem [ref=f4e143]:
+              - strong [ref=f4e144]: When should you stop?
+              - text: Identify actions that still require builder approval.
+          - paragraph [ref=f4e145]: "Example:"
+          - blockquote [ref=f4e146]:
+            - paragraph [ref=f4e147]: You are our release-notes editor. Turn merged work into concise builder-facing notes. Verify every feature claim against the repository, group changes by outcome, and never publish without approval.
+          - heading [level=2] [ref=f4e148]:
+            - link "Memory" [ref=f4e149] [cursor=pointer]:
+              - /url: "#memory"
+            - button "Copy Anchor Link" [ref=f4e150]
+          - paragraph [ref=f4e154]: "Memory gives an agent continuity across chats. It is for durable context: preferences, product decisions, recurring constraints, and lessons that should still matter next week."
+          - paragraph [ref=f4e155]:
+            - text: Use the agent's
+            - strong [ref=f4e156]: Memory
+            - text: view to inspect what it knows. Correct stale entries when reality changes. Do not use memory as a substitute for task-specific instructions or as a place to store secrets.
+          - heading [level=2] [ref=f4e157]:
+            - link "Skills" [ref=f4e158] [cursor=pointer]:
+              - /url: "#skills"
+            - button "Copy Anchor Link" [ref=f4e159]
+          - paragraph [ref=f4e163]: Skills capture repeatable procedures. An agent can use them to preserve a workflow it has learned instead of solving the same process from scratch each time.
+          - paragraph [ref=f4e164]:
+            - text: A useful skill should say when it applies, what steps to follow, what to verify, and when to ask for approval. See
+            - strong [ref=f4e165]:
+              - link "Skills and Plugins" [ref=f4e166] [cursor=pointer]:
+                - /url: /docs/skills-and-plugins
+            - text: for the full model.
+          - heading [level=2] [ref=f4e167]:
+            - link "Places and Authority" [ref=f4e168] [cursor=pointer]:
+              - /url: "#places-and-authority"
+            - button "Copy Anchor Link" [ref=f4e169]
+          - paragraph [ref=f4e173]:
+            - text: An agent works from its own home and can be granted additional folders through
+            - strong [ref=f4e174]: Places
+            - text: . Grant only the folders the teammate needs.
+          - paragraph [ref=f4e175]: Plugins, agent messaging, and routine scheduling are separate permissions. Keeping them explicit limits the effect of a mistaken instruction and makes each teammate's authority easier to understand.
+          - heading [level=2] [ref=f4e176]:
+            - link "Agent Chats" [ref=f4e177] [cursor=pointer]:
+              - /url: "#agent-chats"
+            - button "Copy Anchor Link" [ref=f4e178]
+          - paragraph [ref=f4e182]: Each chat is a thread with the same agent identity. Start a new chat when the goal changes materially; keep an existing chat when the next request depends on its recent discussion.
+          - paragraph [ref=f4e183]: When agent messaging is enabled, approved teammates can send each other bounded messages. The exchange appears in both agents' chats and can wake an idle teammate into a fresh chat, subject to the app's safety limits.
+          - heading [level=2] [ref=f4e184]:
+            - link "Agent Settings" [ref=f4e185] [cursor=pointer]:
+              - /url: "#agent-settings"
+            - button "Copy Anchor Link" [ref=f4e186]
+          - paragraph [ref=f4e190]:
+            - text: From an agent's
+            - strong [ref=f4e191]: Settings
+            - text: "view, you can:"
+          - list [ref=f4e192]:
+            - listitem [ref=f4e193]: Update its name and brief
+            - listitem [ref=f4e194]: Change the default engine and conversation settings
+            - listitem [ref=f4e195]: Manage approved places
+            - listitem [ref=f4e196]: Choose a memory budget and reflection mode
+            - listitem [ref=f4e197]: Enable or disable messaging and routine permissions
+            - listitem [ref=f4e198]: Delete the agent after reviewing the confirmation
+          - paragraph [ref=f4e199]: Changing an engine affects future work. Review active chats before switching so you understand which context carries forward.
+        - generic [ref=f4e200]:
+          - link [ref=f4e201] [cursor=pointer]:
+            - /url: /docs/getting-started
+            - paragraph [ref=f4e205]: Getting Started
+            - paragraph [ref=f4e206]: Install BridgeMind One on macOS 26, sign in, choose Agent, Code, or Chat mode, and start shipping with an AI teammate.
+          - link [ref=f4e207] [cursor=pointer]:
+            - /url: /docs/code-mode
+            - paragraph [ref=f4e211]: Code Mode
+            - paragraph [ref=f4e212]: Work by project folder with real terminals, coding-agent threads, files, browsers, simulators, tabs, splits, and multi-agent session presets.
+  - alert [ref=f4e213]

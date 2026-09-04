@@ -92,6 +92,14 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   blocked by name on shared), the armed sentences, outcome lines.
 - **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
   each with a three-state result.
+- **Watcher node (M84).** Run now / Stop (the control is one or the other, never a disabled
+  pair), the close, and three body states — never run (naming its trigger and the manual
+  verb), a run that printed nothing, and the tail. A trigger that could not be armed says so
+  in the body rather than leaving a node that silently never runs. Its palette door,
+  `Watch…`, is disabled with `REASON_NO_WATCH_ROOT` when no panel with a directory is
+  selected, and the trigger line re-prompts by name rather than guessing (a guessed trigger
+  arms a real command against the wrong thing, and the user finds out by watching it never
+  run).
 - **Memory node (M83).** Refresh, the kind select, the add line and its `Add` verb, each
   refusal from the store rendered by name (`a memory needs text`, an unknown kind, a missing
   root), the named empty arm, and the skipped-line count. Its two doors — the palette's

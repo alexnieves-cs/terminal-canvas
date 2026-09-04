@@ -9,6 +9,7 @@ import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-
 import { railLabel } from '@renderer/shell/rail-rows'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, HANDOFF_QUEUE_MS, handoffFires, type HandoffEvent, type HandoffTrigger } from '@shared/handoff'
 import { incomingHandoffs, joinAdvance } from './handoff-rules'
+import { fireWatchersFor } from '@renderer/watcher/useWatchers'
 import type { RunEvent } from './run-model'
 import { onChatTurnEnd, lastAssistantText } from '@renderer/chat/chat-store'
 
@@ -161,6 +162,11 @@ export function useHandoff(deps: HandoffDeps): void {
       deliver(targetId, sourceId, trigger, state.payload, lines, joined ? `${detail} (joined ${sources} sources)` : detail, expected.filter((id) => id !== sourceId))
     }
     const fire = (sourceId: string, event: HandoffEvent, detail: string): void => {
+      // M84. A watcher waiting on this source runs from the SAME event and
+      // the same table, before the edges are walked: a watcher is a trigger
+      // on the graph, not a second kind of edge, so nothing about the loop
+      // below changes for it.
+      fireWatchersFor(panelsRef.current, sourceId, event)
       const source = panelsRef.current.find((p) => p.rect.id === sourceId)
       if (!source || !(isTerminalPanel(source) || isChatPanel(source))) return
       for (const link of linksOf(source)) {

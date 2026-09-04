@@ -83,7 +83,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeMemoryPanel, isMemoryPanel,
+import { makeWatcherPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -107,12 +107,15 @@ import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
+import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState } from '@renderer/panels/panel-state'
 import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
+import { WatcherNode } from '@renderer/watcher/WatcherNode'
+import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
 import type { PersistedTemplate } from '@shared/templates'
 import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette/template-model'
@@ -725,7 +728,7 @@ export function Canvas({
         // panel can be redone, and the redone panel carries the same session
         // id — its transcript must still be there to render. Only an
         // explicit close, a reset and a workspace delete drop the file.
-        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false) }
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -1399,7 +1402,7 @@ export function Canvas({
         clearFileResult(panel.rect.id)
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
-        disposeChat(panel.rect.id, true)
+        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1824,7 +1827,7 @@ export function Canvas({
       // is still not a registry.dispose call site: the close ends the
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
-      disposeChat(id, true)
+      disposeChat(id, true); disposeWatcher(id)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -3242,6 +3245,8 @@ export function Canvas({
    */
   // M73. Keep main told about every chat panel on this canvas; disposal is
   // explicit at the removing sites (see useChatSessions).
+  // M84. One module-level subscription to watcher:state, installed once.
+  useWatchers()
   useChatSessions(panels)
   // M73. Mint a chat panel. The CLI session id is minted HERE so the panel
   // record is complete before any invoke resolves; main's agent:create is
@@ -3420,7 +3425,7 @@ export function Canvas({
     // move restores the chat panel, and it must render its turns. The
     // ordinary close path would drop the file, so this is the one removal
     // that does not go through it.
-    disposeChat(id, false)
+    disposeChat(id, false); disposeWatcher(id)
     setPanels((current) => { const next = removePanel(current, id); commitHistory(next); return next })
     setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
     setFocusedId((current) => (current === id ? null : current))
@@ -3446,6 +3451,83 @@ export function Canvas({
     if (panel && isChatPanel(panel)) openInTerminal(id)
     else void openAsChat(id)
   }, [openAsChat, openInTerminal])
+  /**
+   * M84. Asking for a watcher: the command, then when to run it.
+   *
+   * Two text lines rather than a form, because the palette's line is the one
+   * input this app already has for "type a thing" and a modal form would be
+   * a second vocabulary for the same act. The trigger line takes the words
+   * the node itself shows (`on a change in <path>`, `every 10m`, `when the
+   * branch moves`), so what a user types is what they will read back.
+   */
+  /**
+   * M84. Arm or disarm a watcher — a PERSISTED fact on the panel record, so a
+   * paused watcher is still paused after a relaunch, and one history entry so
+   * ⌘Z puts it back. `armed: true` is written as ABSENCE: the field's absence
+   * already means armed, and writing it would make every file differ from the
+   * one before it for no new fact.
+   */
+  const setWatcherArmed = useCallback((id: string, armed: boolean) => {
+    setPanels((current) => {
+      const next = current.map((p) => {
+        if (p.rect.id !== id || !isWatcherPanel(p)) return p
+        const { armed: _was, ...rest } = p.watch
+        return { ...p, watch: armed ? rest : { ...rest, armed: false as const } }
+      })
+      commitHistory(next)
+      return next
+    })
+  }, [commitHistory])
+
+  const beginWatcher = useCallback(() => {
+    const root = noteRootRef.current
+    if (root === null) return
+    // The selected panel, when it is one a watcher can wait on — which is
+    // what makes `after this passes` a thing a person can type.
+    const selected = selectedIdRef.current === null ? undefined : panelsRef.current.find((p) => p.rect.id === selectedIdRef.current)
+    const sourceRef = selected !== undefined && (isTerminalPanel(selected) || isChatPanel(selected))
+      ? { id: selected.rect.id, label: railLabel(selected, undefined) }
+      : undefined
+    const askTrigger = (command: string, initial: string, label: string, feedback?: true): void => {
+      setInputMode({
+        kind: 'text',
+        label,
+        initial,
+        ...(feedback === undefined ? {} : { feedback }),
+        submit: (answer) => {
+          const text = answer.trim()
+          if (text === '') { setInputMode(null); return }
+          const trigger = parseTriggerWords(text, root, sourceRef)
+          if (trigger === null) {
+            askTrigger(command, text, sourceRef === undefined ? 'Try: a path, `every 10m`, or `branch`' : `Try: a path, \`every 10m\`, \`branch\`, or \`after this passes\``, true)
+            return
+          }
+          setInputMode(null)
+          const parts = command.trim().split(/\s+/)
+          const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+          const watcherId = `w${nextIdRef.current++}`
+          setPanels((current) => {
+            const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), {
+              cwd: root, command: parts[0] as string, args: parts.slice(1), trigger
+            })]
+            commitHistory(next)
+            return next
+          })
+          selectOnly(watcherId)
+        }
+      })
+    }
+    setInputMode({
+      kind: 'text',
+      label: 'What should it run?',
+      initial: 'npm test',
+      submit: (command) => {
+        if (command.trim() === '') { setInputMode(null); return }
+        askTrigger(command, 'src', sourceRef === undefined ? 'When? a path to watch, `every 10m`, or `branch`' : `When? a path, \`every 10m\`, \`branch\`, or \`after this passes\` (${sourceRef.label})`)
+      }
+    })
+  }, [commitHistory, selectOnly])
+
   const beginNewNote = useCallback(() => {
     const root = noteRootRef.current
     // The row is already disabled without a root; this is the second half of
@@ -3548,7 +3630,7 @@ export function Canvas({
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
@@ -3889,6 +3971,28 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
+                />
+              )
+            }
+            // M84. The eighth kind — a PROCESS node without a PTY: its
+            // process is main's watch runner, addressed by this id.
+            if (isWatcherPanel(panel)) {
+              const trigger = panel.watch.trigger
+              const source = trigger.kind === 'panel' ? panelsRef.current.find((p) => p.rect.id === trigger.sourceId) : undefined
+              return (
+                <WatcherNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                  onSetArmed={setWatcherArmed}
+                  {...(source === undefined ? {} : { sourceLabel: railLabel(source, undefined) })}
                 />
               )
             }

@@ -23,6 +23,16 @@ export interface QuitDeps {
    * Optional so every existing caller and check is unchanged.
    */
   agents?: { disposeAll(): void }
+  /**
+   * M84. Every watcher, disarmed and its run killed. A watcher's child is an
+   * ordinary `child_process`, not a pty and not a tmux session, so nothing
+   * else in this sequence reaches it: without this arm a quit mid-run leaves
+   * an `npm test` running with no window, no ledger row (main is gone before
+   * its exit) and no way to find it but `ps`. It runs on BOTH arms — the
+   * keep-on-quit setting is about tmux sessions that can be reattached, and
+   * a watcher's child cannot be.
+   */
+  watchers?: { disposeAll(): void }
 }
 
 /**
@@ -63,6 +73,11 @@ export function runQuit(deps: QuitDeps): void {
     deps.agents?.disposeAll()
   } catch (error) {
     console.warn('[quit] agent session teardown failed', error)
+  }
+  try {
+    deps.watchers?.disposeAll()
+  } catch (error) {
+    console.warn('[quit] watcher teardown failed', error)
   }
   deps.flush()
   if (deps.keep) return

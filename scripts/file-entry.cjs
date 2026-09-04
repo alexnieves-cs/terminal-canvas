@@ -22,5 +22,9 @@ module.exports = {
   /* M52: the run ledger, an append stream beside layout.json, same tier. */
   ...require('../src/main/run-ledger.ts'),
   ...require('../src/main/export.ts'),
+  /* M84: the watcher's pure trigger vocabulary and its runner over an
+     injected spawn — the agent runner's seam, one tier down. */
+  ...require('../src/shared/watch-trigger.ts'),
+  ...require('../src/main/watch-runner.ts'),
   ...require('../src/shared/redact.ts')
 }

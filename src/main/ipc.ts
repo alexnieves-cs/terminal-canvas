@@ -1,4 +1,5 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
+import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
@@ -143,6 +144,28 @@ const INERT_AGENTS: AgentHandlers = {
   importSession: () => ({ kind: 'refused', reason: 'the agent runtime is not available' })
 }
 
+/**
+ * M84. The watcher runtime's verbs, inert by default for the reason every
+ * collaborator before it is: every channel keeps a handler (`verify:ipc`),
+ * and a harness that did not wire the runtime gets a NAMED refusal rather
+ * than a process.
+ */
+export interface WatcherHandlers {
+  create(req: WatcherCreateRequest): WatcherCreateResult | Promise<WatcherCreateResult>
+  run(id: string): void | Promise<void>
+  stop(id: string): void | Promise<void>
+  dispose(id: string): void | Promise<void>
+  list(): WatcherStateEvent[] | Promise<WatcherStateEvent[]>
+}
+
+const INERT_WATCHERS: WatcherHandlers = {
+  create: () => ({ ok: false, reason: 'the watcher runtime is not available' }),
+  run: () => {},
+  stop: () => {},
+  dispose: () => {},
+  list: () => []
+}
+
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
@@ -234,7 +257,9 @@ export function registerIpcHandlers(
    * (verify:ipc) and a harness that did not wire the runtime gets a NAMED
    * refusal, never a process.
    */
-  agents: AgentHandlers = INERT_AGENTS
+  agents: AgentHandlers = INERT_AGENTS,
+  /** M84. The watcher runtime; see WatcherHandlers. */
+  watchers: WatcherHandlers = INERT_WATCHERS
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -245,6 +270,11 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
+  ipcMain.handle(IPC.WATCHER_CREATE, (_event, req: WatcherCreateRequest) => watchers.create(req))
+  ipcMain.handle(IPC.WATCHER_RUN, (_event, id: string) => watchers.run(id))
+  ipcMain.handle(IPC.WATCHER_STOP, (_event, id: string) => watchers.stop(id))
+  ipcMain.handle(IPC.WATCHER_DISPOSE, (_event, id: string) => watchers.dispose(id))
+  ipcMain.handle(IPC.WATCHER_LIST, () => watchers.list())
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())

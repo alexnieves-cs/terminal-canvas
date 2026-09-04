@@ -68,7 +68,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox' | 'chat' | 'memory'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox' | 'chat' | 'memory' | 'watcher'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -290,6 +290,8 @@ export interface PaletteActions {
   beginSpawnSheet(templateId?: string): void
   /** M83. Open the project memory for the captured panel's repository. */
   openMemory(): void
+  /** M84. Ask for a watcher: the command, then the trigger. */
+  beginWatcher(): void
   /** M80. Save the selected panels and their edges as a template. */
   beginSaveTemplate(panelIds: readonly string[]): void
   /**
@@ -580,6 +582,7 @@ export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
 export const REASON_NO_SELECTION_TEMPLATE = 'select the panels to save first'
 /** M80. No template is saved yet — the row still says so rather than vanishing. */
 /** M83. Outside a repository there is nothing to remember about. */
+export const REASON_NO_WATCH_ROOT = 'select a panel first — a watcher runs its command in that panel\'s directory'
 export const REASON_NO_REPO_MEMORY = 'open a panel inside a repository first — memory is kept per repository'
 /** M80. No template is saved yet — the row still says so rather than vanishing. */
 export const REASON_NO_TEMPLATES = 'no templates yet — select some panels and save them as one'
@@ -986,6 +989,18 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'panel',
     run: () => actions.openMemory()
   }, ctx.memoryRoot === undefined || ctx.memoryRoot === '' ? REASON_NO_REPO_MEMORY : undefined))
+
+  // M84. The watcher: a command run on a trigger. Its directory is the
+  // selected panel's, like the note and the memory rows, so the row is
+  // disabled by NAME rather than opening a form with nowhere to run.
+  out.push(withReason({
+    id: 'panel.watcher',
+    title: 'Watch…',
+    subtitle: 'run a command when something changes',
+    searchText: 'watch watcher run when change trigger tests build timer',
+    group: 'panel',
+    run: () => actions.beginWatcher()
+  }, ctx.noteRoot === null || ctx.noteRoot === undefined ? REASON_NO_WATCH_ROOT : undefined))
 
   const templateRows = ctx.templates ?? []
   if (templateRows.length === 0) {

@@ -7,9 +7,10 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isFilePanel, isTerminalPanel, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel } from '@renderer/panels/panels'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
+import { watchStateInput } from '@renderer/watcher/watcher-store'
 import { panelName, panelPath } from '@renderer/palette/panel-name'
 import { REASON_CHAT_NO_BASELINE, type PanelRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
@@ -69,7 +70,7 @@ function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<str
   const status = registry.get(p.rect.id)?.status
   const resolved = status?.kind === 'running' ? status.command : undefined
   const tailKind = isFilePanel(p) && p.source.prose === true ? 'note' : p.kind
-  const state: StateInput = { kind: tailKind, status, dormant: isTerminalPanel(p) && dormantIds.has(p.rect.id) }
+  const state: StateInput = { kind: tailKind, status, dormant: isTerminalPanel(p) && dormantIds.has(p.rect.id), ...(isWatcherPanel(p) ? { watch: watchStateInput(p.rect.id) } : {}) }
   const { word } = panelState(state, getAgentState(p.rect.id))
   const path = panelPath(p)
   return { name: panelName(p, resolved), ...(path === undefined ? {} : { path }), state, stateWord: word }

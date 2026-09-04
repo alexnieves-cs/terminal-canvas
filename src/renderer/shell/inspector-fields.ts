@@ -1,12 +1,14 @@
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
 import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_CHAT_NO_BASELINE, REASON_NOT_CLAUDE_SESSION, REASON_NOT_STARTED, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
+import { describeTrigger } from '@shared/watch-trigger'
+import { watchStateInput } from '@renderer/watcher/watcher-store'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
-import { isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isWatcherPanel, isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -409,6 +411,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
   memory: 'A memory node',
+  watcher: 'A watcher',
   review: 'A review node',
   file: 'A file panel',
   toolbox: 'A toolbox node',
@@ -618,6 +621,23 @@ export function buildInspectorModel(
   // M83. The memory node: a document kind whose subject is a repository.
   if (isMemoryPanel(panel)) {
     return { kind: 'memory', reviewable: false, state: { kind: 'memory', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'root', label: 'repository', value: panel.source.root }] }
+  }
+  // M84. The watcher: a PROCESS node, so its state comes from its own store
+  // rather than from a registry it is not in, and its fields are the three
+  // facts a person acts on — what runs, where, and when it runs.
+  if (isWatcherPanel(panel)) {
+    return {
+      kind: 'watcher', reviewable: false,
+      state: { kind: 'watcher', status: undefined, dormant: false, watch: watchStateInput(panel.rect.id) },
+      id: panel.rect.id, heading: railLabel(panel, undefined),
+      ...(panel.title === undefined ? {} : { title: panel.title }),
+      restartable: false, reattached: false, links, usage: NO_USAGE,
+      fields: [
+        { key: 'watch-command', label: 'runs', value: [panel.watch.command, ...panel.watch.args].join(' ') },
+        { key: 'watch-cwd', label: 'in', value: panel.watch.cwd },
+        { key: 'watch-trigger', label: 'when', value: describeTrigger(panel.watch.trigger) }
+      ]
+    }
   }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [

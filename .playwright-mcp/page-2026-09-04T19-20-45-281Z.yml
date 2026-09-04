@@ -1,0 +1,847 @@
+- generic [active] [ref=f12e1]:
+  - link "Skip to content" [ref=f12e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f12e3]:
+    - generic [ref=f12e5]:
+      - link "BridgeMind — home" [ref=f12e7] [cursor=pointer]:
+        - /url: /
+        - img "BridgeMind" [ref=f12e8]
+      - navigation "Primary" [ref=f12e9]:
+        - link "Product" [ref=f12e10] [cursor=pointer]:
+          - /url: /#product
+        - link "Capabilities" [ref=f12e11] [cursor=pointer]:
+          - /url: /#capabilities
+        - link "Community" [ref=f12e12] [cursor=pointer]:
+          - /url: /#community
+        - link "Pricing" [ref=f12e13] [cursor=pointer]:
+          - /url: /pricing
+      - generic [ref=f12e14]:
+        - link "Sign in" [ref=f12e15] [cursor=pointer]:
+          - /url: /login
+        - link "Download for Mac" [ref=f12e17] [cursor=pointer]:
+          - /url: https://downloads.bridgemind.ai/bridgemind-one/latest/macos/BridgeMindOne-universal.dmg
+  - main [ref=f12e20]:
+    - generic [ref=f12e22]:
+      - paragraph [ref=f12e23]: Changelog
+      - heading "What shipped." [level=1] [ref=f12e25]
+      - paragraph [ref=f12e26]: Release notes for BridgeMind. Older BridgeSpace, BridgeVoice, and BridgeAgent notes stay below for the apps that still link here.
+      - navigation [ref=f12e27]:
+        - link "BridgeMind" [ref=f12e28] [cursor=pointer]:
+          - /url: "#bridgemind-one"
+        - link "BridgeSpace" [ref=f12e29] [cursor=pointer]:
+          - /url: "#bridgespace"
+        - link "BridgeVoice" [ref=f12e30] [cursor=pointer]:
+          - /url: "#bridgevoice"
+        - link "BridgeAgent" [ref=f12e31] [cursor=pointer]:
+          - /url: "#bridgeagent"
+    - generic [ref=f12e33]:
+      - heading "BridgeMind" [level=2] [ref=f12e34]
+      - generic [ref=f12e35]:
+        - group "Show BridgeMind changes for" [ref=f12e36]:
+          - button "All platforms" [pressed] [ref=f12e37]
+          - button "macOS" [ref=f12e38]
+          - button "Windows" [ref=f12e41]
+          - button "Linux" [ref=f12e44]
+        - generic [ref=f12e47]:
+          - article [ref=f12e48]:
+            - generic [ref=f12e49]:
+              - generic [ref=f12e50]: v0.1.27
+              - generic [ref=f12e51]: 2026-09-04
+              - generic [ref=f12e52]: macOS
+            - heading [level=3] [ref=f12e53]:
+              - link "Your coding agents are found from the Dock, and typing behaves again" [ref=f12e54] [cursor=pointer]:
+                - /url: /changelog/bridgemind-one/v0-1-27
+            - paragraph [ref=f12e55]: macOS only. Every fix from this week's macOS beta tickets in one update. Coding agents that only your .zshrc puts on PATH — Claude Code's native installer, npm's global bin, nvm, bun, OpenCode, Grok — are found when you launch from Finder or the Dock instead of showing as not installed, and when nothing is found the app says exactly which shells and folders it checked and offers Check again. Auto's task field no longer types backwards, and Korean, Japanese and Chinese input sources compose in the chat composer again.
+            - list [ref=f12e56]:
+              - listitem [ref=f12e57]:
+                - generic [ref=f12e58]: CLIs on your .zshrc PATH are found.
+                - text: Launching from Finder or the Dock now asks your login and interactive shells where your agents live, so a Claude Code, Codex, OpenCode or Grok install that only .zshrc knows about shows up instead of being reported as missing.
+              - listitem [ref=f12e59]:
+                - generic [ref=f12e60]: Nothing found? It tells you why.
+                - text: Chat mode, the launch grid and the agent page list the shells asked and the folders checked, point at the ~/.zprofile fix, and offer Check again so a fresh install is picked up without relaunching.
+              - listitem [ref=f12e61]:
+                - generic [ref=f12e62]: Typing lands in order, and 한글 composes.
+                - text: A custom task typed into Auto's field no longer comes out backwards, and Korean, Japanese and Chinese input sources compose whole syllables in the chat composer instead of scattering letters.
+            - generic [ref=f12e63]:
+              - paragraph [ref=f12e64]: Fixed
+              - list [ref=f12e65]:
+                - listitem [ref=f12e66]: Coding agents that only your .zshrc puts on PATH (Claude Code's native installer, npm's global bin, nvm, bun, OpenCode, Grok) are now found when you launch from Finder or the Dock instead of being reported as not installed.
+                - listitem [ref=f12e67]: When no coding agent is found, Chat mode, the launch grid and the agent page say which shells were asked and which folders were checked, point at the ~/.zprofile fix, and offer Check again so a fresh install is picked up without relaunching.
+                - listitem [ref=f12e68]: "A slow or prompting .zshrc no longer reads as \"not installed\": discovery still stops at its deadline and tells you the shell didn't answer, and a chat sent before it answers says so and asks you to send again."
+                - listitem [ref=f12e69]: Typing a custom task into Auto's field no longer comes out backwards; each character lands after the last one, the way it does in the chat composer.
+                - listitem [ref=f12e70]: "Korean, Japanese and Chinese input sources compose in the chat composer again: typing 한글 produces the two syllables rather than six separate letters, and a draft filled in from elsewhere waits for the syllable you are on to finish."
+                - listitem [ref=f12e71]: A first Fn take before the on-device speech model is downloaded now says exactly where the Download button is (Settings → Voice, beside Apple Speech) instead of pointing at a "prepare" step that does not exist.
+          - article [ref=f12e72]:
+            - generic [ref=f12e73]:
+              - generic [ref=f12e74]: v0.1.28
+              - generic [ref=f12e75]: 2026-09-04
+              - generic [ref=f12e76]: Windows
+            - heading [level=3] [ref=f12e77]:
+              - 'link "The Windows terminal behaves: PowerShell opens, splits reflow, Shift+Enter adds a line" [ref=f12e78] [cursor=pointer]':
+                - /url: /changelog/bridgemind-one/v0-1-28
+            - paragraph [ref=f12e79]: Windows only. Every terminal fix from the Windows beta tickets in one update. Choosing PowerShell opens a working prompt instead of failing on the spot, Shift+Enter inside Claude Code inserts a new line rather than sending the prompt, and split panes stop painting a coding agent's screen twice or leaving it drawn in the old corner after you close its neighbour. Ctrl+V pastes into a terminal again.
+            - list [ref=f12e80]:
+              - listitem [ref=f12e81]:
+                - generic [ref=f12e82]: PowerShell opens again.
+                - text: Settings › Terminal › PowerShell now opens a live prompt. When any chosen shell cannot start, the pane names the executable it tried instead of a generic start error.
+              - listitem [ref=f12e83]:
+                - generic [ref=f12e84]: Splits reflow like Windows Terminal.
+                - text: Splitting, pressing +, maximizing and restoring, or closing one of two panes now hands the remaining agent the full grid at once — no duplicate frame, no dropped lines, no agent stuck in a corner until you resize by hand.
+              - listitem [ref=f12e85]:
+                - generic [ref=f12e86]: Shift+Enter is a new line.
+                - text: In a terminal running Claude Code, Shift+Enter inserts a line break the way it does in the Claude Code CLI; Enter still submits.
+            - generic [ref=f12e87]:
+              - paragraph [ref=f12e88]: Fixed
+              - list [ref=f12e89]:
+                - listitem [ref=f12e90]: Choosing PowerShell as the terminal type now opens a working PowerShell pane instead of failing immediately.
+                - listitem [ref=f12e91]: When a chosen shell cannot be launched, the terminal pane names the executable it tried instead of a generic start error.
+                - listitem [ref=f12e92]: Shift+Enter in a terminal running Claude Code inserts a new line instead of submitting the prompt.
+                - listitem [ref=f12e93]: Splitting a pane, pressing "+", or maximizing and restoring the window no longer paints a coding agent's screen twice, drops lines, or leaves a garbled copy behind; the terminal now follows Windows' own resize behaviour.
+                - listitem [ref=f12e94]: Closing one of two terminal panes reflows the remaining agent to the full pane immediately, instead of leaving it drawn in the old corner until the pane is resized by hand.
+                - listitem [ref=f12e95]: Ctrl+V and Shift+Insert paste into a terminal again instead of sending a control character to the running agent.
+          - article [ref=f12e96]:
+            - generic [ref=f12e97]:
+              - generic [ref=f12e98]: v0.1.26
+              - generic [ref=f12e99]: 2026-09-03
+              - generic [ref=f12e100]: macOS
+            - heading [level=3] [ref=f12e101]:
+              - link "Chat mode gets its own composer" [ref=f12e102] [cursor=pointer]:
+                - /url: /changelog/bridgemind-one/v0-1-26
+            - paragraph [ref=f12e103]: "macOS only. Chat mode is for code, and its composer now says so: typing @ offers only the thread's folders and files, a teammate handle typed in a chat no longer mails that agent, and new Add files / Add folder buttons let you attach without dragging from Finder."
+            - list [ref=f12e104]:
+              - listitem [ref=f12e105]:
+                - generic [ref=f12e106]: Add files and folders from the composer.
+                - text: A + menu in the Chat composer opens a chooser for files or for one folder. A picked folder is granted whole, exactly as a dropped one is, and everything goes through the same staging as a drop.
+              - listitem [ref=f12e107]:
+                - generic [ref=f12e108]: "@ reaches files, not teammates."
+                - text: In Chat mode, @ lists the thread's folders and files only. Agents are reached from Agent mode, so a handle typed in a coding chat can no longer wake a teammate by accident.
+            - generic [ref=f12e109]:
+              - paragraph [ref=f12e110]: Added
+              - list [ref=f12e111]:
+                - listitem [ref=f12e112]: Chat mode's composer has Add files and Add folder buttons, so you can attach without dragging from Finder; a picked folder is granted whole, exactly as a dropped one is.
+            - generic [ref=f12e113]:
+              - paragraph [ref=f12e114]: Changed
+              - list [ref=f12e115]:
+                - listitem [ref=f12e116]: "Chat mode is for code: typing @ there offers only the thread's folders and files, and a teammate handle typed in a chat no longer mails that agent. Agents are reached from Agent mode."
+          - article [ref=f12e117]:
+            - generic [ref=f12e118]:
+              - generic [ref=f12e119]: v0.1.25
+              - generic [ref=f12e120]: 2026-09-03
+              - generic [ref=f12e121]: Windows
+              - generic [ref=f12e122]: Linux
+            - heading [level=3] [ref=f12e123]:
+              - link "Chat mode becomes threads in your workspaces, and Bridge can find any session" [ref=f12e124] [cursor=pointer]:
+                - /url: /changelog/bridgemind-one/v0-1-25
+            - paragraph [ref=f12e125]: Windows and Linux. Chat mode is now organised as threads inside your workspace folders, the way T3 Code works, with Cursor, Grok Build and OpenCode joining Claude Code and Codex as thread engines through the Agent Client Protocol. Ask Bridge where an agent is working and it takes you there. A failed update now says so and offers a retry or a direct installer download instead of silently showing "Update" again.
+            - list [ref=f12e126]:
+              - listitem [ref=f12e127]:
+                - generic [ref=f12e128]: Threads live in your folders.
+                - text: The Chat sidebar lists your workspace folders with one thread per coding session underneath. Start a new thread from a folder's +, the header's +, or Ctrl+N; each thread's header names its folder, branch, engine and model, and a Changes panel shows a unified diff per changed file.
+              - listitem [ref=f12e129]:
+                - generic [ref=f12e130]: Bridge finds the session.
+                - text: Ask "where is the agent working on the login tests?" and Bridge locates it — a terminal pane, a saved agent's chat or a Chat-mode thread — takes you there, highlights it, and tells you what it was last doing.
+              - listitem [ref=f12e131]:
+                - generic [ref=f12e132]: A stuck update tells you.
+                - text: When an update downloads but the installer cannot start, the title-bar pill reports the failure with a retry, and Settings › Software update offers a Download installer button that opens the signed Windows installer in your browser.
+            - generic [ref=f12e133]:
+              - paragraph [ref=f12e134]: Added
+              - list [ref=f12e135]:
+                - listitem [ref=f12e136]: Ask Bridge "where is the agent working on the login tests?" and it finds the session — a terminal pane in any workspace, a saved agent's chat or a Chat-mode thread — takes you there, highlights it, and tells you what it was last doing; when two fit it names them and asks. Bridge can also list every workspace, tab and pane at once.
+                - listitem [ref=f12e137]: "Chat mode is now threads in your workspaces, the way T3 Code works: the sidebar lists your folders, each thread underneath is one coding session in that folder, and a new thread starts from the folder's +, the header's +, or Ctrl+N."
+                - listitem [ref=f12e138]: Cursor, Grok Build and OpenCode can run a thread alongside Claude Code and Codex, through each CLI's Agent Client Protocol; the model menu lists what the agent reports, and the agent's permission asks appear above the composer with Allow / Allow for session / Deny.
+                - listitem [ref=f12e139]: Each thread's header names its folder, git branch, engine and model, and a Changes panel shows the workspace's changed files with a unified diff per file, refreshing when a turn finishes.
+                - listitem [ref=f12e140]: Pin a thread to keep it above every folder, and a thread that finishes while you are elsewhere shows an unread dot until you open it.
+                - listitem [ref=f12e141]: Muse Code by Meta can be launched as a coding agent in terminal panes and workspace lineups.
+            - generic [ref=f12e142]:
+              - paragraph [ref=f12e143]: Changed
+              - list [ref=f12e144]:
+                - listitem [ref=f12e145]: Chats written before threads had folders still open and run; they list under "Other chats" at the bottom of the rail.
+                - listitem [ref=f12e146]: A terminal handoff aimed at a chat engine now opens a Chat-mode thread in the workspace instead of a pane beside the terminal.
+                - listitem [ref=f12e147]: The browser tab that finishes sign-in now shows a BridgeMind page saying you're signed in (or that sign-in didn't finish) instead of a bare line of text.
+            - generic [ref=f12e148]:
+              - paragraph [ref=f12e149]: Fixed
+              - list [ref=f12e150]:
+                - listitem [ref=f12e151]: When an update downloads but the installer cannot start, the title-bar pill now says the update failed and offers a retry instead of silently showing "Update" again, and Settings › Software update adds a Download installer button that opens the current signed Windows installer in your browser so you can finish by hand.
+            - generic [ref=f12e152]:
+              - paragraph [ref=f12e153]: Removed
+              - list [ref=f12e154]:
+                - listitem [ref=f12e155]: The Thread pane is gone from Code mode's + menu and Alt+T; a thread is a Chat-mode conversation in the folder now, and a saved layout that still holds one shows a card that opens Chat mode instead.
+          - article [ref=f12e156]:
+            - generic [ref=f12e157]:
+              - generic [ref=f12e158]: v0.1.24
+              - generic [ref=f12e159]: 2026-09-03
+              - generic [ref=f12e160]: macOS
+            - heading [level=3] [ref=f12e161]:
+              - link "Your desk mic stays on when the headphones connect" [ref=f12e162] [cursor=pointer]:
+                - /url: /changelog/bridgemind-one/v0-1-24
+            - paragraph [ref=f12e163]: macOS only. Bridge and dictation now keep the microphone you had before your Bluetooth headphones connected, instead of quietly switching to an iPhone's Continuity Camera mic or another display's mic that hears nothing. A mic that opens but delivers no audio says so. Muse Code by Meta joins the coding agents you can launch in a pane.
+            - list [ref=f12e164]:
+              - listitem [ref=f12e165]:
+                - generic [ref=f12e166]: Headphones on, desk mic kept.
+                - text: With AirPods or another Bluetooth headset connected, Automatic no longer falls back to an iPhone's Continuity Camera mic or the wrong display mic. It remembers the desk microphone you were using and keeps it, so a Bridge call or a dictation hold hears you.
+              - listitem [ref=f12e167]:
+                - generic [ref=f12e168]: Silence is reported, not swallowed.
+                - text: A microphone that opens but delivers no audio within a second now ends the take with "The microphone isn't delivering audio" and points you to Settings → Microphone, instead of resetting as if you had tapped too briefly.
+              - listitem [ref=f12e169]:
+                - generic [ref=f12e170]: Muse Code by Meta.
+                - text: Launch Meta's Muse Code as a coding agent in terminal panes and workspace lineups, alongside Claude Code, Codex, Cursor and the rest.
+            - generic [ref=f12e171]:
+              - paragraph [ref=f12e172]: Added
+              - list [ref=f12e173]:
+                - listitem [ref=f12e174]: Muse Code by Meta can be launched as a coding agent in terminal panes and workspace lineups.
+            - generic [ref=f12e175]:
+              - paragraph [ref=f12e176]: Fixed
+              - list [ref=f12e177]:
+                - listitem [ref=f12e178]: Dictation and Bridge keep using the desk microphone you had before your Bluetooth headphones connected, instead of switching to a Continuity Camera iPhone or another display's mic that hears nothing.
+                - listitem [ref=f12e179]: A microphone that opens but delivers no audio now says so, with a pointer to Settings → Microphone, instead of silently dropping the take.
+                - listitem [ref=f12e180]: BridgeMind no longer quits without warning when a chat engine's process exits at the moment the app sends it the next message; the turn ends with the engine's exit instead.
+          - button "Show 17 older BridgeMind releases" [ref=f12e181]
+          - navigation "Older BridgeMind releases" [ref=f12e182]:
+            - list [ref=f12e183]:
+              - listitem [ref=f12e184]:
+                - link "v0.1.23" [ref=f12e185] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-23
+              - listitem [ref=f12e186]:
+                - link "v0.1.22" [ref=f12e187] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-22
+              - listitem [ref=f12e188]:
+                - link "v0.1.21" [ref=f12e189] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-21
+              - listitem [ref=f12e190]:
+                - link "v0.1.20" [ref=f12e191] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-20
+              - listitem [ref=f12e192]:
+                - link "v0.1.18" [ref=f12e193] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-18
+              - listitem [ref=f12e194]:
+                - link "v0.1.13" [ref=f12e195] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-13
+              - listitem [ref=f12e196]:
+                - link "v0.1.16" [ref=f12e197] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-16
+              - listitem [ref=f12e198]:
+                - link "v0.1.15" [ref=f12e199] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-15
+              - listitem [ref=f12e200]:
+                - link "v0.1.14" [ref=f12e201] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-14
+              - listitem [ref=f12e202]:
+                - link "v0.1.12" [ref=f12e203] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-12
+              - listitem [ref=f12e204]:
+                - link "v0.1.11" [ref=f12e205] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-11
+              - listitem [ref=f12e206]:
+                - link "v0.1.9" [ref=f12e207] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-9
+              - listitem [ref=f12e208]:
+                - link "v0.1.8" [ref=f12e209] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-8
+              - listitem [ref=f12e210]:
+                - link "v0.1.5" [ref=f12e211] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-5
+              - listitem [ref=f12e212]:
+                - link "v0.1.4" [ref=f12e213] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-4
+              - listitem [ref=f12e214]:
+                - link "v0.1.1" [ref=f12e215] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-1
+              - listitem [ref=f12e216]:
+                - link "v0.1.0" [ref=f12e217] [cursor=pointer]:
+                  - /url: /changelog/bridgemind-one/v0-1-0
+    - generic [ref=f12e219]:
+      - heading "BridgeSpace" [level=2] [ref=f12e220]
+      - generic [ref=f12e221]:
+        - article [ref=f12e222]:
+          - generic [ref=f12e223]:
+            - generic [ref=f12e224]: v3.4.18
+            - generic [ref=f12e225]: 2026-08-04
+            - generic [ref=f12e226]: Windows
+          - heading [level=3] [ref=f12e227]:
+            - link "Windows image paste is back" [ref=f12e228] [cursor=pointer]:
+              - /url: /changelog/bridgespace/v3-4-18
+          - paragraph [ref=f12e229]: BridgeSpace 3.4.18 restores pasting screenshots into agent terminals on Windows — a 3.4.17 regression made Ctrl+V do nothing in Claude Code and Codex panes.
+          - list [ref=f12e230]:
+            - listitem [ref=f12e231]:
+              - generic [ref=f12e232]: Paste screenshots into agents on Windows again.
+              - text: Ctrl+V in a Claude Code or Codex pane saves the clipboard image next to your work and types its path again, instead of silently doing nothing.
+          - generic [ref=f12e233]:
+            - paragraph [ref=f12e234]: Fixed
+            - list [ref=f12e235]:
+              - listitem [ref=f12e236]: "Restored clipboard-image paste into agent terminals on Windows: 3.4.17 handed the raw Ctrl+V to every agent CLI, but only OpenCode can read a clipboard image that way on Windows — every other agent got nothing. Windows saves the image and types its path again; OpenCode keeps its native paste, and macOS/Linux keep the agent-native handling shipped in 3.4.17."
+        - article [ref=f12e237]:
+          - generic [ref=f12e238]:
+            - generic [ref=f12e239]: v3.4.17
+            - generic [ref=f12e240]: 2026-07-28
+          - heading [level=3] [ref=f12e241]:
+            - link "The Bridge becomes a workspace" [ref=f12e242] [cursor=pointer]:
+              - /url: /changelog/bridgespace/v3-4-17
+          - paragraph [ref=f12e243]: "BridgeSpace 3.4.17 turns the expanded Bridge view into a full orchestration workspace: a sessions rail, a redesigned voice orb, and a live interactive terminal for the focused agent. It also makes TUI highlights copyable and stops paid sessions from bouncing into recovery screens."
+          - list [ref=f12e244]:
+            - listitem [ref=f12e245]:
+              - generic [ref=f12e246]: Orchestrate agents from the Bridge.
+              - text: The expanded Bridge view now pairs every session with its live terminal — click it, type in it, and drag the dividers to fit your layout.
+            - listitem [ref=f12e247]:
+              - generic [ref=f12e248]: Copy what the TUI shows you.
+              - text: Drag-highlights inside Claude Code, htop, and other mouse-tracking TUIs now copy the exact cells you see.
+            - listitem [ref=f12e249]:
+              - generic [ref=f12e250]: Paid sessions stay verified.
+              - text: Background token rotation and cold starts no longer strand paid sessions behind the verification gate.
+          - generic [ref=f12e251]:
+            - paragraph [ref=f12e252]: Added
+            - list [ref=f12e253]:
+              - listitem [ref=f12e254]: "The expanded Bridge view is now an orchestration workspace: a sessions rail, a voice stage with the redesigned flowing orb, and the focused agent's terminal — live and interactive, not a read-only mirror, and sized to its pane like a real terminal."
+              - listitem [ref=f12e255]: The sessions rail and the stage/terminal split are draggable (and keyboard-adjustable), and both remember their widths.
+              - listitem [ref=f12e256]: "Drag-highlights inside mouse-tracking TUIs (Claude Code, htop) are copyable: Cmd/Ctrl+C and context-menu Copy re-read the exact cells the drag covered, even though the TUI owns the mouse."
+              - listitem [ref=f12e257]: The Codex context pill now matches Codex's own /status math — baseline tokens are excluded, and large rollouts bootstrap from a bounded tail so the meter never stalls.
+          - generic [ref=f12e258]:
+            - paragraph [ref=f12e259]: Changed
+            - list [ref=f12e260]:
+              - listitem [ref=f12e261]: BridgeCode opens straight into the chat; the separate Codex connection gate screen is gone.
+              - listitem [ref=f12e262]: The subscription grace notice is a dismissible corner toast instead of a top-center banner.
+              - listitem [ref=f12e263]: "The Bridge orb rests at idle: its interior circulation pauses when no call is live, cutting the compositor load of an open Bridge view to near zero."
+          - generic [ref=f12e264]:
+            - paragraph [ref=f12e265]: Fixed
+            - list [ref=f12e266]:
+              - listitem [ref=f12e267]: Background access-token rotation no longer voids in-flight account checks, which surfaced as paid sessions hitting STALE_SUBSCRIPTION_RESULT after about an hour.
+              - listitem [ref=f12e268]: Cold starts with an expired token restore the signed-in principal from stored credentials instead of stranding the session behind the verification gate.
+              - listitem [ref=f12e269]: A valid 72-hour offline receipt now lands in the grace notice, never the fullscreen recovery screen, and transient mid-request races retry instead of freezing on a cached plan.
+              - listitem [ref=f12e270]: "Fixed the ghost orb: always-running orb layers could overload the macOS WebView compositor and leave the Bridge view painted over the workspace."
+              - listitem [ref=f12e271]: Terminal renderer addons are disposed before the terminal core, preventing renderer teardown breakage when panes close.
+              - listitem [ref=f12e272]: On Linux, Ctrl+V with an image on the clipboard is handed to the agent CLI when the WebView cannot read it, instead of being swallowed.
+          - generic [ref=f12e273]:
+            - paragraph [ref=f12e274]: Removed
+            - list [ref=f12e275]:
+              - listitem [ref=f12e276]: The AI account profiles experiment (multi-account connect, per-pane profile binding, usage-limit auto-switching) is fully removed — settings UI, renderer stores, and the Rust backend.
+        - article [ref=f12e277]:
+          - generic [ref=f12e278]:
+            - generic [ref=f12e279]: v3.4.15
+            - generic [ref=f12e280]: 2026-07-17
+          - heading [level=3] [ref=f12e281]:
+            - link "The right plan follows the right account" [ref=f12e282] [cursor=pointer]:
+              - /url: /changelog/bridgespace/v3-4-15
+          - paragraph [ref=f12e283]: BridgeSpace 3.4.15 confirms the account before browser sign-in returns to the desktop. It also keeps paid workspaces available through token refreshes and stale browser cookies.
+          - list [ref=f12e284]:
+            - listitem [ref=f12e285]:
+              - generic [ref=f12e286]: Confirm the account first.
+              - text: Browser sign-in now shows the account before BridgeSpace accepts it, with a direct path to switch accounts.
+            - listitem [ref=f12e287]:
+              - generic [ref=f12e288]: Subscription checks recover.
+              - text: Paid workspaces no longer fall into an upgrade screen when a startup verification is replayed or delayed.
+            - listitem [ref=f12e289]:
+              - generic [ref=f12e290]: Desktop sessions stay signed in.
+              - text: Refresh timing, per-session logout, and stale cookie handling no longer invalidate unrelated desktop sessions.
+          - generic [ref=f12e291]:
+            - paragraph [ref=f12e292]: Fixed
+            - list [ref=f12e293]:
+              - listitem [ref=f12e294]: Browser OAuth confirms the resolved account before handing credentials to BridgeSpace and lets builders restart with a different account.
+              - listitem [ref=f12e295]: Upgrade prompts name the signed-in account so a subscription tied to another login is immediately visible.
+              - listitem [ref=f12e296]: Bearer-authenticated desktop requests ignore stale web-session cookies instead of failing write requests at CSRF validation.
+              - listitem [ref=f12e297]: Web logout revokes only the current web session instead of signing BridgeSpace out on another device.
+              - listitem [ref=f12e298]: Access-token refresh uses the token's real lifetime, the correct Cognito client, and a forced retry after an API rejection.
+        - article [ref=f12e299]:
+          - generic [ref=f12e300]:
+            - generic [ref=f12e301]: v3.4.13
+            - generic [ref=f12e302]: 2026-07-12
+          - heading [level=3] [ref=f12e303]:
+            - link "Startup recovery that stops looping" [ref=f12e304] [cursor=pointer]:
+              - /url: /changelog/bridgespace/v3-4-13
+          - paragraph [ref=f12e305]: BridgeSpace 3.4.13 keeps Windows terminal failures, subscription checks, and agent resumes from turning into startup loops. Failed work stays visible, recovery stays explicit, and existing terminal layouts remain intact.
+          - list [ref=f12e306]:
+            - listitem [ref=f12e307]:
+              - generic [ref=f12e308]: Windows terminals recover in place.
+              - text: Blocked shell aliases now fall back to real PowerShell or Command Prompt executables, while large restored layouts pause excess terminals without deleting their panes.
+            - listitem [ref=f12e309]:
+              - generic [ref=f12e310]: Subscription checks always finish.
+              - text: Verification now has a hard deadline. Temporary failures show Retry and Sign in again, while invalid credentials return directly to authentication.
+            - listitem [ref=f12e311]:
+              - generic [ref=f12e312]: Agent resumes return to their pane.
+              - text: Recovered Claude and Codex sessions now use durable workspace and pane identity, so a restart restores the conversation where it actually ran.
+          - generic [ref=f12e313]:
+            - paragraph [ref=f12e314]: Changed
+            - list [ref=f12e315]:
+              - listitem [ref=f12e316]: Deferred terminal panes keep their original split, folder, SSH context, and bound-agent actions until a builder chooses how to restore them.
+          - generic [ref=f12e317]:
+            - paragraph [ref=f12e318]: Fixed
+            - list [ref=f12e319]:
+              - listitem [ref=f12e320]: Windows System Default skips blocked WindowsApps shell aliases and retries canonical PowerShell and Command Prompt executables for recoverable CreateProcessW failures.
+              - listitem [ref=f12e321]: Cold-start terminal restore uses a bounded budget and circuit breaker instead of recreating every persisted PTY at once after a crash.
+              - listitem [ref=f12e322]: Subscription verification cannot spin forever, cannot grant paid access from cache, and cannot apply a late result from a previous account.
+              - listitem [ref=f12e323]: Agent sessions persist workspace and pane identity so relaunch recovery, History resume, account-limit switching, and BridgeSwarm launches target the original pane.
+              - listitem [ref=f12e324]: Claude Code mouse selections copy the text inside prompt boxes without border glyphs or padded cells, while deliberate box-art copies remain unchanged.
+        - article [ref=f12e325]:
+          - generic [ref=f12e326]:
+            - generic [ref=f12e327]: v3.2.2
+            - generic [ref=f12e328]: 2026-06-12
+          - heading [level=3] [ref=f12e329]:
+            - link "Multi-account switching and resume that hold up" [ref=f12e330] [cursor=pointer]:
+              - /url: /changelog/bridgespace/v3-2-2
+          - paragraph [ref=f12e331]: "BridgeSpace 3.2.2 makes multi-account agents dependable: switching Claude accounts keeps you signed in, resumes run under the account profile the conversation belongs to, and session recovery is honest about what can and can't be resumed."
+          - list [ref=f12e332]:
+            - listitem [ref=f12e333]:
+              - generic [ref=f12e334]: Connected accounts stay signed in.
+              - text: Switching to a connected Claude account no longer re-runs the first-run wizard and its login screen — onboarding state is seeded from the CLI's real state file at connect and self-heals on every switch.
+            - listitem [ref=f12e335]:
+              - generic [ref=f12e336]: Resume follows the right account.
+              - text: Resuming a recovered agent now runs under the account profile the conversation was created on. Previously the resume used whichever profile was active, so Claude answered "No conversation found" after an account switch.
+            - listitem [ref=f12e337]:
+              - generic [ref=f12e338]: Home-directory agents are recoverable.
+              - text: Agents launched in a workspace rooted at the home folder were invisible to crash recovery — an empty Claude settings file silently blocked hook installation. They now register like any other agent and are offered for resume.
+            - listitem [ref=f12e339]:
+              - generic [ref=f12e340]: Resume failures speak up.
+              - text: When a resumed agent can't start — wrong account, missing CLI — BridgeSpace surfaces a notification and keeps the session recoverable under Settings → History instead of losing it.
+          - generic [ref=f12e341]:
+            - paragraph [ref=f12e342]: Added
+            - list [ref=f12e343]:
+              - listitem [ref=f12e344]: Agent sessions record the Claude/Codex account profile and transcript path they ran under, powering profile-aware resume.
+              - listitem [ref=f12e345]: Claude sessions register the moment the CLI starts (SessionStart hook), so an agent closed before its first reply is still offered for resume.
+              - listitem [ref=f12e346]: Agents launched from the workspace UI are recorded at spawn time, so Codex agents no longer wait for their first turn to become recoverable.
+          - generic [ref=f12e347]:
+            - paragraph [ref=f12e348]: Changed
+            - list [ref=f12e349]:
+              - listitem [ref=f12e350]: The launch-time cleanup of user-level Claude hook entries now skips workspaces rooted at the home folder, whose project settings live in the same file.
+          - generic [ref=f12e351]:
+            - paragraph [ref=f12e352]: Fixed
+            - list [ref=f12e353]:
+              - listitem [ref=f12e354]: "Switching to a connected Claude account forced a re-login: the onboarding self-heal read .claude.json from inside ~/.claude, where the CLI never writes it — it now reads the real home-root state file, and connects seed it up front."
+              - listitem [ref=f12e355]: Resumed agents launched under whichever account profile was active and failed with "No conversation found" when it differed — resume commands are now pinned to the conversation's own profile.
+              - listitem [ref=f12e356]: A successful resume could be misread as failed when the replayed conversation contained phrases like "command not found", re-offering a duplicate resume — failure detection now stands down once the CLI demonstrably booted.
+              - listitem [ref=f12e357]: Resuming a conversation whose transcript was never saved (closed before the first reply) typed a command guaranteed to fail; it is now blocked up front with a notification and the dead entry stops being re-offered on every boot.
+              - listitem [ref=f12e358]: The default (un-profiled) Claude sign-in is now detected via its real Keychain item and state file, so Connect Accounts reports it accurately.
+              - listitem [ref=f12e359]: An empty ~/.claude/settings.local.json permanently blocked hook installation for home-rooted workspaces; empty files are now treated as a fresh install, and refusals are logged where builders can find them.
+              - listitem [ref=f12e360]: A failed resume silently consumed the session's recoverability; the session now returns to recoverable and a notification explains what happened.
+        - button "Show 22 older BridgeSpace releases" [ref=f12e361]
+        - navigation "Older BridgeSpace releases" [ref=f12e362]:
+          - list [ref=f12e363]:
+            - listitem [ref=f12e364]:
+              - link "v3.2.1" [ref=f12e365] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-2-1
+            - listitem [ref=f12e366]:
+              - link "v3.1.13" [ref=f12e367] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-13
+            - listitem [ref=f12e368]:
+              - link "v3.1.11" [ref=f12e369] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-11
+            - listitem [ref=f12e370]:
+              - link "v3.1.9" [ref=f12e371] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-9
+            - listitem [ref=f12e372]:
+              - link "v3.1.8" [ref=f12e373] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-8
+            - listitem [ref=f12e374]:
+              - link "v3.1.7" [ref=f12e375] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-7
+            - listitem [ref=f12e376]:
+              - link "v3.1.6" [ref=f12e377] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-6
+            - listitem [ref=f12e378]:
+              - link "v3.1.1" [ref=f12e379] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-1-1
+            - listitem [ref=f12e380]:
+              - link "v3.0.84" [ref=f12e381] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-84
+            - listitem [ref=f12e382]:
+              - link "v3.0.83" [ref=f12e383] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-83
+            - listitem [ref=f12e384]:
+              - link "v3.0.82" [ref=f12e385] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-82
+            - listitem [ref=f12e386]:
+              - link "v3.0.81" [ref=f12e387] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-81
+            - listitem [ref=f12e388]:
+              - link "v3.0.80" [ref=f12e389] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-80
+            - listitem [ref=f12e390]:
+              - link "v3.0.79" [ref=f12e391] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-79
+            - listitem [ref=f12e392]:
+              - link "v3.0.78" [ref=f12e393] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-78
+            - listitem [ref=f12e394]:
+              - link "v3.0.77" [ref=f12e395] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-77
+            - listitem [ref=f12e396]:
+              - link "v3.0.76" [ref=f12e397] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-76
+            - listitem [ref=f12e398]:
+              - link "v3.0.75" [ref=f12e399] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-75
+            - listitem [ref=f12e400]:
+              - link "v3.0.74" [ref=f12e401] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-74
+            - listitem [ref=f12e402]:
+              - link "v3.0.72" [ref=f12e403] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-72
+            - listitem [ref=f12e404]:
+              - link "v3.0.71" [ref=f12e405] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-71
+            - listitem [ref=f12e406]:
+              - link "v3.0.70" [ref=f12e407] [cursor=pointer]:
+                - /url: /changelog/bridgespace/v3-0-70
+    - generic [ref=f12e409]:
+      - heading "BridgeVoice" [level=2] [ref=f12e410]
+      - generic [ref=f12e411]:
+        - article [ref=f12e412]:
+          - generic [ref=f12e413]:
+            - generic [ref=f12e414]: v2.8.4
+            - generic [ref=f12e415]: 2026-08-04
+          - heading [level=3] [ref=f12e416]:
+            - link "No more trailing \"...\" when you stop mid-thought" [ref=f12e417] [cursor=pointer]:
+              - /url: /changelog/bridgevoice/v2-8-4
+          - paragraph [ref=f12e418]: BridgeVoice 2.8.4 stops Whisper's conversational trail-off from being pasted when a recording ends mid-sentence — on every engine, local and cloud — and gives update failures from a mounted DMG a clear, actionable fix.
+          - list [ref=f12e419]:
+            - listitem [ref=f12e420]:
+              - generic [ref=f12e421]: Trailing ellipses stripped from dictation.
+              - text: Stopping a recording to think no longer appends "..." — Whisper's trail-off on incomplete sentences is stripped on local models and cloud transcription alike, while real terminal punctuation is preserved.
+            - listitem [ref=f12e422]:
+              - generic [ref=f12e423]: Cross-volume update failures now explain the fix.
+              - text: Updating while running from a mounted DMG showed a generic "Update failed" toast that vanished mid-read; it is now a sticky message telling builders to move BridgeVoice to Applications first.
+          - generic [ref=f12e424]:
+            - paragraph [ref=f12e425]: Fixed
+            - list [ref=f12e426]:
+              - listitem [ref=f12e427]: "Transcripts no longer end with hallucinated \"...\" when a recording stops mid-sentence: trailing runs of \".\", \"…\", and \"。\" are stripped on every engine (cloud transcription previously received no cleanup at all), single terminal periods survive, and interior ellipses are untouched."
+              - listitem [ref=f12e428]: Update installs that fail because the app runs from a mounted DMG or another volume surfaced a generic auto-dismissing error; they now show a sticky toast with the actual fix — move BridgeVoice to Applications and retry.
+        - article [ref=f12e429]:
+          - generic [ref=f12e430]:
+            - generic [ref=f12e431]: v2.5.3
+            - generic [ref=f12e432]: 2026-06-12
+          - heading [level=3] [ref=f12e433]:
+            - link "Session loops ended, mic auto-recovery, steadier push-to-talk" [ref=f12e434] [cursor=pointer]:
+              - /url: /changelog/bridgevoice/v2-5-3
+          - paragraph [ref=f12e435]: BridgeVoice 2.5.3 stops expired sessions from silently retrying forever and prompts re-login instead, rebuilds silent microphone streams before giving up, and hardens push-to-talk against phantom releases and macOS event-tap drops.
+          - list [ref=f12e436]:
+            - listitem [ref=f12e437]:
+              - generic [ref=f12e438]: Expired sessions now ask for re-login.
+              - text: Permanently dead refresh tokens end the background retry loop, clear themselves, and surface the sign-in prompt instead of silently hammering the API.
+            - listitem [ref=f12e439]:
+              - generic [ref=f12e440]: Silent mics recover on their own.
+              - text: A stream that delivers no audio rebuilds on the same device, then fails over to the next mic before the no-audio banner appears.
+            - listitem [ref=f12e441]:
+              - generic [ref=f12e442]: Push-to-talk holds its ground.
+              - text: Recordings can no longer be cut by a phantom release in the first 150ms, and macOS event-tap drops self-heal with one aggregated diagnostic.
+          - generic [ref=f12e443]:
+            - paragraph [ref=f12e444]: Added
+            - list [ref=f12e445]:
+              - listitem [ref=f12e446]: Silent microphone streams now run a two-stage recovery — rebuild on the same device, then fail over to the next candidate — before the no-audio banner shows.
+              - listitem [ref=f12e447]: Update checks identify themselves to the edge and retry once after 30 seconds; a scheduled canary now watches the update feed every 30 minutes.
+              - listitem [ref=f12e448]: Switching to local transcription with a missing model falls back to the best downloaded model and says so, instead of erroring.
+          - generic [ref=f12e449]:
+            - paragraph [ref=f12e450]: Changed
+            - list [ref=f12e451]:
+              - listitem [ref=f12e452]: Audio capture moved to a wait-free ring buffer, so the realtime callback no longer drops samples under lock contention.
+              - listitem [ref=f12e453]: Loopback devices (Stereo Mix, Line In, virtual cables) are excluded from automatic microphone fallback unless explicitly selected.
+              - listitem [ref=f12e454]: Error reports truncate embedded HTML bodies, consolidate fragmented groupings, and skip known no-op messages.
+          - generic [ref=f12e455]:
+            - paragraph [ref=f12e456]: Fixed
+            - list [ref=f12e457]:
+              - listitem [ref=f12e458]: Permanently expired sessions (invalid or 30-day-old refresh tokens) stop retry-looping, clear the dead token, and prompt re-login; flaky networks can no longer bypass the auth failure hard-stop.
+              - listitem [ref=f12e459]: Push-to-talk requires a real key-up during the first 150ms of a hold, ending sub-100ms phantom stops on virtual audio setups.
+              - listitem [ref=f12e460]: Dictated text re-resolves its target window when the saved one is destroyed on Windows, and frontmost-app lookup runs in-process on macOS instead of shelling out to AppleScript.
+              - listitem [ref=f12e461]: Command panics are caught and reported instead of aborting the app on Linux.
+              - listitem [ref=f12e462]: Model downloads tolerate antivirus stat races on Windows with a short retry.
+        - article [ref=f12e463]:
+          - generic [ref=f12e464]:
+            - generic [ref=f12e465]: v2.5.2
+            - generic [ref=f12e466]: 2026-06-12
+          - heading [level=3] [ref=f12e467]:
+            - link "Windows mic reliability + quit from the dashboard" [ref=f12e468] [cursor=pointer]:
+              - /url: /changelog/bridgevoice/v2-5-2
+          - paragraph [ref=f12e469]: BridgeVoice 2.5.2 repairs silently dead Windows mic streams while the app is idle, stops sending builders to privacy settings they already fixed, and adds an explicit Quit so exiting never depends on finding the tray icon.
+          - list [ref=f12e470]:
+            - listitem [ref=f12e471]:
+              - generic [ref=f12e472]: Dead mic streams heal before you dictate.
+              - text: A Windows watchdog now detects a silently dead microphone stream while BridgeVoice is idle and rebuilds it before your next push-to-talk — and fails over to another microphone if the device stays silent.
+            - listitem [ref=f12e473]:
+              - generic [ref=f12e474]: No more false microphone setup warnings.
+              - text: The dashboard banner now trusts Windows' own permission registry and live capture state, so it only appears for a real privacy block or a genuinely missing microphone.
+            - listitem [ref=f12e475]:
+              - generic [ref=f12e476]: Quit BridgeVoice from the dashboard.
+              - text: Closing the dashboard now explains that BridgeVoice keeps running in the tray, and both the dialog and the account menu offer a real Quit.
+          - generic [ref=f12e477]:
+            - paragraph [ref=f12e478]: Added
+            - list [ref=f12e479]:
+              - listitem [ref=f12e480]: One-time notice after the first dashboard close explaining that BridgeVoice keeps running in the system tray, with a Quit BridgeVoice button.
+              - listitem [ref=f12e481]: Quit BridgeVoice item in the account menu, mirroring the tray quit teardown exactly.
+          - generic [ref=f12e482]:
+            - paragraph [ref=f12e483]: Fixed
+            - list [ref=f12e484]:
+              - listitem [ref=f12e485]: "Windows: an idle watchdog now rebuilds a microphone stream that silently died between recordings, so the first dictation after a driver or audio-engine hiccup is no longer lost."
+              - listitem [ref=f12e486]: "Windows: when a rebuilt stream stays silent, BridgeVoice fails over once to a different microphone for that recording instead of giving up."
+              - listitem [ref=f12e487]: "Windows: the 'Microphone setup needed' banner no longer fires on flaky device probes — a real privacy block shows 'Microphone access blocked by Windows', zero devices shows 'No microphone detected', and a working mic never banners."
+        - article [ref=f12e488]:
+          - generic [ref=f12e489]:
+            - generic [ref=f12e490]: v2.5.1
+            - generic [ref=f12e491]: 2026-06-11
+          - heading [level=3] [ref=f12e492]:
+            - link "Credit-powered rewrites, auto-enhance, and a theme-true widget" [ref=f12e493] [cursor=pointer]:
+              - /url: /changelog/bridgevoice/v2-5-1
+          - paragraph [ref=f12e494]: Polish and Enhance Prompt now run on BridgeMind credits with a live balance in the dashboard, a new setting rewrites every dictation into a polished AI prompt automatically, and the floating widget follows your theme.
+          - list [ref=f12e495]:
+            - listitem [ref=f12e496]:
+              - generic [ref=f12e497]: Polish + Enhance Prompt on credits.
+              - text: Cloud rewrites now charge BridgeMind credits per use, and the dashboard sidebar shows your live balance.
+            - listitem [ref=f12e498]:
+              - generic [ref=f12e499]: Auto Enhance Prompt.
+              - text: Builders can flip one setting and every dictation pastes as a polished AI prompt - no button click.
+            - listitem [ref=f12e500]:
+              - generic [ref=f12e501]: Windows 11 push-to-talk fixed.
+              - text: Push-to-talk no longer goes dead after updating - the broken readiness gate is gone.
+          - generic [ref=f12e502]:
+            - paragraph [ref=f12e503]: Added
+            - list [ref=f12e504]:
+              - listitem [ref=f12e505]: "Polish and Enhance Prompt are wired into the BridgeMind credits system: each rewrite reserves, settles to actual usage, and refunds on failure."
+              - listitem [ref=f12e506]: Credits balance now shows in the dashboard sidebar, account menu, and Subscription page, updating live after every rewrite.
+              - listitem [ref=f12e507]: "Auto Enhance Prompt setting (Settings -> Recording Behavior): every dictation is rewritten into a polished AI prompt before pasting, with fallback to your exact words if enhancing fails."
+              - listitem [ref=f12e508]: "Parakeet V3 local model: on-device multilingual transcription across 25 languages with auto-detect."
+              - listitem [ref=f12e509]: Optional recording start/stop chimes (Settings -> Behavior).
+              - listitem [ref=f12e510]: Widget quick-action buttons now show a pointer cursor and hover styling on macOS.
+          - generic [ref=f12e511]:
+            - paragraph [ref=f12e512]: Changed
+            - list [ref=f12e513]:
+              - listitem [ref=f12e514]: "The floating widget now follows your theme: pure-black capsules with white text on Black, the inverse on Light - pill, toast, and quick actions included."
+              - listitem [ref=f12e515]: Polish and Enhance Prompt return only the rewritten text - no chatty preamble, options, or commentary - backed by a rebuilt rewrite engine.
+              - listitem [ref=f12e516]: Theme system consolidated to two themes, Black and Light; legacy theme choices migrate automatically.
+          - generic [ref=f12e517]:
+            - paragraph [ref=f12e518]: Fixed
+            - list [ref=f12e519]:
+              - listitem [ref=f12e520]: Windows 11 push-to-talk no longer goes dead after updating the app.
+              - listitem [ref=f12e521]: Releasing the push-to-talk key now stops recording instantly instead of hanging until a watchdog timer.
+              - listitem [ref=f12e522]: Double tray icons on macOS and Windows.
+              - listitem [ref=f12e523]: Shortcuts page no longer sticks on 'Waiting for system access' after saving.
+              - listitem [ref=f12e524]: White-on-white button text on the Black theme.
+              - listitem [ref=f12e525]: Startup crash 'Importing a module script failed' from stale dev chunks.
+        - article [ref=f12e526]:
+          - generic [ref=f12e527]:
+            - generic [ref=f12e528]: v2.2.57
+            - generic [ref=f12e529]: 2026-06-10
+          - heading [level=3] [ref=f12e530]:
+            - link "Auth-hiccup recording grace, harder Windows focus restore, faster startup" [ref=f12e531] [cursor=pointer]:
+              - /url: /changelog/bridgevoice/v2-2-57
+          - paragraph [ref=f12e532]: Paying builders keep push-to-talk through token-refresh hiccups, Windows focus restore escalates before falling back to manual paste, and both webviews start faster with per-window code splitting and a leaner widget render path.
+          - list [ref=f12e533]:
+            - listitem [ref=f12e534]:
+              - generic [ref=f12e535]: Recording survives sign-in hiccups.
+              - text: A session waiting on token refresh no longer locks the recording shortcuts for paying builders — the gate honors the cached subscription while sign-in self-heals in the background.
+            - listitem [ref=f12e536]:
+              - generic [ref=f12e537]: "Windows: focus restore retries harder."
+              - text: When Windows refuses to return focus to the target app, BridgeVoice now escalates with an input-state nudge and retries before falling back to clipboard paste.
+            - listitem [ref=f12e538]:
+              - generic [ref=f12e539]: Faster widget and dashboard startup.
+              - text: Each webview now loads only its own code, fonts are self-hosted, and the live waveform renders in an isolated frame-coalesced island.
+          - generic [ref=f12e540]:
+            - paragraph [ref=f12e541]: Added
+            - list [ref=f12e542]:
+              - listitem [ref=f12e543]: "Hotkey self-diagnostics: BridgeVoice now detects the instant-stop failure signature (recordings ended by the release watchdog within 100 ms, repeatedly) and reports it automatically, so a regression of the v2.2.53 class surfaces in hours instead of via bug reports."
+          - generic [ref=f12e544]:
+            - paragraph [ref=f12e545]: Changed
+            - list [ref=f12e546]:
+              - listitem [ref=f12e547]: Widget and dashboard load as separate lazy chunks — the always-on pill no longer parses the dashboard's entire module graph at launch, and vice versa.
+              - listitem [ref=f12e548]: The live waveform is an isolated, memoized component with frame-coalesced updates, so audio levels no longer re-render the whole widget ~33 times per second.
+              - listitem [ref=f12e549]: Fonts are self-hosted via @fontsource; the webview no longer blocks on a Google Fonts stylesheet at launch.
+              - listitem [ref=f12e550]: Dictionary, statistics, and audio-device commands moved off the main/UI thread, removing event-loop freezes during dictation and dashboard refreshes.
+              - listitem [ref=f12e551]: "Release hardening: builds now refuse to ship a consuming keyboard hook (CI guard), and the release pipeline pushes tags atomically and verifies the build workflow actually starts — closing the gap that silently skipped v2.2.55."
+          - generic [ref=f12e552]:
+            - paragraph [ref=f12e553]: Fixed
+            - list [ref=f12e554]:
+              - listitem [ref=f12e555]: A paying builder whose token refresh failed transiently saw "Pro subscription required" on every shortcut press until the background refresher recovered. The recording gate now stays open while the session is merely expired with a valid refresh token and the cached subscription is inside its paid period; each press also doubles as a recovery attempt.
+              - listitem [ref=f12e556]: "Windows: focus restore failures (the \"paste manually\" fallback) now retry once after a benign Alt tap that lifts the foreground lock — the same escalation AutoHotkey uses — and remaining failures are tagged with the refusing app so they can be fixed per-target."
+              - listitem [ref=f12e557]: "macOS: hotkey dispatch moved off the event-tap callback onto a worker thread, so showing windows or emitting events can no longer stall the tap into a system-disabled state mid-hold."
+              - listitem [ref=f12e558]: "Startup: the Whisper model probe hashes candidate files on the blocking pool and no longer holds the model-manager lock, so other commands aren't blocked while models verify."
+              - listitem [ref=f12e559]: "Recording start latency: the post-start capture probe no longer adds 25-50 ms of perceived delay on healthy recordings."
+        - button "Show 7 older BridgeVoice releases" [ref=f12e560]
+        - navigation "Older BridgeVoice releases" [ref=f12e561]:
+          - list [ref=f12e562]:
+            - listitem [ref=f12e563]:
+              - link "v2.2.56" [ref=f12e564] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-56
+            - listitem [ref=f12e565]:
+              - link "v2.2.55" [ref=f12e566] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-55
+            - listitem [ref=f12e567]:
+              - link "v2.2.54" [ref=f12e568] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-54
+            - listitem [ref=f12e569]:
+              - link "v2.2.53" [ref=f12e570] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-53
+            - listitem [ref=f12e571]:
+              - link "v2.2.52" [ref=f12e572] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-52
+            - listitem [ref=f12e573]:
+              - link "v2.2.51" [ref=f12e574] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-51
+            - listitem [ref=f12e575]:
+              - link "v2.2.50" [ref=f12e576] [cursor=pointer]:
+                - /url: /changelog/bridgevoice/v2-2-50
+    - generic [ref=f12e578]:
+      - heading "BridgeAgent" [level=2] [ref=f12e579]
+      - generic [ref=f12e580]:
+        - article [ref=f12e581]:
+          - generic [ref=f12e582]:
+            - generic [ref=f12e583]: v0.1.9
+            - generic [ref=f12e584]: 2026-07-02
+          - heading [level=3] [ref=f12e585]:
+            - link "A runtime that updates itself" [ref=f12e586] [cursor=pointer]:
+              - /url: /changelog/bridgeagent/v0-1-9
+          - paragraph [ref=f12e587]: "No more running bridge update by hand: the app now watches the bridge CLI, brings its own installs current in place, and hands you the exact command when the install is yours."
+          - list [ref=f12e588]:
+            - listitem [ref=f12e589]:
+              - generic [ref=f12e590]: Runtime updates, handled.
+              - text: The app checks the installed bridge CLI 20 seconds after launch and then hourly. An app-managed install behind the version this build expects updates in place, and the agent picks up the new code on its next message. No restart, no terminal.
+            - listitem [ref=f12e591]:
+              - generic [ref=f12e592]: Your install stays yours.
+              - text: Installed the CLI yourself, via pipx, git, or your own PATH? The app never touches it. A toast surfaces the bridge update command to copy, and a runtime newer than the pin is always left alone.
+            - listitem [ref=f12e593]:
+              - generic [ref=f12e594]: See exactly what's installed.
+              - text: "Settings → About gains a runtime card: the installed CLI version next to the one this build expects, a check button in packaged builds, and a clear error strip when an update can't land."
+          - generic [ref=f12e595]:
+            - paragraph [ref=f12e596]: Added
+            - list [ref=f12e597]:
+              - listitem [ref=f12e598]: "Background runtime reconciliation: the bridge CLI is checked 20 seconds after launch and then hourly, and app-managed installs behind the build's pinned runtime (0.17.3) update in place. The gateway restarts on the next message, so the update needs no app restart."
+              - listitem [ref=f12e599]: "Runtime update toast: managed installs announce when they've been brought current; self-managed installs get the exact bridge update command to copy instead of being touched. The app never downgrades a runtime you've updated past the pin."
+              - listitem [ref=f12e600]: Settings → About runtime card showing the installed CLI version against the version this build expects, with a manual check in packaged builds.
+        - article [ref=f12e601]:
+          - generic [ref=f12e602]:
+            - generic [ref=f12e603]: v0.1.8
+            - generic [ref=f12e604]: 2026-07-02
+          - heading [level=3] [ref=f12e605]:
+            - link "Sessions that stay signed in" [ref=f12e606] [cursor=pointer]:
+              - /url: /changelog/bridgeagent/v0-1-8
+          - paragraph [ref=f12e607]: Session refresh now recovers from expired tokens instead of dead-ending in 401s, Codex sign-in runs right in Settings, and realtime voice replies get a speaking-speed picker.
+          - list [ref=f12e608]:
+            - listitem [ref=f12e609]:
+              - generic [ref=f12e610]: Session refresh that recovers.
+              - text: "An expired access token no longer strands the app: the API proxy force-refreshes and retries once, and the launch-time session check heals a drifted token instead of silently failing."
+            - listitem [ref=f12e611]:
+              - generic [ref=f12e612]: Codex sign-in from Settings.
+              - text: OpenAI Codex OAuth now runs the CLI's device-code flow inside the app — it shows the code, opens the browser, and confirms when the sign-in lands. No terminal detour.
+            - listitem [ref=f12e613]:
+              - generic [ref=f12e614]: Voice replies at your speed.
+              - text: Pick how fast realtime voice answers speak, from 0.25x to 1.5x. The choice applies on the next connect.
+          - generic [ref=f12e615]:
+            - paragraph [ref=f12e616]: Added
+            - list [ref=f12e617]:
+              - listitem [ref=f12e618]: "Device-code OAuth sign-in for OpenAI Codex in Settings and onboarding: start the flow, get the verification code, and the app confirms when the browser sign-in lands. Replaces the dead end where an expired Codex session had no re-auth path."
+              - listitem [ref=f12e619]: Speaking-speed picker for realtime voice replies (0.25x-1.5x), applied at connect time and clamped so a hand-edited preference can't break the session.
+          - generic [ref=f12e620]:
+            - paragraph [ref=f12e621]: Changed
+            - list [ref=f12e622]:
+              - listitem [ref=f12e623]: "Loops board rework: tone-colored progress rings with state glyphs, a stalled indicator, and every non-running loop can be restarted."
+              - listitem [ref=f12e624]: Bundled runtime pin bumped to 0.17.3.
+          - generic [ref=f12e625]:
+            - paragraph [ref=f12e626]: Fixed
+            - list [ref=f12e627]:
+              - listitem [ref=f12e628]: "Expired-session 401 loop: a rejected access token now forces a real refresh (bypassing the local freshness check that made retries a no-op) and retries the request once. Applies to voice session minting and profile loads."
+              - listitem [ref=f12e629]: Parallel requests that hit a 401 at the same time now share one refresh instead of firing several back-to-back.
+        - article [ref=f12e630]:
+          - generic [ref=f12e631]:
+            - generic [ref=f12e632]: v0.1.0
+            - generic [ref=f12e633]: 2026-06-10
+          - heading [level=3] [ref=f12e634]:
+            - link "BridgeAgent Desktop ships" [ref=f12e635] [cursor=pointer]:
+              - /url: /changelog/bridgeagent/v0-1-0
+          - paragraph [ref=f12e636]: "The first desktop build of BridgeAgent: a native control surface for the self-improving agent runtime with guided install, chat, the agent map, scheduled responsibilities, voice, and signed auto-updates from day one."
+          - list [ref=f12e637]:
+            - listitem [ref=f12e638]:
+              - generic [ref=f12e639]: A native home for the agent.
+              - text: Chat with streaming sessions, browse the agent map, and schedule responsibilities — the desktop app drives the locally installed bridge CLI without embedding it.
+            - listitem [ref=f12e640]:
+              - generic [ref=f12e641]: Guided runtime install.
+              - text: The app detects an existing bridge CLI across install layouts, or walks builders through installing the runtime with live stage-by-stage progress.
+            - listitem [ref=f12e642]:
+              - generic [ref=f12e643]: Signed auto-updates.
+              - text: Updates download in the background from downloads.bridgemind.ai and are cryptographically verified before install — restart when ready and keep working.
+          - generic [ref=f12e644]:
+            - paragraph [ref=f12e645]: Added
+            - list [ref=f12e646]:
+              - listitem [ref=f12e647]: Chat workspace with streaming sessions, split panes, drag-and-drop image attachments, and a fast SQLite session list that opens chats without waiting on the CLI.
+              - listitem [ref=f12e648]: "Agent map and responsibilities: browse what the agent knows and schedule recurring jobs with cron-backed delivery."
+              - listitem [ref=f12e649]: Voice input and live conversation — spoken prompts become text, and a realtime voice dock can drive the agent hands-free.
+              - listitem [ref=f12e650]: Onboarding that detects an existing bridge CLI (PATH, installer layouts, legacy locations) or installs the runtime step by step.
+              - listitem [ref=f12e651]: "Auto-update pipeline: background checks shortly after launch and hourly, signature-verified downloads, and a restart prompt when an update is staged. Linux deb/rpm installs get a manual download path in Settings → About."
+  - contentinfo [ref=f12e652]:
+    - generic [ref=f12e653]:
+      - generic [ref=f12e654]:
+        - generic [ref=f12e655]:
+          - link "BridgeMind — home" [ref=f12e656] [cursor=pointer]:
+            - /url: /
+            - img "BridgeMind" [ref=f12e657]
+          - paragraph [ref=f12e658]: "The Agent Super App: AI agents on routines, a workspace for vibe coding, and AI chat — native on Mac, Windows, and Linux."
+          - list [ref=f12e659]:
+            - listitem [ref=f12e660]:
+              - link "BridgeMind on Discord" [ref=f12e661] [cursor=pointer]:
+                - /url: https://discord.gg/bridgemind
+            - listitem [ref=f12e664]:
+              - link "BridgeMind on YouTube" [ref=f12e665] [cursor=pointer]:
+                - /url: https://www.youtube.com/@bridgemindai
+            - listitem [ref=f12e668]:
+              - link "BridgeMind on X" [ref=f12e669] [cursor=pointer]:
+                - /url: https://x.com/bridgemindai
+            - listitem [ref=f12e672]:
+              - link "BridgeMind on GitHub" [ref=f12e673] [cursor=pointer]:
+                - /url: https://github.com/bridge-mind
+        - navigation "Footer" [ref=f12e676]:
+          - generic [ref=f12e677]:
+            - paragraph [ref=f12e678]: Product
+            - list "Product" [ref=f12e680]:
+              - listitem [ref=f12e681]:
+                - link "Download" [ref=f12e682] [cursor=pointer]:
+                  - /url: /#download
+              - listitem [ref=f12e684]:
+                - link "Overview" [ref=f12e685] [cursor=pointer]:
+                  - /url: /#product
+              - listitem [ref=f12e687]:
+                - link "Vibe coding" [ref=f12e688] [cursor=pointer]:
+                  - /url: /#vibe-coding
+              - listitem [ref=f12e690]:
+                - link "Capabilities" [ref=f12e691] [cursor=pointer]:
+                  - /url: /#capabilities
+              - listitem [ref=f12e693]:
+                - link "Pricing" [ref=f12e694] [cursor=pointer]:
+                  - /url: /pricing
+          - generic [ref=f12e696]:
+            - paragraph [ref=f12e697]: Learn
+            - list "Learn" [ref=f12e699]:
+              - listitem [ref=f12e700]:
+                - link "Docs" [ref=f12e701] [cursor=pointer]:
+                  - /url: https://docs.bridgemind.ai
+              - listitem [ref=f12e706]:
+                - link "Developers" [ref=f12e707] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f12e709]:
+                - link "FAQ" [ref=f12e710] [cursor=pointer]:
+                  - /url: /#faq
+              - listitem [ref=f12e712]:
+                - link "Changelog" [ref=f12e713] [cursor=pointer]:
+                  - /url: /changelog
+          - generic [ref=f12e715]:
+            - paragraph [ref=f12e716]: Community
+            - list "Community" [ref=f12e718]:
+              - listitem [ref=f12e719]:
+                - link "Discord" [ref=f12e720] [cursor=pointer]:
+                  - /url: /discord
+              - listitem [ref=f12e722]:
+                - link "YouTube" [ref=f12e723] [cursor=pointer]:
+                  - /url: https://www.youtube.com/@bridgemindai
+              - listitem [ref=f12e728]:
+                - link "X" [ref=f12e729] [cursor=pointer]:
+                  - /url: https://x.com/bridgemindai
+              - listitem [ref=f12e734]:
+                - link "GitHub" [ref=f12e735] [cursor=pointer]:
+                  - /url: https://github.com/bridge-mind
+          - generic [ref=f12e740]:
+            - paragraph [ref=f12e741]: Company
+            - list "Company" [ref=f12e743]:
+              - listitem [ref=f12e744]:
+                - link "Contact" [ref=f12e745] [cursor=pointer]:
+                  - /url: /contact
+              - listitem [ref=f12e747]:
+                - link "Privacy" [ref=f12e748] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=f12e750]:
+                - link "Terms" [ref=f12e751] [cursor=pointer]:
+                  - /url: /terms
+      - paragraph [ref=f12e754]: © 2026 BridgeMind·Built by BridgeMind LLC
+    - generic [aria-hidden]:
+      - paragraph: BRIDGEMIND
+  - alert [ref=f12e755]

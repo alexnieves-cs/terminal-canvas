@@ -87,7 +87,7 @@ export interface PanelFrameProps {
 }
 
 /** M69. The word a sessionless kind shows in its summary's state slot. */
-const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', chat: 'chat', memory: 'memory' }
+const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', chat: 'chat', memory: 'memory', watcher: 'watcher' }
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentState,

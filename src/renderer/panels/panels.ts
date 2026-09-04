@@ -1,4 +1,5 @@
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
+import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
@@ -160,7 +161,21 @@ export interface ChatPanel extends PanelBase {
   chat: ChatSource
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel | ChatPanel
+/**
+ * M84. A watcher — the EIGHTH kind, and the second process node that is not a
+ * terminal. Its process is main's (`watch-runner.ts`), addressed by this
+ * panel's id, and it has no spec: like the chat panel it never reaches
+ * assignTiers, `registry.ensure` or the live budget, and isTerminalPanel's
+ * seventh clause is the one line that keeps that structural rather than
+ * remembered.
+ */
+export interface WatcherPanel extends PanelBase {
+  kind: 'watcher'
+  /** `armed` ABSENT means armed — the ordinary case and every pre-toggle file. */
+  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false }
+}
+
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel | ChatPanel | WatcherPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -200,6 +215,10 @@ export function isChatPanel(panel: Panel): panel is ChatPanel {
   return panel.kind === 'chat'
 }
 
+export function isWatcherPanel(panel: Panel): panel is WatcherPanel {
+  return panel.kind === 'watcher'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -221,7 +240,7 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
-    !isChatPanel(panel)
+    !isChatPanel(panel) && !isWatcherPanel(panel)
   )
 }
 
@@ -699,6 +718,22 @@ export function makeToolboxPanel(
 }
 
 /** M83. A memory node: the project memory for one repository, as a document. */
+export const WATCHER_W = 520
+export const WATCHER_H = 340
+
+/** M84. A watcher node, at the cascade centre like every other minted kind. */
+export function makeWatcherPanel(
+  id: string, centre: Point, z: number,
+  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger }
+): WatcherPanel {
+  return {
+    kind: 'watcher',
+    rect: { id, x: centre.x - WATCHER_W / 2, y: centre.y - WATCHER_H / 2, w: WATCHER_W, h: WATCHER_H },
+    z,
+    watch: { cwd: watch.cwd, command: watch.command, args: [...watch.args], trigger: watch.trigger }
+  }
+}
+
 export const MEMORY_W = 460
 export const MEMORY_H = 420
 

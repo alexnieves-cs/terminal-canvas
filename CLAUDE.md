@@ -66,14 +66,14 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | ~190 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | ~192 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:palette` | plain node | ~122 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~157 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:rail` | plain node | ~158 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~96 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
-| `verify:file` | plain node | ~40 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
+| `verify:file` | plain node | ~42 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
 | `verify:usage` | plain node | ~26 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
@@ -91,7 +91,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 80 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | ~290 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | ~293 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -151,6 +151,8 @@ renderer --invoke--> env:report                                                 
 renderer --invoke--> link:open                                                    --> main
 renderer --invoke--> ledger:list                                                  --> main
 renderer --invoke--> memory:list / memory:add                                     --> main
+renderer --invoke--> watcher:create / watcher:run / watcher:stop                   --> main
+renderer --invoke--> watcher:dispose / watcher:list                               --> main
 renderer --invoke--> spawn:sheet / spawn:recent                                   --> main
 renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
 renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import  --> main
@@ -168,6 +170,7 @@ main     --send-->   attention:jump                                            -
 main     --send-->   settings:changed                                          --> renderer
 main     --send-->   spawn:open-sheet                                          --> renderer
 main     --send-->   agent:event (batched ~16ms)                                 --> renderer
+main     --send-->   watcher:state                                                --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
@@ -310,6 +313,15 @@ check does not, and should not, cover it.
   loses its turn, and a budget is a stop) and says so once, latched until the ceiling is
   raised above the spend. The spend is the sum of the sessions' own `costUsd`, the CLI's
   cumulative figure; a session with no figure counts as nothing.
+- `src/main/watch-runner.ts` — M84. The watcher's runner: one command per watcher, run
+  when its trigger says so, with NO pty anywhere in it. The process seam is injected
+  (`agent-runner.ts`'s shape), so the coalesce, the exit arms, the capped tail and the ledger
+  row all run under plain node in `verify:file watch.1`. ARMING is `main/index.ts`'s — a
+  recursive `fs.watch` for a directory, `FileWatchers` for a file (including a git trigger's
+  `.git/HEAD`), an interval for a timer — and the `panel` trigger is the RENDERER's, fired
+  from the same events and the same `handoffFires` table the graph's edges ask.
+  `shared/watch-trigger.ts` is the union and the one phrase every surface says it with;
+  `renderer/watcher/` holds the node, the per-panel store mirror and the palette's parse.
 - `src/main/memory-store.ts` — M83. The project memory: ONE append-only JSONL per
   repository under `userData/memory`, named by the root's slug (the scrollback log's shape),
   every write scrubbed by `shared/redact.ts` and carrying its `redacted` count, ring-trimmed

@@ -1,4 +1,4 @@
-import { isFilePanel, isJiraPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel } from '@renderer/panels/panels'
 
 /**
  * M64. IDENTITY LEADS, PROVENANCE FOLLOWS (brief, principle 3).
@@ -50,6 +50,9 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
     const root = panel.source.root.replace(/\/+$/, '')
     return `memory · ${root.slice(root.lastIndexOf('/') + 1) || root}`
   }
+  // M84. `watcher · <command>` — the name is what it runs; the trigger is
+  // the row's trailing phrase, not part of its identity.
+  if (isWatcherPanel(panel)) return `watcher · ${panel.watch.command.split('/').pop() ?? panel.watch.command}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -61,5 +64,6 @@ export function panelPath(panel: Panel): string | undefined {
   if (isToolboxPanel(panel)) return panel.source.cwd
   if (isChatPanel(panel)) return panel.chat.cwd
   if (isMemoryPanel(panel)) return panel.source.root
+  if (isWatcherPanel(panel)) return panel.watch.cwd
   return panel.spec.cwd
 }

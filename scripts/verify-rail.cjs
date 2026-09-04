@@ -2634,6 +2634,53 @@ console.log('\n' + '='.repeat(60))
     none === 'no permission rules in this directory' && some === '3 allow · 1 deny · 1 ask in 2 files',
     JSON.stringify({ none, some }))
 }
+// M84 — watch-words.1. THE TRIGGER VOCABULARY, and the palette's parse of it.
+//      One table for the phrase every surface says (a second copy is exactly
+//      the drift `trigger-words.ts` exists to prevent), and a parse that
+//      REFUSES what it does not understand: a guess arms a real command
+//      against a path that does not exist, and the user finds out by watching
+//      it never run. `after this passes` is the milestone's headline sentence
+//      and is only reachable when a source panel is selected.
+{
+  const W = R
+  const src = { id: 'n3', label: 'tests' }
+  const words = {
+    path: W.triggerWord({ kind: 'path', path: '/repo/src/' }),
+    git: W.triggerWord({ kind: 'git-ref', root: '/repo' }),
+    timer: W.triggerWord({ kind: 'timer', everyMs: 90000 }),
+    panelBare: W.triggerWord({ kind: 'panel', sourceId: 'n3', on: 'exit-ok' }),
+    panelLabelled: W.triggerWord({ kind: 'panel', sourceId: 'n3', on: 'exit-ok' }, 'tests')
+  }
+  const parse = (t, source) => W.parseTriggerWords(t, '/repo', source)
+  const parsed = {
+    dir: parse('src'),
+    absolute: parse('/elsewhere/pkg'),
+    dotted: parse('./src'),
+    timer: parse('every 10m'),
+    bareTimer: parse('10m'),
+    seconds: parse('every 30s'),
+    branch: parse('branch'),
+    tooFast: parse('every 1s'),
+    typo: parse('evry 10m'),
+    afterNoSource: parse('after this passes'),
+    after: parse('after this passes', src),
+    afterFails: parse('when this fails', src),
+    afterTurn: parse('after this finishes', src),
+    afterNonsense: parse('after this thing', src)
+  }
+  ok('watch-words.1 the trigger phrase comes from one table (and takes a panel LABEL when the canvas has one); the palette parses a path, a timer and a branch, refuses a timer below the floor and an `every` typo rather than reading it as a path, and reads `after this passes` only when a source panel is selected',
+    /on a change in src$/.test(words.path) && words.git === 'when the branch moves' &&
+      words.timer === 'every 1m 30s' && /n3/.test(words.panelBare) && /tests exits 0/.test(words.panelLabelled) &&
+      parsed.dir.kind === 'path' && parsed.dir.path === '/repo/src' &&
+      parsed.absolute.path === '/elsewhere/pkg' && parsed.dotted.path === '/repo/src' &&
+      parsed.timer.everyMs === 600000 && parsed.bareTimer.everyMs === 600000 && parsed.seconds.everyMs === 30000 &&
+      parsed.branch.kind === 'git-ref' && parsed.tooFast === null && parsed.typo === null &&
+      parsed.afterNoSource === null &&
+      parsed.after.kind === 'panel' && parsed.after.on === 'exit-ok' && parsed.after.sourceId === 'n3' &&
+      parsed.afterFails.on === 'exit-fail' && parsed.afterTurn.on === 'idle' && parsed.afterNonsense === null,
+    JSON.stringify({ words, parsed }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

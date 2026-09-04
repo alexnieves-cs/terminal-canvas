@@ -1,3 +1,4 @@
+import type { WatchTrigger } from './watch-trigger'
 import type { RunRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from './agent-session'
 import type { PermissionAnswer } from './transcript'
@@ -34,6 +35,33 @@ import type { PersistedTemplate } from './templates'
  * hundred entries and says nothing (M83's verifier).
  */
 export const MEMORY_MAX = 500
+
+/** M84. What a watcher needs to be armed: its id, its command and its trigger. */
+export interface WatcherCreateRequest {
+  id: string
+  cwd: string
+  command: string
+  args: string[]
+  trigger: WatchTrigger
+  /** M84. `false` arms nothing: the watcher is known and runnable by hand, and its trigger is off. */
+  armed?: boolean
+}
+
+export type WatcherCreateResult = { ok: true } | { ok: false; reason: string }
+
+/** M84. One watcher's state, as main knows it. `tail` is capped; nothing durable. */
+export interface WatcherStateEvent {
+  id: string
+  status: 'not-started' | 'running' | 'passed' | 'exited'
+  exitCode?: number | null
+  signal?: string | null
+  tail: string
+  startedAt?: number
+  endedAt?: number
+  pending: boolean
+  /** The trigger could not be armed, in words the node's body shows. */
+  disarmed?: string
+}
 
 export interface MemoryEntryRow {
   kind: 'decided' | 'tried' | 'failed' | 'note'
@@ -194,6 +222,17 @@ export const IPC = {
   /** M83. The project memory, for the node that renders it and the chat that carries it. */
   MEMORY_LIST: 'memory:list',
   MEMORY_ADD: 'memory:add',
+  /**
+   * M84. The watcher runtime. `create` is idempotent at an id (a restored
+   * canvas re-arms every watcher it holds, and re-arming must not double any
+   * trigger); `run` is the manual verb; `stop` kills the run in flight;
+   * `dispose` disarms and forgets. State arrives on WATCHER_STATE.
+   */
+  WATCHER_CREATE: 'watcher:create',
+  WATCHER_RUN: 'watcher:run',
+  WATCHER_STOP: 'watcher:stop',
+  WATCHER_DISPOSE: 'watcher:dispose',
+  WATCHER_LIST: 'watcher:list',
   /**
    * The settings surface. Renderer -> main and invokes, not events, for the
    * same reason M5b's preset mutations are: main owns the store, because the
@@ -568,6 +607,8 @@ export const IPC_EVENTS = {
    * token never costs a render.
    */
   AGENT_EVENT: 'agent:event',
+  /** M84. One watcher's state, sent as it changes (the tail is batched by the runner's own flush). */
+  WATCHER_STATE: 'watcher:state',
   /**
    * Where a panel is and what it is running, pushed when either CHANGES.
    *
@@ -1095,6 +1136,18 @@ export interface CanvasBridge {
     /** M74. See AGENT_IMPORT. */
     importSession(req: AgentImportRequest): Promise<AgentImportResult>
     onEvent(listener: (event: AgentSessionEvent) => void): () => void
+  }
+  /** M84. The watcher runtime: a command run on a trigger, with no PTY. */
+  watcher: {
+    /** Idempotent at an id: re-arming a restored watcher must not double its trigger. Refuses by name (no such directory; a trigger that cannot be armed). */
+    create(req: WatcherCreateRequest): Promise<WatcherCreateResult>
+    /** Run now, whatever the trigger says. */
+    run(id: string): Promise<void>
+    /** Stop the run in flight; nothing if none is. */
+    stop(id: string): Promise<void>
+    dispose(id: string): Promise<void>
+    list(): Promise<WatcherStateEvent[]>
+    onState(listener: (event: WatcherStateEvent) => void): () => void
   }
   spawn: {
     /** M65. See SPAWN_SHEET. Refuses with a reason rather than spawning into a directory that is not there. */

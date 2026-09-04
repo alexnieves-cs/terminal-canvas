@@ -46,5 +46,9 @@ module.exports = {
      type-only imports, the reason every model above joined. */
   ...require('../src/renderer/chat/chat-model'),
   /* M75. The composer's pure model: triggers, completions, placeholders. */
-  ...require('../src/renderer/chat/composer-model')
+  ...require('../src/renderer/chat/composer-model'),
+  /* M84. The watcher's trigger vocabulary and the palette's parse of it —
+     pure, and the parse decides what a real command gets armed against. */
+  ...require('../src/shared/watch-trigger'),
+  ...require('../src/renderer/watcher/trigger-input')
 }

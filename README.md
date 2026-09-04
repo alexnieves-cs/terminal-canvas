@@ -364,6 +364,8 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        diagnostics:sample / diagnostics:export
                        export:panel-text / export:canvas-png
                        memory:list / memory:add
+                       watcher:create / watcher:run / watcher:stop
+                       watcher:dispose / watcher:list
                        env:report / link:open / ledger:list
                        spawn:sheet / spawn:recent
                        agent:create / agent:send / agent:interrupt / agent:dispose
@@ -374,7 +376,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
-                       agent:event (batched ~16ms)
+                       agent:event (batched ~16ms) / watcher:state
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -834,6 +836,7 @@ price of not killing something.
 | M73 | The chat panel: the sixth `Panel` kind — a conversation with the installed `claude` over M71's runtime, streaming, interruptible, its permission questions answered inline, its transcript a file that survives a relaunch, in the one state vocabulary | ✅ done |
 | M74 | Same agent, two front-ends: a claude terminal opens as a chat with its session's own transcript rendered and continued, a chat opens in a terminal with `claude --resume`; one front-end at a time, refused by name otherwise | ✅ done |
 | M75 | The composer: `@` references completed from the panel's directory, dropped or pasted images as image blocks (never a temp file), dropped files as references, `/` project and saved prompts, and `{{ }}` placeholders filled before insertion for saved prompts on both front-ends | ✅ done |
+| M84 | The watcher: a node that runs a command when something happens — a change under a path, a branch that moves, a timer, or another node ending through the same handoff table — reporting the last run's pass or fail in the app's one state vocabulary, keeping its run-ledger rows, showing that run's output tail, and never taking a PTY or a live-budget slot | ✅ done |
 | M83 | Memory: what a repository has decided, tried and failed, as one append-only per-repository store that people and agents write to through the same door — a `memory` control verb and `tc memory add`, a seventh panel kind that lists it and adds to it, and a chat's first message carrying the recent entries with a line above the composer saying how many, so nothing is sent that was not shown | ✅ done |
 | M82 | Budgets and queues that stop work: `agents.maxConcurrent` queues a send past the ceiling with its own reason, and `agents.budgetUsd` refuses a send past the budget by name with the fix, interrupting every turn in flight once per crossing — never killing, and never storing a refused message as a turn | ✅ done |
 | M81 | The supervisor: `tc status`, a read-only control verb answering with the canvas model — every panel's state word, the edges' triggers, the runs and their cost — in the canvas's own vocabulary; and a supervisor panel, a chat created with a system prompt that tells it to read the canvas with `tc status` and answer in those words, one per canvas, its first question left unsent in its composer | ✅ done |
