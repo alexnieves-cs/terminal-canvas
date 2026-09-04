@@ -1,5 +1,5 @@
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
-import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NOT_CLAUDE_SESSION, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
+import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_CHAT_NO_BASELINE, REASON_NOT_CLAUDE_SESSION, REASON_NOT_STARTED, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
@@ -43,6 +43,13 @@ export interface InspectorModel {
   id: string
   /** M74. See FrontEndVerb. Absent on every kind but terminal and chat. */
   frontEnd?: FrontEndVerb
+  /**
+   * M77. Whether `Open review` can act: a terminal's is `restartable` (one
+   * fact, the same the Restart verb asks); a chat's is "its agent has run".
+   * `reviewReason` names the fix when it cannot, in the kind's own words.
+   */
+  reviewable: boolean
+  reviewReason?: string
   /** M76. A chat's pending request; absent at rest and on every other kind. The pane disables its verbs by name from this. */
   approval?: PendingApproval
   /**
@@ -412,6 +419,8 @@ export interface ChatInspectorInput {
   turns: number
   /** M76. The oldest pending permission request, when one is. */
   approval?: PendingApproval
+  /** M77. `chatHasRun` — the one definition the palette row shares. */
+  ran?: boolean
 }
 
 export function buildInspectorModel(
@@ -489,8 +498,11 @@ export function buildInspectorModel(
     }
     const chatBusy = chat !== undefined && (chat.state.status === 'streaming' || chat.state.pending > 0)
     const chatTurns = chat?.turns ?? 0
+    const chatReviewable = chat !== undefined && (chat.ran === true || chat.turns > 0)
     return {
       kind: 'chat',
+      reviewable: chatReviewable,
+      ...(chatReviewable ? {} : { reviewReason: REASON_CHAT_NO_BASELINE }),
       ...(chat?.approval === undefined ? {} : { approval: chat.approval }),
       frontEnd: {
         verb: 'open-in-terminal',
@@ -518,6 +530,7 @@ export function buildInspectorModel(
   if (isReviewPanel(panel)) {
     return {
       kind: 'review',
+      reviewable: false,
       state: { kind: 'review', status: undefined, dormant: false },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
@@ -548,6 +561,7 @@ export function buildInspectorModel(
     const cut = path.lastIndexOf('/')
     return {
       kind: 'file',
+      reviewable: false,
       state: { kind: panel.source.prose === true ? 'note' : 'file', status: undefined, dormant: false },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
@@ -574,6 +588,7 @@ export function buildInspectorModel(
   if (isToolboxPanel(panel)) {
     return {
       kind: 'toolbox',
+      reviewable: false,
       state: { kind: 'toolbox', status: undefined, dormant: false },
       id: panel.rect.id,
       heading: railLabel(panel, undefined),
@@ -593,7 +608,7 @@ export function buildInspectorModel(
       ]
     }
   }
-  if (isJiraPanel(panel)) return { kind: 'jira', state: { kind: 'jira', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
+  if (isJiraPanel(panel)) return { kind: 'jira', reviewable: false, state: { kind: 'jira', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [
     { key: 'command', label: 'command', value: running?.command ?? 'none yet' },
@@ -691,8 +706,11 @@ export function buildInspectorModel(
     panel.spec.agent !== undefined && AGENT_CAPABILITIES[panel.spec.agent].transcriptAccounting
   const isClaude = panel.spec.agent === 'claude-code'
   const processLive = running !== undefined
+  const restartable = isRestartable(status)
   return {
     kind: 'terminal',
+    reviewable: restartable,
+    ...(restartable ? {} : { reviewReason: REASON_NOT_STARTED }),
     frontEnd: {
       verb: 'open-as-chat',
       enabled: isClaude && !processLive,

@@ -89,6 +89,9 @@ export interface PanelRow {
   busy?: boolean
   /** M74. A chat panel's completed turns; zero refuses open-in-terminal by name. */
   turns?: number
+  /** M77. Whether Open review can act, with the kind's own reason when not. Absent falls back to `restartable`. */
+  reviewable?: boolean
+  reviewReason?: string
   /** The word at build time — the `state:` query's key and order. */
   stateWord?: string
   /**
@@ -564,6 +567,8 @@ export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude se
 export const REASON_CHAT_BUSY = 'the chat is still answering — interrupt it first'
 export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has nothing to move'
 export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
+/** M77. A chat with no baseline yet: the review row's own reason. */
+export const REASON_CHAT_NO_BASELINE = 'send a message first — a chat has no baseline until its agent runs'
 /** M76. The one disabled row when nothing pends. */
 export const REASON_NO_APPROVALS = 'no agent is asking for permission'
 
@@ -922,7 +927,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         // written and disagree the first time one of them was wrong.
         ctx.capturedId === null || target === undefined
           ? REASON_NO_FOCUS
-          : (target.restartable ? undefined : REASON_NOT_STARTED)
+          : target.reviewable !== undefined
+            ? (target.reviewable ? undefined : (target.reviewReason ?? REASON_NOT_STARTED))
+            : (target.restartable ? undefined : REASON_NOT_STARTED)
       )
     )
   }

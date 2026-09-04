@@ -3,6 +3,8 @@ import type { ChatPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ChatAttachment } from '@shared/agent-session'
 import type { DirResult } from '@shared/fs-tree'
+import type { ReviewDiff } from '@shared/review'
+import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
@@ -68,14 +70,75 @@ function kb(size: number): string {
   return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : size >= 1024 ? `${Math.round(size / 1024)} KB` : `${size} B`
 }
 
-const ToolRow = memo(function ToolRow({ row }: { row: Extract<ChatRow, { kind: 'tool' }> }): JSX.Element {
+/**
+ * M77. What a tool row's `diff` verb shows: three named answers and the
+ * hunks. `null` is "still reading" — a different sentence from every other
+ * arm, and never collapsed into one of them.
+ */
+type ToolDiff =
+  | null
+  | { kind: 'no-baseline' }
+  | { kind: 'unchanged' }
+  | { kind: 'diff'; diff: ReviewDiff }
+
+const ToolRow = memo(function ToolRow({ row, panelId }: { row: Extract<ChatRow, { kind: 'tool' }>; panelId: string }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const [diffOpen, setDiffOpen] = useState(false)
+  const [diff, setDiff] = useState<ToolDiff>(null)
   const hasResult = row.result !== undefined
+  // The file's diff against THIS chat's baseline: the baseline names the
+  // root, the change list says whether the file changed at all (a Read
+  // most often reads `unchanged`, which is the honest answer), and the diff
+  // is the review node's own query. Stale answers guarded by `live`.
+  useEffect(() => {
+    if (!diffOpen || row.file === undefined) return
+    let live = true
+    const file = row.file
+    setDiff(null)
+    void (async () => {
+      const baseline = await window.canvas.review.baseline(panelId)
+      if (!live) return
+      if (baseline === null) { setDiff({ kind: 'no-baseline' }); return }
+      const result = await window.canvas.review.panel(panelId)
+      if (!live) return
+      // `changes` AND `shared` carry a file list — a repository several panels
+      // share is the ordinary case for a chat beside a terminal (the scene found
+      // it: the row said `could not be read` for a diff the node beside it showed).
+      if (result.kind === 'clean') { setDiff({ kind: 'unchanged' }); return }
+      if (result.kind !== 'changes' && result.kind !== 'shared') { setDiff(result.kind === 'never-started' || result.kind === 'not-a-repo' ? { kind: 'no-baseline' } : { kind: 'diff', diff: { kind: 'unavailable' } }); return }
+      const rel = matchReviewPath(file, result.root, result.files.map((f) => f.path))
+      const entry = rel === null ? undefined : result.files.find((f) => f.path === rel)
+      if (entry === undefined) { setDiff({ kind: 'unchanged' }); return }
+      const d = await window.canvas.review.diff({ repoRoot: result.root, baselineSha: baseline.sha, path: entry.path, untracked: entry.untracked })
+      if (live) setDiff({ kind: 'diff', diff: d })
+    })()
+    return () => { live = false }
+  }, [diffOpen, row.file, panelId])
   return (
     <div className={`chat__row chat__row--tool${row.result?.isError ? ' chat__row--tool-error' : ''}`} data-chat-row="tool" data-chat-tool={row.name}>
       <span className="chat__tool-name">{row.name}</span>
       <span className="chat__tool-input">{shortInput(row.input)}</span>
       {row.live && !hasResult && <span className="chat__tool-running">running</span>}
+      {row.file !== undefined && (
+        <button type="button" className="chat__tool-toggle" data-chat-tool-diff
+          title={diffOpen ? 'Hide the diff' : `Show this file's diff against the chat's baseline`} aria-expanded={diffOpen}
+          {...shellControl(() => setDiffOpen((v) => !v))}>
+          {diffOpen ? 'hide diff' : 'diff'}
+        </button>
+      )}
+      {diffOpen && (
+        <div className="chat__tool-diff" data-chat-tool-diff-body data-chat-tool-diff-state={diff === null ? 'reading' : diff.kind === 'diff' ? diff.diff.kind : diff.kind}>
+          {diff === null ? <p className="review-node__hunk-note">reading…</p>
+            : diff.kind === 'no-baseline' ? <p className="review-node__hunk-note">no baseline — this chat was created outside a repository, or before its agent ran</p>
+            : diff.kind === 'unchanged' ? <p className="review-node__hunk-note">unchanged against the baseline</p>
+            : diff.diff.kind === 'binary' ? <p className="review-node__hunk-note">binary file</p>
+            : diff.diff.kind === 'unavailable' ? <p className="review-node__hunk-note">this diff could not be read</p>
+            : <div className="review-node__hunks" data-review-node-hunks>
+                {diff.diff.lines.map((line, i) => <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>)}
+                {diff.diff.truncated > 0 && <div className="review-node__hunk-note">+{diff.diff.truncated} more lines</div>}
+              </div>}
+        </div>
+      )}
       {hasResult && (
         <button type="button" className="chat__tool-toggle" data-chat-tool-toggle
           title={open ? 'Hide the result' : 'Show the result'} aria-label={open ? 'Hide the result' : 'Show the result'}
@@ -403,7 +466,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               case 'thinking':
                 return <ThinkingRow key={row.id} row={row} />
               case 'tool':
-                return <ToolRow key={row.id} row={row} />
+                return <ToolRow key={row.id} row={row} panelId={id} />
               case 'image':
                 return <div key={row.id} className="chat__row chat__row--user" data-chat-row="image"><span className="chat__role">you</span><span className="chat__image">image · {row.mediaType.replace('image/', '')} · {kb(row.size)}</span></div>
               default:

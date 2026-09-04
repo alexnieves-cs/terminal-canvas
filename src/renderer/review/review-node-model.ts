@@ -72,6 +72,8 @@ export interface ReviewNodeRow {
    * body attached to a row that is gone.
    */
   expanded: boolean
+  /** M77. How many tool calls of a chat subject named this path. Absent for a terminal's node and for an untouched file. */
+  touches?: number
 }
 
 export interface ReviewNodeModel {
@@ -94,8 +96,10 @@ export function buildReviewNodeModel(input: {
   title?: string
   result: ReviewResult | undefined
   expandedPath: string | null
+  /** M77. Tool-call counts by root-relative path, from the subject chat's transcript. Optional so every pre-M77 caller keeps its meaning. */
+  touches?: Record<string, number>
 }): ReviewNodeModel {
-  const { subject, title, result, expandedPath } = input
+  const { subject, title, result, expandedPath, touches } = input
   // The same shape as railLabel's honest chain: the user's own name outranks
   // everything, and the fallback names the SUBJECT rather than the node,
   // because "review" alone tells nobody which agent's work this is. The label
@@ -132,7 +136,8 @@ export function buildReviewNodeModel(input: {
     removed: f.removed,
     binary: f.binary,
     untracked: f.untracked,
-    expanded: f.path === expandedPath
+    expanded: f.path === expandedPath,
+    ...(touches !== undefined && (touches[f.path] ?? 0) > 0 ? { touches: touches[f.path] as number } : {})
   }))
   const more = Math.max(0, result.files.length - NODE_FILE_CAP)
   if (result.kind === 'shared') {
@@ -140,7 +145,11 @@ export function buildReviewNodeModel(input: {
       heading,
       root,
       summary: `${plural(result.files.length, 'file')} changed`,
-      note: `${result.panelCount} panels share this repository, so changes cannot be attributed`,
+      // M77: with tool-call counts on the rows, the sentence must not
+      // contradict them — git cannot attribute; the transcript can.
+      note: touches !== undefined && Object.keys(touches).length > 0
+        ? `${result.panelCount} panels share this repository — git changes are unattributed; tool calls are this chat's own`
+        : `${result.panelCount} panels share this repository, so changes cannot be attributed`,
       files: rows,
       more,
       commit: {

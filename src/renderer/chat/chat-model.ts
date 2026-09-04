@@ -1,6 +1,7 @@
 import type { ContentBlock, TranscriptTurn } from '@shared/transcript'
 import type { AgentSessionSnapshot } from '@shared/agent-session'
 import type { ChatStateInput } from '@renderer/panels/panel-state'
+import { toolFilePath } from '@shared/tool-index'
 import { shortPath } from '@renderer/palette/panel-name'
 
 /**
@@ -25,6 +26,8 @@ export type ChatRow =
       /** Folded under the call by tool_use id; absent while the tool runs. */
       result?: { content: string; isError: boolean }
       live: boolean
+      /** M77. The file this call names, when it names one — the `diff` verb's subject. */
+      file?: string
     }
   | { kind: 'unknown'; id: string; kindName: string }
   /** M75. An attached image: its type and size, never the picture. */
@@ -54,7 +57,7 @@ function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolea
         rows.push({ kind: 'thinking', id, text: texts?.[i] ?? block.text, live })
         return
       case 'tool_use':
-        rows.push({ kind: 'tool', id: block.id || id, name: block.name, input: block.input, live })
+        rows.push({ kind: 'tool', id: block.id || id, name: block.name, input: block.input, live, ...((): { file?: string } => { const f = toolFilePath(block.input); return f === null ? {} : { file: f } })() })
         return
       case 'tool_result':
         // Folded below, never a row of its own.
@@ -120,6 +123,17 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
 }
 
 export const REASON_CHAT_STREAMING = 'the agent is still answering — interrupt it, or wait'
+/**
+ * M77. Whether this chat's agent has RUN — the one definition `Open review`
+ * gates on in the pane and the palette: a process alive, a result seen this
+ * launch, a durable meta line with turns, or a user text turn in the file.
+ */
+export function chatHasRun(state: { snapshot: AgentSessionSnapshot | null; turns: readonly TranscriptTurn[]; meta?: { turns: number } }): boolean {
+  const snap = state.snapshot
+  const alive = snap !== null && snap.pid !== undefined && snap.status !== 'exited' && snap.status !== 'disposed'
+  return alive || (snap !== null && snap.turns > 0) || (state.meta?.turns ?? 0) > 0 || state.turns.some((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text'))
+}
+
 /** M76. The one deny message, whichever surface says it. */
 export const DENY_MESSAGE = 'denied from the canvas'
 /** M76. A question is open: the composer names the fix, which is above it. */

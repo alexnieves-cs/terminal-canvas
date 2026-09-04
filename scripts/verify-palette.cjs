@@ -2078,6 +2078,18 @@ const WS = [
     JSON.stringify({ a: a && a.disabledReason, b: b && b.disabledReason, c: c && c.disabledReason }))
 }
 
+// M77 — tools.1. `Open review` on a chat gates on `reviewable`, with the chat's
+//     own reason when it cannot — never the terminal's `has not started`.
+{
+  const chatRow = (over = {}) => ({ id: 'c1', label: 'chat · api', kind: 'chat', restartable: false, agent: false, ...over })
+  const yes = P.buildCommands(ctx({ capturedId: 'c1', panels: [chatRow({ reviewable: true })] })).find((r) => r.id === 'panel.review')
+  const no = P.buildCommands(ctx({ capturedId: 'c1', panels: [chatRow({ reviewable: false, reviewReason: 'send a message first — a chat has no baseline until its agent runs' })] })).find((r) => r.id === 'panel.review')
+  const legacy = P.buildCommands(ctx({ capturedId: 'c1', panels: [chatRow()] })).find((r) => r.id === 'panel.review')
+  ok('tools.1 Open review on a chat is enabled by reviewable and refused by the chat\'s own reason; a row without the field falls back to restartable',
+    yes && yes.disabledReason === undefined && no && /send a message/.test(no.disabledReason) && legacy && legacy.disabledReason === P.REASON_NOT_STARTED,
+    JSON.stringify({ yes: yes && yes.disabledReason, no: no && no.disabledReason, legacy: legacy && legacy.disabledReason }))
+}
+
 // M76 — approve.1. Two rows per pending request, named with the tool and the
 //     panel, each running the ONE answer verb; with nothing pending one
 //     disabled row whose reason says so — a row that disappears is

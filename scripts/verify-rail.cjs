@@ -2371,6 +2371,57 @@ const session = (id, over = {}) => ({
     JSON.stringify({ pending: pending.approval, state: pending.state, rest: rest.approval, terminal: 'approval' in terminal }))
 }
 
+// M77 — tools.1 / tools.2. TOOL CALLS AS OBJECTS, the pure half.
+//     tools.1: a chat tool row carries the file it names (and none for Bash);
+//     a review node row carries the number of tool calls that touched ITS path
+//     and no other's. tools.2: `reviewable` on the inspector model — a
+//     terminal's is restartable; a chat's is "its agent has run"; a chat at
+//     rest with no turn is refused by a reason that names the fix, not the
+//     terminal's `has not started`.
+{
+  const turns = [
+    { id: 'm1', role: 'assistant', blocks: [
+      { type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: '/repo/src/a.ts' } },
+      { type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'ls' } }
+    ], at: 2 }
+  ]
+  const rows = R.chatRows(turns, null).filter((r) => r.kind === 'tool')
+  const model = R.buildReviewNodeModel({
+    subject: { subjectId: 'c1', repoRoot: '/repo', baselineSha: 'abc', label: 'chat' },
+    result: { kind: 'changes', root: '/repo', added: 1, removed: 0, files: [{ path: 'src/a.ts', added: 1, removed: 0, binary: false, untracked: false }, { path: 'src/b.ts', added: 1, removed: 0, binary: false, untracked: false }], truncated: 0 },
+    expandedPath: null,
+    touches: { 'src/a.ts': 2 }
+  })
+  const plain = R.buildReviewNodeModel({
+    subject: { subjectId: 'c1', repoRoot: '/repo', baselineSha: 'abc', label: 'chat' },
+    result: { kind: 'changes', root: '/repo', added: 1, removed: 0, files: [{ path: 'src/a.ts', added: 1, removed: 0, binary: false, untracked: false }], truncated: 0 },
+    expandedPath: null
+  })
+  const shared = R.buildReviewNodeModel({
+    subject: { subjectId: 'c1', repoRoot: '/repo', baselineSha: 'abc', label: 'chat' },
+    result: { kind: 'shared', root: '/repo', panelCount: 3, files: [{ path: 'src/a.ts', added: 1, removed: 0, binary: false, untracked: false }] },
+    expandedPath: null, touches: { 'src/a.ts': 1 }
+  })
+  ok('tools.1 a chat tool row carries the file it names and none for Bash; a review row carries the tool-call count for its own path only; the count is optional; a shared repository\'s note does not contradict the counts',
+    rows.length === 2 && rows[0].file === '/repo/src/a.ts' && rows[1].file === undefined &&
+      model.files[0].touches === 2 && model.files[1].touches === undefined && plain.files[0].touches === undefined &&
+      /tool calls are this chat/.test(shared.note) && shared.files[0].touches === 1,
+    JSON.stringify({ rows: rows.map((r) => r.file), files: model.files }))
+
+  const t = (over = {}) => ({ kind: 'terminal', rect: { id: 't1', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 't1', cwd: '~', args: [] }, ...over })
+  const chat = () => ({ kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/r', sessionId: 'u' } })
+  const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  const live = R.buildInspectorModel(t(), { kind: 'running', pid: 4, command: 'sh', reattached: false, cwd: '~' })
+  const never = R.buildInspectorModel(t(), { kind: 'idle' })
+  const chatRan = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { state: { status: 'ready', pending: 0, hasHistory: true }, usage, turns: 1 })
+  const chatAlive = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { state: { status: 'streaming', pending: 0, hasHistory: false }, usage, turns: 0, ran: true })
+  const chatEmpty = R.buildInspectorModel(chat(), undefined)
+  ok('tools.2 reviewable: a live terminal yes, a never-started one no; a chat with a turn yes, one with a process alive yes, an empty one no with a reason naming the fix',
+    live.reviewable === true && never.reviewable === false && chatRan.reviewable === true && chatAlive.reviewable === true && chatEmpty.reviewable === false &&
+      typeof chatEmpty.reviewReason === 'string' && /send a message/.test(chatEmpty.reviewReason) && typeof never.reviewReason === 'string' && never.reviewReason !== chatEmpty.reviewReason,
+    JSON.stringify({ live: live.reviewable, never: [never.reviewable, never.reviewReason], chatRan: chatRan.reviewable, chatAlive: chatAlive.reviewable, chatEmpty: [chatEmpty.reviewable, chatEmpty.reviewReason] }))
+}
+
 // M75 — composer.1–.4. THE COMPOSER'S PURE MODEL.
 //     composer.1: a trigger is `@` or `/` at the start of the text or after
 //     whitespace with the caret inside the token — `a/b`, an email, a caret

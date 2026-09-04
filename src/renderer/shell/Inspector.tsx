@@ -510,10 +510,10 @@ function InspectorPanel({
             type="button"
             className="inspector__action"
             data-inspector-action="review"
-            disabled={!model.restartable}
-            title={model.restartable
+            disabled={!model.reviewable}
+            title={model.reviewable
               ? `Open a review node for ${model.heading}`
-              : `${model.heading} has not started yet, so there is no baseline to review against`}
+              : (model.reviewReason ?? `${model.heading} has not started yet, so there is no baseline to review against`)}
             {...shellControl(() => onOpenReview(model.id))}
           >
             Open review

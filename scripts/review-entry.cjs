@@ -10,6 +10,8 @@
    first draft of this plan. */
 module.exports = {
   ...require('../src/main/git-args'),
+  /* M77. The tool-call → file index: pure over transcript turns. */
+  ...require('../src/shared/tool-index'),
   ...require('../src/main/review-engine'),
   // The impure one. It joins the bundle — rather than the suite requiring the
   // .ts directly, which plain node cannot load — and needs no `external`

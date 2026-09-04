@@ -3163,3 +3163,27 @@ M43 checks run against the same interface. `approve.2`.
 while one is already waiting, and clearing on the first answer of two would tell the user the
 panel is done while a question is still open. `approve.1`; `approve.3` for focus and the two
 settings.
+
+**A chat's baseline is captured by `agent:create` through the SAME capture PtyManager uses, and
+it SURVIVES a relaunch (`main/index.ts`, `baseline-capture.ts`).** The obvious alternative — a
+second capture path for chats — would drift from the terminal's once-only guard and epoch
+poisoning silently. The relaunch rule is the opposite of the terminal's on purpose: a terminal's
+next launch spawns a NEW agent, so a surviving baseline would blame it for yesterday's edits;
+a chat RESUMES the same conversation (`--resume`), so its starting point is still the right
+thing to diff against. The startup sweep therefore counts every saved chat panel as surviving.
+`verify:panels tools.1`; the sweep's rule is `verify:review` 37's `staleBaselineIds` with chat
+ids in the surviving list (main-only wiring, read in `index.ts`).
+
+**A tool's path is matched to a review row by suffix when it is not under the root
+(`shared/tool-index.ts`).** git reports the repository root's REAL path (`/private/var/…` on
+macOS) while the agent's cwd, and so every `file_path` it emits, is the logical one (`/var/…`);
+a pure function cannot resolve the symlink. `matchReviewPath` takes the LONGEST known row path
+the tool's path ends with, and null when none matches — never a guess, because a wrong match
+attributes an edit to the wrong file with no symptom. The panels check found this on its first
+run: touches read null and the Edit row's `diff` said `unchanged`. `verify:review tools.1`.
+
+**A tool row's `diff` is a three-state body, and `unchanged` is an answer, not an error.** A
+`Read` that names a file which nothing changed reads `unchanged against the baseline`; a chat
+created outside a repository or before its agent ran reads `no baseline`; `reading…` is its
+own sentence. Collapsing any two tells the user the wrong fix (principle 7). `verify:panels
+tools.2`.
