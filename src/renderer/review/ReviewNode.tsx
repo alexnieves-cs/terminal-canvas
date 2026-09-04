@@ -1,9 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { ReviewPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
-import type { ReviewDiff, ReviewResult } from '@shared/review'
+import type { ReviewAcross, ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import { buildReviewNodeModel } from './review-node-model'
+import { NODE_FILE_CAP, buildReviewNodeModel } from './review-node-model'
 import { useChat } from '@renderer/chat/chat-store'
 import { indexToolFiles, touchesByPath, type ToolTouch } from '@shared/tool-index'
 import { shortPath } from '@renderer/palette/panel-name'
@@ -40,6 +40,8 @@ export interface ReviewNodeProps {
    * an undo entry.
    */
   onCommitted: (nodeId: string, sha: string) => void
+  /** M86. What the canvas calls a section's panel (the honest chain), for a cross-worktree node's headings. */
+  sectionLabel?: (panelId: string) => string | undefined
   /**
    * SessionHandle.focus() on a panel id — Canvas's own `restoreFocus`, the one
    * the palette already uses. The commit input is the second surface in this
@@ -92,12 +94,85 @@ export interface ReviewNodeProps {
  * surfaces each growing a second case for a panel that is a panel in every
  * way that matters to them.
  */
+
+/**
+ * M86. The cross-worktree body: the main tree first, then one section per
+ * worktree this app created, each headed by what the user calls it and its
+ * branch. Three states — reading, an arm that could not answer (with why),
+ * and the sections — and commit and discard are BLOCKED by name rather than
+ * absent: a commit across worktrees would be N commits pretending to be one,
+ * and a control that disappears is indistinguishable from one never built.
+ */
+function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: string) => string | undefined): JSX.Element {
+  if (across === undefined) {
+    return <p className="pf__summary review-node__summary" data-review-node-summary data-review-across="reading">reading every worktree…</p>
+  }
+  if (across.kind === 'git-missing') {
+    return <p className="pf__note review-node__note" data-review-node-note data-review-across="unavailable">no git binary was found</p>
+  }
+  if (across.kind === 'unreadable') {
+    return <p className="pf__note review-node__note" data-review-node-note data-review-across="unavailable">git could not open this repository — {across.detail}</p>
+  }
+  const changed = across.sections.filter((s) => s.result.kind === 'changes' || s.result.kind === 'shared').length
+  return (
+    <div className="review-node__across" data-review-across={String(across.sections.length)}>
+      <p className="pf__summary review-node__summary" data-review-node-summary>
+        {across.sections.length} worktree{across.sections.length === 1 ? '' : 's'} · {changed === 0 ? 'no changes anywhere' : `${changed} with changes`}
+      </p>
+      {/* No path row: the title names the repository and the context pane's
+          identity line names it too — a two-line absolute path was the
+          loudest thing in the well (M86's critic). */}
+      <p className="pf__note review-node__note" data-review-node-commit-blocked>one worktree at a time — open that worktree's own review to commit or discard</p>
+      {across.sections.map((section) => {
+        const r = section.result
+        const files = r.kind === 'changes' || r.kind === 'shared' ? r.files : []
+        // ONE shape per heading (M86's critic): what the user calls it, then
+        // its branch in the dim mono slot — for the main tree too — and one
+        // count shape for every section with changes. `shared` carries no
+        // totals of its own, so they are summed from its files rather than
+        // withheld.
+        const label = (section.panelId !== undefined ? sectionLabel(section.panelId) : undefined) ?? section.label
+        const added = files.reduce((n, f) => n + f.added, 0)
+        const removed = files.reduce((n, f) => n + f.removed, 0)
+        return (
+          <section key={section.path} className="review-node__section" data-review-section={section.branch}>
+            <h4 className="review-node__section-head">
+              <span className="review-node__section-label">{label}</span>
+              <span className="review-node__section-branch">{section.branch}</span>
+              <span className="review-node__section-count">
+                {r.kind === 'clean' ? 'no changes'
+                  : files.length > 0 ? `${files.length} file${files.length === 1 ? '' : 's'} · +${added} −${removed}`
+                    : r.kind === 'baseline-lost' ? 'this worktree could not be read'
+                      : r.kind}
+              </span>
+            </h4>
+            {section.note !== undefined && <p className="pf__note review-node__note" data-review-section-note>{section.note}</p>}
+            {files.length > 0 && (
+              <ul className="review-node__files">
+                {files.slice(0, NODE_FILE_CAP).map((f) => (
+                  <li key={f.path} className="review-node__file" data-review-node-file={`${section.branch}:${f.path}`}>
+                    <span className="review-node__path">{f.path}</span>
+                    <span className="review-node__counts">{f.untracked ? 'new' : f.binary ? 'binary' : `+${f.added} −${f.removed}`}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
 function ReviewNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted,
-  restoreFocus, focusedId, readOnly = false, onBeginLink, linkTarget
+  restoreFocus, focusedId, readOnly = false, onBeginLink, linkTarget, sectionLabel = () => undefined
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
+  // M86. The cross-worktree answer, when this node is one. `undefined` is
+  // "asked, unanswered" — the third state — never an empty section list.
+  const [across, setAcross] = useState<ReviewAcross | undefined>(undefined)
   const [expandedPath, setExpandedPath] = useState<string | null>(null)
   const [diff, setDiff] = useState<ReviewDiff | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -142,6 +217,16 @@ function ReviewNodeImpl({
   // baseline on kill. See ReviewSubject in shared/review.ts.
   useEffect(() => {
     let live = true
+    // M86. A cross-worktree node asks `review:across` for its ROOT and never
+    // `review:at`: the sections are each worktree's diff since its fork,
+    // and `result` stays undefined so the ordinary commit and discard arms
+    // have nothing to offer — they are blocked by name below.
+    if (subject.across === true) {
+      void window.canvas.review.across(subject.repoRoot)
+        .then((a) => { if (live) setAcross(a) })
+        .catch((error: unknown) => { if (live) setAcross({ kind: 'unreadable', detail: String(error) }) })
+      return () => { live = false }
+    }
     void window.canvas.review.at(subject)
       .then((r) => { if (live) setResult(r) })
       // A rejected invoke must LAND IN AN ARM, never be swallowed. `result`
@@ -378,6 +463,14 @@ function ReviewNodeImpl({
         >
           <Refresh />
         </button>
+        {/* M86. A cross-worktree node keeps the Commit control, DISABLED with
+            its reason: a control that disappears is indistinguishable from a
+            feature never built (M86's critic). */}
+        {subject.across === true && (
+          <button type="button" className="review-node__commit" data-review-node-commit disabled
+            title="one worktree at a time — open that worktree's own review to commit"
+            onMouseDown={(event) => { event.stopPropagation(); event.preventDefault() }}>Commit</button>
+        )}
         {model.commit.kind !== 'none' && (
           <button
             type="button"
@@ -450,8 +543,10 @@ function ReviewNodeImpl({
         {outcome !== null && (
           <p className="review-node__commit-outcome" data-review-node-commit-outcome>{outcome}</p>
         )}
+        {subject.across === true ? renderAcross(across, sectionLabel) : (<>
         <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
         <p className="review-node__root">{model.root}</p>
+        </>)}
         {model.note !== undefined && (
           <p className="pf__note review-node__note" data-review-node-note>{model.note}</p>
         )}

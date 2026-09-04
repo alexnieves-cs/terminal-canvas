@@ -749,7 +749,10 @@ app.whenReady().then(async () => {
     // spawned panel whose cwd is not a repository) reads never-started
     // forever instead of not-a-repo, because baselineOf alone cannot tell
     // the two apart — see review-engine.ts's own doc comment on this dep.
-    notARepo: (panelId) => baselineCapture.isNotARepo(panelId)
+    notARepo: (panelId) => baselineCapture.isNotARepo(panelId),
+    // M86. The worktree records for a root, as main wires them — the
+    // cross-worktree node's sections come from exactly this dep.
+    worktreesOf: (root) => layoutStore.worktrees().filter((w) => w.root === root).map((w) => ({ path: w.path, branch: w.branch, panelId: w.panelId }))
   })
   // M37. Real git, real records, a scratch worktrees directory under $TMPDIR
   // (spaced, this repo's rule). Records go through the harness's own
@@ -17531,6 +17534,84 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr) + ' | renderer: ' + (vLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onV)
+      }
+    }
+
+
+    // -------------------------------------------------------------------
+    // M86 — across.1. A CROSS-WORKTREE REVIEW NODE over a real repository
+    //     with two worktrees this "app" created (records in the harness's
+    //     own store, trees made by real git). The node renders ONE SECTION
+    //     PER TREE — the main tree first — never one flat list; the changed
+    //     worktree's section names its file and the untouched one reads
+    //     `no changes`; commit and discard are BLOCKED BY NAME, not absent;
+    //     and the context pane's Changes section for a panel in that
+    //     repository carries the branch line and the identity line names
+    //     the repository.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['across.1 a cross-worktree review node asked from INSIDE a worktree renders the repository\'s sections — the main tree first, the changed worktree naming its file, the untouched one clean — with commit blocked by name; and the context pane for that worktree panel names the repository, not the worktree, and its branch against the tracking ref']
+      const xLog = []
+      const onX = (_e, _l, m) => { xLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onX)
+      try {
+        const { execFileSync } = require('node:child_process')
+        const xBase = mkdtempSync(join(tmpdir(), 'tc panels across-'))
+        const xRepo = join(xBase, 'repo here')
+        const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+        mkdirSync(xRepo)
+        g(xRepo, 'init', '-q', '.'); g(xRepo, 'config', 'user.email', 'v@e.com'); g(xRepo, 'config', 'user.name', 'v')
+        g(xRepo, 'checkout', '-q', '-b', 'main')
+        writeFileSync(join(xRepo, 'a.txt'), 'base\n'); g(xRepo, 'add', '-A'); g(xRepo, 'commit', '-qm', 'init')
+        const xRoot = g(xRepo, 'rev-parse', '--show-toplevel').trim()
+        const wtA = join(xBase, 'wt a'); const wtB = join(xBase, 'wt b')
+        g(xRepo, 'worktree', 'add', '-q', '-b', 'tc/xa-1', wtA, 'HEAD')
+        g(xRepo, 'worktree', 'add', '-q', '-b', 'tc/xb-1', wtB, 'HEAD')
+        writeFileSync(join(wtA, 'a.txt'), 'changed in a\n')
+        // The records, as the manager would have written them.
+        layoutStore.addWorktree({ id: 'xwa', root: xRoot, path: wtA, branch: 'tc/xa-1', createdAt: 1, panelId: 'xA' })
+        layoutStore.addWorktree({ id: 'xwb', root: xRoot, path: wtB, branch: 'tc/xb-1', createdAt: 2, panelId: 'xB' })
+        REVIEW_FENCES.push(xBase)
+        layoutStore.save({
+          panels: [
+            { id: 'xr', kind: 'review', x: 80, y: 80, w: 520, h: 420, z: 1, subject: { subjectId: 'xT', repoRoot: wtA, baselineSha: g(xRepo, 'rev-parse', 'HEAD').trim(), label: 'every worktree', across: true } },
+            // The subject sits INSIDE worktree A: its root resolves to the worktree,
+            // and the node and the identity line must still answer for the REPOSITORY.
+            ...fromPanels([{ kind: 'terminal', rect: { id: 'xT', x: 660, y: 80, w: 320, h: 220 }, z: 2, spec: { panelId: 'xT', cwd: wtA, command: '/bin/sh', args: ['-c', 'sleep 600'] } }])
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reX = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reX
+        await settle()
+        const sections = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="xr"]'); if (!n) return false; const secs = [...n.querySelectorAll('[data-review-section]')].map((s) => ({ branch: s.getAttribute('data-review-section'), count: s.querySelector('.review-node__section-count')?.textContent ?? '', files: [...s.querySelectorAll('[data-review-node-file]')].map((f) => f.getAttribute('data-review-node-file')) })); return secs.length === 3 ? { secs, blocked: n.querySelector('[data-review-node-commit-blocked]')?.textContent ?? null, summary: n.querySelector('[data-review-node-summary]')?.textContent ?? null } : false })()`), 15000)
+        // The terminal: start it, select it, read the context pane.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.rail-list--panels .rail-row[data-rail-row="xT"] .rail-row__start'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 6000)
+        await wc.executeJavaScript(`window.__m50Select(['xT'])`)
+        const pane = await waitUntil(() => wc.executeJavaScript(`(() => { const rep = document.querySelector('[data-inspector-repository]'); const line = document.querySelector('[data-branch-line]'); return rep && line ? { repository: rep.textContent, line: line.textContent } : false })()`), 15000)
+        ok(IDS[0],
+          sections && sections.secs[0].branch === 'main' && /no changes/.test(sections.secs[0].count) &&
+            sections.secs[1].branch === 'tc/xa-1' && sections.secs[1].files.includes('tc/xa-1:a.txt') &&
+            sections.secs[2].branch === 'tc/xb-1' && /no changes/.test(sections.secs[2].count) &&
+            typeof sections.blocked === 'string' && /one worktree at a time/.test(sections.blocked) && /3 worktrees/.test(sections.summary ?? '') &&
+            pane && /repo here/.test(pane.repository) && !/wt a/.test(pane.repository) && /tc\/xa-1 · no upstream/.test(pane.line),
+          JSON.stringify({ sections, pane, log: xLog.slice(-3) }))
+        await clickPanelClose(wc, 'xT')
+        await settle()
+        layoutStore.dropWorktree('xwa'); layoutStore.dropWorktree('xwb')
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reXDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reXDone
+        await settle()
+        try { rmSync(xBase, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (xErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(xErr && xErr.message || xErr) + ' | renderer: ' + (xLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onX)
       }
     }
 

@@ -530,7 +530,16 @@ function parseReviewSubject(raw: unknown, id: string, warnings: string[]): Revie
     warnings.push(`dropped review panel ${id}: subject was incomplete`)
     return null
   }
-  return { subjectId, repoRoot, baselineSha, label }
+  // M86. `across` is carried only as a literal `true`. A present value that
+  // is anything else is malformed: it warns and the FLAG is dropped, never
+  // the node — a review node that lost its flag is an ordinary review of the
+  // same subject, which is a smaller wrong than a node that vanished.
+  const { across } = raw
+  if (across !== undefined && across !== true) {
+    warnings.push(`dropped review panel ${id}'s across flag: expected true, got ${JSON.stringify(across)}`)
+    return { subjectId, repoRoot, baselineSha, label }
+  }
+  return { subjectId, repoRoot, baselineSha, label, ...(across === true ? { across: true as const } : {}) }
 }
 
 /**

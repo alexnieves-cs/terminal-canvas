@@ -844,6 +844,8 @@ export interface ReviewFieldModel {
   /** The honest arms' explanation. Absent when there is nothing to explain. */
   note?: string
   files: ReviewFieldRow[]
+  /** M86. The repository this answer is about, when git named one — what the identity line and the branch line hang from. */
+  root?: string
   /** Files beyond the cap. Zero when everything fits. */
   more: number
 }
@@ -887,6 +889,13 @@ const HIDDEN: ReviewFieldModel = Object.freeze({
  * and a panel the feature is broken for must not look the same.
  */
 export function buildReviewFields(result: ReviewResult | undefined): ReviewFieldModel {
+  const built = buildReviewFieldsInner(result)
+  // M86. The root rides along on every arm that has one — field by field,
+  // absent staying absent, so `'root' in review` means git named one.
+  return result !== undefined && 'root' in result && typeof result.root === 'string' ? { ...built, root: result.root } : built
+}
+
+function buildReviewFieldsInner(result: ReviewResult | undefined): ReviewFieldModel {
   if (result === undefined || result.kind === 'not-a-repo') return HIDDEN
 
   if (result.kind === 'never-started') {

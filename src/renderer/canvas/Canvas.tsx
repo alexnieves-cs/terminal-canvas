@@ -2275,8 +2275,30 @@ export function Canvas({
   // credentials: main owns the records, the palette is the only reader, and
   // reading at mount would surface a failure nowhere near this feature.
   const [worktreeRows, setWorktreeRows] = useState<WorktreeListRow[]>(EMPTY_WORKTREES)
+  const worktreeEpochRef = useRef(0)
   const reloadWorktrees = useCallback(() => {
-    void window.canvas.worktree.list().then(setWorktreeRows)
+    // M86. Each row carries where its branch stands against its tracking ref,
+    // read per worktree from the LOCAL ref — a fetch is never run, and the
+    // phrase says so. A row whose status could not be read keeps no phrase
+    // rather than a wrong one.
+    // Rows land at once and the phrases enrich them after; an older reload
+    // settling after a newer one is dropped, or a removed worktree could
+    // reappear (M86's verifier).
+    const epoch = ++worktreeEpochRef.current
+    void window.canvas.worktree.list().then(async (rows) => {
+      if (epoch !== worktreeEpochRef.current) return
+      setWorktreeRows(rows)
+      const withStatus = await Promise.all(rows.map(async (row) => {
+        try {
+          const s = await window.canvas.git.status(row.path)
+          if (s.kind !== 'status') return row
+          const phrase = s.upstream === null ? `${s.branch} · no upstream` : `${s.branch} · ahead ${s.upstream.ahead} · behind ${s.upstream.behind}`
+          return { ...row, status: phrase }
+        } catch { return row }
+      }))
+      if (epoch !== worktreeEpochRef.current) return
+      setWorktreeRows(withStatus)
+    })
   }, [])
   useEffect(() => {
     if (palette.open) reloadWorktrees()
@@ -2746,6 +2768,33 @@ export function Canvas({
             baselineSha: baseline.sha,
             label
           })
+        ]
+        commitHistory(next)
+        return next
+      })
+      selectOnly(id)
+    })
+  }, [commitHistory])
+
+  /**
+   * M86. A review of EVERY worktree of the subject's repository: the same mint
+   * as `openReview`, with the subject flagged `across`. The node asks for its
+   * root's sections rather than one baseline, so a killed subject changes
+   * nothing about what it shows — the whole reason the flag exists.
+   */
+  const openReviewAcross = useCallback((subjectId: string) => {
+    const subject = panelsRef.current.find((p) => p.rect.id === subjectId)
+    if (subject === undefined || !(isTerminalPanel(subject) || isChatPanel(subject))) return
+    void window.canvas.review.baseline(subjectId).then((baseline) => {
+      if (baseline === null) return
+      const current = panelsRef.current.find((p) => p.rect.id === subjectId)
+      if (current === undefined || !(isTerminalPanel(current) || isChatPanel(current))) return
+      const id = `r${nextIdRef.current++}`
+      setPanels((existing) => {
+        const centre = cascadeCentre(reviewCentre(current.rect), existing)
+        const next = [
+          ...existing,
+          makeReviewPanel(id, centre, nextZ(existing), { subjectId, repoRoot: baseline.root, baselineSha: baseline.sha, label: `every worktree of ${baseline.root.split('/').pop() ?? baseline.root}`, across: true })
         ]
         commitHistory(next)
         return next
@@ -3713,7 +3762,7 @@ export function Canvas({
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-    selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
+    selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
@@ -3855,6 +3904,7 @@ export function Canvas({
   // Each is a three-state result — nothing to show / asked but unanswered / a
   // real answer — and must stay one; see the hook's doc comment.
   const {
+    branchLine, repository,
     toolboxModel, reviewModel, inspectorSummary, hasSelection
   } = useInspectorDetail({
     registry, palette, panels, selectedId, selectedPanel,
@@ -4059,7 +4109,9 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
-                />
+                                  // M86. A section's heading is the honest chain's label for its panel.
+                  sectionLabel={(panelId) => { const p = panelsRef.current.find((q) => q.rect.id === panelId); return p === undefined ? undefined : railLabel(p, isTerminalPanel(p) ? registry.get(panelId)?.status : undefined) }}
+                  />
               )
             }
             // The second sessionless arm, and onSelect is selectAndRaise here
@@ -4378,6 +4430,8 @@ export function Canvas({
         panelRun={panelRun}
         onRunAgain={onRunAgain}
         review={reviewModel}
+        branchLine={branchLine}
+        repository={repository}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}
       />

@@ -92,6 +92,12 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   blocked by name on shared), the armed sentences, outcome lines.
 - **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
   each with a three-state result.
+- **Cross-worktree review (M86).** The palette's `Review every worktree…` row is disabled
+  with `REASON_NO_REVIEW_TARGET_ACROSS` when no panel inside a repository is captured and with
+  `REASON_NO_WORKTREES` when this app has made none; inside the node, commit and discard are
+  blocked by name (`one worktree at a time`) rather than absent, a worktree whose directory is
+  gone is a section that says so, and the context pane's branch line is absent until asked,
+  a phrase when git answered, and nothing (the note beneath explains) when it could not.
 - **Vault pane (M85).** Three states before the list — no folder set (names the setting and
   offers `Choose a folder…`), reading, a folder that is not there (the reason, and the same
   verb) — then the list with its filter and a named empty arm for no notes and for no match;

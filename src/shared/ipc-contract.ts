@@ -96,7 +96,7 @@ export interface ControlCanvasModel {
   runs: Array<{ id: string; name: string; outcome: string; panels: number; cost?: number }>
 }
 import type { SettingDef, SettingValue } from './settings-schema'
-import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
+import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
@@ -341,6 +341,10 @@ export const IPC = {
   REVIEW_AT: 'review:at',
   /** One file's hunks. Pull-only, one file at a time — see ReviewDiffRequest. */
   REVIEW_DIFF: 'review:diff',
+  /** M86. Where a branch stands against its tracking ref — from the local ref; never a fetch. */
+  GIT_STATUS: 'git:status',
+  /** M86. The main tree, then every worktree this app created for the root, each with its own diff since its fork. */
+  REVIEW_ACROSS: 'review:across',
   /**
    * Turn the work a review node reports into a commit.
    *
@@ -989,6 +993,8 @@ export interface WorktreeListRow {
   panelId: string
   attached: boolean
   panelTitle?: string
+  /** M86. `branch · ahead N · behind M` from the local tracking ref, or `· no upstream`; absent when git could not say. Filled by the renderer, never by main's list. */
+  status?: string
 }
 
 export type WorktreeRemoveResult =
@@ -1266,6 +1272,12 @@ export interface CanvasBridge {
     diff(req: ReviewDiffRequest): Promise<ReviewDiff>
     commit(req: ReviewCommitRequest): Promise<ReviewCommitResult>
     discard(req: ReviewDiscardRequest): Promise<ReviewDiscardResult>
+    /** M86. See REVIEW_ACROSS. */
+    across(root: string): Promise<ReviewAcross>
+  }
+  /** M86. See GIT_STATUS. */
+  git: {
+    status(root: string): Promise<RepoStatus>
   }
   /**
    * Metadata only. Deliberately no `get` here — there is no channel that

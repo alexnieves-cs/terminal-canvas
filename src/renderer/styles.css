@@ -744,6 +744,18 @@ body {
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
 /* M83. The memory node: entries newest first, each `kind · text · time`, and
    one line to add another. */
+/* M86. A cross-worktree review's sections, and the context pane's branch line
+   and repository suffix — the same caps micro-label and mono rows every other
+   section in a body uses. */
+.review-node__section { margin-top: var(--sp-2); border-top: 1px solid var(--line); padding-top: var(--sp-2); }
+.review-node__section-head { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0 0 var(--sp-1); font-weight: 400; }
+.review-node__section-label { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
+.review-node__section-branch { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.review-node__section-count { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+.review-node__path { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-node__counts { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+.inspector__branch-line { margin: 0 0 var(--sp-1); font-size: var(--t-xs); color: var(--fg-3); }
+.inspector__repository { font-weight: 400; color: var(--fg-3); }
 /* M85. The vault: the navigator's fourth pane, and a note's links. */
 .vault-pane__filter { margin: var(--sp-2); padding: var(--sp-1) var(--sp-2); min-height: 24px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font: inherit; font-size: var(--t-sm); }
 .vault-pane__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

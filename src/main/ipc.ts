@@ -272,6 +272,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
+  ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
+  ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))
   ipcMain.handle(IPC.WATCHER_CREATE, (_event, req: WatcherCreateRequest) => watchers.create(req))
   ipcMain.handle(IPC.WATCHER_RUN, (_event, id: string) => watchers.run(id))

@@ -76,6 +76,8 @@ export interface PaletteActionsDeps {
   openJiraPanel: () => void
   /** M83. Open the memory node for the captured panel's repository. */
   openMemoryPanel: () => Promise<void>
+  /** M86. A review across every worktree of the subject's repository. */
+  openReviewAcross: (subjectId: string) => void
   /** M84. The palette's Watch… row: ask for the command, then the trigger. */
   beginWatcher: () => void
   beginNewNote: () => void
@@ -141,7 +143,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -1422,6 +1424,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // by MAIN (only it knows what a directory's repository root is), so the
     // node's subject is the same root `tc memory` writes under.
     openMemory: () => { void openMemoryPanel() },
+    reviewAcross: (id) => openReviewAcross(id),
     beginWatcher,
     openJira: () => openJiraPanel(),
     newNote: () => beginNewNote(),

@@ -117,6 +117,19 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'across', intent: 'A review of every worktree of one repository, in one node: the main tree first, then each worktree this app created, headed by what the user calls it and its branch, each with its own files and counts — and commit and discard blocked by name, because a commit across worktrees would be N commits pretending to be one. The context pane beside it names the repository on its identity line and says where the branch stands against its tracking ref, from the last fetch.',
+    run: async (kit) => {
+      await kit.goTo('every worktree of repo')
+      await sleep(900)
+      await kit.shot('across')
+      // The other half of the intent: the context pane for the live panel
+      // in that repository — its identity line and its branch line.
+      await kit.goTo('claude — api')
+      await kit.js(`(() => { const b = document.querySelector('[aria-label="Show the context pane"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await sleep(900)
+      await kit.shot('across-context')
+      await kit.js(`(() => { const b = document.querySelector('[aria-label="Hide the context pane"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+    } },
   { name: 'vault', intent: 'The vault: the navigator\'s fourth pane lists a folder of markdown notes by title, newest first, and the open note paints its `[[links]]` as links — a resolved one in the accent, an unresolved one dashed and offering to be created — with a Backlinks section beneath naming the notes that point here and the line. A note is still a file panel; a vault is many of them plus an index.',
     run: async (kit) => {
       await kit.js(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
@@ -299,6 +312,18 @@ app.whenReady().then(async () => {
   git(['add', '.'])
   git(['commit', '-q', '-m', 'fixture'])
   const baselineSha = git(['rev-parse', 'HEAD']).trim()
+  // M86. Two worktrees the "app" created for the fixture repository, one with
+  // a change, so the cross-worktree scene shows a changed and a clean section.
+  // After the repository's own init and commit above, through the same helper.
+  const REPO_ROOT = git(['rev-parse', '--show-toplevel']).trim()
+  const REPO_HEAD = baselineSha
+  const WT_DIR = join(FIX, 'worktrees')
+  mkdirSync(WT_DIR, { recursive: true })
+  const WT_A = join(WT_DIR, 'tc-api-health'); const WT_B = join(WT_DIR, 'tc-tests')
+  git(['worktree', 'add', '-q', '-b', 'tc/api-20260904-1100', WT_A, 'HEAD'])
+  git(['worktree', 'add', '-q', '-b', 'tc/tests-20260904-1102', WT_B, 'HEAD'])
+  writeFileSync(join(WT_A, 'src', 'server.ts'), 'export const port = 8080\nexport function start(): void {\n  console.log("listening on", port)\n}\nexport function health(): string { return "ok" }\n')
+  writeFileSync(join(WT_A, 'src', 'health.ts'), 'export const ok = () => true\n')
   writeFileSync(join(REPO, 'src', 'server.ts'), 'export const port = 8081\nexport function start(): void {\n  console.log("listening on", port)\n}\n')
   writeFileSync(join(REPO, 'src', 'health.ts'), 'export const ok = (): boolean => true\n')
   // M75. An image for the composer scene's drop.
@@ -327,6 +352,9 @@ app.whenReady().then(async () => {
         { id: 'note', kind: 'file', x: 800, y: 310, w: 340, h: 420, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
+        // M86. One review over every worktree of the fixture repository.
+        { id: 'across', kind: 'review', x: 1200, y: 1300, w: 560, h: 420, z: 14,
+          subject: { subjectId: 'live', repoRoot: REPO_ROOT, baselineSha: REPO_HEAD, label: 'every worktree of repo', across: true } },
         // M84. A watcher: a command run on a trigger, mid-canvas.
         { id: 'watch', kind: 'watcher', x: 440, y: 900, w: 520, h: 340, z: 13,
           watch: { cwd: REPO, command: '/bin/sh', args: ['-c', 'echo "tests 41 passed, 0 failed"; echo "typecheck clean"; exit 0'], trigger: { kind: 'path', path: REPO + '/src' } } },
@@ -352,6 +380,10 @@ app.whenReady().then(async () => {
       groups: [], bookmarks: []
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
+    worktrees: [
+      { id: 'wt-a', root: REPO_ROOT, path: WT_A, branch: 'tc/api-20260904-1100', createdAt: Date.now() - 3600000, panelId: 'live' },
+      { id: 'wt-b', root: REPO_ROOT, path: WT_B, branch: 'tc/tests-20260904-1102', createdAt: Date.now() - 3000000, panelId: 'dormant' }
+    ],
     preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes') },
     // M77. The chat's baseline too: the fixture's edit to server.ts predates
     // boot, so it is seeded rather than captured (as the terminal's is).
@@ -368,6 +400,9 @@ app.whenReady().then(async () => {
     baselineOf: (panelId) => layoutStore.baseline(panelId),
     peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
     notARepo: (panelId) => baselineCapture.isNotARepo(panelId)
+    ,
+    // M86. The scene's two worktree records, as main wires them.
+    worktreesOf: (root) => layoutStore.worktrees().filter((w) => w.root === root).map((w) => ({ path: w.path, branch: w.branch, panelId: w.panelId, ...(w.panelId === 'live' ? { panelTitle: 'claude — api' } : {}) }))
   })
   const baselineCapture = createBaselineCapture({
     baselineOf: (panelId) => layoutStore.baseline(panelId),

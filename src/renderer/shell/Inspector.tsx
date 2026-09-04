@@ -102,6 +102,10 @@ export interface InspectorProps {
    * an unfrozen prop here defeats the memo outright.
    */
   review: ReviewFieldModel | null
+  /** M86. The selected panel's branch against its tracking ref, or null before asked, or '' when git could not say. */
+  branchLine: string | null
+  /** M86. The repository every worktree shares, once git named it. */
+  repository: string | null
   /**
    * null when the selected panel has no directory at all (a review node, a
    * file panel, a Jira panel), and `hidden` when the inventory itself says
@@ -137,7 +141,7 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
@@ -152,6 +156,8 @@ function InspectorImpl({
             <InspectorEmpty summary={summary} />
           </>
         : <InspectorPanel
+            branchLine={branchLine}
+            repository={repository}
             tab={tab}
             onSelectTab={onSelectTab}
             automations={automations}
@@ -377,13 +383,16 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
 function InspectorPanel({
   tab, onSelectTab, automations,
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, panelRun, onRunAgain,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   tab: ContextTab
   onSelectTab: (tab: ContextTab) => void
   automations: AutomationRow[]
   model: InspectorModel
   review: ReviewFieldModel | null
+  /** M86. See InspectorProps.branchLine. */
+  branchLine: string | null
+  repository: string | null
   toolbox: ToolboxFieldModel | null
   onOpenToolbox: (id: string) => void
   onRename: (id: string, title: string) => void
@@ -423,7 +432,15 @@ function InspectorPanel({
           qualifies every other section's answer, and the Cost figure must
           never be on screen without its subject (spec §4.2). */}
       <div className="context__header">
-      <div className="inspector__heading" data-inspector-heading>{model.heading}</div>
+      <div className="inspector__heading" data-inspector-heading>
+        {model.heading}
+        {/* M86. The identity line names the REPOSITORY — the small thing the
+            scope decision asked for: which project this panel is in, beside
+            what it is called, before any section's answer. */}
+        {repository !== null && (
+          <span className="inspector__repository" data-inspector-repository title={repository}> · {repository.replace(/\/+$/, '').split('/').pop()}</span>
+        )}
+      </div>
       <div className="inspector__state">
         {/*
           The ATTRIBUTE, not only a class: a class is a styling decision a
@@ -599,6 +616,13 @@ function InspectorPanel({
         */
         <section className="inspector__section">
           <h3 className="inspector__section-heading">Changes</h3>
+          {/* M86. The branch and where it stands, from the local tracking
+              ref — never a fetch, and the phrase says so. Absent until asked,
+              a phrase when git answered, nothing when it could not (the note
+              below already says why). */}
+          {branchLine !== null && branchLine !== '' && (
+            <p className="inspector__branch-line inspector__value--mono" data-branch-line>{branchLine}</p>
+          )}
           <p className="inspector__review-summary" data-review-summary>{review.summary}</p>
           {review.note !== undefined && (
             <p className="inspector__review-note" data-review-note>{review.note}</p>

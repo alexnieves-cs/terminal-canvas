@@ -10,9 +10,18 @@ import {
   parseDiffLines,
   parseNulList,
   parseNumstat,
-  parseRepoRoot
+  parseRepoRoot,
+  buildBranchArgs,
+  buildUpstreamArgs,
+  buildAheadBehindArgs,
+  parseAheadBehind,
+  buildMergeBaseArgs,
+  buildCommonDirArgs,
+  parseCommonRoot,
+  buildWorktreeListArgs,
+  parseWorktreeList
 } from './git-args'
-import type { ReviewBaseline, ReviewDiff, ReviewDiffRequest, ReviewFile, ReviewResult } from '@shared/review'
+import type { RepoStatus, ReviewAcross, ReviewSection, ReviewBaseline, ReviewDiff, ReviewDiffRequest, ReviewFile, ReviewResult } from '@shared/review'
 
 export interface GitResult {
   stdout: string
@@ -49,6 +58,8 @@ export interface GitRunOptions {
 export type GitRunner = (args: string[], opts?: GitRunOptions) => Promise<GitResult>
 
 export interface ReviewEngineDeps {
+  /** M86. The worktree records for a root. Optional so every fixture before M86 builds. */
+  worktreesOf?: (root: string) => WorktreeRecordRow[]
   run: GitRunner
   /** The panel's stored baseline, or undefined if it has never spawned. */
   baselineOf: (panelId: string) => ReviewBaseline | undefined
@@ -77,7 +88,19 @@ export interface ReviewEngineDeps {
   repoUnreadable?: (panelId: string) => string | undefined
 }
 
+/** M86. What the engine needs to know about the worktrees this app created for a root. */
+export interface WorktreeRecordRow {
+  path: string
+  branch: string
+  panelId: string
+  panelTitle?: string
+}
+
 export interface ReviewEngine {
+  /** M86. The branch and its tracking ref, from the local ref alone. */
+  status(root: string): Promise<RepoStatus>
+  /** M86. The main tree, then one section per worktree record; a worktree's diff is since its FORK. */
+  reviewAcross(root: string): Promise<ReviewAcross>
   resolveRepo(cwd: string): Promise<RepoAnswer>
   captureBaseline(root: string): Promise<string | null>
   /** The panel-addressed question: resolve this panel's baseline, then ask. */
@@ -187,7 +210,10 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return head.ok ? trimmed(head.stdout) : null
   }
 
-  const reviewAt = async (baseline: ReviewBaseline, subjectId: string): Promise<ReviewResult> => {
+  /** A tree's diff against a sha, with NO peer attribution — a repository, not a panel. */
+  const reviewTree = async (baseline: ReviewBaseline): Promise<ReviewResult> => reviewAt(baseline, null)
+
+  const reviewAt = async (baseline: ReviewBaseline, subjectId: string | null): Promise<ReviewResult> => {
     if (gitMissing) return { kind: 'git-missing' }
 
     const { root, sha } = baseline
@@ -237,7 +263,8 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     // manufactured ambiguity rather than a real one.
     if (files.length === 0) return { kind: 'clean', root }
 
-    const peers = deps.peersInRepo(root, subjectId)
+    // `null` is a tree, not a panel: no peers to attribute among.
+    const peers = subjectId === null ? 0 : deps.peersInRepo(root, subjectId)
     if (peers > 0) return { kind: 'shared', root, panelCount: peers + 1, files }
 
     return {
@@ -297,5 +324,96 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return { kind: 'diff', lines, truncated }
   }
 
-  return { resolveRepo, captureBaseline, review, reviewAt, fileDiff }
+  /**
+   * M86. Three states in one answer: git declining (`unreadable`), a branch
+   * with no upstream (`upstream: null`, a real answer), and the counts. The
+   * counts come from the local tracking ref; nothing here fetches.
+   */
+  /** The main tree of whatever `root` is inside — `root` itself when git cannot say. */
+  const commonRootOf = async (root: string): Promise<string> => {
+    const common = await run(buildCommonDirArgs(root))
+    return (common.ok ? parseCommonRoot(common.stdout) : null) ?? root
+  }
+
+  const status = async (root: string): Promise<RepoStatus> => {
+    if (gitMissing) return { kind: 'git-missing' }
+    const branchResult = await run(buildBranchArgs(root))
+    if (gitMissing) return { kind: 'git-missing' }
+    if (!branchResult.ok) return { kind: 'unreadable', detail: firstLine(branchResult.stderr) }
+    const branch = trimmed(branchResult.stdout) ?? 'HEAD'
+    const upstream = await run(buildUpstreamArgs(root))
+    const repository = await commonRootOf(root)
+    if (!upstream.ok) return { kind: 'status', root, repository, branch, upstream: null }
+    const name = trimmed(upstream.stdout) ?? ''
+    const counts = await run(buildAheadBehindArgs(root))
+    const parsed = counts.ok ? parseAheadBehind(counts.stdout) : null
+    if (parsed === null) return { kind: 'unreadable', detail: firstLine(counts.stderr) || 'rev-list gave no counts' }
+    return { kind: 'status', root, repository, branch, upstream: { name, ...parsed } }
+  }
+
+  /**
+   * M86. A worktree's section is its diff since its FORK from the main tree
+   * (`merge-base HEAD <root HEAD>` in the worktree), NEVER a panel's baseline:
+   * main drops a baseline when its panel is killed, and a review of finished
+   * work is exactly what a cross-worktree node is for. A worktree whose
+   * directory is gone is a `baseline-lost` section, never a missing one.
+   */
+  const reviewAcross = async (asked: string): Promise<ReviewAcross> => {
+    if (gitMissing) return { kind: 'git-missing' }
+    // The MAIN tree, whatever tree was asked from: a panel spawned into a
+    // worktree resolves its root to the worktree, and "every worktree of
+    // this" must mean the repository's, not the worktree's (M86's verifier).
+    const root = await commonRootOf(asked)
+    const head = await run(buildHeadArgs(root))
+    if (gitMissing) return { kind: 'git-missing' }
+    if (!head.ok) return { kind: 'unreadable', detail: firstLine(head.stderr) }
+    const headSha = trimmed(head.stdout) ?? ''
+    const sections: ReviewSection[] = []
+    const mainBranch = await run(buildBranchArgs(root))
+    const mainName = mainBranch.ok ? (trimmed(mainBranch.stdout) ?? 'HEAD') : 'HEAD'
+    // The main tree's own section: its working changes against HEAD.
+    // The main tree's section is a plain tree diff — never the `shared` arm,
+    // which is about attributing a panel's diff among peers and has no
+    // meaning for the repository itself (M86's verifier).
+    // Called `main tree` rather than by its branch, so the heading's label and
+    // branch slots do not read as one doubled word (`main main`).
+    sections.push({ path: root, branch: mainName, label: 'main tree', result: await reviewTree({ root, sha: headSha }) })
+    // Git's own list of worktrees, so a record whose directory is there but
+    // is no longer a worktree is told apart from one whose history diverged.
+    const listed = await run(buildWorktreeListArgs(root))
+    const trees = listed.ok ? parseWorktreeList(listed.stdout).map((t) => t.path) : null
+    for (const record of deps.worktreesOf?.(root) ?? []) {
+      // The record's path as GIT spells it: a record holds `/var/…` while
+      // git lists `/private/var/…`, and a string compare called every
+      // worktree removed (M86's verifier's fixture, in the harness). Asking
+      // the tree for its own toplevel also answers for a directory that is
+      // gone, which is the other way a record stops being a worktree.
+      const top = await run(buildRepoRootArgs(record.path))
+      const asGit = top.ok ? parseRepoRoot(top.stdout) : null
+      const stillATree = asGit !== null && (trees === null || trees.includes(asGit))
+      if (!stillATree) {
+        sections.push({ path: record.path, branch: record.branch, label: record.panelTitle ?? record.branch, panelId: record.panelId, result: { kind: 'baseline-lost', root: record.path }, note: 'no longer a worktree — it was removed outside this app' })
+        continue
+      }
+      const fork = await run(buildMergeBaseArgs(record.path, headSha))
+      const forkSha = fork.ok ? trimmed(fork.stdout) : null
+      // Two arms that were one: a directory git cannot open, and a branch
+      // with NO COMMON HISTORY (an orphan, a rewritten main). The second is
+      // a readable worktree, and "could not be read" named the wrong fix.
+      const result: ReviewResult = forkSha === null
+        ? { kind: 'baseline-lost', root: record.path }
+        : await reviewTree({ root: record.path, sha: forkSha })
+      sections.push({
+        path: record.path,
+        branch: record.branch,
+        label: record.panelTitle ?? record.branch,
+        panelId: record.panelId,
+        result,
+        ...(forkSha === null ? { note: fork.code === 1 ? 'no common history with the main tree' : `git could not read it — ${firstLine(fork.stderr)}` } : {})
+      })
+    }
+    return { kind: 'across', root, sections }
+  }
+
+  return { resolveRepo, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross }
 }

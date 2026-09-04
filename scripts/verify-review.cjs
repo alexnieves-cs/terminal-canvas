@@ -1719,6 +1719,128 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     JSON.stringify({ touches, keys: byPath instanceof Map ? [...byPath.keys()] : byPath }))
 }
 
+// M86 — git.1. THE BUILDERS AND PARSERS, pure, and the ONE RULE this
+//      milestone rests on: NO FETCH. Ahead/behind is what the local tracking
+//      ref says; a builder that fetched would put a network call behind a
+//      pane that reads as passive. Asserted as TEXT over git-args.ts, because
+//      no fake runner can prove an absence. `rev-list --left-right --count`
+//      prints `A<TAB>B` — a parser splitting on spaces reads it as one field
+//      and answers null for every real answer. A detached worktree's porcelain
+//      has `detached` and no `branch` line: `null`, never a branch called HEAD.
+{
+  const has = (n) => typeof R[n] === 'function'
+  const src = require('node:fs').readFileSync(join(__dirname, '..', 'src', 'main', 'git-args.ts'), 'utf8')
+  const noFetch = !/'fetch'|'pull'|'ls-remote'|"fetch"|"pull"/.test(src)
+  const ab = has('buildAheadBehindArgs') ? R.buildAheadBehindArgs('/r') : null
+  const up = has('buildUpstreamArgs') ? R.buildUpstreamArgs('/r') : null
+  const wl = has('buildWorktreeListArgs') ? R.buildWorktreeListArgs('/r') : null
+  const mb = has('buildMergeBaseArgs') ? R.buildMergeBaseArgs('/r/wt', 'abc') : null
+  const parsed = has('parseAheadBehind') ? {
+    tab: R.parseAheadBehind('2\t1\n'), zero: R.parseAheadBehind('0\t0\n'),
+    junk: R.parseAheadBehind('fatal: no upstream\n'), empty: R.parseAheadBehind(''), one: R.parseAheadBehind('3\n')
+  } : null
+  const trees = has('parseWorktreeList') ? R.parseWorktreeList([
+    'worktree /r', 'HEAD 1111111111111111111111111111111111111111', 'branch refs/heads/main', '',
+    'worktree /r/../wt one', 'HEAD 2222222222222222222222222222222222222222', 'branch refs/heads/tc/p1-x', '',
+    'worktree /det', 'HEAD 3333333333333333333333333333333333333333', 'detached', ''
+  ].join('\n')) : null
+  ok('git.1 no fetch/pull/ls-remote is built anywhere; ahead/behind args are rev-list --left-right --count HEAD...@{u} and its TAB output parses to two integers (junk, empty and one field are null); worktree list --porcelain parses paths, heads and branches with a detached tree as branch null',
+    noFetch && ab && ab.join(' ') === '-C /r rev-list --left-right --count HEAD...@{u}' &&
+      up && up.join(' ') === '-C /r rev-parse --abbrev-ref --symbolic-full-name @{u}' &&
+      wl && wl.join(' ') === '-C /r worktree list --porcelain' &&
+      mb && mb.join(' ') === '-C /r/wt merge-base HEAD abc' &&
+      parsed && parsed.tab && parsed.tab.ahead === 2 && parsed.tab.behind === 1 && parsed.zero && parsed.zero.ahead === 0 &&
+      parsed.junk === null && parsed.empty === null && parsed.one === null &&
+      Array.isArray(trees) && trees.length === 3 && trees[0].path === '/r' && trees[0].branch === 'main' && trees[0].head.startsWith('1111') &&
+      trees[1].path === '/r/../wt one' && trees[1].branch === 'tc/p1-x' && trees[2].branch === null,
+    JSON.stringify({ noFetch, ab, up, wl, mb, parsed, trees }))
+}
+
+// M86 — git.2. AGAINST REAL GIT: a bare remote, a clone with a tracking
+//      branch, commits on both sides, and two worktrees the app "created".
+//      (a) `status` reads ahead 1 / behind 1 from the LOCAL tracking ref after
+//          a fetch this check performs itself — the app never fetches; the
+//          numbers are only as fresh as the user's last fetch and the pane
+//          says so. (b) A branch with no upstream is `upstream: null`, a real
+//          answer, never 0/0. (c) `reviewAcross` lists the main tree first and
+//          one section per worktree record, each worktree's files being its
+//          diff since its FORK from the main tree — a section for a worktree
+//          whose panel was never spawned or was killed, because the fork is
+//          what the diff is against, never a panel's baseline.
+if (GIT) {
+  const fs = require('node:fs')
+  const base = mkdtempSync(join(tmpdir(), 'tc review across '))
+  const bare = join(base, 'origin.git')
+  const clone = join(base, 'clone here')
+  const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+  execFileSync('git', ['init', '-q', '--bare', bare])
+  execFileSync('git', ['clone', '-q', bare, clone])
+  g(clone, 'config', 'user.email', 'v@e.com'); g(clone, 'config', 'user.name', 'v')
+  g(clone, 'checkout', '-q', '-b', 'main')
+  fs.writeFileSync(join(clone, 'a.txt'), 'base\n'); g(clone, 'add', '-A'); g(clone, 'commit', '-qm', 'init')
+  g(clone, 'push', '-q', '-u', 'origin', 'main')
+  // One commit here (ahead 1), one on the remote through a second clone (behind 1).
+  fs.writeFileSync(join(clone, 'b.txt'), 'local\n'); g(clone, 'add', '-A'); g(clone, 'commit', '-qm', 'local')
+  const other = join(base, 'other')
+  execFileSync('git', ['clone', '-q', bare, other])
+  g(other, 'config', 'user.email', 'v@e.com'); g(other, 'config', 'user.name', 'v')
+  fs.writeFileSync(join(other, 'c.txt'), 'remote\n'); g(other, 'add', '-A'); g(other, 'commit', '-qm', 'remote'); g(other, 'push', '-q', 'origin', 'HEAD:main')
+  g(clone, 'fetch', '-q')
+  const runner = R.createGitRunner({ gitPath: () => 'git', env: () => process.env, timeoutMs: () => 20000 })
+  const wtDir = join(base, 'worktrees')
+  fs.mkdirSync(wtDir)
+  const records = []
+  const engine = R.createReviewEngine({
+    run: runner, baselineOf: () => undefined, peersInRepo: () => 0,
+    worktreesOf: (root) => records.filter((r) => r.root === root)
+  })
+  const rootAnswer = await engine.resolveRepo(clone)
+  const root = rootAnswer.kind === 'root' ? rootAnswer.root : clone
+  // Two worktrees on tc/ branches, as the manager would make them; one gets a change.
+  const wt1 = join(wtDir, 'one'); const wt2 = join(wtDir, 'two')
+  g(clone, 'worktree', 'add', '-q', '-b', 'tc/p1-x', wt1, 'HEAD')
+  g(clone, 'worktree', 'add', '-q', '-b', 'tc/p2-x', wt2, 'HEAD')
+  fs.writeFileSync(join(wt1, 'a.txt'), 'changed in one\n')
+  g(wt1, 'config', 'user.email', 'v@e.com'); g(wt1, 'config', 'user.name', 'v')
+  g(wt1, 'commit', '-qam', 'work in one')
+  fs.writeFileSync(join(wt1, 'd.txt'), 'uncommitted in one\n')
+  records.push({ id: 'w1', root, path: wt1, branch: 'tc/p1-x', createdAt: 1, panelId: 'p1' })
+  records.push({ id: 'w2', root, path: wt2, branch: 'tc/p2-x', createdAt: 2, panelId: 'p2' })
+  const status = typeof engine.status === 'function' ? await engine.status(root) : null
+  const noUp = typeof engine.status === 'function' ? await engine.status(wt1) : null
+  const across = typeof engine.reviewAcross === 'function' ? await engine.reviewAcross(root) : null
+  const sec = (i) => (across && across.kind === 'across' ? across.sections[i] : undefined)
+  // (d) Asked from INSIDE a worktree, the answer is the repository's — the
+  //     same three sections — because a panel spawned into a worktree
+  //     resolves its root to the worktree (M86's verifier). And the status
+  //     asked there names the REPOSITORY, never the worktree's leaf.
+  const fromInside = typeof engine.reviewAcross === 'function' ? await engine.reviewAcross(wt2) : null
+  // (e) A worktree with NO COMMON HISTORY is a readable tree whose section
+  //     says so, not "could not be read"; a record whose directory was
+  //     removed outside the app says that.
+  const wt3 = join(wtDir, 'three')
+  g(clone, 'worktree', 'add', '-q', '--detach', wt3, 'HEAD')
+  g(wt3, 'checkout', '-q', '--orphan', 'tc/orphan'); g(wt3, 'config', 'user.email', 'v@e.com'); g(wt3, 'config', 'user.name', 'v')
+  fs.writeFileSync(join(wt3, 'z.txt'), 'orphan\n'); g(wt3, 'add', '-A'); g(wt3, 'commit', '-qm', 'orphan')
+  records.push({ id: 'w3', root, path: wt3, branch: 'tc/orphan', createdAt: 3, panelId: 'p3' })
+  g(clone, 'worktree', 'remove', '--force', wt2)
+  const afterChanges = typeof engine.reviewAcross === 'function' ? await engine.reviewAcross(root) : null
+  const secOf = (branch) => (afterChanges && afterChanges.kind === 'across' ? afterChanges.sections.find((x) => x.branch === branch) : undefined)
+  ok('git.2 status reads ahead 1 / behind 1 from the tracking ref after a fetch the CHECK ran and names the repository even from a worktree; a branch with no upstream answers null; reviewAcross lists the main tree first then one section per worktree record — a worktree\'s files being its diff since its fork, an untouched worktree clean — and answers the SAME from inside a worktree; an orphan branch says no common history and a removed worktree says so',
+    status && status.kind === 'status' && status.branch === 'main' && status.upstream && status.upstream.ahead === 1 && status.upstream.behind === 1 &&
+      noUp && noUp.kind === 'status' && noUp.branch === 'tc/p1-x' && noUp.upstream === null &&
+      across && across.kind === 'across' && across.sections.length === 3 &&
+      sec(0).path === root && sec(0).branch === 'main' &&
+      sec(1).branch === 'tc/p1-x' && sec(1).panelId === 'p1' && sec(1).result.kind === 'changes' &&
+      sec(1).result.files.some((f) => f.path === 'a.txt' && !f.untracked) && sec(1).result.files.some((f) => f.path === 'd.txt' && f.untracked) &&
+      sec(2).branch === 'tc/p2-x' && sec(2).result.kind === 'clean' &&
+      status.repository === root && noUp.repository === root &&
+      fromInside && fromInside.kind === 'across' && fromInside.root === root && fromInside.sections.length === 3 && fromInside.sections[0].branch === 'main' &&
+      secOf('tc/orphan') && secOf('tc/orphan').result.kind === 'baseline-lost' && /no common history/.test(secOf('tc/orphan').note ?? '') &&
+      secOf('tc/p2-x') && /no longer a worktree/.test(secOf('tc/p2-x').note ?? ''),
+    JSON.stringify({ status, noUp, across, fromInside: fromInside && { root: fromInside.root, n: fromInside.sections && fromInside.sections.length }, orphan: secOf('tc/orphan'), removed: secOf('tc/p2-x') }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)
