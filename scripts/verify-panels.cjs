@@ -932,7 +932,10 @@ app.whenReady().then(async () => {
       let isDir = false
       try { isDir = statSync(expandTilde(spec.cwd)).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
-      return { kind: 'created', snapshot: agentSessions.create({ ...spec, cwd: expandTilde(spec.cwd) }) }
+      const snapshot = agentSessions.create({ ...spec, cwd: expandTilde(spec.cwd) })
+      // M77. The same capture the real handler fires (index.ts).
+      baselineCapture.capture(spec.id, expandTilde(spec.cwd))
+      return { kind: 'created', snapshot }
     },
     // M75. main/index.ts's resolve-then-send; a refusal names the attachment.
     send: (id, text, attachments = []) => {
@@ -942,7 +945,7 @@ app.whenReady().then(async () => {
     },
     clipboardImage: () => null,
     interrupt: (id) => agentSessions.interrupt(id),
-    dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
+    dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) { agentTranscripts.drop(id); baselineCapture.drop(id); layoutStore.dropBaseline(id) } },
     answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
     list: () => agentSessions.list(),
     transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } },
@@ -14720,6 +14723,102 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(kErr && kErr.message || kErr) + ' | renderer: ' + (cLog2.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onC2)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M77 — tools.1 / tools.2. TOOL CALLS AS INSPECTABLE OBJECTS. A chat panel
+    //     RESTORED in a real repository with a seeded transcript (an Edit on
+    //     seed.txt, a Read on other.txt); agent:create captures its baseline
+    //     BEFORE the harness edits seed.txt on disk. tools.1: the context
+    //     pane's Changes section answers for the chat (one file), Open review
+    //     is enabled and mints a node whose row says `1 tool call` and lists
+    //     the Edit when expanded. tools.2: the Edit row's `diff` verb shows
+    //     the added line in place; the Read row's says unchanged — the honest
+    //     answer, not an error.
+    // -------------------------------------------------------------------
+    {
+      const IDS = [
+        'tools.1 a restored chat in a repository has a baseline from agent:create: Changes lists the edited file, Open review is enabled, and the node\'s row counts and lists the tool call that touched it',
+        'tools.2 a tool row naming a changed file shows its diff in place; one naming an unchanged file says unchanged; a Bash row has no diff verb; closing the chat drops its baseline'
+      ]
+      const tLog = []
+      const onT = (_e, level, m) => { if (level >= 2) tLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onT)
+      let GIT_T = true
+      try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT_T = false }
+      if (!GIT_T) {
+        for (const id of IDS) ok(id, true, 'skipped: no git on this machine')
+      } else try {
+        const trepo = mkdtempSync(join(tmpdir(), 'tc panels tools-'))
+        const tgit = (...args) => execFileSync('git', ['-C', trepo, ...args], { encoding: 'utf8' })
+        tgit('init', '-q', '.'); tgit('config', 'user.email', 'v@example.com'); tgit('config', 'user.name', 'v')
+        writeFileSync(join(trepo, 'seed.txt'), 'seed\n'); writeFileSync(join(trepo, 'other.txt'), 'other\n')
+        tgit('add', '-A'); tgit('commit', '-qm', 'init')
+        const chatId = 'c-tools'
+        const at = Date.now() - 60000
+        agentTranscripts.appendTurn(chatId, { id: 'u-t1', role: 'user', blocks: [{ type: 'text', text: 'add a line' }], at })
+        agentTranscripts.appendTurn(chatId, { id: 'm-t1', role: 'assistant', blocks: [
+          { type: 'tool_use', id: 'tu-read', name: 'Read', input: { file_path: join(trepo, 'other.txt') } },
+          { type: 'tool_use', id: 'tu-edit', name: 'Edit', input: { file_path: join(trepo, 'seed.txt'), old_string: 'seed', new_string: 'seed\nadded by the agent' } },
+          { type: 'tool_use', id: 'tu-bash', name: 'Bash', input: { command: `cat ${join(trepo, 'seed.txt')}` } }
+        ], at: at + 1000 })
+        agentTranscripts.appendTurn(chatId, { id: 'm-t2', role: 'assistant', blocks: [{ type: 'text', text: 'done' }], at: at + 2000 })
+        agentTranscripts.appendMeta(chatId, { usage: { input: 1, output: 1, cacheWrite: 0, cacheRead: 0 }, turns: 1 })
+        layoutStore.addPreset({ id: 'tools-claude', name: 'Claude (tools)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        layoutStore.save({
+          panels: [{ id: chatId, kind: 'chat', x: 80, y: 80, w: 520, h: 360, z: 1, chat: { cwd: trepo, sessionId: '77777777-7777-4777-8777-777777777777' } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reT
+        await settle()
+        const restored = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') !== null`), 6000)
+        // The baseline lands asynchronously after agent:create (git in a subprocess).
+        const baseline = await waitUntil(() => wc.executeJavaScript(`window.canvas.review.baseline(${JSON.stringify(chatId)}).then((b) => b && b.sha ? b : false)`), 8000)
+        // NOW the edit on disk, after the baseline.
+        writeFileSync(join(trepo, 'seed.txt'), 'seed\nadded by the agent\n')
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+        // A real click on the chrome selects (the inspector follows selectedId).
+        const box = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="${chatId}"] .pf__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } })()`)
+        if (box) { wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1 }) }
+        const changes = await waitUntil(() => wc.executeJavaScript(`(() => { const f = [...document.querySelectorAll('[data-review-file]')].map((e) => e.getAttribute('data-review-file')); return f.includes('seed.txt') ? f : false })()`), 10000)
+        const reviewBtn = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); return b && !b.disabled ? { title: b.title } : false })()`), 5000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const nodeRow = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.review-node'); if (!n) return false; const f = n.querySelector('[data-review-node-file="seed.txt"]'); if (!f) return false; const t = f.querySelector('[data-review-node-touches]'); return { id: n.getAttribute('data-panel-id'), touches: t ? t.getAttribute('data-review-node-touches') : null, text: t ? t.textContent : null, other: !!n.querySelector('[data-review-node-file="other.txt"]') } })()`), 10000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.review-node [data-review-node-file="seed.txt"] .review-node__file-button'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const touchList = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('.review-node [data-review-node-touch-list]'); return l ? l.textContent : false })()`), 5000)
+        ok(IDS[0],
+          restored === true && baseline && typeof baseline.sha === 'string' && Array.isArray(changes) && changes.includes('seed.txt') && !changes.includes('other.txt') &&
+            reviewBtn && /review node/.test(reviewBtn.title) && nodeRow && nodeRow.touches === '1' && /1 tool call/.test(nodeRow.text) && nodeRow.other === false &&
+            typeof touchList === 'string' && /Edit/.test(touchList) && !/Read/.test(touchList),
+          JSON.stringify({ restored, baseline: baseline && baseline.sha, changes, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
+
+        // tools.2 — the chat's own tool rows.
+        const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
+        const clickDiff = (tool) => wc.executeJavaScript(`(() => { const row = ${sel(`[data-chat-tool="${tool}"]`)}; const b = row && row.querySelector('[data-chat-tool-diff]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const stateOf = (tool, want) => waitUntil(() => wc.executeJavaScript(`(() => { const row = ${sel(`[data-chat-tool="${tool}"]`)}; const b = row && row.querySelector('[data-chat-tool-diff-body]'); if (!b) return false; const s = b.getAttribute('data-chat-tool-diff-state'); return s === ${JSON.stringify(want)} ? { state: s, text: b.textContent.slice(0, 200), adds: b.querySelectorAll('.review-node__line--add').length } : false })()`), 8000)
+        const verbs = await wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-row="tool"]')]; return Object.fromEntries(rows.map((r) => [r.getAttribute('data-chat-tool'), !!r.querySelector('[data-chat-tool-diff]')])) })()`)
+        // Declared before the assertion that reads it; measured after the close below.
+        let baselineGone = false
+        const clickedEdit = await clickDiff('Edit')
+        const editDiff = await stateOf('Edit', 'diff')
+        const clickedRead = await clickDiff('Read')
+        const readDiff = await stateOf('Read', 'unchanged')
+        await clickPanelClose(wc, chatId)
+        await settle()
+        // Closing a chat drops its baseline (a Design claim with no row in the table).
+        baselineGone = await waitUntil(() => wc.executeJavaScript(`window.canvas.review.baseline(${JSON.stringify(chatId)}).then((b) => b === null)`), 5000)
+        ok(IDS[1],
+          clickedEdit === true && editDiff && editDiff.adds >= 1 && /added by the agent/.test(editDiff.text) &&
+            clickedRead === true && readDiff && /unchanged/.test(readDiff.text) && verbs && verbs.Edit === true && verbs.Read === true && verbs.Bash === false && baselineGone === true,
+          JSON.stringify({ clickedEdit, editDiff, clickedRead, readDiff, verbs, baselineGone, log: tLog.slice(-3) }))
+        try { rmSync(trepo, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (tErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(tErr && tErr.message || tErr) + ' | renderer: ' + (tLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onT)
       }
     }
 

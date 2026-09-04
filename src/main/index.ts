@@ -742,6 +742,10 @@ app.whenReady().then(async () => {
     // had would leave its baseline in place for a panel that is about to
     // spawn a brand-new agent.
     const surviving: string[] = []
+    // M77. A chat's baseline survives a relaunch: the conversation RESUMES
+    // (`--resume`) rather than starting over, so its starting point is still
+    // the right thing to diff against. Every saved chat panel counts.
+    for (const w of layoutStore.mergedWorkspaces()) for (const p of w.panels) if (p.kind === 'chat') surviving.push(p.id)
     const orphanIds = new Set(orphans.map((o) => o.panelId))
     for (const session of ptyManager.list()) {
       if (known.has(session.panelId)) { surviving.push(session.panelId); continue }
@@ -791,6 +795,11 @@ app.whenReady().then(async () => {
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
       const snapshot = manager.create({ ...spec, cwd })
+      // M77. The SAME capture PtyManager fires, keyed by the chat's panel id,
+      // so review:panel / review:baseline / review:at answer for a chat with
+      // no change to the engine. The store's once-only guard makes a
+      // relaunch's re-create a no-op.
+      captureBaseline(spec.id, cwd)
       // M76. A reloaded renderer re-creates every chat by id; a question
       // still pending must light its attention surfaces again.
       approvals?.resync(spec.id)
@@ -818,7 +827,7 @@ app.whenReady().then(async () => {
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)
-      if (drop) agentTranscripts.drop(id)
+      if (drop) { agentTranscripts.drop(id); dropBaseline(id) }
     },
     answer: ({ id, requestId, answer }) => agentSessions?.answerPermission(id, requestId, answer) ?? false,
     list: () => agentSessions?.list() ?? [],

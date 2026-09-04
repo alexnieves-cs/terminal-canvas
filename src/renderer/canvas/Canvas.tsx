@@ -2550,8 +2550,9 @@ export function Canvas({
     // panel: only a terminal panel ever had a session, and only a session ever
     // had a baseline. The id could only reach here from a row that should have
     // been gated.
-    if (subject === undefined || !isTerminalPanel(subject)) return
-    const label = railLabel(subject, registry.get(subjectId)?.status)
+    // M77: a chat panel has a baseline too (agent:create captures one).
+    if (subject === undefined || !(isTerminalPanel(subject) || isChatPanel(subject))) return
+    const label = railLabel(subject, isTerminalPanel(subject) ? registry.get(subjectId)?.status : undefined)
     void window.canvas.review.baseline(subjectId).then((baseline) => {
       // Null is reachable despite the row's gate: a panel can be killed
       // between the click and the reply, and main drops its baseline on
@@ -2569,7 +2570,7 @@ export function Canvas({
       // meant something in the workspace that is no longer on screen, and
       // the node would carry a subjectId nothing here answers to.
       const current = panelsRef.current.find((p) => p.rect.id === subjectId)
-      if (current === undefined || !isTerminalPanel(current)) return
+      if (current === undefined || !(isTerminalPanel(current) || isChatPanel(current))) return
       // `r`, from the SAME counter `n` comes from. PanelId doubles as a tmux
       // session name, so a review node minting an id a terminal panel in any
       // workspace already owns is M7's invisible collision through a new
@@ -3312,7 +3313,8 @@ export function Canvas({
     selectedIsSessionless, waitingIds,
     // M68. Read from the registry, whose version() this component already
     // re-renders on for status changes — so the flip is seen without a store.
-    selectedSpawned: selectedId !== null && registry.get(selectedId)?.status.kind === 'running'
+    // M77. A chat's process is main's runtime, read from the chat store.
+    selectedSpawned: selectedId !== null && (registry.get(selectedId)?.status.kind === 'running' || getChat(selectedId).snapshot?.pid !== undefined)
   })
 
   return (

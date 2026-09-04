@@ -69,8 +69,8 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:layout` | plain node | ~185 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
-| `verify:palette` | plain node | ~119 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~153 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:palette` | plain node | ~120 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:rail` | plain node | ~155 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~96 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
 | `verify:file` | plain node | ~38 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
@@ -91,7 +91,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 76 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | ~278 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | ~280 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -246,6 +246,14 @@ check does not, and should not, cover it.
   dock badge reads the SUM. `chat-store.ts`'s `useApprovals()` is the renderer's cached list
   of every pending request (membership change only); the popover, the pane, the palette and
   the card's summary tier all answer through the one `agentSession.answer` verb.
+- `src/shared/tool-index.ts` — M77. The tool-call → file index, pure over transcript turns: a
+  tool names a file only through `file_path`/`path`/`notebook_path` as a string (a Bash command
+  mentioning a path names nothing); `matchReviewPath` maps a tool's path to a review row —
+  relative under the root, else the longest row the path ends with, because git reports the
+  root's REAL path and an agent's cwd is the logical one. `agent:create` fires the same
+  `captureBaseline` PtyManager does, keyed by the chat's id, so `review:*` answers for a chat;
+  a chat's baseline survives a relaunch (the conversation resumes). `reviewable` on the
+  inspector model and the palette row is per kind, with the chat's own reason.
 - `src/main/claude-transcript-import.ts` — M74. The CLI's own transcript (M17's glob) read
   into a chat panel's file for `Open as chat`: sidechain and meta records skipped, assistant
   records merged by message id with usage counted once, a typed prompt's string content a

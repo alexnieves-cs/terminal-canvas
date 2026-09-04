@@ -1681,6 +1681,44 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
   }
 }
 
+// M77 — tools.1. THE TOOL-CALL → FILE INDEX. A tool names a file only through
+//     file_path / path / notebook_path as a STRING; a Bash command that
+//     mentions a path names nothing (indexing it would attribute a `cat` to
+//     an edit). Touches keep transcript order; grouping is by the path
+//     RELATIVE to the repository root, which is how a review row spells it;
+//     a path outside the root stays as typed.
+{
+  const turns = [
+    { id: 'u1', role: 'user', blocks: [{ type: 'text', text: 'go' }], at: 1 },
+    { id: 'm1', role: 'assistant', blocks: [
+      { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/repo/src/a.ts' } },
+      { type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'cat /repo/src/b.ts' } },
+      { type: 'tool_use', id: 't3', name: 'Edit', input: { file_path: '/repo/src/a.ts', old_string: 'x', new_string: 'y' } }
+    ], at: 2 },
+    { id: 'u2', role: 'user', blocks: [{ type: 'tool_result', toolUseId: 't1', content: '', isError: false }], at: 3 },
+    { id: 'm2', role: 'assistant', blocks: [
+      { type: 'tool_use', id: 't4', name: 'NotebookEdit', input: { notebook_path: '/repo/nb.ipynb' } },
+      { type: 'tool_use', id: 't5', name: 'Glob', input: { path: '/elsewhere/x', pattern: '*' } },
+      { type: 'tool_use', id: 't6', name: 'Write', input: { file_path: 42 } }
+    ], at: 4 }
+  ]
+  const touches = R.indexToolFiles(turns)
+  const byPath = R.touchesByPath(touches, '/repo')
+  // The symlinked root: git says /private/var/x, the agent says /var/x.
+  const viaRows = R.touchesByPath([{ path: '/var/x/src/a.ts', turnId: 'm', toolUseId: 't', toolName: 'Edit', at: 1 }], '/private/var/x', ['src/a.ts', 'a.ts'])
+  const noRow = R.matchReviewPath('/var/x/src/a.ts', '/private/var/x', ['b.ts'])
+  // Another repository with the same row path is NOT a match: the directory
+  // the row hangs from must end with the root's own last segment.
+  const otherRepo = R.matchReviewPath('/home/u/other/src/a.ts', '/private/var/x', ['src/a.ts'])
+  const sameTail = R.matchReviewPath('/var/x/src/a.ts', '/private/var/x', ['a.ts', 'src/a.ts'])
+  ok('tools.1 the index lists every tool_use naming a file (file_path/path/notebook_path as a string), in order, never a Bash command; grouped by the root-relative path, by the longest known row a symlinked path ends with, else as typed',
+    R.toolFilePath({ file_path: '/x' }) === '/x' && R.toolFilePath({ command: 'cat /x' }) === null && R.toolFilePath({ file_path: 7 }) === null &&
+      touches.length === 4 && touches.map((t) => t.toolUseId).join(',') === 't1,t3,t4,t5' && touches[1].toolName === 'Edit' && touches[1].turnId === 'm1' && touches[1].at === 2 &&
+      byPath instanceof Map && byPath.get('src/a.ts')?.length === 2 && byPath.get('nb.ipynb')?.length === 1 && byPath.get('/elsewhere/x')?.length === 1 && byPath.size === 3 &&
+      viaRows.get('src/a.ts')?.length === 1 && noRow === null && otherRepo === null && sameTail === 'src/a.ts',
+    JSON.stringify({ touches, keys: byPath instanceof Map ? [...byPath.keys()] : byPath }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

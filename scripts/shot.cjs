@@ -112,6 +112,27 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'tool-objects', intent: 'A tool call as an object: in the chat, the Edit row\'s `diff` verb is open and shows the hunk against the chat\'s baseline in the review node\'s own line idiom; the context pane\'s Changes section answers for the chat; a review node opened from it lists server.ts with `· 2 tool calls` and, expanded, the Read and the Edit that touched it. One vocabulary for what happened to a file, whichever surface says it.',
+    run: async (kit) => {
+      await kit.goTo('api (chat)')
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await kit.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(400)
+      await kit.js(`(() => { const row = document.querySelector('.panel[data-panel-id="chat"] [data-chat-tool="Edit"]'); const b = row && row.querySelector('[data-chat-tool-diff]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      await sleep(900)
+      await kit.js(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); if (b && !b.disabled) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      await sleep(900)
+      await kit.js(`(() => { const b = [...document.querySelectorAll('.review-node')].pop()?.querySelector('[data-review-node-file="src/server.ts"] .review-node__file-button'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      await sleep(900)
+      await kit.goTo('review: claude — api (chat)')
+      await sleep(400)
+      // The pane shows the CHAT's Changes (the Work tab), the camera stays on the node.
+      await kit.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(300)
+      await kit.js(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) }; return !!t })()`)
+      await sleep(700)
+      await kit.shot('tool-objects')
+    } },
   { name: 'composer', intent: 'The chat panel\'s composer at work: a dropped image as a dim mono line above the textarea (its name and a labelled `remove`), and the `@` file list open under a half-typed reference — rows in mono, directories first, the same hairline family as the frame; nothing floats over the canvas.',
     run: async (kit) => {
       await kit.goTo('api (chat)')
@@ -252,7 +273,9 @@ app.whenReady().then(async () => {
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
     preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false },
-    baselines: { live: { root: REPO, sha: baselineSha } }
+    // M77. The chat's baseline too: the fixture's edit to server.ts predates
+    // boot, so it is seeded rather than captured (as the terminal's is).
+    baselines: { live: { root: REPO, sha: baselineSha }, chat: { root: REPO, sha: baselineSha } }
   }), 'utf8')
 
   const layoutStore = createLayoutStore({ filePath: layoutPath })
@@ -328,14 +351,14 @@ app.whenReady().then(async () => {
   const seedChatTranscript = (panelId) => {
     const at = Date.now() - 3600000
     agentTranscripts.appendTurn(panelId, { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'What does src/server.ts export, and is the health check wired?' }], at })
-    agentTranscripts.appendTurn(panelId, { id: 'm1', role: 'assistant', blocks: [{ type: 'thinking', text: '' }, { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: join(REPO, 'src', 'server.ts') } }], model: 'claude-haiku-4-5-20251001', at: at + 1000 })
+    agentTranscripts.appendTurn(panelId, { id: 'm1', role: 'assistant', blocks: [{ type: 'thinking', text: '' }, { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: join(REPO, 'src', 'server.ts') } }, { type: 'tool_use', id: 't1b', name: 'Edit', input: { file_path: join(REPO, 'src', 'server.ts'), old_string: '8080', new_string: '8081' } }], model: 'claude-haiku-4-5-20251001', at: at + 1000 })
     agentTranscripts.appendTurn(panelId, { id: 'u-2', role: 'user', blocks: [{ type: 'tool_result', toolUseId: 't1', content: 'export const start = () => listen(3000)\nexport const health = () => ok()', isError: false }], at: at + 1500 })
     agentTranscripts.appendTurn(panelId, { id: 'm2', role: 'assistant', blocks: [{ type: 'text', text: 'It exports `start` and `health`. The health check exists but nothing routes to it yet — `start` only calls `listen(3000)`.\n\nWant me to wire `/health` to it?' }], model: 'claude-haiku-4-5-20251001', at: at + 4000 })
     agentTranscripts.appendMeta(panelId, { usage: { input: 18, output: 96, cacheWrite: 40101, cacheRead: 79671 }, costUsd: 0.0895, turns: 1 })
   }
   seedChatTranscript('chat')
   const agentHandlers = {
-    create: (spec) => ({ kind: 'created', snapshot: agentSessions.create(spec) }),
+    create: (spec) => { const snapshot = agentSessions.create(spec); baselineCapture.capture(spec.id, spec.cwd); return { kind: 'created', snapshot } },
     send: (id, text) => agentSessions.send(id, text),
     interrupt: (id) => agentSessions.interrupt(id),
     dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },

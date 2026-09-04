@@ -4,6 +4,9 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { buildReviewNodeModel } from './review-node-model'
+import { useChat } from '@renderer/chat/chat-store'
+import { indexToolFiles, touchesByPath, type ToolTouch } from '@shared/tool-index'
+import { shortPath } from '@renderer/palette/panel-name'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
 
@@ -226,9 +229,17 @@ function ReviewNodeImpl({
   // the signature was `JSON.stringify` over the model AND the diff, so a drag
   // with a large file expanded stringified up to DIFF_MAX_LINES line objects
   // per frame to avoid one object allocation.
+  // M77. The tool calls that touched each file, from the SUBJECT chat's
+  // transcript through the chat store (a terminal subject has no store entry
+  // and reads as empty). Re-derived as turns land; keyed the way a review row
+  // spells a path.
+  const subjectChat = useChat(subject.subjectId)
+  const rowPaths = useMemo(() => (result !== undefined && (result.kind === 'changes' || result.kind === 'shared') ? result.files.map((f) => f.path) : []), [result])
+  const touchMap = useMemo(() => touchesByPath(indexToolFiles(subjectChat.turns), subject.repoRoot, rowPaths), [subjectChat.turns, subject.repoRoot, rowPaths])
+  const touchCounts = useMemo(() => { const out: Record<string, number> = {}; for (const [k, v] of touchMap) out[k] = v.length; return out }, [touchMap])
   const model = useMemo(
-    () => buildReviewNodeModel({ subject, title: panel.title, result, expandedPath }),
-    [subject, panel.title, result, expandedPath]
+    () => buildReviewNodeModel({ subject, title: panel.title, result, expandedPath, touches: touchCounts }),
+    [subject, panel.title, result, expandedPath, touchCounts]
   )
   const { rect, z } = panel
 
@@ -450,6 +461,7 @@ function ReviewNodeImpl({
               <button
                 type="button"
                 className={`review-node__file-button${f.expanded ? ' review-node__file-button--open' : ''}`}
+                title={f.expanded ? 'Hide the diff' : f.touches !== undefined ? 'Show the diff and the tool calls that touched this file' : 'Show the diff'}
                 onMouseDown={(event) => {
                   event.stopPropagation()
                   event.preventDefault()
@@ -461,6 +473,7 @@ function ReviewNodeImpl({
                 <span className="review-node__counts">
                   {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
                 </span>
+                {f.touches !== undefined && <span className="review-node__touches" data-review-node-touches={f.touches}>· {f.touches} tool call{f.touches === 1 ? '' : 's'}</span>}
               </button>
               {model.discard.kind !== 'none' && !readOnly && (
                 <button
@@ -502,6 +515,7 @@ function ReviewNodeImpl({
                   </button>
                 </div>
               )}
+              {f.expanded && f.touches !== undefined && <Touches list={touchMap.get(f.path) ?? []} />}
               {f.expanded && <Hunks diff={diff} />}
             </li>
           ))}
@@ -519,6 +533,18 @@ function ReviewNodeImpl({
  * component can never render, because review-engine.ts refuses to produce
  * one (see fileDiff's own comment).
  */
+/** M77. The tool calls that touched an expanded file, in transcript order. */
+function Touches({ list }: { list: ToolTouch[] }): JSX.Element {
+  const clock = (at: number): string => { const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+  return (
+    <ul className="review-node__touch-list" data-review-node-touch-list>
+      {/* The chat's own tool-row idiom (`Tool · input`), then the time — one
+          vocabulary for what happened to a file (M77's critic). */}
+      {list.map((t) => <li key={t.toolUseId} className="review-node__touch"><span className="chat__tool-name">{t.toolName}</span> · <span className="review-node__touch-arg">{shortPath(t.path, 2)}</span> · {clock(t.at)}</li>)}
+    </ul>
+  )
+}
+
 function Hunks({ diff }: { diff: ReviewDiff | null }): JSX.Element {
   if (diff === null) return <p className="review-node__hunk-note">reading…</p>
   if (diff.kind === 'binary') return <p className="review-node__hunk-note">binary file</p>

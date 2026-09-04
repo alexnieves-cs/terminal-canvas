@@ -1,6 +1,6 @@
 import { useMemo, type RefObject } from 'react'
 import { useChat, getChat } from '@renderer/chat/chat-store'
-import { chatStateInput } from '@renderer/chat/chat-model'
+import { chatStateInput, chatHasRun } from '@renderer/chat/chat-model'
 import type { ChatStateInput } from '@renderer/panels/panel-state'
 import type { Viewport } from './viewport'
 import { orderPanels } from './spatial-order'
@@ -11,7 +11,7 @@ import { isFilePanel, isTerminalPanel, type Panel, isChatPanel } from '@renderer
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { panelName, panelPath } from '@renderer/palette/panel-name'
-import type { PanelRow } from '@renderer/palette/commands'
+import { REASON_CHAT_NO_BASELINE, type PanelRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { WorkspaceRow } from '@shared/ipc-contract'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
@@ -89,6 +89,16 @@ function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedA
  * in flight and how many turns it holds — read once at palette open, like
  * every other row field, from the chat store's mirror.
  */
+/**
+ * M77. `Open review`'s gate per kind: a terminal's is restartable (absent here
+ * so the row falls back to it); a chat's is "its agent has run" — a completed
+ * turn in the transcript or a process alive — with its own reason otherwise.
+ */
+function reviewFields(p: Panel): { reviewable?: boolean; reviewReason?: string } {
+  if (!isChatPanel(p)) return {}
+  return chatHasRun(getChat(p.rect.id)) ? { reviewable: true } : { reviewable: false, reviewReason: REASON_CHAT_NO_BASELINE }
+}
+
 function frontEndFields(p: Panel): { busy?: boolean; turns?: number } {
   if (!isChatPanel(p)) return {}
   const chat = getChat(p.rect.id)
@@ -146,6 +156,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 title: p.title,
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
+                ...reviewFields(p),
                 // M20. From the SESSION's spec, like everything else that
                 // reports what a panel is actually running.
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
@@ -159,6 +170,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 kind: p.kind,
                 ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
+                ...reviewFields(p),
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
                 ...frontEndFields(p),
                 ...findingFields(p, registry, dormantIds)
@@ -320,6 +332,8 @@ export function useRailModels(deps: RailModelsDeps) {
             costUsd: useMeta ? meta.costUsd : snap.costUsd,
             model: snap.model ?? selectedChat.turns.find((t) => t.model !== undefined)?.model,
             turns: useMeta ? meta.turns : snap.turns,
+            // M77. The ONE definition the palette row uses too.
+            ran: chatHasRun(selectedChat),
             // M76. The oldest pending request, for the pane's Allow and Deny.
             ...((): { approval?: PendingApproval } => { const a = pendingApprovals.find((x) => x.id === selectedPanel.rect.id); return a === undefined ? {} : { approval: a } })()
           }
@@ -339,7 +353,8 @@ export function useRailModels(deps: RailModelsDeps) {
   // panel that will never have one, above an Open-review button whose handler
   // refuses it and returns. One wrong query, both defects; see verify:panels
   // 112, which pins the review node's half of exactly this.
-  const selectedIsSessionless = selectedPanel !== undefined && !isTerminalPanel(selectedPanel)
+  // M77. A chat is a process kind: main holds its baseline from agent:create.
+  const selectedIsSessionless = selectedPanel !== undefined && !isTerminalPanel(selectedPanel) && !isChatPanel(selectedPanel)
 
   return {
     panelRows, railRows, railWorkspaces, railAttention,

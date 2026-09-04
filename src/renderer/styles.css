@@ -749,6 +749,10 @@ body {
 .rail-row__verb { min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
 .rail-row__verb:hover { background: var(--s-4); }
 /* M76. The question at the summary tier, under the state word. */
+/* M77. A tool row's diff, under the row in the review node's own line idiom; a review row's touches. */
+.chat__tool-diff { grid-column: 1 / -1; min-width: 0; overflow-x: auto; }
+.review-node__touches { flex: none; font-size: var(--t-xs); color: var(--fg-3); }
+.review-node__touch-list { flex: 1 1 100%; margin: 0 0 var(--sp-2); padding: 0 0 0 var(--sp-3); list-style: none; font-size: var(--t-xs); color: var(--fg-2); }
 /* M76. The questions, pinned between the well and the composer. */
 .chat__questions { flex: none; padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--s-1); }
 .chat__far-approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
