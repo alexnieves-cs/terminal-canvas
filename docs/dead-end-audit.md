@@ -92,6 +92,13 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   blocked by name on shared), the armed sentences, outcome lines.
 - **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
   each with a three-state result.
+- **Vault pane (M85).** Three states before the list — no folder set (names the setting and
+  offers `Choose a folder…`), reading, a folder that is not there (the reason, and the same
+  verb) — then the list with its filter and a named empty arm for no notes and for no match;
+  the cap reported under the list rather than notes silently missing. Inside a note, an
+  unresolved `[[link]]` stays a link (dashed) that offers to create the note; the Backlinks
+  section says `no note points here yet` rather than vanishing. No REASON_* constant: the
+  pane's refusals are its own three arms.
 - **Watcher node (M84).** Run now / Stop (the control is one or the other, never a disabled
   pair), the close, and three body states — never run (naming its trigger and the manual
   verb), a run that printed nothing, and the tail. A trigger that could not be armed says so

@@ -866,6 +866,73 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ stopped, escalated, removedRow, disposedSignals }))
 }
 
+// M85 — vault.1. THE LINK SYNTAX AND THE INDEX, pure.
+//      (a) `[[name]]` and `[[name|text]]` are links; `[a]`, `[[ ]]` and a
+//          bare `[[name` are TEXT. A parser that took the loose reading turns
+//          a markdown reference link into a note nobody wrote.
+//      (b) A name resolves against a BASENAME without its extension, case
+//          insensitively, and a name with a path against the path relative to
+//          the root — two spellings of the same note, one answer.
+//      (c) Backlinks: every note pointing AT a note, with the line, including
+//          TWO links from one note, and never a note against itself.
+//      (d) An unresolved link is a link, not text: the index says it resolves
+//          to nothing, which is what lets the note offer to create it.
+{
+  const V = F
+  const links = typeof V.parseWikiLinks === 'function' ? {
+    plain: V.parseWikiLinks('see [[design]] and [[plans/next|the next one]]'),
+    notLinks: V.parseWikiLinks('a [ref] and [[unclosed and [[]] and [[   ]] and `[[in code]]` and\n```\n[[fenced]]\n```\n'),
+    twice: V.parseWikiLinks('[[a]] then [[a]] again')
+  } : null
+  const files = [
+    { path: 'design.md', body: '# The design\nsee [[api notes]] and [[plans/next]]\n' },
+    { path: 'api notes.md', body: '# API notes\nback to [[design]] and again [[Design]]\n' },
+    { path: 'plans/next.md', body: '# Next\nnothing here yet, but [[missing note]]\n' },
+    { path: 'self.md', body: '# Self\nI point at [[self]]\n' }
+  ]
+  const index = typeof V.buildVaultIndex === 'function' ? V.buildVaultIndex(files) : null
+  const back = (p) => (index ? (index.backlinks[p] ?? []) : [])
+  ok('vault.1 [[name]] and [[name|text]] are links while a reference link and an unclosed one are text; a name resolves by basename case-insensitively and by relative path; backlinks list both links from one note, never a note against itself, and an unresolved name resolves to nothing rather than silently reading as text',
+    links !== null && index !== null &&
+      links.plain.length === 2 && links.plain[0].name === 'design' && links.plain[1].name === 'plans/next' && links.plain[1].text === 'the next one' &&
+      links.notLinks.length === 0 && links.twice.length === 2 &&
+      index.byName['design'] === 'design.md' && index.byName['api notes'] === 'api notes.md' && index.byName['plans/next'] === 'plans/next.md' &&
+      V.resolveWikiName('Design', index) === 'design.md' && V.resolveWikiName('missing note', index) === null &&
+      back('design.md').length === 2 && back('design.md').every((b) => b.path === 'api notes.md') &&
+      back('api notes.md').length === 1 && back('api notes.md')[0].path === 'design.md' && back('api notes.md')[0].line === 2 &&
+      back('self.md').length === 0,
+    JSON.stringify({ links, byName: index && index.byName, backlinks: index && index.backlinks }))
+}
+
+// M85 — vault.2. THE READ, against a real fixture tree whose directory has a
+//      SPACE in it (this repo's rule). Every `.md` under the root, recursive,
+//      its title the first heading or its basename; a non-markdown file is
+//      not a note; the caps are REPORTED rather than silently dropping notes;
+//      a root that is not there answers EMPTY with its own reason rather than
+//      throwing.
+{
+  const vaultDir = join(DIR, 'my vault')
+  require('node:fs').mkdirSync(join(vaultDir, 'meetings'), { recursive: true })
+  writeFileSync(join(vaultDir, 'design.md'), '# The design\nbody\n')
+  writeFileSync(join(vaultDir, 'untitled.md'), 'no heading here\n')
+  writeFileSync(join(vaultDir, 'notes.txt'), 'not a note\n')
+  writeFileSync(join(vaultDir, 'meetings', '2026-09-04.md'), '# Standup\n[[design]]\n')
+  const read = typeof F.readVault === 'function' ? F.readVault(vaultDir) : null
+  const capped = typeof F.readVault === 'function' ? F.readVault(vaultDir, { maxFiles: 2 }) : null
+  const missing = typeof F.readVault === 'function' ? F.readVault(join(DIR, 'no such vault')) : null
+  const byPath = (r, p) => (r ? r.notes.find((n) => n.path === p) : undefined)
+  ok('vault.2 the read walks the tree for .md only, titles each note by its first heading or its basename, reports what the cap dropped rather than dropping it silently, and answers empty with a reason for a root that is not there',
+    read !== null &&
+      read.notes.length === 3 && read.skipped === 0 &&
+      byPath(read, 'design.md').title === 'The design' &&
+      byPath(read, 'untitled.md').title === 'untitled' &&
+      byPath(read, 'meetings/2026-09-04.md').title === 'Standup' &&
+      !read.notes.some((n) => n.path.endsWith('.txt')) &&
+      capped.notes.length === 2 && capped.skipped === 1 &&
+      missing.notes.length === 0 && typeof missing.reason === 'string' && /vault/i.test(missing.reason),
+    JSON.stringify({ n: read && read.notes.map((x) => [x.path, x.title]), skipped: read && read.skipped, capped: capped && { n: capped.notes.length, skipped: capped.skipped }, missing }))
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

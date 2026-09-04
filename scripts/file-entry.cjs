@@ -24,6 +24,10 @@ module.exports = {
   ...require('../src/main/export.ts'),
   /* M84: the watcher's pure trigger vocabulary and its runner over an
      injected spawn — the agent runner's seam, one tier down. */
+  /* M85. The vault: the link syntax and the index are pure; the read is a
+     node:fs walk, the tier file-read.ts already sits in. */
+  ...require('../src/shared/vault.ts'),
+  ...require('../src/main/vault-read.ts'),
   ...require('../src/shared/watch-trigger.ts'),
   ...require('../src/main/watch-runner.ts'),
   ...require('../src/shared/redact.ts')

@@ -744,6 +744,23 @@ body {
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
 /* M83. The memory node: entries newest first, each `kind · text · time`, and
    one line to add another. */
+/* M85. The vault: the navigator's fourth pane, and a note's links. */
+.vault-pane__filter { margin: var(--sp-2); padding: var(--sp-1) var(--sp-2); min-height: 24px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font: inherit; font-size: var(--t-sm); }
+.vault-pane__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.vault-pane__where { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); margin-right: var(--sp-1); }
+.file-node__wikilink-verb { color: var(--fg-4); text-decoration: none; font-size: var(--t-xs); }
+.vault-pane__empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3); }
+.vault-pane__verb { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
+/* A link inside a note reads as text with a mark, never as a button: the body
+   is a well, and a row of buttons in prose would be a form. */
+.file-node__wikilink { padding: 0; border: 0; background: none; font: inherit; color: var(--iris); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.file-node__wikilink--unresolved { color: var(--fg-3); text-decoration-style: dashed; }
+.file-node__backlinks { border-top: 1px solid var(--line); padding-top: var(--sp-2); margin-top: var(--sp-2); }
+.file-node__backlinks-head { margin: 0 0 var(--sp-1); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.file-node__backlinks-list { margin: 0; padding: 0; list-style: none; }
+.file-node__backlink { display: flex; align-items: baseline; gap: var(--sp-2); }
+.file-node__backlink-verb { padding: 0; border: 0; background: none; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); cursor: pointer; }
+.file-node__backlink-line { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); }
 /* M84. The watcher node: a command line, a capped output tail in the mono
    well every body on this canvas uses, and one line saying how the last run
    ended. No scrollback — the durable record is the run ledger. */

@@ -92,6 +92,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
+  readVault,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -1125,6 +1126,9 @@ app.whenReady().then(async () => {
     // M80. The preset's resolved template — main's own answer, never a spawn.
     presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
     // M83. The project memory: a real store under the harness's own dir.
+    // M85. The vault's read: the REAL reader over the fixture folder, the
+    // reasoning every real export in this harness follows.
+    vaultRead: (root) => readVault(root),
     memoryList: (root, limit) => memoryStore.list(root, limit),
     memoryAdd: (req) => { const r = memoryStore.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
     listTemplates: () => allTemplates(layoutStore.templates()),
@@ -17445,6 +17449,88 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(wErr && wErr.message || wErr) + ' | renderer: ' + (wLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onW)
+      }
+    }
+
+
+    // -------------------------------------------------------------------
+    // M85 — vault.1. THE VAULT, END TO END, over a real folder of markdown.
+    //     The pane lists every note by TITLE and opens one as a prose panel;
+    //     a `[[link]]` inside that note is a CONTROL that opens the note it
+    //     names; an UNRESOLVED link is still a link (marked, and offering to
+    //     create) rather than silently reading as text — the failure this
+    //     whole feature would have shipped with; and the Backlinks section
+    //     names the note that points here, with its line. With no vault set
+    //     the pane says so and offers the verb, rather than rendering an
+    //     empty list that reads like a folder with nothing in it.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['vault.1 with no vault set the pane names the setting and offers its verb; with one set it lists notes by title and marks the open one, a click opens a note as prose, a [[link]] opens the note it names, an unresolved link is marked rather than read as text, and Backlinks names the note pointing here with its line — or says no note does']
+      const vLog = []
+      const onV = (_e, _l, m) => { vLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onV)
+      try {
+        const vaultDir = mkdtempSync(join(tmpdir(), 'tc panels my vault-'))
+        mkdirSync(join(vaultDir, 'meetings'), { recursive: true })
+        writeFileSync(join(vaultDir, 'design.md'), '# The design\nit follows [[api notes]] and [[nothing here]]\n')
+        writeFileSync(join(vaultDir, 'api notes.md'), '# API notes\nback to [[design]]\n')
+        writeFileSync(join(vaultDir, 'meetings', '2026-09-04.md'), '# Standup\nnothing\n')
+        layoutStore.setPreference('vault.root', '')
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reV = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reV
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const unset = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('[data-vault-arm="unset"]'); return p ? { text: p.textContent, verb: !!p.querySelector('[data-vault-choose]') } : false })()`), 6000)
+        // Now set the root through the SAME store the setting writes to.
+        // Set through the store and RELOAD: the settings push is main's own
+        // event and this harness does not own the menu that sends it, so the
+        // reload is the honest way to reach the same state a user would.
+        layoutStore.setPreference('vault.root', vaultDir)
+        flushLayoutStore()
+        const reV2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reV2
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const listed = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('[data-vault-note]')].map((r) => ({ path: r.getAttribute('data-vault-note'), title: r.querySelector('[data-vault-title]')?.textContent ?? '' })); return rows.length === 3 ? rows : false })()`), 8000)
+        // Open `design.md` from the pane.
+        // Guarded: a missing target reads as a red assertion, never a throw
+        // that takes the block down (the harness doc's rule).
+        const clickedNote = await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="design.md"] .rail-row__main'); if (!r) return { ok: false, panes: document.querySelector('[data-vault-pane]') ? 'vault pane up' : 'no vault pane', arm: document.querySelector('[data-vault-arm]')?.getAttribute('data-vault-arm') ?? null }; r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return { ok: true } })()`)
+        const opened = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-kind="file"]')].pop(); if (!p) return false; const links = [...p.querySelectorAll('[data-wikilink]')].map((l) => ({ name: l.getAttribute('data-wikilink'), resolved: l.getAttribute('data-wikilink-resolved'), text: l.textContent })); return links.length === 2 ? { id: p.getAttribute('data-panel-id'), links } : false })()`), 8000)
+        // Click the RESOLVED link: it opens the note it names.
+        const clickedLink = await wc.executeJavaScript(`(() => { const l = document.querySelector('[data-wikilink="api notes"]'); if (!l) return false; l.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const followed = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const t = p ? p.querySelector('.pf__title')?.textContent ?? '' : ''; return /api notes/.test(t) ? { title: t, panels: ps.length } : false })()`), 8000)
+        // That note's Backlinks name design.md, with its line.
+        const backlinks = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const rows = p ? [...p.querySelectorAll('[data-file-backlink]')].map((b) => ({ path: b.getAttribute('data-file-backlink'), line: b.parentElement?.querySelector('.file-node__backlink-line')?.textContent ?? '' })) : []; return rows.length === 1 ? rows : false })()`), 8000)
+        // The EMPTY arm of Backlinks (M85's critic: the scene proved only the
+        // answered state): a note nobody points at says so rather than showing
+        // a heading over nothing. And the pane marks the OPEN note's row.
+        await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="meetings/2026-09-04.md"] .rail-row__main'); if (r) r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!r })()`)
+        const noneArm = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const a = p ? p.querySelector('[data-file-backlinks-arm="none"]') : null; return a ? a.textContent : false })()`), 8000)
+        const markedRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="meetings/2026-09-04.md"]'); return r && r.classList.contains('rail-row--selected') ? true : false })()`), 6000)
+        ok(IDS[0],
+          unset && /no vault folder yet/.test(unset.text) && unset.verb === true &&
+            typeof noneArm === 'string' && /no note points here/.test(noneArm) && markedRow === true &&
+            Array.isArray(listed) && listed.some((r) => r.path === 'design.md' && r.title === 'The design') && clickedNote.ok === true && clickedLink === true &&
+            listed.some((r) => r.path === 'meetings/2026-09-04.md' && r.title === 'Standup') &&
+            opened && opened.links.some((l) => l.name === 'api notes' && l.resolved === 'true') &&
+            opened.links.some((l) => l.name === 'nothing here' && l.resolved === 'false') &&
+            followed && followed.panels === 2 &&
+            Array.isArray(backlinks) && backlinks[0].path === 'design.md' && /line 2/.test(backlinks[0].line),
+          JSON.stringify({ unset, listed, clickedNote, opened, clickedLink, followed, backlinks, noneArm, markedRow, log: vLog.slice(-3) }))
+        layoutStore.setPreference('vault.root', '')
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reVDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reVDone
+        await settle()
+        try { rmSync(vaultDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (vErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr) + ' | renderer: ' + (vLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onV)
       }
     }
 

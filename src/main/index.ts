@@ -23,6 +23,7 @@ import { createReviewDiscarder } from './review-discard'
 import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
+import { readVault } from './vault-read'
 import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
@@ -48,7 +49,7 @@ import type { AgentCreateResult, AgentSessionSpec } from '../shared/agent-sessio
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { spawn as spawnChild } from 'node:child_process'
-import { watch as fsWatch, type FSWatcher } from 'node:fs'
+import { watch as fsWatch, realpathSync, type FSWatcher } from 'node:fs'
 import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from './watch-runner'
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../shared/watch-trigger'
 import type { WatcherHandlers } from './ipc'
@@ -496,6 +497,36 @@ const sendToRenderer = (channel: string, payload: unknown): void => {
   win.show()
 }
 const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memory') })
+
+/**
+ * M85. Main's OWN watch on the vault root, so a note an agent writes into the
+ * folder reaches the pane with no gesture. One recursive watch, replaced when
+ * the root changes, debounced so a save that touches several files is one
+ * event, and never opening a window (the send goes only to one that exists).
+ */
+let vaultWatch: { root: string; watcher: FSWatcher } | null = null
+let vaultChangedTimer: NodeJS.Timeout | null = null
+const armVaultWatch = (root: string): void => {
+  if (vaultWatch !== null && vaultWatch.root === root) return
+  vaultWatch?.watcher.close()
+  vaultWatch = null
+  let isDir = false
+  try { isDir = statSync(root).isDirectory() } catch { isDir = false }
+  if (!isDir) return
+  try {
+    const watcher = fsWatch(root, { persistent: false, recursive: true }, () => {
+      if (vaultChangedTimer !== null) clearTimeout(vaultChangedTimer)
+      vaultChangedTimer = setTimeout(() => {
+        vaultChangedTimer = null
+        const wc = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+        if (wc !== null && !wc.isLoading()) wc.send(IPC_EVENTS.VAULT_CHANGED)
+      }, 250)
+      vaultChangedTimer.unref?.()
+    })
+    watcher.on('error', () => { vaultWatch?.watcher.close(); vaultWatch = null })
+    vaultWatch = { root, watcher }
+  } catch { /* no watch; the refresh control still works */ }
+}
 /** M84. The watcher runner, once it exists — read by the quit sequence. */
 let watchRunnerRef: { disposeAll(): void } | null = null
 
@@ -1153,6 +1184,18 @@ app.whenReady().then(async () => {
       // repository keeps its own path as the key rather than failing: the
       // store's named refusals are for an ABSENT root, not for a directory
       // that git does not own.
+      // M85. The vault's read, in main for `file-read.ts`'s reason. The root
+      // is expanded and realpath'd, NEVER resolveCwd'd: that helper falls back
+      // to $HOME for a path that is not there, and a typo'd vault would have
+      // walked the user's entire home directory and listed it as the vault
+      // (M85's verifier). A missing root is the reader's own "no vault" arm.
+      vaultRead: (root) => {
+        const expanded = expandTilde(root.trim())
+        let real = expanded
+        try { real = realpathSync(expanded) } catch { /* the reader answers with its reason */ }
+        armVaultWatch(real)
+        return readVault(real)
+      },
       memoryList: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
       memoryAdd: async (req) => {
         const r = memoryStore.add({ ...req, root: await memoryRoot(req.root) })

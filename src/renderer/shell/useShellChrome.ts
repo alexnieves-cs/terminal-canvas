@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ShellBreakpoint } from './useShellBreakpoint'
 
-export type NavigatorPane = 'panels' | 'workspaces' | 'files'
+export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault'
 export type ContextTab = 'detail' | 'work' | 'tools'
 
 export interface ShellChrome {
@@ -72,7 +72,7 @@ export function useShellChrome(deps: {
   const [railPref, setRailPref] = useState<boolean | null>(null)
   const [ctxPref, setCtxPref] = useState<boolean | null>(null)
   const [treeOpen, setTreeOpen] = useState(false)
-  const [navigatorPref, setNavigatorPref] = useState<'panels' | 'workspaces'>('panels')
+  const [navigatorPref, setNavigatorPref] = useState<Exclude<NavigatorPane, 'files'>>('panels')
   const [contextTab, setContextTabState] = useState<ContextTab>('detail')
   const [navDrawer, setNavDrawer] = useState(false)
   const [ctxDrawer, setCtxDrawer] = useState(false)
@@ -91,7 +91,9 @@ export function useShellChrome(deps: {
         if (rail) setRailPref(rail.persisted ? rail.value === true : null)
         if (ctx) setCtxPref(ctx.persisted ? ctx.value === true : null)
         if (tree) setTreeOpen(tree.value === true)
-        if (nav) setNavigatorPref(nav.value === 'workspaces' ? 'workspaces' : 'panels')
+        // M85. A value from a LATER version of this app falls back to panels
+        // rather than leaving the navigator on a pane that does not exist.
+        if (nav) setNavigatorPref(nav.value === 'workspaces' || nav.value === 'vault' ? nav.value : 'panels')
         if (tab) setContextTabState(tab.value === 'work' || tab.value === 'tools' ? tab.value : 'detail')
       })
     }

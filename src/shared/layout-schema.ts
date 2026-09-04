@@ -1030,7 +1030,9 @@ export function parsePreferences(
       out[id] = [...value]
       continue
     }
-    const expected = def.type === 'enum' ? 'string' : def.type
+    // M85. Both `enum` and `text` are strings here; only an enum is then
+    // checked against a list of values.
+    const expected = def.type === 'enum' || def.type === 'text' ? 'string' : def.type
     if (typeof value !== expected) {
       warnings.push(`dropped setting ${id}: expected ${expected}, got ${typeof value}`)
       continue

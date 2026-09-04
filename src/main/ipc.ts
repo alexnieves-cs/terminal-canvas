@@ -89,6 +89,8 @@ export interface PaletteHandlers {
   /** M80. The preset's resolved template, or null. */
   presetTemplate(id: string): PresetTemplate | null
   /** M83. The project memory, for the node and the chat's context. */
+  /** M85. Every `.md` under the vault root. */
+  vaultRead(root: string): { root: string; notes: unknown[]; skipped: number; reason?: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
   memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   listTemplates(): PersistedTemplate[]
@@ -270,6 +272,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
+  ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))
   ipcMain.handle(IPC.WATCHER_CREATE, (_event, req: WatcherCreateRequest) => watchers.create(req))
   ipcMain.handle(IPC.WATCHER_RUN, (_event, id: string) => watchers.run(id))
   ipcMain.handle(IPC.WATCHER_STOP, (_event, id: string) => watchers.stop(id))
