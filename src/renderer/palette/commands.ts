@@ -286,7 +286,10 @@ export interface PaletteActions {
   /** Name the current multi-selection as one movable canvas region. */
   beginCreateGroup(panelIds: string[]): void
   /** M65. Open the spawn sheet: where, what, how. */
-  beginSpawnSheet(): void
+  /** M80. `templateId` opens the sheet on that template. */
+  beginSpawnSheet(templateId?: string): void
+  /** M80. Save the selected panels and their edges as a template. */
+  beginSaveTemplate(panelIds: readonly string[]): void
   /**
    * M61. Card or expand one group, and remove one. Ids rather than "the
    * captured panel's group", the rule every panel verb here obeys; both are
@@ -437,6 +440,8 @@ export interface PaletteContext {
    * ids and not a count: main does not hold this fact, the renderer does.
    */
   attentionIds: readonly string[]
+  /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
+  templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /**
    * M76. Every pending permission request on this renderer, with the panel's
    * label. Optional so every older fixture builds; absent is none.
@@ -567,6 +572,10 @@ export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude se
 export const REASON_CHAT_BUSY = 'the chat is still answering — interrupt it first'
 export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has nothing to move'
 export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
+/** M77. A chat with no baseline yet: the review row's own reason. */
+export const REASON_NO_SELECTION_TEMPLATE = 'select the panels to save first'
+/** M80. No template is saved yet — the row still says so rather than vanishing. */
+export const REASON_NO_TEMPLATES = 'no templates yet — select some panels and save them as one'
 /** M77. A chat with no baseline yet: the review row's own reason. */
 export const REASON_CHAT_NO_BASELINE = 'send a message first — a chat has no baseline until its agent runs'
 /** M76. The one disabled row when nothing pends. */
@@ -958,6 +967,35 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     shortcut: '⌘⇧N',
     run: () => actions.beginSpawnSheet()
   })
+
+  // M80. Templates: one row each, disabled by its own reason when it cannot
+  // run; and the save verb, refused by name with nothing selected.
+  const templateRows = ctx.templates ?? []
+  if (templateRows.length === 0) {
+    out.push(withReason({
+      id: 'template.none', title: 'New from template…', searchText: 'template new from shape of work start',
+      group: 'panel', hiddenAtRest: true, run: () => {}
+    }, REASON_NO_TEMPLATES))
+  }
+  for (const t of templateRows) {
+    out.push(withReason({
+      id: `template.new.${t.id}`,
+      title: `New from ${t.name}`,
+      subtitle: `${t.nodes} panel${t.nodes === 1 ? '' : 's'} · ${t.edges} edge${t.edges === 1 ? '' : 's'}`,
+      searchText: 'template new from shape of work start',
+      group: 'panel',
+      run: () => actions.beginSpawnSheet(t.id)
+    }, t.refusal))
+  }
+  out.push(withReason({
+    id: 'template.save',
+    title: 'Save selection as template…',
+    subtitle: 'the selected panels and the edges between them',
+    searchText: 'save template selection shape of work',
+    group: 'panel',
+    hiddenAtRest: true,
+    run: () => actions.beginSaveTemplate(ctx.selectedIds)
+  }, ctx.selectedIds.length === 0 ? REASON_NO_SELECTION_TEMPLATE : undefined))
 
   out.push({
     id: 'panel.open-file',

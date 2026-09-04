@@ -121,6 +121,8 @@ export interface PaletteProps {
   cameraTrail: { back: boolean; forward: boolean }
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
+  /** M80. Saved shapes of work, for the New-from rows. */
+  templates: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /** M76. Every pending permission request, for the Allow/Deny rows. */
   approvals: readonly ApprovalRow[]
   hasSelection: boolean
@@ -204,6 +206,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         cameraTrail: props.cameraTrail,
         noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
+        templates: props.templates,
         approvals: props.approvals,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
@@ -220,7 +223,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
-     props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, props.approvals, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, props.approvals, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.scrollbackEnabled]
   )

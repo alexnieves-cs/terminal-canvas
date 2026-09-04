@@ -12,7 +12,8 @@ import type {
   PtyWriteRequest
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
-import type { SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
+import type { PersistedTemplate } from '../shared/templates'
+import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
 import type { PtyManager } from './pty-manager'
@@ -83,6 +84,12 @@ export interface PaletteHandlers {
   requestReset(): void
   listPrompts(cwd: string | null): PromptListRow[]
   savePrompt(name: string, body: string): void
+  /** M80. Templates: the list (built-ins first), a save, a delete that refuses a built-in. */
+  /** M80. The preset's resolved template, or null. */
+  presetTemplate(id: string): PresetTemplate | null
+  listTemplates(): PersistedTemplate[]
+  saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
+  removeTemplate(id: string): boolean
   removePrompt(id: string): boolean
 }
 
@@ -345,6 +352,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_LIST, (_event, cwd: string | null) => palette.listPrompts(cwd))
   ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
+  ipcMain.handle(IPC.PRESET_TEMPLATE, (_event, id: string) => palette.presetTemplate(id))
+  ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
+  ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }) => palette.saveTemplate(template))
+  ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))
 
   // expandTilde, deliberately NOT resolveCwd: `~` expansion is main's job and
   // the renderer has no process.env to do it with — the same boundary

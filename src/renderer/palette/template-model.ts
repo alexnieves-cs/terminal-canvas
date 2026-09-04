@@ -1,0 +1,95 @@
+import type { PersistedTemplate, TemplateNode } from '@shared/templates'
+import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
+import type { Point } from '@renderer/canvas/viewport'
+
+/**
+ * M80. THE TEMPLATE MODEL, pure. What a template asks for, what filling it
+ * gives, where its nodes land, and why it cannot run.
+ *
+ * The hole regex is `composer-model.ts`'s, IMPORTED: a template's
+ * `{{parameters}}` and a prompt's `{{holes}}` are one idea, and a second
+ * copy of the pattern would drift in the case nobody types twice.
+ */
+
+/** Every string in a template that a parameter can live in, in first-seen order. */
+function fieldsOf(template: PersistedTemplate): string[] {
+  const out: string[] = [template.name, ...(template.description === undefined ? [] : [template.description])]
+  for (const n of template.nodes) {
+    out.push(n.cwd)
+    if (n.command !== undefined) out.push(n.command)
+    if (n.title !== undefined) out.push(n.title)
+    if (n.message !== undefined) out.push(n.message)
+  }
+  return out
+}
+
+export function templateHoles(template: PersistedTemplate): string[] {
+  const out: string[] = []
+  for (const field of fieldsOf(template)) for (const name of placeholders(field)) if (!out.includes(name)) out.push(name)
+  return out
+}
+
+/** A hole with no value stays as typed — the composer's own rule, reached through its own function. */
+export function fillTemplate(template: PersistedTemplate, values: Record<string, string>): PersistedTemplate {
+  const fill = (text: string): string => fillPlaceholders(text, values)
+  return {
+    ...template,
+    name: fill(template.name),
+    ...(template.description === undefined ? {} : { description: fill(template.description) }),
+    nodes: template.nodes.map((n) => ({
+      ...n,
+      cwd: fill(n.cwd),
+      ...(n.command === undefined ? {} : { command: fill(n.command) }),
+      ...(n.title === undefined ? {} : { title: fill(n.title) }),
+      ...(n.message === undefined ? {} : { message: fill(n.message) })
+    })),
+    edges: template.edges.map((e) => ({ ...e }))
+  }
+}
+
+export interface TemplatePlacement {
+  key: string
+  node: TemplateNode
+  centre: Point
+}
+
+/** The nodes around a centre, in node order — the geometry the canvas mints from. */
+export function templatePanels(template: PersistedTemplate, centre: Point): TemplatePlacement[] {
+  return template.nodes.map((node) => ({ key: node.key, node, centre: { x: centre.x + node.dx, y: centre.y + node.dy } }))
+}
+
+/**
+ * Why this template cannot be instantiated, in a sentence naming the fix —
+ * or undefined. A row is disabled with this, never hidden.
+ */
+export function templateRefusal(
+  template: PersistedTemplate,
+  presets: readonly { id: string }[],
+  claudeAvailable: boolean
+): string | undefined {
+  const missing = template.nodes.find((n) => n.presetId !== undefined && !presets.some((p) => p.id === n.presetId))
+  if (missing !== undefined) return `${missing.key} names a preset that no longer exists — save the template again`
+  const bare = template.nodes.find((n) => n.kind === 'terminal' && n.presetId === undefined && (n.command ?? '') === '')
+  if (bare !== undefined) return `${bare.key} names neither a preset nor a command`
+  // A cycle is refused by `setLinkAutomation` at the last moment and silently
+  // (it returns the array unchanged), which would leave a template half
+  // applied — so it is refused HERE, by name, before anything is minted.
+  const outgoing = new Map<string, string[]>()
+  for (const e of template.edges) outgoing.set(e.from, [...(outgoing.get(e.from) ?? []), e.to])
+  const seen = new Set<string>()
+  const walking = new Set<string>()
+  const cycles = (key: string): boolean => {
+    if (walking.has(key)) return true
+    if (seen.has(key)) return false
+    walking.add(key)
+    for (const next of outgoing.get(key) ?? []) if (cycles(next)) return true
+    walking.delete(key)
+    seen.add(key)
+    return false
+  }
+  if (template.nodes.some((n) => cycles(n.key))) return 'its edges make a loop — a handoff graph cannot cycle'
+  if (!claudeAvailable && template.nodes.some((n) => n.kind === 'chat')) {
+    return 'claude was not found on the login PATH — install it, or check the environment report'
+  }
+  return undefined
+}

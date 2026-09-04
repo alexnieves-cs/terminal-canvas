@@ -11,7 +11,7 @@ import {
   type Prompt,
   type RestoreSettings,
   type Workspace,
-  type WorktreeRecord, RECENT_DIRECTORIES_CAP } from '../shared/layout-schema'
+  type WorktreeRecord, RECENT_DIRECTORIES_CAP, TEMPLATES_MAX, type PersistedTemplate } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
 import type { ReviewBaseline } from '../shared/review'
@@ -94,6 +94,11 @@ export interface LayoutStore {
   defaultPresetId(): string
   /** The SAVED prompts only. Project prompts are read live; see main/prompts.ts. */
   prompts(): Prompt[]
+  /** M80. Saved templates (the user's; built-ins are code). */
+  templates(): PersistedTemplate[]
+  saveTemplate(template: PersistedTemplate): void
+  /** False when the id names nothing — including every built-in id. */
+  deleteTemplate(id: string): boolean
   addPrompt(prompt: Prompt): void
   /** False when the id names nothing — including any project prompt id. */
   deletePrompt(id: string): boolean
@@ -516,6 +521,22 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // Copied out for the same reason presets() copies: a caller must not be
     // able to mutate the snapshot the store is about to serialise.
     prompts: () => snapshot.prompts.map((p) => ({ ...p })),
+
+    templates: () => snapshot.templates.map((t) => ({ ...t, nodes: t.nodes.map((n) => ({ ...n })), edges: t.edges.map((e) => ({ ...e })) })),
+
+    saveTemplate(template) {
+      const copy = { ...template, nodes: template.nodes.map((n) => ({ ...n })), edges: template.edges.map((e) => ({ ...e })) }
+      snapshot.templates = [copy, ...snapshot.templates.filter((t) => t.id !== template.id)].slice(0, TEMPLATES_MAX)
+      scheduleWrite()
+    },
+
+    deleteTemplate(id) {
+      const before = snapshot.templates.length
+      snapshot.templates = snapshot.templates.filter((t) => t.id !== id)
+      if (snapshot.templates.length === before) return false
+      scheduleWrite()
+      return true
+    },
 
     addPrompt(prompt) {
       snapshot.prompts = [...snapshot.prompts, { ...prompt }]

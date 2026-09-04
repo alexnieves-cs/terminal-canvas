@@ -9,6 +9,8 @@ module.exports = {
   ...require('../src/renderer/palette/commands'),
   /* M65. The spawn sheet's model — pure. */
   ...require('../src/renderer/palette/spawn-sheet'),
+  /* M80. The template model: holes, fill, placement, the named refusal. */
+  ...require('../src/renderer/palette/template-model'),
   /* M66. The settings definitions, for the voice check. */
   ...require('../src/shared/settings-schema')
 }

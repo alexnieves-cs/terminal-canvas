@@ -3,6 +3,9 @@ import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type Permiss
 import type { SpawnResult } from '@shared/ipc-contract'
 import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
 import { shortPath } from './panel-name'
+import type { PersistedTemplate } from '@shared/templates'
+import { templateHoles } from './template-model'
+import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 
 /**
  * M65. THE SPAWN SHEET — where, what, how, in the palette's overlay.
@@ -28,6 +31,12 @@ import { shortPath } from './panel-name'
 
 export interface SpawnSheetModel {
   presets: readonly SheetPreset[]
+  /** M80. Saved shapes of work, built-ins first; each with the reason it cannot run, when it cannot. */
+  templates?: readonly { template: PersistedTemplate; refusal?: string }[]
+  /** M80. The template the sheet opens on, when it was opened for one. */
+  templateId?: string
+  /** M80. Instantiate: the filled template, the sheet's answer in the sheet's own shape. */
+  instantiate?(template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult>
   defaultPresetId: string
   /** The focused panel's live directory, when a terminal is focused. */
   focusedCwd?: string
@@ -45,10 +54,12 @@ export interface SpawnSheetProps {
 }
 
 const COMMAND = '__command__'
+/** M80. A template's own value in the `what` select. */
+const TEMPLATE_PREFIX = '__tpl__'
 
 export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.Element {
   const firstAvailable = model.presets.find((p) => p.id === model.defaultPresetId && p.available !== false) ?? model.presets.find((p) => p.available !== false)
-  const [whatId, setWhatId] = useState<string>(firstAvailable?.id ?? COMMAND)
+  const [whatId, setWhatId] = useState<string>(model.templateId !== undefined ? `${TEMPLATE_PREFIX}${model.templateId}` : (firstAvailable?.id ?? COMMAND))
   const [command, setCommand] = useState('')
   const preset = model.presets.find((p) => p.id === whatId)
   const [cwd, setCwd] = useState(model.focusedCwd ?? preset?.cwd ?? '')
@@ -58,6 +69,13 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const [effort, setEffort] = useState<Effort | ''>('')
   const [modelName, setModelName] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
+  // M80. The chosen template and its parameters — ONE FIELD PER PARAMETER,
+  // the composer's fill step (the sheet is a form; a form asks its fields
+  // together). Its own state so switching `what` away keeps nothing.
+  const [holeValues, setHoleValues] = useState<Record<string, string>>({})
+  const templates = model.templates ?? []
+  const chosenTemplate = templates.find((t) => `${TEMPLATE_PREFIX}${t.template.id}` === whatId)
+  const holes = chosenTemplate === undefined ? [] : templateHoles(chosenTemplate.template)
   const [highlight, setHighlight] = useState(-1)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const whereRef = useRef<HTMLInputElement | null>(null)
@@ -90,6 +108,21 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   }
 
   const submit = (): void => {
+    // M80. A template makes several panels; the sheet's other fields do not
+    // apply to it, and its own refusal (a missing preset, no claude) is the
+    // one shown.
+    if (chosenTemplate !== undefined) {
+      if (chosenTemplate.refusal !== undefined) { setRefusal(chosenTemplate.refusal); return }
+      const missing = holes.find((h) => (holeValues[h] ?? '').trim() === '')
+      if (missing !== undefined) { setRefusal(`fill in ${missing}`); return }
+      const filled: Record<string, string> = {}
+      for (const h of holes) filled[h] = (holeValues[h] ?? '').trim()
+      void (model.instantiate?.(chosenTemplate.template, filled) ?? Promise.resolve<SpawnResult>({ kind: 'refused', reason: 'templates cannot be started here' })).then((result) => {
+        if (result.kind === 'refused') { setRefusal(result.reason); return }
+        onDone()
+      })
+      return
+    }
     const v = values()
     if (v.what.kind === 'command' && v.what.command.trim() === '') { setRefusal('type a command, or choose a preset'); return }
     if (v.cwd.trim() === '') { setRefusal('choose a directory'); return }
@@ -131,12 +164,24 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const isAgent = preset?.agent !== undefined || isChat
   const own = preset?.agentOptions ?? {}
   const request = buildSpawnRequest(values(), model.presets)
-  const what = isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
+  // M80. The shape, not only its arithmetic (the critic): the kinds it will
+  // make and the trigger word its edge carries, in the edge's own vocabulary.
+  const templateShape = chosenTemplate === undefined ? '' : (() => {
+    const t = chosenTemplate.template
+    const kinds = t.nodes.map((n) => n.kind).join(' + ')
+    const edges = t.edges.map((e) => TRIGGER_WORDS[e.trigger])
+    return `${kinds}${edges.length === 0 ? '' : ` · ${[...new Set(edges)].join(', ')}`}`
+  })()
+  // The template's NAME is already the `what` row's value; the preview says
+  // what it makes, which is the thing the row cannot.
+  const what = chosenTemplate !== undefined ? templateShape
+    : isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
       <div className="sheet__title">New panel…</div>
 
+      {chosenTemplate === undefined && (
       <label className="sheet__field sheet__field--where">
         <span className="sheet__label">where</span>
         <input ref={whereRef} className="sheet__input sheet__input--mono" data-sheet-where value={cwd} placeholder="a directory" spellCheck={false}
@@ -156,6 +201,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           </ul>
         )}
       </label>
+      )}
 
       <label className="sheet__field">
         <span className="sheet__label">what</span>
@@ -166,8 +212,24 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           <option value={COMMAND}>type a command…</option>
           {/* M73. The conversation arm, disabled by name when claude is absent. */}
           <option value={CHAT_WHAT_ID} disabled={!model.claudeAvailable}>chat with claude{model.claudeAvailable ? '' : ' — not on PATH'}</option>
+          {/* M80. Templates, disabled by name when one cannot be started. */}
+          {templates.map((t) => (
+            <option key={t.template.id} value={`${TEMPLATE_PREFIX}${t.template.id}`} disabled={t.refusal !== undefined}>
+              {t.template.name}{t.refusal === undefined ? '' : ` — ${t.refusal}`}
+            </option>
+          ))}
         </select>
       </label>
+
+      {/* M80. One field per parameter: the composer's fill step, in a form. */}
+      {chosenTemplate !== undefined && holes.map((hole) => (
+        <label className="sheet__field sheet__field--hole" key={hole}>
+          <span className="sheet__label sheet__label--hole">{hole}</span>
+          <input className="sheet__input sheet__input--mono" data-sheet-hole={hole} value={holeValues[hole] ?? ''}
+            placeholder={hole === 'repository' ? 'a directory' : `a value for ${hole}`} spellCheck={false}
+            onChange={(e) => { setHoleValues((v) => ({ ...v, [hole]: e.target.value })); setRefusal(null) }} />
+        </label>
+      ))}
 
       {whatId === COMMAND && (
         <label className="sheet__field">
@@ -177,10 +239,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         </label>
       )}
 
+      {chosenTemplate === undefined && (
       <label className="sheet__field">
         <span className="sheet__label">title</span>
         <input className="sheet__input" data-sheet-title value={title} placeholder={whatId === COMMAND ? (command.trim() || 'the command') : 'optional'} onChange={(e) => setTitle(e.target.value)} />
       </label>
+      )}
 
       {isAgent && (
         <div className="sheet__field sheet__field--how">
@@ -200,9 +264,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       )}
 
       <div className="sheet__foot">
-        <span className="sheet__preview" data-sheet-preview>{what} · {request.cwd ? shortPath(request.cwd, 3) : '—'}</span>
+        <span className="sheet__preview" data-sheet-preview>{what}{chosenTemplate !== undefined ? '' : ` · ${request.cwd ? shortPath(request.cwd, 3) : '—'}`}</span>
         {refusal !== null && <span className="sheet__refusal" data-sheet-refusal role="alert">{refusal}</span>}
-        <span className="sheet__keys">↵ start · esc close · ⌘N starts the default without asking</span>
+        {/* M80. The commit verb says what it will MAKE for a template: `start`
+            is the state machine's word for one panel (the critic), and a
+            template lays down a shape. */}
+        <span className="sheet__keys">↵ {chosenTemplate === undefined ? 'start' : `create ${chosenTemplate.template.nodes.length} panels`} · esc close · ⌘N starts the default without asking</span>
       </div>
     </div>
   )

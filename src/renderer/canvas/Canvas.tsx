@@ -109,6 +109,8 @@ import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { useRuns } from './useRuns'
+import type { PersistedTemplate } from '@shared/templates'
+import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette/template-model'
 import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
@@ -163,6 +165,19 @@ const registry = createRegistry({
 // a tmux backend and asserts the session survives; that is what fails if this
 // listener comes back.
 
+/**
+ * M80. A template's first message, delivered once the chat's store entry
+ * exists: `insertIntoComposer` is a no-op for an id the store has not seeded,
+ * and the seeding is the panel's own hook, a render away.
+ */
+async function deliverToComposer(id: string, text: string): Promise<void> {
+  for (let i = 0; i < 40; i += 1) {
+    const state = getChat(id)
+    if (state.snapshot !== null || state.refusal !== null) { insertIntoComposer(id, text); return }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
+
 /** M78. The word an edge carries on the canvas for its rule. */
 function edgeWord(automation: LinkAutomation): string {
   // One phrasing, verbatim, on the line and in the pane's select (M78's critic).
@@ -216,6 +231,10 @@ export function Canvas({
   // every other late-declared verb here uses.
   const forgetOpenRunsRef = useRef<() => void>(() => {})
   const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current() }, [])
+  // M80. The sheet is opened by usePaletteActions, which is created above the
+  // instantiate verb; the ref is the same indirection every late verb uses.
+  const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
+  const instantiateTemplateStable = useCallback((template: PersistedTemplate, values: Record<string, string>) => instantiateTemplateRef.current(template, values), [])
   // The open run's duration ticks once a second, and only while one is open:
   // Date.now() read every render would give the rail's rows a new identity at
   // drag frequency (M79's verifier).
@@ -2077,6 +2096,11 @@ export function Canvas({
   // palette-only, and the comment here still said so — see that effect for why
   // the top bar cannot wait for a first Cmd+K.
   const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
+  // M80. The saved shapes of work, for the palette's rows (the sheet asks main
+  // itself when it opens, so a template saved while the palette is shut is
+  // offered the moment the sheet opens either way).
+  const [templateRows, setTemplateRows] = useState<PersistedTemplate[]>([])
+  useEffect(() => { void window.canvas.template.list().then(setTemplateRows) }, [])
   const reloadPresets = useCallback(() => {
     void window.canvas.preset.list().then(setPresetRows)
   }, [])
@@ -2532,6 +2556,10 @@ export function Canvas({
   // M76. The pending requests with the panel's label, for the palette's
   // Allow/Deny rows. The label is the same one the rail row shows.
   const pendingApprovals = useApprovals()
+  const paletteTemplates = useMemo(() => templateRows.map((t) => {
+    const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
+    return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
+  }), [templateRows, presetRows])
   const paletteApprovals = useMemo<ApprovalRow[]>(() => pendingApprovals.map((a) => {
     const panel = panelsRef.current.find((p) => p.rect.id === a.id)
     return { ...a, label: panel === undefined ? a.id : railLabel(panel, undefined) }
@@ -3152,6 +3180,94 @@ export function Canvas({
   // record is complete before any invoke resolves; main's agent:create is
   // asked FIRST so a refusal (no such directory, no claude) is answered by
   // name with no panel minted, and the hook's later create is idempotent.
+  /**
+   * M80. INSTANTIATE a template: each node through the ordinary create path
+   * (a terminal through the same `makePanel` a spawn uses, a chat through
+   * `beginNewChat`, which is what asks main for the session), then the edges
+   * through `setLinkAutomation` — which is also what refuses a cycle. ONE
+   * history entry for the whole shape: undoing a template is one press.
+   *
+   * A chat node's `message` is INSERTED into its composer, never sent: a
+   * template must not start work the user has not read.
+   */
+  const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const filled = fillTemplate(template, values)
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const places = templatePanels(filled, centre)
+    const minted = new Map<string, string>()
+    const madePanels: Panel[] = []
+    const messages: Array<{ id: string; text: string }> = []
+    // Every chat session main has already created, so a refusal half way
+    // through disposes them rather than leaving an agent with no panel
+    // (M80's verifier).
+    const createdChats: string[] = []
+    const undoCreated = (): void => { for (const id of createdChats) void window.canvas.agentSession.dispose({ id, drop: true }) }
+    for (const place of places) {
+      const node = place.node
+      if (node.kind === 'chat') {
+        const id = `c${nextIdRef.current++}`
+        const sessionId = crypto.randomUUID()
+        const result = await window.canvas.agentSession.create({ id, cwd: node.cwd, sessionId })
+        if (result.kind === 'refused') { undoCreated(); return { kind: 'refused', reason: result.reason } }
+        createdChats.push(id)
+        const panel = makeChatPanel(id, place.centre, 1, { cwd: node.cwd, sessionId })
+        madePanels.push(node.title === undefined ? panel : { ...panel, title: node.title })
+        minted.set(node.key, id)
+        // The message goes in AFTER the panel is committed: the insert bus only
+        // reaches a chat the store has seeded, and the store is seeded by the
+        // panel's own hook — which cannot run before the panel exists.
+        if (node.message !== undefined && node.message !== '') messages.push({ id, text: node.message })
+        continue
+      }
+      // A preset node is RESOLVED by main (only main turns an absent command
+      // into the login shell, M5b) and minted here — never spawned through the
+      // event path, which would place it itself and commit its own history
+      // entry, and leave the renderer guessing which panel had arrived.
+      let spec: PanelSpecTemplate | null = null
+      if (node.presetId !== undefined) {
+        const resolved = await window.canvas.preset.template(node.presetId)
+        if (resolved === null) { undoCreated(); return { kind: 'refused', reason: `${node.key} names a preset that no longer exists` } }
+        spec = {
+          panelId: '', cwd: node.cwd, args: [...resolved.args],
+          ...(resolved.command === undefined ? {} : { command: resolved.command }),
+          ...(resolved.agent === undefined ? {} : { agent: resolved.agent }),
+          ...(resolved.agentOptions === undefined ? {} : { agentOptions: resolved.agentOptions })
+        }
+      } else if ((node.command ?? '') !== '') {
+        spec = { panelId: '', cwd: node.cwd, command: node.command as string, args: [...(node.args ?? [])] }
+      }
+      if (spec === null) { undoCreated(); return { kind: 'refused', reason: `${node.key} names neither a preset nor a command` } }
+      const id = `n${nextIdRef.current++}`
+      const panel = makePanel(id, place.centre, 1, { ...spec, panelId: id })
+      madePanels.push(node.title === undefined ? panel : { ...panel, title: node.title })
+      minted.set(node.key, id)
+    }
+    setPanels((current) => {
+      let next: Panel[] = [...current]
+      let z = nextZ(current)
+      for (const panel of madePanels) next = [...next, { ...panel, z: z++ }]
+      for (const edge of filled.edges) {
+        const from = minted.get(edge.from)
+        const to = minted.get(edge.to)
+        if (from === undefined || to === undefined) continue
+        next = addLink(next, from, to)
+        next = setLinkAutomation(next, from, to, { kind: 'handoff', enabled: true, trigger: edge.trigger })
+      }
+      commitHistory(next)
+      return next
+    })
+    for (const { id, text } of messages) void deliverToComposer(id, text)
+    // The whole shape is the selection: a template is one thing.
+    const ids = madePanels.map((p) => p.rect.id)
+    if (ids.length > 0) {
+      selectOnly(ids[0] as string)
+      for (const id of ids.slice(1)) addToSelection(id)
+    }
+    return { kind: 'spawned' }
+  }, [commitHistory, selectOnly, addToSelection])
+  instantiateTemplateRef.current = instantiateTemplate
+
   const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
@@ -3331,6 +3447,7 @@ export function Canvas({
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -3879,6 +3996,7 @@ export function Canvas({
             // author of a fact this side already folds correctly.
             attentionIds={waitingIds}
             approvals={paletteApprovals}
+            templates={paletteTemplates}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
             groups={groups}

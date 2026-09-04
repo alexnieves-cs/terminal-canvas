@@ -41,6 +41,8 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | `REASON_CHAT_BUSY` | the chat is still answering — interrupt it first | press Interrupt, then Open in terminal (M74) |
 | `REASON_CHAT_EMPTY` | send a message first — an empty chat has nothing to move | send one message; the session then exists to resume |
 | `REASON_NOT_CHAT` | only a chat panel can open in a terminal | focus a chat panel |
+| `REASON_NO_SELECTION_TEMPLATE` | select the panels to save first | select the terminals and chats the template should hold (M80) |
+| `REASON_NO_TEMPLATES` | no templates yet — select some panels and save them as one | save a selection; the built-in `review this repository` is always offered beside it (M80) |
 | `REASON_CHAT_NO_BASELINE` | send a message first — a chat has no baseline until its agent runs | send one message; the runtime's create captures the baseline (M77) |
 | `REASON_NO_APPROVALS` | no agent is asking for permission | nothing to do — the row exists so a person who types `allow` learns there is no open question (M76) |
 | `REASON_NO_CLAUDE` | claude was not found on the login PATH — install it, or check the environment report | install `claude`; the same sentence disables the launcher's chat line and the chat panel's composer (M73) |

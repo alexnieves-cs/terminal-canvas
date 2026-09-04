@@ -96,8 +96,17 @@ const bridge: CanvasBridge = {
     remove: (id: string) => ipcRenderer.invoke(IPC.PRESET_DELETE, id),
     setDefault: (id: string) => ipcRenderer.invoke(IPC.PRESET_SET_DEFAULT, id),
     spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id),
+    template: (id: string) => ipcRenderer.invoke(IPC.PRESET_TEMPLATE, id),
     setWorktree: (id: string, on: boolean) => ipcRenderer.invoke(IPC.PRESET_SET_WORKTREE, id, on),
     savePanel: (captured: CapturedPanel) => ipcRenderer.invoke(IPC.PRESET_SAVE_PANEL, captured)
+  },
+  // M80. A preset's resolved template, for a template's node.
+  // (declared inside `preset` below)
+  // Saved shapes of work.
+  template: {
+    list: () => ipcRenderer.invoke(IPC.TEMPLATE_LIST),
+    save: (template) => ipcRenderer.invoke(IPC.TEMPLATE_SAVE, template),
+    remove: (id: string) => ipcRenderer.invoke(IPC.TEMPLATE_DELETE, id)
   },
   prompt: {
     list: (cwd: string | null) => ipcRenderer.invoke(IPC.PROMPT_LIST, cwd),

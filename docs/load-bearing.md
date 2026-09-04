@@ -3249,3 +3249,25 @@ emitted beside the sentence the automation list already shows, at the same site,
 cannot say something the list does not: a `delivered` only where a paste or a send happened,
 a `skipped` only where a condition failed or a send was refused, a `fired` once per source.
 `verify:panels run.1` reads both the store's record and the pane's row from one delivery.
+
+**A template's preset node is spawned through MAIN, and its panel is learned from the array
+delta (`Canvas.tsx` `instantiateTemplate`, `waitForPanel`).** Only main can resolve a preset
+whose `command` is absent into the user's login shell (M5b's rule, stated in this file's IPC
+section), so a template that minted a preset node in the renderer would spawn a panel with no
+command and no error. The renderer therefore asks `spawn:sheet` and waits for the one panel id
+that was not there before — bounded, and a refusal by name when nothing arrives. A node with a
+`command` is minted here (there is nothing to resolve); a node with neither is refused by name
+at instantiation.
+
+**A template's chat message is delivered AFTER the panel is committed.** `insertIntoComposer`
+is a no-op for an id the chat store has not seeded, and the seeding is the panel's own hook —
+which cannot run before the panel exists. `verify:panels template.1` watched the message land
+in an empty composer before this was a poll; the check asserts the composer's value and that
+the chat has sent nothing (`data-chat-turns` is `0`): a template must not start work the user
+has not read.
+
+**Every node and edge of a template lands in ONE history entry.** The panels are collected
+first and the edges applied inside the same `setPanels` updater, with a single `commitHistory`
+— so one undo takes the whole shape away and one redo brings it back. Two entries would leave
+a canvas with the panels and no edges after an undo, which reads as a broken template rather
+than a half-undone one. `verify:panels template.1`.
