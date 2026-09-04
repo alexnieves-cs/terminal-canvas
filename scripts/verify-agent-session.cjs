@@ -869,6 +869,59 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify(r && r.skipped))
   }
 
+  // attach.1 — M75. An image travels as a base64 block on the wire and as a
+  // PLACEHOLDER in the stored turn: the transcript file must never carry the
+  // bytes (a screenshot is a megabyte, a conversation is many), and the
+  // renderer renders "image · 12 KB", not the picture.
+  {
+    const { manager, spawns } = makeManager()
+    manager.create({ id: 'p1', cwd: '/repo' })
+    const png = Buffer.from('fake-png-bytes').toString('base64')
+    const r = typeof manager.send === 'function' ? manager.send('p1', 'look at this', [{ mediaType: 'image/png', base64: png, name: 'shot.png' }]) : null
+    const line = spawns[0] && spawns[0].proc.stdin[0] ? JSON.parse(spawns[0].proc.stdin[0]) : null
+    const content = line && line.message && line.message.content
+    const turn = manager.transcript('p1')[0]
+    ok('attach.1 an image goes on the wire as a base64 image block after the text, and the stored user turn carries a placeholder with the media type and size, never the bytes',
+      r === 'sent' && Array.isArray(content) && content.length === 2 && content[0].type === 'text' && content[0].text === 'look at this' &&
+        content[1].type === 'image' && content[1].source && content[1].source.type === 'base64' && content[1].source.media_type === 'image/png' && content[1].source.data === png &&
+        turn && turn.blocks.length === 2 && turn.blocks[1].type === 'image' && turn.blocks[1].mediaType === 'image/png' && turn.blocks[1].size === Buffer.byteLength('fake-png-bytes') &&
+        !JSON.stringify(turn).includes(png),
+      JSON.stringify({ r, content: content && content.map((c) => c.type), turn: turn && turn.blocks }))
+    const encoded = JSON.parse(T.userMessageLine('hi'))
+    const imageOnly = JSON.parse(T.userMessageLine('', [{ mediaType: 'image/png', base64: png }]))
+    ok('attach.1b a message with no image is still a one-block text message (the M71 wire shape, unchanged), and an image-only message carries no empty text block',
+      Array.isArray(encoded.message.content) && encoded.message.content.length === 1 && encoded.message.content[0].type === 'text' &&
+        imageOnly.message.content.length === 1 && imageOnly.message.content[0].type === 'image', JSON.stringify({ encoded, imageOnly: imageOnly.message.content.map((c) => c.type) }))
+  }
+
+  // attach.2 — M75. The pure attachment resolver: a non-image path is refused
+  // by name (the answer names the fix — reference it by path), a file over
+  // the cap is refused with the cap, a missing file is refused, and an image
+  // under the cap is decoded with its media type.
+  {
+    const ATT = M.attachments || {}
+    const resolve = typeof ATT.resolveAttachment === 'function' ? ATT.resolveAttachment : () => null
+    const dir = mkdtempSync(join(tmpdir(), 'tc attach '))
+    const fs = require('node:fs')
+    fs.writeFileSync(join(dir, 'ok.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    fs.writeFileSync(join(dir, 'big.jpg'), Buffer.alloc(300))
+    fs.writeFileSync(join(dir, 'notes.txt'), 'hello')
+    const okImg = resolve({ kind: 'path', path: join(dir, 'ok.png') }, 200)
+    const big = resolve({ kind: 'path', path: join(dir, 'big.jpg') }, 200)
+    const txt = resolve({ kind: 'path', path: join(dir, 'notes.txt') }, 200)
+    const gone = resolve({ kind: 'path', path: join(dir, 'nope.png') }, 200)
+    const data = resolve({ kind: 'data', mediaType: 'image/jpeg', base64: Buffer.from('abc').toString('base64'), name: 'pasted' }, 200)
+    const dataBig = resolve({ kind: 'data', mediaType: 'image/jpeg', base64: Buffer.alloc(300).toString('base64'), name: 'pasted' }, 200)
+    rmSync(dir, { recursive: true, force: true })
+    ok('attach.2 an image under the cap decodes with its media type; a non-image, an oversize file (path or data) and a missing file are refused by name',
+      okImg && okImg.kind === 'image' && okImg.mediaType === 'image/png' && okImg.base64 === Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64') && okImg.name === 'ok.png' &&
+        big && big.kind === 'refused' && /200/.test(big.reason) &&
+        txt && txt.kind === 'refused' && /path/.test(txt.reason) &&
+        gone && gone.kind === 'refused' && data && data.kind === 'image' && data.name === 'pasted' &&
+        dataBig && dataBig.kind === 'refused',
+      JSON.stringify({ okImg: okImg && okImg.kind, big, txt, gone, data: data && data.kind, dataBig }))
+  }
+
   // quit — the optional agents dependency
   {
     const order = []

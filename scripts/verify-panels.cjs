@@ -86,7 +86,7 @@ const {
   ToolboxCache,
   readFrom,
   FILE_MAX_LINES,
-  AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript,
+  AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -911,7 +911,13 @@ app.whenReady().then(async () => {
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
       return { kind: 'created', snapshot: agentSessions.create({ ...spec, cwd: expandTilde(spec.cwd) }) }
     },
-    send: (id, text) => agentSessions.send(id, text),
+    // M75. main/index.ts's resolve-then-send; a refusal names the attachment.
+    send: (id, text, attachments = []) => {
+      const images = []
+      for (const a of attachments) { const r = resolveAttachment(a); if (r.kind === 'refused') return { refused: r.reason }; images.push({ mediaType: r.mediaType, base64: r.base64, name: r.name }) }
+      return agentSessions.send(id, text, images)
+    },
+    clipboardImage: () => null,
     interrupt: (id) => agentSessions.interrupt(id),
     dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
     answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
@@ -14529,6 +14535,168 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (fLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onF)
+      }
+    }
+
+    // M75 — composer.1 / composer.2 / composer.3. THE COMPOSER, END TO END.
+    //     composer.1: typing `@ser` opens the file list from the panel's
+    //     directory, Enter inserts the reference, and a query that matches
+    //     nothing says so rather than vanishing. composer.2: a png dropped on
+    //     the chat panel (through the real drop verb, by screen point) becomes
+    //     an attachment chip, and the send carries a base64 image block with
+    //     the file's bytes while the stored turn carries only a placeholder;
+    //     a dropped text file inserts a `@` reference instead. composer.3: `/`
+    //     lists the directory's project prompt and the saved library; a saved
+    //     prompt with holes opens the fill step and inserts the filled body; a
+    //     project prompt is inserted verbatim, its holes untouched.
+    {
+      const IDS = [
+        'composer.1 typing @ser lists the directory and Enter inserts the reference; a query with no match says so rather than vanishing',
+        'composer.2 a png dropped on the chat becomes an attachment chip and goes on the wire as a base64 image block, never into the transcript; a text file dropped becomes a @ reference',
+        'composer.3 / lists the project prompt and the saved one; a saved prompt with holes is filled before insertion; a project prompt is inserted verbatim',
+        'composer.4 the palette\'s Insert prompt row fills a two-hole saved prompt through two text lines in a row and delivers it to the captured chat\'s composer'
+      ]
+      const cLog2 = []
+      const onC2 = (_e, _l, m) => { cLog2.push(String(m)) }
+      wc.on('console-message', onC2)
+      try {
+        const kDir = mkdtempSync(join(tmpdir(), 'tc panels composer-'))
+        mkdirSync(join(kDir, 'src'))
+        mkdirSync(join(kDir, '.claude', 'commands'), { recursive: true })
+        writeFileSync(join(kDir, 'server.ts'), 'export const x = 1\n')
+        writeFileSync(join(kDir, 'src', 'health.ts'), 'export const ok = () => true\n')
+        writeFileSync(join(kDir, 'notes.txt'), 'hello\n')
+        const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+        writeFileSync(join(kDir, 'pic.png'), pngBytes)
+        writeFileSync(join(kDir, '.claude', 'commands', 'deploy.md'), 'Deploy {{target}} carefully\n')
+        layoutStore.addPreset({ id: 'composer-claude', name: 'Claude (composer)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        // The harness fences project prompts to known directories and stubs
+        // the bridge's save: this block joins the fence and saves through the
+        // store, which is what the real handlers do.
+        PROMPT_DIRS.add(kDir); PROMPT_DIRS.add(realpathSync(kDir))
+        layoutStore.addPrompt({ id: 'p-hole', name: 'review-with-hole', body: 'Review {{file}} for {{what}}' })
+        flushLayoutStore()
+        const reK = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reK
+        await settle()
+        const minted = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(kDir)})`)
+        const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
+        const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
+        const typeInto = (text) => wc.executeJavaScript(`(() => {
+          const ta = ${sel('[data-chat-input]')}; if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, ${JSON.stringify(text)}); ta.setSelectionRange(${JSON.stringify(text)}.length, ${JSON.stringify(text)}.length); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); return true })()`)
+        const key = (k) => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; if (!ta) return false; ta.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true })); return true })()`)
+        // composer.1
+        const typed = await waitUntil(() => typeInto('look at @ser'), 5000)
+        const listed = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-completion]')].map((r) => r.getAttribute('data-chat-completion')); return rows.includes('server.ts') ? rows : false })()`), 5000)
+        await key('Enter')
+        const inserted = await waitUntil(() => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; return ta && ta.value === 'look at @server.ts ' ? ta.value : false })()`), 4000)
+        await typeInto('look at @zzz')
+        // Waited for the SETTLED state: the note reads `listing … ` while the
+        // fs:list is in flight (three states), and only `no matches` after.
+        const emptyNote = await waitUntil(() => wc.executeJavaScript(`(() => { const t = ${sel('[data-chat-popup-empty]')}?.textContent; return t && /no matches/.test(t) ? t : false })()`), 4000)
+        await key('Escape')
+        const closed = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-popup]')} === null`), 3000)
+        ok(IDS[0],
+          minted && minted.kind === 'spawned' && typed === true && Array.isArray(listed) && listed[0] === 'server.ts' && inserted === 'look at @server.ts ' &&
+            typeof emptyNote === 'string' && /no matches/.test(emptyNote) && closed === true,
+          JSON.stringify({ minted, typed, listed, inserted, emptyNote, closed, log: cLog2.slice(-3) }))
+
+        // composer.2 — the real drop verb, at the panel's centre.
+        await typeInto('')
+        const centre = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); return { x: r.left + r.width / 2 - host.left, y: r.top + r.height / 2 - host.top } })()`)
+        const dropped = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'pic.png'))}, ${centre.x}, ${centre.y})`)
+        const chip = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-attachment="pic.png"]')} !== null`), 4000)
+        const droppedText = await wc.executeJavaScript(`window.__m59Drop(${JSON.stringify(join(kDir, 'notes.txt'))}, ${centre.x}, ${centre.y})`)
+        const refText = await waitUntil(() => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; return ta && ta.value.includes('@notes.txt') ? ta.value : false })()`), 4000)
+        const spawnsBefore2 = chatSpawns.length
+        await typeInto('see this ')
+        await wc.executeJavaScript(`(() => { const b = ${sel('[data-chat-send]')}; if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const sentWithImage = await waitUntil(async () => chatSpawns.length > spawnsBefore2 && chatSpawns[chatSpawns.length - 1].proc.stdin.length > 0, 5000)
+        const wire = sentWithImage ? JSON.parse(chatSpawns[chatSpawns.length - 1].proc.stdin[0]) : null
+        const imageBlock = wire && wire.message.content.find((c) => c.type === 'image')
+        const stored = agentTranscripts.read(chatId).turns.find((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'image'))
+        const chipGone = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-attachments]')} === null`), 4000)
+        ok(IDS[1],
+          dropped === 'pasted' && chip === true && droppedText === 'pasted' && typeof refText === 'string' &&
+            sentWithImage === true && imageBlock && imageBlock.source.type === 'base64' && imageBlock.source.media_type === 'image/png' && imageBlock.source.data === pngBytes.toString('base64') &&
+            stored && stored.blocks.some((b) => b.type === 'image' && b.mediaType === 'image/png' && b.size === pngBytes.length) && !JSON.stringify(agentTranscripts.read(chatId)).includes(pngBytes.toString('base64')) &&
+            chipGone === true,
+          JSON.stringify({ dropped, chip, droppedText, refText, sentWithImage, imageBlock: imageBlock && imageBlock.source.media_type, stored: stored && stored.blocks.map((b) => b.type), chipGone, log: cLog2.slice(-3) }))
+
+        // composer.3 — wait for the turn to end so the composer is enabled again.
+        await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 8000)
+        await waitUntil(() => typeInto('/'), 5000)
+        const promptRows = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-prompt]')].map((r) => r.textContent); return rows.some((r) => r.includes('deploy')) && rows.some((r) => r.includes('review-with-hole')) ? rows : false })()`), 5000)
+        await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-prompt]')].find((r) => r.textContent.includes('review-with-hole')); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const fillShown = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-fill]')} !== null`), 4000)
+        const popupState = await wc.executeJavaScript(`(() => { const p = ${sel('[data-chat-popup]')}; return p ? { kind: p.getAttribute('data-chat-popup'), text: p.textContent.slice(0, 160) } : 'no-popup' })()`)
+        // Guarded: a missing input reads as a red assertion, never an Illegal
+        // invocation that takes the block down.
+        const filledIn = await wc.executeJavaScript(`(() => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+          const a = ${sel('[data-chat-fill-input="file"]')}; const b = ${sel('[data-chat-fill-input="what"]')}; if (!a || !b) return false
+          set.call(a, 'server.ts'); a.dispatchEvent(new Event('input', { bubbles: true }))
+          set.call(b, 'bugs'); b.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = ${sel('[data-chat-fill-insert]')}; if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const filled = await waitUntil(() => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; return ta && ta.value === 'Review server.ts for bugs' ? ta.value : false })()`), 4000)
+        await typeInto('/dep')
+        await waitUntil(() => wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-prompt]')].some((r) => r.textContent.includes('deploy'))`), 4000)
+        await key('Enter')
+        const verbatim = await waitUntil(() => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; return ta && ta.value.includes('{{target}}') ? ta.value : false })()`), 4000)
+        ok(IDS[2],
+          Array.isArray(promptRows) && promptRows.some((r) => r.includes('project')) && promptRows.some((r) => r.includes('saved')) &&
+            fillShown === true && filled === 'Review server.ts for bugs' && typeof verbatim === 'string' && /^Deploy \{\{target\}\} carefully/.test(verbatim),
+          JSON.stringify({ promptRows, fillShown, popupState, filledIn, filled, verbatim, log: cLog2.slice(-3) }))
+        // composer.4 — the palette's chain. The chat is FOCUSED by a mousedown
+        // on its frame (the palette captures focusedId at open), the row is
+        // run with Enter, and each hole is a text line submitted with Enter:
+        // Palette.tsx closes before submit, so the second line exists only if
+        // the chain reopens the palette for every hole.
+        await typeInto('')
+        // On the BODY, not the textarea: the textarea stops its own mousedown
+        // (a click into it must not start a panel drag), so a mousedown there
+        // never reaches the body's focus handler and the palette would
+        // capture whichever panel was focused before.
+        const focusedChat = await wc.executeJavaScript(`(() => { const body = ${sel('.chat__body')}; if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+        await settle()
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
+        const paletteLine = (value, expectLabel) => wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input'); if (!input) return 'no palette input'
+          // The text line's label is the input's placeholder.
+          const label = input.placeholder || ''
+          if (!label.includes(${JSON.stringify(expectLabel)})) return 'label: ' + label.slice(0, 120)
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        const chainRow = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'insert prompt review-with-hole'); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected || !selected.textContent.includes('review-with-hole')) return selected ? selected.textContent : 'no row'
+          if (selected.className.includes('palette__row--disabled')) return 'disabled: ' + selected.title
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__list') === null && document.querySelector('.palette__input') !== null`), 3000)
+        const hole1 = await paletteLine('server.ts', 'file (1 of 2)')
+        const secondLine = await waitUntil(() => wc.executeJavaScript(`((document.querySelector('.palette__input') || {}).placeholder || '').includes('what (2 of 2)')`), 3000)
+        const hole2 = secondLine === true ? await paletteLine('bugs', 'what (2 of 2)') : 'no second line'
+        const delivered = await waitUntil(() => wc.executeJavaScript(`(() => { const ta = ${sel('[data-chat-input]')}; return ta && ta.value === 'Review server.ts for bugs' ? ta.value : false })()`), 4000)
+        const paletteShut = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 3000)
+        ok(IDS[3],
+          chainRow === true && hole1 === true && secondLine === true && hole2 === true && delivered === 'Review server.ts for bugs' && paletteShut === true,
+          JSON.stringify({ focusedChat, chainRow, hole1, secondLine, hole2, delivered, paletteShut, log: cLog2.slice(-3) }))
+        await clickPanelClose(wc, chatId)
+        await settle()
+        try { rmSync(kDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (kErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(kErr && kErr.message || kErr) + ' | renderer: ' + (cLog2.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onC2)
       }
     }
 

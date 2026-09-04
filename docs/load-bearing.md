@@ -3104,3 +3104,29 @@ injected notes. Either rendered as the user's conversation would show turns nobo
 typed prompt is a bare STRING in that file — the one shape the stream never produces — and
 is one text block, never an empty turn. `verify:agent-session import.1–.3`.
 
+**An attachment is resolved in MAIN and refused whole by name; the transcript holds a
+placeholder, never the bytes (`main/attachments.ts`, `shared/transcript.ts`).** The renderer
+has no `fs`, so a dropped image's path is read in main — and the same door is where a
+non-image, an oversize file or a missing one is refused, each naming its fix (reference a
+file by its path; the 5 MB cap; is it still there?). A refused attachment refuses the SEND
+whole and the composer keeps the draft: a message that went with one image missing would
+read as sent and be wrong. On the wire an image is a base64 block after the text (the
+API's shape, which the CLI's stream-json input takes); in the stored turn it is
+`{ type: 'image', mediaType, size }`, because a screenshot is a megabyte and a transcript is
+many, and the renderer says `image · png · 42 KB`. `verify:agent-session attach.1` pins the
+placeholder by asserting the base64 is ABSENT from the stored turn; `attach.2` the refusals.
+
+**A trigger opens a completion only at a token's start with the caret inside it
+(`renderer/chat/composer-model.ts`).** `a/b` is a path, `me@x` an address, and a caret
+before the `@` is not inside the token; without the rule every path typed by hand opens a
+list over the transcript. `verify:rail composer.1` names the four non-triggers.
+
+**A saved prompt's holes are filled before insertion; a project prompt is NEVER expanded
+(`composer-model.ts`, `ChatNode.tsx`, `usePaletteActions.ts`).** M5b decided a project
+prompt is a file this app does not own, and expanding a placeholder the CLI's own format
+does not define would make the same file behave differently inside the app than in a plain
+terminal. So only the SAVED library gets the fill step — in the composer's popup, or in
+the palette's text line for either front-end — and a hole with no value stays as typed,
+never blanked into a prompt that silently says less. `composer.2` and `verify:panels
+composer.3` (a project prompt inserted verbatim, `{{target}}` intact).
+

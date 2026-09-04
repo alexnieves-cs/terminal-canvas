@@ -2,6 +2,8 @@ import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'rea
 import type { AgentOptions } from '@shared/cost'
 import { claudeAvailable } from '@renderer/palette/commands'
 import { disposeChat } from '@renderer/chat/useChatSessions'
+import { insertIntoComposer } from '@renderer/chat/chat-store'
+import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
@@ -249,15 +251,43 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // Inserting nothing is the only honest answer; inserting the wrong
       // prompt into a running agent is not.
       if (!target || body === undefined) return
-      // paste(), NEVER write(). session-factory.ts spells out the failure it
-      // exists to prevent: term.paste wraps the payload in bracketed-paste
-      // markers when the app has enabled them (and normalises LF to CR), so a
-      // multi-line prompt arrives as ONE input. A raw write submits every
-      // newline separately — pasting a five-line prompt into `claude` fires
-      // off four incomplete fragments and then the tail. EVERY prompt is
-      // multi-line, so every use of this feature depends on this call.
-      // verify:panels 40 is the check that can tell the two apart.
-      registry.get(target)?.handle.paste(body)
+      // M75. The delivery depends on the target's kind: a chat's composer
+      // takes text through the store's insert bus; a terminal takes a
+      // bracketed paste. paste(), NEVER write(), for the terminal:
+      // session-factory.ts spells out the failure it exists to prevent —
+      // term.paste wraps the payload in bracketed-paste markers (and
+      // normalises LF to CR), so a multi-line prompt arrives as ONE input; a
+      // raw write submits every newline separately. verify:panels 40 is the
+      // check that can tell the two apart.
+      const deliver = (text: string): void => {
+        const panel = panelsRef.current.find((p) => p.rect.id === target)
+        if (panel !== undefined && isChatPanel(panel)) insertIntoComposer(target, text)
+        else registry.get(target)?.handle.paste(text)
+      }
+      // M75. Backlog #27: a SAVED prompt's {{holes}} are filled first, one
+      // question per hole through the palette's own text line; a project
+      // prompt is never expanded (M5b's decision — the same file must behave
+      // the same inside and outside this app), so its holes stay as typed.
+      const holes = id.startsWith('proj:') ? [] : placeholders(body)
+      if (holes.length === 0) { deliver(body); return }
+      const values: Record<string, string> = {}
+      const ask = (i: number): void => {
+        const name = holes[i]
+        if (name === undefined) { setInputMode(null); deliver(fillPlaceholders(body, values)); return }
+        setInputMode({
+          kind: 'text',
+          label: `${name} (${i + 1} of ${holes.length}) — the value for {{${name}}}`,
+          initial: '',
+          submit: (value) => { values[name] = value; ask(i + 1) }
+        })
+        // Reopened for EVERY hole, not only the first: Palette.tsx closes
+        // before calling submit, so the second hole's mode would otherwise
+        // be set on a palette that is already gone and wiped by the
+        // clear-on-close effect — the prompt then inserted with its second
+        // hole as typed, and nothing said so (M75's verifier).
+        palette.openPalette()
+      }
+      ask(0)
     },
     beginSavePrompt: () => {
       const target = palette.capturedId

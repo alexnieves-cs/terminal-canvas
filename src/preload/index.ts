@@ -115,7 +115,8 @@ const bridge: CanvasBridge = {
   },
   agentSession: {
     create: (spec) => ipcRenderer.invoke(IPC.AGENT_CREATE, spec),
-    send: (id, text) => ipcRenderer.invoke(IPC.AGENT_SEND, id, text),
+    send: (id, text, attachments) => ipcRenderer.invoke(IPC.AGENT_SEND, id, text, attachments ?? []),
+    clipboardImage: () => ipcRenderer.invoke(IPC.AGENT_CLIPBOARD_IMAGE),
     interrupt: (id) => ipcRenderer.invoke(IPC.AGENT_INTERRUPT, id),
     dispose: (req) => ipcRenderer.invoke(IPC.AGENT_DISPOSE, req),
     answer: (req) => ipcRenderer.invoke(IPC.AGENT_ANSWER, req),

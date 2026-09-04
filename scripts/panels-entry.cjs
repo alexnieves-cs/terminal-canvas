@@ -240,5 +240,7 @@ module.exports = {
   AgentSessionManager: require('../src/main/agent-session').AgentSessionManager,
   createAgentTranscriptLog: require('../src/main/agent-transcript-log').createAgentTranscriptLog,
   /* M74. The CLI-transcript importer, pure. */
-  importClaudeTranscript: require('../src/main/claude-transcript-import').importClaudeTranscript
+  importClaudeTranscript: require('../src/main/claude-transcript-import').importClaudeTranscript,
+  /* M75. The attachment resolver, node:fs over a path. */
+  resolveAttachment: require('../src/main/attachments').resolveAttachment
 }

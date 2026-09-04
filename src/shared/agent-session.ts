@@ -82,6 +82,17 @@ export type AgentSessionEvent = { id: string } & (
 
 export type SendResult = 'sent' | 'queued' | 'no-session'
 
+/** M75. What the composer attaches: a dropped image's path (main reads it) or pasted bytes. */
+export type ChatAttachment =
+  | { kind: 'path'; path: string }
+  | { kind: 'data'; mediaType: string; base64: string; name: string }
+
+/** M75. `agent:send`'s answer: the runtime's word, or a refusal naming the attachment that could not go. */
+export type SendAnswer = SendResult | { refused: string }
+
+/** M75. `agent:clipboard-image`: the pasted image, or null when the clipboard holds none. */
+export type ClipboardImage = { mediaType: string; base64: string; size: number } | { refused: string } | null
+
 /**
  * What `agent:create` answers. A refusal is a NAMED reason (the directory
  * is not there; the CLI was not found), never a snapshot that will fail on

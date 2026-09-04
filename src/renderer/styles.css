@@ -3492,3 +3492,22 @@ body {
 /* A disabled verb is DASHED as well as dimmer: the M74 critic could not tell
    Interrupt's disabled state from its enabled one by ink alone. */
 .pf__verb:disabled, .chat__verb:disabled { color: var(--fg-3); border-style: dashed; background: transparent; cursor: default; }
+/* M75. The composer's popup (files or prompts), its fill step and the attachment chips. */
+/* Inside the panel, not over the canvas: a hairline, no shadow (principle 4). */
+.chat__popup { display: flex; flex-direction: column; max-height: 220px; overflow: auto; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-2); }
+.chat__popup-row { display: flex; justify-content: space-between; gap: var(--sp-3); min-height: 24px; padding: 0 var(--sp-3); border: 0; background: transparent; color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); text-align: left; cursor: pointer; }
+.chat__popup-row { border-top: 1px solid var(--line); }
+.chat__popup-row--on, .chat__popup-row:hover { background: var(--iris-dim); }
+.chat__popup-head { padding: var(--sp-1) var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.chat__popup-match { background: transparent; color: var(--fg); font-weight: 600; }
+.chat__popup-source, .chat__popup-note { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
+.chat__popup-note { padding: var(--sp-2) var(--sp-3); }
+.chat__fill { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }
+.chat__fill-field { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: var(--sp-3); }
+.chat__fill-name { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); }
+.chat__fill-input { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); }
+.chat__attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.chat__chip { display: inline-flex; align-items: baseline; gap: var(--sp-2); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); }
+.chat__chip-remove { min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
+.chat__chip-remove:hover { color: var(--fg); }
+.chat__image { color: var(--fg-2); }

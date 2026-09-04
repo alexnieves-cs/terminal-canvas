@@ -44,5 +44,7 @@ module.exports = {
   ...require('../src/renderer/palette/panel-name'),
   /* M73. The chat panel's rows, live-block merge and composer arms — pure,
      type-only imports, the reason every model above joined. */
-  ...require('../src/renderer/chat/chat-model')
+  ...require('../src/renderer/chat/chat-model'),
+  /* M75. The composer's pure model: triggers, completions, placeholders. */
+  ...require('../src/renderer/chat/composer-model')
 }

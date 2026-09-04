@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
-import { BrowserWindow, Notification, app, dialog, shell } from 'electron'
+import { BrowserWindow, Notification, app, dialog, shell, clipboard } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
@@ -36,6 +36,7 @@ import { AgentSessionManager } from './agent-session'
 import { claudeCliRunner } from './claude-cli-runner'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
+import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
 import type { AgentCreateResult, AgentSessionSpec } from '../shared/agent-session'
@@ -770,7 +771,25 @@ app.whenReady().then(async () => {
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
       return { kind: 'created', snapshot: manager.create({ ...spec, cwd }) }
     },
-    send: (id, text) => agentSessions?.send(id, text) ?? 'no-session',
+    // M75. Attachments are resolved HERE (the renderer has no fs): every one
+    // must decode or the send is refused whole, naming the one that could not.
+    send: (id, text, attachments) => {
+      const images: { mediaType: string; base64: string; name: string }[] = []
+      for (const attachment of attachments) {
+        const resolved = resolveAttachment(attachment)
+        if (resolved.kind === 'refused') return { refused: resolved.reason }
+        images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
+      }
+      return agentSessions?.send(id, text, images) ?? 'no-session'
+    },
+    clipboardImage: () => {
+      const image = clipboard.readImage()
+      if (image.isEmpty()) return null
+      const png = image.toPNG()
+      // Capped BEFORE it crosses the bridge, with the cap the send would apply.
+      if (png.length > ATTACHMENT_MAX_BYTES) return { refused: `the clipboard image is larger than the ${Math.round(ATTACHMENT_MAX_BYTES / (1024 * 1024))} MB attachment cap` }
+      return { mediaType: 'image/png', base64: png.toString('base64'), size: png.length }
+    },
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)

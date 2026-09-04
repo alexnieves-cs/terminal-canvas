@@ -4,6 +4,7 @@ import {
   parseStreamChunk,
   permissionResponseLine,
   userMessageLine,
+  type OutgoingImage,
   type PermissionAnswer,
   type TranscriptEvent,
   type TranscriptTurn
@@ -109,7 +110,7 @@ interface Session {
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
   abortReason: 'interrupt-timeout' | null
-  queue: string[]
+  queue: { text: string; images: OutgoingImage[] }[]
   pending: Map<string, PendingPermission>
   usage: TokenTotals
   costUsd?: number
@@ -168,7 +169,12 @@ export class AgentSessionManager {
     return this.snapshot(session)
   }
 
-  send(id: string, text: string): SendResult {
+  /**
+   * M75. `images` are decoded attachments: they go on the wire as base64
+   * blocks and onto the transcript as PLACEHOLDERS (type and size), never as
+   * bytes. A queued send keeps its images with its text.
+   */
+  send(id: string, text: string, images: readonly (OutgoingImage & { name?: string })[] = []): SendResult {
     const session = this.sessions.get(id)
     if (!session) return 'no-session'
     // On the transcript the moment it is sent, before the CLI has echoed
@@ -177,16 +183,19 @@ export class AgentSessionManager {
     this.storeTurn(session, {
       id: `u-${++session.userTurns}`,
       role: 'user',
-      blocks: [{ type: 'text', text }],
+      blocks: [
+        { type: 'text', text },
+        ...images.map((img) => ({ type: 'image' as const, mediaType: img.mediaType, size: Buffer.byteLength(img.base64, 'base64') }))
+      ],
       at: this.now()
     })
     if (session.inFlight) {
-      session.queue.push(text)
+      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
       this.emit({ id, type: 'queued', text })
       return 'queued'
     }
     this.ensureProcess(session)
-    this.writeUser(session, text)
+    this.writeUser(session, text, images)
     return 'sent'
   }
 
@@ -305,9 +314,9 @@ export class AgentSessionManager {
     })
   }
 
-  private writeUser(session: Session, text: string): void {
+  private writeUser(session: Session, text: string, images: readonly OutgoingImage[] = []): void {
     if (!session.proc) return
-    session.proc.write(userMessageLine(text))
+    session.proc.write(userMessageLine(text, images))
     session.inFlight = true
     session.interrupting = false
     if (session.status === 'ready') this.setStatus(session, 'streaming')
@@ -377,8 +386,8 @@ export class AgentSessionManager {
         this.emit({ id, ...event, interrupted })
         const next = session.queue.shift()
         if (next !== undefined) {
-          this.writeUser(session, next)
-          this.emit({ id, type: 'dequeued', text: next })
+          this.writeUser(session, next.text, next.images)
+          this.emit({ id, type: 'dequeued', text: next.text })
         }
         return
       }
