@@ -2,7 +2,8 @@ import { useSyncExternalStore } from 'react'
 import { addTotals } from '@shared/cost'
 import type { AgentSessionEvent, AgentSessionSnapshot } from '@shared/agent-session'
 import type { TranscriptTurn } from '@shared/transcript'
-import type { LiveMessage } from './chat-model'
+import { toolArgument, type LiveMessage } from './chat-model'
+import type { PendingApproval } from '@renderer/shell/rail-sections'
 
 /**
  * M73. The renderer's mirror of each chat panel's session — a module-level
@@ -51,6 +52,40 @@ function notify(id: string): void {
 function update(id: string, next: ChatState): void {
   states.set(id, next)
   notify(id)
+  syncApprovals()
+}
+
+/**
+ * M76. EVERY pending permission request across every chat on this renderer,
+ * for the surfaces that answer from afar (the popover, the pane, the
+ * palette). Rebuilt only when MEMBERSHIP changes — the attention store's own
+ * discipline — so a streaming chat, whose state updates at the flush rate,
+ * never re-renders the dock. Keyed by panel id + request id; the argument is
+ * the transcript's own short form of the tool's input.
+ */
+let approvalSnapshot: PendingApproval[] = []
+let approvalKey = ''
+const approvalListeners = new Set<() => void>()
+function syncApprovals(): void {
+  const next: PendingApproval[] = []
+  for (const [id, state] of states) {
+    for (const p of state.snapshot?.pending ?? []) next.push({ id, requestId: p.requestId, toolName: p.toolName, argument: toolArgument(p.input) })
+  }
+  const key = next.map((a) => `${a.id}/${a.requestId}`).join('\n')
+  if (key === approvalKey) return
+  approvalKey = key
+  approvalSnapshot = next
+  for (const cb of approvalListeners) cb()
+}
+export function approvals(): PendingApproval[] {
+  return approvalSnapshot
+}
+export function useApprovals(): PendingApproval[] {
+  return useSyncExternalStore(
+    (cb) => { approvalListeners.add(cb); return () => { approvalListeners.delete(cb) } },
+    () => approvalSnapshot,
+    () => approvalSnapshot
+  )
 }
 
 export function getChat(id: string): ChatState {
@@ -114,6 +149,7 @@ export function takeInsert(id: string, seq: number): void {
 
 export function clearChat(id: string): void {
   states.delete(id)
+  syncApprovals()
   notify(id)
 }
 

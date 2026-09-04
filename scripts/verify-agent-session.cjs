@@ -922,6 +922,90 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ okImg: okImg && okImg.kind, big, txt, gone, data: data && data.kind, dataBig }))
   }
 
+  // M76 — approve.1–.3. MAIN OWNS PENDING AND SAYS SO ONCE. The tracker is
+  //     driven by the manager's own events and emits the terminal's state
+  //     word on the terminal's channel — so every attention surface lights
+  //     with no code of its own — and drives the M43 sink exactly as
+  //     PtyManager.syncAttention does: on ENTRY only. approve.2 is the badge
+  //     union: two authors of one number, one writer.
+  {
+    const P = M.approvals
+    const calls = []
+    const sink = {
+      notify: (id, label, count, body) => calls.push(['notify', id, label, count, body]),
+      badge: (n) => calls.push(['badge', n]),
+      beep: () => calls.push(['beep']),
+      windowFocused: () => false, notifyEnabled: () => true, soundEnabled: () => true
+    }
+    const states = []
+    const tracker = P.createApprovalTracker({ sink, emitState: (id, state) => states.push([id, state]), label: (id) => `dir-${id}` })
+    const req = (id, requestId, toolName = 'Bash') => ({ id, type: 'permission-request', requestId, toolName, input: { command: 'ls' } })
+    tracker.apply(req('c1', 'r1'))
+    tracker.apply(req('c1', 'r2', 'Edit'))
+    const afterTwo = { states: states.slice(), calls: calls.slice() }
+    tracker.apply({ id: 'c1', type: 'permission-answered', requestId: 'r1', allow: true })
+    const afterOne = states.slice()
+    tracker.apply({ id: 'c1', type: 'permission-dropped', requestId: 'r2' })
+    const afterNone = states.slice()
+    tracker.apply(req('c2', 'r9'))
+    tracker.apply({ id: 'c2', type: 'status', status: 'disposed' })
+    ok('approve.1 a panel entering needs-you emits wants-you ONCE and notifies once naming the tool; a second request re-notifies nothing; one answer of two keeps it; the last answer emits idle; a dispose drops the panel and emits nothing',
+      afterTwo.states.length === 1 && afterTwo.states[0][0] === 'c1' && afterTwo.states[0][1] === 'wants-you' &&
+        afterTwo.calls.filter((c) => c[0] === 'notify').length === 1 && /Bash/.test(afterTwo.calls.find((c) => c[0] === 'notify')[2]) && /dir-c1/.test(afterTwo.calls.find((c) => c[0] === 'notify')[4]) &&
+        afterTwo.calls.filter((c) => c[0] === 'beep').length === 1 && afterTwo.calls.some((c) => c[0] === 'badge' && c[1] === 1) &&
+        afterOne.length === 1 && afterNone.length === 2 && afterNone[1][1] === 'idle' &&
+        states.length === 3 && states[2][0] === 'c2' && states[2][1] === 'wants-you' && tracker.pendingIds().length === 0 && calls[calls.length - 1][0] === 'badge' && calls[calls.length - 1][1] === 0,
+      JSON.stringify({ afterTwo, afterOne, afterNone, states, tail: calls.slice(-3), pending: tracker.pendingIds() }))
+
+    const real = []
+    const union = P.createAttentionUnion({ ...sink, badge: (n) => real.push(n), notify: (...a) => real.push(['n', ...a]), beep: () => real.push('beep') })
+    union.forPty.badge(2)
+    union.forAgents.badge(1)
+    union.forPty.badge(0)
+    union.forAgents.notify('c1', 'claude asks to run Bash', 1, 'api needs you')
+    ok('approve.2 the badge is the SUM of both authors and each child sink otherwise passes straight through',
+      real[0] === 2 && real[1] === 3 && real[2] === 1 && Array.isArray(real[3]) && real[3][2] === 'claude asks to run Bash' && real[3][4] === 'api needs you' &&
+        union.forPty.windowFocused() === false && union.forAgents.notifyEnabled() === true,
+      JSON.stringify(real))
+
+    const quiet = []
+    const focusedTracker = P.createApprovalTracker({
+      sink: { ...sink, notify: (...a) => quiet.push(['notify', ...a]), beep: () => quiet.push(['beep']), badge: () => {}, windowFocused: () => true, soundEnabled: () => false },
+      emitState: () => {}, label: () => 'x'
+    })
+    focusedTracker.apply(req('c3', 'r1'))
+    const offTracker = P.createApprovalTracker({
+      sink: { ...sink, notify: (...a) => quiet.push(['notify-off', ...a]), beep: () => {}, badge: () => {}, windowFocused: () => false, notifyEnabled: () => false },
+      emitState: () => {}, label: () => 'x'
+    })
+    offTracker.apply(req('c4', 'r1'))
+    ok('approve.3 no notification while the window is focused or with the setting off, and no beep with sound off',
+      quiet.length === 0, JSON.stringify(quiet))
+
+    // approve.4 — the REAL manager's order on an exit with a question open:
+    // permission-dropped BEFORE status exited, so the tracker says idle and
+    // the panel (which stays on the canvas) is not a phantom needs-you; and
+    // resync says wants-you again only while something pends.
+    const { manager, spawns } = makeManager()
+    const exitStates = []
+    const exitTracker = P.createApprovalTracker({ sink: { ...sink, notify() {}, beep() {}, badge() {} }, emitState: (id, state) => exitStates.push([id, state]), label: () => 'x' })
+    manager.subscribe((e) => exitTracker.apply(e))
+    manager.create({ id: 'p1', cwd: '/repo' })
+    manager.send('p1', 'x')
+    spawns[0].proc.emitLines(upTo(fixture('permission.jsonl'), (l) => l.includes('"can_use_tool"')))
+    await tick(5)
+    const beforeExit = exitStates.slice()
+    exitTracker.resync('p1')
+    const resynced = exitStates.slice()
+    spawns[0].proc.exit(1, null)
+    await tick(5)
+    exitTracker.resync('p1')
+    ok('approve.4 an exit with a question open reaches the tracker as dropped-then-exited, so it emits idle for a panel that stays on the canvas; resync repeats wants-you only while pending',
+      beforeExit.length === 1 && beforeExit[0][1] === 'wants-you' && resynced.length === 2 && resynced[1][1] === 'wants-you' &&
+        exitStates.length === 3 && exitStates[2][1] === 'idle' && exitTracker.pendingIds().length === 0,
+      JSON.stringify(exitStates))
+  }
+
   // quit — the optional agents dependency
   {
     const order = []

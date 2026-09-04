@@ -107,6 +107,8 @@ import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
+import { useApprovals } from '@renderer/chat/chat-store'
+import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable } from '@renderer/palette/commands'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
@@ -2497,6 +2499,13 @@ export function Canvas({
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
+  // M76. The pending requests with the panel's label, for the palette's
+  // Allow/Deny rows. The label is the same one the rail row shows.
+  const pendingApprovals = useApprovals()
+  const paletteApprovals = useMemo<ApprovalRow[]>(() => pendingApprovals.map((a) => {
+    const panel = panelsRef.current.find((p) => p.rect.id === a.id)
+    return { ...a, label: panel === undefined ? a.id : railLabel(panel, undefined) }
+  }), [pendingApprovals])
 
   // Cell 8's door. The palette's own workspaces drill-in, never a second list:
   // the grid holds eight cells and the ninth is how you reach a ninth
@@ -3339,6 +3348,7 @@ export function Canvas({
         attentionOpen={chrome.attentionOpen}
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
+        onAnswer={paletteActions.answerApproval}
       />
       <TopBar
         presets={presetRows}
@@ -3717,6 +3727,7 @@ export function Canvas({
             // and asking it to recompute one here would make it a second
             // author of a fact this side already folds correctly.
             attentionIds={waitingIds}
+            approvals={paletteApprovals}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
             groups={groups}
@@ -3742,6 +3753,7 @@ export function Canvas({
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
         onFrontEnd={onFrontEnd}
+        onAnswer={paletteActions.answerApproval}
         onOpenReview={paletteActions.openReview}
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}

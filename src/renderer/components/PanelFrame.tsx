@@ -74,6 +74,8 @@ export interface PanelFrameProps {
    * the edge read it instead of the kind. Absent for every document kind.
    */
   state?: PanelStateWord
+  /** M76. What the summary tier shows UNDER the state word — a chat's pending question with its verbs. */
+  far?: ReactNode
   /** null: no close control (the merged view's read-only geometry). */
   close: PanelFrameClose | null
   /** The terminal's enter animation, on the motion wrapper. */
@@ -89,7 +91,7 @@ const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentState,
-  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state
+  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far
 }: PanelFrameProps): JSX.Element {
   // M73. The tone every mark below reads: a terminal's rides rootAttrs, a
   // process kind's is its state's, a document kind's is `kind`.
@@ -109,6 +111,7 @@ export function PanelFrame({
         <div className="panel__card-summary">
           <div className="panel__card-summary-title">{title}</div>
           <div className="panel__card-summary-state" data-tone={tone}>{state?.word ?? kindWord ?? KIND_WORD[kind as Exclude<Panel['kind'], 'terminal'>]}</div>
+          {far}
         </div>
       </div>
     ) : null

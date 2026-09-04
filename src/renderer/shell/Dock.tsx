@@ -15,6 +15,8 @@ export interface DockProps {
   attentionOpen: boolean
   onToggleAttention: () => void
   onGoToPanel: (id: string) => void
+  /** M76. Answer a chat's pending request from the popover, without going to it. */
+  onAnswer: (id: string, requestId: string, allow: boolean) => void
 }
 
 /**
@@ -32,7 +34,7 @@ export interface DockProps {
  *
  * Every control mounts shellControl(): focus never leaves the terminal.
  */
-function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel }: DockProps): JSX.Element {
+function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer }: DockProps): JSX.Element {
   const entries: Array<{ id: NavigatorPane; label: string; icon: JSX.Element }> = [
     { id: 'panels', label: 'Panels', icon: <Grid /> },
     { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
@@ -99,6 +101,20 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
                       <span className="rail-row__tail" data-tone={agentWord('wants-you').tone}>{agentWord('wants-you').word}</span>
                       <span className="rail-row__go">jump</span>
                     </button>
+                    {/* M76. A chat's question, answerable HERE: the tool named
+                        on each verb, the argument in mono under the row. A
+                        terminal's row has no verbs — nothing in this app can
+                        answer a question typed into a PTY on the user's
+                        behalf — and says only `jump`. */}
+                    {row.approval !== undefined && (
+                      <div className="rail-attention__approval" data-rail-approval={row.approval.requestId}>
+                        <span className="rail-attention__argument">{row.approval.argument}</span>
+                        <button type="button" className="rail-row__verb" data-rail-allow title={`Allow ${row.approval.toolName} in ${row.label}`}
+                          {...shellControl(() => onAnswer(row.id, row.approval!.requestId, true))}>Allow {row.approval.toolName}</button>
+                        <button type="button" className="rail-row__verb" data-rail-deny title={`Deny ${row.approval.toolName} in ${row.label}`}
+                          {...shellControl(() => onAnswer(row.id, row.approval!.requestId, false))}>Deny {row.approval.toolName}</button>
+                      </div>
+                    )}
                   </li>
                 ))
               )}

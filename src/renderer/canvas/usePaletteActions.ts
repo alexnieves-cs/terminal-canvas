@@ -3,6 +3,7 @@ import type { AgentOptions } from '@shared/cost'
 import { claudeAvailable } from '@renderer/palette/commands'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer } from '@renderer/chat/chat-store'
+import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { Registry } from '@renderer/session/session-registry'
@@ -1285,6 +1286,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     newChat: () => { void beginNewChat() },
     openAsChat: (id) => openAsChat(id),
     openInTerminal: (id) => openInTerminal(id),
+    // M76. The ONE answer verb every surface calls; main clears every
+    // surface through its permission-answered event. A deny carries a
+    // message the agent reads.
+    answerApproval: (id, requestId, allow) => {
+      void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE } })
+    },
     setPresetWorktree: (id, on) => {
       // Main owns the store and refuses a built-in; the reload is what makes
       // the toggle row's own title flip.

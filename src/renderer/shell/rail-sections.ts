@@ -137,6 +137,17 @@ export function workspaceSignature(rows: readonly RailWorkspace[]): string {
 export interface RailAttention {
   id: string
   label: string
+  /** M76. A chat's OLDEST pending permission request, so the row can answer it. A terminal's row never has one. */
+  approval?: PendingApproval
+}
+
+/** M76. One pending permission request, as every surface that can answer it reads it. */
+export interface PendingApproval {
+  id: string
+  requestId: string
+  toolName: string
+  /** `toolArgument(input)` — the transcript's own short form. */
+  argument: string
 }
 
 /**
@@ -166,13 +177,21 @@ export interface RailAttention {
  */
 export function buildAttentionRows(
   queue: readonly string[],
-  panelRows: readonly RailRow[]
+  panelRows: readonly RailRow[],
+  /**
+   * M76. Every pending request on this renderer, in ARRIVAL order per panel;
+   * the row takes the first for its id. Optional and defaulted so every
+   * pre-M76 caller and check keeps its exact meaning.
+   */
+  approvals: readonly PendingApproval[] = []
 ): RailAttention[] {
   const byId = new Map(panelRows.map((row) => [row.id, row]))
   const out: RailAttention[] = []
   for (const id of queue) {
     const row = byId.get(id)
-    if (row !== undefined) out.push({ id, label: row.label })
+    if (row === undefined) continue
+    const approval = approvals.find((a) => a.id === id)
+    out.push({ id, label: row.label, ...(approval === undefined ? {} : { approval }) })
   }
   return out
 }

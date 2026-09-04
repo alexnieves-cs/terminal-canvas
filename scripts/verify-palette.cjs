@@ -206,6 +206,7 @@ const spyActions = () => {
     setDefaultPreset: record('setDefaultPreset'),
     goToPanel: record('goToPanel'),
     insertPrompt: record('insertPrompt'),
+    answerApproval: record('answerApproval'),
     beginSavePrompt: record('beginSavePrompt'),
     deletePrompt: record('deletePrompt'),
     beginRenamePanel: record('beginRenamePanel'),
@@ -2075,6 +2076,28 @@ const WS = [
       b && b.disabledReason === P.REASON_NO_CLAUDE && /PATH/.test(P.REASON_NO_CLAUDE) &&
       c && c.disabledReason === P.REASON_NO_CLAUDE,
     JSON.stringify({ a: a && a.disabledReason, b: b && b.disabledReason, c: c && c.disabledReason }))
+}
+
+// M76 — approve.1. Two rows per pending request, named with the tool and the
+//     panel, each running the ONE answer verb; with nothing pending one
+//     disabled row whose reason says so — a row that disappears is
+//     indistinguishable from a feature never built.
+{
+  const withOne = ctx({ approvals: [{ id: 'c1', requestId: 'r1', toolName: 'Bash', argument: 'ls', label: 'api (chat)' }] })
+  const rows = P.buildCommands(withOne)
+  const allow = rows.find((r) => r.id === 'approval.allow.c1.r1')
+  const deny = rows.find((r) => r.id === 'approval.deny.c1.r1')
+  if (allow) allow.run()
+  if (deny) deny.run()
+  const none = P.buildCommands(ctx()).find((r) => r.id === 'approval.none')
+  const noneWithOne = rows.find((r) => r.id === 'approval.none')
+  ok('approve.1 Allow and Deny rows per pending request, named with the tool and the panel, running the answer verb; one disabled row with a named reason when nothing pends, and none when something does',
+    allow && /Allow Bash/.test(allow.title) && /api \(chat\)/.test(allow.title) && allow.disabledReason === undefined && /permission|approve/.test(allow.searchText) &&
+      deny && /Deny Bash/.test(deny.title) &&
+      withOne.actions.calls.some((c) => c[0] === 'answerApproval' && c[1] === 'c1' && c[2] === 'r1' && c[3] === true) &&
+      withOne.actions.calls.some((c) => c[0] === 'answerApproval' && c[1] === 'c1' && c[2] === 'r1' && c[3] === false) &&
+      none && none.disabledReason === P.REASON_NO_APPROVALS && /asking/.test(P.REASON_NO_APPROVALS) && noneWithOne === undefined,
+    JSON.stringify({ allow: allow && allow.title, deny: deny && deny.title, calls: withOne.actions.calls, none: none && none.disabledReason }))
 }
 
 // M74 — front.1. The two front-end rows, each aimed at the captured panel and

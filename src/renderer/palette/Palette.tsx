@@ -22,7 +22,7 @@ import {
   type PaletteScope,
   type SectionId
 } from './palette-model'
-import {
+import { type ApprovalRow,
   buildCommands,
   type PaletteActions,
   type PanelRow,
@@ -121,6 +121,8 @@ export interface PaletteProps {
   cameraTrail: { back: boolean; forward: boolean }
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
+  /** M76. Every pending permission request, for the Allow/Deny rows. */
+  approvals: readonly ApprovalRow[]
   hasSelection: boolean
   /** M27. Where a new note would be saved; null disables the row. */
   noteRoot: string | null
@@ -202,6 +204,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         cameraTrail: props.cameraTrail,
         noteRoot: props.noteRoot,
         attentionIds: props.attentionIds,
+        approvals: props.approvals,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,
         selectedIds: props.selectedIds,
@@ -217,7 +220,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
-     props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, props.approvals, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.scrollbackEnabled]
   )

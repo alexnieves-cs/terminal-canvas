@@ -68,6 +68,7 @@ const {
   readProjectPrompts,
   resolveCwd,
   expandTilde,
+  createApprovalTracker,
   resolveSpawnRequest,
   IPC_EVENTS,
   IPC,
@@ -875,10 +876,23 @@ app.whenReady().then(async () => {
         proc.stdin.push(line)
         let parsed = null
         try { parsed = JSON.parse(line) } catch { parsed = null }
-        if (parsed && parsed.type === 'user') {
-          const cut = Math.floor(chatFixture.length / 2)
-          setTimeout(() => { if (!exited) for (const cb of dataCbs) cb(chatFixture.slice(0, cut).join('\n') + '\n') }, 40)
-          setTimeout(() => { if (!exited) for (const cb of dataCbs) cb(chatFixture.slice(cut).join('\n') + '\n') }, 160)
+        const cut = Math.floor(chatFixture.length / 2)
+        const emit = (lines) => { for (const cb of dataCbs) cb(lines.join('\n') + '\n') }
+        // M76. A user line whose text starts with `ask:` is answered with a
+        // permission request instead of the recorded answer; the answer
+        // then streams once the control response arrives — the real CLI's
+        // own order.
+        const text = parsed && parsed.type === 'user' && Array.isArray(parsed.message?.content) ? String(parsed.message.content.find((c) => c.type === 'text')?.text ?? '') : ''
+        if (parsed && parsed.type === 'user' && text.startsWith('ask:')) {
+          proc.asks = (proc.asks ?? 0) + 1
+          const requestId = `req-${proc.pid}-${proc.asks}`
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(0, cut)) }, 40)
+          setTimeout(() => { if (!exited) emit([JSON.stringify({ type: 'control_request', request_id: requestId, request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'ls -la', description: 'list' }, tool_use_id: 'tu-' + requestId } })]) }, 80)
+        } else if (parsed && parsed.type === 'control_response') {
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 40)
+        } else if (parsed && parsed.type === 'user') {
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(0, cut)) }, 40)
+          setTimeout(() => { if (!exited) emit(chatFixture.slice(cut)) }, 160)
         }
       },
       onData(cb) { dataCbs.push(cb) },
@@ -899,7 +913,16 @@ app.whenReady().then(async () => {
     // front-end fixture store, so an imported chat's first send resumes.
     transcriptExists: (id) => frontTranscripts.has(id)
   })
+  // M76. The tracker main runs: a pending permission is `needs you` on the
+  // terminal's own channel. An inert sink; the decision path is proven in
+  // verify:agent-session.
+  const approvalTracker = createApprovalTracker({
+    sink: { notify() {}, badge() {}, beep() {}, windowFocused: () => true, notifyEnabled: () => false, soundEnabled: () => false },
+    emitState: (panelId, state) => { if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.AGENT_STATE, { panelId, state }) },
+    label: () => 'harness'
+  })
   agentSessions.subscribe((event) => {
+    approvalTracker.apply(event)
     if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
     if (event.type === 'result') { const snap = agentSessions.get(event.id); if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns }) }
     if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
@@ -14697,6 +14720,121 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(kErr && kErr.message || kErr) + ' | renderer: ' + (cLog2.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onC2)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M76 — approve.1 / approve.2. THE QUESTION ANSWERED FROM AFAR. The fake
+    //     runner answers an `ask:` message with a permission request.
+    //     approve.1: the request puts the chat in `needs you` on the pill, the
+    //     rail row and the dock badge (main's tracker, the terminal's own
+    //     channel), the popover row carries the tool and the argument, and
+    //     Allow there answers on the wire WITHOUT moving the camera; the
+    //     card and the row clear when main's event lands. approve.2: the
+    //     palette's `Deny Bash` row puts a deny with a message on the wire;
+    //     the context pane's Allow leads its action bar, answers, and reads
+    //     disabled by name after.
+    // -------------------------------------------------------------------
+    {
+      const IDS = [
+        'approve.1 a permission request puts the chat in needs you on the pill, the rail row and the dock badge; the popover row names the tool and argument; Allow there answers on the wire without moving the camera, and every surface clears',
+        'approve.2 the palette\'s Deny row puts a deny with a message on the wire; focusing the chat does not clear its needs-you; the context pane\'s Allow leads the action bar, answers, and is disabled by name after'
+      ]
+      const aLog = []
+      const onA = (_e, level, m) => { if (level >= 2) aLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onA)
+      try {
+        const aDir = mkdtempSync(join(tmpdir(), 'tc panels approve-'))
+        layoutStore.addPreset({ id: 'approve-claude', name: 'Claude (approve)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        flushLayoutStore()
+        const reA = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reA
+        await settle()
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        const spawnsBefore = chatSpawns.length
+        const minted = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(aDir)})`)
+        const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
+        const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
+        const sendText = (text) => waitUntil(() => wc.executeJavaScript(`(() => {
+          const ta = ${sel('[data-chat-input]')}; if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, ${JSON.stringify(text)}); ta.dispatchEvent(new Event('input', { bubbles: true }))
+          const b = ${sel('[data-chat-send]')}; if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 8000)
+        const pendingIs = (n) => waitUntil(() => wc.executeJavaScript(`${sel('')}?.getAttribute('data-chat-pending') === ${JSON.stringify(String(n))}`), 8000)
+        const wireResponses = () => { const spawn = chatSpawns[spawnsBefore]; return spawn ? spawn.proc.stdin.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter((p) => p && p.type === 'control_response') : [] }
+
+        // approve.1
+        const sent1 = await sendText('ask: list the directory')
+        const pending1 = await pendingIs(1)
+        const pill = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'needs you' || false`), 4000)
+        const railWord = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-row="${chatId}"]'); return r && r.textContent.includes('needs you') ? true : false })()`), 4000)
+        const badge = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock-badge]'); return b && !b.hidden && b.textContent === '1' ? b.textContent : false })()`), 4000)
+        const inQueue = await wc.executeJavaScript(`window.__m4aAttention ? window.__m4aAttention() : 'no-hook'`)
+        const vpBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        const popRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-attention="${chatId}"]'); if (!r) return false; const a = r.querySelector('[data-rail-allow]'); return a ? { allow: a.textContent, title: a.title, arg: r.querySelector('.rail-attention__argument')?.textContent ?? null, deny: !!r.querySelector('[data-rail-deny]') } : false })()`), 4000)
+        await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-rail-attention="${chatId}"] [data-rail-allow]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
+        const cleared = await pendingIs(0)
+        const rowGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-attention="${chatId}"]') === null`), 4000)
+        const badgeGone = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock-badge]'); return b ? b.hidden : false })()`), 4000)
+        const vpAfter = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const idleAgain = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 8000)
+        const wire1 = wireResponses()
+        ok(IDS[0],
+          minted && minted.kind === 'spawned' && sent1 === true && pending1 === true && pill === true && railWord === true && badge === '1' &&
+            popRow && /Allow Bash/.test(popRow.allow) && popRow.arg === 'ls -la' && popRow.deny === true &&
+            wire1.length === 1 && /allow/.test(JSON.stringify(wire1[0])) && !/deny/.test(JSON.stringify(wire1[0])) &&
+            cleared === true && rowGone === true && badgeGone === true && idleAgain === true &&
+            vpBefore.x === vpAfter.x && vpBefore.y === vpAfter.y && vpBefore.scale === vpAfter.scale,
+          JSON.stringify({ minted, sent1, pending1, pill, railWord, badge, inQueue, popRow, wire1, cleared, rowGone, badgeGone, idleAgain, vpBefore, vpAfter, log: aLog.slice(-3) }))
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') === 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+
+        // approve.2 — the palette's Deny, then the pane's Allow.
+        const sent2 = await sendText('ask: again')
+        const pending2 = await pendingIs(1)
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
+        const denyRow = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'deny bash'); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected || !/Deny Bash/.test(selected.textContent)) return selected ? selected.textContent : 'no row'
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return selected.textContent })()`)
+        const denied = await pendingIs(0)
+        const wire2 = wireResponses()
+        const idle2 = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 8000)
+        const sent3 = await sendText('ask: third')
+        const pending3 = await pendingIs(1)
+        // Select the chat so the context pane shows it; the pane may be hidden by an earlier check.
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+        await wc.executeJavaScript(`(() => { const body = ${sel('.chat__body')}; if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+        await settle()
+        // Focus is the terminal's acknowledgement; a chat's needs-you is a
+        // question, not a bell, and the badge must still say one.
+        const badgeAfterFocus = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock-badge]'); return b && !b.hidden ? b.textContent : 'hidden' })()`)
+        const paneAllow = await waitUntil(() => wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="allow"]'); const acts = [...document.querySelectorAll('[data-inspector-action]')].map((b) => b.getAttribute('data-inspector-action')); return a && !a.disabled ? { text: a.textContent, title: a.title, first: acts[0], deny: !!document.querySelector('[data-inspector-action="deny"]') } : false })()`), 5000)
+        await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="allow"]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
+        const cleared3 = await pendingIs(0)
+        const paneAfter = await waitUntil(() => wc.executeJavaScript(`(() => { const a = document.querySelector('[data-inspector-action="allow"]'); return a && a.disabled ? { text: a.textContent, title: a.title } : false })()`), 5000)
+        const wire3 = wireResponses()
+        ok(IDS[1],
+          sent2 === true && pending2 === true && /Deny Bash/.test(String(denyRow)) && denied === true &&
+            wire2.length === 2 && /deny/.test(JSON.stringify(wire2[1])) && /denied from the canvas/.test(JSON.stringify(wire2[1])) && idle2 === true &&
+            sent3 === true && pending3 === true && paneAllow && /Allow Bash/.test(paneAllow.text) && paneAllow.first === 'allow' && paneAllow.deny === true &&
+            badgeAfterFocus === '1' && cleared3 === true && paneAfter && /nothing is waiting/.test(paneAfter.title) && wire3.length === 3 && /allow/.test(JSON.stringify(wire3[2])),
+          JSON.stringify({ sent2, pending2, denyRow, denied, wire2: wire2.slice(1), idle2, sent3, pending3, badgeAfterFocus, paneAllow, cleared3, paneAfter, wire3: wire3.slice(2), log: aLog.slice(-3) }))
+        await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 8000)
+        await clickPanelClose(wc, chatId)
+        await settle()
+        try { rmSync(aDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (aErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(aErr && aErr.message || aErr) + ' | renderer: ' + (aLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onA)
       }
     }
 

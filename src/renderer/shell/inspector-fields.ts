@@ -10,6 +10,7 @@ import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPane
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
+import type { PendingApproval } from './rail-sections'
 
 /**
  * What the inspector renders, as plain data.
@@ -42,6 +43,8 @@ export interface InspectorModel {
   id: string
   /** M74. See FrontEndVerb. Absent on every kind but terminal and chat. */
   frontEnd?: FrontEndVerb
+  /** M76. A chat's pending request; absent at rest and on every other kind. The pane disables its verbs by name from this. */
+  approval?: PendingApproval
   /**
    * Which kind of panel this model describes. `'review'` is what gates
    * Inspector.tsx's Restart and Save-as-preset controls — an optional
@@ -407,6 +410,8 @@ export interface ChatInspectorInput {
   costUsd?: number
   model?: string
   turns: number
+  /** M76. The oldest pending permission request, when one is. */
+  approval?: PendingApproval
 }
 
 export function buildInspectorModel(
@@ -486,6 +491,7 @@ export function buildInspectorModel(
     const chatTurns = chat?.turns ?? 0
     return {
       kind: 'chat',
+      ...(chat?.approval === undefined ? {} : { approval: chat.approval }),
       frontEnd: {
         verb: 'open-in-terminal',
         enabled: !chatBusy && chatTurns > 0,

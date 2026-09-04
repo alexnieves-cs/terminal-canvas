@@ -37,6 +37,8 @@ import { claudeCliRunner } from './claude-cli-runner'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
+import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
+import type { AttentionSink } from './pty-manager'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
 import type { AgentCreateResult, AgentSessionSpec } from '../shared/agent-session'
@@ -142,6 +144,8 @@ let gitPath: string | null = null
 // it yet — M72's chat panel is its first caller — but it is wired into the
 // quit sequence now so a process it owns can never outlive the app.
 let agentSessions: AgentSessionManager | null = null
+// M76. Assigned beside it once the runtime exists; create() re-syncs through it.
+let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
 
 // Getters for the reason PtyManager's getBackend is one: this runner is
@@ -239,6 +243,39 @@ const controlSocketPath = join(app.getPath('userData'), 'control.sock')
 const launcherDir = join(app.getPath('userData'), 'bin')
 let controlServer: ControlServer | null = null
 
+// M43. The real OS attention surfaces. Every method reads live state through
+// a getter (focus and the two settings change constantly), and the whole
+// decision path — when to notify, when to beep — lives in PtyManager, tested
+// under plain node; this object only DOES what it is told. Confirmed by hand
+// against a real dock, a real notification and a real beep (manual-only list).
+const osAttention: AttentionSink = {
+  notify: (panelId, label, count, body) => {
+    if (!Notification.isSupported()) return
+    const n = new Notification({
+      title: label,
+      body: body ?? (count > 1 ? `${label} wants you (${count} panels waiting)` : `${label} wants you`)
+    })
+    n.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.focus()
+        // The Cmd+J path, never a wake: frame the panel that called for you.
+        mainWindow.webContents.send(IPC_EVENTS.ATTENTION_JUMP, panelId)
+      }
+    })
+    n.show()
+  },
+  badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : '') },
+  beep: () => { shell.beep() },
+  windowFocused: () => mainWindow?.isFocused() ?? false,
+  notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,
+  soundEnabled: () => layoutStore.getSetting('attention.sound') === true
+}
+// M76. One badge, two authors, one writer: PtyManager's waiting set and
+// the approval tracker's each report their count to a child sink and the
+// dock badge reads the sum. See main/approvals.ts.
+const attention = createAttentionUnion(osAttention)
+
 const ptyManager = new PtyManager(
   () => mainWindow?.webContents ?? null,
   () => backend,
@@ -269,34 +306,8 @@ const ptyManager = new PtyManager(
     drop: (panelId) => { void scrollbackLog.drop(panelId) },
     enabled: () => layoutStore.getSetting('scrollback.persist') === true
   },
-  // M43. The real OS attention surfaces. Every method reads live state through
-  // a getter (focus and the two settings change constantly), and the whole
-  // decision path — when to notify, when to beep — lives in PtyManager, tested
-  // under plain node; this object only DOES what it is told. Confirmed by hand
-  // against a real dock, a real notification and a real beep (manual-only list).
-  {
-    notify: (panelId, label, count) => {
-      if (!Notification.isSupported()) return
-      const n = new Notification({
-        title: label,
-        body: count > 1 ? `${label} wants you (${count} panels waiting)` : `${label} wants you`
-      })
-      n.on('click', () => {
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) mainWindow.restore()
-          mainWindow.focus()
-          // The Cmd+J path, never a wake: frame the panel that called for you.
-          mainWindow.webContents.send(IPC_EVENTS.ATTENTION_JUMP, panelId)
-        }
-      })
-      n.show()
-    },
-    badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : '') },
-    beep: () => { shell.beep() },
-    windowFocused: () => mainWindow?.isFocused() ?? false,
-    notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,
-    soundEnabled: () => layoutStore.getSetting('attention.sound') === true
-  },
+  // M43's OS sink, through M76's union — declared above the manager.
+  attention.forPty,
   // M52. The run ledger (an append stream beside layout.json) and the
   // shell-integration directory the rc files are written under. Declared
   // above this construction because they are values, not getters.
@@ -639,7 +650,17 @@ app.whenReady().then(async () => {
   // the renderer never has to echo a turn back; and every event forwarded
   // to the renderer on ONE channel, already batched at the manager.
   const agentSessionsHere = agentSessions
+  // M76. A pending permission is `needs you` on the terminal's own channel,
+  // decided here in main — the renderer's store is a cache of this, never a
+  // second author. The label is the chat's directory name.
+  const approvalsHere = createApprovalTracker({
+    sink: attention.forAgents,
+    emitState: (panelId, state) => { mainWindow?.webContents.send(IPC_EVENTS.AGENT_STATE, { panelId, state }) },
+    label: (id) => { const cwd = agentSessionsHere.get(id)?.cwd ?? id; return cwd.replace(/\/+$/, '').split('/').pop() || cwd }
+  })
+  approvals = approvalsHere
   agentSessionsHere.subscribe((event) => {
+    approvalsHere.apply(event)
     if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
     if (event.type === 'result') {
       const snap = agentSessionsHere.get(event.id)
@@ -769,7 +790,11 @@ app.whenReady().then(async () => {
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
-      return { kind: 'created', snapshot: manager.create({ ...spec, cwd }) }
+      const snapshot = manager.create({ ...spec, cwd })
+      // M76. A reloaded renderer re-creates every chat by id; a question
+      // still pending must light its attention surfaces again.
+      approvals?.resync(spec.id)
+      return { kind: 'created', snapshot }
     },
     // M75. Attachments are resolved HERE (the renderer has no fs): every one
     // must decode or the send is refused whole, naming the one that could not.
