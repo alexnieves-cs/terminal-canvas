@@ -28,6 +28,13 @@ export interface ChatState {
   refusal: string | null
   /** The last recorded accounting for a panel whose session has not run this launch. */
   meta?: { usage: AgentSessionSnapshot['usage']; costUsd?: number; turns: number }
+  /**
+   * M75. A request from outside the component (the palette's prompt row, a
+   * drop on the panel) to put text or an attachment into the composer. A
+   * sequence number so an identical request twice is two insertions; the
+   * component takes it and clears it.
+   */
+  insert?: { seq: number; text?: string; attach?: { kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
 }
 
 const states = new Map<string, ChatState>()
@@ -80,6 +87,29 @@ export function seedChat(
     refusal: input.refusal === undefined ? prev.refusal : input.refusal,
     ...(input.meta === undefined ? (prev.meta === undefined ? {} : { meta: prev.meta }) : { meta: input.meta })
   })
+}
+
+let insertSeq = 0
+
+/** M75. Ask the composer of `id` to insert text at its caret. */
+export function insertIntoComposer(id: string, text: string): void {
+  const prev = states.get(id)
+  if (!prev) return
+  update(id, { ...prev, insert: { seq: ++insertSeq, text } })
+}
+
+/** M75. Ask the composer of `id` to attach an image. */
+export function attachToComposer(id: string, attach: NonNullable<ChatState['insert']>['attach']): void {
+  const prev = states.get(id)
+  if (!prev) return
+  update(id, { ...prev, insert: { seq: ++insertSeq, attach } })
+}
+
+export function takeInsert(id: string, seq: number): void {
+  const prev = states.get(id)
+  if (!prev || !prev.insert || prev.insert.seq !== seq) return
+  const { insert: _taken, ...rest } = prev
+  update(id, rest)
 }
 
 export function clearChat(id: string): void {

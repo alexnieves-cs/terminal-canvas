@@ -1,5 +1,5 @@
 import type { RunRow } from './run-ledger'
-import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult } from './agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportResult, CanvasPngExportResult } from './export'
@@ -435,7 +435,9 @@ export const IPC = {
    * the NEW panel id, or refuses by name (the terminal is live; it was never
    * pinned; the CLI has not written the file yet).
    */
-  AGENT_IMPORT: 'agent:import'
+  AGENT_IMPORT: 'agent:import',
+  /** M75. The clipboard's image, for a ⌘V that carried no text. Main's `clipboard.readImage()`. */
+  AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -1013,8 +1015,10 @@ export interface CanvasBridge {
   agentSession: {
     /** M73. Idempotent at an id; spawns nothing. Refuses by name (no such directory; claude not found). */
     create(spec: AgentSessionSpec): Promise<AgentCreateResult>
-    /** Writes one user turn; queues it if one is in flight; respawns after an exit. */
-    send(id: string, text: string): Promise<SendResult>
+    /** Writes one user turn; queues it if one is in flight; respawns after an exit. M75: with attachments, resolved in main; a refusal names the one that could not go and nothing is sent. */
+    send(id: string, text: string, attachments?: ChatAttachment[]): Promise<SendAnswer>
+    /** M75. See AGENT_CLIPBOARD_IMAGE. */
+    clipboardImage(): Promise<ClipboardImage>
     /** True when a request was written; false with no turn in flight. */
     interrupt(id: string): Promise<boolean>
     /** `drop`: also remove the durable transcript (an explicit close, never a quit). */

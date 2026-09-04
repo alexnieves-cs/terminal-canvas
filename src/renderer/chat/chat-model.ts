@@ -27,6 +27,8 @@ export type ChatRow =
       live: boolean
     }
   | { kind: 'unknown'; id: string; kindName: string }
+  /** M75. An attached image: its type and size, never the picture. */
+  | { kind: 'image'; id: string; mediaType: string; size: number }
 
 /** One block of the message in flight, its deltas accumulated. */
 export interface LiveBlock {
@@ -56,6 +58,9 @@ function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolea
         return
       case 'tool_result':
         // Folded below, never a row of its own.
+        return
+      case 'image':
+        rows.push({ kind: 'image', id, mediaType: block.mediaType, size: block.size })
         return
       default:
         rows.push({ kind: 'unknown', id, kindName: block.kind })
@@ -88,6 +93,7 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
     if (turn.role === 'user') {
       const text = turn.blocks.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
       if (text !== '') rows.push({ kind: 'user', id: turn.id, text })
+      turn.blocks.forEach((b, i) => { if (b.type === 'image') rows.push({ kind: 'image', id: `${turn.id}:${i}`, mediaType: b.mediaType, size: b.size }) })
       for (const block of turn.blocks) {
         if (block.type !== 'tool_result') continue
         const row = toolRows.get(block.toolUseId)
@@ -164,7 +170,7 @@ export function chatStateInput(snapshot: AgentSessionSnapshot | null, hasHistory
  * file name survives (brief principle 3: a row that begins with
  * `/private/var/folders/…` is wrong); a command is cut from the right.
  */
-export function toolArgument(input: Record<string, unknown>, keep = 3): string {
+export function toolArgument(input: Record<string, unknown>, keep = 2): string {
   const pathLike = input.file_path ?? input.path ?? input.notebook_path
   if (typeof pathLike === 'string') return shortPath(pathLike, keep)
   const first = input.command ?? input.pattern ?? input.url ?? input.description ?? input.query

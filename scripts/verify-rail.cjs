@@ -2298,7 +2298,7 @@ const session = (id, over = {}) => ({
     JSON.stringify({ i1, i2, i3, i4, i5 }))
   const arg = typeof R.toolArgument === 'function' ? R.toolArgument : () => null
   ok('chat-model.5 a tool row\'s path argument is shortened from the LEFT so the file name survives; a command is cut from the right',
-    arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }) === '…/repo/src/server.ts' &&
+    arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }) === '…/src/server.ts' &&
       arg({ command: 'echo hi' }) === 'echo hi' && arg({ command: 'x'.repeat(200) }).length === 94 && arg({}) === '',
     JSON.stringify([arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }), arg({ command: 'x'.repeat(200) }).length]))
 }
@@ -2332,6 +2332,60 @@ const session = (id, over = {}) => ({
       chatEmpty && chatEmpty.enabled === false && /send a message/.test(chatEmpty.reason) &&
       review === undefined,
     JSON.stringify({ claudeExited, claudeDormant, claudeLive, shell, chatRest, chatBusy, chatEmpty, review }))
+}
+
+// M75 — composer.1–.4. THE COMPOSER'S PURE MODEL.
+//     composer.1: a trigger is `@` or `/` at the start of the text or after
+//     whitespace with the caret inside the token — `a/b`, an email, a caret
+//     before the trigger are NOT triggers, or every path typed by hand opens
+//     a list. composer.2: placeholders are unique names in first-seen order,
+//     a hole with no value stays as typed (never blanked), and a name with a
+//     space is literal text. composer.3: attachment kinds by extension.
+//     composer.4: file completions filter by prefix, directories first with a
+//     trailing slash, capped with a remainder count.
+{
+  const T = typeof R.triggerAt === 'function' ? R.triggerAt : () => 'missing'
+  const at = (text, caret) => T(text, caret === undefined ? text.length : caret)
+  const cases = {
+    atStart: at('@ser'), afterSpace: at('look at @src/ser'), slashStart: at('/rev'), slashAfterSpace: at('please /rev'),
+    inPath: at('a/b'), email: at('mail me@x'), caretBefore: at('@ser', 0), mid: at('@server after', 4), closed: at('@server done'), justAt: at('@')
+  }
+  ok('composer.1 @ and / open a completion only at a token start with the caret inside it; a/b, an email, a caret before the trigger and a finished token do not',
+    cases.atStart && cases.atStart.kind === 'file' && cases.atStart.query === 'ser' && cases.atStart.start === 0 &&
+      cases.afterSpace && cases.afterSpace.kind === 'file' && cases.afterSpace.query === 'src/ser' && cases.afterSpace.start === 8 &&
+      cases.slashStart && cases.slashStart.kind === 'prompt' && cases.slashStart.query === 'rev' &&
+      cases.slashAfterSpace && cases.slashAfterSpace.kind === 'prompt' &&
+      cases.inPath === null && cases.email === null && cases.caretBefore === null && cases.closed === null &&
+      cases.mid && cases.mid.query === 'ser' && cases.justAt && cases.justAt.query === '',
+    JSON.stringify(cases))
+  const apply = typeof R.applyCompletion === 'function' ? R.applyCompletion : () => null
+  const a1 = apply('look at @src/ser and', 8, 16, '@src/server.ts')
+  ok('composer.1b applying a completion replaces the token from its start to the caret and puts the caret after the replacement',
+    a1 && a1.text === 'look at @src/server.ts and' && a1.caret === 22, JSON.stringify(a1))
+  const ph = typeof R.placeholders === 'function' ? R.placeholders : () => null
+  const fill = typeof R.fillPlaceholders === 'function' ? R.fillPlaceholders : () => null
+  const body = 'review {{selection}} in {{cwd}} then {{selection}} — not {{a name}} and {{ }}'
+  const names = ph(body)
+  const filled = fill(body, { selection: 'foo', cwd: '/r' })
+  ok('composer.2 placeholders are unique names in first-seen order, a hole with no value stays as typed, and a name with a space is literal',
+    Array.isArray(names) && names.join(',') === 'selection,cwd' &&
+      filled === 'review foo in /r then foo — not {{a name}} and {{ }}' &&
+      fill('{{x}}', {}) === '{{x}}' && fill('{{x}}', { x: '' }) === '{{x}}' && ph('plain').length === 0,
+    JSON.stringify({ names, filled }))
+  const kind = typeof R.attachmentKind === 'function' ? R.attachmentKind : () => null
+  const media = typeof R.imageMediaType === 'function' ? R.imageMediaType : () => null
+  ok('composer.3 png, jpg, jpeg, gif and webp are images with their media types; everything else is a file',
+    kind('a.PNG') === 'image' && kind('b.jpeg') === 'image' && kind('c.webp') === 'image' && kind('d.gif') === 'image' &&
+      kind('e.ts') === 'file' && kind('f') === 'file' && kind('g.svg') === 'file' &&
+      media('a.jpg') === 'image/jpeg' && media('a.png') === 'image/png' && media('a.ts') === null,
+    JSON.stringify([kind('a.PNG'), kind('g.svg'), media('a.jpg')]))
+  const comp = typeof R.fileCompletions === 'function' ? R.fileCompletions : () => null
+  const entries = [{ name: 'server.ts', kind: 'file' }, { name: 'src', kind: 'dir' }, { name: 'scripts', kind: 'dir' }, { name: 'README.md', kind: 'file' }, { name: 'shared', kind: 'symlink' }]
+  const rows = comp(entries, 's', 3)
+  ok('composer.4 file completions filter by prefix (case-insensitive), put directories first with a trailing slash, and cap with a remainder count',
+    rows && rows.rows.length === 3 && rows.rows[0].label === 'scripts/' && rows.rows[1].label === 'src/' && rows.rows[2].label === 'server.ts' &&
+      rows.more === 1 && comp(entries, 'zz', 3).rows.length === 0 && comp(entries, 'zz', 3).more === 0,
+    JSON.stringify(rows))
 }
 
 // M63 — state.1/.2/.3. THE ONE VOCABULARY. Every combination of kind, status,

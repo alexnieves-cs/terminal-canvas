@@ -34,6 +34,12 @@ export type ContentBlock =
   | { type: 'thinking'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  /**
+   * M75. An image the user attached — a PLACEHOLDER: the media type and the
+   * byte count, never the bytes, so the transcript file and the store stay
+   * small and a rendered turn says `image · 42 KB`.
+   */
+  | { type: 'image'; mediaType: string; size: number }
   /** A block type this version has never seen. Kept, never dropped. */
   | { type: 'unknown'; kind: string }
 
@@ -166,6 +172,14 @@ function parseBlock(raw: unknown): ContentBlock | undefined {
         content: resultContent(raw.content),
         isError: raw.is_error === true
       }
+    case 'image': {
+      // The CLI's file echoes a user's image block with its bytes; only the
+      // placeholder is kept (M75).
+      const source = isRecord(raw.source) ? raw.source : {}
+      const data = str(source.data) ?? ''
+      const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+      return { type: 'image', mediaType: str(source.media_type) ?? 'image', size: Math.max(0, Math.floor((data.length * 3) / 4) - padding) }
+    }
     default:
       return { type: 'unknown', kind: type }
   }
@@ -378,10 +392,27 @@ export function parseStreamChunk(
  * newline is the CALLER's: `JSON.stringify` never emits a raw newline, so the
  * line is one line by construction, and the writer appends the terminator.
  */
-export function userMessageLine(text: string): string {
+export interface OutgoingImage {
+  mediaType: string
+  base64: string
+}
+
+/**
+ * M75. Images ride as base64 image blocks AFTER the text — the API's own
+ * content-block shape, which the CLI's stream-json input accepts verbatim.
+ */
+export function userMessageLine(text: string, images: readonly OutgoingImage[] = []): string {
+  // An image-only message carries NO empty text block: the API refuses one.
+  const textBlocks = text === '' && images.length > 0 ? [] : [{ type: 'text', text }]
   return JSON.stringify({
     type: 'user',
-    message: { role: 'user', content: [{ type: 'text', text }] }
+    message: {
+      role: 'user',
+      content: [
+        ...textBlocks,
+        ...images.map((img) => ({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.base64 } }))
+      ]
+    }
   })
 }
 

@@ -1,11 +1,17 @@
-import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { ChatPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
+import type { ChatAttachment } from '@shared/agent-session'
+import type { DirResult } from '@shared/fs-tree'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
-import { useChat } from './chat-store'
+import { takeInsert, useChat } from './chat-store'
 import { chatRows, chatStateInput, composerState, toolArgument, type ChatRow } from './chat-model'
+import {
+  applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
+  type ComposerTrigger, type FileCompletionRow
+} from './composer-model'
 
 /**
  * M73. THE CHAT PANEL — a conversation with an agent, on the canvas, through
@@ -30,10 +36,14 @@ import { chatRows, chatStateInput, composerState, toolArgument, type ChatRow } f
  * never delivers a native copy or paste to this textarea, and Canvas.tsx's
  * listener routes `edit:paste` to the focused TERMINAL — for a chat panel
  * that is nobody. The composer therefore subscribes itself and serves the
- * paste only while it holds DOM focus (M73's verifier caught the first cut
- * declining to, on exactly the argument the spec was guarding against).
- * Cmd+Z over the composer still reaches applyHistory — the known limit
- * CLAUDE.md records for the Jira draft, now the fifth text surface.
+ * paste only while it holds DOM focus. Cmd+Z over the composer still reaches
+ * applyHistory — the known limit CLAUDE.md records for the Jira draft.
+ *
+ * M75. The composer resolves `@` references against the panel's directory,
+ * offers the project's and the saved prompts as `/` commands (a saved
+ * prompt's `{{holes}}` filled in the same popup; a project prompt inserted
+ * verbatim, never expanded), and carries dropped or pasted images as
+ * attachments the next send takes. The pure rules live in composer-model.ts.
  */
 
 export interface ChatNodeProps {
@@ -53,6 +63,10 @@ export interface ChatNodeProps {
 }
 
 const shortInput = toolArgument
+
+function kb(size: number): string {
+  return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : size >= 1024 ? `${Math.round(size / 1024)} KB` : `${size} B`
+}
 
 const ToolRow = memo(function ToolRow({ row }: { row: Extract<ChatRow, { kind: 'tool' }> }): JSX.Element {
   const [open, setOpen] = useState(false)
@@ -88,6 +102,20 @@ const ThinkingRow = memo(function ThinkingRow({ row }: { row: Extract<ChatRow, {
   )
 })
 
+/** An attachment as the composer holds it, before main resolves it. */
+type PendingAttachment = { id: number; label: string; size?: number } & ChatAttachment
+
+interface PromptRowLite { id: string; name: string; source: 'saved' | 'project'; body: string }
+
+/** The popup's state: which trigger opened it, its rows, the highlighted row, and a fill step. */
+interface Popup {
+  trigger: ComposerTrigger
+  files?: { dir: string; rows: FileCompletionRow[]; more: number; result: DirResult['kind'] | 'pending' }
+  prompts?: PromptRowLite[]
+  index: number
+  fill?: { prompt: PromptRowLite; names: string[]; values: Record<string, string> }
+}
+
 export function ChatNode(props: ChatNodeProps): JSX.Element {
   const { panel } = props
   const id = panel.rect.id
@@ -99,9 +127,14 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const state = panelState({ kind: 'chat', status: undefined, dormant: false, ...(stateInput === undefined ? {} : { chat: stateInput }) }, undefined)
   const composer = composerState(snapshot, props.claudeAvailable)
   const [draft, setDraft] = useState('')
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const [popup, setPopup] = useState<Popup | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const stickRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const attachSeq = useRef(0)
+  const popupSeq = useRef(0)
 
   // Auto-scroll to the newest row unless the user has scrolled away; the
   // decision is read from the scroll position BEFORE the rows change, so a
@@ -117,11 +150,54 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
   }
 
+  const placeCaret = (at: number): void => {
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(at, at)
+    })
+  }
+
+  /* Insert text at the caret, keeping the caret after it. */
+  const insertAtCaret = useCallback((text: string): void => {
+    const ta = textareaRef.current
+    const start = ta?.selectionStart ?? ta?.value.length ?? 0
+    const end = ta?.selectionEnd ?? start
+    setDraft((d) => d.slice(0, start) + text + d.slice(end))
+    placeCaret(start + text.length)
+  }, [])
+
+  const addAttachment = useCallback((attach: ChatAttachment, size?: number): void => {
+    const label = attach.kind === 'path' ? attach.path.slice(attach.path.lastIndexOf('/') + 1) : attach.name
+    setAttachments((current) => [...current, { id: ++attachSeq.current, label, ...(size === undefined ? {} : { size }), ...attach }])
+    setRefusal(null)
+  }, [])
+
+  // M75. Requests from outside the component: the palette's prompt row and
+  // a drop on the panel, through the store's insert bus.
+  useEffect(() => {
+    const insert = chat.insert
+    if (!insert) return
+    if (insert.text !== undefined) insertAtCaret(insert.text)
+    if (insert.attach !== undefined) addAttachment(insert.attach)
+    takeInsert(id, insert.seq)
+  }, [chat.insert, id, insertAtCaret, addAttachment])
+
   // The menu's paste and copy, served only while this textarea is focused.
+  // A paste with NO text asks main for a clipboard image (M75).
   useEffect(() => {
     const offPaste = window.canvas.edit.onPaste((text) => {
       const ta = textareaRef.current
-      if (!text || !ta || document.activeElement !== ta) return
+      if (!ta || document.activeElement !== ta) return
+      if (!text) {
+        void window.canvas.agentSession.clipboardImage().then((image) => {
+          if (image === null) return
+          if ('refused' in image) { setRefusal(image.refused); return }
+          addAttachment({ kind: 'data', mediaType: image.mediaType, base64: image.base64, name: 'pasted image' }, image.size)
+        })
+        return
+      }
       const start = ta.selectionStart ?? ta.value.length
       const end = ta.selectionEnd ?? start
       setDraft((d) => d.slice(0, start) + text + d.slice(end))
@@ -134,14 +210,89 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       if (end > start) void navigator.clipboard.writeText(ta.value.slice(start, end))
     })
     return () => { offPaste(); offCopy() }
-  }, [])
+  }, [addAttachment])
+
+  /* M75. The completion popup follows the caret: recomputed on every edit. */
+  const refreshPopup = useCallback((text: string, caret: number): void => {
+    const trigger = triggerAt(text, caret)
+    if (trigger === null) { setPopup(null); return }
+    const seq = ++popupSeq.current
+    if (trigger.kind === 'file') {
+      // `@src/ser` lists `src/` filtered by `ser`; `@ser` lists the panel's directory.
+      const slash = trigger.query.lastIndexOf('/')
+      const sub = slash < 0 ? '' : trigger.query.slice(0, slash + 1)
+      const needle = slash < 0 ? trigger.query : trigger.query.slice(slash + 1)
+      const dir = sub === '' ? panel.chat.cwd : (sub.startsWith('/') ? sub : `${panel.chat.cwd.replace(/\/+$/, '')}/${sub}`)
+      // Three states: asked-but-unanswered renders `listing …`, never `no matches`.
+      setPopup((current) => ({ trigger, index: 0, files: current?.files && current.files.dir === dir ? current.files : { dir, rows: [], more: 0, result: 'pending' } }))
+      void window.canvas.files.list(dir).then((result) => {
+        if (popupSeq.current !== seq) return
+        const listed = result.kind === 'ok' ? fileCompletions(result.entries, needle) : { rows: [], more: 0 }
+        setPopup({ trigger, index: 0, files: { dir, rows: listed.rows, more: listed.more, result: result.kind } })
+      })
+      return
+    }
+    setPopup({ trigger, index: 0, prompts: [] })
+    void window.canvas.prompt.list(panel.chat.cwd).then((list) => {
+      if (popupSeq.current !== seq) return
+      const q = trigger.query.toLowerCase()
+      const matching = list.filter((p) => p.name.toLowerCase().includes(q)).map((p) => ({ id: p.id, name: p.name, source: p.source, body: p.body }))
+      setPopup({ trigger, index: 0, prompts: matching })
+    })
+  }, [panel.chat.cwd])
+
+  const acceptFile = (row: FileCompletionRow): void => {
+    if (!popup) return
+    const q = popup.trigger.query
+    const slash = q.lastIndexOf('/')
+    const prefix = slash < 0 ? '' : q.slice(0, slash + 1)
+    const ta = textareaRef.current
+    const caret = ta?.selectionStart ?? draft.length
+    const replacement = `@${prefix}${row.insert}${row.dir ? '' : ' '}`
+    const next = applyCompletion(draft, popup.trigger.start, caret, replacement)
+    setDraft(next.text)
+    placeCaret(next.caret)
+    // A directory keeps the list open one level down; a file closes it.
+    if (row.dir) refreshPopup(next.text, next.caret)
+    else setPopup(null)
+  }
+
+  const insertPromptBody = (body: string): void => {
+    if (!popup) return
+    const ta = textareaRef.current
+    const caret = ta?.selectionStart ?? draft.length
+    const next = applyCompletion(draft, popup.trigger.start, caret, body)
+    setDraft(next.text)
+    setPopup(null)
+    placeCaret(next.caret)
+  }
+  const acceptPrompt = (prompt: PromptRowLite): void => {
+    if (!popup) return
+    // A project prompt is never expanded: its holes are the CLI's business.
+    const names = prompt.source === 'saved' ? placeholders(prompt.body) : []
+    if (names.length > 0) { setPopup({ ...popup, fill: { prompt, names, values: {} } }); return }
+    insertPromptBody(prompt.body)
+  }
 
   const send = (): void => {
     const text = draft.trim()
-    if (text === '' || !composer.send.enabled) return
-    setDraft('')
+    if ((text === '' && attachments.length === 0) || !composer.send.enabled) return
+    const outgoing: ChatAttachment[] = attachments.map((a) => (a.kind === 'path' ? { kind: 'path', path: a.path } : { kind: 'data', mediaType: a.mediaType, base64: a.base64, name: a.name }))
+    setPopup(null)
     stickRef.current = true
-    void window.canvas.agentSession.send(id, text)
+    // Cleared NOW, restored on a refusal: text typed during the round trip
+    // is kept either way (M75's verifier).
+    const keptAttachments = attachments
+    setDraft('')
+    setAttachments([])
+    setRefusal(null)
+    void window.canvas.agentSession.send(id, text, outgoing).then((answer) => {
+      if (typeof answer === 'object' && answer !== null && 'refused' in answer) {
+        setRefusal(answer.refused)
+        setDraft((d) => (d === '' ? draft : d))
+        setAttachments((current) => (current.length === 0 ? keptAttachments : current))
+      }
+    })
   }
   const interrupt = (): void => {
     if (!composer.interrupt.enabled) return
@@ -158,6 +309,28 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   // the user sent — the same thing the runtime's result count measures.
   const turnCount = chat.turns.filter((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text')).length
   const title = panel.title ?? `chat · ${(panel.chat.cwd.replace(/\/+$/, '').split('/').pop() || panel.chat.cwd)}`
+
+  const popupRows = popup?.files?.rows.length ?? popup?.prompts?.length ?? 0
+  const onComposerKey = (e: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
+    if (popup !== null && popup.fill === undefined) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); setPopup({ ...popup, index: Math.min(Math.max(0, popupRows - 1), popup.index + 1) }); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); setPopup({ ...popup, index: Math.max(0, popup.index - 1) }); return }
+      if ((e.key === 'Enter' || e.key === 'Tab') && popupRows > 0) {
+        e.preventDefault(); e.stopPropagation()
+        if (popup.files) { const row = popup.files.rows[popup.index]; if (row) acceptFile(row) }
+        else if (popup.prompts) { const p = popup.prompts[popup.index]; if (p) acceptPrompt(p) }
+        return
+      }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setPopup(null); return }
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send() }
+    // Bare keys belong to this textarea while it has focus; the canvas's
+    // Cmd-gated shortcuts still apply above it.
+    e.stopPropagation()
+  }
+
+  const fillStep = popup?.fill
+  const insertFilled = (): void => { if (fillStep) insertPromptBody(fillPlaceholders(fillStep.prompt.body, fillStep.values)) }
 
   return (
     <PanelFrame
@@ -219,6 +392,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                 return <ThinkingRow key={row.id} row={row} />
               case 'tool':
                 return <ToolRow key={row.id} row={row} />
+              case 'image':
+                return <div key={row.id} className="chat__row chat__row--user" data-chat-row="image"><span className="chat__role">you</span><span className="chat__image">image · {row.mediaType.replace('image/', '')} · {kb(row.size)}</span></div>
               default:
                 return <div key={row.id} className="chat__row chat__row--unknown" data-chat-row="unknown"><span className="chat__role">claude</span><span className="pf__note">a {row.kindName} block this version cannot render</span></div>
             }
@@ -247,27 +422,101 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>
           ) : (
             <>
+              {attachments.length > 0 && (
+                <div className="chat__attachments" data-chat-attachments>
+                  {/* A dim mono line in the well's own idiom, not a bordered pill
+                      (M75's critic): `name · size · remove`, the verb a word. */}
+                  {attachments.map((a) => (
+                    <span key={a.id} className="chat__chip" data-chat-attachment={a.label}>
+                      <span className="chat__chip-label">image · {a.label}{a.size !== undefined ? ` · ${kb(a.size)}` : ''}</span>
+                      <button type="button" className="chat__chip-remove" title={`Remove ${a.label} from the next message`} aria-label={`Remove ${a.label}`}
+                        {...shellControl(() => setAttachments((current) => current.filter((x) => x.id !== a.id)))}>remove</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {popup !== null && (
+                <div className="chat__popup" data-chat-popup={popup.trigger.kind} role="listbox" aria-label={popup.trigger.kind === 'file' ? 'Files' : 'Prompts'}>
+                  {fillStep !== undefined ? (
+                    <div className="chat__fill" data-chat-fill>
+                      <div className="chat__popup-note">{fillStep.prompt.name} — fill its holes, then insert</div>
+                      {fillStep.names.map((name) => (
+                        <label key={name} className="chat__fill-field">
+                          <span className="chat__fill-name">{`{{${name}}}`}</span>
+                          <input className="chat__fill-input" data-chat-fill-input={name} value={fillStep.values[name] ?? ''} placeholder="a value"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); insertFilled() } if (e.key === 'Escape') { e.preventDefault(); setPopup(null) } }}
+                            onChange={(e) => setPopup({ ...popup, fill: { ...fillStep, values: { ...fillStep.values, [name]: e.target.value } } })} />
+                        </label>
+                      ))}
+                      <div className="chat__verbs">
+                        <button type="button" className="chat__verb" data-chat-fill-insert title="Insert the filled prompt" {...shellControl(insertFilled)}>Insert</button>
+                        <button type="button" className="chat__verb" title="Close without inserting" {...shellControl(() => setPopup(null))}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : popup.files !== undefined ? (
+                    popup.files.rows.length === 0 ? (
+                      <div className="chat__popup-note" data-chat-popup-empty>
+                        {popup.files.result === 'pending' ? `listing ${popup.files.dir} …` : popup.files.result === 'ok' ? `no matches in ${popup.files.dir}` : popup.files.result === 'gone' ? `${popup.files.dir} is not there` : popup.files.result === 'not-a-directory' ? `${popup.files.dir} is a file` : `${popup.files.dir} could not be read`}
+                      </div>
+                    ) : (
+                      <>
+                        {/* A caps header names the list and counts it (principle 6, 7);
+                            the matched prefix is marked in each row (the palette's rule). */}
+                        <div className="chat__popup-head" data-chat-popup-head>files in {popup.files.dir.split('/').filter(Boolean).pop() ?? '/'} · {popup.files.rows.length + popup.files.more}</div>
+                        {popup.files.rows.map((row, i) => {
+                          const needle = popup.trigger.query.slice(popup.trigger.query.lastIndexOf('/') + 1)
+                          const hit = needle.length > 0 && row.label.toLowerCase().startsWith(needle.toLowerCase())
+                          return (
+                            <button key={row.label} type="button" role="option" aria-selected={i === popup.index} className={`chat__popup-row${i === popup.index ? ' chat__popup-row--on' : ''}`} data-chat-completion={row.label}
+                              title={row.dir ? `Descend into ${row.label}` : `Reference ${row.label}`} {...shellControl(() => acceptFile(row))}>
+                              <span className="chat__popup-label">{hit ? <><mark className="chat__popup-match">{row.label.slice(0, needle.length)}</mark>{row.label.slice(needle.length)}</> : row.label}</span>
+                              <span className="chat__popup-source">{row.dir ? 'directory' : 'file'}</span>
+                            </button>
+                          )
+                        })}
+                        {popup.files.more > 0 && <div className="chat__popup-note">+{popup.files.more} more — keep typing</div>}
+                      </>
+                    )
+                  ) : (
+                    (popup.prompts?.length ?? 0) === 0 ? (
+                      <div className="chat__popup-note" data-chat-popup-empty>no prompts match — save one with ⌘K, or add .claude/commands/*.md to this directory</div>
+                    ) : (
+                      <>
+                      <div className="chat__popup-head" data-chat-popup-head>prompts · {popup.prompts?.length ?? 0}</div>
+                      {popup.prompts?.map((p, i) => (
+                        <button key={p.id} type="button" role="option" aria-selected={i === popup.index} className={`chat__popup-row${i === popup.index ? ' chat__popup-row--on' : ''}`} data-chat-prompt={p.id}
+                          title={p.source === 'project' ? `Insert ${p.name} as written (a project prompt is never expanded)` : `Insert ${p.name}`} {...shellControl(() => acceptPrompt(p))}>
+                          <span className="chat__popup-label">/{p.name}</span>
+                          <span className="chat__popup-source">{p.source}</span>
+                        </button>
+                      ))}
+                      </>
+                    )
+                  )}
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 className="chat__input"
                 data-chat-input
                 value={draft}
-                placeholder={composer.send.enabled ? 'your next message — ⌘↩ sends' : composer.send.reason}
+                placeholder={composer.send.enabled ? 'your next message (⌘↩ sends)' : composer.send.reason}
                 disabled={!composer.send.enabled}
                 title={composer.send.enabled ? 'Your next message' : composer.send.reason}
                 spellCheck={false}
                 rows={2}
-                onChange={(e) => setDraft(e.target.value)}
-                onMouseDown={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send() }
-                  // Bare keys belong to this textarea while it has focus; the
-                  // canvas's Cmd-gated shortcuts still apply above it.
-                  e.stopPropagation()
-                }}
+                onChange={(e) => { setDraft(e.target.value); setRefusal(null); refreshPopup(e.target.value, e.target.selectionStart ?? e.target.value.length) }}
+                // Stopped (a click into a text field must not start a drag)
+                // AND focused: the palette captures focusedId at open, so a
+                // click here that left the chat unfocused sent Insert prompt
+                // to whichever terminal was focused before (composer.4).
+                onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}
+                onKeyDown={onComposerKey}
               />
+              {refusal !== null && <p className="pf__note chat__refusal" data-chat-send-refusal role="alert">{refusal}</p>}
               <div className="chat__verbs">
-                <button type="button" className="chat__verb chat__verb--send" data-chat-send disabled={!composer.send.enabled || draft.trim() === ''}
+                <button type="button" className="chat__verb chat__verb--send" data-chat-send disabled={!composer.send.enabled || (draft.trim() === '' && attachments.length === 0)}
                   title={composer.send.enabled ? 'Send (⌘↩)' : composer.send.reason} aria-label="Send" {...shellControl(send)}>Send</button>
                 <button type="button" className="chat__verb chat__verb--interrupt" data-chat-interrupt disabled={!composer.interrupt.enabled}
                   title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}>Interrupt</button>

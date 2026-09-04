@@ -18,5 +18,7 @@ module.exports = {
   /* M74. The CLI-transcript importer: pure over lines. */
   importer: require('../src/main/claude-transcript-import'),
   /* M74. The TUI argv builder, for the resume rule. */
-  agentArgs: require('../src/main/agent-args')
+  agentArgs: require('../src/main/agent-args'),
+  /* M75. The attachment resolver: node:fs over a path, pure over data. */
+  attachments: require('../src/main/attachments')
 }

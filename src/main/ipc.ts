@@ -1,5 +1,5 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
-import type { AgentSessionSpec, AgentCreateResult, SendResult, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult } from '../shared/agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
@@ -109,7 +109,9 @@ export interface ScrollbackHandlers {
  */
 export interface AgentHandlers {
   create(spec: AgentSessionSpec): AgentCreateResult
-  send(id: string, text: string): SendResult
+  send(id: string, text: string, attachments: ChatAttachment[]): SendAnswer
+  /** M75. */
+  clipboardImage(): ClipboardImage
   interrupt(id: string): boolean
   dispose(req: { id: string; drop: boolean }): void
   answer(req: { id: string; requestId: string; answer: PermissionAnswer }): boolean
@@ -122,6 +124,7 @@ export interface AgentHandlers {
 const INERT_AGENTS: AgentHandlers = {
   create: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
   send: () => 'no-session',
+  clipboardImage: () => null,
   interrupt: () => false,
   dispose: () => {},
   answer: () => false,
@@ -224,7 +227,8 @@ export function registerIpcHandlers(
   agents: AgentHandlers = INERT_AGENTS
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
-  ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string) => agents.send(id, text))
+  ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
+  ipcMain.handle(IPC.AGENT_CLIPBOARD_IMAGE, () => agents.clipboardImage())
   ipcMain.handle(IPC.AGENT_INTERRUPT, (_event, id: string) => agents.interrupt(id))
   ipcMain.handle(IPC.AGENT_DISPOSE, (_event, req: { id: string; drop: boolean }) => agents.dispose(req))
   ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer }) => agents.answer(req))

@@ -102,7 +102,8 @@ import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY } from '@renderer/palette/commands'
-import { getChat } from '@renderer/chat/chat-store'
+import { getChat, insertIntoComposer, attachToComposer } from '@renderer/chat/chat-store'
+import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
@@ -2689,6 +2690,11 @@ export function Canvas({
    * the agent"; anywhere else opens a file panel at the drop's own world
    * point, as before.
    */
+  // M75. A path relative to a chat's directory, when it is inside it.
+  const relativeTo = (cwd: string, path: string): string => {
+    const base = cwd.replace(/\/+$/, '')
+    return path.startsWith(base + '/') ? path.slice(base.length + 1) : path
+  }
   const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
     if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
     const world = screenToWorld(screen, viewportRef.current)
@@ -2698,6 +2704,14 @@ export function Canvas({
       const session = registry.get(hit)
       if (target !== undefined && target.kind === 'terminal' && session !== undefined && session.spawned) {
         session.handle.paste(shellQuote(path))
+        return 'pasted'
+      }
+      // M75. A drop on a chat panel: an image becomes an attachment on the
+      // next message, anything else a `@` reference relative to the panel's
+      // directory — the composer's own verbs, never a file panel.
+      if (target !== undefined && isChatPanel(target)) {
+        if (attachmentKind(path) === 'image') attachToComposer(hit, { kind: 'path', path })
+        else insertIntoComposer(hit, `@${relativeTo(target.chat.cwd, path)} `)
         return 'pasted'
       }
     }
