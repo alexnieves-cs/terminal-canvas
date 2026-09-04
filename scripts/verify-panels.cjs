@@ -14738,6 +14738,103 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // M79 — run.1. RUNS. A two-panel handoff (rA → rB on exit 0) fires and
+    //     becomes a run: the Workspaces pane lists it (2 panels, a duration,
+    //     the outcome word done — rB reads one line of the paste and exits 0,
+    //     so the sink ENDS and the run seals), the layout store carries the record with
+    //     two entries and an outcome, the Work tab of a member names it, a
+    //     frame with the run's name wraps both; Run again restarts the root
+    //     (a new pid) and, after its exit, a second run is listed.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['run.1 a fired handoff becomes a run: listed with its panels, duration and outcome; stored with two entries; named on a member\'s Work tab; framed; Run again restarts the root and records a second run']
+      const rLog = []
+      const onRr = (_e, level, m) => { if (level >= 2) rLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onRr)
+      try {
+        backend = createDirectBackend('verify: direct (m79 runs)')
+        const home = require('node:os').homedir()
+        const rPanel = (id, x, y, links, command = '/bin/sh', args = []) => ({ kind: 'terminal', rect: { id, x, y, w: 320, h: 220 }, z: 1, spec: { panelId: id, cwd: home, command, args }, ...(links ? { links } : {}) })
+        layoutStore.save({
+          panels: fromPanels([rPanel('rA', 60, 60, [{ to: 'rB', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }]), rPanel('rB', 440, 60, undefined, '/bin/sh', ['-c', 'echo ready; read x; exit 0'])]),
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reR = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reR
+        await settle()
+        const seeded = await waitUntil(() => wc.executeJavaScript(`['rA', 'rB'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        const wakeR = async (id) => {
+          const pt = await cardPoint(id); if (!pt) return false
+          wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+          return waitUntil(async () => (await sessionMap(wc)).has(id), 10000)
+        }
+        const logHas = async (id, token) => (await scrollbackLog.tail(id, 120)).some((l) => l.includes(token))
+        const bUp = seeded ? await wakeR('rB') : false
+        const aUp = seeded ? await wakeR('rA') : false
+        await sleep(400)
+        const pidBefore = ptyManager.list().find((s) => s.panelId === 'rA')?.pid ?? null
+        if (aUp) ptyManager.write('rA', 'echo RUN-TOKEN-1\r')
+        await waitUntil(async () => logHas('rA', 'RUN-TOKEN-1'), 10000)
+        if (aUp) ptyManager.write('rA', 'exit 0\r')
+        const delivered = await waitUntil(async () => logHas('rB', 'RUN-TOKEN-1'), 12000)
+        // The Workspaces pane lists the run.
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-run]'); if (!r) return false; const o = r.getAttribute('data-run-outcome'); return o === 'idle' ? { id: r.getAttribute('data-rail-run'), outcome: o, text: r.textContent, again: !document.querySelector('[data-rail-run-again]')?.disabled } : false })()`), 10000)
+        // The ACTIVE workspace's state as the store would hand a fresh renderer (check 17's door).
+        const stored = await waitUntil(async () => { layoutStore.flushSync(); const runs = (layoutStore.initial().runs) || []; const run = runs.find((r) => r.panelIds.includes('rA')); return run && run.endedAt !== undefined && run.entries.length === 2 ? run : false }, 6000)
+        // The frame must WRAP both panels, not merely exist: its rect contains theirs.
+        const frame = await wc.executeJavaScript(`(() => {
+          const g = [...document.querySelectorAll('.canvas-group')].find((el) => /^run \\d/.test(el.querySelector('.canvas-group__label')?.textContent ?? ''))
+          if (!g) return null
+          const gr = g.getBoundingClientRect()
+          const inside = (id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= gr.left - 2 && r.right <= gr.right + 2 && r.top >= gr.top - 2 && r.bottom <= gr.bottom + 2 }
+          return { label: g.querySelector('.canvas-group__label').textContent, wraps: inside('rA') && inside('rB') } })()`)
+        // The Work tab of a member names the run.
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="rA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) } return !!t })()`)
+        const workLine = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('[data-work-run]'); return p && /^run \\d/.test(p.textContent) && p.querySelector('[data-work-run-again]') ? p.textContent : false })()`), 5000)
+        // Run again: the root restarts (a new pid), exits, and a second run is listed.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
+        const clickedAgain = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-run-again]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const note = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-run-note]')?.textContent ?? false`), 5000)
+        const pidAfter = await waitUntil(() => { const s = ptyManager.list().find((x) => x.panelId === 'rA'); return s && s.pid !== pidBefore ? s.pid : false }, 10000)
+        // The restarted root must be up before it is typed into, and rB must be
+        // alive again to receive: the first run's rB read one line and exited.
+        await waitUntil(async () => (await sessionMap(wc)).has('rA'), 10000)
+        await sleep(900)
+        await wakeR('rB')
+        await sleep(400)
+        ptyManager.write('rA', 'echo RUN-TOKEN-2\r')
+        const token2 = await waitUntil(async () => logHas('rA', 'RUN-TOKEN-2'), 10000)
+        ptyManager.write('rA', 'exit 0\r')
+        const exited2 = await waitUntil(() => { const s = ptyManager.list().find((x) => x.panelId === 'rA'); return s === undefined || s.pid !== pidAfter }, 12000)
+        const secondRun = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('[data-rail-run]')].map((r) => r.getAttribute('data-rail-run')); return ids.length >= 2 ? ids : false })()`), 12000)
+        // Back to the Panels pane and the Detail tab: later blocks select through rail
+        // rows that exist only there, and one of them (osc133.1) relies on the Work tab
+        // FLIPPING to refetch the ledger.
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="detail"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) } return !!t })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        ok(IDS[0],
+          seeded === true && bUp && aUp && delivered === true && row && /2 panels/.test(row.text) && row.again === true &&
+            stored && stored.entries.every((e) => e.outcome !== undefined) && stored.costUsd === 0 &&
+            frame && frame.wraps === true && typeof workLine === 'string' && /idle/.test(workLine) && /2 panels/.test(workLine) &&
+            clickedAgain === true && /1 root restarted/.test(String(note)) && typeof pidAfter === 'number' &&
+            Array.isArray(secondRun) && secondRun.length >= 2 && secondRun.includes(row.id) && secondRun.some((id) => id !== row.id),
+          JSON.stringify({ seeded, bUp, aUp, delivered, token2, exited2, row, stored: stored && { entries: stored.entries, cost: stored.costUsd, name: stored.name }, frame, workLine, clickedAgain, note, pidBefore, pidAfter, secondRun, log: rLog.slice(-3) }))
+      } catch (rErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(rErr && rErr.message || rErr) + ' | renderer: ' + (rLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onRr)
+      }
+    }
+
+    // -------------------------------------------------------------------
     // M78 — graph.1 / graph.2 / graph.3. THE TASK GRAPH. graph.1: a JOIN —
     //     two terminals hand off into one on exit 0 — fires ONCE after both
     //     sources, the target's log carrying both tokens, and a fourth edge
@@ -14783,6 +14880,13 @@ app.whenReady().then(async () => {
         layoutStore.flushSync()
         const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reG
+        await settle()
+        // The rail collapsed: gT and gS sit at x 820 and a real click on their
+        // cards must land inside the window whatever the previous block left.
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', false)`)
+        // And the context pane closed: open, it covers the right 260px, where gT
+        // and gS's card centres land (the previous block opens it).
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', false)`)
         await settle()
         const seeded = await waitUntil(() => wc.executeJavaScript(`['gA', 'gB', 'gC', 'gD', 'gT', 'gS', 'gH', 'gK'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
         const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
@@ -14912,6 +15016,11 @@ app.whenReady().then(async () => {
       if (!GIT_T) {
         for (const id of IDS) ok(id, true, 'skipped: no git on this machine')
       } else try {
+        // The previous block's renderer is still auto-saving its own layout (a
+        // handoff's last events land after its last check); a save of ours that
+        // lands BEFORE that debounced one is overwritten and the reload shows the
+        // old panels (M79's chain saw exactly that). Let it land first.
+        await settle(); await sleep(900)
         const trepo = mkdtempSync(join(tmpdir(), 'tc panels tools-'))
         const tgit = (...args) => execFileSync('git', ['-C', trepo, ...args], { encoding: 'utf8' })
         tgit('init', '-q', '.'); tgit('config', 'user.email', 'v@example.com'); tgit('config', 'user.name', 'v')
@@ -14936,7 +15045,8 @@ app.whenReady().then(async () => {
         const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reT
         await settle()
-        const restored = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') !== null`), 6000)
+        const restored = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${chatId}"]') !== null`), 8000)
+        const restoreState = restored === true ? null : await wc.executeJavaScript(`(() => ({ panels: [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id')), launcher: !!document.querySelector('[data-launcher]'), title: document.title }))()`)
         // The baseline lands asynchronously after agent:create (git in a subprocess).
         const baseline = await waitUntil(() => wc.executeJavaScript(`window.canvas.review.baseline(${JSON.stringify(chatId)}).then((b) => b && b.sha ? b : false)`), 8000)
         // NOW the edit on disk, after the baseline.
@@ -14955,7 +15065,7 @@ app.whenReady().then(async () => {
           restored === true && baseline && typeof baseline.sha === 'string' && Array.isArray(changes) && changes.includes('seed.txt') && !changes.includes('other.txt') &&
             reviewBtn && /review node/.test(reviewBtn.title) && nodeRow && nodeRow.touches === '1' && /1 tool call/.test(nodeRow.text) && nodeRow.other === false &&
             typeof touchList === 'string' && /Edit/.test(touchList) && !/Read/.test(touchList),
-          JSON.stringify({ restored, baseline: baseline && baseline.sha, changes, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
+          JSON.stringify({ restored, restoreState, baseline: baseline && baseline.sha, changes, reviewBtn, nodeRow, touchList, log: tLog.slice(-3) }))
 
         // tools.2 — the chat's own tool rows.
         const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
@@ -15804,20 +15914,31 @@ app.whenReady().then(async () => {
         const ok0 = await waitUntil(async () => (await marks('0')) > 0, 10000)
         ptyManager.write('oA', 'false\r')
         const ok1 = await waitUntil(async () => (await marks('1')) > 0, 10000)
-        // The Work tab: select through the rail, pin the context open, switch.
+        // The Work tab: select through the rail (on the PANELS pane — an earlier
+        // block may have left the dock elsewhere), pin the context open, switch.
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await settle()
         await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="oA"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
         await settle()
         const ctxHidden = await wc.executeJavaScript(`(document.querySelector('.shell__inspector')?.getBoundingClientRect().width ?? 0) === 0`)
         if (ctxHidden) { await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__inspector-toggle'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`); await settle() }
+        // Detail first, THEN Work: RunsSection fetches the ledger when its tab
+        // becomes active, and a tab already on Work (left by an earlier block)
+        // would never refetch after the commands ran.
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="detail"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
+        await settle()
         await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
         const runs = await waitUntil(async () => {
           const r = await wc.executeJavaScript(`[...document.querySelectorAll('[data-run-row]')].map((el) => ({ exit: el.dataset.runExit, text: el.textContent }))`)
           return r.length >= 2 ? r : false
         }, 6000)
+        // Diagnostic (M79): what the Work tab holds when the rows are missing.
+        const workState = runs === false ? await wc.executeJavaScript(`(() => ({ tab: document.querySelector('[data-context-tab="work"]')?.getAttribute('aria-selected'), runLine: document.querySelector('[data-work-run]')?.textContent ?? null, runsArm: document.querySelector('[data-work-arm="runs"]')?.textContent ?? null, rows: document.querySelectorAll('[data-run-row]').length, selected: document.querySelector('.inspector__title, [data-inspector-heading]')?.textContent ?? null, kind: document.querySelector('[data-inspector-kind]')?.getAttribute('data-inspector-kind') ?? null }))()`) : null
         ok(IDS[0],
           woke === true && ok0 === true && ok1 === true && runs !== false &&
             runs.some((r) => /false/.test(r.text) && r.exit === '1') && runs.some((r) => /true/.test(r.text) && r.exit === '0'),
-          JSON.stringify({ woke, ok0, ok1, runs }))
+          JSON.stringify({ woke, ok0, ok1, runs, workState }))
 
         // osc133.2. Enough output to scroll, then Previous prompt from the
         //           palette: viewportY moves back to an earlier mark's line.
@@ -16231,7 +16352,7 @@ app.whenReady().then(async () => {
       const onC = (_e, level, message) => { if (level >= 2) cLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onC)
       const IDS = [
-        'context.2 the Work tab renders Changes, Runs and Cost with a first-arm line each for a plain shell outside a repository',
+        'context.2 the Work tab renders Changes, Run, Commands and Cost with a first-arm line each for a plain shell outside a repository',
         'context.3 the Jira panel with no credential offers Connect Jira…, which opens the palette in its Credentials scope',
         'context.4 the Files pane names the panel its root belongs to, and the Workspaces pane\'s merged row toggles the merged view'
       ]
@@ -16267,11 +16388,11 @@ app.whenReady().then(async () => {
         for (let i = 0; i < 60; i++) {
           work = await wc.executeJavaScript(`(() => { const arm = (k) => document.querySelector('[data-work-arm="' + k + '"]')?.textContent ?? null
             const heads = [...document.querySelectorAll('[data-context-panel="work"] .inspector__section-heading')].map((h) => h.textContent)
-            return { heads, changes: arm('changes'), runs: arm('runs'), cost: arm('cost'), heading: document.querySelector('[data-inspector-heading]')?.textContent ?? null, tab: document.querySelector('.context__tab--on')?.textContent ?? null, summary: document.querySelector('[data-review-summary]')?.textContent ?? null } })()`)
+            return { heads, changes: arm('changes'), runs: arm('runs'), run: document.querySelector('[data-work-run]')?.textContent ?? null, cost: arm('cost'), heading: document.querySelector('[data-inspector-heading]')?.textContent ?? null, tab: document.querySelector('.context__tab--on')?.textContent ?? null, summary: document.querySelector('[data-review-summary]')?.textContent ?? null } })()`)
           if (work && work.changes !== null && work.runs !== null && work.cost !== null) break
           await sleep(100)
         }
-        ok(IDS[0], work !== null && work.changes !== null && work.runs !== null && work.cost !== null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Runs', 'Cost']) && /not a repository/.test(work.changes) && work.runs === 'no runs yet' && /no agent on this panel/.test(work.cost),
+        ok(IDS[0], work !== null && work.changes !== null && work.runs !== null && work.run !== null && work.cost !== null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Run', 'Commands', 'Cost']) && /not a repository/.test(work.changes) && work.runs === 'no commands yet' && /no agent on this panel/.test(work.cost),
           JSON.stringify({ work, log: cLog.slice(-3) }))
 
         // The Jira panel: the verb, then the scope it opens.

@@ -29,5 +29,8 @@ module.exports = {
   ...require('../src/renderer/panels/history'),
   /* M78. The handoff table (shared, pure) and the join reducer. */
   ...require('../src/shared/handoff'),
-  ...require('../src/renderer/canvas/handoff-rules')
+  ...require('../src/renderer/canvas/handoff-rules'),
+  /* M79. Runs: the component, the roots, the reducer, the cost. */
+  ...require('../src/renderer/canvas/run-model'),
+  ...require('../src/shared/runs')
 }

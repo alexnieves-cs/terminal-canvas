@@ -2422,6 +2422,22 @@ const session = (id, over = {}) => ({
     JSON.stringify({ live: live.reviewable, never: [never.reviewable, never.reviewReason], chatRan: chatRan.reviewable, chatAlive: chatAlive.reviewable, chatEmpty: [chatEmpty.reviewable, chatEmpty.reviewReason] }))
 }
 
+// M79 — run.1. The Runs rows: name, the panel count, the duration, the cost
+//      (a dash when absent), and the outcome word — running while open, done,
+//      failed when any entry's outcome names a non-zero exit; Run again is
+//      refused by name while open and when no root is a terminal.
+{
+  const run = (over = {}) => ({ id: 'r1', name: 'a → b · 10:00', panelIds: ['a', 'b'], edges: [{ from: 'a', to: 'b' }], startedAt: 1000, endedAt: 61000, entries: [{ panelId: 'a', startedAt: 1000, endedAt: 2000, outcome: 'exit 0' }, { panelId: 'b', startedAt: 2000, endedAt: 61000, outcome: 'exit 0' }], costUsd: 0.1234, ...over })
+  const build = typeof R.buildRunRows === 'function' ? R.buildRunRows : () => []
+  const rows = build([run(), run({ id: 'r2', endedAt: undefined, costUsd: undefined }), run({ id: 'r3', entries: [{ panelId: 'a', startedAt: 1, endedAt: 2, outcome: 'exit 1' }] })], new Set(['a']), 100000)
+  ok('run.1 the Runs rows carry name, ONE facts line (panels · duration · cost or a dash), the outcome in the state vocabulary (idle / working / exited N) with its tone, and Run again with its reason while open or without a terminal root',
+    rows.length === 3 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'idle' && rows[0].tone === 'idle' && rows[0].facts === '2 panels · 1m 0s · $0.12' && rows[0].runAgain.enabled === true &&
+      rows[1].outcome === 'working' && rows[1].cost === '—' && /—$/.test(rows[1].facts) && rows[1].runAgain.enabled === false && /still running/.test(rows[1].runAgain.reason) &&
+      rows[2].outcome === 'exited 1' && rows[2].tone === 'exited' &&
+      build([run()], new Set(), 100000)[0]?.runAgain.enabled === false && /terminal/.test(build([run()], new Set(), 100000)[0]?.runAgain.reason ?? ''),
+    JSON.stringify(rows))
+}
+
 // M78 — graph.1. describeAutomation names the five triggers, each distinct.
 {
   const d = (trigger) => R.describeAutomation({ kind: 'handoff', enabled: true, trigger })

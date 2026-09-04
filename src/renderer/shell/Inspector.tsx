@@ -2,6 +2,7 @@ import { memo, useEffect, useState, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import { agentStateLabel, handoffControl, KIND_NOUN, visibleDetailFields } from './inspector-fields'
+import type { Tone } from '@renderer/panels/panel-state'
 import { shortPath } from '@renderer/palette/panel-name'
 import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
@@ -37,6 +38,16 @@ export interface SelectedEdge {
   /** A chat never exits: the exit-family triggers cannot fire from it. */
   sourceIsChat: boolean
   result?: string
+}
+
+/** M79. The run line the pane shows for a panel: the rail row's own facts, verbatim. */
+export interface PanelRunLine {
+  id: string
+  name: string
+  facts: string
+  outcome: string
+  tone: Tone
+  runAgain: { enabled: true } | { enabled: false; reason: string }
 }
 
 export interface AutomationRow {
@@ -79,6 +90,9 @@ export interface InspectorProps {
   automations: AutomationRow[]
   /** M78. The selected edge, when one is; the pane shows it with its rule as a select. */
   selectedEdge?: SelectedEdge | null
+  /** M79. The newest run the selected panel belongs to, or null. */
+  panelRun?: PanelRunLine | null
+  onRunAgain?: (id: string) => void
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -123,7 +137,7 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
@@ -151,6 +165,8 @@ function InspectorImpl({
             onRestart={onRestart}
             onFrontEnd={onFrontEnd}
             onAnswer={onAnswer}
+            panelRun={panelRun ?? null}
+            onRunAgain={onRunAgain ?? (() => {})}
             onOpenReview={onOpenReview}
             onLink={onLink}
             onRemoveLink={onRemoveLink}
@@ -184,14 +200,15 @@ function RunsSection({ panelId, active }: { panelId: string; active: boolean }):
   if (rows.length === 0) {
     return (
       <section className="inspector__section" data-work-section="runs">
-        <h3 className="inspector__section-heading">Runs</h3>
-        <p className="inspector__arm" data-work-arm="runs">no runs yet</p>
+        {/* M79: `Commands`, since a RUN is now the graph's execution (its own section above). */}
+        <h3 className="inspector__section-heading">Commands</h3>
+        <p className="inspector__arm" data-work-arm="runs">no commands yet</p>
       </section>
     )
   }
   return (
     <section className="inspector__section" data-runs-section>
-      <h3 className="inspector__section-heading">Runs</h3>
+      <h3 className="inspector__section-heading">Commands</h3>
       <ul className="inspector__review-files">
         {rows.map((r, i) => (
           <li key={`${r.endedAt}-${i}`} className="inspector__review-file" data-run-row data-run-exit={r.exitCode ?? ''}>
@@ -359,7 +376,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   tab, onSelectTab, automations,
-  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
+  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults
 }: {
   tab: ContextTab
@@ -375,6 +392,8 @@ function InspectorPanel({
   onRestart: (id: string) => void
   onFrontEnd: (id: string) => void
   onAnswer: (id: string, requestId: string, allow: boolean) => void
+  panelRun: PanelRunLine | null
+  onRunAgain: (id: string) => void
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -621,9 +640,24 @@ function InspectorPanel({
         </section>
       )}
       {/* Runs before Cost: what it did, then what it cost (spec order). */}
+      {/* M79. The run this panel belongs to: the rail row's facts verbatim and
+          its verb, or the one sentence when it is not in one. Its own section,
+          so the ledger's empty state never sits under a real answer. */}
+      <section className="inspector__section" data-work-section="run">
+        <h3 className="inspector__section-heading">Run</h3>
+        {panelRun ? (
+          <div className="inspector__run" data-work-run>
+            <span className="inspector__run-name">{panelRun.name}</span>
+            <span className="inspector__run-facts">{panelRun.facts} · <span data-tone={panelRun.tone}>{panelRun.outcome}</span></span>
+            <button type="button" className="inspector__action inspector__action--secondary" data-work-run-again disabled={!panelRun.runAgain.enabled}
+              title={panelRun.runAgain.enabled ? 'Restart this run\'s roots in order' : panelRun.runAgain.reason}
+              {...shellControl(() => { if (panelRun.runAgain.enabled) onRunAgain(panelRun.id) })}>Run again</button>
+          </div>
+        ) : <p className="inspector__arm" data-work-run>not part of a run</p>}
+      </section>
       {model.kind === 'terminal' ? <RunsSection panelId={model.id} active={tab === 'work'} /> : (
         <section className="inspector__section" data-work-section="runs">
-          <h3 className="inspector__section-heading">Runs</h3>
+          <h3 className="inspector__section-heading">Commands</h3>
           <p className="inspector__arm" data-work-arm="runs">{KIND_NOUN[model.kind]} runs nothing</p>
         </section>
       )}

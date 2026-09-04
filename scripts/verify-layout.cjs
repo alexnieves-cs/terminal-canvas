@@ -256,7 +256,8 @@ const CANVAS = {
   focusedId: null
   ,
   // M56. The state shape gained bookmarks; a round trip carries the empty list.
-  bookmarks: []
+  bookmarks: [],
+  runs: []
 }
 
 // 16. A missing file is a first run, not an error.
@@ -1997,6 +1998,37 @@ const handoffLayout = (panels) => L.parseLayout(file({
       cd?.automation?.kind === 'restart-on-exit' && cd.automation.enabled === true &&
       r.warnings.length === 0,
     JSON.stringify({ ab, bc, cd, warnings: r.warnings }))
+}
+
+// M79 — run.1. THE RUN RECORD on the workspace, beside groups and bookmarks:
+//      absent is every pre-M79 file (no warning); a malformed run is dropped
+//      by name; an entry naming a missing panel is dropped and the run kept;
+//      a run with no surviving panel is dropped; the newest RUNS_MAX kept.
+{
+  const runsLayout = (panels, runs) => L.parseLayout(file({
+    workspaces: [{ id: 'w1', name: 'Canvas', panels, camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null, ...(runs === undefined ? {} : { runs }) }]
+  }))
+  const good = { id: 'run-1', name: 'a → b · 10:00', panelIds: ['a', 'b'], edges: [{ from: 'a', to: 'b' }], startedAt: 1000, endedAt: 2000, entries: [{ panelId: 'a', startedAt: 1000, endedAt: 1500, outcome: 'exit 0' }, { panelId: 'b', startedAt: 1500 }, { panelId: 'ghost', startedAt: 1600 }], costUsd: 0.12 }
+  const absent = runsLayout([panel({ id: 'a' })])
+  const r = runsLayout([panel({ id: 'a' }), panel({ id: 'b' })], [
+    good,
+    { id: 'run-2', name: 'gone', panelIds: ['zz'], edges: [], startedAt: 1, entries: [] },
+    { id: 'run-3', panelIds: ['a'], edges: [], startedAt: 1, entries: [] },
+    { id: 'run-4', name: 'open', panelIds: ['a'], edges: [], startedAt: 5, entries: [{ panelId: 'a', startedAt: 5 }] },
+    'nonsense'
+  ])
+  const many = runsLayout([panel({ id: 'a' })], Array.from({ length: L.RUNS_MAX + 5 }, (_, i) => ({ id: `r${i}`, name: `run ${i}`, panelIds: ['a'], edges: [], startedAt: i, entries: [] })))
+  const ws = active(r.snapshot)
+  const kept = ws.runs ?? []
+  const absentRuns = active(absent.snapshot).runs ?? null
+  const manyRuns = active(many.snapshot).runs ?? []
+  ok('run.1 runs: absent is [] with no warning; a malformed run (no name, not an object) is dropped by name; a run with no surviving panel is dropped; a missing entry is pruned and the run kept with its fields; the newest RUNS_MAX are kept',
+    Array.isArray(absentRuns) && absentRuns.length === 0 && absent.warnings.length === 0 &&
+      kept.length === 2 && kept[0].id === 'run-1' && kept[0].name === good.name && kept[0].endedAt === 2000 && kept[0].costUsd === 0.12 && kept[0].edges.length === 1 &&
+      kept[0].entries.length === 2 && kept[0].entries[0].outcome === 'exit 0' && kept[0].entries[1].endedAt === undefined && kept[1].id === 'run-4' && kept[1].endedAt === undefined &&
+      r.warnings.some((w) => /run-2/.test(w)) && r.warnings.some((w) => /run-3/.test(w)) && r.warnings.some((w) => /ghost/.test(w)) &&
+      manyRuns.length === L.RUNS_MAX && manyRuns[0]?.startedAt === L.RUNS_MAX + 4,
+    JSON.stringify({ absent: absentRuns, kept, warnings: r.warnings, many: manyRuns.length }))
 }
 
 // M78 — graph.1. The three new triggers parse; an unknown one is still malformed.

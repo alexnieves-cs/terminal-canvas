@@ -359,7 +359,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       focusedId: keepSelection ? w.focusedId : null,
       // M56. Bookmarks are places, not layout: they survive `restore.layout`
       // off, since a bookmark on an empty canvas still names where to look.
-      bookmarks: (w.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } }))
+      bookmarks: (w.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } })),
+      // M79. Runs are a history, kept whatever the restore settings say.
+      runs: (w.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) }))
     }
   }
 
@@ -392,6 +394,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     if (camera) w.camera = { ...incoming.camera }
     // M56. Ungated: a bookmark is a place, kept whatever the restore settings say.
     w.bookmarks = (incoming.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } }))
+    w.runs = (incoming.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) }))
     scheduleWrite()
   }
 

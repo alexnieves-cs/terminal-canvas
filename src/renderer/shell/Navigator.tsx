@@ -5,6 +5,7 @@ import type { FileRow } from './file-tree-model'
 import type { NavigatorPane } from './useShellChrome'
 import { RailPanelRow } from './RailPanelRow'
 import { RailWorkspaceRow } from './RailWorkspaceRow'
+import type { RailRun } from './rail-sections'
 import { FileTree } from './FileTree'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
@@ -14,6 +15,9 @@ export interface NavigatorProps {
   onToggle: () => void
   // Workspaces
   workspaces: RailWorkspace[]
+  /** M79. Runs, newest first, with Run again. */
+  runs: Array<RailRun & { note?: string }>
+  onRunAgain: (id: string) => void
   onSwitchWorkspace: (id: string) => void
   onCreateWorkspace: () => void
   onRenameWorkspace: (id: string, currentName: string) => void
@@ -147,6 +151,25 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                   <span className="rail-row__tail">{props.merged ? 'on · read-only' : 'all workspaces'}</span>
                 </button>
               </li>
+              {/* M79. Runs: one execution of a subgraph each, newest first. */}
+              <li className="rail-row rail-row--heading" data-rail-runs-heading><span className="shell__region-title">Runs</span></li>
+              {props.runs.length === 0 ? (
+                <li className="rail-empty" data-rail-runs-empty>no runs yet — a handoff that fires records one</li>
+              ) : props.runs.map((run) => (
+                <li key={run.id} className="rail-row rail-run" data-rail-run={run.id} data-run-outcome={run.outcome}>
+                  {/* Two lines: the name owns the first, the facts and the verb the second. */}
+                  <span className="rail-row__label rail-run__name">{run.name}</span>
+                  <div className="rail-run__main">
+                    {/* The facts truncate first; the state word never does. */}
+                    <span className="rail-run__facts">{run.facts}</span>
+                    <span className="rail-run__word" data-tone={run.tone}>{run.outcome}</span>
+                    <button type="button" className="rail-row__verb" data-rail-run-again={run.id} disabled={!run.runAgain.enabled}
+                      title={run.runAgain.enabled ? 'Restart this run\'s roots in order' : run.runAgain.reason}
+                      {...shellControl(() => { if (run.runAgain.enabled) props.onRunAgain(run.id) })}>Run again</button>
+                  </div>
+                  {run.note !== undefined && <span className="rail-run__note" data-rail-run-note>{run.note}</span>}
+                </li>
+              ))}
             </ul>
           ) : (
             <ul className="rail-list rail-list--panels" aria-label="Panels">

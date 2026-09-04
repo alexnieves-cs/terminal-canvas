@@ -1,5 +1,7 @@
 import type { WorkspaceRow } from '@shared/ipc-contract'
 import type { RailRow } from './rail-rows'
+import type { PersistedRun } from '@shared/runs'
+import { agentWord, panelState, type Tone } from '@renderer/panels/panel-state'
 
 /**
  * The rail's Workspaces and Attention sections, as plain data.
@@ -203,6 +205,65 @@ export function buildAttentionRows(
  * A signature blind to order would freeze the section on a stale sequence with
  * every id in it still correct, which is the hardest kind of wrong to see.
  */
+/** M79. A run as the Workspaces pane lists it. */
+export interface RailRun {
+  id: string
+  name: string
+  panels: number
+  duration: string
+  /** `$0.12`, or `—` when the run's cost is absent. */
+  cost: string
+  /** ONE facts line, rendered identically in the rail and the pane: `3 panels · 2m 0s · $0.21`. */
+  facts: string
+  /** The state vocabulary's own word (principle 13's watcher rule), never a new one. */
+  outcome: string
+  tone: Tone
+  runAgain: { enabled: true } | { enabled: false; reason: string }
+}
+
+export const REASON_RUN_OPEN = 'this run is still running'
+export const REASON_RUN_NO_TERMINAL_ROOT = 'no root of this run is a terminal — a chat is re-run by sending it a message'
+
+function durationText(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
+}
+
+/**
+ * `terminalIds` are the panels that can be restarted; `now` is for an open
+ * run's duration. The outcome word: running while open, failed when any
+ * entry's outcome names a non-zero exit, else done.
+ */
+export function buildRunRows(runs: readonly PersistedRun[], terminalIds: ReadonlySet<string>, now: number): RailRun[] {
+  return runs.map((run) => {
+    const open = run.endedAt === undefined
+    const failing = run.entries.find((e) => e.outcome !== undefined && /^exit (?!0\b)/.test(e.outcome))
+    const failed = failing !== undefined
+    const roots = run.panelIds.filter((id) => !run.edges.some((e) => e.to === id))
+    const runAgain: RailRun['runAgain'] = open ? { enabled: false, reason: REASON_RUN_OPEN }
+      : roots.some((id) => terminalIds.has(id)) ? { enabled: true } : { enabled: false, reason: REASON_RUN_NO_TERMINAL_ROOT }
+    // The vocabulary, never a fourth set of words: an open run is what a busy
+    // agent is; a finished one is idle; a failed entry's exit is the run's.
+    const word = open ? agentWord('busy')
+      : failed ? panelState({ kind: 'terminal', status: { kind: 'exited', code: Number((failing!.outcome as string).slice(5)) }, dormant: false }, 'exited')
+        : agentWord('idle')
+    const duration = durationText((run.endedAt ?? now) - run.startedAt)
+    const cost = run.costUsd === undefined ? '—' : `$${run.costUsd.toFixed(2)}`
+    const panels = run.panelIds.length
+    return {
+      id: run.id, name: run.name, panels, duration, cost,
+      facts: `${panels} panel${panels === 1 ? '' : 's'} · ${duration} · ${cost}`,
+      outcome: word.word,
+      tone: word.tone,
+      runAgain
+    }
+  })
+}
+
+export function runSignature(rows: readonly RailRun[]): string {
+  return JSON.stringify(rows)
+}
+
 export function attentionSignature(rows: readonly RailAttention[]): string {
   return JSON.stringify(rows)
 }

@@ -112,6 +112,17 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'runs', intent: 'A run that already happened: the Workspaces pane lists it — name, `3 panels`, its duration and cost, the word `done`, a `Run again` verb — and on the canvas its three panels wear a read-only frame with the run\'s name as its caps label; the context pane\'s Work tab for the target names the run it belongs to. A record of what the graph did, in the same words the graph uses.',
+    run: async (kit) => {
+      await kit.goTo('claude — api (2)')
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await kit.js(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await kit.js(`(() => { const c = document.querySelector('.panel[data-panel-id="twin"] .pf__chrome'); if (c) c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); return !!c })()`)
+      await sleep(300)
+      await kit.js(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) } return !!t })()`)
+      await sleep(700)
+      await kit.shot('runs')
+    } },
   { name: 'graph', intent: 'The task graph: two ruled edges into the second terminal — the chat\'s after a turn, worker a\'s on exit 0 — each saying what it does on the line in mono; the edge from the chat is selected (accent stroke, its badge the remove control) and the context pane shows it as an Edge: source → target, the rule as a labelled select, Label… and Remove. An edge is a thing you can pick up.',
     run: async (kit) => {
       await kit.goTo('claude — api (2)')
@@ -274,6 +285,8 @@ app.whenReady().then(async () => {
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })
       ],
       groups: [{ id: 'g1', label: 'workers', colour: 'violet', panelIds: ['groupA', 'groupB'] }],
+      // M79. A run that already happened: the chat and worker a handed off into twin.
+      runs: [{ id: 'run-1', name: 'run 1', panelIds: ['chat', 'groupA', 'twin'], edges: [{ from: 'chat', to: 'twin' }, { from: 'groupA', to: 'twin' }], startedAt: Date.now() - 3600000, endedAt: Date.now() - 3480000, entries: [{ panelId: 'chat', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3590000, outcome: 'a turn' }, { panelId: 'groupA', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3560000, outcome: 'exit 0' }, { panelId: 'twin', startedAt: Date.now() - 3560000, endedAt: Date.now() - 3480000, outcome: 'exit 0' }], costUsd: 0.2138 }],
       bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }]
     }, {
       id: 'w2', name: 'docs', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,

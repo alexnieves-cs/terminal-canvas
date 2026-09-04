@@ -1393,6 +1393,53 @@ ok('74 a panel with no kind is not a review panel',
     JSON.stringify({ incoming: incoming && incoming(graph, 'c'), chatTarget: V.linksOf(chatTarget[0]), chatSource: V.linksOf(chatSource[1]), fileRefused: fileTarget === graph, cyc: cyc && V.linksOf(cyc[2]) }))
 }
 
+// M79 — run.1 / run.2. RUNS, the pure half. run.1: the component over
+//      ENABLED handoff edges only (a disabled edge is not a path; a plain
+//      link is not a path), roots and sinks in panel order; the reducer opens
+//      a run with the firing source's entry, records events onto entries,
+//      is complete only when every sink has an outcome, and seals with the
+//      time and cost. run.2: the cost is the summary's own rule — absent when
+//      any panel's model is unpriced, else the sum.
+{
+  const term = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const on = (to, trigger = 'exit') => ({ to, automation: { kind: 'handoff', enabled: true, trigger } })
+  const off = (to) => ({ to, automation: { kind: 'handoff', enabled: false, trigger: 'exit' } })
+  const ps = [term('a', [on('c')]), term('b', [on('c'), { to: 'z' }]), term('c', [on('d')]), term('d'), term('e', [off('a')]), term('z')]
+  const comp = V.componentOf(ps, 'c')
+  const roots = V.rootsOf(ps, comp)
+  const sinks = V.sinksOf(ps, comp)
+  const alone = V.componentOf(ps, 'z')
+  let run = V.beginRun(comp, 'a', 1000, 'test run')
+  run = V.recordRunEvent(run, { kind: 'fired', panelId: 'a', outcome: 'exit 0', at: 1100 })
+  const openAfterA = V.runIsComplete(run, comp)
+  run = V.recordRunEvent(run, { kind: 'fired', panelId: 'b', outcome: 'exit 0', at: 1200 })
+  run = V.recordRunEvent(run, { kind: 'delivered', panelId: 'c', sentence: 'handed off 4 lines after exit 0', at: 1300 })
+  run = V.recordRunEvent(run, { kind: 'fired', panelId: 'c', outcome: 'exit 1', at: 1400 })
+  run = V.recordRunEvent(run, { kind: 'skipped', panelId: 'd', sentence: 'skipped — exit 1 is not exit 0', at: 1400 })
+  const complete = V.runIsComplete(run, comp)
+  const sealed = V.finishRun(run, 1500, 0.5)
+  ok('run.1 componentOf follows only enabled handoff edges; roots and sinks in panel order; the reducer opens with the source, records entries, completes only when every sink has an outcome, and seals',
+    JSON.stringify(comp.panelIds) === '["a","b","c","d"]' && comp.edges.length === 3 && JSON.stringify(roots) === '["a","b"]' && JSON.stringify(sinks) === '["d"]' &&
+      alone.panelIds.length === 1 && alone.edges.length === 0 &&
+      run.entries.length === 4 && run.entries[0].panelId === 'a' && run.entries[0].outcome === 'exit 0' && run.entries[0].endedAt === 1100 &&
+      run.entries[2].panelId === 'c' && run.entries[2].startedAt === 1300 && run.entries[2].outcome === 'exit 1' &&
+      run.entries[3].panelId === 'd' && /skipped/.test(run.entries[3].outcome) &&
+      openAfterA === false && complete === true && sealed.endedAt === 1500 && sealed.costUsd === 0.5 && run.endedAt === undefined,
+    JSON.stringify({ comp, roots, sinks, run, sealed }))
+
+  const usage = (model, input) => ({ totals: { input, output: 0, cacheWrite: 0, cacheRead: 0 }, byModel: { [model]: { input, output: 0, cacheWrite: 0, cacheRead: 0 } }, turns: 1, subagentTurns: 0 })
+  const priced = V.runCost(['a', 'b'], new Map([['a', usage('claude-haiku-4-5', 1000000)], ['b', usage('claude-haiku-4-5', 1000000)]]))
+  const unpriced = V.runCost(['a', 'b'], new Map([['a', usage('claude-haiku-4-5', 1000000)], ['b', usage('mystery-model', 1)]]))
+  const none = V.runCost(['a'], new Map())
+  const abandoned = V.sealAbandoned([{ id: 'o', name: 'open', panelIds: ['a'], edges: [], startedAt: 1, entries: [{ panelId: 'a', startedAt: 1 }, { panelId: 'b', startedAt: 1, endedAt: 2, outcome: 'exit 0' }] }, { id: 'd', name: 'done', panelIds: ['a'], edges: [], startedAt: 1, endedAt: 3, entries: [] }], 9)
+  ok('run.3 a run left open in a saved layout is sealed on load with the relaunch named on its open entries; a sealed run is untouched',
+    abandoned[0].endedAt === 9 && /relaunched/.test(abandoned[0].entries[0].outcome) && abandoned[0].entries[1].outcome === 'exit 0' && abandoned[1].endedAt === 3,
+    JSON.stringify(abandoned))
+  ok('run.2 runCost sums priced usage and is absent when any panel is unpriced; no usage at all is zero',
+    typeof priced === 'number' && priced > 0 && unpriced === undefined && none === 0,
+    JSON.stringify({ priced, unpriced, none }))
+}
+
 // M16 (originally numbered 79-80b under this branch's own M13, which
 // collided with main's own DIFFERENT M13 — "links between panels", which
 // independently claimed 79-88 in this file. See the milestone-wide
