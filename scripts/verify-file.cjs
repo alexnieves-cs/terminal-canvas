@@ -644,6 +644,80 @@ const p = (name) => join(DIR, name)
   rmSync(dir, { recursive: true, force: true })
 }
 
+// M83 — memory.1. THE PROJECT MEMORY STORE. Every write passes the M39
+//      scrubber (a token in a note must not sit in a file agents read back);
+//      an unusable kind and empty text are refused BY NAME rather than
+//      coerced; a repository with no file reads EMPTY, never an error; a
+//      malformed line is skipped and COUNTED; the cap drops the OLDEST.
+{
+  const memDir = join(DIR, 'memory')
+  const store = F.createMemoryStore({ dir: memDir })
+  const root = '/repo/one'
+  const empty = store.list(root, 10)
+  const added = store.add({ root, kind: 'decided', text: 'we use tmux for durability', panelId: 'n1', at: 1000 })
+  const secret = store.add({ root, kind: 'note', text: 'the token is ghp_0123456789012345678901234567890123456789', at: 1001 })
+  const badKind = store.add({ root, kind: 'pondered', text: 'x', at: 1002 })
+  const badText = store.add({ root, kind: 'note', text: '   ', at: 1003 })
+  const listed = store.list(root, 10)
+  const otherRoot = store.list('/repo/two', 10)
+  // A malformed line is skipped and counted.
+  require('node:fs').appendFileSync(store.fileOf(root), 'not json\n')
+  const afterJunk = store.list(root, 10)
+  // The cap drops the oldest.
+  for (let i = 0; i < F.MEMORY_MAX + 5; i += 1) store.add({ root: '/repo/cap', kind: 'note', text: `n${i}`, at: 2000 + i })
+  const capped = store.list('/repo/cap', F.MEMORY_MAX + 10)
+  ok('memory.1 the store: an empty repository reads empty; a write is scrubbed; an unusable kind and empty text are refused by name; a malformed line is skipped and counted; the cap drops the oldest',
+    empty.entries.length === 0 && empty.skipped === 0 &&
+      added.ok === true && secret.ok === true &&
+      badKind.ok === false && /kind/.test(badKind.reason) && badText.ok === false && /text/.test(badText.reason) &&
+      listed.entries.length === 2 && listed.entries[0].at === 1001 &&
+      !listed.entries.some((e) => /ghp_0123/.test(e.text)) && listed.entries.some((e) => /redacted|removed/i.test(e.text)) &&
+      otherRoot.entries.length === 0 &&
+      afterJunk.entries.length === 2 && afterJunk.skipped === 1 &&
+      capped.entries.length === F.MEMORY_MAX && capped.entries[capped.entries.length - 1].text !== 'n0',
+    JSON.stringify({ empty, added, secret, badKind, badText, listed: listed.entries, afterJunk: { n: afterJunk.entries.length, skipped: afterJunk.skipped }, capped: capped.entries.length }))
+}
+
+// M83 — memory.2. THE THREE PROPERTIES A GREEN memory.1 DOES NOT HAVE, each
+//      found by the milestone's verifier and each a SILENT failure.
+//      (a) The file name is injective: `/a/b` and `/a-b` flatten to the same
+//          slug, and two repositories sharing one memory read each other's
+//          decisions back into their agents' context with no symptom.
+//      (b) The ring trim keeps the newest RAW LINES: re-serialising the
+//          parsed entries deletes every line the parser skipped, so "a line
+//          could not be read" silently becomes "there was never a line".
+//      (c) A non-positive limit answers EMPTY rather than [] pretending to
+//          be a repository nobody has written about — it is clamped here and
+//          refused by name at the control door.
+{
+  const memDir2 = join(DIR, 'memory2')
+  const store2 = F.createMemoryStore({ dir: memDir2 })
+  const injective = store2.fileOf('/a/b') !== store2.fileOf('/a-b')
+  const long1 = `/very/long/${'x'.repeat(140)}/repo-one`
+  const long2 = `/very/long/${'x'.repeat(140)}/repo-two`
+  const injectiveLong = store2.fileOf(long1) !== store2.fileOf(long2)
+  const stable = store2.fileOf('/a/b') === store2.fileOf('/a/b/')
+  // (b) A malformed line written BEFORE the trim must survive it.
+  const capRoot = '/repo/trim'
+  for (let i = 0; i < F.MEMORY_MAX + 5; i += 1) store2.add({ root: capRoot, kind: 'note', text: `t${i}`, at: 100 + i })
+  // The junk goes in among the NEWEST lines, so the trim that follows it has
+  // to carry it: a junk line older than the cap is dropped legitimately, and
+  // a check that put it there would pass against a re-serialising trim.
+  require('node:fs').appendFileSync(store2.fileOf(capRoot), 'not json at all\n')
+  store2.add({ root: capRoot, kind: 'note', text: 'after the junk', at: 9999 })
+  const afterTrim = store2.list(capRoot, F.MEMORY_MAX + 10)
+  const rawAfterTrim = require('node:fs').readFileSync(store2.fileOf(capRoot), 'utf8')
+  const noTmpLeft = !require('node:fs').existsSync(`${store2.fileOf(capRoot)}.tmp`)
+  // (c) A non-positive limit.
+  const zero = store2.list(capRoot, 0)
+  const negative = store2.list(capRoot, -3)
+  ok('memory.2 two repositories never share a file (including past the name cap), the ring trim keeps raw lines so a skipped line survives and is still counted, no temp file is left behind, and a non-positive limit answers empty',
+    injective === true && injectiveLong === true && stable === true &&
+      afterTrim.entries.length + afterTrim.skipped === F.MEMORY_MAX && afterTrim.skipped === 1 && /not json at all/.test(rawAfterTrim) &&
+      noTmpLeft === true && zero.entries.length === 0 && negative.entries.length === 0,
+    JSON.stringify({ injective, injectiveLong, stable, kept: afterTrim.entries.length, skipped: afterTrim.skipped, junkSurvived: /not json at all/.test(rawAfterTrim), noTmpLeft, zero: zero.entries.length, negative: negative.entries.length }))
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

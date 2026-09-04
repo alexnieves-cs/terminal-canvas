@@ -18,6 +18,8 @@ import { chmodSync, rmSync } from 'node:fs'
 import { parseControlLine, type ControlRequest } from './control-protocol'
 
 export interface ControlReply {
+  /** M83. `memory list`'s answer. */
+  memory?: { root: string; entries: unknown[]; skipped: number }
   /** M81. `status`'s model. */
   canvas?: import('./control-handler').ControlCanvasModel
   ok: boolean

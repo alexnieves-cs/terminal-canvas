@@ -1,4 +1,4 @@
-import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 
@@ -63,6 +63,11 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   if (isToolboxPanel(panel)) {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
     return `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+  }
+  // M83. The memory node reads by what it remembers, the same split.
+  if (isMemoryPanel(panel)) {
+    const root = panel.source.root.replace(/\/+$/, '')
+    return `memory · ${root.slice(root.lastIndexOf('/') + 1) || root}`
   }
   // M73. The same split as the toolbox, for the same 260px reason.
   if (isChatPanel(panel)) {

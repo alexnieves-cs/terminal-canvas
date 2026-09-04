@@ -363,6 +363,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        toolbox:read / toolbox:permissions
                        diagnostics:sample / diagnostics:export
                        export:panel-text / export:canvas-png
+                       memory:list / memory:add
                        env:report / link:open / ledger:list
                        spawn:sheet / spawn:recent
                        agent:create / agent:send / agent:interrupt / agent:dispose
@@ -833,6 +834,7 @@ price of not killing something.
 | M73 | The chat panel: the sixth `Panel` kind — a conversation with the installed `claude` over M71's runtime, streaming, interruptible, its permission questions answered inline, its transcript a file that survives a relaunch, in the one state vocabulary | ✅ done |
 | M74 | Same agent, two front-ends: a claude terminal opens as a chat with its session's own transcript rendered and continued, a chat opens in a terminal with `claude --resume`; one front-end at a time, refused by name otherwise | ✅ done |
 | M75 | The composer: `@` references completed from the panel's directory, dropped or pasted images as image blocks (never a temp file), dropped files as references, `/` project and saved prompts, and `{{ }}` placeholders filled before insertion for saved prompts on both front-ends | ✅ done |
+| M83 | Memory: what a repository has decided, tried and failed, as one append-only per-repository store that people and agents write to through the same door — a `memory` control verb and `tc memory add`, a seventh panel kind that lists it and adds to it, and a chat's first message carrying the recent entries with a line above the composer saying how many, so nothing is sent that was not shown | ✅ done |
 | M82 | Budgets and queues that stop work: `agents.maxConcurrent` queues a send past the ceiling with its own reason, and `agents.budgetUsd` refuses a send past the budget by name with the fix, interrupting every turn in flight once per crossing — never killing, and never storing a refused message as a turn | ✅ done |
 | M81 | The supervisor: `tc status`, a read-only control verb answering with the canvas model — every panel's state word, the edges' triggers, the runs and their cost — in the canvas's own vocabulary; and a supervisor panel, a chat created with a system prompt that tells it to read the canvas with `tc status` and answer in those words, one per canvas, its first question left unsent in its composer | ✅ done |
 | M80 | Templates: a shape of work — panels, their directories, their first messages and the edges between them — saved as a record beside presets with `{{parameters}}`; instantiated from the spawn sheet with one field per parameter, minting every node and edge in one history entry; a built-in `review this repository`; a selection saved as a template of your own | ✅ done |

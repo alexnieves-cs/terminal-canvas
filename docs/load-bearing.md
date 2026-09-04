@@ -3333,3 +3333,44 @@ budget.2` drives two sessions and a second result.
 **A ceiling of 0 is no ceiling, and that is the DEFAULT.** Every fixture that constructs the
 manager without `limits`, and every canvas that has never opened the settings page, behaves
 exactly as before M82 — the arms are unreachable rather than merely lenient.
+
+**The repository ROOT is resolved in ONE place, and it is main (`main/index.ts`'s
+`memoryRoot`).** A memory node is opened on a panel's directory, a chat carries its own
+`cwd`, and `tc memory add` passes whatever the agent's shell was standing in — three doors
+onto one store, and each of them is usually a SUBDIRECTORY of the repository. Keying the
+file by the path each door happened to hold gives one repository several memories that never
+see each other, which fails in the worst possible way: every door reads a plausible,
+non-empty list and nothing on screen says the other doors are looking somewhere else. Main
+resolves through `reviewEngine.resolveRepo` before every read and every write, and a
+directory git does not own keeps its own path as the key rather than being refused — the
+store's named refusals are for an ABSENT root, not for a directory outside a repository. A
+renderer-side resolver would be a second author of the same fact, and the two would diverge
+only for panels below the root.
+
+**A chat's first message carries the repository's memories, and the panel SAYS SO before it
+sends them (`renderer/chat/memory-context.ts`, `ChatNode.tsx`).** This is the one disclosure
+rule in the app that is not about credentials: text the user did not type is added to a
+message that goes to a model provider, so the count is stated above the composer while the
+draft is still editable, and the bound is a property of the module (`MEMORY_CONTEXT_MAX` 20
+entries, 4 KB) rather than a number chosen at the call site. The note is keyed on
+`turnCount === 0` because the claim is only true of the FIRST message; leaving it up would
+promise something later sends do not do. `verify:panels memory.2` asserts both halves in one
+check on purpose — a note with no context is a lie, context with no note is the silent
+disclosure failure, and either half alone can pass while the other is broken.
+
+**The memory store's write is the FIRST control verb that writes, and it can write nothing
+else (`control-handler.ts`'s `memory` arm).** The socket is a door an agent already has a
+CLI for; the whole surface has been read-only since M54 precisely so that a compromised or
+confused agent could not use it to act. `memory add` keeps that property by construction: it
+reaches one append-only store, a `command` key is refused on it as everywhere, and no arm of
+it can spawn, focus or run. Every entry is scrubbed by `shared/redact.ts` on the way IN — not
+on the way out — because the file outlives the app and an agent pasting a token into a memory
+would otherwise put it on disk in plaintext with nothing on screen to say so.
+
+**A memory panel is sessionless, and closing one must send no `pty.kill`.** The seventh kind
+joins the review, file, note, toolbox and Jira nodes on the negative side of
+`isTerminalPanel`'s positive partition; a kind added to the union without that clause reaches
+`assignTiers`, `registry.ensure` and the live budget, and takes a live WebGL context from a
+terminal that needed it. `verify:panels memory.1` proves it with the non-vacuity shape every
+sessionless kind's check uses: no kill recorded for the node's id, and a REAL terminal closed
+in the same window IS recorded, so the check cannot pass by recording nothing at all.

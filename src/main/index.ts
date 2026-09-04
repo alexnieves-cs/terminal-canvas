@@ -22,6 +22,7 @@ import { createReviewCommitter } from './review-commit'
 import { createReviewDiscarder } from './review-discard'
 import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
+import { createMemoryStore } from './memory-store'
 import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
@@ -489,6 +490,15 @@ const sendToRenderer = (channel: string, payload: unknown): void => {
   if (win.isMinimized()) win.restore()
   win.show()
 }
+const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memory') })
+
+/** M83. A directory's repository root, or the directory itself when git does not own it. */
+const memoryRoot = async (path: string): Promise<string> => {
+  if (path === '') return path
+  const answer = await reviewEngine.resolveRepo(path)
+  return answer.kind === 'root' ? answer.root : path
+}
+
 const controlHandler = createControlHandler({
   presets: () => allPresets(layoutStore.presets()),
   defaultId: () => layoutStore.defaultPresetId() || null,
@@ -503,6 +513,16 @@ const controlHandler = createControlHandler({
   // ephemeral reply channel canvas:counts already uses; a window that does
   // not answer yields null, which the handler turns into an empty model
   // WITH a note.
+  // M83. The project memory: one store for the app, keyed per repository.
+  // The control door resolves the root through the SAME `memoryRoot` the IPC
+  // door uses. An agent runs `tc memory add` wherever its shell is standing,
+  // which is usually a subdirectory: without this its memories land in a file
+  // the node and the chat never read, and every door still shows a plausible
+  // non-empty list (M83's verifier).
+  memory: {
+    list: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
+    add: async (req) => memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+  },
   canvas: async () => {
     const wc = mainWindow?.webContents
     if (!wc) return null
@@ -958,6 +978,19 @@ app.whenReady().then(async () => {
       presetTemplate: (id) => {
         const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
         return found === undefined ? null : templateOf(found)
+      },
+      // M83. The ROOT is resolved HERE, in one place, for every door — the
+      // node, the chat's first-send context and the control verb. A chat
+      // panel's cwd is often a subdirectory, and keying its memory by that
+      // cwd would give the same repository two memories that never see each
+      // other, with nothing on screen saying so. A directory outside a
+      // repository keeps its own path as the key rather than failing: the
+      // store's named refusals are for an ABSENT root, not for a directory
+      // that git does not own.
+      memoryList: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
+      memoryAdd: async (req) => {
+        const r = memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+        return r.ok ? { ok: true } : { ok: false, reason: r.reason }
       },
       listTemplates: () => allTemplates(layoutStore.templates()),
       saveTemplate: (template) => {

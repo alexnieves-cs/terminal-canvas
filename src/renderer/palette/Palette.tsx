@@ -205,6 +205,11 @@ export function Palette(props: PaletteProps): JSX.Element {
         bookmarks: props.bookmarks,
         cameraTrail: props.cameraTrail,
         noteRoot: props.noteRoot,
+        // M83. The memory row's subject is the captured panel's DIRECTORY;
+        // main resolves it to the repository. Without this the row was
+        // disabled for every panel — its reason is real, but it was never
+        // true of a panel that has one.
+        ...(props.noteRoot === null ? {} : { memoryRoot: props.noteRoot }),
         attentionIds: props.attentionIds,
         templates: props.templates,
         approvals: props.approvals,

@@ -1,7 +1,7 @@
 import { memo, type JSX } from 'react'
 import type { FileRow } from './file-tree-model'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Refresh } from '@renderer/icons'
+import { ChevronLeft, Refresh, KindMemory } from '@renderer/icons'
 
 export interface FileTreeProps {
   onToggle: () => void
@@ -34,6 +34,14 @@ export interface FileTreeProps {
   onToggleDir: (path: string) => void
   onInsertPath: (path: string) => void
   onRefresh: () => void
+  /**
+   * M83. The Files pane's door to this directory's PROJECT MEMORY — the
+   * second door beside the palette's row, because the memory is about the
+   * repository the tree is already standing in. Disabled with its named
+   * reason rather than hidden when there is no directory to resolve.
+   */
+  onOpenMemory: () => void
+  memoryReason?: string
 }
 
 /**
@@ -50,7 +58,7 @@ export interface FileTreeProps {
  * mousemove whether or not this pane is up.
  */
 function FileTreeImpl({
-  onToggle, rootPath, rootLabel, rootPanel, rows, rootPending, emptyReason, onToggleDir, onInsertPath, onRefresh
+  onToggle, rootPath, rootLabel, rootPanel, rows, rootPending, emptyReason, onToggleDir, onInsertPath, onRefresh, onOpenMemory, memoryReason
 }: FileTreeProps): JSX.Element {
   return (
     <div className="shell__tree" aria-label="File tree" data-file-tree>
@@ -74,10 +82,22 @@ function FileTreeImpl({
             type="button"
             className="shell__region-add icon-button"
             title="Re-read this directory"
+            data-tree-refresh
             aria-label="Refresh the file tree"
             {...shellControl(onRefresh)}
           >
             <Refresh />
+          </button>
+          <button
+            type="button"
+            className="shell__region-add icon-button"
+            title={memoryReason ?? 'Open this repository\u2019s memory'}
+            aria-label="Open the project memory"
+            data-tree-memory
+            disabled={memoryReason !== undefined}
+            {...shellControl(onOpenMemory)}
+          >
+            <KindMemory />
           </button>
           {/* M46: the Files pane is one of the navigator's panes, so its
               collapse control is the navigator's (⌘\), and ⌘B is what

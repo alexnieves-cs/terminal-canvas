@@ -25,6 +25,24 @@ import type {
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
 
+/** M83. One memory as the renderer reads it. */
+/**
+ * M83. The newest memories kept per repository — the store's ring cap, and
+ * the node's read limit. It lives in the CONTRACT rather than in
+ * `main/memory-store.ts` because both sides need it and neither may import
+ * the other: a node asking for 100 against a store keeping 500 hides four
+ * hundred entries and says nothing (M83's verifier).
+ */
+export const MEMORY_MAX = 500
+
+export interface MemoryEntryRow {
+  kind: 'decided' | 'tried' | 'failed' | 'note'
+  text: string
+  panelId?: string
+  at: number
+  redacted?: number
+}
+
 /** M81. The canvas model `tc status` answers with — the renderer's own words. */
 export interface ControlCanvasModel {
   panels: Array<{ id: string; kind: string; title?: string; state: string; cwd?: string; cost?: number }>
@@ -173,6 +191,9 @@ export const IPC = {
   TEMPLATE_LIST: 'template:list',
   TEMPLATE_SAVE: 'template:save',
   TEMPLATE_DELETE: 'template:delete',
+  /** M83. The project memory, for the node that renders it and the chat that carries it. */
+  MEMORY_LIST: 'memory:list',
+  MEMORY_ADD: 'memory:add',
   /**
    * The settings surface. Renderer -> main and invokes, not events, for the
    * same reason M5b's preset mutations are: main owns the store, because the
@@ -1027,6 +1048,12 @@ export interface CanvasBridge {
     clear(): Promise<void>
     /** M42. Hits across every panel's log, newest-first within a panel, capped. [] for an empty query. */
     search(query: string): Promise<ScrollbackSearchHit[]>
+  }
+  /** M83. The project memory: what this repository has decided, tried and failed. */
+  memory: {
+    list(root: string, limit: number): Promise<{ root: string; entries: MemoryEntryRow[]; skipped: number }>
+    /** Refused BY NAME for an unusable kind or empty text; every write is scrubbed. */
+    add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   }
   /** M80. Templates: a shape of work saved once and instantiated with its parameters filled. */
   template: {

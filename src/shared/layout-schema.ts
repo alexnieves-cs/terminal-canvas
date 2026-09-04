@@ -183,6 +183,16 @@ export interface PersistedToolboxPanel extends PersistedPanelBase {
 }
 
 /**
+ * M83's memory node — the SEVENTH kind, a document one. Like a review node
+ * and a toolbox it carries no cwd of its own: its subject is a repository
+ * root, and that is the whole of its source.
+ */
+export interface PersistedMemoryPanel extends PersistedPanelBase {
+  kind: 'memory'
+  source: { root: string }
+}
+
+/**
  * M73's chat panel. Like every sessionless kind it carries NO top-level cwd
  * and NO args: its `chat.cwd` is the directory its agent works in, a field
  * with a different meaning from a terminal's spawn cwd, and a reader that
@@ -194,6 +204,7 @@ export interface PersistedChatPanel extends PersistedPanelBase {
 }
 
 export type PersistedPanel =
+  | PersistedMemoryPanel
   | PersistedTerminalPanel
   | PersistedReviewPanel
   | PersistedFilePanel
@@ -663,6 +674,16 @@ function parsePanel(
     const source = parseToolboxSource(raw.source, id, warnings)
     if (source === null) return null
     return { ...base, kind: 'toolbox', source }
+  }
+  if (kind === 'memory') {
+    // A memory node's source is a repository root and nothing else; an
+    // unusable one drops the PANEL by name, like every other kind's source.
+    const source = raw.source
+    if (!isRecord(source) || !isStr(source.root) || source.root.trim() === '') {
+      warnings.push(`dropped memory panel ${id}: source root was unusable`)
+      return null
+    }
+    return { ...base, kind: 'memory', source: { root: source.root } }
   }
   if (kind === 'chat') {
     const chat = parseChatSource((raw as Record<string, unknown>).chat, id, warnings)

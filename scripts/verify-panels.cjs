@@ -69,6 +69,7 @@ const {
   resolveCwd,
   expandTilde,
   createApprovalTracker,
+  createMemoryStore,
   allTemplates,
   isBuiltInTemplate,
   resolveSpawnRequest,
@@ -721,7 +722,13 @@ app.whenReady().then(async () => {
     const i = args.indexOf('-C')
     const target = i >= 0 ? args[i + 1] : ''
     if (typeof target !== 'string' || !REVIEW_FENCES.some((f) => target.startsWith(f))) {
-      return { stdout: '', ok: false, notFound: false }
+      // The FULL GitResult shape, `code` and `stderr` included. Returning a
+      // partial one made `resolveRepo` reach `firstLine(result.stderr)` with
+      // undefined and throw INSIDE `captureBaseline`'s floating promise — an
+      // unhandled rejection that aborted that panel's baseline capture and
+      // printed a warning no assertion reads. It only showed up when a check
+      // spawned a panel outside the fences (M83's memory.3).
+      return { stdout: '', ok: false, notFound: false, code: -1, stderr: 'refused by the review fence' }
     }
     return realGitRunner(args, opts)
   }
@@ -908,6 +915,8 @@ app.whenReady().then(async () => {
     return proc
   }
   const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels chat ')), 'agent-transcripts') })
+  const memoryDir = mkdtempSync(join(tmpdir(), 'tc panels memory-store '))
+  const memoryStore = createMemoryStore({ dir: memoryDir })
   const agentSessions = new AgentSessionManager({
     runner: chatRunner, command: '/fake/claude', env: { PATH: '/fake' },
     // M82. The canvas's ceilings, read live from the same store main reads.
@@ -1055,6 +1064,9 @@ app.whenReady().then(async () => {
     // M80. The real store, through the same three verbs main wires.
     // M80. The preset's resolved template — main's own answer, never a spawn.
     presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
+    // M83. The project memory: a real store under the harness's own dir.
+    memoryList: (root, limit) => memoryStore.list(root, limit),
+    memoryAdd: (req) => { const r = memoryStore.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
     listTemplates: () => allTemplates(layoutStore.templates()),
     saveTemplate: (template) => {
       const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id) ? template.id : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
@@ -15398,6 +15410,123 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
+    // M83 — memory.1. THE PROJECT MEMORY, END TO END. A memory node opened
+    //     on a real repository reads EMPTY by name, an added memory appears
+    //     with its kind, a secret typed into one is scrubbed before it is
+    //     stored, and closing the node sends NO pty.kill for its id while a
+    //     terminal closed in the same window IS recorded (the sessionless
+    //     kinds' own non-vacuity shape, reached by a seventh kind).
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['memory.1 a memory node reads its repository empty by name, an added memory appears with its kind and is scrubbed of secrets, and closing the node sends no pty.kill while a terminal close in the same window is recorded']
+      const yLog = []
+      const onY = (_e, level, m) => { if (level >= 2) yLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onY)
+      try {
+        const yRepo = mkdtempSync(join(tmpdir(), 'tc panels memory-'))
+        layoutStore.save({
+          panels: [{ id: 'mem1', kind: 'memory', x: 80, y: 80, w: 460, h: 420, z: 1, source: { root: yRepo } },
+            ...fromPanels([{ kind: 'terminal', rect: { id: 'yT', x: 620, y: 80, w: 320, h: 220 }, z: 2, spec: { panelId: 'yT', cwd: require('node:os').homedir(), command: '/bin/sh', args: ['-c', 'sleep 600'] } }])],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reY = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reY
+        await settle()
+        const emptyArm = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="mem1"] [data-memory-arm="empty"]')?.textContent ?? false`), 8000)
+        // No session for a document kind, and no xterm.
+        const hasSession = await wc.executeJavaScript(`Object.prototype.hasOwnProperty.call(window.__m4aSessions(), 'mem1')`)
+        const added = await wc.executeJavaScript(`(async () => {
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+          const input = document.querySelector('.panel[data-panel-id="mem1"] [data-memory-text]')
+          if (!input) return 'no input'
+          set.call(input, 'we chose tmux; the token is ghp_0123456789012345678901234567890123456789')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          const save = document.querySelector('.panel[data-panel-id="mem1"] [data-memory-save]')
+          if (!save) return 'no save'
+          // shellControl runs on CLICK (its mousedown only preventDefaults).
+          save.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+          return true })()`)
+        const entry = await waitUntil(() => wc.executeJavaScript(`(() => { const e = document.querySelector('.panel[data-panel-id="mem1"] [data-memory-entry]'); return e ? { kind: e.getAttribute('data-memory-entry'), text: e.querySelector('.memory-node__text')?.textContent ?? '' } : false })()`), 6000)
+        // The store's own file: the secret is not in it.
+        const onDisk = (() => { try { return require('node:fs').readFileSync(memoryStore.fileOf(yRepo), 'utf8') } catch (e) { return `ERR ${String(e && e.message)}` } })()
+        const killsBefore = killedPanelIds.length
+        await clickPanelClose(wc, 'mem1')
+        await settle()
+        const killsAfterNode = killedPanelIds.length
+        await clickPanelClose(wc, 'yT')
+        await settle()
+        const killsAfterTerminal = killedPanelIds.length
+        ok(IDS[0],
+          typeof emptyArm === 'string' && /nothing remembered/.test(emptyArm) && hasSession === false &&
+            added === true && entry && entry.kind === 'decided' && /we chose tmux/.test(entry.text) && !/ghp_0123/.test(entry.text) &&
+            typeof onDisk === 'string' && !/ghp_0123/.test(onDisk) && /we chose tmux/.test(onDisk) &&
+            killsAfterNode === killsBefore && killsAfterTerminal > killsAfterNode,
+          JSON.stringify({ emptyArm, hasSession, added, entry, onDisk: String(onDisk).slice(0, 160), killsBefore, killsAfterNode, killsAfterTerminal, log: yLog.slice(-3) }))
+        try { rmSync(yRepo, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (yErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(yErr && yErr.message || yErr) + ' | renderer: ' + (yLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onY)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M83 — memory.2. THE STATED CONTEXT. A chat opened in a repository that
+    //     has memories SAYS how many will go with its first message, and the
+    //     first message on the wire carries exactly those, ahead of the
+    //     user's text. Both halves in one check on purpose: a note with no
+    //     context is a lie, and context with no note is the failure this
+    //     milestone's spec names — "memories the panel never said it would".
+    //     After the first turn the note is gone, because the claim is only
+    //     true of the first message.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['memory.2 a chat states how many memories go with its first message and the wire carries exactly those, ahead of the text — a memory added after the note rendered does not ride along; the note leaves after the first turn']
+      const zLog = []
+      const onZ = (_e, _l, m) => { zLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onZ)
+      try {
+        const zRepo = mkdtempSync(join(tmpdir(), 'tc panels memctx-'))
+        memoryStore.add({ root: zRepo, kind: 'decided', text: 'sessions live in tmux' })
+        memoryStore.add({ root: zRepo, kind: 'failed', text: 'parsing the pretty output' })
+        const reZ = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reZ
+        await settle()
+        const mintedZ = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(zRepo)})`)
+        const zChat = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
+        const zSel = (q) => `document.querySelector('.panel[data-panel-id="${zChat}"] ${q}')`
+        const note = await waitUntil(() => wc.executeJavaScript(`(() => { const n = ${zSel('[data-chat-memory-note]')}; return n ? n.textContent : false })()`), 6000)
+        // The note has rendered. A memory added NOW must NOT ride along: the
+        // panel announced two, and a message carrying three would be exactly
+        // the disclosure failure the note exists to prevent (M83's verifier).
+        memoryStore.add({ root: zRepo, kind: 'note', text: 'added after the note rendered' })
+        const spawnsBeforeZ = chatSpawns.length
+        await wc.executeJavaScript(`(() => {
+          const ta = ${zSel('[data-chat-input]')}; if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, 'what did we decide?'); ta.dispatchEvent(new Event('input', { bubbles: true }))
+          const b = ${zSel('[data-chat-send]')}; if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const sentZ = await waitUntil(async () => chatSpawns.length > spawnsBeforeZ && chatSpawns[chatSpawns.length - 1].proc.stdin.length > 0, 6000)
+        const wireZ = sentZ ? JSON.parse(chatSpawns[chatSpawns.length - 1].proc.stdin[0]) : null
+        const textZ = wireZ ? (wireZ.message.content.find((c) => c.type === 'text') || {}).text || '' : ''
+        const noteGone = await waitUntil(() => wc.executeJavaScript(`${zSel('[data-chat-memory-note]')} === null`), 8000)
+        ok(IDS[0],
+          mintedZ && mintedZ.kind === 'spawned' && typeof note === 'string' && /2 memories/.test(note) && /first message/.test(note) &&
+            sentZ === true && /sessions live in tmux/.test(textZ) && /parsing the pretty output/.test(textZ) &&
+            !/added after the note rendered/.test(textZ) && /— 2 memories\]/.test(textZ) &&
+            textZ.indexOf('sessions live in tmux') < textZ.indexOf('what did we decide?') && noteGone === true,
+          JSON.stringify({ mintedZ, note, sentZ, textZ: textZ.slice(0, 200), noteGone, log: zLog.slice(-3) }))
+        try { rmSync(zRepo, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (zErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(zErr && zErr.message || zErr) + ' | renderer: ' + (zLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onZ)
+      }
+    }
+
+    // -------------------------------------------------------------------
     // M48 — first run. firstrun.1: a canvas booted with ZERO panels shows the
     // launcher, its preset control spawns through preset:spawn-by-id (the
     // harness's real handler), and the launcher leaves. firstrun.2: a canvas
@@ -17029,6 +17158,67 @@ app.whenReady().then(async () => {
         wc.removeListener('console-message', onC)
       }
     }
+
+    // -------------------------------------------------------------------
+    // M83 — memory.3. THE TWO DOORS. The Files pane's memory control and the
+    //     palette's row are enabled from the SELECTED panel's directory, and
+    //     the node they open must be rooted on THAT directory. The first
+    //     version opened the captured-or-focused panel's instead, so a
+    //     selected file node lit the control and clicking it did nothing, and
+    //     a terminal focused in another repository opened the wrong memory
+    //     under this repository's tree — both silent (M83's verifier). With
+    //     nothing selected the control is DISABLED and says why, never gone.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['memory.3 the Files pane memory control is disabled with its named reason when nothing is selected, and with a FILE panel selected it opens a memory node rooted on that panel\'s directory, not on the focused terminal\'s']
+      const dLog = []
+      const onD = (_e, _l, m) => { dLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onD)
+      try {
+        const dirA = mkdtempSync(join(tmpdir(), 'tc panels doorA-'))
+        const dirB = mkdtempSync(join(tmpdir(), 'tc panels doorB-'))
+        writeFileSync(join(dirA, 'plan.md'), '# plan\n')
+        layoutStore.save({
+          panels: [{ id: 'fdoor', kind: 'file', x: 80, y: 80, w: 360, h: 260, z: 1, source: { path: join(dirA, 'plan.md') } },
+            ...fromPanels([{ kind: 'terminal', rect: { id: 'tdoor', x: 520, y: 80, w: 320, h: 220 }, z: 2, spec: { panelId: 'tdoor', cwd: dirB, command: '/bin/sh', args: ['-c', 'sleep 600'] } }])],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD
+        await settle()
+        // The Files pane, with NOTHING selected.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="files"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const closed = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-tree-memory]'); return b ? { disabled: b.disabled, title: b.title } : false })()`), 5000)
+        // Select the FILE panel; focus the terminal in the OTHER directory.
+        await wc.executeJavaScript(`window.__m50Select(['fdoor'])`)
+        await settle()
+        const armed = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-tree-memory]'); return b && b.disabled === false ? { title: b.title } : false })()`), 5000)
+        const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="memory"]').length`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-tree-memory]'); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const opened = await waitUntil(() => wc.executeJavaScript(`(() => { const ns = [...document.querySelectorAll('.panel[data-panel-kind="memory"]')]; return ns.length > ${before} ? ns[ns.length - 1].querySelector('[data-memory-node]')?.getAttribute('data-memory-node') ?? ns[ns.length - 1].getAttribute('data-memory-node') : false })()`), 6000)
+        ok(IDS[0],
+          closed && closed.disabled === true && /repository/.test(closed.title) &&
+            armed !== false && typeof opened === 'string' && opened === dirA && opened !== dirB,
+          JSON.stringify({ closed, armed, opened, dirA, dirB, log: dLog.slice(-3) }))
+        // Leave the canvas as this block found it: the terminal this block
+        // spawned is closed (its session would otherwise outlive the block and
+        // be counted by the recovery checks below), and the layout is cleared.
+        await clickPanelClose(wc, 'tdoor')
+        await settle()
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reDone
+        await settle()
+        try { rmSync(dirA, { recursive: true, force: true }); rmSync(dirB, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (dErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(dErr && dErr.message || dErr) + ' | renderer: ' + (dLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onD)
+      }
+    }
+
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

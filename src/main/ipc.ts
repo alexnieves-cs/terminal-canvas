@@ -87,6 +87,9 @@ export interface PaletteHandlers {
   /** M80. Templates: the list (built-ins first), a save, a delete that refuses a built-in. */
   /** M80. The preset's resolved template, or null. */
   presetTemplate(id: string): PresetTemplate | null
+  /** M83. The project memory, for the node and the chat's context. */
+  memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
+  memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   listTemplates(): PersistedTemplate[]
   saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
   removeTemplate(id: string): boolean
@@ -353,6 +356,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_SAVE, (_event, name: string, body: string) => palette.savePrompt(name, body))
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
   ipcMain.handle(IPC.PRESET_TEMPLATE, (_event, id: string) => palette.presetTemplate(id))
+  ipcMain.handle(IPC.MEMORY_LIST, (_event, root: string, limit: number) => palette.memoryList(root, limit))
+  ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string }) => palette.memoryAdd(req))
   ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
   ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }) => palette.saveTemplate(template))
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))

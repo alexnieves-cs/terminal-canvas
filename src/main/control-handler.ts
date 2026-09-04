@@ -40,6 +40,11 @@ export interface ControlHandlerDeps {
    * answer in time" — a third state, never an empty model with no note.
    */
   canvas?: () => Promise<ControlCanvasModel | null>
+  /** M83. The project memory store: the only thing a control verb may write. */
+  memory?: {
+    list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
+    add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true; entry: unknown } | { ok: false; reason: string }>
+  }
 }
 
 export function createControlHandler(deps: ControlHandlerDeps): (req: ControlRequest) => Promise<ControlReply> {
@@ -62,6 +67,22 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         }
       case 'focus':
         return deps.focus(req.id) ? { ok: true } : { ok: false, error: `no panel ${req.id}` }
+      case 'memory': {
+        if (deps.memory === undefined) return { ok: false, error: 'this window has no memory store' }
+        if (req.op === 'list') {
+          const root = req.root ?? ''
+          if (root === '') return { ok: false, error: 'memory list needs a root — the repository whose memory to read' }
+          // A non-positive or absurd limit is refused BY NAME rather than
+          // clamped quietly: `--limit 0` answers an empty list that reads
+          // exactly like a repository nobody has written about, which is the
+          // one wrong answer this store must never give (M83's verifier).
+          const limit = req.limit ?? 50
+          if (!Number.isInteger(limit) || limit < 1) return { ok: false, error: `${JSON.stringify(req.limit)} is not a usable limit — ask for at least one memory` }
+          return { ok: true, memory: await deps.memory.list(root, limit) }
+        }
+        const written = await deps.memory.add({ root: req.root, kind: req.kind, text: req.text, ...(req.panelId === undefined ? {} : { panelId: req.panelId }) })
+        return written.ok ? { ok: true, entry: written.entry } : { ok: false, error: written.reason }
+      }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or
         // kill in it, and the whole verb is one call into a renderer that

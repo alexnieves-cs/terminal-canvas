@@ -9,6 +9,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat } from './chat-store'
+import { MEMORY_CONTEXT_MAX, memoryContext } from './memory-context'
 import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
@@ -352,7 +353,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     setDraft('')
     setAttachments([])
     setRefusal(null)
-    void window.canvas.agentSession.send(id, text, outgoing).then((answer) => {
+    // M83. The first message carries the repository's memories ahead of the
+    // user's text — the same bound the note above the composer states.
+    const carried = turnCount === 0 && !memorySentRef.current && memoryBlock !== null ? memoryBlock.text : ''
+    if (carried !== '') { memorySentRef.current = true; setMemoryBlock(null) }
+    void Promise.resolve(window.canvas.agentSession.send(id, `${carried}${text}`, outgoing)).then((answer) => {
       if (typeof answer === 'object' && answer !== null && 'refused' in answer) {
         setRefusal(answer.refused)
         setDraft((d) => (d === '' ? draft : d))
@@ -394,6 +399,30 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     // Cmd-gated shortcuts still apply above it.
     e.stopPropagation()
   }
+
+  // M83. The repository's recent memories go with the FIRST message, and the
+  // panel says so before it does — bounded, and nothing is sent that the user
+  // cannot see first.
+  // The block is READ ONCE and held: the note states the count of the block
+  // it is holding, and the send carries that same block. Counting here and
+  // re-reading at send time let the two disagree — a memory added between the
+  // two reads went with the message the panel had already described (M83's
+  // verifier), which is exactly the failure this note exists to prevent.
+  const [memoryBlock, setMemoryBlock] = useState<{ text: string; count: number } | null>(null)
+  // Whether THIS panel has already carried its memories. Turn counts arrive
+  // back over `agent:event`, so two quick sends both see `turnCount === 0`
+  // and the block would be prepended twice — the second time unannounced.
+  const memorySentRef = useRef(false)
+  useEffect(() => {
+    if (turnCount > 0 || memorySentRef.current) { setMemoryBlock(null); return }
+    let live = true
+    void window.canvas.memory.list(panel.chat.cwd, MEMORY_CONTEXT_MAX).then((answer) => {
+      if (!live) return
+      const block = memoryContext(answer.entries)
+      setMemoryBlock(block.count === 0 ? null : block)
+    })
+    return () => { live = false }
+  }, [panel.chat.cwd, turnCount])
 
   const fillStep = popup?.fill
   const insertFilled = (): void => { if (fillStep) insertPromptBody(fillPlaceholders(fillStep.prompt.body, fillStep.values)) }
@@ -506,6 +535,9 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>
           ) : (
             <>
+              {memoryBlock !== null && turnCount === 0 && (
+                <p className="pf__note chat__memory-note" data-chat-memory-note>{memoryBlock.count} memor{memoryBlock.count === 1 ? 'y' : 'ies'} from this repository will go with your first message</p>
+              )}
               {attachments.length > 0 && (
                 <div className="chat__attachments" data-chat-attachments>
                   {/* A dim mono line in the well's own idiom, not a bordered pill

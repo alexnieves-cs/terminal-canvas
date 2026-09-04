@@ -68,7 +68,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox' | 'chat'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox' | 'chat' | 'memory'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -288,6 +288,8 @@ export interface PaletteActions {
   /** M65. Open the spawn sheet: where, what, how. */
   /** M80. `templateId` opens the sheet on that template. */
   beginSpawnSheet(templateId?: string): void
+  /** M83. Open the project memory for the captured panel's repository. */
+  openMemory(): void
   /** M80. Save the selected panels and their edges as a template. */
   beginSaveTemplate(panelIds: readonly string[]): void
   /**
@@ -440,6 +442,8 @@ export interface PaletteContext {
    * ids and not a count: main does not hold this fact, the renderer does.
    */
   attentionIds: readonly string[]
+  /** M83. The captured panel's repository, when it has one — the memory row's subject. */
+  memoryRoot?: string
   /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
   templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /**
@@ -574,6 +578,9 @@ export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has not
 export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
 /** M77. A chat with no baseline yet: the review row's own reason. */
 export const REASON_NO_SELECTION_TEMPLATE = 'select the panels to save first'
+/** M80. No template is saved yet — the row still says so rather than vanishing. */
+/** M83. Outside a repository there is nothing to remember about. */
+export const REASON_NO_REPO_MEMORY = 'open a panel inside a repository first — memory is kept per repository'
 /** M80. No template is saved yet — the row still says so rather than vanishing. */
 export const REASON_NO_TEMPLATES = 'no templates yet — select some panels and save them as one'
 /** M77. A chat with no baseline yet: the review row's own reason. */
@@ -970,6 +977,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
 
   // M80. Templates: one row each, disabled by its own reason when it cannot
   // run; and the save verb, refused by name with nothing selected.
+  // M83. The project memory, for the captured panel's repository.
+  out.push(withReason({
+    id: 'panel.memory',
+    title: 'Open memory…',
+    subtitle: 'what this repository has decided, tried and failed',
+    searchText: 'memory project remember decided tried failed notes',
+    group: 'panel',
+    run: () => actions.openMemory()
+  }, ctx.memoryRoot === undefined || ctx.memoryRoot === '' ? REASON_NO_REPO_MEMORY : undefined))
+
   const templateRows = ctx.templates ?? []
   if (templateRows.length === 0) {
     out.push(withReason({

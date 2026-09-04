@@ -170,6 +170,8 @@ module.exports = {
   expandTilde: require('../src/main/pty-manager').expandTilde,
   /* M76. The approval tracker: main's decision that a pending permission is needs-you, for both harnesses. */
   createApprovalTracker: require('../src/main/approvals').createApprovalTracker,
+  /* M83. The project memory store, for the node and the verbs. */
+  createMemoryStore: require('../src/main/memory-store').createMemoryStore,
   /* M80. Templates: built-ins are code, and a built-in refuses deletion. */
   allTemplates: require('../src/shared/templates').allTemplates,
   isBuiltInTemplate: require('../src/shared/templates').isBuiltInTemplate,

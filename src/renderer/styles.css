@@ -742,6 +742,26 @@ body {
 
 /* M79. A run frame is a record, not a group: dashed, and its label says `run ·`. */
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+/* M83. The memory node: entries newest first, each `kind · text · time`, and
+   one line to add another. */
+.memory-node__body { display: flex; flex-direction: column; min-height: 0; gap: var(--sp-2); padding: var(--sp-3); }
+.memory-node__root { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-node__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+/* The last row carries no rule: a hairline over the empty half of a short
+   list reads as a table that was cut off (M83's critic). */
+.memory-node__entry { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--sp-2); padding: var(--sp-1) 0; border-bottom: 1px solid var(--line); }
+.memory-node__entry:last-child { border-bottom: 0; }
+.memory-node__kind { font-family: var(--font-ui); font-size: var(--t-xs); line-height: 1.6; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+/* M83 (critic). The entries are a WELL, like every other body on this canvas
+   (terminal output, the chat transcript, a file's text) — the UI face made
+   the list read as a settings pane beside its peers. */
+.memory-node__text { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
+.memory-node__at { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.memory-node__redacted { grid-column: 2; font-size: var(--t-xs); color: var(--amber); }
+.memory-node__add { display: flex; align-items: center; gap: var(--sp-2); }
+.memory-node__select { min-height: 24px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-xs); }
+.memory-node__input { flex: 1 1 auto; min-width: 0; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font: inherit; font-size: var(--t-sm); }
+.memory-node__verb { flex: none; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
 /* M80. A template's parameter: its name above its field, never truncated into
    the sheet's fixed label column. */
 .sheet__field--hole { flex-direction: column; align-items: stretch; gap: var(--sp-1); }
