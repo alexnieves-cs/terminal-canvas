@@ -2168,6 +2168,13 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   that changes a record type shows up as the session's `unknown` counter, and one that
   changes a flag shows up as `exited` with the CLI's own stderr — never as a red suite. The
   `deny` branch of a permission response has only the SDK's documented shape behind it.
+- **The summary tier's Allow/Deny (M76).** The card's far tier renders the question with its
+  verbs; no suite drives the camera below `SUMMARY_ENTER` and clicks one. The `approval` scene
+  is a picture at scale 1.
+- **A chat's OS notification (M76).** The tracker is proven against a fake sink (`approve.1–.3`):
+  that the real toast is titled `claude asks to run <tool>` with `<dir> needs you` beneath,
+  and that its click frames the chat panel without waking anything, was never observed by a
+  suite — the same standing as the M43 surfaces above.
 - **Every pixel (M61–M70).** `npm run shot` renders twenty-five scenes and asserts nothing;
   each milestone's look was a person's (and a fresh-context critic's) reading of the PNGs,
   recorded in the build logs. A green `npm run verify` is silent on how anything LOOKS —
@@ -3130,3 +3137,29 @@ the palette's text line for either front-end — and a hole with no value stays 
 never blanked into a prompt that silently says less. `composer.2` and `verify:panels
 composer.3` (a project prompt inserted verbatim, `{{target}}` intact).
 
+**A chat's `needs you` is decided in MAIN and travels on the terminal's channel; the
+renderer's store is a cache, never a second author (`main/approvals.ts`, `main/index.ts`,
+`chat-store.ts`).** The obvious renderer-side version — derive the attention set from the chat
+store's pending lists — makes two authors of "who wants me": the store fed by `agent:state` and
+a second list fed by `agent:event`, which agree until a dispose races an event and then differ
+forever, with the pip pointing at a panel whose card says idle. The tracker emits `wants-you`
+when a panel's pending set goes from empty to non-empty and `idle` when it empties, on the SAME
+channel the terminal detector uses, so the store, the pips, Cmd+J, the popover, the workspace
+counts and the palette's `state:` order need nothing new. The card, the rail row and the far
+tiers still read the word from the snapshot's pending list, and the two readings agree by
+construction because both are main's one fact. `agent:acknowledge` (focus) never clears a
+chat's `needs you`: a question with no answer is a fact, not a bell. `verify:agent-session
+approve.1`, `verify:panels approve.1`.
+
+**One dock badge, two authors, one writer (`createAttentionUnion`).** `PtyManager.syncAttention`
+sets the badge from its waiting set on every change; the approval tracker sets it from its own.
+Each writing `app.dock.setBadge` directly leaves the number reading whichever spoke last — a
+terminal going quiet zeroes a badge that should still say one chat is asking. The union hands
+each a child sink that records its own count and writes the SUM. PtyManager is untouched; the
+M43 checks run against the same interface. `approve.2`.
+
+**The tracker notifies on ENTRY only, and a second request re-notifies nothing.** The same rule
+`syncAttention` states: a notification per request would toast every tool call of a busy agent
+while one is already waiting, and clearing on the first answer of two would tell the user the
+panel is done while a question is still open. `approve.1`; `approve.3` for focus and the two
+settings.

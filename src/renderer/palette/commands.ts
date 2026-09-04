@@ -120,6 +120,8 @@ export interface PaletteActions {
   setDefaultPreset(id: string): void
   goToPanel(id: string): void
   insertPrompt(id: string): void
+  /** M76. Answer a chat's pending permission request from anywhere. */
+  answerApproval(id: string, requestId: string, allow: boolean): void
   beginSavePrompt(): void
   deletePrompt(id: string): void
   beginRenamePanel(id: string, currentTitle: string): void
@@ -433,6 +435,11 @@ export interface PaletteContext {
    */
   attentionIds: readonly string[]
   /**
+   * M76. Every pending permission request on this renderer, with the panel's
+   * label. Optional so every older fixture builds; absent is none.
+   */
+  approvals?: readonly ApprovalRow[]
+  /**
    * focusedId as it was when the palette OPENED, not now. Opening moves DOM
    * focus to the input; the app-level focus is deliberately left alone, and
    * every panel-acting command targets the panel the user was in.
@@ -557,6 +564,17 @@ export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude se
 export const REASON_CHAT_BUSY = 'the chat is still answering — interrupt it first'
 export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has nothing to move'
 export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
+/** M76. The one disabled row when nothing pends. */
+export const REASON_NO_APPROVALS = 'no agent is asking for permission'
+
+/** M76. A pending request as the palette lists it. */
+export interface ApprovalRow {
+  id: string
+  requestId: string
+  toolName: string
+  argument: string
+  label: string
+}
 
 /** M73. Whether a claude preset is available — the one fact the three chat doors share. */
 export function claudeAvailable(presets: readonly PresetRow[]): boolean {
@@ -728,6 +746,30 @@ export function buildCommands(ctx: PaletteContext): Command[] {
             : termLive ? REASON_TERMINAL_LIVE : undefined
       )
     )
+    // M76. Two rows per pending request, named with the tool and the panel;
+    // with nothing pending ONE disabled row whose reason says so. The rows
+    // are what the OS notification, the popover and the pane all lead to:
+    // an answer given from wherever the user is.
+    const approvals = ctx.approvals ?? []
+    for (const a of approvals) {
+      const where = `${a.toolName} · ${a.label}`
+      out.push({
+        id: `approval.allow.${a.id}.${a.requestId}`, title: `Allow ${where}`, subtitle: a.argument, mono: true,
+        searchText: `allow approve permission needs you ${a.toolName} ${a.label}`, group: 'panel',
+        run: () => actions.answerApproval(a.id, a.requestId, true)
+      })
+      out.push({
+        id: `approval.deny.${a.id}.${a.requestId}`, title: `Deny ${where}`, subtitle: a.argument, mono: true,
+        searchText: `deny refuse permission needs you ${a.toolName} ${a.label}`, group: 'panel',
+        run: () => actions.answerApproval(a.id, a.requestId, false)
+      })
+    }
+    if (approvals.length === 0) {
+      out.push(withReason({
+        id: 'approval.none', title: 'Answer a permission request…', searchText: 'allow deny approve permission needs you', group: 'panel', hiddenAtRest: true,
+        run: () => {}
+      }, REASON_NO_APPROVALS))
+    }
     out.push(
       withReason(
         {

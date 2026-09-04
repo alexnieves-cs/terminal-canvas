@@ -740,6 +740,20 @@ body {
   color: var(--iris);
 }
 
+/* M76. The row wraps so the question sits UNDER the label and its jump, never beside them. */
+.rail-attention { flex-wrap: wrap; }
+/* M76. A chat's question on its attention row: the argument in mono, the
+   two verbs named with the tool. The row above stays the jump. */
+.rail-attention__approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-2) calc(var(--sp-2) + 14px); }
+.rail-attention__argument { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+.rail-row__verb { min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
+.rail-row__verb:hover { background: var(--s-4); }
+/* M76. The question at the summary tier, under the state word. */
+/* M76. The questions, pinned between the well and the composer. */
+.chat__questions { flex: none; padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--s-1); }
+.chat__far-approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+.chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+
 /* M47. ONE status dot. The rail's dot, the context pane's dot and the
    frame's `.pf__state` all carry `.status-dot`, and this is the only rule
    set keyed on data-agent-state — the same colours the panel border and the
@@ -3472,9 +3486,9 @@ body {
 .chat__tool-toggle:hover { color: var(--fg-2); }
 .chat__tool-result { grid-column: 2 / -1; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--t-sm); max-height: 240px; overflow: auto; }
 .chat__empty, .chat__queued, .chat__exited { margin: var(--sp-2) 0; }
-.chat__permission { margin: var(--sp-3) 0; padding: var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-1); display: flex; flex-direction: column; gap: var(--sp-2); }
-.chat__permission-title { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
-.chat__permission-input { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--t-sm); color: var(--fg-2); }
+.chat__permission { padding: var(--sp-2) 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: var(--sp-2); row-gap: var(--sp-2); align-items: baseline; }
+.chat__permission-line { min-width: 0; overflow-wrap: anywhere; font-size: var(--t-sm); color: var(--fg); }
+.chat__permission-verbs { grid-column: 2; }
 .chat__permission-verbs, .chat__verbs { display: flex; gap: var(--sp-2); }
 .chat__verb { min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
 .chat__verb:hover:not(:disabled) { background: var(--s-4); }

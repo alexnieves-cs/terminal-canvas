@@ -120,6 +120,10 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
 }
 
 export const REASON_CHAT_STREAMING = 'the agent is still answering — interrupt it, or wait'
+/** M76. The one deny message, whichever surface says it. */
+export const DENY_MESSAGE = 'denied from the canvas'
+/** M76. A question is open: the composer names the fix, which is above it. */
+export const REASON_CHAT_PENDING = 'claude is waiting for your answer — allow or deny above'
 export const REASON_CHAT_NO_CLAUDE = 'claude was not found on the login PATH — install it, or check the environment report'
 export const REASON_CHAT_IDLE = 'nothing is in flight'
 
@@ -145,6 +149,7 @@ export function composerState(
     return { send: { enabled: false, reason: REASON_CHAT_NO_CLAUDE }, interrupt: { enabled: false, reason: REASON_CHAT_IDLE } }
   }
   const streaming = snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
+  if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: REASON_CHAT_PENDING }, interrupt: { enabled: true } }
   if (streaming) return { send: { enabled: false, reason: REASON_CHAT_STREAMING }, interrupt: { enabled: true } }
   return { send: { enabled: true }, interrupt: { enabled: false, reason: REASON_CHAT_IDLE } }
 }

@@ -20,5 +20,7 @@ module.exports = {
   /* M74. The TUI argv builder, for the resume rule. */
   agentArgs: require('../src/main/agent-args'),
   /* M75. The attachment resolver: node:fs over a path, pure over data. */
-  attachments: require('../src/main/attachments')
+  attachments: require('../src/main/attachments'),
+  /* M76. The approval tracker and the badge union: pure over an injected sink. */
+  approvals: require('../src/main/approvals')
 }

@@ -7,7 +7,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat } from './chat-store'
-import { chatRows, chatStateInput, composerState, toolArgument, type ChatRow } from './chat-model'
+import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
@@ -143,7 +143,10 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     const el = bodyRef.current
     if (!el) return
     if (stickRef.current) el.scrollTop = el.scrollHeight
-  }, [rows])
+    // The pending count is a dependency too: the question block pinned under
+    // the well shrinks it, and without this the newest line hid behind the
+    // question the moment it mattered (M76's critic).
+  }, [rows, snapshot?.pending.length])
   const onScroll = (): void => {
     const el = bodyRef.current
     if (!el) return
@@ -299,7 +302,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     void window.canvas.agentSession.interrupt(id)
   }
   const answer = (requestId: string, allow: boolean): void => {
-    void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: 'denied from the canvas' } })
+    void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE } })
   }
 
   const alive = snapshot !== null && snapshot.pid !== undefined && snapshot.status !== 'exited' && snapshot.status !== 'disposed'
@@ -345,6 +348,15 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       rootAttrs={{ 'data-chat-status': snapshot?.status ?? 'none', 'data-chat-pending': String(snapshot?.pending.length ?? 0), 'data-chat-turns': String(turnCount) }}
       title={title}
       state={state}
+      // M76. The question at the SUMMARY tier too: the tool and its argument
+      // in mono, Allow and Deny. The block tier is the tone alone — a
+      // control smaller than a word is not a control.
+      far={snapshot !== null && snapshot.pending.length > 0 ? (() => { const p = snapshot.pending[0]!; return (
+        <div className="chat__far-approval" data-chat-far-approval={p.requestId} onMouseDown={(e) => e.stopPropagation()}>
+          <span className="chat__far-question"><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
+          <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow ${p.toolName}`} {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+          <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title={`Deny ${p.toolName}`} {...shellControl(() => answer(p.requestId, false))}>Deny</button>
+        </div>) })() : undefined}
       onSelect={props.onSelect}
       onBeginDrag={props.onBeginDrag}
       onBeginLink={props.onBeginLink}
@@ -406,17 +418,26 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               claude exited{typeof snapshot.exitCode === 'number' ? ` with ${snapshot.exitCode}` : ''}{snapshot.exitSignal ? ` (${snapshot.exitSignal})` : ''} — the next message resumes the conversation
             </p>
           )}
-          {snapshot?.pending.map((p) => (
+        </div>
+        {/* M76. The question lives BETWEEN the well and the composer, never
+            inside the scroll host: a block at the bottom of a long transcript
+            was scrolled out of view the moment it mattered (the approval
+            scene). */}
+        {snapshot !== null && snapshot.pending.length > 0 && <div className="chat__questions" data-chat-questions>
+          {snapshot.pending.map((p) => (
             <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>
-              <span className="chat__permission-title">claude asks to run <span className="chat__tool-name">{p.toolName}</span></span>
-              <pre className="chat__permission-input">{shortInput(p.input)}</pre>
+              {/* The transcript's own tool-row idiom (M76's critic): a caps
+                  margin label, the tool and its argument in mono — the same
+                  line the popover and the pane show — then the two verbs. */}
+              <span className="chat__role">asks</span>
+              <span className="chat__permission-line"><span className="chat__tool-name">{p.toolName}</span> · {shortInput(p.input)}</span>
               <div className="chat__permission-verbs">
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
                 <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title="Deny this tool call" {...shellControl(() => answer(p.requestId, false))}>Deny</button>
               </div>
             </div>
           ))}
-        </div>
+        </div>}
         <div className="chat__composer" data-chat-composer>
           {chat.refusal !== null ? (
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>

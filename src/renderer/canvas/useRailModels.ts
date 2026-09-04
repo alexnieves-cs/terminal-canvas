@@ -16,8 +16,9 @@ import type { PaletteController } from '@renderer/palette/usePalette'
 import type { WorkspaceRow } from '@shared/ipc-contract'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
 import {
-  attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature
+  attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature, type PendingApproval
 } from '../shell/rail-sections'
+import { useApprovals } from '@renderer/chat/chat-store'
 import {
   buildInspectorModel, inspectorSignature, isRestartable
 } from '../shell/inspector-fields'
@@ -242,7 +243,9 @@ export function useRailModels(deps: RailModelsDeps) {
    * an orphan (agent state survives a panel's closure by design) and must not
    * become a row that navigates nowhere.
    */
-  const attentionBuilt = buildAttentionRows(waitingIds, railBuilt)
+  // M76. The pending requests ride the rows so the popover can answer them.
+  const pendingApprovals = useApprovals()
+  const attentionBuilt = buildAttentionRows(waitingIds, railBuilt, pendingApprovals)
   const attentionSig = attentionSignature(attentionBuilt)
   const railAttention = useMemo(() => attentionBuilt, [attentionSig])
 
@@ -316,7 +319,9 @@ export function useRailModels(deps: RailModelsDeps) {
             usage: useMeta ? meta.usage : snap.usage,
             costUsd: useMeta ? meta.costUsd : snap.costUsd,
             model: snap.model ?? selectedChat.turns.find((t) => t.model !== undefined)?.model,
-            turns: useMeta ? meta.turns : snap.turns
+            turns: useMeta ? meta.turns : snap.turns,
+            // M76. The oldest pending request, for the pane's Allow and Deny.
+            ...((): { approval?: PendingApproval } => { const a = pendingApprovals.find((x) => x.id === selectedPanel.rect.id); return a === undefined ? {} : { approval: a } })()
           }
         })()
       )

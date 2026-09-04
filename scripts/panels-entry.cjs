@@ -168,6 +168,8 @@ module.exports = {
   mergePrompts: require('../src/main/prompts').mergePrompts,
   readProjectPrompts: require('../src/main/prompts').readProjectPrompts,
   expandTilde: require('../src/main/pty-manager').expandTilde,
+  /* M76. The approval tracker: main's decision that a pending permission is needs-you, for both harnesses. */
+  createApprovalTracker: require('../src/main/approvals').createApprovalTracker,
   /* M65. The sheet's resolver, so the harness runs main's own function. */
   resolveSpawnRequest: require('../src/main/spawn-request').resolveSpawnRequest,
   resolveCwd: require('../src/main/pty-manager').resolveCwd,

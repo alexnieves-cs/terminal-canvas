@@ -2286,6 +2286,11 @@ const session = (id, over = {}) => ({
       c && c.send.enabled === false && /PATH/.test(c.send.reason) &&
       d && d.send.enabled === true && e && e.send.enabled === true,
     JSON.stringify({ a, b, c, d, e }))
+  // M76 — approve.3. A question open disables Send by a reason that names the
+  // fix (the verbs above), distinct from the streaming reason; Interrupt stays.
+  const f = composer(snap('streaming', [{ requestId: 'r', toolName: 'Bash', input: {} }]), true)
+  ok('approve.3 the composer with a question open disables Send naming allow/deny, distinct from the streaming reason, and keeps Interrupt',
+    f && f.send.enabled === false && /allow or deny/.test(f.send.reason) && f.send.reason !== a.send.reason && f.interrupt.enabled === true, JSON.stringify(f))
   const input = typeof R.chatStateInput === 'function' ? R.chatStateInput : () => null
   const i1 = input(snap('streaming', [{ requestId: 'r', toolName: 'Bash', input: {} }]))
   const i2 = input(null)
@@ -2332,6 +2337,38 @@ const session = (id, over = {}) => ({
       chatEmpty && chatEmpty.enabled === false && /send a message/.test(chatEmpty.reason) &&
       review === undefined,
     JSON.stringify({ claudeExited, claudeDormant, claudeLive, shell, chatRest, chatBusy, chatEmpty, review }))
+}
+
+// M76 — approve.1 / approve.2. THE QUESTION ON THE ROW AND IN THE PANE.
+//     approve.1: an attention row for a chat with a pending request carries
+//     the OLDEST request (tool and argument) so the popover can answer it; a
+//     terminal's row carries none — nothing in this app can answer a question
+//     typed into a PTY — and the signature moves when the request changes.
+//     approve.2: the inspector model carries the chat's pending request, and
+//     none when nothing pends (the component disables by name from that).
+{
+  const approvals = [
+    { id: 'c1', requestId: 'r2', toolName: 'Edit', argument: 'b.ts' },
+    { id: 'c1', requestId: 'r1', toolName: 'Bash', argument: 'ls' }
+  ]
+  const chatRow = { id: 'c1', label: 'api (chat)', tail: 'x', dormant: false }
+  const rows = R.buildAttentionRows(['n1', 'c1'], [railRowFor('n1', panel('n1'), running(1, '/bin/zsh')), chatRow], approvals)
+  const plain = R.buildAttentionRows(['n1', 'c1'], [railRowFor('n1', panel('n1'), running(1, '/bin/zsh')), chatRow])
+  ok('approve.1 a chat attention row carries its first pending request (tool, argument, id); a terminal row carries none; the third argument is optional; the signature moves on the request',
+    rows.length === 2 && rows[0].approval === undefined && rows[1].approval !== undefined && rows[1].approval.requestId === 'r2' && rows[1].approval.toolName === 'Edit' && rows[1].approval.argument === 'b.ts' &&
+      plain.length === 2 && plain[1].approval === undefined &&
+      R.attentionSignature(rows) !== R.attentionSignature(plain),
+    JSON.stringify({ rows, plain }))
+
+  const chat = (over = {}) => ({ kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/r', sessionId: 'u' }, ...over })
+  const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  const pending = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { state: { status: 'ready', pending: 1, hasHistory: true }, usage, turns: 2, approval: { requestId: 'r1', toolName: 'Bash', argument: 'ls' } })
+  const rest = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { state: { status: 'ready', pending: 0, hasHistory: true }, usage, turns: 2 })
+  const terminal = R.buildInspectorModel({ kind: 'terminal', rect: { id: 't1', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 't1', cwd: '~', args: [] } }, { kind: 'idle' })
+  ok('approve.2 the inspector model carries a chat\'s pending request and its state word is needs you; none at rest; a terminal has no approval field',
+    pending.approval !== undefined && pending.approval.toolName === 'Bash' && pending.approval.argument === 'ls' && pending.approval.requestId === 'r1' && R.panelState(pending.state).word === 'needs you' &&
+      rest.approval === undefined && rest.kind === 'chat' && !('approval' in terminal),
+    JSON.stringify({ pending: pending.approval, state: pending.state, rest: rest.approval, terminal: 'approval' in terminal }))
 }
 
 // M75 — composer.1–.4. THE COMPOSER'S PURE MODEL.

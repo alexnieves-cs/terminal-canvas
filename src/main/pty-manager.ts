@@ -87,8 +87,12 @@ export interface ScrollbackSink {
  * changes constantly and a captured value would freeze at construction.
  */
 export interface AttentionSink {
-  /** A panel newly entered wants-you while the window was NOT focused. */
-  notify(panelId: PanelId, label: string, count: number): void
+  /**
+   * A panel newly entered wants-you while the window was NOT focused. `body`
+   * is M76's: a chat's notification names the tool in its title and the
+   * panel in its body; absent, the body is the M43 sentence.
+   */
+  notify(panelId: PanelId, label: string, count: number, body?: string): void
   /** The dock badge: the number waiting, on every change. */
   badge(count: number): void
   /** The system alert sound, on a panel entering wants-you. */

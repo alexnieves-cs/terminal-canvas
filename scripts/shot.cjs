@@ -122,6 +122,20 @@ const SCENES = [
       await sleep(700)
       await kit.shot('composer')
     } },
+  { name: 'approval', intent: 'An agent asking permission, seen from afar: the chat card reads `needs you` in amber with the question (tool and argument in mono) and Allow / Deny; the dock badge counts one; the attention popover\'s row for it names the tool on its Allow verb with the argument beneath, while a terminal\'s row (if any) says only jump; the context pane\'s action bar leads with Allow Bash and Deny. The same question, answerable in three places, one vocabulary.',
+    run: async (kit) => {
+      await kit.goTo('api (chat)')
+      await kit.js(`(() => { const ta = document.querySelector('.panel[data-panel-id="chat"] [data-chat-input]'); if (!ta) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(ta, 'run the tests'); ta.dispatchEvent(new Event('input', { bubbles: true }))
+        const b = document.querySelector('.panel[data-panel-id="chat"] [data-chat-send]'); if (!b || b.disabled) return 'send disabled'; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await sleep(600)
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await kit.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(300)
+      await kit.js(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await sleep(500)
+      await kit.shot('approval')
+    } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
     run: async (k) => { await k.goTo('claude — api (2)'); await k.shot('subagents') } },
   { name: 'palette', intent: 'The command palette at rest (Cmd+K) over the canvas: sections, rows, disabled rows with their reasons, and the footer.',
@@ -281,11 +295,35 @@ app.whenReady().then(async () => {
   // From the bundled kit (panels-entry.cjs), never a direct require of a
   // TypeScript module: Electron's main loader cannot read one, and the
   // throw lands at module scope where it reads as a hang.
-  const { AgentSessionManager, createAgentTranscriptLog } = require(ENTRY_OUT)
+  const { AgentSessionManager, createAgentTranscriptLog, createApprovalTracker, IPC_EVENTS: SHOT_EVENTS } = require(ENTRY_OUT)
   const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc-shot-chat-')), 'agent-transcripts') })
+  // M76. The runner answers a user line with a permission request and never
+  // finishes the turn: the `approval` scene is the question, waiting.
   const agentSessions = new AgentSessionManager({
-    runner: () => ({ pid: 1, write() {}, onData() {}, onExit() {}, kill() {} }),
+    runner: () => {
+      const cbs = []
+      return {
+        pid: 1,
+        write(line) {
+          let parsed = null
+          try { parsed = JSON.parse(line) } catch { parsed = null }
+          if (parsed && parsed.type === 'user') {
+            setTimeout(() => { for (const cb of cbs) cb(JSON.stringify({ type: 'control_request', request_id: 'req-shot-1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'npm test -- --watch=false', description: 'run the tests' }, tool_use_id: 'tu-1' } }) + '\n') }, 30)
+          }
+        },
+        onData(cb) { cbs.push(cb) }, onExit() {}, kill() {}
+      }
+    },
     command: '/fake/claude', env: {}, newSessionId: () => 'shot-session'
+  })
+  const approvalTracker = createApprovalTracker({
+    sink: { notify() {}, badge() {}, beep() {}, windowFocused: () => true, notifyEnabled: () => false, soundEnabled: () => false },
+    emitState: (panelId, state) => { if (!wc.isDestroyed()) wc.send(SHOT_EVENTS.AGENT_STATE, { panelId, state }) },
+    label: () => 'api'
+  })
+  agentSessions.subscribe((event) => {
+    approvalTracker.apply(event)
+    if (!wc.isDestroyed()) wc.send(SHOT_EVENTS.AGENT_EVENT, event)
   })
   const seedChatTranscript = (panelId) => {
     const at = Date.now() - 3600000

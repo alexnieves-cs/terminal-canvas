@@ -47,6 +47,8 @@ export interface InspectorProps {
   onRestart: (id: string) => void
   /** M74. The panel's front-end verb (open as chat / open in terminal). */
   onFrontEnd: (id: string) => void
+  /** M76. Answer the chat's pending permission request. */
+  onAnswer: (id: string, requestId: string, allow: boolean) => void
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -100,7 +102,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onOpenReview,
+  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -126,6 +128,7 @@ function InspectorImpl({
             onSavePreset={onSavePreset}
             onRestart={onRestart}
             onFrontEnd={onFrontEnd}
+            onAnswer={onAnswer}
             onOpenReview={onOpenReview}
             onLink={onLink}
             onRemoveLink={onRemoveLink}
@@ -267,7 +270,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   tab, onSelectTab, automations,
-  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onOpenReview,
+  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults
 }: {
   tab: ContextTab
@@ -282,6 +285,7 @@ function InspectorPanel({
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
   onFrontEnd: (id: string) => void
+  onAnswer: (id: string, requestId: string, allow: boolean) => void
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -638,8 +642,27 @@ function InspectorPanel({
           verb stays VISIBLE and disabled-with-a-reason where it does not
           apply — a control that vanishes reads as a feature never built. */}
       <div className="inspector__actions context__actions">
+        {/* M76. On a chat, Allow and Deny lead — the only two verbs whose delay
+            costs something — enabled while a request is pending and disabled
+            by name otherwise. Present only on the chat kind, the rule the
+            front-end verb set. */}
+        {model.kind === 'chat' && (['allow', 'deny'] as const).map((verb) => (
+          <button
+            key={verb}
+            type="button"
+            className="inspector__action"
+            data-inspector-action={verb}
+            disabled={model.approval === undefined}
+            title={model.approval === undefined
+              ? 'nothing is waiting for an answer'
+              : `${verb === 'allow' ? 'Allow' : 'Deny'} ${model.approval.toolName} — ${model.approval.argument}`}
+            {...shellControl(() => { if (model.approval !== undefined) onAnswer(model.id, model.approval.requestId, verb === 'allow') })}
+          >
+            {verb === 'allow' ? (model.approval === undefined ? 'Allow' : `Allow ${model.approval.toolName}`) : 'Deny'}
+          </button>
+        ))}
         {/*
-          FIRST, and DISABLED rather than absent when the panel never started:
+          FIRST among the rest, and DISABLED rather than absent when the panel never started:
           a control that vanished would read as a feature that was never
           built, the rule verify:palette 31 states for rows.
 
