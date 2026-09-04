@@ -910,6 +910,8 @@ app.whenReady().then(async () => {
   const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels chat ')), 'agent-transcripts') })
   const agentSessions = new AgentSessionManager({
     runner: chatRunner, command: '/fake/claude', env: { PATH: '/fake' },
+    // M82. The canvas's ceilings, read live from the same store main reads.
+    limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0 }),
     newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16,
     // M74. The fenced answer to "has the CLI written this session": the
     // front-end fixture store, so an imported chat's first send resumes.
@@ -943,7 +945,13 @@ app.whenReady().then(async () => {
     send: (id, text, attachments = []) => {
       const images = []
       for (const a of attachments) { const r = resolveAttachment(a); if (r.kind === 'refused') return { refused: r.reason }; images.push({ mediaType: r.mediaType, base64: r.base64, name: r.name }) }
-      return agentSessions.send(id, text, images)
+      const answer = agentSessions.send(id, text, images)
+      // M82. Main's own mapping: the ceiling refuses by name with the fix.
+      if (answer === 'refused-budget') {
+        const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+        return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
+      }
+      return answer
     },
     clipboardImage: () => null,
     interrupt: (id) => agentSessions.interrupt(id),
@@ -15330,6 +15338,62 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(aErr && aErr.message || aErr) + ' | renderer: ' + (aLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onA)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M82 — budget.1. THE CEILING, END TO END. With the budget set below the
+    //     canvas's reported spend, a send from a chat is REFUSED in the
+    //     composer with the ceiling and the fix named, and nothing is added to
+    //     the transcript; raising the ceiling lets the same send through.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['budget.1 a send over the canvas budget is refused in the composer with the ceiling and the fix named, adds no turn, and goes through once the ceiling is raised']
+      const bLog = []
+      const onB = (_e, level, m) => { if (level >= 2) bLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onB)
+      try {
+        const bDir = mkdtempSync(join(tmpdir(), 'tc panels budget-'))
+        layoutStore.addPreset({ id: 'budget-claude', name: 'Claude (budget)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        flushLayoutStore()
+        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reB
+        await settle()
+        await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(bDir)})`)
+        const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 8000)
+        const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
+        const sendText = (text) => waitUntil(() => wc.executeJavaScript(`(() => {
+          const ta = ${sel('[data-chat-input]')}; if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, ${JSON.stringify(text)}); ta.dispatchEvent(new Event('input', { bubbles: true }))
+          const b = ${sel('[data-chat-send]')}; if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 8000)
+        await sendText('first')
+        await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 10000)
+        const turnsBefore = await wc.executeJavaScript(`${sel('')}?.getAttribute('data-chat-turns') ?? null`)
+        await wc.executeJavaScript(`window.canvas.settings.set('agents.budgetUsd', 0.0001)`)
+        await settle()
+        const sentOver = await sendText('over the ceiling')
+        // The COMPOSER's own refusal (M75's `data-chat-send-refusal`); the
+        // store's `data-chat-refusal` is the create's, a different fact.
+        const refusal = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-send-refusal]')}?.textContent ?? false`), 6000)
+        const turnsAfter = await wc.executeJavaScript(`${sel('')}?.getAttribute('data-chat-turns') ?? null`)
+        await wc.executeJavaScript(`window.canvas.settings.set('agents.budgetUsd', 0)`)
+        await settle()
+        const sentAgain = await sendText('after raising it')
+        const throughAgain = await waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-send-refusal]')} === null`), 6000)
+        ok(IDS[0],
+          typeof chatId === 'string' && turnsBefore === '1' && sentOver === true &&
+            typeof refusal === 'string' && /budget for this canvas/.test(refusal) && /raise it in settings/.test(refusal) &&
+            turnsAfter === turnsBefore && sentAgain === true && throughAgain === true,
+          JSON.stringify({ chatId, turnsBefore, sentOver, refusal, turnsAfter, sentAgain, throughAgain, log: bLog.slice(-3) }))
+        await clickPanelClose(wc, chatId)
+        await settle()
+        try { rmSync(bDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (bErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr) + ' | renderer: ' + (bLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onB)
       }
     }
 

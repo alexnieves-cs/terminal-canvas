@@ -1035,6 +1035,60 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ withPrompt, resumed, without, supArgs, plainArgs: plainSpawns[0]?.args }))
   }
 
+  // M82 — budget.1 / budget.2. TWO CEILINGS THE CANVAS ENFORCES. budget.1:
+  //      a ceiling of 0 refuses nothing (every pre-M82 fixture); a send over
+  //      the budget is REFUSED and stores no turn (a refused message is not a
+  //      turn); a send under a reached concurrency ceiling is QUEUED with its
+  //      own reason even though this session is free. budget.2: crossing the
+  //      budget INTERRUPTS every turn in flight (never kills) and says so
+  //      ONCE per crossing, not once per result.
+  {
+    const limits = { maxConcurrent: 0, budgetUsd: 0 }
+    const { manager, spawns, events } = makeManager({ limits: () => limits })
+    manager.create({ id: 'b1', cwd: '/r' })
+    manager.create({ id: 'b2', cwd: '/r' })
+    const freely = manager.send('b1', 'one')
+    // A ceiling of one, with b1's turn in flight: b2 queues for CONCURRENCY.
+    limits.maxConcurrent = 1
+    const queued = manager.send('b2', 'two')
+    const queuedEvent = events.filter((e) => e.type === 'queued').pop()
+    const b2Turns = manager.transcript('b2').filter((t) => t.role === 'user').length
+    // Over budget: refused, and nothing stored.
+    limits.maxConcurrent = 0
+    limits.budgetUsd = 0.01
+    const proc1 = spawns[0].proc
+    proc1.emitLines([JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.5, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(5)
+    const refused = manager.send('b2', 'three')
+    const storedAfterRefusal = manager.transcript('b2').filter((t) => t.role === 'user').length
+    ok('budget.1 a ceiling of 0 refuses nothing; a send past a reached concurrency ceiling queues with its own reason; a send over the budget is refused and stores no turn',
+      freely === 'sent' && queued === 'queued' && queuedEvent && queuedEvent.reason === 'concurrency' && b2Turns === 1 &&
+        refused === 'refused-budget' && storedAfterRefusal === b2Turns,
+      JSON.stringify({ freely, queued, queuedEvent, b2Turns, refused, storedAfterRefusal }))
+
+    const l2 = { maxConcurrent: 0, budgetUsd: 1 }
+    const two = makeManager({ limits: () => l2 })
+    two.manager.create({ id: 'c1', cwd: '/r' })
+    two.manager.create({ id: 'c2', cwd: '/r' })
+    two.manager.send('c1', 'x')
+    two.manager.send('c2', 'y')
+    const before = two.spawns.map((s) => s.proc.killed)
+    // c1's result carries the whole budget: both turns in flight are interrupted.
+    two.spawns[0].proc.emitLines([JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 2, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(10)
+    const budgetEvents = two.events.filter((e) => e.type === 'budget')
+    const interrupts = two.spawns.map((s) => s.proc.stdin.filter((l) => l.includes('interrupt')).length)
+    // A second result must not say it again.
+    two.spawns[1].proc.emitLines([JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.1, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(10)
+    const afterSecond = two.events.filter((e) => e.type === 'budget').length
+    ok('budget.2 crossing the budget interrupts every turn in flight and never kills, and says so once per crossing rather than once per result',
+      budgetEvents.length === 1 && typeof budgetEvents[0].spent === 'number' && budgetEvents[0].limit === 1 &&
+        interrupts.some((n) => n > 0) && two.spawns.every((s) => s.proc.killed === 0) && before.every((k) => k === 0) &&
+        afterSecond === 1,
+      JSON.stringify({ budgetEvents, interrupts, killed: two.spawns.map((s) => s.proc.killed), afterSecond }))
+  }
+
   // quit — the optional agents dependency
   {
     const order = []

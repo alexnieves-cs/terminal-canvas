@@ -474,7 +474,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             }
           })}
           {snapshot !== null && snapshot.queued > 0 && (
-            <p className="pf__note chat__queued" data-chat-queued>{snapshot.queued} message{snapshot.queued === 1 ? '' : 's'} waiting for this turn to end</p>
+            <p className="pf__note chat__queued" data-chat-queued>{snapshot.queued} message{snapshot.queued === 1 ? '' : 's'} waiting {snapshot.queuedReason === 'concurrency' ? 'for a free agent — this canvas has a ceiling on how many work at once' : 'for this turn to end'}</p>
           )}
           {snapshot?.status === 'exited' && (
             <p className="pf__note chat__exited" data-chat-exited>

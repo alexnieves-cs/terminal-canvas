@@ -2000,6 +2000,20 @@ const handoffLayout = (panels) => L.parseLayout(file({
     JSON.stringify({ ab, bc, cd, warnings: r.warnings }))
 }
 
+// M82 — budget.1. The two ceilings are settings: numbers, defaulting to 0
+//      (no ceiling), in the Agents category, and resolvable through the same
+//      door every other setting uses.
+{
+  const defs = L.SETTINGS ?? []
+  const maxc = defs.find((d) => d.id === 'agents.maxConcurrent')
+  const budget = defs.find((d) => d.id === 'agents.budgetUsd')
+  ok('budget.1 agents.maxConcurrent and agents.budgetUsd are number settings defaulting to 0 — no ceiling — in the Agents category, each naming what 0 means',
+    maxc && maxc.type === 'number' && maxc.default === 0 && /0 is no ceiling/.test(maxc.description) &&
+      budget && budget.type === 'number' && budget.default === 0 && /0 is no ceiling/.test(budget.description) &&
+      maxc.category === budget.category,
+    JSON.stringify({ maxc, budget }))
+}
+
 // M80 — template.1. THE TEMPLATE RECORD, top level beside presets and
 //      prompts: absent is every pre-M80 file (no warning); a template that is
 //      not an object, has no usable id or name, or has no surviving node is

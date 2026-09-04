@@ -3315,3 +3315,21 @@ The sheet's option is the affordance; `beginNewChat` refuses a second one by nam
 that lives only in a control's `disabled` attribute is bypassed by anything that sets the
 value another way — the shot harness does exactly that, deliberately. `verify:panels
 supervisor.1` asserts both the disabled option in the DOM and the create's refusal.
+
+**A refused send stores NOTHING (`agent-session.ts`'s budget arm).** Every other send stores
+its user turn before the CLI has echoed anything, because the transcript is what the panel
+renders. A message the ceiling refused was never received by an agent, and a transcript
+holding it would show the user their own words in a conversation that never had them — the
+same confident wrong answer `costOf`'s `undefined` refuses to give. `verify:agent-session
+budget.1` asserts the turn count is unchanged across a refusal.
+
+**A budget crossing INTERRUPTS, and latches.** A kill loses the turn; an interrupt stops it
+and leaves what it produced (M71's own distinction). The latch is what makes one crossing one
+stop: `enforceBudget` runs on every result, and without it a canvas over budget would
+interrupt every session again on each result and say so each time. It clears when the ceiling
+is raised above the spend, which is what "until raised" means. `verify:agent-session
+budget.2` drives two sessions and a second result.
+
+**A ceiling of 0 is no ceiling, and that is the DEFAULT.** Every fixture that constructs the
+manager without `limits`, and every canvas that has never opened the settings page, behaves
+exactly as before M82 — the arms are unreachable rather than merely lenient.

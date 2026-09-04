@@ -60,6 +60,8 @@ export interface AgentSessionSnapshot {
   costUsd?: number
   pending: PendingPermission[]
   queued: number
+  /** M82. Why the last message queued: this session's turn, or the canvas's ceiling. */
+  queuedReason?: 'in-flight' | 'concurrency'
   counters: AgentSessionCounters
 }
 
@@ -74,7 +76,10 @@ export type AgentSessionEvent = { id: string } & (
   | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
   | { type: 'turn'; turn: TranscriptTurn }
   | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' }
-  | { type: 'queued'; text: string }
+  /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
+  | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
+  /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */
+  | { type: 'budget'; spent: number; limit: number; interrupted: number }
   /** A queued message written after the result that freed the turn. */
   | { type: 'dequeued'; text: string }
   | { type: 'queue-dropped'; count: number }
@@ -82,7 +87,12 @@ export type AgentSessionEvent = { id: string } & (
   | { type: 'permission-dropped'; requestId: string }
 )
 
-export type SendResult = 'sent' | 'queued' | 'no-session'
+/**
+ * M82. `refused-budget` is a fourth answer, not an error: the canvas has
+ * reached the ceiling its owner set, and the message was NOT stored — a
+ * refused message is not a turn.
+ */
+export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget'
 
 /** M75. What the composer attaches: a dropped image's path (main reads it) or pasted bytes. */
 export type ChatAttachment =

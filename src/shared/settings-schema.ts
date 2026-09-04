@@ -133,6 +133,30 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // M82. Two ceilings the canvas enforces. 0 is no ceiling for both, which
+    // is every canvas that has never opened this page.
+    id: 'agents.maxConcurrent',
+    label: 'Agents working at once',
+    description: 'how many agents may work at once — a send past this queues with its reason; 0 is no ceiling',
+    keywords: ['concurrency', 'limit', 'ceiling', 'parallel', 'queue', 'at once', 'budget'],
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 32,
+    category: AGENT_CATEGORY
+  },
+  {
+    id: 'agents.budgetUsd',
+    label: 'Budget for this canvas',
+    description: 'stop this canvas\'s agents when their reported cost reaches this many dollars — a send past this is refused by name; 0 is no ceiling',
+    keywords: ['budget', 'cost', 'dollars', 'spend', 'ceiling', 'limit', 'money'],
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 1000,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.bell',
     label: 'Detect the terminal bell',
     description: 'treat a bell as “this panel wants you” — your CLI must be set to ring it; Claude Code’s notification channel defaults to auto',

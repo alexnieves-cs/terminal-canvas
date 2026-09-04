@@ -265,7 +265,9 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       return
     case 'queued':
       if (!snap) return
-      update(event.id, { ...prev, snapshot: { ...snap, queued: snap.queued + 1 } })
+      // M82. The REASON rides the snapshot so the panel can say which queue it
+      // is in: this session's own turn, or the canvas's ceiling.
+      update(event.id, { ...prev, snapshot: { ...snap, queued: snap.queued + 1, ...(event.reason === undefined ? {} : { queuedReason: event.reason }) } })
       return
     case 'dequeued':
       if (!snap) return

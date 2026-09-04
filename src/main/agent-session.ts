@@ -72,6 +72,11 @@ export type {
 } from '@shared/agent-session'
 
 export interface AgentSessionDeps {
+  /**
+   * M82. The canvas's ceilings, read LIVE on every send and every result.
+   * `0` means no ceiling — which is every caller that does not pass this.
+   */
+  limits?: () => { maxConcurrent: number; budgetUsd: number }
   runner: AgentRunner
   /** The resolved path of the `claude` binary. */
   command: string
@@ -127,6 +132,9 @@ const INTERRUPT_GRACE_MS = 5000
 const COALESCE_MS = 16
 
 export class AgentSessionManager {
+  /** M82. Latched at a crossing so one crossing is one stop; cleared when the ceiling is raised. */
+  private budgetStopped = false
+
   private readonly sessions = new Map<string, Session>()
   private readonly listeners = new Set<(event: AgentSessionEvent) => void>()
   private readonly now: () => number
@@ -183,6 +191,26 @@ export class AgentSessionManager {
   send(id: string, text: string, images: readonly (OutgoingImage & { name?: string })[] = []): SendResult {
     const session = this.sessions.get(id)
     if (!session) return 'no-session'
+    // M82. The canvas's own ceilings, read LIVE (a setting changed while a
+    // panel is open must take effect on the next send, not the next launch).
+    const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0 }
+    if (limits.budgetUsd > 0 && this.spent() >= limits.budgetUsd) {
+      // Nothing stored: a refused message is not a turn, and a transcript that
+      // held it would show the user a message the agent never received.
+      return 'refused-budget'
+    }
+    const busy = [...this.sessions.values()].filter((s) => s.inFlight).length
+    if (limits.maxConcurrent > 0 && !session.inFlight && busy >= limits.maxConcurrent) {
+      this.storeTurn(session, {
+        id: `u-${++session.userTurns}`,
+        role: 'user',
+        blocks: [{ type: 'text', text }, ...images.map((img) => ({ type: 'image' as const, mediaType: img.mediaType, size: Buffer.byteLength(img.base64, 'base64') }))],
+        at: this.now()
+      })
+      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
+      this.emit({ id, type: 'queued', text, reason: 'concurrency' })
+      return 'queued'
+    }
     // On the transcript the moment it is sent, before the CLI has echoed
     // anything — the echo (`isReplay`) is deliberately NOT stored, or every
     // message would appear twice.
@@ -197,7 +225,7 @@ export class AgentSessionManager {
     })
     if (session.inFlight) {
       session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
-      this.emit({ id, type: 'queued', text })
+      this.emit({ id, type: 'queued', text, reason: 'in-flight' })
       return 'queued'
     }
     this.ensureProcess(session)
@@ -391,6 +419,10 @@ export class AgentSessionManager {
         session.turnCount += 1
         if (event.usage) session.usage = addTotals(session.usage, event.usage)
         if (event.costUsd !== undefined) session.costUsd = event.costUsd
+        // M82. A result is where the canvas's spend changes, so it is where a
+        // crossing is noticed — once, and by INTERRUPTING (never killing): a
+        // killed agent loses its turn, and the budget is a stop, not a loss.
+        this.enforceBudget()
         if (session.proc && session.status !== 'starting') this.setStatus(session, 'ready')
         this.emit({ id, ...event, interrupted })
         const next = session.queue.shift()
@@ -512,6 +544,33 @@ export class AgentSessionManager {
 
   private deliver(event: AgentSessionEvent): void {
     for (const cb of this.listeners) cb(event)
+  }
+
+  /** M82. The canvas's reported spend: the CLI's own cumulative figures, summed. */
+  private spent(): number {
+    let total = 0
+    for (const s of this.sessions.values()) total += s.costUsd ?? 0
+    return total
+  }
+
+  /**
+   * M82. One crossing, one stop. `budgetStopped` latches so a second result
+   * does not interrupt again (and does not say it again); it is cleared when
+   * the ceiling is raised above the spend, which is what "until raised"
+   * means.
+   */
+  private enforceBudget(): void {
+    const limit = this.deps.limits?.().budgetUsd ?? 0
+    const spent = this.spent()
+    if (limit <= 0 || spent < limit) { this.budgetStopped = false; return }
+    if (this.budgetStopped) return
+    this.budgetStopped = true
+    let interrupted = 0
+    for (const s of this.sessions.values()) {
+      if (!s.inFlight) continue
+      if (this.interrupt(s.id)) interrupted += 1
+    }
+    for (const s of this.sessions.values()) { this.emit({ id: s.id, type: 'budget', spent, limit, interrupted }); break }
   }
 
   private snapshot(session: Session): AgentSessionSnapshot {
