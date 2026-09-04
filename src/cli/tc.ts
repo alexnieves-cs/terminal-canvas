@@ -7,6 +7,7 @@
  *   tc list | tc focus <id> | tc ping | tc status
  *   tc memory list [--root <dir>] [--limit <n>]
  *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir>]
+ *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
  *
  * Exit 0 on ok, 1 on a refusal (the app answered no), 2 when nothing is
  * listening — three answers, because "the app said no" and "there is no
@@ -28,6 +29,10 @@ export const USAGE = [
   '       tc status',
   '       tc memory list [--root <dir>] [--limit <n>]',
   '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir>]',
+  '       tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]',
+  '',
+  'api exits 1 when the service answered 4xx or 5xx, so a script can test $? — the reply',
+  'carries the status and body either way.',
   '',
   'A memory is kept per repository. --root defaults to the panel\'s own directory',
   '(TC_PANEL_CWD, set inside every panel), resolved to its repository by the app.',
@@ -98,6 +103,36 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       }
       return { kind: 'ok', line: JSON.stringify(fields) }
     }
+    // M87. The broker. Four positional arguments and an optional body, no
+    // flags: an agent types this from memory, and a shape with nothing to
+    // misspell is the one it gets right. The panel rides from TC_PANEL_ID,
+    // set inside every panel, so the audit row names who asked.
+    case 'api': {
+      // `--panel <id>` anywhere in the arguments; the rest are positional.
+      const positional: string[] = []
+      let panelFlag: string | undefined
+      for (let i = 0; i < rest.length; i += 1) {
+        const arg = rest[i]!
+        if (arg === '--panel') {
+          const value = rest[i + 1]
+          if (value === undefined || value === '') return { kind: 'usage', error: '--panel needs a panel id' }
+          panelFlag = value; i += 1; continue
+        }
+        positional.push(arg)
+      }
+      const [service, method, path, body, ...extra] = positional
+      if (service === undefined || method === undefined || path === undefined) return { kind: 'usage', error: 'api needs a service, a method and a path' }
+      if (extra.length > 0) return { kind: 'usage', error: `unexpected argument ${extra[0]}` }
+      // A body must already be JSON: the services take nothing else, and a
+      // malformed one is a usage error here rather than a 400 from the wire
+      // that reads as the service's fault.
+      if (body !== undefined) { try { JSON.parse(body) } catch { return { kind: 'usage', error: 'the body must be JSON' } } }
+      const fields: Record<string, string> = { verb: 'api', service, method: method.toUpperCase(), path }
+      if (body !== undefined) fields.body = body
+      const panelId = panelFlag ?? env['TC_PANEL_ID']
+      if (panelId !== undefined && panelId !== '') fields.panelId = panelId
+      return { kind: 'ok', line: JSON.stringify(fields) }
+    }
     case 'list':
     case 'status':
     case 'ping':
@@ -135,8 +170,12 @@ export async function runCli(
   for (const path of candidates) {
     try {
       const raw = await connect(path, `${built.line}\n`)
-      const reply = JSON.parse(raw.trim()) as { ok?: boolean }
+      const reply = JSON.parse(raw.trim()) as { ok?: boolean; status?: number }
       io.stdout(`${JSON.stringify(reply)}\n`)
+      // A served 4xx/5xx is `ok: true` on the wire (the broker did its job) and
+      // exit 1 here: an agent testing $? must not read GitHub's refusal as
+      // success (M87's verifier).
+      if (reply.ok === true && typeof reply.status === 'number' && reply.status >= 400) return 1
       return reply.ok === true ? 0 : 1
     } catch (error: unknown) {
       lastError = error

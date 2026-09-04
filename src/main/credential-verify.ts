@@ -78,6 +78,35 @@ export async function verifyCredential(deps: VerifyDeps, service: string): Promi
 }
 
 /** node:https rather than a dependency — see the plan's global constraints. */
+/**
+ * M87. The broker's real fetcher: any method, any headers, a body, a
+ * timeout. Beside the verifier's for the same reason that one is here — a
+ * network call belongs to main and to no suite.
+ */
+export function createHttpsBrokerFetcher(): (req: { url: string; method: string; headers: Record<string, string>; body?: string; timeoutMs: number }) => Promise<{ status: number; body: string }> {
+  return (req) => new Promise((resolve, reject) => {
+    const { request } = require('node:https') as typeof import('node:https')
+    // A DEADLINE for the whole call, not node's socket-inactivity timeout: a
+    // server sending a byte every 29 seconds would otherwise hold a call
+    // open forever (M87's verifier).
+    const deadline = setTimeout(() => { r.destroy(new Error('the request timed out')) }, req.timeoutMs)
+    const r = request(req.url, { method: req.method, headers: { ...req.headers, ...(req.body === undefined ? {} : { 'content-length': String(Buffer.byteLength(req.body)) }) } }, (res) => {
+      const chunks: Buffer[] = []
+      let total = 0
+      res.on('data', (c: Buffer) => {
+        total += c.length
+        chunks.push(c)
+        // Past twice the cap, stop READING rather than only stop keeping.
+        if (total > MAX_BODY_BYTES * 2) { res.destroy(); clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) }
+      })
+      res.on('end', () => { clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) })
+    })
+    r.on('error', (error) => { clearTimeout(deadline); reject(error) })
+    if (req.body !== undefined) r.write(req.body)
+    r.end()
+  })
+}
+
 export function createHttpsFetcher(): Fetcher {
   return (url, token, timeoutMs) =>
     new Promise((resolve, reject) => {

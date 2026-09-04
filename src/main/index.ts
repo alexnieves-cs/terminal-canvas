@@ -23,6 +23,9 @@ import { createReviewDiscarder } from './review-discard'
 import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
+import { createBroker } from './broker'
+import { createHttpsBrokerFetcher } from './credential-verify'
+import { createBrokerAudit } from './broker-audit'
 import { readVault } from './vault-read'
 import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
@@ -540,6 +543,15 @@ const armVaultWatch = (root: string): void => {
 /** M84. The watcher runner, once it exists — read by the quit sequence. */
 let watchRunnerRef: { disposeAll(): void } | null = null
 
+/**
+ * M87. The broker over the credential store — the store's LAST reader — with
+ * the real HTTPS fetcher and an audit file beside the run ledger. Wired to
+ * the control handler only: no IPC channel reaches it, so the renderer can
+ * neither spend a credential nor see what an agent spent.
+ */
+const brokerAudit = createBrokerAudit({ file: join(app.getPath('userData'), 'broker-audit.jsonl') })
+const broker = createBroker({ store: credentialStore, fetcher: createHttpsBrokerFetcher(), audit: brokerAudit })
+
 /** M83. A directory's repository root, or the directory itself when git does not own it. */
 const memoryRoot = async (path: string): Promise<string> => {
   if (path === '') return path
@@ -548,6 +560,8 @@ const memoryRoot = async (path: string): Promise<string> => {
 }
 
 const controlHandler = createControlHandler({
+  // M87. The one verb that can spend a credential.
+  broker,
   presets: () => allPresets(layoutStore.presets()),
   defaultId: () => layoutStore.defaultPresetId() || null,
   spawn: (preset, cwd) => {

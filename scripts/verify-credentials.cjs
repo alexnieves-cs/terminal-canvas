@@ -239,7 +239,96 @@ const TOKEN = 'ghp_supersecrettokenvalue123456'
   ok('14 verifying an absent credential makes no request', res.ok === false && called === false)
 }
 
+// M87 — broker.1. THE BROKER over a fake fetcher, in the plain-node tier the
+//      store already sits in. Six properties, each a silent failure:
+//      (a) The token is ATTACHED to the request and appears NOWHERE else —
+//          not in the reply, not in the audit row, not in a refusal's text.
+//      (b) A service with no credential answers the NAMED reason the panel
+//          rows use, never an empty 401 the agent would retry forever.
+//      (c) `..`, a scheme and `//` in the path never reach the fetcher; an
+//          unknown method and an unknown service are refused by name.
+//      (d) Every call — a refusal included — appends one audit row carrying
+//          metadata only: an agent's ATTEMPT is what the audit is for.
+//      (e) A response over the cap is truncated and SAYS so.
+//      (f) Jira attaches basic auth for email:token at the credential's own
+//          site, under /rest/api/3 — the same one-way door as GitHub's bearer.
+{
+  const p = join(dir, 'broker.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  store.set('jira', JSON.stringify({ site: 'https://acme.atlassian.net', email: 'me@acme.test', token: 'jira-secret-token' }))
+  const seen = []
+  const rows = []
+  const big = 'x'.repeat(2 * 1024 * 1024)
+  const fetcher = async (req) => { seen.push(req); return req.url.endsWith('/big') ? { status: 200, body: big } : { status: 200, body: JSON.stringify({ login: 'octocat' }) } }
+  const broker = typeof mod.createBroker === 'function'
+    ? mod.createBroker({ store, fetcher, audit: { append: (row) => rows.push(row) }, now: () => 1234 })
+    : null
+  const call = async (req) => (broker ? broker.call(req) : { ok: false, reason: 'no broker' })
+  const user = await call({ service: 'github', method: 'GET', path: '/user', panelId: 'n1' })
+  const jira = await call({ service: 'jira', method: 'GET', path: '/search?jql=x' })
+  const none = await call({ service: 'github', method: 'GET', path: '/user' }).then(async (first) => { store.delete('github'); const r = await call({ service: 'github', method: 'GET', path: '/user' }); store.set('github', TOKEN); return r })
+  const dots = await call({ service: 'github', method: 'GET', path: '/repos/../secrets' })
+  const scheme = await call({ service: 'github', method: 'GET', path: 'https://evil.test/' })
+  const slashes = await call({ service: 'github', method: 'GET', path: '//evil.test/x' })
+  const method = await call({ service: 'github', method: 'TRACE', path: '/user' })
+  const unknown = await call({ service: 'gitlab', method: 'GET', path: '/user' })
+  const bigReply = await call({ service: 'github', method: 'GET', path: '/big' })
+  // M87's verifier: the escapes and leaks a green first version had.
+  const encodedDots = await call({ service: 'jira', method: 'GET', path: '/%2e%2e/%2e%2e/%2e%2e/rest/api/2/myself' })
+  const upperDots = await call({ service: 'github', method: 'GET', path: '/repos/%2E%2E/x' })
+  const longPath = await call({ service: 'github', method: 'GET', path: '/' + 'a'.repeat(3000) })
+  const colonOk = await call({ service: 'github', method: 'GET', path: '/search/issues?q=repo:o/r' })
+  const seenBefore = seen.length
+  const throwing = typeof mod.createBroker === 'function'
+    ? mod.createBroker({ store, fetcher: async (req) => { throw new Error(req.url.includes('github') ? `boom ${TOKEN} and again ${TOKEN}` : `boom basic ${Buffer.from('me@acme.test:jira-secret-token').toString('base64')} raw jira-secret-token`) }, audit: { append: (row) => rows.push(row) }, now: () => 1 })
+    : null
+  const thrown = throwing ? await throwing.call({ service: 'github', method: 'GET', path: '/user' }) : null
+  const thrownJira = throwing ? await throwing.call({ service: 'jira', method: 'GET', path: '/myself' }) : null
+  // The in-flight ceiling: a fetcher that never answers, nine calls at once.
+  let release = () => {}
+  const hanging = typeof mod.createBroker === 'function'
+    ? mod.createBroker({ store, fetcher: () => new Promise((resolve) => { release = () => resolve({ status: 200, body: '{}' }) }), audit: { append: () => {} }, now: () => 1 })
+    : null
+  const inFlight = hanging ? Array.from({ length: mod.BROKER_IN_FLIGHT_MAX + 1 }, () => hanging.call({ service: 'github', method: 'GET', path: '/user' })) : []
+  const ceiling = hanging ? await Promise.race([inFlight[inFlight.length - 1], new Promise((r) => setTimeout(() => r('hung'), 200))]) : null
+  release()
+  // The audit's ring trim, through the real writer with a small cap.
+  const auditFile = join(dir, 'audit', 'broker-audit.jsonl')
+  const audit = typeof mod.createBrokerAudit === 'function' ? mod.createBrokerAudit({ file: auditFile, max: 50 }) : null
+  if (audit) for (let i = 0; i < 260; i += 1) audit.append({ at: i, service: 's', method: 'GET', path: '/p', status: 0, bytes: 0 })
+  const auditLines = audit ? readFileSync(auditFile, 'utf8').split('\n').filter((l) => l !== '').length : -1
+  const auditNewest = audit ? audit.list(1).rows[0] : null
+  // The Jira site as the URL parser reads it.
+  const evilSite = typeof mod.parseJiraCredential === 'function' ? mod.parseJiraCredential(JSON.stringify({ site: 'https://evil.test#x.atlassian.net', email: 'a@b.c', token: 't' })) : 'absent'
+  const goodSite = typeof mod.parseJiraCredential === 'function' ? mod.parseJiraCredential(JSON.stringify({ site: 'https://acme.atlassian.net', email: 'a@b.c', token: 't' })) : 'absent'
+  const everything = JSON.stringify({ user, jira, none, dots, scheme, slashes, method, unknown, rows, big: bigReply && bigReply.ok, encodedDots, upperDots, longPath, thrown, thrownJira })
+  const ghReq = seen.find((r) => r.url === 'https://api.github.com/user')
+  const jiraReq = seen.find((r) => r.url.startsWith('https://acme.atlassian.net/rest/api/3/search'))
+  ok('broker.1 the token is attached to the request and appears nowhere in a reply, an audit row or a refusal; no credential answers the named reason; .. a scheme // an unknown method and an unknown service are refused before the fetcher; every call and every refusal is one audit row of metadata; an over-cap reply is truncated and says so; jira uses basic auth at its own site',
+    broker !== null &&
+      user && user.ok === true && user.status === 200 && ghReq && ghReq.headers.authorization === `Bearer ${TOKEN}` &&
+      jira && jira.ok === true && jiraReq && /^Basic /.test(jiraReq.headers.authorization) && Buffer.from(jiraReq.headers.authorization.slice(6), 'base64').toString() === 'me@acme.test:jira-secret-token' &&
+      none && none.ok === false && /not connected/.test(none.reason) && /Credentials/.test(none.reason) &&
+      dots.ok === false && scheme.ok === false && slashes.ok === false && method.ok === false && unknown.ok === false &&
+      seen.length === 5 &&
+      !everything.includes(TOKEN) && !everything.includes('jira-secret-token') &&
+      rows.length === 16 && rows.every((r) => (r.at === 1234 || r.at === 1) && typeof r.service === 'string' && typeof r.method === 'string' && typeof r.path === 'string' && typeof r.status === 'number' && !('body' in r)) &&
+      rows[0].panelId === 'n1' && rows.some((r) => r.status === 0 && typeof r.reason === 'string') &&
+      bigReply && bigReply.ok === true && bigReply.truncated === true && bigReply.body.length <= mod.BROKER_BODY_MAX &&
+      encodedDots.ok === false && /encoded dots/.test(encodedDots.reason) && upperDots.ok === false && longPath.ok === false && /characters/.test(longPath.reason) &&
+      colonOk.ok === true && seen.length === seenBefore &&
+      thrown && thrown.ok === false && /\[redacted\]/.test(thrown.reason) && thrownJira && thrownJira.ok === false && !/jira-secret-token/.test(thrownJira.reason) && !/bWVAYWNtZS50ZXN0/.test(thrownJira.reason) &&
+      ceiling && ceiling.ok === false && /in flight/.test(ceiling.reason) &&
+      auditLines > 0 && auditLines <= 150 && auditNewest && auditNewest.at === 259 &&
+      evilSite === null && goodSite !== null && goodSite.site === 'https://acme.atlassian.net' &&
+      // The audit records the path as the WIRE sees it, prefix included.
+      rows.some((r) => r.path === '/rest/api/3/search?jql=x'),
+    JSON.stringify({ encodedDots, upperDots, longPath: longPath && longPath.reason, thrown, thrownJira, colonOk: colonOk.ok, seenGrew: seen.length - seenBefore, ceiling, auditLines, auditNewest, evilSite: evilSite === null, goodSite: goodSite && goodSite.site, paths: rows.map((r) => r.path).slice(0, 6), leak: everything.includes(TOKEN) || everything.includes("jira-secret-token"), rows: rows.length, seen: seen.length }))
+}
+
 rmSync(dir, { recursive: true, force: true })
+
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)

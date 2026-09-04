@@ -40,6 +40,8 @@ export interface ControlHandlerDeps {
    * answer in time" — a third state, never an empty model with no note.
    */
   canvas?: () => Promise<ControlCanvasModel | null>
+  /** M87. The broker: the one verb that can spend a credential. Absent means refused by name. */
+  broker?: { call(req: { service: string; method: string; path: string; body?: string; panelId?: string }): Promise<{ ok: true; status: number; body: string; truncated: boolean } | { ok: false; reason: string }> }
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -82,6 +84,11 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         }
         const written = await deps.memory.add({ root: req.root, kind: req.kind, text: req.text, ...(req.panelId === undefined ? {} : { panelId: req.panelId }) })
         return written.ok ? { ok: true, entry: written.entry } : { ok: false, error: written.reason }
+      }
+      case 'api': {
+        if (deps.broker === undefined) return { ok: false, error: 'this window has no broker' }
+        const answer = await deps.broker.call({ service: req.service, method: req.method, path: req.path, ...(req.body === undefined ? {} : { body: req.body }), ...(req.panelId === undefined ? {} : { panelId: req.panelId }) })
+        return answer.ok ? { ok: true, status: answer.status, body: answer.body, truncated: answer.truncated } : { ok: false, error: answer.reason }
       }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or

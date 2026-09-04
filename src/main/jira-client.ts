@@ -48,7 +48,11 @@ export function parseJiraCredential(value: string): JiraCredential | null {
   try {
     const parsed = JSON.parse(value) as Partial<JiraCredential>
     const site = typeof parsed.site === 'string' ? parsed.site.replace(/\/$/, '') : ''
-    if (!/^https:\/\/[^/]+\.atlassian\.net$/i.test(site) ||
+    // Through the URL parser, not a regex alone: `https://evil.test#x.atlassian.net`
+    // passed the regex while its HOST was evil.test (M87's verifier).
+    let host = ''
+    try { const u = new URL(site); host = u.host; if (u.pathname !== '/' || u.search !== '' || u.hash !== '' || u.username !== '' || u.password !== '') return null } catch { return null }
+    if (!/^[^/]+\.atlassian\.net$/i.test(host) ||
       typeof parsed.email !== 'string' || parsed.email.trim() === '' ||
       typeof parsed.token !== 'string' || parsed.token.trim() === '') return null
     return { site, email: parsed.email.trim(), token: parsed.token.trim() }
