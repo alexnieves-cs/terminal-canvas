@@ -656,7 +656,13 @@ app.whenReady().then(async () => {
     // M73. Whether the CLI already holds a transcript for a session id —
     // M17's glob, so a restored chat panel that has had a turn resumes and
     // one that never did pins. Decided at spawn, never persisted.
-    transcriptExists: (sessionId) => resolveTranscript(sessionId) !== undefined
+    transcriptExists: (sessionId) => resolveTranscript(sessionId) !== undefined,
+    // M82. Read LIVE, like every other setting the manager consults: a ceiling
+    // raised in the palette must take effect on the next send.
+    limits: () => ({
+      maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
+      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+    })
   })
   // M73. The durable transcript, written from the manager's own events so
   // the renderer never has to echo a turn back; and every event forwarded
@@ -826,7 +832,13 @@ app.whenReady().then(async () => {
         if (resolved.kind === 'refused') return { refused: resolved.reason }
         images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
       }
-      return agentSessions?.send(id, text, images) ?? 'no-session'
+      const answer = agentSessions?.send(id, text, images) ?? 'no-session'
+      // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
+      if (answer === 'refused-budget') {
+        const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+        return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
+      }
+      return answer
     },
     clipboardImage: () => {
       const image = clipboard.readImage()
