@@ -557,6 +557,9 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
     return null
   }
   const chat: ChatSource = { cwd: raw.cwd, sessionId: raw.sessionId }
+  // M81. A supervisor keeps its job across a relaunch: the flag is what makes
+  // its next spawn carry the system prompt again (the CLI keeps no record).
+  if (raw.supervisor === true) chat.supervisor = true
   const agentOptions = parseAgentOptions(raw.agentOptions, `panel ${id}`, warnings)
   if (agentOptions !== undefined) chat.agentOptions = agentOptions
   return chat

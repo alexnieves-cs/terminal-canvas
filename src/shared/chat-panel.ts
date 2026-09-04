@@ -20,6 +20,8 @@ import type { AgentOptions } from './cost'
  * undefined` survives IPC and reads as present.
  */
 export interface ChatSource {
+  /** M81. This chat's subject is the canvas: its system prompt is the supervisor's, on every spawn. */
+  supervisor?: boolean
   /** Unexpanded, like ToolboxSource.cwd — main expands it with resolveCwd. */
   cwd: string
   sessionId: string

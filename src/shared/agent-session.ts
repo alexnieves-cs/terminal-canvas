@@ -25,6 +25,8 @@ export interface AgentSessionSpec {
   sessionId?: string
   /** A CLI session UUID known to exist: the first spawn resumes it. */
   resume?: string
+  /** M81. Text appended to the CLI's own system prompt — a supervisor's job. */
+  appendSystemPrompt?: string
 }
 
 export interface PendingPermission {
@@ -91,6 +93,20 @@ export type ChatAttachment =
 export type SendAnswer = SendResult | { refused: string }
 
 /** M75. `agent:clipboard-image`: the pasted image, or null when the clipboard holds none. */
+/**
+ * M81. THE SUPERVISOR'S JOB, appended to the CLI's own system prompt. It
+ * names the one tool it needs and the words it must answer in — the canvas's
+ * own, so a supervisor and the rail say the same thing (principle 11) — and
+ * it names what it must NOT do, because a supervisor that spawns or closes
+ * panels is a second author of the canvas.
+ */
+export const SUPERVISOR_PROMPT = [
+  'You are the supervisor of a Terminal Canvas workspace.',
+  'Read the canvas by running `tc status`, which answers with JSON: every panel with its state word, the edges between them, and the runs that have happened.',
+  'Answer in the canvas\'s own words — a panel is `working`, `needs you`, `idle`, `asleep` or `exited N`; an edge fires `on exit`, `on exit 0`, `on a failing exit`, `after a turn` or `always`.',
+  'Never spawn, close, restart or write to a panel: you observe and report. `tc status` is the only command you need.'
+].join(' ')
+
 export type ClipboardImage = { mediaType: string; base64: string; size: number } | { refused: string } | null
 
 /**

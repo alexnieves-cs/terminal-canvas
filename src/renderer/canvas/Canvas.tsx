@@ -60,7 +60,7 @@ import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
-  applyAgentState, attentionIds, clearAgentState, useAttentionIds
+  applyAgentState, attentionIds, clearAgentState, useAttentionIds, getAgentState
 } from '@renderer/session/agent-state-store'
 import {
   applyLiveSession, clearLiveSession, getLiveSession
@@ -68,7 +68,7 @@ import {
 import { applySubagents, clearSubagents } from '@renderer/session/subagent-store'
 import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
-import { applyUsage, clearUsage } from '@renderer/session/usage-store'
+import { applyUsage, clearUsage, getUsage } from '@renderer/session/usage-store'
 import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
@@ -108,6 +108,10 @@ import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
 import { useApprovals } from '@renderer/chat/chat-store'
+import { panelState } from '@renderer/panels/panel-state'
+import { SUPERVISOR_PROMPT } from '@shared/agent-session'
+import { chatStateInput } from '@renderer/chat/chat-model'
+import { costOf } from '@shared/pricing'
 import { useRuns } from './useRuns'
 import type { PersistedTemplate } from '@shared/templates'
 import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette/template-model'
@@ -648,6 +652,11 @@ export function Canvas({
   const [dormantIds, setDormantIds] = useState<ReadonlySet<string>>(
     () => new Set(initial.panels.map((p) => p.id).filter((id) => !liveSessionIds.has(id)))
   )
+  // M81. `tc status` answers from an effect installed once, so every fact it
+  // reads must come from a ref: a captured `dormantIds` told the supervisor a
+  // woken panel was still asleep while the pill beside it said `idle`.
+  const dormantIdsRef = useRef(dormantIds)
+  dormantIdsRef.current = dormantIds
 
   // Applying a history state has to reach the registry too: an undone close
   // must recreate the panel's session, and it comes back DORMANT because its
@@ -1421,6 +1430,56 @@ export function Canvas({
   // Main owns the reset dialog but only the renderer knows the live statuses,
   // so it supplies the counts the confirmation names.
   useEffect(() => {
+    // M81. `tc status`'s model: the canvas in its OWN words — the state
+    // vocabulary's word per panel, the edge labels' trigger words, the run
+    // rows' outcome — so a supervisor reading this and a person reading the
+    // rail are told the same thing (principle 11).
+    const offModel = window.canvas.canvas.onModel(() => ({
+      panels: panelsRef.current.map((p) => {
+        const word = isTerminalPanel(p)
+          ? panelState({ kind: 'terminal', status: registry.get(p.rect.id)?.status, dormant: dormantIdsRef.current.has(p.rect.id) }, getAgentState(p.rect.id))
+          : isChatPanel(p)
+            ? panelState({ kind: 'chat', status: undefined, dormant: false, chat: chatStateInput(getChat(p.rect.id).snapshot, getChat(p.rect.id).turns.length > 0) ?? { status: 'not-started' as const, pending: 0, hasHistory: false } }, undefined)
+            // A document kind has no process word; the model says so in the
+          // vocabulary's own terms rather than inventing one (M81's verifier:
+          // the prompt tells the supervisor the closed set, so a `review`
+          // here is a word its instructions say does not exist).
+          // The vocabulary's own function decides the word, never a literal:
+          // a document kind has no process, which is what `panelState` says
+          // for a terminal that never started (verify:rail state.2).
+          : panelState({ kind: 'terminal', status: undefined, dormant: false }, undefined)
+        const usage = getUsage(p.rect.id)
+        // No usage recorded is NOT zero — a confident `cost: 0` beside a
+        // working agent is the answer `machine-cost` already refuses.
+        const priced = usage === undefined || Object.keys(usage.byModel).length === 0
+          ? undefined
+          : Object.entries(usage.byModel).reduce<number | undefined>((acc, [model, totals]) => {
+            const c = costOf(totals, model)
+            return acc === undefined || c === undefined ? undefined : acc + c
+          }, 0)
+        const cost = priced
+        return {
+          id: p.rect.id, kind: p.kind, state: word.word,
+          ...(p.title === undefined ? {} : { title: p.title }),
+          ...(isTerminalPanel(p) ? { cwd: getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd } : isChatPanel(p) ? { cwd: p.chat.cwd } : {}),
+          ...(cost === undefined ? {} : { cost })
+        }
+      }),
+      edges: panelsRef.current.flatMap((p) => linksOf(p)
+        // Every edge, including a plain link and a DISABLED rule: "no edge"
+        // and "an edge that is off" are different facts (M81's verifier).
+        .map((l) => ({
+          from: p.rect.id,
+          to: l.to,
+          trigger: l.automation?.kind === 'handoff' && l.automation.enabled
+            ? TRIGGER_WORDS[l.automation.trigger]
+            : l.automation?.kind === 'handoff' ? 'off' : 'none'
+        }))),
+      runs: runsRef.current.map((r) => {
+        const row = buildRunRows([r], new Set(), Date.now())[0]
+        return { id: r.id, name: r.name, outcome: row?.outcome ?? '', panels: r.panelIds.length, ...(r.costUsd === undefined ? {} : { cost: r.costUsd }) }
+      })
+    }))
     const offCounts = window.canvas.canvas.onCounts(() => ({
       panels: panelsRef.current.length,
       // The SAME predicate the inspector's summary uses. It was written inline
@@ -1433,6 +1492,7 @@ export function Canvas({
     const offReset = window.canvas.canvas.onReset(resetCanvas)
     return () => {
       offCounts()
+      offModel()
       offReset()
     }
   }, [resetCanvas])
@@ -2821,7 +2881,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -2846,6 +2906,12 @@ export function Canvas({
     // assign-below shape this file already uses. Resolves main's answer, so a
     // check can read a refusal by name.
     w.__m73Chat = (cwd: string): Promise<{ kind: string; reason?: string }> => beginNewChatRef.current({ cwd })
+    // M81. The supervisor the sheet's row makes, and whether a second is offered.
+    w.__m81Supervisor = async (cwd?: string): Promise<boolean> => {
+      const result = await beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message: 'What is this canvas doing?' })
+      return result.kind === 'spawned'
+    }
+    w.__m81SupervisorOffered = (): boolean => !panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)
     // M74's two verbs, through the same functions the palette rows, the
     // action bar and the chrome buttons call.
     w.__m74OpenAsChat = (id: string): Promise<{ kind: string; reason?: string }> => openAsChatRef.current(id)
@@ -3268,7 +3334,7 @@ export function Canvas({
   }, [commitHistory, selectOnly, addToSelection])
   instantiateTemplateRef.current = instantiateTemplate
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3279,17 +3345,24 @@ export function Canvas({
     const id = `c${nextIdRef.current++}`
     const sessionId = crypto.randomUUID()
     const agentOptions = opts?.agentOptions !== undefined && Object.keys(opts.agentOptions).length > 0 ? opts.agentOptions : undefined
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...(agentOptions === undefined ? {} : { agentOptions }) })
+    // M81. ONE supervisor per canvas, refused HERE as well as in the sheet's
+    // disabled row: the row is the affordance, this is the rule.
+    if (opts?.appendSystemPrompt !== undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
+      return { kind: 'refused', reason: 'this canvas already has a supervisor' }
+    }
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
     })
     selectOnly(id)
+    // M81/M80's rule: a first message is INSERTED, never sent.
+    if (opts?.message !== undefined && opts.message !== '') void deliverToComposer(id, opts.message)
     return { kind: 'spawned' }
   }, [commitHistory, selectOnly])
   beginNewChatRef.current = beginNewChat

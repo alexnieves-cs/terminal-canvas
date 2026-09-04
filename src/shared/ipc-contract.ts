@@ -24,6 +24,13 @@ import type {
 } from './types'
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
+
+/** M81. The canvas model `tc status` answers with — the renderer's own words. */
+export interface ControlCanvasModel {
+  panels: Array<{ id: string; kind: string; title?: string; state: string; cwd?: string; cost?: number }>
+  edges: Array<{ from: string; to: string; trigger: string }>
+  runs: Array<{ id: string; name: string; outcome: string; panels: number; cost?: number }>
+}
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
 import type { CredentialMeta } from './credential-schema'
@@ -474,6 +481,13 @@ export const IPC_EVENTS = {
    * why it lives here and not in IPC (verify:ipc only walks IPC).
    */
   CANVAS_COUNTS: 'canvas:counts',
+  /**
+   * M81. `tc status`'s model, asked of the renderer on the SAME ephemeral
+   * reply-channel shape CANVAS_COUNTS uses — an event, never an invoke, so
+   * verify:ipc's "every channel has a handler" rule does not (and should
+   * not) cover it.
+   */
+  CANVAS_MODEL: 'canvas:model',
   /** Confirmed reset: drop every panel and return to the first-run canvas. */
   CANVAS_RESET: 'canvas:reset',
   /**
@@ -965,6 +979,8 @@ export interface CanvasBridge {
   canvas: {
     /** Registers the answer to canvas:counts. Returns its own unsubscribe. */
     onCounts(provide: () => { panels: number; running: number }): () => void
+    /** M81. The canvas model for `tc status`. Same ephemeral-reply shape as onCounts. */
+    onModel(provide: () => ControlCanvasModel): () => void
     onReset(listener: () => void): () => void
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>

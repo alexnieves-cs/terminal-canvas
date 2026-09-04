@@ -13,6 +13,7 @@ import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { templateRefusal } from '@renderer/palette/template-model'
+import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
 import type { PersistedTemplate } from '@shared/templates'
 import { clearSubagents } from '@renderer/session/subagent-store'
@@ -73,7 +74,7 @@ export interface PaletteActionsDeps {
   openJiraPanel: () => void
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
-  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>
+  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }) => Promise<SpawnResult>
   /** M80. Instantiate a template: every node and edge in one history entry. */
   instantiateTemplate: (template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>
   /** M74. The two front-end verbs. */
@@ -1124,15 +1125,21 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           sheet: {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
             claudeAvailable: claudeOk,
+            hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),
             templates,
             ...(templateId === undefined ? {} : { templateId }),
             instantiate: instantiateTemplate,
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.
-            submit: (values) => values.what.kind === 'chat'
-              ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
-              : window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
+            // M81. A supervisor is a chat created with the supervisor's own
+            // system prompt and its first question in the composer — unsent,
+            // like a template's (M80): nothing starts work unread.
+            submit: (values) => values.what.kind === 'supervisor'
+              ? beginNewChat({ cwd: values.cwd, title: values.title === '' ? 'supervisor' : values.title, agentOptions: values.agentOptions, appendSystemPrompt: SUPERVISOR_PROMPT, message: 'What is this canvas doing?' })
+              : values.what.kind === 'chat'
+                ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
+                : window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
           }
         })
         palette.openPalette()

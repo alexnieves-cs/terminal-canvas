@@ -26,6 +26,13 @@ export const CLAUDE_HEADLESS_ARGS: readonly string[] = [
 ]
 
 export interface HeadlessArgsInput {
+  /**
+   * M81. Text appended to the CLI's own system prompt (`--append-system-prompt`)
+   * — a supervisor's job description. It rides EVERY spawn of the session,
+   * fresh or resumed: the CLI keeps no record of it, so a resumed supervisor
+   * without it would quietly stop being one.
+   */
+  appendSystemPrompt?: string
   /** The CLI session UUID this app minted (or adopted from a restored panel). */
   sessionId: string
   /**
@@ -47,6 +54,7 @@ export interface HeadlessArgsInput {
  */
 export function headlessArgs(input: HeadlessArgsInput): string[] {
   const base = [...CLAUDE_HEADLESS_ARGS]
+  if (input.appendSystemPrompt !== undefined && input.appendSystemPrompt !== '') base.push('--append-system-prompt', input.appendSystemPrompt)
   if (input.resume) {
     base.push('--resume', input.sessionId)
     // sessionId '' makes agentArgs skip its --session-id pin.

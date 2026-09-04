@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, SUPERVISOR_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
 import { templateHoles } from './template-model'
@@ -45,6 +45,8 @@ export interface SpawnSheetModel {
   submit(values: SheetValues): Promise<SpawnResult>
   /** M73. Whether claude was found — the chat arm is offered disabled by name otherwise. */
   claudeAvailable: boolean
+  /** M81. One supervisor per canvas: the row says so rather than vanishing. */
+  hasSupervisor?: boolean
 }
 
 export interface SpawnSheetProps {
@@ -99,7 +101,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   )
 
   const values = (): SheetValues => {
-    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : { kind: 'preset', id: whatId }
+    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : { kind: 'preset', id: whatId }
     const agentOptions: AgentOptions = {}
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
@@ -160,7 +162,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
   // M73. A chat is an agent panel: the how fields apply, with the CLI's own
   // defaults as the placeholders.
-  const isChat = whatId === CHAT_WHAT_ID
+  const isSupervisor = whatId === SUPERVISOR_WHAT_ID
+  const isChat = whatId === CHAT_WHAT_ID || isSupervisor
   const isAgent = preset?.agent !== undefined || isChat
   const own = preset?.agentOptions ?? {}
   const request = buildSpawnRequest(values(), model.presets)
@@ -175,6 +178,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // The template's NAME is already the `what` row's value; the preview says
   // what it makes, which is the thing the row cannot.
   const what = chosenTemplate !== undefined ? templateShape
+    : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas — ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
     : isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
@@ -212,6 +216,10 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           <option value={COMMAND}>type a command…</option>
           {/* M73. The conversation arm, disabled by name when claude is absent. */}
           <option value={CHAT_WHAT_ID} disabled={!model.claudeAvailable}>chat with claude{model.claudeAvailable ? '' : ' — not on PATH'}</option>
+          {/* M81. One per canvas, disabled by name when there already is one. */}
+          <option value={SUPERVISOR_WHAT_ID} disabled={!model.claudeAvailable || model.hasSupervisor === true}>
+            supervisor of this canvas{!model.claudeAvailable ? ' — not on PATH' : model.hasSupervisor === true ? ' — this canvas already has one' : ''}
+          </option>
           {/* M80. Templates, disabled by name when one cannot be started. */}
           {templates.map((t) => (
             <option key={t.template.id} value={`${TEMPLATE_PREFIX}${t.template.id}`} disabled={t.refusal !== undefined}>
@@ -242,7 +250,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       {chosenTemplate === undefined && (
       <label className="sheet__field">
         <span className="sheet__label">title</span>
-        <input className="sheet__input" data-sheet-title value={title} placeholder={whatId === COMMAND ? (command.trim() || 'the command') : 'optional'} onChange={(e) => setTitle(e.target.value)} />
+        <input className="sheet__input" data-sheet-title value={title} placeholder={isSupervisor ? 'supervisor' : whatId === COMMAND ? (command.trim() || 'the command') : 'optional'} onChange={(e) => setTitle(e.target.value)} />
       </label>
       )}
 

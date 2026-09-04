@@ -11,7 +11,7 @@ import type { SpawnRequest } from '@shared/ipc-contract'
  * component (`SpawnSheet.tsx`) only renders and moves focus.
  */
 
-export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' }
+export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' }
 
 /**
  * M73. The chat arm's stand-in preset id in the request the sheet PREVIEWS.
@@ -21,6 +21,8 @@ export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; comm
  * exist rather than spawning anything.
  */
 export const CHAT_WHAT_ID = '__chat__'
+/** M81. A chat whose subject is the canvas: created with the supervisor's system prompt. */
+export const SUPERVISOR_WHAT_ID = '__supervisor__'
 
 export interface SheetValues {
   what: SheetWhat
@@ -58,6 +60,11 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
   const cwd = values.cwd.trim()
   const title = values.title.trim()
   const what = values.what
+  if (what.kind === 'supervisor') {
+    const req: SpawnRequest = { presetId: SUPERVISOR_WHAT_ID, cwd }
+    if (title !== '') req.title = title
+    return req
+  }
   if (what.kind === 'chat') {
     const req: SpawnRequest = { presetId: CHAT_WHAT_ID, cwd }
     if (title !== '') req.title = title

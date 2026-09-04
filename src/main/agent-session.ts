@@ -94,6 +94,8 @@ export interface AgentSessionDeps {
 
 
 interface Session {
+  /** M81. The supervisor's job, appended to the CLI's system prompt on every spawn. */
+  appendSystemPrompt?: string
   id: string
   cwd: string
   agentOptions?: AgentOptions
@@ -162,6 +164,10 @@ export class AgentSessionManager {
       turnCount: 0,
       userTurns: 0,
       counters: { ignored: 0, unknown: 0, malformed: 0 },
+      // M81. The supervisor's job. On the SESSION, never inside `counters` —
+      // the first cut spread it there, which typechecks (the field is optional
+      // on both) and means no spawn ever carries the prompt.
+      ...(spec.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: spec.appendSystemPrompt }),
       batch: [],
       batchTimer: null
     }
@@ -287,7 +293,10 @@ export class AgentSessionManager {
     const args = headlessArgs({
       sessionId: session.sessionId,
       resume,
-      agentOptions: session.agentOptions
+      agentOptions: session.agentOptions,
+      // M81. Rides EVERY spawn, fresh or resumed: the CLI keeps no record of
+      // it, so a resumed supervisor without it would stop being one.
+      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt })
     })
     const proc = this.deps.runner({
       command: this.deps.command,

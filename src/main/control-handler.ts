@@ -11,6 +11,7 @@
  */
 import { existsSync } from 'node:fs'
 import type { Preset } from '../shared/layout-schema'
+import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
 import type { ControlReply } from './control-server'
 
@@ -21,6 +22,9 @@ export interface ControlSessionRow {
   command: string
 }
 
+/** M81. The canvas as `tc status` reports it — declared in the contract, beside every other shape both sides read. */
+export type { ControlCanvasModel } from '../shared/ipc-contract'
+
 export interface ControlHandlerDeps {
   presets: () => readonly Preset[]
   defaultId: () => string | null
@@ -30,6 +34,12 @@ export interface ControlHandlerDeps {
   list: () => ControlSessionRow[]
   /** True when the id named a panel the renderer can fly to. */
   focus: (panelId: string) => boolean
+  /**
+   * M81. The canvas model, asked of the RENDERER (it is the only side that
+   * knows a panel's word, its edges and its runs). `null` is "it did not
+   * answer in time" — a third state, never an empty model with no note.
+   */
+  canvas?: () => Promise<ControlCanvasModel | null>
 }
 
 export function createControlHandler(deps: ControlHandlerDeps): (req: ControlRequest) => Promise<ControlReply> {
@@ -52,6 +62,18 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         }
       case 'focus':
         return deps.focus(req.id) ? { ok: true } : { ok: false, error: `no panel ${req.id}` }
+      case 'status': {
+        // READ-ONLY by construction: this arm has no spawn, focus, write or
+        // kill in it, and the whole verb is one call into a renderer that
+        // only reports. A canvas nobody answered for is EMPTY WITH A NOTE.
+        // A rejection is the same third state as a timeout: the canvas did
+        // not answer. It must not escape into the socket's reply path.
+        const model = deps.canvas === undefined ? null : await deps.canvas().catch(() => null)
+        if (model === null) {
+          return { ok: true, canvas: { panels: [], edges: [], runs: [] }, note: 'the canvas did not answer in time — it may be starting, or no window is open' }
+        }
+        return { ok: true, canvas: model }
+      }
     }
   }
 }

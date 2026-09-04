@@ -69,6 +69,13 @@ const bridge: CanvasBridge = {
     // canvas:counts is a main -> renderer REQUEST, not an invoke: main sends a
     // one-shot reply channel name, and the renderer answers on it directly
     // rather than the renderer initiating with ipcRenderer.invoke.
+    onModel: (provide) => {
+      const wrapped = (_event: IpcRendererEvent, replyChannel: string): void => {
+        ipcRenderer.send(replyChannel, provide())
+      }
+      ipcRenderer.on(IPC_EVENTS.CANVAS_MODEL, wrapped)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.CANVAS_MODEL, wrapped)
+    },
     onCounts: (provide) => {
       const wrapped = (_event: IpcRendererEvent, replyChannel: string): void => {
         ipcRenderer.send(replyChannel, provide())

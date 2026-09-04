@@ -21,7 +21,7 @@ buildSync({
   platform: 'node',
   format: 'cjs',
   external: ['electron', 'node-pty'],
-  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared'), '@renderer': join(__dirname, '..', 'src', 'renderer') }
 })
 const C = require(OUT)
 
@@ -200,6 +200,74 @@ const ok = (n, pass, detail = '') => {
         first === join(dir, 'tc') && second === join(dir, 'tc') && writes.length === 1 && (statSync(join(dir, 'tc')).mode & 0o111) !== 0,
       JSON.stringify({ script, first, second, writes }))
     rmSync(dir, { recursive: true, force: true })
+  }
+
+  // M81 — status.1 / status.2. `tc status`: a READ-ONLY fifth verb. status.1:
+  //      it parses from both doors, refuses a command key like every other
+  //      verb, and has no arm that spawns, focuses or writes. status.2: the
+  //      handler answers with the canvas MODEL in the canvas's own words, and
+  //      a renderer that does not answer yields an empty model WITH a note —
+  //      three states, never two.
+  {
+    const parsed = C.parseControlLine(JSON.stringify({ verb: 'status' }))
+    const withCommand = C.parseControlLine(JSON.stringify({ verb: 'status', command: 'rm -rf /' }))
+    // The URL door is M54's `open` alone — a URL has nowhere to put a reply,
+    // and `status` is a question. It is refused there BY NAME.
+    const url = C.parseControlUrl('terminal-canvas://status')
+    const spawns = []
+    const focused = []
+    const model = {
+      panels: [{ id: 'n1', kind: 'terminal', title: 'api', state: 'working', cwd: '/r', cost: 0.5 }, { id: 'c1', kind: 'chat', state: 'needs you', cwd: '/r' }],
+      edges: [{ from: 'n1', to: 'c1', trigger: 'on exit 0' }],
+      runs: [{ id: 'run-1', name: 'run 1', outcome: 'idle', panels: 2, cost: 0.5 }]
+    }
+    const handler = C.createControlHandler({
+      presets: () => [], defaultId: () => null, exists: () => true,
+      spawn: (p) => spawns.push(p), list: () => [], focus: (id) => { focused.push(id); return true },
+      canvas: async () => model
+    })
+    const quiet = C.createControlHandler({
+      presets: () => [], defaultId: () => null, exists: () => true,
+      spawn: (p) => spawns.push(p), list: () => [], focus: () => true,
+      canvas: async () => null
+    })
+    const reply = parsed.kind === 'ok' ? await handler(parsed.req) : null
+    const empty = await quiet({ verb: 'status' })
+    ok('status.1 status parses from the socket line, is refused by name at the URL door (which can only open), refuses a command key, and its handler spawns and focuses nothing',
+      parsed.kind === 'ok' && parsed.req.verb === 'status' && url.kind === 'bad' && /can only open/.test(url.error) &&
+        withCommand.kind === 'bad' && /command/.test(withCommand.error) &&
+        spawns.length === 0 && focused.length === 0,
+      JSON.stringify({ parsed, url, withCommand, spawns, focused }))
+    ok('status.2 the reply carries the canvas model in the canvas\'s own words; a renderer that does not answer yields an empty model WITH a note, never a silent empty one',
+      reply !== null && reply.ok === true && reply.canvas.panels.length === 2 && reply.canvas.panels[0].state === 'working' &&
+        reply.canvas.edges[0].trigger === 'on exit 0' && reply.canvas.runs[0].outcome === 'idle' &&
+        empty.ok === true && empty.canvas.panels.length === 0 && typeof empty.note === 'string' && /answer/.test(empty.note),
+      JSON.stringify({ reply, empty }))
+  }
+
+  // M81 — status.3. The words themselves, from the modules that make them:
+  //      the handler passes the model through (status.2 proves that and no
+  //      more), so drift would happen HERE — a state word outside the
+  //      vocabulary, or a trigger phrased twice. Every word the model can
+  //      carry is checked against panel-state's own closed set and
+  //      trigger-words' own table.
+  {
+    const V = C
+    const VOCAB = new Set(['not started', 'starting', 'working', 'needs you', 'idle', 'asleep', 'running'])
+    const words = [
+      V.panelState({ kind: 'terminal', status: undefined, dormant: false }, undefined).word,
+      V.panelState({ kind: 'terminal', status: { kind: 'running', pid: 1, command: 'x', cwd: '/', reattached: false }, dormant: false }, 'busy').word,
+      V.panelState({ kind: 'terminal', status: { kind: 'running', pid: 1, command: 'x', cwd: '/', reattached: false }, dormant: false }, 'wants-you').word,
+      V.panelState({ kind: 'terminal', status: { kind: 'running', pid: 1, command: 'x', cwd: '/', reattached: false }, dormant: false }, 'idle').word,
+      V.panelState({ kind: 'terminal', status: undefined, dormant: true }, undefined).word
+    ]
+    const exited = V.panelState({ kind: 'terminal', status: { kind: 'exited', code: 3 }, dormant: false }, 'exited').word
+    const triggers = Object.values(V.TRIGGER_WORDS)
+    ok('status.3 every word the model can carry comes from the vocabulary: each state word is in the closed set (or `exited N`), and each trigger phrase is trigger-words\' own',
+      words.every((w) => VOCAB.has(w)) && /^exited \d+$/.test(exited) &&
+        triggers.length === 5 && new Set(triggers).size === 5 && triggers.every((t) => typeof t === 'string' && t !== '') &&
+        triggers.includes('on exit 0') && triggers.includes('after a turn'),
+      JSON.stringify({ words, exited, triggers }))
   }
 
   const failed = results.filter((r) => !r.pass)

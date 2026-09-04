@@ -22,7 +22,10 @@ import { isFilePanel, isJiraPanel,
  * the first time only one gains a field. Absent knobs stay absent.
  */
 function copyChatSource(chat: ChatSource): ChatSource {
-  return { cwd: chat.cwd, sessionId: chat.sessionId, ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } }) }
+  // M81's `supervisor` copied like every other field: an absent one stays
+  // absent (a spread would write `supervisor: undefined`, which survives IPC
+  // and reads as present).
+  return { cwd: chat.cwd, sessionId: chat.sessionId, ...(chat.supervisor === true ? { supervisor: true } : {}), ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } }) }
 }
 
 export function toPanels(persisted: PersistedPanel[]): Panel[] {

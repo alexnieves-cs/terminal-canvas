@@ -3271,3 +3271,47 @@ first and the edges applied inside the same `setPanels` updater, with a single `
 — so one undo takes the whole shape away and one redo brings it back. Two entries would leave
 a canvas with the panels and no edges after an undo, which reads as a broken template rather
 than a half-undone one. `verify:panels template.1`.
+
+**`tc status` is read-only BY CONSTRUCTION, and its model comes from the renderer
+(`control-handler.ts`, `canvas:model`).** The verb's arm contains no spawn, focus, write or
+kill — a supervisor holding the socket can therefore do nothing to the canvas but read it,
+and that is a property of the code rather than of the prompt it was given. The model itself
+cannot be built in main: main knows sessions, not a panel's state WORD, its edges or its runs,
+and a second derivation of those in main is exactly the drift principle 11 forbids. It is
+asked of the renderer over the ephemeral reply channel `canvas:counts` invented, and a window
+that does not answer in time yields an empty model WITH a note — never a silent empty one.
+`verify:control status.1–.2`, `verify:panels supervisor.1`.
+
+**Everything the model reads comes from a REF (`Canvas.tsx`'s `onModel`).** The answer is
+installed once, in an effect whose deps do not include the canvas's state, so a captured value
+is frozen at mount: the first run told a supervisor a woken panel was still `asleep` while the
+pill beside it said `idle`, and `verify:panels supervisor.1` compares the model against the
+DOM's own words precisely to catch that class. `dormantIdsRef` exists for this.
+
+**A supervisor's system prompt rides EVERY spawn, and the flag lives on the panel
+(`ChatSource.supervisor`, `useChatSessions.ts`).** `--append-system-prompt` is not recorded by
+the CLI, so a resumed session started without it is a panel that looks like a supervisor and
+is not one — with no symptom until it answers a question about the canvas by guessing. The
+panel's own record is what makes the next spawn carry it again.
+
+**A field added to the SESSION must not land inside `counters` (`main/agent-session.ts`).**
+M81's first cut spread `appendSystemPrompt` into the `counters` object literal — the brace
+that closed `counters` moved below it — so the value sat at `session.counters.appendSystemPrompt`
+while the spawn read `session.appendSystemPrompt`. It typechecks (both fields are optional and
+a spread of a union is not excess-property-checked) and no surface changes: every supervisor
+was an ordinary chat with the right title. The check that sees it drives the MANAGER to the
+runner's argv rather than calling `headlessArgs` directly — `verify:agent-session
+supervisor.1`. Any future per-session field owes the same argv-level check.
+
+**`tc status` reports only the state vocabulary's words, and a document kind is `not started`,
+never its kind name.** `SUPERVISOR_PROMPT` tells the model the closed set; a `review` or
+`file` in the `state` field would be a word its own instructions say does not exist, and a
+model cannot tell a vocabulary miss from a state it has not seen. `verify:control status.3`
+checks the producers (`panelState`, `TRIGGER_WORDS`) rather than the handler, because the
+handler passes the model through and a check on it would assert a tautology.
+
+**One supervisor per canvas is enforced at the CREATE path, not only by the disabled row.**
+The sheet's option is the affordance; `beginNewChat` refuses a second one by name. A rule
+that lives only in a control's `disabled` attribute is bypassed by anything that sets the
+value another way — the shot harness does exactly that, deliberately. `verify:panels
+supervisor.1` asserts both the disabled option in the DOM and the create's refusal.
