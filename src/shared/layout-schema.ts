@@ -4,7 +4,7 @@ import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
 import type { ChatSource } from './chat-panel'
-import type { LinkAutomation } from './handoff'
+import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from './handoff'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import {
   AGENT_KINDS,
@@ -458,8 +458,9 @@ function parseLinkAutomation(raw: unknown): LinkAutomation | undefined | 'malfor
   if (raw === undefined) return undefined
   if (!isRecord(raw) || typeof raw.enabled !== 'boolean') return 'malformed'
   if (raw.kind === 'restart-on-exit') return { kind: 'restart-on-exit', enabled: raw.enabled }
-  if (raw.kind === 'handoff' && (raw.trigger === 'exit' || raw.trigger === 'idle')) {
-    return { kind: 'handoff', enabled: raw.enabled, trigger: raw.trigger }
+  // M78: five triggers. HANDOFF_TRIGGERS is the list; an unknown one is still malformed.
+  if (raw.kind === 'handoff' && typeof raw.trigger === 'string' && (HANDOFF_TRIGGERS as readonly string[]).includes(raw.trigger)) {
+    return { kind: 'handoff', enabled: raw.enabled, trigger: raw.trigger as HandoffTrigger }
   }
   return 'malformed'
 }
@@ -1252,9 +1253,14 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     for (const link of source.links ?? []) {
       if (link.automation === undefined) continue
       const target = byId.get(link.to)
-      if (!isTerminal(source) || target === undefined || !isTerminal(target)) {
+      // M78: a handoff's endpoints are PROCESS kinds — a terminal or a chat
+      // (a turn's end is a source; a send is a target). A restart is still
+      // the terminal's alone: a chat has no process to restart.
+      const isProcess = (p: PersistedPanel): boolean => isTerminal(p) || p.kind === 'chat'
+      const allowed = link.automation.kind === 'handoff' ? isProcess : isTerminal
+      if (!allowed(source) || target === undefined || !allowed(target)) {
         clearAutomation(source, link.to)
-        warnings.push(`dropped automation on link ${source.id} -> ${link.to}: endpoints must be terminal panels`)
+        warnings.push(`dropped automation on link ${source.id} -> ${link.to}: endpoints must be ${link.automation.kind === 'handoff' ? 'terminal or chat panels' : 'terminal panels'}`)
       }
     }
   }

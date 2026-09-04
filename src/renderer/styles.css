@@ -1316,8 +1316,12 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 0;
-  height: 0;
+  /* 1px, not 0: a zero-sized SVG inside the world's `will-change: transform`
+     compositing layer painted NOTHING of its overflow (M78's graph scene —
+     the lines were in the DOM, at the right rects, with visible strokes, and
+     the screenshot showed bare canvas). One pixel gives the layer a box. */
+  width: 1px;
+  height: 1px;
   overflow: visible;
   z-index: 0;
   pointer-events: none;
@@ -1494,6 +1498,14 @@ body {
   pointer-events: all;
   cursor: pointer;
 }
+/* M78. A selected edge: the accent stroke, the badge the remove control. */
+.link-layer__line--selected { stroke: var(--iris); stroke-width: 3px; }
+.link-layer__badge--selected circle { stroke: var(--iris); }
+.link-layer__label--rule { fill: var(--fg-2); font-family: var(--font-mono); }
+.link-layer__head--selected { fill: var(--iris); }
+/* M78. The edge view: the ends in mono (two names the machine knows), a hairline select. */
+.inspector__edge-ends { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
+.inspector__select { width: 100%; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); }
 
 .link-layer__badge circle {
   fill: var(--s-3);
@@ -1502,7 +1514,9 @@ body {
 }
 
 .link-layer__badge path {
-  stroke: var(--red);
+  /* M78: iris, not red — a selection affordance, not a destructive verb (the
+     pane's Remove is the verb). */
+  stroke: var(--iris);
   stroke-width: 1.5px;
   stroke-linecap: round;
   fill: none;

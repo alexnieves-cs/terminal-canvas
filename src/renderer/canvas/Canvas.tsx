@@ -125,6 +125,7 @@ import { Navigator } from '../shell/Navigator'
 import { railLabel } from '../shell/rail-rows'
 import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
+import { TRIGGER_WORDS } from './trigger-words'
 import type { ScrollbackSearchHit } from '@shared/ipc-contract'
 
 
@@ -158,6 +159,13 @@ const registry = createRegistry({
 // verify:panels check 26 reloads a real renderer against a real PtyManager on
 // a tmux backend and asserts the session survives; that is what fails if this
 // listener comes back.
+
+/** M78. The word an edge carries on the canvas for its rule. */
+function edgeWord(automation: LinkAutomation): string {
+  // One phrasing, verbatim, on the line and in the pane's select (M78's critic).
+  if (automation.kind === 'restart-on-exit') return 'restart on exit'
+  return TRIGGER_WORDS[automation.trigger]
+}
 
 export function Canvas({
   initial,
@@ -522,10 +530,14 @@ export function Canvas({
    */
   const selectedPanelIds = useMemo(() => [...selectedIds], [selectedIds])
 
+  // M78. The selected EDGE, exclusive with the panel selection: selecting a
+  // panel or clicking the background clears it; selecting it clears them.
+  const [selectedLink, setSelectedLink] = useState<{ from: string; to: string } | null>(null)
   const selectOnly = useCallback((id: string | null): void => {
     const next = id === null ? EMPTY_SELECTION : new Set([id])
     selectedIdsRef.current = next
     setSelectedIds(next)
+    setSelectedLink(null)
   }, [])
   /** Additive selection is deliberately add-only: background click clears. */
   const addToSelection = useCallback((id: string): void => {
@@ -537,6 +549,7 @@ export function Canvas({
     next.add(id)
     selectedIdsRef.current = next
     setSelectedIds(next)
+    setSelectedLink(null)
   }, [])
   // M13/motion: an entry animation ends and the id leaves the set. Kept
   // beside the selection helpers rather than folded into them — it is a
@@ -2880,6 +2893,73 @@ export function Canvas({
     .filter((row): row is AutomationRow => row !== null))
   const automationRowsSignature = JSON.stringify(automationRowsBuilt)
   const automationRows = useMemo(() => automationRowsBuilt, [automationRowsSignature])
+  // M78. What every edge with a rule SAYS on the canvas (principle 13): the
+  // trigger in the vocabulary's words, and `⋈ waiting` while a join is owed.
+  const edgeLabels = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const row of automationRowsBuilt) {
+      if (!row.enabled) continue
+      const key = `${row.from}:${row.to}`
+      const result = automationResult.get(key)
+      const userLabel = linksOf(panels.find((p) => p.rect.id === row.from) ?? panels[0]!).find((l) => l.to === row.to)?.label
+      out.set(key, `${userLabel === undefined ? '' : `${userLabel} · `}${edgeWord(row.automation)}${result !== undefined && result.startsWith('waiting for') ? ' · waiting' : ''}`)
+    }
+    return out
+  }, [automationRowsSignature, automationResult])
+  const selectLink = useCallback((from: string, to: string) => {
+    selectedIdsRef.current = EMPTY_SELECTION
+    setSelectedIds(EMPTY_SELECTION)
+    setSelectedLink({ from, to })
+  }, [])
+  // M78. Delete/Backspace removes the selected edge (one history entry, the
+  // palette row's own verb); Escape deselects. Gated like every canvas key.
+  useEffect(() => {
+    if (selectedLink === null) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (shouldIgnoreKeys()) return
+      // A text field owns its own Backspace — a composer, a file editor, and
+      // xterm's helper textarea alike (the M24 lesson). With focus in one of
+      // them the edge is removed from the pane or the badge instead.
+      const active = document.activeElement
+      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable)) return
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        paletteActionsRef.current?.removeLink(selectedLink.from, selectedLink.to)
+        setSelectedLink(null)
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        setSelectedLink(null)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [selectedLink, shouldIgnoreKeys])
+  // The merged view has no edge verbs; a workspace switch replaces the panels
+  // under a selection. Both clear it rather than leaving a stale key.
+  useEffect(() => { if (merged) setSelectedLink(null) }, [merged])
+  useEffect(() => {
+    if (selectedLink === null) return
+    const source = panelsRef.current.find((p) => p.rect.id === selectedLink.from)
+    if (source === undefined || !linksOf(source).some((l) => l.to === selectedLink.to)) setSelectedLink(null)
+  }, [selectedLink, panels])
+  const selectedEdge = useMemo(() => {
+    if (selectedLink === null) return null
+    const source = panels.find((p) => p.rect.id === selectedLink.from)
+    const target = panels.find((p) => p.rect.id === selectedLink.to)
+    if (source === undefined || target === undefined) return null
+    const link = linksOf(source).find((l) => l.to === selectedLink.to)
+    if (link === undefined) return null
+    return {
+      from: selectedLink.from, to: selectedLink.to,
+      source: railLabel(source, undefined), target: railLabel(target, undefined),
+      ...(link.label === undefined ? {} : { label: link.label }),
+      ...(link.automation === undefined ? {} : { automation: link.automation }),
+      canHandoff: (isTerminalPanel(source) || isChatPanel(source)) && (isTerminalPanel(target) || isChatPanel(target)),
+      canRestart: isTerminalPanel(source) && isTerminalPanel(target),
+      sourceIsChat: isChatPanel(source),
+      result: automationResult.get(`${selectedLink.from}:${selectedLink.to}`)
+    }
+  }, [selectedLink, panels, automationResult])
   useEffect(() => registry.onExit((info) => {
     const source = panelsRef.current.find((panel) => panel.rect.id === info.panelId)
     if (!source || !isTerminalPanel(source)) return
@@ -3465,6 +3545,9 @@ export function Canvas({
             panels={displayPanels}
             draw={linkDraw.state}
             onRemove={merged ? undefined : removeLinkStable}
+            edgeLabels={edgeLabels}
+            selectedKey={selectedLink === null ? null : `${selectedLink.from}:${selectedLink.to}`}
+            onSelect={merged ? undefined : selectLink}
           />
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
@@ -3702,6 +3785,7 @@ export function Canvas({
           viewport={viewport}
           cursor={cursor}
           selectedId={selectedId}
+          selectedEdge={selectedEdge === null ? null : { source: selectedEdge.source, target: selectedEdge.target }}
           selected={inspectorModel === null ? null : { id: inspectorModel.id, label: inspectorModel.heading, state: inspectorModel.state }}
           backend={backendInfo}
           machineCost={machineCostTotal}
@@ -3764,6 +3848,7 @@ export function Canvas({
         onSetLinkAutomation={onSetLinkAutomation}
         automationResults={automationResult}
         automations={automationRows}
+        selectedEdge={selectedEdge}
         review={reviewModel}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}

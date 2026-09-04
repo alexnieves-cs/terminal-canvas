@@ -51,14 +51,29 @@ import type { LinkDrawState } from './useLinkDraw'
  * Nobody has measured a canvas with two hundred links; if that is ever slow,
  * the fix is a viewport intersection test here, and this is where it goes.
  */
+/** A cubic Bézier coordinate at t. */
+function bez(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const u = 1 - t
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+}
+
 function LinkLayerImpl({
   panels,
   draw,
-  onRemove
+  onRemove,
+  edgeLabels,
+  selectedKey,
+  onSelect
 }: {
   panels: Panel[]
   draw?: LinkDrawState | null
   onRemove?: (from: string, to: string) => void
+  /** M78. What each edge says it does, keyed `from:to` — overrides the user's label when a rule exists. */
+  edgeLabels?: ReadonlyMap<string, string>
+  /** M78. The selected edge's key; its badge is the remove control, Delete removes it. */
+  selectedKey?: string | null
+  /** M78. A click on an edge's midpoint badge selects it (the panels deselect). */
+  onSelect?: (from: string, to: string) => void
 }): JSX.Element | null {
   const [hovered, setHovered] = useState<string | null>(null)
   // Rebuilt whenever the panel array's identity changes — which includes every
@@ -112,6 +127,11 @@ function LinkLayerImpl({
             the ghost at `link-arrow` paints a dashed iris curve ending in a
             solid `--line-strong` arrowhead — a committed-link colour on a
             path whose whole job is to say "not committed yet". */}
+        {/* M78. The selected edge's own head: a marker does not inherit its
+            path's stroke, so the accent needs a marker of its own. */}
+        <marker id="link-arrow-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" className="link-layer__head--selected" />
+        </marker>
         <marker
           id="link-arrow-ghost"
           viewBox="0 0 10 10"
@@ -124,7 +144,12 @@ function LinkLayerImpl({
           <path d="M 0 0 L 10 5 L 0 10 z" className="link-layer__ghost-head" />
         </marker>
       </defs>
-      {segments.map((s) => (
+      {segments.map((s) => {
+        // M78. The rule maps and the selection are keyed `from:to` (the
+        // automation key every surface shares); the segment's own key is
+        // `from to` (M13's, with a space) and stays on `data-link`.
+        const ek = `${s.from}:${s.to}`
+        return (
         <g key={s.key}>
           {/* The hit stroke. Wide and transparent, and it takes pointer events
               where the LAYER does not — .link-layer keeps pointer-events:none
@@ -158,6 +183,13 @@ function LinkLayerImpl({
             className="link-layer__hit"
             d={s.d}
             style={onRemove === undefined ? { pointerEvents: 'none' } : undefined}
+            // M78. A CLICK on the edge selects it — click, not mousedown, so
+            // the background's mousedown (which clears every selection and
+            // must keep reading nothing from event.target, M35's rule) has
+            // already run; the selection lands after it. The badge stays the
+            // remove control M35 built.
+            onClick={onSelect === undefined ? undefined : (event) => { event.stopPropagation(); onSelect(s.from, s.to) }}
+            data-link-hit={ek}
             onMouseEnter={onRemove === undefined ? undefined : () => setHovered(s.key)}
             onMouseLeave={
               onRemove === undefined
@@ -175,14 +207,15 @@ function LinkLayerImpl({
               the line instead, which also gives it the correct paint order
               (on top of the line, at its own location) for free. */}
           <path
-            className="link-layer__line"
+            className={`link-layer__line${selectedKey === ek ? ' link-layer__line--selected' : ''}`}
             data-link={s.key}
+            data-link-selected={selectedKey === ek ? 'true' : undefined}
             d={s.d}
-            markerEnd="url(#link-arrow)"
+            markerEnd={selectedKey === ek ? 'url(#link-arrow-selected)' : 'url(#link-arrow)'}
           />
-          {hovered === s.key && onRemove !== undefined && (
+          {(hovered === s.key || selectedKey === ek) && onRemove !== undefined && (
             <g
-              className="link-layer__badge"
+              className={`link-layer__badge${selectedKey === ek ? ' link-layer__badge--selected' : ''}`}
               data-link-remove={s.key}
               transform={`translate(${(s.x1 + 3 * s.c1x + 3 * s.c2x + s.x2) / 8}, ${
                 (s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8
@@ -199,13 +232,15 @@ function LinkLayerImpl({
                 setHovered(null)
               }}
             >
+              <title>Remove this edge</title>
               <circle r="9" />
               <path d="M -3.5 -3.5 L 3.5 3.5 M 3.5 -3.5 L -3.5 3.5" />
             </g>
           )}
-          {s.label !== undefined && (
+          {(edgeLabels?.get(ek) ?? s.label) !== undefined && (
             <text
-              className="link-layer__label"
+              className={`link-layer__label${edgeLabels?.has(ek) ? ' link-layer__label--rule' : ''}`}
+              data-link-label={ek}
               // The CURVE's midpoint, not the chord's. At t = 0.5 a cubic
               // reduces to (P0 + 3C1 + 3C2 + P3) / 8, so this needs no path
               // measurement and no DOM — a getPointAtLength call here would
@@ -227,15 +262,19 @@ function LinkLayerImpl({
               // `hovered`, and a label that only moved while hovered would
               // itself jump on every mouseenter/mouseleave, which is a worse
               // visual defect than the one this offset removes.
-              x={(s.x1 + 3 * s.c1x + 3 * s.c2x + s.x2) / 8}
-              y={(s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8 - 16}
+              // M78. A RULE label sits at t = 0.72, toward the arrowhead the
+              // reader looks at first, so an edge whose midpoint is off screen
+              // still says what it does; the user's own label keeps the midpoint.
+              x={edgeLabels?.has(ek) ? bez(0.72, s.x1, s.c1x, s.c2x, s.x2) : (s.x1 + 3 * s.c1x + 3 * s.c2x + s.x2) / 8}
+              y={(edgeLabels?.has(ek) ? bez(0.72, s.y1, s.c1y, s.c2y, s.y2) : (s.y1 + 3 * s.c1y + 3 * s.c2y + s.y2) / 8) - 16}
               textAnchor="middle"
             >
-              {s.label}
+              {edgeLabels?.get(ek) ?? s.label}
             </text>
           )}
         </g>
-      ))}
+        )
+      })}
       {ghost !== null && (
         <path className="link-layer__ghost" d={ghost} markerEnd="url(#link-arrow-ghost)" />
       )}

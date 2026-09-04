@@ -548,7 +548,12 @@ export function setLinkAutomation(
 ): Panel[] {
   const source = panels.find((p) => p.rect.id === from)
   const target = panels.find((p) => p.rect.id === to)
-  if (!source || !target || !isTerminalPanel(source) || !isTerminalPanel(target)) return panels
+  // M78: a chat is a process kind — a valid source (a turn's end) and target (a send).
+  const isProcess = (p: Panel): boolean => isTerminalPanel(p) || isChatPanel(p)
+  if (!source || !target || !isProcess(source) || !isProcess(target)) return panels
+  // A restart is the terminal's alone (a chat has no process to restart) —
+  // the parser drops it on load, so the mutator must refuse it here too.
+  if (automation.kind === 'restart-on-exit' && !(isTerminalPanel(source) && isTerminalPanel(target))) return panels
   const link = linksOf(source).find((candidate) => candidate.to === to)
   if (!link) return panels
   if (!automation.enabled && link.automation === undefined) return panels
@@ -568,6 +573,7 @@ export function setLinkAutomation(
  */
 export function nextHandoffState(current: LinkAutomation | undefined): LinkAutomation {
   if (current?.kind === 'handoff' && current.enabled) {
+    // M78: a condition set from the edge's select cycles to off, like idle.
     return current.trigger === 'exit'
       ? { kind: 'handoff', enabled: true, trigger: 'idle' }
       : { kind: 'handoff', enabled: false, trigger: 'idle' }

@@ -26,5 +26,8 @@ module.exports = {
      verify-viewport.cjs's esbuild config to resolve @renderer as well as
      @shared: every other cross-boundary import here is `import type`. */
   ...require('../src/renderer/canvas/link-geometry'),
-  ...require('../src/renderer/panels/history')
+  ...require('../src/renderer/panels/history'),
+  /* M78. The handoff table (shared, pure) and the join reducer. */
+  ...require('../src/shared/handoff'),
+  ...require('../src/renderer/canvas/handoff-rules')
 }

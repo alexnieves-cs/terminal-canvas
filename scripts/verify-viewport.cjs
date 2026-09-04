@@ -1334,6 +1334,65 @@ ok('74 a panel with no kind is not a review panel',
     JSON.stringify({ has: [set !== null, next !== null], aToB: aToB && V.linksOf(aToB[0]), replaced: replaced && V.linksOf(replaced[1]) }))
 }
 
+// M78 — graph.1 / graph.2 / graph.3. THE TASK GRAPH'S PURE RULES.
+//      graph.1: handoffFires is ONE table over five triggers and two events —
+//      exit-ok only on code 0, exit-fail on any other exit (a signal is a
+//      failure), exit on any exit, idle only on a turn's end, always on both.
+//      graph.2: the join reducer fires when every expected source has
+//      arrived, never on the first, orders the payload by the EXPECTED list,
+//      names the sources still owed, and a source arriving twice replaces
+//      itself. graph.3: the mutator accepts a chat at either end and still
+//      refuses a document kind and a cycle.
+{
+  const fires = typeof V.handoffFires === 'function' ? V.handoffFires : null
+  const exit = (code) => ({ kind: 'exit', code })
+  const idle = { kind: 'idle' }
+  const table = fires === null ? null : {
+    ok0: fires('exit-ok', exit(0)), ok1: fires('exit-ok', exit(1)), okSig: fires('exit-ok', exit(null)), okIdle: fires('exit-ok', idle),
+    fail0: fires('exit-fail', exit(0)), fail1: fires('exit-fail', exit(1)), failSig: fires('exit-fail', exit(null)), failIdle: fires('exit-fail', idle),
+    exit0: fires('exit', exit(0)), exit1: fires('exit', exit(1)), exitIdle: fires('exit', idle),
+    idle0: fires('idle', exit(0)), idleIdle: fires('idle', idle),
+    always0: fires('always', exit(0)), always1: fires('always', exit(1)), alwaysIdle: fires('always', idle)
+  }
+  ok('graph.1 handoffFires: exit-ok only on 0, exit-fail on non-zero and on a signal, exit on any exit, idle only on a turn, always on both',
+    table !== null && table.ok0 === true && table.ok1 === false && table.okSig === false && table.okIdle === false &&
+      table.fail0 === false && table.fail1 === true && table.failSig === true && table.failIdle === false &&
+      table.exit0 === true && table.exit1 === true && table.exitIdle === false &&
+      table.idle0 === false && table.idleIdle === true &&
+      table.always0 === true && table.always1 === true && table.alwaysIdle === true,
+    JSON.stringify(table))
+
+  const advance = typeof V.joinAdvance === 'function' ? V.joinAdvance : null
+  const one = advance ? advance(['a', 'b'], new Map([['b', 'B-out']])) : null
+  const both = advance ? advance(['a', 'b'], new Map([['b', 'B-out'], ['a', 'A-out']])) : null
+  const single = advance ? advance(['a'], new Map([['a', 'A-out']])) : null
+  const none = advance ? advance(['a', 'b'], new Map()) : null
+  ok('graph.2 joinAdvance is ready only when every expected source arrived, orders the payload by the expected list, and names the sources still owed',
+    advance !== null && one && one.ready === false && JSON.stringify(one.waitingFor) === '["a"]' &&
+      both && both.ready === true && both.payload.indexOf('A-out') < both.payload.indexOf('B-out') && both.waitingFor.length === 0 &&
+      single && single.ready === true && single.payload === 'A-out' &&
+      none && none.ready === false && JSON.stringify(none.waitingFor) === '["a","b"]',
+    JSON.stringify({ one, both, single, none }))
+
+  const incoming = typeof V.incomingHandoffs === 'function' ? V.incomingHandoffs : null
+  const term = (id, links) => ({ kind: 'terminal', rect: { id, x: 0, y: 0, w: 10, h: 10 }, spec: { panelId: id, cwd: '~', args: [] }, z: 1, ...(links ? { links } : {}) })
+  const chat = (id, links) => ({ kind: 'chat', rect: { id, x: 0, y: 0, w: 10, h: 10 }, z: 1, chat: { cwd: '/r', sessionId: 'u' }, ...(links ? { links } : {}) })
+  const file = { kind: 'file', rect: { id: 'f', x: 0, y: 0, w: 10, h: 10 }, z: 1, source: { path: '/tmp/f' } }
+  const on = (trigger) => ({ kind: 'handoff', enabled: true, trigger })
+  const graph = [term('a', [{ to: 'c', automation: on('exit-ok') }, { to: 'f' }]), chat('b', [{ to: 'c', automation: on('idle') }, { to: 'a', automation: { kind: 'handoff', enabled: false, trigger: 'exit' } }]), chat('c'), file]
+  const set = V.setLinkAutomation
+  const chatTarget = set(graph, 'a', 'c', on('exit-fail'))
+  const chatSource = set(graph, 'b', 'a', on('always'))
+  const fileTarget = set(graph, 'a', 'f', on('exit'))
+  const withCycle = set(set(graph, 'b', 'a', on('always')), 'a', 'c', on('exit'))
+  const cyc = set(withCycle.map((p) => p.rect.id === 'c' ? { ...p, links: [{ to: 'b' }] } : p), 'c', 'b', on('exit'))
+  ok('graph.3 incomingHandoffs lists the enabled edges into a target in panel order (a join at two); setLinkAutomation accepts a chat at either end, refuses a file, refuses a cycle',
+    incoming !== null && JSON.stringify(incoming(graph, 'c')) === '["a","b"]' && JSON.stringify(incoming(graph, 'a')) === '[]' &&
+      V.linksOf(chatTarget[0])[0].automation.trigger === 'exit-fail' && V.linksOf(chatSource[1])[1].automation.trigger === 'always' &&
+      fileTarget === graph && cyc !== null && V.linksOf(cyc[2])[0].automation === undefined,
+    JSON.stringify({ incoming: incoming && incoming(graph, 'c'), chatTarget: V.linksOf(chatTarget[0]), chatSource: V.linksOf(chatSource[1]), fileRefused: fileTarget === graph, cyc: cyc && V.linksOf(cyc[2]) }))
+}
+
 // M16 (originally numbered 79-80b under this branch's own M13, which
 // collided with main's own DIFFERENT M13 — "links between panels", which
 // independently claimed 79-88 in this file. See the milestone-wide

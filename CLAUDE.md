@@ -62,15 +62,15 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | Script | Runtime | Covers |
 |---|---|---|
 | `verify:meta` | plain node | 29 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
-| `verify:viewport` | plain node | ~123 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
+| `verify:viewport` | plain node | ~127 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | ~185 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | ~187 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:palette` | plain node | ~120 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~155 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:rail` | plain node | ~156 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~96 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
 | `verify:file` | plain node | ~38 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
@@ -91,7 +91,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 76 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | ~280 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | ~283 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -254,6 +254,17 @@ check does not, and should not, cover it.
   `captureBaseline` PtyManager does, keyed by the chat's id, so `review:*` answers for a chat;
   a chat's baseline survives a relaunch (the conversation resumes). `reviewable` on the
   inspector model and the palette row is per kind, with the chat's own reason.
+- `src/shared/handoff.ts` / `src/renderer/canvas/handoff-rules.ts` — M78. `handoffFires` is
+  the ONE table over five triggers (`exit`, `idle`, `exit-ok`, `exit-fail`, `always`) and two
+  events; nothing else decides whether an edge fires. `incomingHandoffs`/`joinAdvance` are the
+  join: a target with several enabled edges starts once, when the last expected source arrives,
+  payloads in panel order; `useHandoff.ts` holds arrivals in a ref beside M41's queue. A chat is
+  a process kind at either end (its `result` is the source's `idle` through the chat store's
+  `onChatTurnEnd`; a target receives through `agentSession.send`, which spawns an asleep chat).
+  An edge is selected by a CLICK on its hit stroke (click, never mousedown — the background's
+  mousedown clears every selection first and reads nothing from the target, M35's rule); the
+  hover badge stays M35's remove; `Canvas.tsx` owns `selectedLink`, Delete/Escape, and
+  `edgeLabels` (principle 13).
 - `src/main/claude-transcript-import.ts` — M74. The CLI's own transcript (M17's glob) read
   into a chat panel's file for `Open as chat`: sidechain and meta records skipped, assistant
   records merged by message id with usage counted once, a typed prompt's string content a

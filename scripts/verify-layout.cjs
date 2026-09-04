@@ -1999,6 +1999,37 @@ const handoffLayout = (panels) => L.parseLayout(file({
     JSON.stringify({ ab, bc, cd, warnings: r.warnings }))
 }
 
+// M78 — graph.1. The three new triggers parse; an unknown one is still malformed.
+{
+  const r = handoffLayout([
+    panel({ id: 'a', links: [{ to: 'b', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
+    panel({ id: 'b', links: [{ to: 'c', automation: { kind: 'handoff', enabled: true, trigger: 'exit-fail' } }] }),
+    panel({ id: 'c', links: [{ to: 'd', automation: { kind: 'handoff', enabled: true, trigger: 'always' } }] }),
+    panel({ id: 'd', links: [{ to: 'a', automation: { kind: 'handoff', enabled: true, trigger: 'sometimes' } }] })
+  ])
+  const ps = active(r.snapshot).panels
+  ok('graph.1 exit-ok, exit-fail and always parse as handoff triggers; an unknown trigger drops the rule with a warning and keeps the link',
+    ps[0].links?.[0]?.automation?.trigger === 'exit-ok' && ps[1].links?.[0]?.automation?.trigger === 'exit-fail' && ps[2].links?.[0]?.automation?.trigger === 'always' &&
+      ps[3].links?.[0]?.to === 'a' && ps[3].links?.[0]?.automation === undefined && r.warnings.some((w) => /d -> a/.test(w) && /malformed/.test(w)),
+    JSON.stringify({ links: ps.map((p) => p.links), warnings: r.warnings }))
+}
+
+// M78 — graph.2. A handoff between two chats survives the durable door; a
+//      restart rule on a chat is dropped by name, the link kept.
+{
+  const chatOnDisk = (id, links) => ({ id, x: 0, y: 0, w: 400, h: 300, z: 1, kind: 'chat', chat: { cwd: '/r', sessionId: 'u-' + id }, ...(links ? { links } : {}) })
+  const r = handoffLayout([
+    chatOnDisk('a', [{ to: 'b', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }]),
+    chatOnDisk('b', [{ to: 't', automation: { kind: 'restart-on-exit', enabled: true } }]),
+    panel({ id: 't' })
+  ])
+  const ps = active(r.snapshot).panels
+  ok('graph.2 a handoff between two chats parses; a restart rule on a chat is dropped by name and the link kept',
+    ps[0].links?.[0]?.automation?.trigger === 'idle' && ps[1].links?.[0]?.to === 't' && ps[1].links?.[0]?.automation === undefined &&
+      r.warnings.some((w) => /b -> t/.test(w) && /terminal panels/.test(w)),
+    JSON.stringify({ links: ps.map((p) => p.links), warnings: r.warnings }))
+}
+
 // handoff.2. Malformed drops the AUTOMATION and keeps the LINK, with a
 //      warning naming the link: an unknown trigger, a missing trigger, and a
 //      handoff naming a sessionless endpoint (a review node cannot receive a
@@ -2017,7 +2048,7 @@ const handoffLayout = (panels) => L.parseLayout(file({
     links.length === 3 && links.every((l) => l.automation === undefined) && links[0].label === 'x' &&
       r.warnings.filter((w) => /a -> b.*malformed/.test(w)).length === 1 &&
       r.warnings.filter((w) => /a -> c.*malformed/.test(w)).length === 1 &&
-      r.warnings.some((w) => /a -> r1.*terminal panels/.test(w)),
+      r.warnings.some((w) => /a -> r1.*terminal( or chat)? panels/.test(w)),
     JSON.stringify({ links, warnings: r.warnings }))
 }
 
