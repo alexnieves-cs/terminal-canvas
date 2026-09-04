@@ -13,6 +13,8 @@ export interface CanvasHudProps {
   selectedId: string | null
   /** M63. The selected panel's title and state word, so the strip says who and what, not an id. */
   selected?: { id: string; label: string; state: StateInput } | null
+  /** M78. A selected EDGE, when one is: the strip names it as `source → target`. */
+  selectedEdge?: { source: string; target: string } | null
   /** null until the one-shot probe answers. */
   backend: SessionBackendInfo | null
   machineCost: MachineCostSnapshot['total']
@@ -38,7 +40,7 @@ const ZOOM_STEP = 1.2
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ viewport, cursor, selectedId, selected, backend, machineCost, onZoomBy, onFit }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected, backend, machineCost, onZoomBy, onFit }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       {/* M46. The zoom cluster: the ONE pointer surface in the HUD (the rest
@@ -59,7 +61,7 @@ export function CanvasHud({ viewport, cursor, selectedId, selected, backend, mac
       {/* M63. Labelled: a bare panel id in the strip read as a word nobody
           would guess (M61's critic could not identify it). */}
       <span className="canvas-hud__focus" title="The selected panel" data-hud-selected={selectedId ?? undefined}>
-        {selected ? <SelectedToken id={selected.id} label={selected.label} state={selected.state} /> : 'nothing selected'}
+        {selected ? <SelectedToken id={selected.id} label={selected.label} state={selected.state} /> : selectedEdge ? <span className="hud__edge" data-hud-edge>edge {selectedEdge.source} → {selectedEdge.target}</span> : 'nothing selected'}
       </span>
       <span className="canvas-hud__cost" data-machine-cost-total>
         CPU {formatCpu(machineCost.cpuPercent)} · RAM {formatMemory(machineCost.memoryBytes)}

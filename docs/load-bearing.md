@@ -3187,3 +3187,43 @@ run: touches read null and the Edit row's `diff` said `unchanged`. `verify:revie
 created outside a repository or before its agent ran reads `no baseline`; `reading…` is its
 own sentence. Collapsing any two tells the user the wrong fix (principle 7). `verify:panels
 tools.2`.
+
+**`handoffFires` is the ONE table, and an edge that fails its condition is recorded by name
+(`shared/handoff.ts`, `useHandoff.ts`).** Five triggers and two events make ten cells; a second
+copy of the table in the hook, the parser or the pane drifts in the cell nobody tests (`exit-ok`
+on a signal, `always` on a turn). The hook asks the table and nothing else; a failed exit
+condition writes `skipped — exit 1 is not exit 0` to the automation list, because an edge that
+silently did not fire is indistinguishable from one that is broken. `verify:viewport graph.1`,
+`verify:panels graph.1`.
+
+**A join fires ONCE, when the LAST expected source arrives, with the payload in the panels'
+order — and the arrivals live in a ref, never in the layout (`handoff-rules.ts`, `useHandoff.ts`).**
+Firing on each arrival would start the target twice with half the context each time; persisting
+arrivals would replay yesterday's output on the next launch (the same reason M41's queue is a
+ref). `incomingHandoffs` is computed at each arrival from the CURRENT panels, so an edge added
+or removed while a join waits changes what it waits for, and `waiting for <source>` names what
+is still owed. `verify:viewport graph.2`, `verify:panels graph.1`.
+
+**An edge is selected on CLICK, never on mousedown (`LinkLayer.tsx`).** The canvas background's
+mousedown clears every selection and, by M35's rule, reads nothing from `event.target` — so a
+mousedown on the hit stroke that selected the edge would be cleared by the same event a moment
+later, and stopping propagation there would pin a panel live (M35's own comment names the
+failure). A click fires after the mousedown has run, so the selection lands last. The first
+draft made the hover BADGE select, which broke M35's remove check; the badge stays the remove
+control. `verify:panels graph.2`, `link-draw.5`.
+
+**A handoff into a shell EXECUTES the pasted transcript (a harness fact worth keeping).** The
+join check's first target was a `/bin/sh`, and the source's own `exit 0` line, pasted, ended it
+before the second source's part arrived; a bare `cat` never leaves `starting` (no output, no
+idle) and is never receivable. The target that works is a shell that prints once and sleeps:
+the tty echoes the paste into the log without running it. This is also the honest limit of a
+handoff into a plain shell — it is INPUT, and a shell runs input. `verify:panels graph.1`.
+
+**The link layer's SVG is 1px, never 0px (`styles.css` `.link-layer`).** A zero-sized SVG root
+with `overflow: visible` inside the world's `will-change: transform` compositing layer painted
+NOTHING of its overflow: the lines were in the DOM, at the right client rects, with visible
+computed strokes, and the screenshot showed bare canvas. Every link check reads the DOM and
+computed styles, so every one was green while no link had been visible in the built app for
+some time. The `graph` scene (M78) was the first time a picture of a link was looked at. One
+pixel gives the layer a box and the overflow paints. Manual-only: that this holds on the next
+Chromium.

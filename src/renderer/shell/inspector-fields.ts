@@ -5,12 +5,13 @@ import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
-import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type LinkAutomation } from '@shared/handoff'
+import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
 import type { PendingApproval } from './rail-sections'
+import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 
 /**
  * What the inspector renders, as plain data.
@@ -110,7 +111,7 @@ export interface InspectorLinkRow {
   automation?: LinkAutomation
 }
 
-export type HandoffState = 'off' | 'exit' | 'idle'
+export type HandoffState = 'off' | HandoffTrigger
 
 export function handoffStateOf(automation: LinkAutomation | undefined): HandoffState {
   return automation?.kind === 'handoff' && automation.enabled ? automation.trigger : 'off'
@@ -126,9 +127,8 @@ export function describeAutomation(automation: LinkAutomation): string {
   // BOTH bounds, named where the rule is made: a user must never learn the
   // 16 KiB cap from a silently truncated paste (the M41 verifier's note).
   const bound = `last ${HANDOFF_MAX_LINES} lines, ${Math.round(HANDOFF_MAX_CHARS / 1024)} KiB max`
-  return automation.trigger === 'exit'
-    ? `handoff on exit · ${bound}`
-    : `handoff after a turn · ${bound}`
+  // M78: the one vocabulary the line and the select use.
+  return `handoff ${TRIGGER_WORDS[automation.trigger]} · ${bound}`
 }
 
 /**
@@ -141,6 +141,11 @@ export function handoffControl(state: HandoffState): { label: string; title: str
     case 'off': return { label: 'handoff: off', title: 'Hand this panel\'s output to the target when it exits (next: on exit)' }
     case 'exit': return { label: 'handoff: exit', title: 'Next: hand off after each completed turn instead (idle)' }
     case 'idle': return { label: 'handoff: idle', title: 'Next: turn the handoff off' }
+    // M78. The three conditions are set from the edge's own select; the
+    // cycle button reads them and its press turns the handoff off.
+    case 'exit-ok': return { label: 'handoff: exit 0', title: 'Next: turn the handoff off' }
+    case 'exit-fail': return { label: 'handoff: failing exit', title: 'Next: turn the handoff off' }
+    case 'always': return { label: 'handoff: always', title: 'Next: turn the handoff off' }
   }
 }
 

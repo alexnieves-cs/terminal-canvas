@@ -112,6 +112,15 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'graph', intent: 'The task graph: two ruled edges into the second terminal — the chat\'s after a turn, worker a\'s on exit 0 — each saying what it does on the line in mono; the edge from the chat is selected (accent stroke, its badge the remove control) and the context pane shows it as an Edge: source → target, the rule as a labelled select, Label… and Remove. An edge is a thing you can pick up.',
+    run: async (kit) => {
+      await kit.goTo('claude — api (2)')
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await sleep(300)
+      await kit.js(`(() => { const hit = document.querySelector('[data-link-hit="chat:twin"]'); if (hit) hit.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!hit })()`)
+      await sleep(700)
+      await kit.shot('graph')
+    } },
   { name: 'tool-objects', intent: 'A tool call as an object: in the chat, the Edit row\'s `diff` verb is open and shows the hunk against the chat\'s baseline in the review node\'s own line idiom; the context pane\'s Changes section answers for the chat; a review node opened from it lists server.ts with `· 2 tool calls` and, expanded, the Read and the Edit that touched it. One vocabulary for what happened to a file, whichever surface says it.',
     run: async (kit) => {
       await kit.goTo('api (chat)')
@@ -245,6 +254,9 @@ app.whenReady().then(async () => {
     workspaces: [{
       id: 'w1', name: 'api', camera: { x: 0, y: 0, scale: 1 }, selectedId: 'live', focusedId: null,
       panels: [
+        // M78. Two ruled edges INTO `twin` (the second terminal): a join of the
+        // chat (after a turn) and worker a (on exit 0); every ruled edge says
+        // what it does. Twin sits in open space, so the edges are visible.
         term('live', 30, 30, 380, 250, 1, { title: 'claude — api' }),
         // M74. Marked a claude session so the frame shows the terminal-side
         // front-end verb (it is dormant: no live process, the precondition).
@@ -256,9 +268,9 @@ app.whenReady().then(async () => {
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
         // M73. A chat panel with a recorded conversation in its durable file
         // (seeded below), so the scene shows a transcript with no process.
-        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' } },
+        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
-        term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX }),
+        term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })
       ],
       groups: [{ id: 'g1', label: 'workers', colour: 'violet', panelIds: ['groupA', 'groupB'] }],

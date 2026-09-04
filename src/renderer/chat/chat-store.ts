@@ -167,6 +167,32 @@ function replaceTurn(turns: TranscriptTurn[], turn: TranscriptTurn): TranscriptT
  * has to re-ask `agent:list` per event; the fields an event does not carry
  * are left as the last answer said.
  */
+/**
+ * M78. A chat's turn ended — the handoff hook's `idle` for a chat source.
+ * Rides applyChatEvent, the ONE event door, like the agent-state store's
+ * transition fan-out rides applyAgentState.
+ */
+type TurnEndListener = (id: string) => void
+const turnEndListeners = new Set<TurnEndListener>()
+export function onChatTurnEnd(listener: TurnEndListener): () => void {
+  turnEndListeners.add(listener)
+  return () => { turnEndListeners.delete(listener) }
+}
+
+/** M78. The last assistant text of a chat, for a handoff's payload; empty when none. */
+export function lastAssistantText(id: string): string {
+  const state = states.get(id)
+  if (!state) return ''
+  // The LAST assistant turn only, never an older one under this turn's
+  // header: a turn that ended in tool blocks alone has no answer to hand off.
+  for (let i = state.turns.length - 1; i >= 0; i -= 1) {
+    const t = state.turns[i]!
+    if (t.role !== 'assistant') continue
+    return t.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n').trim()
+  }
+  return ''
+}
+
 export function applyChatEvent(event: AgentSessionEvent): void {
   const prev = states.get(event.id)
   // An event for a panel this renderer never seeded (another workspace's,
@@ -228,6 +254,10 @@ export function applyChatEvent(event: AgentSessionEvent): void {
         costUsd: event.costUsd ?? snap.costUsd
       }
       update(event.id, { ...prev, snapshot: nextSnap, live: null })
+      // An interrupted turn is not a turn's end: its answer is partial.
+      // …and an error result is not a completed turn either: a handoff
+      // after a failed turn would carry an answer that is not one.
+      if (!event.interrupted && event.ok !== false) for (const cb of turnEndListeners) cb(event.id)
       return
     }
     case 'turn-aborted':

@@ -5,7 +5,8 @@ import { agentStateLabel, handoffControl, KIND_NOUN, visibleDetailFields } from 
 import { shortPath } from '@renderer/palette/panel-name'
 import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
-import type { LinkAutomation } from '@shared/handoff'
+import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
+import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { shellControl } from './shell-control'
 import { Close, Pencil, RotateCw } from '@renderer/icons'
 import type { ContextTab } from './useShellChrome'
@@ -20,6 +21,23 @@ import type { RunRow } from '@shared/run-ledger'
 /** M68. Fields whose value is a path: shown left-truncated, full on hover. */
 const PATH_FIELDS = new Set(['cwd', 'live-cwd', 'worktree-path', 'repo', 'directory', 'toolbox-cwd'])
 const MONO_FIELDS = new Set(['command', 'spec-command', 'cwd', 'live-cwd', 'live-command', 'worktree-path', 'pid', 'repo', 'file', 'directory', 'toolbox-cwd'])
+
+/** M78. The selected edge as the pane shows it. */
+export interface SelectedEdge {
+  from: string
+  to: string
+  source: string
+  target: string
+  label?: string
+  automation?: LinkAutomation
+  /** Both ends are process kinds; a document end can carry no rule. */
+  canHandoff: boolean
+  /** Both ends are terminals — the only edge a restart rule can live on. */
+  canRestart: boolean
+  /** A chat never exits: the exit-family triggers cannot fire from it. */
+  sourceIsChat: boolean
+  result?: string
+}
 
 export interface AutomationRow {
   from: string
@@ -59,6 +77,8 @@ export interface InspectorProps {
   /** Ephemeral evidence of what a functional link most recently did. */
   automationResults: ReadonlyMap<string, string>
   automations: AutomationRow[]
+  /** M78. The selected edge, when one is; the pane shows it with its rule as a select. */
+  selectedEdge?: SelectedEdge | null
   /**
    * null while nothing is selected or the review invoke has not resolved
    * yet — a distinct state from `hidden`, which is the engine's own answer
@@ -103,13 +123,15 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
   return (
     <aside className="shell__inspector" aria-label="Context">
-      {model === null
+      {model === null && selectedEdge != null
+        ? <EdgePanel edge={selectedEdge} onSetLinkAutomation={onSetLinkAutomation} onRemoveLink={onRemoveLink} onRelabelLink={onRelabelLink} />
+        : model === null
         ? <>
             <div className="shell__region-title">Canvas</div>
             <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
@@ -185,6 +207,73 @@ function RunsSection({ panelId, active }: { panelId: string; active: boolean }):
 }
 
 /** The audit surface #24 requires: rules are readable without tracing lines. */
+/**
+ * M78. THE EDGE, selected. Its rule is a labelled select over `off` and the
+ * five triggers — the one place a condition is set — with the last result
+ * beneath and the M35 verbs (relabel, remove). A document end disables the
+ * select by name.
+ */
+function EdgePanel({ edge, onSetLinkAutomation, onRemoveLink, onRelabelLink }: {
+  edge: SelectedEdge
+  onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
+  onRemoveLink: (from: string, to: string) => void
+  onRelabelLink: (from: string, to: string, current: string) => void
+}): JSX.Element {
+  const value = edge.automation?.kind === 'handoff' && edge.automation.enabled ? edge.automation.trigger : edge.automation?.kind === 'restart-on-exit' && edge.automation.enabled ? 'restart' : 'off'
+  // The line's own words (TRIGGER_WORDS), verbatim: one phrasing per fact.
+  const options: Array<{ value: string; label: string }> = [
+    { value: 'off', label: 'off' },
+    ...(['exit', 'exit-ok', 'exit-fail', 'idle', 'always'] as const).map((t) => ({ value: t, label: TRIGGER_WORDS[t] })),
+    { value: 'restart', label: 'restart on exit' }
+  ]
+  return (
+    <div className="inspector__body" data-inspector-edge={`${edge.from}:${edge.to}`}>
+      <div className="shell__region-title">Edge</div>
+      <p className="inspector__edge-ends" data-edge-ends>{edge.source} → {edge.target}</p>
+      <dl className="inspector__fields">
+        <div className="inspector__field">
+          <dt className="inspector__label">label</dt>
+          <dd className="inspector__value">{edge.label ?? (edge.automation !== undefined && edge.automation.enabled ? 'none — the rule is shown on the line' : 'none')}</dd>
+        </div>
+        <div className="inspector__field">
+          <dt className="inspector__label">rule</dt>
+          <dd className="inspector__value">
+            <select
+              className="inspector__select"
+              data-edge-trigger
+              value={value}
+              disabled={!edge.canHandoff}
+              title={edge.canHandoff ? 'What this edge does when the source ends' : 'A rule needs a terminal or a chat at both ends'}
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === 'off') { if (edge.automation !== undefined) onSetLinkAutomation(edge.from, edge.to, { ...edge.automation, enabled: false }); return }
+                if (v === 'restart') { onSetLinkAutomation(edge.from, edge.to, { kind: 'restart-on-exit', enabled: true }); return }
+                onSetLinkAutomation(edge.from, edge.to, { kind: 'handoff', enabled: true, trigger: v as HandoffTrigger })
+              }}
+            >
+              {options.map((o) => {
+                const exitFamily = o.value === 'exit' || o.value === 'exit-ok' || o.value === 'exit-fail'
+                const off = (o.value === 'restart' && !edge.canRestart) || (exitFamily && edge.sourceIsChat)
+                return <option key={o.value} value={o.value} disabled={off}>{o.label}{off ? (o.value === 'restart' ? ' — terminals only' : ' — a chat never exits') : ''}</option>
+              })}
+            </select>
+          </dd>
+        </div>
+        {/* Three states, never two: never fired, waiting, a real sentence. */}
+        <div className="inspector__field">
+          <dt className="inspector__label">last</dt>
+          <dd className="inspector__value" data-edge-result>{edge.result ?? (edge.automation !== undefined && edge.automation.enabled ? 'never fired' : 'no rule')}</dd>
+        </div>
+      </dl>
+      <div className="inspector__actions context__actions">
+        <button type="button" className="inspector__action inspector__action--secondary" data-edge-action="relabel" title="Label this edge" {...shellControl(() => onRelabelLink(edge.from, edge.to, edge.label ?? ''))}>Label…</button>
+        <button type="button" className="inspector__action inspector__action--secondary" data-edge-action="remove" title="Remove this edge (Delete)" {...shellControl(() => onRemoveLink(edge.from, edge.to))}>Remove</button>
+      </div>
+    </div>
+  )
+}
+
 function AutomationList({
   rows, results, onSetLinkAutomation
 }: {

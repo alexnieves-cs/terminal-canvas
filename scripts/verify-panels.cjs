@@ -8297,15 +8297,26 @@ app.whenReady().then(async () => {
         const reviewButtonState = await wc.executeJavaScript(`(() => {
           const b = document.querySelector('[data-inspector-action="review"]')
           return b ? { disabled: b.disabled, title: b.getAttribute('title') } : null })()`)
-        if (armed) await clickShell('[data-inspector-action="review"]')
+        // Clicked INSIDE the wait, and re-clicked while nothing has been minted:
+        // the Changes section re-asks review:panel while a baseline lands, and
+        // each re-ask unmounts the section (and this button) for a round trip,
+        // so a single click can land on nothing (M78's chain, twice in a row).
         let lastFresh = []
+        let clicks = 0
+        let lastClickAt = 0
         const nodeId = armed
           ? await waitUntil(async () => {
               const ids = await panelIds()
               const fresh = ids.filter((id) => !beforeIds.includes(id))
               lastFresh = fresh
-              return fresh.length === 1 ? fresh[0] : false
-            }, 8000)
+              if (fresh.length === 1) return fresh[0]
+              // One click per 1.5 s: two clicks landing on two answered invokes would mint two nodes.
+              if (clicks < 6 && Date.now() - lastClickAt > 1500) {
+                const clickable = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-inspector-action="review"]'); return !!b && !b.disabled })()`)
+                if (clickable) { clicks += 1; lastClickAt = Date.now(); await clickShell('[data-inspector-action="review"]') }
+              }
+              return false
+            }, 12000, 400)
           : false
         // Guarded rather than built bare: an absent row would make this a
         // TypeError, which ends the whole script and takes every later
@@ -14723,6 +14734,157 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(kErr && kErr.message || kErr) + ' | renderer: ' + (cLog2.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onC2)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M78 — graph.1 / graph.2 / graph.3. THE TASK GRAPH. graph.1: a JOIN —
+    //     two terminals hand off into one on exit 0 — fires ONCE after both
+    //     sources, the target's log carrying both tokens, and a fourth edge
+    //     conditioned on a failing exit records `skipped` by name when the
+    //     source exits 0. graph.2: an edge is selected by its midpoint badge,
+    //     the pane shows it, its select sets the rule, Delete removes it and
+    //     one undo restores it. graph.3: a chat's turn end hands its answer
+    //     to a terminal; a terminal's exit hands its tail into a chat's send.
+    // -------------------------------------------------------------------
+    {
+      const IDS = [
+        'graph.1 a join fires once after both sources (both tokens in the target\'s log, the rows say joined), and an exit-fail edge records skipped by name on exit 0',
+        'graph.2 an edge is selected by a click on it, the pane shows it and its select sets the rule, Delete removes it, one undo restores it',
+        'graph.3 a chat\'s turn end hands its answer to a terminal, and a terminal\'s exit hands its tail into a chat\'s send'
+      ]
+      const gLog = []
+      const onG = (_e, level, m) => { if (level >= 2) gLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onG)
+      try {
+        backend = createDirectBackend('verify: direct (m78 graph)')
+        const home = require('node:os').homedir()
+        const gPanel = (id, x, y, links, command = '/bin/sh', args = []) => ({ kind: 'terminal', rect: { id, x, y, w: 320, h: 220 }, z: 1, spec: { panelId: id, cwd: home, command, args }, ...(links ? { links } : {}) })
+        const edge = (to, trigger) => ({ to, automation: { kind: 'handoff', enabled: true, trigger } })
+        const gDir = mkdtempSync(join(tmpdir(), 'tc panels graph-'))
+        layoutStore.addPreset({ id: 'graph-claude', name: 'Claude (graph)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        layoutStore.save({
+          panels: [
+            ...fromPanels([
+              gPanel('gA', 60, 60, [edge('gC', 'exit-ok'), edge('gD', 'exit-fail')]), gPanel('gB', 60, 340, [edge('gC', 'exit-ok')]),
+              // The join TARGET prints once and sleeps: the tty echoes the pasted
+              // payloads into its log without a shell executing them — a shell
+              // ran A's transcript line by line and its `exit` line ended the
+              // target before B's part arrived (the first run); a bare `cat`
+              // never leaves `starting` and is never receivable (the second).
+              gPanel('gC', 440, 60, undefined, '/bin/sh', ['-c', 'echo ready; sleep 600']), gPanel('gD', 440, 340),
+              gPanel('gT', 820, 340), gPanel('gS', 820, 60, [edge('gK', 'exit')])
+            ]),
+            { id: 'gH', kind: 'chat', x: 1200, y: 60, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '88888888-8888-4888-8888-888888888888' }, links: [edge('gT', 'idle')] },
+            { id: 'gK', kind: 'chat', x: 1200, y: 340, w: 340, h: 260, z: 1, chat: { cwd: gDir, sessionId: '99999999-9999-4999-8999-999999999999' } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        layoutStore.flushSync()
+        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reG
+        await settle()
+        const seeded = await waitUntil(() => wc.executeJavaScript(`['gA', 'gB', 'gC', 'gD', 'gT', 'gS', 'gH', 'gK'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
+        const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        const wakeG = async (id) => {
+          const pt = await cardPoint(id); if (!pt) return false
+          wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
+          return waitUntil(async () => (await sessionMap(wc)).has(id), 10000)
+        }
+        const logHas = async (id, token) => (await scrollbackLog.tail(id, 120)).some((l) => l.includes(token))
+        const resultOf = (key) => wc.executeJavaScript(`(() => { const el = document.querySelector('[data-automation-result="${key}"]'); return el ? el.textContent : null })()`)
+        const showList = async (id) => {
+          await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+          await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="${id}"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
+          await settle()
+        }
+        // graph.1 — the join, and the failed condition.
+        const cUp = seeded ? await wakeG('gC') : false
+        const dUp = seeded ? await wakeG('gD') : false
+        const aUp = seeded ? await wakeG('gA') : false
+        const bUp = seeded ? await wakeG('gB') : false
+        await sleep(400)
+        // The token is in the log BEFORE the exit: the handoff reads the tail at
+        // exit time, and an echo still in flight would be a race, not a finding.
+        if (aUp) ptyManager.write('gA', 'echo JOIN-TOKEN-A\r')
+        await waitUntil(async () => logHas('gA', 'JOIN-TOKEN-A'), 10000)
+        if (aUp) ptyManager.write('gA', 'exit 0\r')
+        await showList('gC')
+        const waiting = await waitUntil(async () => { const t = await resultOf('gA:gC'); return t && /waiting for/.test(t) ? t : false }, 8000)
+        const skippedFail = await waitUntil(async () => { const t = await resultOf('gA:gD'); return t && /skipped/.test(t) ? t : false }, 8000)
+        const cUntouched = !(await logHas('gC', 'JOIN-TOKEN-A'))
+        if (bUp) ptyManager.write('gB', 'echo JOIN-TOKEN-B\r')
+        await waitUntil(async () => logHas('gB', 'JOIN-TOKEN-B'), 10000)
+        if (bUp) ptyManager.write('gB', 'exit 0\r')
+        const joinedA = await waitUntil(async () => logHas('gC', 'JOIN-TOKEN-A'), 12000)
+        // Waited for too: one bracketed paste, but the PTY echoes and the log flushes in its own time.
+        const joinedB = await waitUntil(async () => logHas('gC', 'JOIN-TOKEN-B'), 12000)
+        await settle()
+        const rowA = await waitUntil(async () => { const t = await resultOf('gA:gC'); return t && /joined|handed off/.test(t) ? t : false }, 8000)
+        const rowB = await resultOf('gB:gC')
+        const dUntouched = !(await logHas('gD', 'JOIN-TOKEN-A'))
+        const tailC = await scrollbackLog.tail('gC', 400)
+        const headers = tailC.filter((l) => l.includes('handoff from')).length
+        const aFirst = tailC.findIndex((l) => l.includes('JOIN-TOKEN-A')) < tailC.findIndex((l) => l.includes('JOIN-TOKEN-B'))
+        ok(IDS[0],
+          seeded === true && cUp && dUp && aUp && bUp && typeof waiting === 'string' && cUntouched === true &&
+            typeof skippedFail === 'string' && /exit 0 is not a failing exit/.test(skippedFail) && dUntouched === true &&
+            joinedA === true && joinedB === true && headers === 2 && aFirst === true && typeof rowA === 'string' && /joined/.test(rowA) && typeof rowB === 'string' && /joined|handed off/.test(rowB),
+          JSON.stringify({ seeded, up: [cUp, dUp, aUp, bUp], waiting, skippedFail, cUntouched, joinedA, joinedB, headers, rowA, rowB, dUntouched, tailC: tailC.slice(-14).map((l) => l.slice(0, 90)), log: gLog.slice(-3) }))
+
+        // graph.2 — selection, the pane's select, Delete, undo. The edge gS→gK.
+        const hoverKey = 'gS:gK'
+        // A click on the edge's hit stroke selects it (mousedown is the background's).
+        const badge = await waitUntil(() => wc.executeJavaScript(`(() => { const hit = document.querySelector('[data-link-hit="${hoverKey}"]'); if (!hit) return false; hit.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 4000)
+        // `data-link` is M13's `from to` key; the M78 attributes are `from:to`. The line follows its hit stroke.
+        const selected = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-link-hit="${hoverKey}"]')?.nextElementSibling?.getAttribute('data-link-selected') === 'true'`), 4000)
+        const paneEdge = await waitUntil(() => wc.executeJavaScript(`(() => { const e = document.querySelector('[data-inspector-edge="${hoverKey}"]'); const sel = e && e.querySelector('[data-edge-trigger]'); return sel ? { value: sel.value, ends: e.querySelector('[data-edge-ends]')?.textContent ?? null } : false })()`), 4000)
+        await wc.executeJavaScript(`(() => { const sel = document.querySelector('[data-edge-trigger]'); if (!sel) return false; const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(sel, 'exit-ok'); sel.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+        const ruleSet = await waitUntil(() => wc.executeJavaScript(`(() => { const t = document.querySelector('[data-link-label="${hoverKey}"]'); return t && /exit 0/.test(t.textContent) ? t.textContent : false })()`), 4000)
+        const stored = await waitUntil(async () => { layoutStore.flushSync(); const ps = layoutStore.mergedWorkspaces().flatMap((w) => w.panels); const src = ps.find((p) => p.id === 'gS'); const l = src && (src.links || []).find((x) => x.to === 'gK'); return l && l.automation && l.automation.trigger === 'exit-ok' ? l.automation : false }, 4000)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }))`)
+        const removed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-link-hit="${hoverKey}"]') === null`), 4000)
+        // The menu's undo, as the app delivers it.
+        wc.send('edit:undo')
+        const restored = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-link-hit="${hoverKey}"]') !== null`), 4000)
+        ok(IDS[1],
+          badge === true && selected === true && paneEdge && paneEdge.value === 'exit' && /gS|claude|sh/.test(String(paneEdge.ends)) &&
+            typeof ruleSet === 'string' && stored && stored.trigger === 'exit-ok' && removed === true && restored === true,
+          JSON.stringify({ badge, selected, paneEdge, ruleSet, stored, removed, restored, log: gLog.slice(-3) }))
+
+        // graph.3 — chat source (gH → gT on idle), terminal source into a chat (gS → gK on exit).
+        const tUp = await wakeG('gT')
+        const chatSpawnsBefore = chatSpawns.length
+        const sent = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const ta = document.querySelector('.panel[data-panel-id="gH"] [data-chat-input]'); if (!ta || ta.disabled) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+          setter.call(ta, 'Reply with exactly the word: pong'); ta.dispatchEvent(new Event('input', { bubbles: true }))
+          const b = document.querySelector('.panel[data-panel-id="gH"] [data-chat-send]'); if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 8000)
+        const chatToTerminal = await waitUntil(async () => logHas('gT', 'pong'), 12000)
+        const headerT = await logHas('gT', 'handoff from')
+        await showList('gT')
+        const rowH = await waitUntil(async () => { const t = await resultOf('gH:gT'); return t && /handed off/.test(t) ? t : false }, 6000)
+        const sUp = await wakeG('gS')
+        if (sUp) ptyManager.write('gS', 'echo INTO-CHAT-TOKEN\r')
+        await waitUntil(async () => logHas('gS', 'INTO-CHAT-TOKEN'), 10000)
+        if (sUp) ptyManager.write('gS', 'exit 0\r')
+        const chatGotSend = await waitUntil(() => {
+          const spawn = chatSpawns.slice(chatSpawnsBefore).find((sp) => sp.cwd === gDir && sp.args.some((a) => String(a).includes('99999999')))
+          if (!spawn) return false
+          const line = spawn.proc.stdin.map((l) => { try { return JSON.parse(l) } catch { return null } }).find((p) => p && p.type === 'user' && JSON.stringify(p).includes('INTO-CHAT-TOKEN'))
+          return line ? true : false
+        }, 12000)
+        const rowS = await waitUntil(async () => { const t = await resultOf('gS:gK'); return t && /handed off/.test(t) ? t : false }, 6000)
+        ok(IDS[2],
+          tUp && sent === true && chatToTerminal === true && headerT === true && typeof rowH === 'string' &&
+            sUp && chatGotSend === true && typeof rowS === 'string',
+          JSON.stringify({ tUp, sent, chatToTerminal, headerT, rowH, sUp, chatGotSend, rowS, log: gLog.slice(-3) }))
+        try { rmSync(gDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (gErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onG)
       }
     }
 

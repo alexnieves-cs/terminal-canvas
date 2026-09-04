@@ -2422,6 +2422,16 @@ const session = (id, over = {}) => ({
     JSON.stringify({ live: live.reviewable, never: [never.reviewable, never.reviewReason], chatRan: chatRan.reviewable, chatAlive: chatAlive.reviewable, chatEmpty: [chatEmpty.reviewable, chatEmpty.reviewReason] }))
 }
 
+// M78 — graph.1. describeAutomation names the five triggers, each distinct.
+{
+  const d = (trigger) => R.describeAutomation({ kind: 'handoff', enabled: true, trigger })
+  const all = ['exit', 'idle', 'exit-ok', 'exit-fail', 'always'].map(d)
+  ok('graph.1 describeAutomation names the five triggers distinctly — exit 0, a failing exit, always — and keeps the two bounds',
+    /exit 0/.test(d('exit-ok')) && /fail/.test(d('exit-fail')) && /always/.test(d('always')) && /after a turn/.test(d('idle')) && /on exit/.test(d('exit')) &&
+      new Set(all).size === 5 && all.every((s) => /200 lines/.test(s)),
+    JSON.stringify(all))
+}
+
 // M75 — composer.1–.4. THE COMPOSER'S PURE MODEL.
 //     composer.1: a trigger is `@` or `/` at the start of the text or after
 //     whitespace with the caret inside the token — `a/b`, an email, a caret
