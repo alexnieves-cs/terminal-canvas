@@ -28,6 +28,12 @@ export type ControlRequest =
    */
   | { verb: 'memory'; op: 'list'; root?: string; limit?: number }
   | { verb: 'memory'; op: 'add'; root: string; kind: string; text: string; panelId?: string }
+  /**
+   * M87. The broker: a request to a service this app holds a credential for,
+   * performed by main with the credential attached and never returned. The
+   * verb that can SPEND a credential — refused at the URL door outright.
+   */
+  | { verb: 'api'; service: string; method: string; path: string; body?: string; panelId?: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -94,6 +100,22 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
         return { kind: 'ok', req }
       }
       return { kind: 'bad', error: `unknown memory op ${JSON.stringify(op)} — use list or add` }
+    }
+    case 'api': {
+      const service = optionalString(fields['service'])
+      const method = optionalString(fields['method'])
+      const path = optionalString(fields['path'])
+      const body = fields['body']
+      const panelId = optionalString(fields['panelId'])
+      if (service === null || service === undefined) return { kind: 'bad', error: 'api needs a service — github or jira' }
+      if (method === null || method === undefined) return { kind: 'bad', error: 'api needs a method — GET, POST, PUT, PATCH or DELETE' }
+      if (path === null || path === undefined) return { kind: 'bad', error: 'api needs a path, starting with /' }
+      if (body !== undefined && typeof body !== 'string') return { kind: 'bad', error: 'body must be a string (JSON, already encoded)' }
+      if (panelId === null) return { kind: 'bad', error: 'panelId must be a non-empty string' }
+      const req: ControlRequest = { verb: 'api', service, method, path }
+      if (typeof body === 'string') req.body = body
+      if (panelId !== undefined) req.panelId = panelId
+      return { kind: 'ok', req }
     }
     case 'focus': {
       const id = fields['id']

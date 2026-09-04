@@ -3502,3 +3502,23 @@ missing upstream is its own arm (`upstream: null`), decided before the counts ar
 across worktrees would be N commits pretending to be one; hiding the controls would make
 "not supported here" indistinguishable from "not built" (`verify:palette` 31's rule reaching
 the node), so the sentence says which review to open instead.
+
+**The broker is the credential store's LAST reader, and `verify:meta readers.1` pins the set
+by name.** `read(` on a credential store is the one call that yields a token; three modules
+make it — the verifier, the Jira client and the broker — and a fourth fails the build with
+its own filename. This is M14's "no `credential:get`" reaching the control socket: an agent
+can USE a credential through `tc api` and never SEE one, because the token is attached in
+main and appears in no reply, audit row or refusal (`verify:credentials broker.1` searches
+the whole transcript of a run for it).
+
+**The broker's path is checked BEFORE the token is read, and its service table is CLOSED.**
+`..`, a scheme and `//` are refused with nothing secret yet in hand, and an unknown service
+is refused rather than resolved — an open table would let `tc api anything` carry a real
+token to an arbitrary host. A refused call is still an audit row (`status: 0` with the
+reason): an agent's attempt is what the audit is for, and a log that recorded only successes
+would show a quiet canvas during exactly the behaviour a person needs to see.
+
+**The broker has no IPC channel, on purpose.** It is wired to the control handler alone: a
+renderer that could call it could spend a credential from a page's context, and one that
+could read the audit could see what an agent asked — M89's page reads the audit through its
+own channel when that surface lands, and not before.

@@ -396,6 +396,24 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 // a new identifier and destructuring or calling through THAT is unchecked —
 // which is the same class of honest limit as the hardcoded offender list
 // above, not a claim of exhaustiveness.
+// M87 — readers.1. THE READERS OF A CREDENTIAL'S PLAINTEXT, pinned as a LIST.
+//      `read(` on a credential store is the one call that yields a token,
+//      and the set of modules that make it is exactly three: the verifier
+//      (M14), the Jira client (M24) and the broker (M87) — the store's LAST
+//      reader. A fourth would be a new place a token can leak from, and it
+//      fails the build with its own name rather than joining quietly.
+{
+  const { readdirSync } = require('node:fs')
+  const dir = 'src/main'
+  const readers = readdirSync(dir).filter((f) => f.endsWith('.ts'))
+    .filter((f) => /\bstore\s*\.\s*read\s*\(|credentialStore\s*\.\s*read\s*\(|deps\.store\.read\s*\(/.test(stripComments(read(`${dir}/${f}`) ?? '')))
+    .sort()
+  const expected = ['broker.ts', 'credential-verify.ts', 'jira-client.ts']
+  ok('readers.1 exactly three modules read a credential\'s plaintext — credential-verify, jira-client and the broker, the last reader',
+    JSON.stringify(readers) === JSON.stringify(expected),
+    JSON.stringify(readers))
+}
+
 {
   const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/session-backend.ts']
     .filter((f) => /credential-(store|verify|crypto)/.test(stripComments(read(f) ?? '')))

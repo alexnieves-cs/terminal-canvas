@@ -11,4 +11,8 @@ module.exports = {
   ...require('../src/shared/credential-schema'),
   ...require('../src/main/credential-store'),
   ...require('../src/main/credential-verify'),
+  /* M87. The broker: the store's LAST reader, over an injected fetcher and audit. */
+  ...require('../src/main/broker'),
+  ...require('../src/main/broker-audit'),
+  ...require('../src/main/jira-client'),
 }

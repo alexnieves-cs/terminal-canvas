@@ -61,13 +61,13 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:meta` | plain node | 29 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
+| `verify:meta` | plain node | 30 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
 | `verify:viewport` | plain node | ~129 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
 | `verify:layout` | plain node | ~194 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
-| `verify:credentials` | plain node | 15 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
+| `verify:credentials` | plain node | 16 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:palette` | plain node | ~122 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
 | `verify:rail` | plain node | ~158 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
@@ -78,7 +78,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:usage` | plain node | ~26 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
 | `verify:tmux` | plain node | 35 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
-| `verify:control` | plain node | 12 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
+| `verify:control` | plain node | 13 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
 | `verify:agent-session` | plain node | 72 checks (M71, M73–M76, M81, M82): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
@@ -314,6 +314,15 @@ check does not, and should not, cover it.
   loses its turn, and a budget is a stop) and says so once, latched until the ceiling is
   raised above the spend. The spend is the sum of the sessions' own `costUsd`, the CLI's
   cumulative figure; a session with no figure counts as nothing.
+- `src/main/broker.ts` / `src/main/broker-audit.ts` — M87. The credential store's LAST
+  reader (`verify:meta readers.1` pins the set as exactly `credential-verify.ts`,
+  `jira-client.ts`, `broker.ts`): `tc api <service> <method> <path> [body]` reaches it through
+  the control handler ONLY — no IPC channel names it, so the renderer can neither spend a
+  credential nor see what an agent spent. The service table is closed (github: bearer at
+  api.github.com; jira: basic auth at the credential's own site under `/rest/api/3`), the
+  path is checked before the token is read, every call and every refusal is one audit row of
+  metadata under `userData/broker-audit.jsonl`, and the token appears in no reply, row or
+  refusal. The real fetcher (`createHttpsBrokerFetcher`) is never CALLED by a suite — it rides in the credentials bundle beside the verifier's fetcher, and every check drives a fake.
 - `src/main/git-args.ts` (`buildAheadBehindArgs`, `parseAheadBehind`, `parseWorktreeList`,
   `buildMergeBaseArgs`) / `src/main/review-engine.ts` (`status`, `reviewAcross`) — M86. NO
   FETCH is built anywhere in `git-args.ts`, and `verify:review git.1` asserts that as text;

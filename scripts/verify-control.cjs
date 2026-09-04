@@ -277,6 +277,61 @@ const ok = (n, pass, detail = '') => {
       JSON.stringify({ words, exited, triggers }))
   }
 
+  // M87 — api.1. THE BROKER'S VERB at every door. `api` is the verb that can
+  //      SPEND A CREDENTIAL, so its refusals are load-bearing: the URL door
+  //      (a link in a page) refuses it outright; `command` is refused on it
+  //      as everywhere; the parser demands a service, a method and a path and
+  //      refuses a body that is not a string; the handler passes the broker's
+  //      own answer through and can spawn nothing; the CLI builds the shape
+  //      from `tc api <service> <method> <path> [body]` with the panel from
+  //      TC_PANEL_ID.
+  {
+    const parsedOk = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'GET', path: '/user' }))
+    const parsedBody = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'POST', path: '/repos/o/r/issues', body: '{"title":"x"}', panelId: 'n1' }))
+    const noPath = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'GET' }))
+    const badBody = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'POST', path: '/x', body: 42 }))
+    const withCommand = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'GET', path: '/user', command: 'rm' }))
+    const url = C.parseControlUrl('terminal-canvas://api?service=github&method=GET&path=/user')
+    const calls = []
+    const spawns = []
+    const handler = C.createControlHandler({
+      presets: () => [], defaultId: () => null, exists: () => true,
+      spawn: (p) => spawns.push(p), list: () => [], focus: () => true,
+      broker: { call: async (req) => { calls.push(req); return req.service === 'nope' ? { ok: false, reason: 'unknown service nope' } : { ok: true, status: 200, body: '{"login":"octocat"}', truncated: false } } }
+    })
+    const answered = parsedOk.kind === 'ok' ? await handler(parsedOk.req) : null
+    const refused = await handler({ verb: 'api', service: 'nope', method: 'GET', path: '/x' })
+    const noBroker = await C.createControlHandler({ presets: () => [], defaultId: () => null, exists: () => true, spawn: () => {}, list: () => [], focus: () => true })({ verb: 'api', service: 'github', method: 'GET', path: '/user' })
+    const build = typeof C.buildRequest === 'function' ? C.buildRequest : null
+    const cli = build ? build(['api', 'github', 'POST', '/repos/o/r/issues', '{"title":"x"}'], { TC_PANEL_ID: 'n7' }) : null
+    const cliLine = cli && cli.kind === 'ok' ? JSON.parse(cli.line) : cli
+    const cliShort = build ? build(['api', 'github'], {}) : null
+    // M87's verifier: the --panel flag the spec promised, a body that is not
+    // JSON refused as a usage error, and a served 4xx exiting 1 so a script
+    // testing $? does not read the service's refusal as success.
+    const cliFlag = build ? build(['api', 'github', 'get', '/user', '--panel', 'n9'], { TC_PANEL_ID: 'n7' }) : null
+    const cliFlagLine = cliFlag && cliFlag.kind === 'ok' ? JSON.parse(cliFlag.line) : cliFlag
+    const cliBadJson = build ? build(['api', 'github', 'POST', '/x', '{not json'], {}) : null
+    const out2 = []
+    const io2 = { stdout: (s) => out2.push(s), stderr: (s) => out2.push(`E:${s}`) }
+    const served404 = typeof C.runCli === 'function' ? await C.runCli(['api', 'github', 'GET', '/nope'], { TC_CONTROL_SOCKET: '/s.sock' }, async () => '{"ok":true,"status":404,"body":"{}","truncated":false}', io2) : -1
+    const served200 = typeof C.runCli === 'function' ? await C.runCli(['api', 'github', 'GET', '/user'], { TC_CONTROL_SOCKET: '/s.sock' }, async () => '{"ok":true,"status":200,"body":"{}","truncated":false}', io2) : -1
+    ok('api.1 the parser demands service, method and path and refuses a non-string body and a command key; the URL door refuses api; the handler passes the broker\'s answer and its refusal through and spawns nothing, and says so without a broker; the CLI builds the shape with the panel from TC_PANEL_ID',
+      parsedOk.kind === 'ok' && parsedOk.req.verb === 'api' && parsedOk.req.service === 'github' && parsedOk.req.method === 'GET' && parsedOk.req.path === '/user' &&
+        parsedBody.kind === 'ok' && parsedBody.req.body === '{"title":"x"}' && parsedBody.req.panelId === 'n1' &&
+        noPath.kind === 'bad' && /path/.test(noPath.error) && badBody.kind === 'bad' && /body/.test(badBody.error) &&
+        withCommand.kind === 'bad' && /command/.test(withCommand.error) && url.kind === 'bad' &&
+        answered && answered.ok === true && answered.status === 200 && /octocat/.test(answered.body) && calls.length === 2 &&
+        refused.ok === false && /unknown service/.test(refused.error) &&
+        noBroker.ok === false && /broker/.test(noBroker.error) && spawns.length === 0 &&
+        cliLine && cliLine.verb === 'api' && cliLine.service === 'github' && cliLine.method === 'POST' && cliLine.path === '/repos/o/r/issues' && cliLine.body === '{"title":"x"}' && cliLine.panelId === 'n7' &&
+        cliShort && cliShort.kind === 'usage' &&
+        cliFlagLine && cliFlagLine.panelId === 'n9' && cliFlagLine.method === 'GET' &&
+        cliBadJson && cliBadJson.kind === 'usage' && /JSON/.test(cliBadJson.error) &&
+        served404 === 1 && served200 === 0,
+      JSON.stringify({ parsedOk, parsedBody, noPath, badBody, withCommand, url, answered, refused, noBroker, cliLine, cliShort, cliFlagLine, cliBadJson, served404, served200 }))
+  }
+
   // M83 — memory.2. THE CLI's OWN MEMORY VERBS, and the limit refusal.
   //      `verify:control memory.1` drives the parser and the handler, so it
   //      is green over a CLI that never learned the verb — which is exactly
