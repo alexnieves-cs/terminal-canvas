@@ -20,6 +20,8 @@ export type ControlRequest =
   | { verb: 'list' }
   | { verb: 'focus'; id: string }
   | { verb: 'ping' }
+  /** M81. READ-ONLY: the canvas model, for a supervisor that answers about it. */
+  | { verb: 'status' }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -58,6 +60,8 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       return { kind: 'ok', req: { verb: 'list' } }
     case 'ping':
       return { kind: 'ok', req: { verb: 'ping' } }
+    case 'status':
+      return { kind: 'ok', req: { verb: 'status' } }
     case 'focus': {
       const id = fields['id']
       if (typeof id !== 'string' || id.length === 0) return { kind: 'bad', error: 'focus needs an id' }

@@ -18,6 +18,8 @@ import { chmodSync, rmSync } from 'node:fs'
 import { parseControlLine, type ControlRequest } from './control-protocol'
 
 export interface ControlReply {
+  /** M81. `status`'s model. */
+  canvas?: import('./control-handler').ControlCanvasModel
   ok: boolean
   error?: string
   [key: string]: unknown

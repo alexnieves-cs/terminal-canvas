@@ -15970,7 +15970,10 @@ app.whenReady().then(async () => {
           wc.send(IPC_EVENTS.PRESET_SPAWN, template)
         },
         list: () => ptyManager.list().map((r) => ({ panelId: r.panelId, pid: r.pid, cwd: r.cwd, command: r.command })),
-        focus: (id) => { wc.send(IPC_EVENTS.ATTENTION_JUMP, id); return true }
+        focus: (id) => { wc.send(IPC_EVENTS.ATTENTION_JUMP, id); return true },
+        // M81. The renderer's own model, over the same ephemeral reply channel
+        // main uses — the real path, not a stub.
+        canvas: () => requestFromRenderer(wc, IPC_EVENTS.CANVAS_MODEL, null, 2000)
       })
       const server = await createControlServer({ path: sockPath, handle: handler })
       const ask = (line) => new Promise((resolve) => {
@@ -15995,6 +15998,51 @@ app.whenReady().then(async () => {
       const target = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)[0] || null`)
       const focused = target ? await ask(JSON.stringify({ verb: 'focus', id: target })) : ''
       await settle()
+      // M81 — supervisor.1. `tc status` over the SAME socket: the canvas model
+      // in the canvas's own words, counted against the DOM (a reply that
+      // agrees with itself and not with the canvas is the failure a
+      // main-only check cannot see); and the sheet offers ONE supervisor,
+      // whose first question sits in its composer unsent.
+      const statusText = await ask('{"verb":"status"}')
+      const status = (() => { try { return JSON.parse(statusText || '{}') } catch { return {} } })()
+      const domPanels = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => ({ id: p.getAttribute('data-panel-id'), word: p.querySelector('[data-state-word]')?.textContent ?? null }))`)
+      const withCommand = await ask(JSON.stringify({ verb: 'status', command: 'rm -rf /' }))
+      const beforeSup = await panelCount(wc)
+      // The sheet's supervisor row, then its second offer.
+      const supervisorMade = await wc.executeJavaScript(`window.__m81Supervisor ? window.__m81Supervisor() : 'no hook'`)
+      const supervisorState = await waitUntil(() => wc.executeJavaScript(`(() => {
+        const chats = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]
+        const sup = chats[chats.length - 1]
+        if (!sup) return false
+        const composer = sup.querySelector('[data-chat-input]')
+        if (!composer || composer.value === '') return false
+        return { message: composer.value, turns: sup.getAttribute('data-chat-turns'), title: sup.querySelector('.pf__title, .panel__title')?.textContent ?? null } })()`), 8000)
+      // The SHEET's own row, in the DOM — not the predicate behind it (M81's
+      // verifier: re-running the predicate is a tautology).
+      await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
+      const sheetOption = await waitUntil(() => wc.executeJavaScript(`(async () => {
+        if (document.querySelector('[data-spawn-sheet]') === null) {
+          // Through the palette's own row — the harness has no menu accelerator.
+          if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          const input = document.querySelector('.palette__input')
+          if (!input) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'new panel'); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await new Promise((r) => setTimeout(r, 600))
+        }
+        const opt = [...document.querySelectorAll('[data-sheet-what] option')].find((o) => /supervisor/.test(o.textContent))
+        return opt ? { disabled: opt.disabled, text: opt.textContent } : false })()`), 6000)
+      await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      // And the create path refuses a second one even when the row is bypassed.
+      const secondCreate = await wc.executeJavaScript(`window.__m81Supervisor()`)
+      // The durable door: the flag survives a save and a reload.
+      layoutStore.flushSync()
+      // The flag lives on the chat SOURCE, where copyChatSource writes it.
+      const storedFlag = (layoutStore.initial().panels || []).some((p) => p.kind === 'chat' && p.chat && p.chat.supervisor === true)
+      const secondOffer = await wc.executeJavaScript(`window.__m81SupervisorOffered ? window.__m81SupervisorOffered() : 'no hook'`)
       await server.close()
       const parse = (t) => { try { return JSON.parse(t || '{}') } catch { return {} } }
       ok('control.1 an open over the real socket adds a panel to the canvas, a bad preset adds nothing and says why, list answers, and focus reaches the renderer',
@@ -16002,6 +16050,20 @@ app.whenReady().then(async () => {
           parse(bad).ok === false && /no-such-preset-zz/.test(parse(bad).error || '') && stillAfter === after &&
           parse(listed).ok === true && Array.isArray(parse(listed).sessions) && parse(focused).ok === true,
         JSON.stringify({ presetName, opened, before, after, grew, bad, stillAfter, listed: (listed || '').slice(0, 120), target, focused }))
+      ok('supervisor.1 tc status answers over the real socket with the canvas model in the canvas\'s own words, refuses a command key; ONE supervisor per canvas — the sheet\'s row disabled by name AND the create path refusing — its first question unsent, and its flag on disk',
+        status.ok === true && Array.isArray(status.canvas?.panels) && status.canvas.panels.length === domPanels.length &&
+          status.canvas.panels.every((p) => typeof p.state === 'string' && p.state !== '') &&
+          domPanels.filter((d) => d.word !== null).every((d) => status.canvas.panels.some((p) => p.id === d.id && p.state === d.word)) &&
+          Array.isArray(status.canvas.edges) && Array.isArray(status.canvas.runs) &&
+          (() => { try { const r = JSON.parse(withCommand); return r.ok === false && /command/.test(r.error || '') } catch { return false } })() &&
+          supervisorMade === true && supervisorState && /What is this canvas doing\\?/.test(supervisorState.message) && supervisorState.turns === '0' &&
+          // Non-vacuity: at least one panel in the DOM carries a state word, so
+          // the word comparison above is asserting something.
+          domPanels.some((d) => d.word !== null) &&
+          sheetOption && sheetOption.disabled === true && /already has one/.test(sheetOption.text) &&
+          secondCreate === false && storedFlag === true &&
+          secondOffer === false && (await panelCount(wc)) === beforeSup + 1,
+        JSON.stringify({ status: { ok: status.ok, panels: status.canvas?.panels, edges: status.canvas?.edges?.length, runs: status.canvas?.runs?.length }, domPanels, withCommand, supervisorMade, supervisorState, sheetOption, secondCreate, storedFlag, secondOffer }))
       rmSync(sockDir, { recursive: true, force: true })
     }
 

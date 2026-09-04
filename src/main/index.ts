@@ -22,6 +22,7 @@ import { createReviewCommitter } from './review-commit'
 import { createReviewDiscarder } from './review-discard'
 import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
+import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
@@ -497,6 +498,16 @@ const controlHandler = createControlHandler({
     sendToRenderer(IPC_EVENTS.PRESET_SPAWN, template)
   },
   list: () => ptyManager.list().map((r) => ({ panelId: r.panelId, pid: r.pid, command: r.command, cwd: r.cwd })),
+  // M81. `tc status`: the RENDERER's own model — it is the only side that
+  // knows a panel's state word, its edges and its runs. Asked over the
+  // ephemeral reply channel canvas:counts already uses; a window that does
+  // not answer yields null, which the handler turns into an empty model
+  // WITH a note.
+  canvas: async () => {
+    const wc = mainWindow?.webContents
+    if (!wc) return null
+    return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
+  },
   // Running sessions only: a dormant card has no session here, and `list`
   // says so in its note.
   focus: (id) => {

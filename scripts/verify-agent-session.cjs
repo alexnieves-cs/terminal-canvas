@@ -1006,6 +1006,35 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify(exitStates))
   }
 
+  // M81 — supervisor.1. The system-prompt append: a chat can be created with
+  //      one, it rides `--append-system-prompt <text>` on the FRESH spawn, and
+  //      a resumed session carries it too (the CLI keeps no record of it) —
+  //      but an absent one adds no flag at all.
+  {
+    const withPrompt = A.headlessArgs({ sessionId: 'u-1', resume: false, agentOptions: {}, appendSystemPrompt: 'you supervise this canvas' })
+    const resumed = A.headlessArgs({ sessionId: 'u-1', resume: true, agentOptions: {}, appendSystemPrompt: 'you supervise this canvas' })
+    const without = A.headlessArgs({ sessionId: 'u-1', resume: false, agentOptions: {} })
+    const at = withPrompt.indexOf('--append-system-prompt')
+    // …and through the MANAGER to the runner\'s argv: the flag was written into
+    // `counters` in the first cut, which typechecks and means no real spawn
+    // ever carried it (M81's verifier). This is the check that sees that.
+    const { manager: supMgr, spawns: supSpawns } = makeManager()
+    supMgr.create({ id: 's1', cwd: '/repo', appendSystemPrompt: 'you supervise this canvas' })
+    supMgr.send('s1', 'hello')
+    const supArgs = supSpawns[0]?.args ?? []
+    const supAt = supArgs.indexOf('--append-system-prompt')
+    const { manager: plainMgr, spawns: plainSpawns } = makeManager()
+    plainMgr.create({ id: 'p9', cwd: '/repo' })
+    plainMgr.send('p9', 'hello')
+    ok('supervisor.1 an append-system-prompt rides the fresh and the resumed spawn as one flag and its text, REACHES the runner\'s argv through the manager, and an absent one adds no flag',
+      at >= 0 && withPrompt[at + 1] === 'you supervise this canvas' && withPrompt.filter((a) => a === '--append-system-prompt').length === 1 &&
+        resumed.includes('--append-system-prompt') && resumed.includes('--resume') &&
+        !without.includes('--append-system-prompt') &&
+        supAt >= 0 && supArgs[supAt + 1] === 'you supervise this canvas' &&
+        !(plainSpawns[0]?.args ?? []).includes('--append-system-prompt'),
+      JSON.stringify({ withPrompt, resumed, without, supArgs, plainArgs: plainSpawns[0]?.args }))
+  }
+
   // quit — the optional agents dependency
   {
     const order = []

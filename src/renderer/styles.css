@@ -3435,10 +3435,13 @@ body {
 .sheet__suggestion--on { background: var(--s-5); color: var(--fg); }
 .sheet__suggestion-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet__suggestion-why { flex: none; color: var(--iris); font-family: var(--font-ui); font-size: var(--t-xs); }
-.sheet__foot { display: flex; align-items: baseline; gap: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); }
-.sheet__preview { flex: 1; min-width: 0; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet__foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); }
+/* M81. Its OWN row, and it WRAPS: this is the only text that says what a
+   supervisor is, and it shared a line with the key hints until it was cut off
+   mid-sentence (the critic). */
+.sheet__preview { flex: 1 1 100%; min-width: 0; font-family: var(--font-mono); white-space: normal; }
 .sheet__refusal { color: var(--red); }
-.sheet__keys { flex: none; }
+.sheet__keys { flex: 1 1 100%; }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M66. Every control says what it is.

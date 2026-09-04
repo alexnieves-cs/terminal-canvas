@@ -7,5 +7,9 @@ module.exports = {
   ...require('../src/main/control-server'),
   ...require('../src/main/control-handler'),
   ...require('../src/main/launcher'),
-  ...require('../src/cli/tc')
+  ...require('../src/cli/tc'),
+  /* M81. The word producers `tc status` reports in — checked here so drift
+     is caught where it would happen, not where it passes through. */
+  ...require('../src/renderer/panels/panel-state'),
+  ...require('../src/renderer/canvas/trigger-words')
 }

@@ -706,6 +706,9 @@ export function makeChatPanel(
     rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
     z,
     chat: {
+      // M81. A supervisor's flag is copied field-by-field like the rest: it is
+      // what makes its next spawn carry the system prompt again.
+      ...(chat.supervisor === true ? { supervisor: true as const } : {}),
       cwd: chat.cwd,
       sessionId: chat.sessionId,
       ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } })

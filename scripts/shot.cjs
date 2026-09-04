@@ -112,6 +112,18 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'supervisor', intent: 'The spawn sheet\'s supervisor row: `what` reads `supervisor of this canvas` and the preview says what it is — a chat that reads this canvas with `tc status`. One per canvas; the row says so when there already is one.',
+    run: async (kit) => {
+      await kit.press('k', { metaKey: true }); await sleep(400)
+      await kit.type('new panel'); await sleep(300)
+      await kit.js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return !!i })()`)
+      await sleep(800)
+      await kit.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, '__supervisor__'); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await sleep(500)
+      await kit.shot('supervisor')
+      await kit.js(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      await sleep(300)
+    } },
   { name: 'templates', intent: 'The spawn sheet opened on a template: `what` names `review this repository`, ONE field per parameter is asked (`repository`), and the preview line counts the shape it will make (`2 panels · 1 edge`). A shape of work, started with one thing filled in.',
     run: async (kit) => {
       await kit.press('k', { metaKey: true }); await sleep(400)

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel } from '@renderer/panels/panels'
 import { applyChatEvent, clearChat, getChat, seedChat } from './chat-store'
+import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 
 /**
  * M73. The renderer's side of the two lifetimes for a chat panel.
@@ -38,7 +39,10 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
   // its not-started arm rather than nothing.
   if (getChat(id).snapshot === null) seedChat(id, { snapshot: null })
   void window.canvas.agentSession
-    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }) })
+    // M81. A restored SUPERVISOR carries its system prompt again: the CLI
+    // keeps no record of an appended prompt, so a resume without it would
+    // leave a panel that looks like a supervisor and is not one.
+    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : {}) })
     .then((result) => {
       if (!created.has(id)) return
       if (result.kind === 'refused') {
