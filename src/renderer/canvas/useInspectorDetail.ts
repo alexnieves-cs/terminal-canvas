@@ -92,6 +92,33 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
   // said whether the cwd is a repository — so the answer is re-asked, a few
   // times, half a second apart, until it says something else. Bounded: a
   // panel that genuinely never started stays that way and this stops.
+  /**
+   * M86. Where the selected panel's branch stands against its tracking ref,
+   * asked once the review answer has named a root. Three states: null before
+   * an answer, a phrase, or '' when git could not say (the Changes note
+   * already explains). No fetch is ever run; the phrase says `last fetch`.
+   */
+  const [branchLine, setBranchLine] = useState<string | null>(null)
+  /** M86. The repository every worktree shares — a worktree panel's leaf is `tc-<id>-<stamp>`, which names nothing (M86's verifier). */
+  const [repository, setRepository] = useState<string | null>(null)
+  const reviewRoot = review?.root ?? null
+  useEffect(() => {
+    // Cleared on a ROOT change only, never on an idle: clearing on every idle
+    // made the line vanish and return each time the agent finished a turn.
+    setBranchLine(null)
+    setRepository(null)
+  }, [reviewRoot])
+  useEffect(() => {
+    if (reviewRoot === null) return
+    let live = true
+    void window.canvas.git.status(reviewRoot).then((s) => {
+      if (!live) return
+      if (s.kind !== 'status') { setBranchLine(''); return }
+      setRepository(s.repository)
+      setBranchLine(s.upstream === null ? `${s.branch} · no upstream` : `${s.branch} · ahead ${s.upstream.ahead} · behind ${s.upstream.behind} · against the last fetch`)
+    }).catch(() => { if (live) setBranchLine('') })
+    return () => { live = false }
+  }, [reviewRoot, idleArrivals])
   const [reask, setReask] = useState(0)
   useEffect(() => { setReask(0) }, [selectedId])
   useEffect(() => {
@@ -197,5 +224,5 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
   // review, selectedAgentState and idleArrivals are hook-internal: nothing
   // outside read them even when they lived in Canvas.tsx. reviewModel is the
   // frozen projection the inspector actually renders.
-  return { toolboxModel, reviewModel, inspectorSummary, hasSelection }
+  return { toolboxModel, reviewModel, inspectorSummary, hasSelection, branchLine, repository}
 }

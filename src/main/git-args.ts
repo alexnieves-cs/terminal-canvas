@@ -97,6 +97,90 @@ export function buildWorktreeRemoveArgs(root: string, path: string): string[] {
   return ['-C', root, 'worktree', 'remove', path]
 }
 
+/**
+ * M86. The branch and its tracking ref, read from what the repository already
+ * knows. NO FETCH is built anywhere in this file: the numbers are as fresh as
+ * the user's last fetch, and the pane says so beside them. `verify:review
+ * git.1` asserts the absence as text over this file, because no fake runner
+ * can prove a call was never made.
+ */
+export function buildBranchArgs(root: string): string[] {
+  return ['-C', root, 'rev-parse', '--abbrev-ref', 'HEAD']
+}
+
+/** Exits non-zero when the branch has no upstream — the `null` arm, not an error. */
+export function buildUpstreamArgs(root: string): string[] {
+  return ['-C', root, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']
+}
+
+export function buildAheadBehindArgs(root: string): string[] {
+  return ['-C', root, 'rev-list', '--left-right', '--count', 'HEAD...@{u}']
+}
+
+/**
+ * `rev-list --left-right --count` prints `AHEAD<TAB>BEHIND`. Split on any
+ * whitespace and demand exactly two integers: a parser that split on spaces
+ * read the whole line as one field and answered null for every real answer.
+ */
+export function parseAheadBehind(stdout: string): { ahead: number; behind: number } | null {
+  const parts = stdout.trim().split(/\s+/)
+  if (parts.length !== 2) return null
+  const ahead = Number(parts[0])
+  const behind = Number(parts[1])
+  if (!Number.isInteger(ahead) || !Number.isInteger(behind) || ahead < 0 || behind < 0) return null
+  return { ahead, behind }
+}
+
+export function buildWorktreeListArgs(root: string): string[] {
+  return ['-C', root, 'worktree', 'list', '--porcelain']
+}
+
+export interface WorktreeListEntry {
+  path: string
+  head: string
+  /** `null` for a detached worktree — never a branch called HEAD. */
+  branch: string | null
+}
+
+/** `worktree list --porcelain`: stanzas separated by a blank line. */
+export function parseWorktreeList(stdout: string): WorktreeListEntry[] {
+  const out: WorktreeListEntry[] = []
+  for (const stanza of stdout.split(/\n\s*\n/)) {
+    let path: string | null = null
+    let head = ''
+    let branch: string | null = null
+    for (const line of stanza.split('\n')) {
+      if (line.startsWith('worktree ')) path = line.slice('worktree '.length)
+      else if (line.startsWith('HEAD ')) head = line.slice('HEAD '.length).trim()
+      else if (line.startsWith('branch ')) branch = line.slice('branch '.length).trim().replace(/^refs\/heads\//, '')
+    }
+    if (path !== null) out.push({ path, head, branch })
+  }
+  return out
+}
+
+/**
+ * The repository every worktree of a repository shares: `--git-common-dir`
+ * is the main tree's `.git`, absolute. A panel spawned INTO a worktree
+ * resolves `--show-toplevel` to the worktree, and asking for "every worktree
+ * of this root" there found none (M86's verifier).
+ */
+export function buildCommonDirArgs(root: string): string[] {
+  return ['-C', root, 'rev-parse', '--path-format=absolute', '--git-common-dir']
+}
+
+/** `/repo/.git` → `/repo`; a bare or odd layout answers null. */
+export function parseCommonRoot(stdout: string): string | null {
+  const dir = stdout.trim()
+  if (dir === '') return null
+  return dir.endsWith('/.git') ? dir.slice(0, -'/.git'.length) : null
+}
+
+/** In the WORKTREE: where its branch forked from the main tree's `sha`. */
+export function buildMergeBaseArgs(path: string, sha: string): string[] {
+  return ['-C', path, 'merge-base', 'HEAD', sha]
+}
+
 export function buildNumstatArgs(root: string, baseline: string): string[] {
   return ['-C', root, 'diff', '--numstat', '-z', baseline]
 }

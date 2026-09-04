@@ -211,7 +211,11 @@ const bridge: CanvasBridge = {
     at: (subject: ReviewSubject) => ipcRenderer.invoke(IPC.REVIEW_AT, subject),
     diff: (req: ReviewDiffRequest) => ipcRenderer.invoke(IPC.REVIEW_DIFF, req),
     commit: (req: ReviewCommitRequest) => ipcRenderer.invoke(IPC.REVIEW_COMMIT, req),
-    discard: (req: ReviewDiscardRequest) => ipcRenderer.invoke(IPC.REVIEW_DISCARD, req)
+    discard: (req: ReviewDiscardRequest) => ipcRenderer.invoke(IPC.REVIEW_DISCARD, req),
+    across: (root: string) => ipcRenderer.invoke(IPC.REVIEW_ACROSS, root)
+  },
+  git: {
+    status: (root: string) => ipcRenderer.invoke(IPC.GIT_STATUS, root)
   },
   scrollback: {
     tail: (req: { panelId: string; lines: number }) => ipcRenderer.invoke(IPC.SCROLLBACK_TAIL, req),

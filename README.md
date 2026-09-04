@@ -353,6 +353,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        workspace:merged / workspace:move-panels
                        review:panel / review:baseline / review:at
                        review:diff / review:commit / review:discard
+                       review:across / git:status
                        credential:list / credential:set / credential:delete
                        credential:verify
                        jira:list / jira:transitions
@@ -836,6 +837,7 @@ price of not killing something.
 | M73 | The chat panel: the sixth `Panel` kind — a conversation with the installed `claude` over M71's runtime, streaming, interruptible, its permission questions answered inline, its transcript a file that survives a relaunch, in the one state vocabulary | ✅ done |
 | M74 | Same agent, two front-ends: a claude terminal opens as a chat with its session's own transcript rendered and continued, a chat opens in a terminal with `claude --resume`; one front-end at a time, refused by name otherwise | ✅ done |
 | M75 | The composer: `@` references completed from the panel's directory, dropped or pasted images as image blocks (never a temp file), dropped files as references, `/` project and saved prompts, and `{{ }}` placeholders filled before insertion for saved prompts on both front-ends | ✅ done |
+| M86 | Git, deeply: where a branch stands against its tracking ref (`rev-list --left-right --count`, from the local ref — a fetch is never run, and the phrase says so), the branch picture across every worktree this app created for a repository, a review node over every worktree at once with each tree's diff since its fork a section and commit blocked by name, and the context pane's identity line naming the repository | ✅ done |
 | M85 | The vault: a folder of markdown notes as the navigator's fourth pane, listed by title and newest first; `[[links]]` inside a note painted as links — a resolved one opens the note it names, an unresolved one is marked and offers to be created — and a Backlinks section under every note naming what points at it and the line; a note is still a file panel, and a vault is many of them plus one index | ✅ done |
 | M84 | The watcher: a node that runs a command when something happens — a change under a path, a branch that moves, a timer, or another node ending through the same handoff table — reporting the last run's pass or fail in the app's one state vocabulary, keeping its run-ledger rows, showing that run's output tail, and never taking a PTY or a live-budget slot | ✅ done |
 | M83 | Memory: what a repository has decided, tried and failed, as one append-only per-repository store that people and agents write to through the same door — a `memory` control verb and `tc memory add`, a seventh panel kind that lists it and adds to it, and a chat's first message carrying the recent entries with a line above the composer saying how many, so nothing is sent that was not shown | ✅ done |

@@ -294,6 +294,8 @@ export interface PaletteActions {
   beginSpawnSheet(templateId?: string): void
   /** M83. Open the project memory for the captured panel's repository. */
   openMemory(): void
+  /** M86. A review across every worktree of the subject's repository. */
+  reviewAcross(id: string): void
   /** M84. Ask for a watcher: the command, then the trigger. */
   beginWatcher(): void
   /** M80. Save the selected panels and their edges as a template. */
@@ -524,6 +526,7 @@ export const REASON_SCROLLBACK_OFF = 'durable scrollback is off — turn on scro
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
+export const REASON_NO_REVIEW_TARGET_ACROSS = 'select a panel inside a repository first'
 export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
@@ -933,7 +936,30 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ctx.capturedId === null ? REASON_NO_FOCUS : undefined
       )
     )
-    out.push(
+    // M86. Every worktree of the subject's repository in one node, disabled by
+  // name when this app has made none: the ordinary review already answers
+  // for a single tree.
+  out.push(
+    withReason(
+      {
+        id: 'panel.review.across',
+        title: target === undefined ? 'Review every worktree' : `Review every worktree of ${target.label}'s repository`,
+        searchText: 'review worktree worktrees branches across all git',
+        group: 'panel',
+        run: () => { if (target !== undefined) actions.reviewAcross(target.id) }
+      },
+      // The SAME gate the ordinary review row keeps (a file, a memory node
+      // or a never-started panel has nothing to review across), then the
+      // worktree count — an enabled row that does nothing on click is the
+      // failure the reason exists to prevent (M86's verifier).
+      ctx.capturedId === null || target === undefined
+        ? REASON_NO_REVIEW_TARGET_ACROSS
+        : (target.reviewable !== undefined ? !target.reviewable : !target.restartable)
+          ? (target.reviewReason ?? REASON_NOT_STARTED)
+          : ctx.worktrees.length === 0 ? REASON_NO_WORKTREES : undefined
+    )
+  )
+  out.push(
       withReason(
         {
           id: 'panel.review',
@@ -1609,13 +1635,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
   for (const wt of ctx.worktrees) {
-    const who = wt.attached ? ` — ${wt.panelTitle ?? wt.panelId} is in it` : ''
+    // M86. The row says where the branch stands, from the local tracking ref.
+    const who = `${wt.status === undefined ? '' : `${wt.status} — `}${wt.attached ? `${wt.panelTitle ?? wt.panelId} is in it` : ''}`.replace(/ — $/, '')
     out.push(
       withReason(
         {
           id: `worktree.remove.${wt.id}`,
           title: `Remove worktree ${wt.branch}`,
-          subtitle: `${wt.path}${who}`,
+          subtitle: who === '' ? wt.path : `${who} · ${wt.path}`,
           group: 'manage',
           scope: 'worktrees',
           hiddenAtRest: true,

@@ -3090,6 +3090,31 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ def, kept, w, bad, w2, absent, w3 }))
 }
 
+// M86 — across.1. A review node's `across` flag round-trips as a literal
+//      `true`, stays ABSENT on a node that never had it (every pre-M86 file —
+//      a spread that wrote `across: undefined` would read as present at every
+//      `'across' in subject` site), and a present non-`true` value drops the
+//      FLAG by name and keeps the node: a review that lost its flag is an
+//      ordinary review of the same subject, a smaller wrong than a node gone.
+{
+  const subject = { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'agent' }
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'r1', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 1, subject: { ...subject, across: true } },
+      { id: 'r2', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 2, subject },
+      { id: 'r3', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 3, subject: { ...subject, across: 'yes' } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  ok('across.1 a review subject\'s across flag round-trips as true, stays absent on a node without it, and a malformed value drops the flag by name while keeping the node',
+    panels.length === 3 &&
+      panels[0].subject.across === true &&
+      !('across' in panels[1].subject) &&
+      !('across' in panels[2].subject) && out.warnings.some((w) => /r3/.test(w) && /across/.test(w)),
+    JSON.stringify({ subjects: panels.map((p) => p.subject), warnings: out.warnings }))
+}
+
 // M48 — firstrun.1. `hints.seen` is a LIST setting — the second customer of
 //      a non-boolean type after M45's enum: a string list, default empty,
 //      persisted as the user's gestures are first seen, and a non-list (or a

@@ -38,6 +38,14 @@ export interface ReviewSubject {
   baselineSha: string
   /** The subject's label when the node was made — see above. */
   label: string
+  /**
+   * M86. This node reviews EVERY worktree of `repoRoot` (the main tree, then
+   * each worktree this app created), asking `review:across` instead of
+   * `review:at`. Absent for every node before M86 and for the ordinary one;
+   * only `true` is ever written, and absence must stay absent through every
+   * copy site.
+   */
+  across?: true
 }
 
 export interface ReviewFile {
@@ -49,6 +57,33 @@ export interface ReviewFile {
   untracked: boolean
   renamedFrom?: string
 }
+
+/**
+ * M86. Where a branch stands against its tracking ref, read from the LOCAL
+ * ref alone — the app never fetches, and `upstream: null` is a real answer
+ * (a branch with no upstream), never `0/0`.
+ */
+export type RepoStatus =
+  | { kind: 'status'; root: string; /** The repository every worktree shares — what the identity line names. */ repository: string; branch: string; upstream: { name: string; ahead: number; behind: number } | null }
+  | { kind: 'git-missing' }
+  | { kind: 'unreadable'; detail: string }
+
+/** M86. One worktree's place in a cross-worktree review: the main tree first, then each record. */
+export interface ReviewSection {
+  path: string
+  branch: string
+  /** What the node calls it: the branch, or the panel's own title when one exists. */
+  label: string
+  panelId?: string
+  result: ReviewResult
+  /** Why this section could not be read as a diff, when its result is `baseline-lost`: no longer a worktree, or no common history. */
+  note?: string
+}
+
+export type ReviewAcross =
+  | { kind: 'across'; root: string; sections: ReviewSection[] }
+  | { kind: 'git-missing' }
+  | { kind: 'unreadable'; detail: string }
 
 /**
  * Every arm is a designed state, not an error path. `not-a-repo` in

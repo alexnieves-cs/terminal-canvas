@@ -3476,3 +3476,29 @@ root changes, and sends only to a window that exists.
 `file:create`'s inside-root guard, a name that exists is refused, a write can fail — and
 each closed the line silently and left the link dashed. The `.catch` is mandatory for the
 reason FileNode records: an unhandled rejection leaves the line open forever.
+
+**`git-args.ts` never builds a fetch, and `verify:review git.1` proves the ABSENCE as text.**
+Ahead/behind reads the local tracking ref; the number is stale by exactly as much as the
+user's last fetch, and every surface says `against the last fetch` beside it rather than
+pretending otherwise. No fake runner can prove a call was never made, so the check reads the
+source: a builder that fetched would put a network call behind a pane that reads as passive,
+and this app's constraint is that no feature touches a service without a Connect verb.
+
+**A cross-worktree section is a worktree's diff since its FORK, never a panel's baseline
+(`review-engine.ts`'s `reviewAcross`).** Main drops a panel's baseline when the panel is
+killed, and a review of finished work is exactly what a cross-worktree node is for; keyed on
+baselines, every section would go blank the moment its agent was dismissed. `merge-base HEAD
+<root HEAD>` in the worktree is the fork, it needs no stored fact, and a worktree whose
+directory is gone is a `baseline-lost` section rather than a missing one — a section that
+vanishes reads as a worktree that was never made.
+
+**`rev-list --left-right --count` prints `AHEAD<TAB>BEHIND`, and the parser demands exactly
+two integers (`parseAheadBehind`).** A parser splitting on spaces read the whole line as one
+field and answered null for every real answer; a parser that coerced `fatal: no upstream` to
+`0 0` would show a green branch with no remote at all. Null is the "could not say" arm; the
+missing upstream is its own arm (`upstream: null`), decided before the counts are asked.
+
+**Commit and discard on a cross-worktree node are BLOCKED BY NAME, not absent.** A commit
+across worktrees would be N commits pretending to be one; hiding the controls would make
+"not supported here" indistinguishable from "not built" (`verify:palette` 31's rule reaching
+the node), so the sentence says which review to open instead.

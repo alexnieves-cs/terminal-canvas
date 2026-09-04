@@ -173,7 +173,17 @@ const reviewEngine = createReviewEngine({
   // called until a real review:panel invoke lands, long after both consts
   // have been initialised.
   notARepo: (panelId) => baselineCapture.isNotARepo(panelId),
-  repoUnreadable: (panelId) => baselineCapture.unreadableDetail(panelId)
+  repoUnreadable: (panelId) => baselineCapture.unreadableDetail(panelId),
+  // M86. The worktree records for a root, with each panel's own title so a
+  // section can be called what the user calls it.
+  worktreesOf: (root) => {
+    const titles = new Map<string, string | undefined>()
+    for (const ws of layoutStore.mergedWorkspaces()) for (const panel of ws.panels) titles.set(panel.id, panel.title)
+    return layoutStore.worktrees().filter((w) => w.root === root).map((w) => ({
+      path: w.path, branch: w.branch, panelId: w.panelId,
+      ...(titles.get(w.panelId) === undefined ? {} : { panelTitle: titles.get(w.panelId) })
+    }))
+  }
 })
 
 /**
