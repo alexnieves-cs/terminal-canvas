@@ -1,4 +1,5 @@
-import { isMemoryPanel,
+import { triggerWord } from '@shared/watch-trigger'
+import { isMemoryPanel, isWatcherPanel,
   isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
@@ -99,6 +100,8 @@ export function panelLabel(panel: Panel): string {
   if (isChatPanel(panel)) return `chat: ${panel.chat.cwd} (${panel.rect.id})`
   // M83. The seventh kind, named by what it remembers.
   if (isMemoryPanel(panel)) return `memory: ${panel.source.root} (${panel.rect.id})`
+  // M84. The eighth kind, named by what it runs and when.
+  if (isWatcherPanel(panel)) return `watcher: ${panel.watch.command} ${triggerWord(panel.watch.trigger)} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it

@@ -172,6 +172,10 @@ module.exports = {
   createApprovalTracker: require('../src/main/approvals').createApprovalTracker,
   /* M83. The project memory store, for the node and the verbs. */
   createMemoryStore: require('../src/main/memory-store').createMemoryStore,
+  /* M84. The watcher's runner: the same module main uses, over a real child
+     process here — a stub would leave watch.1 proven no further than the
+     preload, which is the reason every other real export here is real. */
+  createWatchRunner: require('../src/main/watch-runner').createWatchRunner,
   /* M80. Templates: built-ins are code, and a built-in refuses deletion. */
   allTemplates: require('../src/shared/templates').allTemplates,
   isBuiltInTemplate: require('../src/shared/templates').isBuiltInTemplate,

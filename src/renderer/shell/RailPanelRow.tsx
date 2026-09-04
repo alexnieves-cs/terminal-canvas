@@ -5,6 +5,7 @@ import { shellControl } from './shell-control'
 import { Close, KIND_GLYPH } from '@renderer/icons'
 import { panelState } from '@renderer/panels/panel-state'
 import { useChat } from '@renderer/chat/chat-store'
+import { useWatch } from '@renderer/watcher/watcher-store'
 import { chatStateInput } from '@renderer/chat/chat-model'
 
 /* M63. The rail's left column: a terminal's is its state dot, every other
@@ -43,11 +44,24 @@ function RailPanelRowImpl({
   // it subscribes to its agent state: a delta for c3 re-renders c3's row and
   // nothing else, and none of it rides the rail's signature.
   const chat = useChat(row.id)
+  // M84. A watcher row subscribes to its own runs for the chat row's reason:
+  // a run's state change re-renders that row and nothing else, and none of it
+  // rides the rail's signature — which is frozen against a drag's 60Hz churn
+  // and would therefore report a watcher's pass whenever a rect next moved.
+  const watch = useWatch(row.id)
   // M63. The word and the tone, from the one vocabulary, with the agent
   // state this row subscribes to applied — `row.tail` is the same answer
   // without it, kept for the signature and the plain-node checks.
   const chatInput = row.state.kind === 'chat' ? chatStateInput(chat.snapshot, chat.turns.length > 0) : undefined
-  const shown = panelState(row.state.kind === 'chat' ? { ...row.state, ...(chatInput === undefined ? {} : { chat: chatInput }) } : row.state, state)
+  const liveState = row.state.kind === 'chat'
+    ? { ...row.state, ...(chatInput === undefined ? {} : { chat: chatInput }) }
+    : row.state.kind === 'watcher'
+      ? { ...row.state, watch: { status: watch.status, ...(watch.exitCode === undefined ? {} : { exitCode: watch.exitCode }), ...(watch.signal === undefined ? {} : { signal: watch.signal }), ...(watch.disarmed === undefined ? {} : { disarmed: true }) } }
+      : row.state
+  const shown = panelState(liveState, state)
+  // M84 (critic). A watcher is a PROCESS node, so it carries the state dot
+  // every process row carries AND its kind glyph — scanning the rail's left
+  // column, a row with only a glyph reads as a document.
   const Glyph = row.state.kind === 'terminal' ? null : KIND_GLYPH[row.state.kind]
   return (
     <li
@@ -79,6 +93,11 @@ function RailPanelRowImpl({
             data-tone={shown.tone}
             aria-hidden="true"
           />
+        ) : row.state.kind === 'watcher' ? (
+          // A process node's glyph carries the state's tone: the dot column
+          // is where a person scans for pass and fail, and the watcher is the
+          // one kind whose glyph sits in it while having a real state.
+          <span className="rail-row__kind rail-row__kind--stateful" data-tone={shown.tone} aria-hidden="true"><Glyph /></span>
         ) : (
           <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
         )}

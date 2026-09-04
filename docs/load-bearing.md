@@ -3374,3 +3374,58 @@ joins the review, file, note, toolbox and Jira nodes on the negative side of
 terminal that needed it. `verify:panels memory.1` proves it with the non-vacuity shape every
 sessionless kind's check uses: no kill recorded for the node's id, and a REAL terminal closed
 in the same window IS recorded, so the check cannot pass by recording nothing at all.
+
+**A watcher runs ONE command at a time and coalesces every trigger that arrives during a run
+into ONE pending run (`main/watch-runner.ts`'s `fire`).** The obvious implementation queues,
+and it fails in the direction that makes people turn the feature off: a save that touches
+forty files becomes forty runs, the fortieth finishing minutes after the work it was about,
+and the harder the user works the further behind the watcher falls. One pending flag says
+"run again when you can", which is the only thing a person ever means. `verify:file watch.1`
+counts SPAWNS rather than state publishes to prove it — the pending flag publishes a state of
+its own, so a check counting `running` publishes passes against a queueing implementation.
+
+**A signal is a FAILURE, and `exitCode` is null for a signalled process.** Every exit arm in
+this repo that tests `code` for truthiness reads a killed process as a pass; a watcher that
+went green because somebody killed it is the worst answer this node can give, because the
+whole point of the kind is that a person trusts its colour without opening it. `watch-runner`
+tests `signal === null && code === 0`, and the node's own line says `last run was stopped`
+rather than inventing an exit number.
+
+**A watcher's output tail is memory only, capped, and keeps the END; the ledger row carries
+none of it.** A watcher is not a terminal and its body is the last thing that happened, not a
+scrollback — a durable per-watcher log would be a second, worse scrollback with no keyboard.
+What is durable is M52's run ledger, whose rows are metadata by construction, which is also
+what keeps a command's output out of a file that gets pasted into an issue.
+
+**A directory and a file are watched DIFFERENTLY, and confusing them fails silently
+(`main/index.ts`'s watcher arming).** `FileWatchers` watches a file by watching its parent
+and filtering on its basename — M22's atomic-rename rule, which is how every editor and every
+agent writes a file — and handed a DIRECTORY it reads it as a file and refuses. The
+commonest trigger of all is "anything under src", so a directory is watched recursively
+instead. The first version armed every path through `FileWatchers`: the node armed, showed
+its trigger phrase, and never ran once. A git trigger is a FILE watch on `.git/HEAD`, whose
+rewrite is what a branch change, a checkout and a commit have in common.
+
+**`watcher:create` is IDEMPOTENT at an id, because the node arms itself on every mount.** A
+workspace switch back, a React re-key and a renderer reload each re-create the same watcher;
+without the disarm-then-arm in main's `create`, each one would add a second trigger to the
+same id and one save would run the command twice, forever, with nothing on screen saying why.
+
+**A watcher's `panel` trigger is armed by the RENDERER, and asks `handoffFires`.** The
+renderer is the side that already learns every exit and every turn's end — it draws the
+handoff edges from exactly those events — so arming this in main would mean main learning
+panel endings a second way, and the two paths would disagree only in the cases nobody tests.
+Asking the same table is what makes a watcher and an edge watching the same source agree
+about whether it fired.
+
+**A watcher's rail row subscribes to its own runs (`RailPanelRow.tsx`), never to the rail's
+signature.** The rail's row array is frozen on a signature of what a row renders, precisely so
+a drag's 60Hz rect churn cannot re-render it; a watcher's state read at BUILD time therefore
+updates whenever a rect next moves and not before — the row said `not started` beside a node
+reading `idle`, which `verify:panels watch.1` caught by asserting the two agree.
+
+**A persisted trigger from a later version DROPS its panel rather than being coerced
+(`layout-schema.ts`'s `parseWatch`).** Every other kind's parser can fall back to a default,
+because the worst case there is a node that shows the wrong thing. A coerced trigger RUNS A
+REAL COMMAND on a schedule nobody asked for. The timer floor is refused for the same reason,
+and the palette's typed trigger is refused by name rather than guessed.

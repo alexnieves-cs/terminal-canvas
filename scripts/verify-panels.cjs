@@ -91,6 +91,7 @@ const {
   readFrom,
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
+  createWatchRunner,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -940,6 +941,65 @@ app.whenReady().then(async () => {
     if (event.type === 'result') { const snap = agentSessions.get(event.id); if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns }) }
     if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
   })
+  // M84. The watcher runtime, wired the way main/index.ts wires it: the real
+  // runner over a real child_process, the real FileWatchers for a path
+  // trigger, and the real run ledger. A stub here would leave watch.1 proven
+  // no further than the preload — the reasoning every real export in this
+  // harness already follows.
+  const watchFileWatchers = new FileWatchers()
+  const watchDirWatchers = new Map()
+  const watchTimers = new Map()
+  const watchRunner = createWatchRunner({
+    spawn: (spec, handlers) => {
+      const child = require('node:child_process').spawn(spec.command, [...spec.args], { cwd: spec.cwd, shell: false })
+      child.stdout?.on('data', (chunk) => handlers.onData(chunk.toString('utf8')))
+      child.stderr?.on('data', (chunk) => handlers.onData(chunk.toString('utf8')))
+      child.on('error', (error) => handlers.onData(`${error.message}\n`))
+      child.on('exit', (code, signal) => handlers.onExit(code, signal))
+      return { kill: (sig) => { try { child.kill(sig ?? 'SIGTERM') } catch { /* gone */ } } }
+    },
+    now: () => Date.now(),
+    ledger: { append: (row) => runLedger.append(row) },
+    onState: (id, state) => { if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.WATCHER_STATE, { id, ...state }) }
+  })
+  const watcherHandlers = {
+    create: (req) => {
+      let isDir = false
+      try { isDir = statSync(expandTilde(req.cwd)).isDirectory() } catch { isDir = false }
+      if (!isDir) return { ok: false, reason: `no such directory: ${req.cwd}` }
+      watchFileWatchers.close(req.id)
+      const dir0 = watchDirWatchers.get(req.id)
+      if (dir0 !== undefined) { dir0.close(); watchDirWatchers.delete(req.id) }
+      const timer = watchTimers.get(req.id)
+      if (timer !== undefined) { clearInterval(timer); watchTimers.delete(req.id) }
+      watchRunner.add({ id: req.id, cwd: expandTilde(req.cwd), command: req.command, args: req.args, trigger: req.trigger })
+      // The same pause main honours: known, runnable by hand, nothing armed.
+      if (req.armed === false) return { ok: true }
+      if (req.trigger.kind === 'path' || req.trigger.kind === 'git-ref') {
+        // The same file-vs-directory split main makes, and for its reason.
+        const target = req.trigger.kind === 'path' ? expandTilde(req.trigger.path) : join(expandTilde(req.trigger.root), '.git', 'HEAD')
+        let isDirTarget = false
+        try { isDirTarget = statSync(target).isDirectory() } catch { isDirTarget = false }
+        if (isDirTarget) {
+          const w = require('node:fs').watch(target, { persistent: false, recursive: true }, () => watchRunner.fire(req.id))
+          watchDirWatchers.set(req.id, w)
+        } else {
+          const first = watchFileWatchers.watch(req.id, target, () => watchRunner.fire(req.id))
+          if (first.kind === 'missing' || first.kind === 'unreadable') return { ok: false, reason: `nothing to watch at ${target}` }
+        }
+      } else if (req.trigger.kind === 'timer') {
+        const t = setInterval(() => watchRunner.fire(req.id), req.trigger.everyMs)
+        t.unref?.()
+        watchTimers.set(req.id, t)
+      }
+      return { ok: true }
+    },
+    run: (id) => watchRunner.fire(id),
+    stop: (id) => watchRunner.stop(id),
+    dispose: (id) => { watchFileWatchers.close(id); const d = watchDirWatchers.get(id); if (d !== undefined) { d.close(); watchDirWatchers.delete(id) } const t = watchTimers.get(id); if (t !== undefined) { clearInterval(t); watchTimers.delete(id) } watchRunner.remove(id) },
+    list: () => watchRunner.ids().map((id) => ({ id, ...(watchRunner.stateOf(id) ?? { status: 'not-started', tail: '', pending: false }) }))
+  }
+
   const agentHandlers = {
     create: (spec) => {
       let isDir = false
@@ -1133,7 +1193,7 @@ app.whenReady().then(async () => {
     persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
     askPath: async () => exportTarget,
     capture: async () => (await win.webContents.capturePage()).toPNG()
-  }), agentHandlers)
+  }), agentHandlers, watcherHandlers)
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -17219,6 +17279,174 @@ app.whenReady().then(async () => {
       }
     }
 
+
+
+    // -------------------------------------------------------------------
+    // M84 — watch.1 / watch.2. THE WATCHER, END TO END, against a real child
+    //     process and a real directory watch.
+    //     watch.1: a restored watcher arms itself, a real WRITE under its
+    //     watched path runs its command, the state flips through the ONE
+    //     vocabulary (working, then idle for a pass and `exited 2` for a
+    //     fail), the body shows the run's tail, a ledger row lands with no
+    //     output in it, and closing the node sends NO pty.kill while a
+    //     terminal closed in the same window IS recorded.
+    //     watch.2: a watcher's PASS fires a handoff edge — a watcher is a
+    //     source on the graph like any other node, through the same table.
+    // -------------------------------------------------------------------
+    {
+      const IDS = [
+        'watch.1 a restored watcher arms itself, a real write under its path runs its command, the state reads idle for a pass and exited 2 for a fail with the tail in the body, a ledger row lands with no output, and closing it sends no pty.kill while a terminal close in the same window is recorded',
+        'watch.2 a watcher that passes fires its handoff edge into a live terminal, through the same table an ordinary source asks',
+        'watch.3 a watcher whose watched path is gone says so in its body rather than sitting silent, and Disarm is a persisted pause: the trigger stops firing, the node says it is not watching, and Run now still runs it'
+      ]
+      const wLog = []
+      const onW = (_e, _l, m) => { wLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onW)
+      try {
+        const wDir = mkdtempSync(join(tmpdir(), 'tc panels watcher-'))
+        mkdirSync(join(wDir, 'src'))
+        writeFileSync(join(wDir, 'src', 'a.txt'), 'one\n')
+        // A command whose exit code the FIXTURE decides: it reads a file the
+        // check writes, so one watcher can be made to pass and then fail
+        // without re-creating it.
+        writeFileSync(join(wDir, 'run.sh'), '#!/bin/sh\necho "ran with $(cat code.txt)"\nexit $(cat code.txt)\n')
+        writeFileSync(join(wDir, 'code.txt'), '0')
+        layoutStore.save({
+          panels: [{ id: 'w1', kind: 'watcher', x: 80, y: 80, w: 520, h: 340, z: 1,
+            watch: { cwd: wDir, command: '/bin/sh', args: ['run.sh'], trigger: { kind: 'path', path: join(wDir, 'src') } } },
+            ...fromPanels([{ kind: 'terminal', rect: { id: 'wT', x: 680, y: 80, w: 320, h: 220 }, z: 2, spec: { panelId: 'wT', cwd: wDir, command: '/bin/sh', args: ['-c', 'sleep 600'] } }])],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reW = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW
+        await settle()
+        // The navigator remembers its pane across reloads, and an earlier
+        // block left it on Files — the rail clauses below read the Panels
+        // pane, so choose it rather than assuming.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        const armed = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="w1"]'); return n ? { status: n.getAttribute('data-watcher-status'), when: n.querySelector('[data-watcher-when]')?.textContent ?? null } : false })()`), 6000)
+        // No session and no xterm: a process node without a PTY.
+        const hasSession = await wc.executeJavaScript(`Object.prototype.hasOwnProperty.call(window.__m4aSessions(), 'w1')`)
+        const ledgerBefore = (await runLedger.list('w1', 50)).length
+        // A REAL write under the watched directory.
+        writeFileSync(join(wDir, 'src', 'a.txt'), 'two\n')
+        const passed = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="w1"]'); if (!n || n.getAttribute('data-watcher-status') !== 'passed') return false; return { tail: n.querySelector('[data-watcher-tail]')?.textContent ?? '', word: n.querySelector('[data-state-word]')?.textContent ?? null, last: n.querySelector('[data-watcher-last]')?.textContent ?? null } })()`), 15000)
+        // The RAIL's own word for the same fact — the vocabulary reaching a
+        // second surface with no code of its own is the milestone's claim.
+        const railWord = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row="w1"]'); return r ? { label: r.querySelector('.rail-row__label')?.textContent ?? null, tail: r.querySelector('.rail-row__tail')?.textContent ?? null } : null })()`)
+        // Now make it FAIL, and trigger again.
+        writeFileSync(join(wDir, 'code.txt'), '2')
+        writeFileSync(join(wDir, 'src', 'a.txt'), 'three\n')
+        const failed = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="w1"]'); if (!n || n.getAttribute('data-watcher-status') !== 'exited') return false; return { last: n.querySelector('[data-watcher-last]')?.textContent ?? null, tone: n.getAttribute('data-tone') } })()`), 15000)
+        const rows = await runLedger.list('w1', 50)
+        const killsBefore = killedPanelIds.length
+        await clickPanelClose(wc, 'w1')
+        await settle()
+        const killsAfterNode = killedPanelIds.length
+        await clickPanelClose(wc, 'wT')
+        await settle()
+        const killsAfterTerminal = killedPanelIds.length
+        ok(IDS[0],
+          armed && armed.status === 'not-started' && /a change in src/.test(armed.when ?? '') && hasSession === false &&
+            passed && /ran with 0/.test(passed.tail) && passed.word === 'idle' && /last run passed/.test(passed.last ?? '') &&
+            railWord && /watcher/.test(railWord.label ?? '') && railWord.tail === 'idle' &&
+            failed && /last run failed — exit 2/.test(failed.last ?? '') && failed.tone === 'exited' &&
+            rows.length >= ledgerBefore + 2 && rows.every((r) => !('output' in r) && !('tail' in r)) &&
+            rows.some((r) => r.exitCode === 0) && rows.some((r) => r.exitCode === 2) &&
+            killsAfterNode === killsBefore && killsAfterTerminal > killsAfterNode,
+          JSON.stringify({ armed, hasSession, passed, railWord, failed, rows: rows.slice(0, 3), killsBefore, killsAfterNode, killsAfterTerminal, log: wLog.slice(-3) }))
+
+        // watch.2 — a watcher's pass fires a handoff edge into a live terminal.
+        writeFileSync(join(wDir, 'code.txt'), '0')
+        layoutStore.save({
+          panels: [{ id: 'w2', kind: 'watcher', x: 80, y: 80, w: 520, h: 340, z: 1,
+            watch: { cwd: wDir, command: '/bin/sh', args: ['run.sh'], trigger: { kind: 'panel', sourceId: 'wS', on: 'exit-ok' } } },
+            ...fromPanels([{ kind: 'terminal', rect: { id: 'wS', x: 680, y: 80, w: 320, h: 220 }, z: 2, spec: { panelId: 'wS', cwd: wDir, command: '/bin/sh', args: ['-c', 'echo starting; sleep 1; exit 0'] } }])],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reW2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW2
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        // A restored terminal is DORMANT until a gesture starts it — the
+        // rail's own start control, which is the gesture a person would use.
+        await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.rail-list--panels .rail-row[data-rail-row="wS"] .rail-row__start'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 6000)
+        const ranAfterExit = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="w2"]'); if (!n) return false; const s = n.getAttribute('data-watcher-status'); return s === 'passed' ? s : false })()`), 20000)
+        // ONE run, not two. A source's ending reaches the fire path by more
+        // than one route (an exit and, for a chat, a turn's end), and a
+        // watcher that ran twice per ending would satisfy any check that only
+        // asked whether it ran (M84's verifier).
+        await settle()
+        const runsForW2 = (await runLedger.list('w2', 50)).length
+        ok(IDS[1],
+          ranAfterExit === 'passed' && runsForW2 === 1,
+          JSON.stringify({ ranAfterExit, runsForW2, log: wLog.slice(-3) }))
+        // watch.3 — the ARMING REFUSAL, and the Arm/Disarm toggle.
+        //   A watcher whose watched path is gone is disarmed in MAIN, and the
+        //   node must say so: the first version discarded `create`'s answer,
+        //   so the node sat at `not started` forever, still runnable by hand,
+        //   with nothing anywhere explaining why it never triggered (M84's
+        //   verifier). The toggle beside it is the pause a person needs that
+        //   is not a delete — persisted, so it survives a reload.
+        layoutStore.save({
+          panels: [{ id: 'w3', kind: 'watcher', x: 80, y: 80, w: 520, h: 340, z: 1,
+            watch: { cwd: wDir, command: '/bin/sh', args: ['run.sh'], trigger: { kind: 'path', path: join(wDir, 'not-there') } } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reW3 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW3
+        await settle()
+        const refused = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="w3"] [data-watcher-disarmed]'); return p ? p.textContent : false })()`), 8000)
+        // Disarm, then reload: the pause is a persisted fact.
+        layoutStore.save({
+          panels: [{ id: 'w4', kind: 'watcher', x: 80, y: 80, w: 520, h: 340, z: 1,
+            watch: { cwd: wDir, command: '/bin/sh', args: ['run.sh'], trigger: { kind: 'path', path: join(wDir, 'src') } } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reW4 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW4
+        await settle()
+        const armLabel = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-arm]'); return b ? b.textContent : false })()`), 6000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-arm]'); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const disarmedLabel = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-arm]'); const w = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-when]'); return b && b.textContent === 'Arm' ? { arm: b.textContent, when: w ? w.textContent : null } : false })()`), 6000)
+        await settle()
+        const persistedDisarm = await waitUntil(async () => {
+          const rows = layoutStore.mergedWorkspaces().flatMap((w) => w.panels).filter((p) => p.id === 'w4')
+          return rows.length === 1 && rows[0].watch.armed === false ? true : false
+        }, 6000)
+        // A disarmed watcher does not run when its path changes.
+        const ledgerBeforeDisarm = (await runLedger.list('w4', 50)).length
+        writeFileSync(join(wDir, 'src', 'a.txt'), 'four\n')
+        await settle()
+        await settle()
+        const ledgerAfterDisarm = (await runLedger.list('w4', 50)).length
+        // And Run now still works on it: disarmed is a pause, not a delete.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="w4"] [data-watcher-run]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const ranByHand = await waitUntil(async () => (await runLedger.list('w4', 50)).length > ledgerAfterDisarm, 10000)
+        ok(IDS[2],
+          typeof refused === 'string' && /nothing to watch/.test(refused) &&
+            armLabel === 'Disarm' && disarmedLabel && disarmedLabel.when === 'not watching' &&
+            persistedDisarm === true && ledgerAfterDisarm === ledgerBeforeDisarm && ranByHand === true,
+          JSON.stringify({ refused, armLabel, disarmedLabel, persistedDisarm, ledgerBeforeDisarm, ledgerAfterDisarm, ranByHand, log: wLog.slice(-3) }))
+
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reDoneW = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reDoneW
+        await settle()
+        try { rmSync(wDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (wErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(wErr && wErr.message || wErr) + ' | renderer: ' + (wLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onW)
+      }
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

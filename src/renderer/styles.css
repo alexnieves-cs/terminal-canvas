@@ -744,6 +744,20 @@ body {
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
 /* M83. The memory node: entries newest first, each `kind · text · time`, and
    one line to add another. */
+/* M84. The watcher node: a command line, a capped output tail in the mono
+   well every body on this canvas uses, and one line saying how the last run
+   ended. No scrollback — the durable record is the run ledger. */
+.watcher-node__body { display: flex; flex-direction: column; min-height: 0; gap: var(--sp-2); padding: var(--sp-3); }
+/* Provenance, not content: the loudest text in a watcher's well is the run's
+   own output, never the invocation that produced it (M84's critic). */
+.watcher-node__command { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watcher-node__tail { flex: 1 1 auto; min-height: 0; margin: 0; padding: var(--sp-2); overflow: auto; background: var(--well); border-radius: var(--r-sm); font-family: var(--font-mono); font-size: var(--t-xs); line-height: 1.5; color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Plain lower case: this line is a sentence about the last run, not a state
+   label, and shouting it made it compete with the pill (M84's critic). */
+.watcher-node__last { margin: 0; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+.watcher-node__when { font-family: var(--font-mono); }
+/* M84. The one kind glyph that carries a state tone — see RailPanelRow. */
+.rail-row__kind--stateful { color: var(--tone); }
 .memory-node__body { display: flex; flex-direction: column; min-height: 0; gap: var(--sp-2); padding: var(--sp-3); }
 .memory-node__root { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memory-node__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: 0; list-style: none; }

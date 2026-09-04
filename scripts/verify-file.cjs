@@ -718,6 +718,154 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ injective, injectiveLong, stable, kept: afterTrim.entries.length, skipped: afterTrim.skipped, junkSurvived: /not json at all/.test(rawAfterTrim), noTmpLeft, zero: zero.entries.length, negative: negative.entries.length }))
 }
 
+// M84 — watch.1. THE WATCHER'S RUNNER, over a FAKE spawn and a fake clock.
+//      Five properties, each of which fails silently in production:
+//      (a) The four triggers each have ONE phrase, from one table.
+//      (b) ONE RUN AT A TIME with a COALESCED pending: five saves during a
+//          run mean one more run, not five. A queueing watcher falls further
+//          behind the harder its user works, which is why people turn
+//          watchers off rather than report them.
+//      (c) The exit arms speak the state vocabulary: 0 is a pass, N is a
+//          fail, and a SIGNAL is a fail — a signal read as a pass is a green
+//          watcher over a killed process.
+//      (d) The tail is capped and is the LAST bytes, not the first: the
+//          interesting end of a failing command's output is its end.
+//      (e) Every finished run appends a ledger row and the row carries NO
+//          output — the ledger is metadata, and this is the one place a
+//          watcher could put a secret into a durable file nobody expects.
+{
+  const words = typeof F.triggerWord === 'function' ? {
+    path: F.triggerWord({ kind: 'path', path: '/repo/src' }),
+    git: F.triggerWord({ kind: 'git-ref', root: '/repo' }),
+    timer: F.triggerWord({ kind: 'timer', everyMs: 600000 }),
+    panel: F.triggerWord({ kind: 'panel', sourceId: 'n3', on: 'exit-ok' })
+  } : null
+  const rows = []
+  const states = []
+  const spawns = []
+  let live = null
+  const fakeSpawn = (spec) => {
+    const proc = {
+      spec,
+      stdout: [],
+      exited: false,
+      kill(signal) { proc.killed = signal; proc.exit(null, signal) },
+      // The runner's process seam: it hands us the callbacks and we drive them.
+      onData: null,
+      onExit: null,
+      exit(code, signal) { proc.exited = true; proc.onExit && proc.onExit(code, signal ?? null) }
+    }
+    live = proc
+    return proc
+  }
+  const runner = typeof F.createWatchRunner === 'function' ? F.createWatchRunner({
+    spawn: (spec, handlers) => { spawns.push(spec); const p = fakeSpawn(spec); p.onData = handlers.onData; p.onExit = handlers.onExit; return p },
+    now: (() => { let t = 1000; return () => (t += 10) })(),
+    ledger: { append: (row) => rows.push(row) },
+    onState: (id, state) => states.push({ id, ...state })
+  }) : null
+  let coalesced = null
+  let tail = null
+  let signalWord = null
+  if (runner) {
+    runner.add({ id: 'w1', cwd: '/repo', command: 'npm', args: ['test'], trigger: { kind: 'path', path: '/repo/src' } })
+    runner.fire('w1')
+    const during = live
+    // (b) three more triggers WHILE the first run is in flight.
+    runner.fire('w1'); runner.fire('w1'); runner.fire('w1')
+    const spawnsDuring = spawns.length
+    during.exit(0, null)
+    // The pending run starts exactly once.
+    coalesced = { spawnsDuring, after: spawns.length, pendingSeen: states.some((s) => s.pending === true) }
+    // (d) a long output on the pending run, then a non-zero exit.
+    const big = 'x'.repeat(F.WATCH_TAIL_BYTES + 500)
+    live.onData(`${big}THE END`)
+    live.exit(2, null)
+    tail = runner.stateOf('w1')
+    // (c) a signal is a failure.
+    runner.fire('w1')
+    live.kill('SIGKILL')
+    signalWord = runner.stateOf('w1')
+  }
+  ok('watch.1 the trigger words come from one table; a trigger during a run coalesces into ONE pending run; exit 0 passes, exit N and a signal fail; the tail is capped and keeps the END; every run appends a ledger row with no output in it',
+    words !== null && runner !== null &&
+      /src/.test(words.path) && /branch/.test(words.git) && /10m|10 m/.test(words.timer) && /n3/.test(words.panel) &&
+      coalesced.spawnsDuring === 1 && coalesced.after === 2 && coalesced.pendingSeen === true &&
+      tail && tail.status === 'exited' && tail.exitCode === 2 &&
+      tail.tail.length <= F.WATCH_TAIL_BYTES && /THE END$/.test(tail.tail) &&
+      signalWord && signalWord.status === 'exited' && signalWord.signal === 'SIGKILL' &&
+      rows.length === 3 && rows.every((r) => r.panelId === 'w1' && typeof r.exitCode !== 'undefined' && !('output' in r) && !('tail' in r)) &&
+      rows[0].command === 'npm test',
+    JSON.stringify({ words, coalesced, tail: tail && { status: tail.status, exitCode: tail.exitCode, len: tail.tail.length, end: tail.tail.slice(-8) }, signalWord, rows }))
+}
+
+// M84 — watch.2. WHAT A GREEN watch.1 DOES NOT PROVE, each found by the
+//      milestone's verifier and each silent in production:
+//      (a) `stop` publishes the cleared pending flag — clearing it without a
+//          publish leaves a body still saying another run is queued.
+//      (b) `stop` ESCALATES: SIGTERM, then SIGKILL after the grace. A command
+//          that ignores SIGTERM (a shell wrapping a test runner is the
+//          ordinary case) otherwise leaves the node on `working` forever with
+//          a Stop control that does nothing.
+//      (c) `remove` records the run it kills. The run really happened, and a
+//          ledger with no row for it disagrees with `stop`, which records one.
+//      (d) `disposeAll` — the quit arm — kills every run in flight. Without
+//          it a quit mid-run orphans an `npm test` with no window and no row.
+{
+  const rows2 = []
+  const states2 = []
+  const signals = []
+  const timers = []
+  let proc2 = null
+  const runner2 = typeof F.createWatchRunner === 'function' ? F.createWatchRunner({
+    spawn: (spec, handlers) => {
+      // A process that IGNORES SIGTERM, which is the case the escalation is for.
+      proc2 = { spec, handlers, kill: (sig) => { signals.push(sig); if (sig === 'SIGKILL') handlers.onExit(null, 'SIGKILL') } }
+      return proc2
+    },
+    now: (() => { let t = 5000; return () => (t += 10) })(),
+    setTimer: (fn, ms) => { const entry = { fn, ms, cancelled: false }; timers.push(entry); return { cancel: () => { entry.cancelled = true } } },
+    ledger: { append: (row) => rows2.push(row) },
+    onState: (id, state) => states2.push({ id, ...state })
+  }) : null
+  let stopped = null
+  let escalated = null
+  let removedRow = null
+  let disposedSignals = null
+  if (runner2) {
+    runner2.add({ id: 'w2', cwd: '/repo', command: 'npm', args: ['test'], trigger: { kind: 'timer', everyMs: 60000 } })
+    runner2.fire('w2')
+    runner2.fire('w2') // a pending run
+    const beforeStop = states2.length
+    runner2.stop('w2')
+    // (a) the cleared pending flag was PUBLISHED.
+    stopped = { published: states2.slice(beforeStop).some((s) => s.pending === false), signals: [...signals] }
+    // (b) the grace timer fires SIGKILL.
+    const pendingKill = timers.find((t) => !t.cancelled)
+    if (pendingKill) pendingKill.fn()
+    escalated = { signals: [...signals], grace: pendingKill ? pendingKill.ms : null }
+    // (c) a run in flight, then removed.
+    runner2.add({ id: 'w3', cwd: '/repo', command: 'make', args: [], trigger: { kind: 'timer', everyMs: 60000 } })
+    runner2.fire('w3')
+    const before3 = rows2.length
+    runner2.remove('w3')
+    removedRow = { added: rows2.length - before3, last: rows2[rows2.length - 1] }
+    // (d) the quit arm.
+    runner2.add({ id: 'w4', cwd: '/repo', command: 'make', args: [], trigger: { kind: 'timer', everyMs: 60000 } })
+    runner2.fire('w4')
+    const sigBefore = signals.length
+    runner2.disposeAll()
+    disposedSignals = { killed: signals.length > sigBefore, ids: runner2.ids() }
+  }
+  ok('watch.2 stop publishes the cleared pending flag and escalates SIGTERM to SIGKILL after the grace; remove records the run it kills; disposeAll kills every run in flight and forgets every watcher',
+    runner2 !== null &&
+      stopped.published === true && stopped.signals[0] === 'SIGTERM' &&
+      escalated.signals.includes('SIGKILL') && escalated.grace === F.WATCH_KILL_GRACE_MS &&
+      removedRow.added === 1 && removedRow.last.panelId === 'w3' && removedRow.last.exitCode === null &&
+      disposedSignals.killed === true && disposedSignals.ids.length === 0,
+    JSON.stringify({ stopped, escalated, removedRow, disposedSignals }))
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -3275,6 +3275,66 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ panels, back }))
 }
 
+// ======================= M84: the watcher on disk ========================
+// watch.1 — a watcher panel round-trips with its WHOLE record: the command,
+// its args, the cwd its runs happen in and the TRIGGER. The trigger is the
+// field that carries the milestone: a watcher restored without one is a node
+// that will never run again, and it looks identical to one whose trigger has
+// simply not fired yet — the same argument check 105 makes for a review
+// subject's sha and 142 makes for a toolbox source's cwd.
+//
+// The second half is the individual-drop rule: an unusable trigger kind, a
+// timer below the floor, a missing command — each drops ITS OWN panel by name
+// while the neighbours survive. A watcher whose trigger kind is from a LATER
+// version of this app must drop rather than be coerced into a timer, because
+// a coerced watcher runs a real command on a schedule nobody asked for.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'wa', kind: 'watcher', x: 1, y: 2, w: 520, h: 360, z: 3, title: 'tests',
+        watch: { cwd: '/Users/me/repo', command: 'npm', args: ['test'], trigger: { kind: 'path', path: '/Users/me/repo/src' } } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const p0 = out.snapshot.workspaces[0].panels[0]
+  const back = L.fromPanels ? null : null
+  ok('watch.1 a watcher panel round-trips with its command, args, cwd and trigger',
+    !out.warnings.some((w) => w.includes('wa')) && p0.kind === 'watcher' &&
+      p0.watch.cwd === '/Users/me/repo' && p0.watch.command === 'npm' &&
+      Array.isArray(p0.watch.args) && p0.watch.args[0] === 'test' &&
+      p0.watch.trigger.kind === 'path' && p0.watch.trigger.path === '/Users/me/repo/src' &&
+      p0.title === 'tests' && !('cwd' in p0) && !('args' in p0),
+    JSON.stringify({ p0, back }))
+}
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'bad-kind', kind: 'watcher', x: 0, y: 0, w: 520, h: 360, z: 1,
+        watch: { cwd: '/r', command: 'npm', args: [], trigger: { kind: 'moon-phase' } } },
+      { id: 'bad-timer', kind: 'watcher', x: 0, y: 0, w: 520, h: 360, z: 2,
+        watch: { cwd: '/r', command: 'npm', args: [], trigger: { kind: 'timer', everyMs: 5 } } },
+      { id: 'no-command', kind: 'watcher', x: 0, y: 0, w: 520, h: 360, z: 3,
+        watch: { cwd: '/r', args: [], trigger: { kind: 'git-ref', root: '/r' } } },
+      { id: 'good', kind: 'watcher', x: 0, y: 0, w: 520, h: 360, z: 4,
+        watch: { cwd: '/r', command: 'make', armed: false, trigger: { kind: 'panel', sourceId: 'n1', on: 'exit-ok' } } },
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 5, cwd: '~', args: [] }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const named = (id) => out.warnings.some((w) => w.includes(id))
+  ok('watch.2 an unusable trigger kind, a timer below the floor and a missing command each drop their own watcher by name; absent args default to none, and the neighbours survive',
+    panels.length === 2 && panels[0].id === 'good' && panels[1].id === 'n1' &&
+      Array.isArray(panels[0].watch.args) && panels[0].watch.args.length === 0 &&
+      // `armed: false` is carried; ABSENT stays absent on the watcher that
+      // never said it — the field's absence already means armed, and writing
+      // it back would make every file differ from the one before it.
+      panels[0].watch.armed === false && !('armed' in out.snapshot.workspaces[0].panels[1]) &&
+      panels[0].watch.trigger.kind === 'panel' && panels[0].watch.trigger.on === 'exit-ok' &&
+      named('bad-kind') && named('bad-timer') && named('no-command'),
+    JSON.stringify({ ids: panels.map((p) => p.id), warnings: out.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

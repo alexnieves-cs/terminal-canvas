@@ -5,6 +5,7 @@ import type { FileSource } from './file-panel'
 import type { ToolboxSource } from './toolbox'
 import type { ChatSource } from './chat-panel'
 import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from './handoff'
+import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
@@ -187,9 +188,85 @@ export interface PersistedToolboxPanel extends PersistedPanelBase {
  * and a toolbox it carries no cwd of its own: its subject is a repository
  * root, and that is the whole of its source.
  */
+/**
+ * M84. The watcher's trigger, parsed here and nowhere else.
+ *
+ * A trigger from a LATER version of this app is DROPPED with its panel, never
+ * coerced: every other kind's parser can fall back to a default because the
+ * worst case is a node that shows the wrong thing, but a coerced trigger runs
+ * a real command on a schedule nobody asked for. The timer floor is checked
+ * for the same reason — a stored `everyMs: 5` is a busy loop with a UI.
+ */
+function parseWatch(raw: unknown, id: string, warnings: string[]): { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false } | null {
+  if (!isRecord(raw)) {
+    warnings.push(`dropped watcher panel ${id}: it had no watch record`)
+    return null
+  }
+  if (!isStr(raw.cwd) || raw.cwd.trim() === '') {
+    warnings.push(`dropped watcher panel ${id}: its directory was unusable`)
+    return null
+  }
+  if (!isStr(raw.command) || raw.command.trim() === '') {
+    warnings.push(`dropped watcher panel ${id}: it had no command to run`)
+    return null
+  }
+  // ABSENT args are none — the commonest command has no arguments, and a
+  // whole node is not dropped for a key nobody wrote. A PRESENT one that is
+  // not an array of strings is malformed and does drop it: the difference
+  // between `make` and `make` with something unreadable after it is a
+  // different command.
+  let args: string[] = []
+  if (raw.args !== undefined) {
+    if (!Array.isArray(raw.args) || !raw.args.every(isStr)) {
+      warnings.push(`dropped watcher panel ${id}: args was not an array of strings`)
+      return null
+    }
+    args = [...raw.args]
+  }
+  const t = raw.trigger
+  if (!isRecord(t)) {
+    warnings.push(`dropped watcher panel ${id}: it had no trigger`)
+    return null
+  }
+  // ABSENT stays absent, and only an explicit `false` is carried: `armed:
+  // true` written back would make every file differ from the one before it
+  // for a field whose absence already means the same thing.
+  const armed = raw.armed === false ? { armed: false as const } : {}
+  if (t.kind === 'path' && isStr(t.path) && t.path.trim() !== '') {
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'path', path: t.path } }
+  }
+  if (t.kind === 'git-ref' && isStr(t.root) && t.root.trim() !== '') {
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'git-ref', root: t.root } }
+  }
+  if (t.kind === 'timer' && typeof t.everyMs === 'number' && Number.isFinite(t.everyMs)) {
+    if (t.everyMs < WATCH_TIMER_MIN_MS) {
+      warnings.push(`dropped watcher panel ${id}: its timer asked for every ${t.everyMs}ms, below the ${WATCH_TIMER_MIN_MS}ms floor`)
+      return null
+    }
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'timer', everyMs: t.everyMs } }
+  }
+  if (t.kind === 'panel' && isStr(t.sourceId) && t.sourceId.trim() !== '' && HANDOFF_TRIGGERS.includes(t.on as HandoffTrigger)) {
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'panel', sourceId: t.sourceId, on: t.on as HandoffTrigger } }
+  }
+  warnings.push(`dropped watcher panel ${id}: trigger ${JSON.stringify(t.kind)} was unusable`)
+  return null
+}
+
 export interface PersistedMemoryPanel extends PersistedPanelBase {
   kind: 'memory'
   source: { root: string }
+}
+
+/**
+ * M84's watcher. A PROCESS node that is not a terminal, so like every other
+ * non-terminal kind it carries no top-level `cwd` and no top-level `args`:
+ * `watch.cwd` is where its runs happen, and a reader keyed on the top-level
+ * field would mistake it for a terminal and spawn a shell for it.
+ */
+export interface PersistedWatcherPanel extends PersistedPanelBase {
+  kind: 'watcher'
+  /** `armed` ABSENT means armed: every watcher written before the toggle existed, and the ordinary case. */
+  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false }
 }
 
 /**
@@ -211,6 +288,7 @@ export type PersistedPanel =
   | PersistedJiraPanel
   | PersistedToolboxPanel
   | PersistedChatPanel
+  | PersistedWatcherPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -684,6 +762,11 @@ function parsePanel(
       return null
     }
     return { ...base, kind: 'memory', source: { root: source.root } }
+  }
+  if (kind === 'watcher') {
+    const watch = parseWatch((raw as Record<string, unknown>).watch, id, warnings)
+    if (watch === null) return null
+    return { ...base, kind: 'watcher', watch }
   }
   if (kind === 'chat') {
     const chat = parseChatSource((raw as Record<string, unknown>).chat, id, warnings)

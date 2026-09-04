@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import type { WatcherStateEvent } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import {
   IPC,
@@ -145,6 +146,14 @@ const bridge: CanvasBridge = {
     transcript: (id) => ipcRenderer.invoke(IPC.AGENT_TRANSCRIPT, id),
     importSession: (req) => ipcRenderer.invoke(IPC.AGENT_IMPORT, req),
     onEvent: (listener) => subscribe<AgentSessionEvent>(IPC_EVENTS.AGENT_EVENT, listener)
+  },
+  watcher: {
+    create: (req) => ipcRenderer.invoke(IPC.WATCHER_CREATE, req),
+    run: (id) => ipcRenderer.invoke(IPC.WATCHER_RUN, id),
+    stop: (id) => ipcRenderer.invoke(IPC.WATCHER_STOP, id),
+    dispose: (id) => ipcRenderer.invoke(IPC.WATCHER_DISPOSE, id),
+    list: () => ipcRenderer.invoke(IPC.WATCHER_LIST),
+    onState: (listener) => subscribe<WatcherStateEvent>(IPC_EVENTS.WATCHER_STATE, listener)
   },
   spawn: {
     sheet: (req: SpawnRequest) => ipcRenderer.invoke(IPC.SPAWN_SHEET, req),

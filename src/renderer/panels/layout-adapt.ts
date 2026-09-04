@@ -1,7 +1,8 @@
+import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
 import { isMemoryPanel, isFilePanel, isJiraPanel,
-  isToolboxPanel, isChatPanel, isReviewPanel, type Panel } from './panels'
+  isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, type Panel } from './panels'
 
 /**
  * Between the persisted shape and the in-memory one.
@@ -26,6 +27,16 @@ function copyChatSource(chat: ChatSource): ChatSource {
   // absent (a spread would write `supervisor: undefined`, which survives IPC
   // and reads as present).
   return { cwd: chat.cwd, sessionId: chat.sessionId, ...(chat.supervisor === true ? { supervisor: true } : {}), ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } }) }
+}
+
+/** M84. One arm per trigger kind — see the watcher arm below for why. */
+function copyTrigger(trigger: WatchTrigger): WatchTrigger {
+  switch (trigger.kind) {
+    case 'path': return { kind: 'path', path: trigger.path }
+    case 'git-ref': return { kind: 'git-ref', root: trigger.root }
+    case 'timer': return { kind: 'timer', everyMs: trigger.everyMs }
+    case 'panel': return { kind: 'panel', sourceId: trigger.sourceId, on: trigger.on }
+  }
 }
 
 export function toPanels(persisted: PersistedPanel[]): Panel[] {
@@ -71,6 +82,17 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     }
     // M83. The memory node, its root copied field by field.
     if (p.kind === 'memory') return { ...base, kind: 'memory' as const, source: { root: p.source.root } }
+    // M84. The watcher, whose trigger is copied by its OWN kind rather than
+    // spread: the union's arms have different fields, and a spread of one
+    // arm's object into another's type is legal TypeScript that produces a
+    // trigger nothing can fire.
+    if (p.kind === 'watcher') {
+      return {
+        ...base,
+        kind: 'watcher' as const,
+        watch: { cwd: p.watch.cwd, command: p.watch.command, args: [...p.watch.args], ...(p.watch.armed === false ? { armed: false as const } : {}), trigger: copyTrigger(p.watch.trigger) }
+      }
+    }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -143,6 +165,17 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     if (isChatPanel(panel)) return { ...base, kind: 'chat' as const, chat: copyChatSource(panel.chat) }
     // M83. The memory node's own root, field by field.
     if (isMemoryPanel(panel)) return { ...base, kind: 'memory' as const, source: { root: panel.source.root } }
+    // M84. Same no-cwd/no-args rule as every branch above: `watch.cwd` is a
+    // different fact from a terminal's spawn cwd, and writing a top-level one
+    // would make the next launch read this watcher as a terminal and spawn a
+    // shell for it.
+    if (isWatcherPanel(panel)) {
+      return {
+        ...base,
+        kind: 'watcher' as const,
+        watch: { cwd: panel.watch.cwd, command: panel.watch.command, args: [...panel.watch.args], ...(panel.watch.armed === false ? { armed: false as const } : {}), trigger: copyTrigger(panel.watch.trigger) }
+      }
+    }
     return {
       ...base,
       kind: 'terminal' as const,

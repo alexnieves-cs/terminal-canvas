@@ -1,4 +1,4 @@
-import { isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isWatcherPanel, isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 
@@ -68,6 +68,13 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   if (isMemoryPanel(panel)) {
     const root = panel.source.root.replace(/\/+$/, '')
     return `memory · ${root.slice(root.lastIndexOf('/') + 1) || root}`
+  }
+  // M84. A watcher reads by what it RUNS: the command is what the user named
+  // it in their head, and the trigger is the row's trailing phrase — a row
+  // that led with the trigger would sort every watcher under `on`.
+  if (isWatcherPanel(panel)) {
+    const command = panel.watch.command.replace(/\/+$/, '')
+    return `watcher · ${command.slice(command.lastIndexOf('/') + 1) || command}`
   }
   // M73. The same split as the toolbox, for the same 260px reason.
   if (isChatPanel(panel)) {

@@ -1,6 +1,7 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
 import { claudeAvailable } from '@renderer/palette/commands'
+import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer } from '@renderer/chat/chat-store'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
@@ -23,7 +24,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isMemoryPanel,
+  isWatcherPanel, isMemoryPanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -75,6 +76,8 @@ export interface PaletteActionsDeps {
   openJiraPanel: () => void
   /** M83. Open the memory node for the captured panel's repository. */
   openMemoryPanel: () => Promise<void>
+  /** M84. The palette's Watch… row: ask for the command, then the trigger. */
+  beginWatcher: () => void
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }) => Promise<SpawnResult>
@@ -138,7 +141,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -389,6 +392,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // M83. The seventh arm — a memory node carries its root.
               if (isMemoryPanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M84. The eighth arm — a watcher carries its whole record.
+              if (isWatcherPanel(p)) {
+                return { kind: p.kind, rect: p.rect, watch: p.watch, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M73. The sixth arm; `verify:layout chat.1` is the parse side of
               // the same field-by-field rule this rename obeys.
@@ -840,7 +847,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     // doomed id, since a hidden workspace's chat is not in
                     // panelsRef to be told apart: for any other kind this is
                     // a no-op in main (no session) and on disk (no file).
-                    disposeChat(panelId, true)
+                    disposeChat(panelId, true); disposeWatcher(panelId)
                     if (doomedSessionlessIds.has(panelId)) {
                       clearFileResult(panelId)
                       clearToolbox(panelId)
@@ -1366,6 +1373,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // by MAIN (only it knows what a directory's repository root is), so the
     // node's subject is the same root `tc memory` writes under.
     openMemory: () => { void openMemoryPanel() },
+    beginWatcher,
     openJira: () => openJiraPanel(),
     newNote: () => beginNewNote(),
     newChat: () => { void beginNewChat() },

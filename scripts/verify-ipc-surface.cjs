@@ -210,7 +210,10 @@ app.whenReady().then(() => {
   // the recent-directories read.
   // M73 added the seven agent:* invokes (67 -> 74); M74 agent:import (75).
   // M75 agent:clipboard-image (76).
-  const EXPECTED_CHANNELS = 82
+  // M76-M80 the approval, tool, run and template verbs; M81 preset:template;
+  // M83 memory:list and memory:add (82). M84 the five watcher:* verbs (87) —
+  // create/run/stop/dispose/list, the runtime a watcher node addresses.
+  const EXPECTED_CHANNELS = 87
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

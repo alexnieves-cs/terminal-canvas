@@ -21,7 +21,7 @@ import type { AgentState } from '@shared/types'
  */
 
 /** The display kind, `Panel['kind']` plus M27's `note` — see rail-rows.ts. */
-export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'chat' | 'memory'
+export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'chat' | 'memory' | 'watcher'
 
 export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-you' | 'idle' | 'exited'
 
@@ -38,6 +38,26 @@ export interface StateInput {
    * not answered for yet — which reads `not started`, the honest word.
    */
   chat?: ChatStateInput
+  /**
+   * M84. A watcher's process facts, from the watcher store's snapshot.
+   * Absent for every other kind, and absent for a watcher main has not
+   * answered for yet — which reads `not started`, the honest word.
+   */
+  watch?: WatchStateInput
+}
+
+/** M84. What the vocabulary needs from a watcher's last run. */
+export interface WatchStateInput {
+  status: 'not-started' | 'running' | 'passed' | 'exited'
+  exitCode?: number | null
+  signal?: string | null
+  /**
+   * The trigger could not be armed — the reason belongs in the node's body.
+   * (A run WAITING for the one in flight is deliberately not a field here:
+   * the word is `working` either way, and a field the vocabulary never reads
+   * is a present-vs-absent optional written at every copy site for nothing.)
+   */
+  disarmed?: boolean
 }
 
 /** M73. What the vocabulary needs from an agent session's snapshot. */
@@ -84,6 +104,10 @@ export function panelState(input: StateInput, agent: AgentState | undefined): Pa
   // whatever the process is doing, because the process is waiting on the
   // answer; nothing else about the vocabulary is new.
   if (input.kind === 'chat') return chatState(input.chat)
+  // M84. A watcher is a PROCESS node too, and its whole point is that a
+  // person reads its pass or fail without opening it — so it speaks the
+  // process words and no new one is invented for it.
+  if (input.kind === 'watcher') return watchState(input.watch)
   if (input.kind !== 'terminal') return { word: input.kind, tone: 'kind' }
   if (input.dormant) return { word: 'asleep', tone: 'asleep' }
   const status = input.status
@@ -126,6 +150,30 @@ export const STATE_PRIORITY: readonly string[] = ['needs you', 'working', 'idle'
 export function statePriority(word: string): number {
   const i = STATE_PRIORITY.findIndex((w) => word === w || word.startsWith(w + ' '))
   return i === -1 ? STATE_PRIORITY.length : i
+}
+
+/**
+ * A watcher's last run, in the one vocabulary.
+ *
+ * `passed` is `idle` and a non-zero exit is `exited N` — the same two words a
+ * terminal running the same command would show, which is what makes a green
+ * or red watcher legible in the rail, the state edge, the minimap and the
+ * far tiers with no code of their own. A SIGNAL is a failure: `exitCode` is
+ * null for a signalled process, and a template that printed `exited null`
+ * would be a state word nobody can act on.
+ */
+function watchState(watch: WatchStateInput | undefined): PanelStateWord {
+  if (watch === undefined) return { word: 'not started', tone: 'none' }
+  if (watch.disarmed === true) return { word: 'exited', tone: 'exited' }
+  switch (watch.status) {
+    case 'not-started': return { word: 'not started', tone: 'none' }
+    case 'running': return { word: 'working', tone: 'working' }
+    case 'passed': return { word: 'idle', tone: 'idle' }
+    case 'exited':
+      return watch.signal !== undefined && watch.signal !== null
+        ? { word: `exited ${watch.signal}`, tone: 'exited' }
+        : { word: `exited ${watch.exitCode ?? 0}`, tone: 'exited' }
+  }
 }
 
 function chatState(chat: ChatStateInput | undefined): PanelStateWord {
