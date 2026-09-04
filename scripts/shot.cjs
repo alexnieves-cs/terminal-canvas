@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -76,7 +76,12 @@ writeFileSync(join(REPO, 'README.md'), '# fixture\n\nA repository the screenshot
 writeFileSync(join(REPO, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm run *)', 'Read', 'Edit'], deny: ['Bash(rm -rf *)'] } }, null, 2))
 writeFileSync(join(REPO, '.claude', 'commands', 'review.md'), 'Review the diff for correctness and name every silent failure.\n')
 writeFileSync(join(REPO, '.claude', 'commands', 'deploy.md'), 'Run the deploy checklist and stop at the first red step.\n')
-writeFileSync(NOTE, '# Plan\n\nSplit the flush gate out of onExit; the timer is the second door.\n\n- [ ] write the check first\n- [ ] watch it fail\n')
+// M85. The notes folder IS the vault: the plan links to two other notes, one
+// of which does not exist yet, and one note links back.
+writeFileSync(NOTE, '# Plan\n\nSplit the flush gate out of onExit; the timer is the second door — see [[flush gate]] and [[decisions/tmux]].\n\nOpen question: [[what the watchdog should do]].\n\n- [ ] write the check first\n- [ ] watch it fail\n')
+mkdirSync(join(FIX, 'notes', 'decisions'), { recursive: true })
+writeFileSync(join(FIX, 'notes', 'flush gate.md'), '# Flush gate\n\nThe gate that keeps a kill from racing the last flush. Referenced from [[plan]].\n')
+writeFileSync(join(FIX, 'notes', 'decisions', 'tmux.md'), '# tmux\n\nSessions live in tmux so agents outlive the app. See [[plan]] for the timer.\n')
 
 let scrollbackDir = join(mkdtempSync(join(tmpdir(), 'tc shot scrollback ')), 'scrollback')
 mkdirSync(scrollbackDir, { recursive: true })
@@ -112,6 +117,15 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'vault', intent: 'The vault: the navigator\'s fourth pane lists a folder of markdown notes by title, newest first, and the open note paints its `[[links]]` as links — a resolved one in the accent, an unresolved one dashed and offering to be created — with a Backlinks section beneath naming the notes that point here and the line. A note is still a file panel; a vault is many of them plus an index.',
+    run: async (kit) => {
+      await kit.js(`(() => { const b = document.querySelector('[data-dock="vault"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await sleep(600)
+      await kit.goTo('plan.md')
+      await sleep(600)
+      await kit.shot('vault')
+      await kit.js(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+    } },
   { name: 'watcher', intent: 'A watcher: a node that runs a command when something changes. The chrome row says WHEN in the same words everywhere (`on a change in src`), the body is the last run\'s output and one line saying how it ended, and the state is the ordinary vocabulary — a passing watcher reads `idle` in green on its own edge, in the rail and in the minimap, with no word invented for it.',
     run: async (kit) => {
       await kit.goTo('watcher · sh')
@@ -310,7 +324,7 @@ app.whenReady().then(async () => {
         { id: 'dormant', x: 660, y: 30, w: 440, h: 250, z: 2, cwd: REPO, command: '/bin/sh', args: ['-c', 'sleep 600'], agent: 'claude-code', title: 'tests' },
         { id: 'review', kind: 'review', x: 30, y: 310, w: 350, h: 230, z: 3, subject: { subjectId: 'live', repoRoot: REPO, baselineSha, label: 'claude — api' } },
         { id: 'file', kind: 'file', x: 410, y: 310, w: 360, h: 230, z: 4, source: { path: join(REPO, 'src', 'server.ts') } },
-        { id: 'note', kind: 'file', x: 800, y: 310, w: 300, h: 230, z: 5, source: { path: NOTE, prose: true } },
+        { id: 'note', kind: 'file', x: 800, y: 310, w: 340, h: 420, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
         // M84. A watcher: a command run on a trigger, mid-canvas.
@@ -338,7 +352,7 @@ app.whenReady().then(async () => {
       groups: [], bookmarks: []
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
-    preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false },
+    preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes') },
     // M77. The chat's baseline too: the fixture's edit to server.ts predates
     // boot, so it is seeded rather than captured (as the terminal's is).
     baselines: { live: { root: REPO, sha: baselineSha }, chat: { root: REPO, sha: baselineSha } }
@@ -472,6 +486,7 @@ app.whenReady().then(async () => {
       spawn: () => {}, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
       // M80. Templates: the built-ins plus the store's own.
       presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
+      vaultRead: (root) => readVault(root),
       memoryList: (root, limit) => shotMemory.list(root, limit),
       memoryAdd: (req) => { const r = shotMemory.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
       listTemplates: () => allTemplates(layoutStore.templates()),

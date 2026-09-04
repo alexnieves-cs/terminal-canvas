@@ -47,6 +47,24 @@ export interface WatcherCreateRequest {
   armed?: boolean
 }
 
+/** M85. One note as the pane and the index see it. No bytes beyond the body. */
+export interface VaultNoteRow {
+  path: string
+  title: string
+  body: string
+  at: number
+}
+
+export interface VaultReadResult {
+  /** The root as main RESOLVED it — `~` expanded and symlinks followed — which is what every panel path is compared against. */
+  root: string
+  notes: VaultNoteRow[]
+  /** Notes the caps dropped — reported, never silent. */
+  skipped: number
+  /** Why there is nothing, when there is nothing. */
+  reason?: string
+}
+
 export type WatcherCreateResult = { ok: true } | { ok: false; reason: string }
 
 /** M84. One watcher's state, as main knows it. `tail` is capped; nothing durable. */
@@ -220,6 +238,8 @@ export const IPC = {
   TEMPLATE_SAVE: 'template:save',
   TEMPLATE_DELETE: 'template:delete',
   /** M83. The project memory, for the node that renders it and the chat that carries it. */
+  /** M85. Every `.md` under the vault root, read in main — the renderer has no fs. */
+  VAULT_READ: 'vault:read',
   MEMORY_LIST: 'memory:list',
   MEMORY_ADD: 'memory:add',
   /**
@@ -609,6 +629,8 @@ export const IPC_EVENTS = {
   AGENT_EVENT: 'agent:event',
   /** M84. One watcher's state, sent as it changes (the tail is batched by the runner's own flush). */
   WATCHER_STATE: 'watcher:state',
+  /** M85. Something under the vault root changed (debounced in main); the renderer re-reads. */
+  VAULT_CHANGED: 'vault:changed',
   /**
    * Where a panel is and what it is running, pushed when either CHANGES.
    *
@@ -1136,6 +1158,13 @@ export interface CanvasBridge {
     /** M74. See AGENT_IMPORT. */
     importSession(req: AgentImportRequest): Promise<AgentImportResult>
     onEvent(listener: (event: AgentSessionEvent) => void): () => void
+  }
+  /** M85. The vault: a folder of markdown notes, read in main. */
+  vault: {
+    /** Every `.md` under `root`, newest first, with what the caps dropped. An absent root answers empty WITH ITS REASON. */
+    read(root: string): Promise<VaultReadResult>
+    /** M85. Fired after main's own watch on the root sees a change — the pane refreshes with no gesture. */
+    onChanged(listener: () => void): () => void
   }
   /** M84. The watcher runtime: a command run on a trigger, with no PTY. */
   watcher: {

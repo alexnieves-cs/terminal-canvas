@@ -213,7 +213,8 @@ app.whenReady().then(() => {
   // M76-M80 the approval, tool, run and template verbs; M81 preset:template;
   // M83 memory:list and memory:add (82). M84 the five watcher:* verbs (87) —
   // create/run/stop/dispose/list, the runtime a watcher node addresses.
-  const EXPECTED_CHANNELS = 87
+  // M85 vault:read (88).
+  const EXPECTED_CHANNELS = 88
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

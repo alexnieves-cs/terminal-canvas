@@ -3058,13 +3058,36 @@ const filePanelOnDisk = (id, over = {}) => ({
   const tab = L.settingDef('shell.contextTab')
   const w = []
   const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
-  ok('shell.1 shell.navigator (workspaces|panels, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
-    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces']) &&
+  // M85 added `vault` as the navigator's fourth pane; the check follows the
+  // schema rather than pinning a list the app has outgrown.
+  ok('shell.1 shell.navigator (panels|workspaces|vault, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
       tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
       tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&
       stray['shell.navigator'] === undefined && stray['shell.contextTab'] === 'work' && w.length === 1,
     JSON.stringify({ nav, tab, stray, w }))
+}
+
+// M85 — text.1. `vault.root` is the app's first TEXT setting. Absent is the
+//      default (''), a string is kept as typed, and a PRESENT non-string is
+//      dropped by name rather than coerced — the first text setting was
+//      refused at both doors because each compared typeof against the type's
+//      NAME, and nothing said so until a real-Electron check did.
+{
+  const def = L.settingDef('vault.root')
+  const w = []
+  const kept = L.parsePreferences({ 'vault.root': '/Users/me/notes' }, w)
+  const w2 = []
+  const bad = L.parsePreferences({ 'vault.root': 42 }, w2)
+  const w3 = []
+  const absent = L.parsePreferences({}, w3)
+  ok('text.1 vault.root is a text setting in the Files category: a string is kept, a number is dropped by name, and absence warns nothing',
+    def !== undefined && def.type === 'text' && def.default === '' && def.category === L.FILES_CATEGORY &&
+      kept['vault.root'] === '/Users/me/notes' && w.length === 0 &&
+      bad['vault.root'] === undefined && w2.length === 1 && /vault\.root/.test(w2[0]) &&
+      absent['vault.root'] === undefined && w3.length === 0,
+    JSON.stringify({ def, kept, w, bad, w2, absent, w3 }))
 }
 
 // M48 — firstrun.1. `hints.seen` is a LIST setting — the second customer of

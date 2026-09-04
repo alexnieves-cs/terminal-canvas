@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FilePanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
+import { parseWikiLinks, resolveWikiName, type VaultIndex } from '@shared/vault'
 import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
@@ -58,8 +59,73 @@ function conflictMessage(
  */
 const CONFIRM_DISCARD_MS = 3000
 
+
+/**
+ * M85. A note's body with its `[[links]]` painted as controls.
+ *
+ * One parse, from `shared/vault.ts`, and the offsets it returns are what
+ * split the text — a second scan here would be the two-parsers drift the
+ * shared module exists to prevent. An UNRESOLVED link is still a link, marked
+ * as unresolved, and clicking it offers to create the note: a `[[name]]` that
+ * quietly read as text would be a note somebody meant to write.
+ */
+function renderProseWithLinks(
+  body: string,
+  vault: { root: string; index: VaultIndex; onOpenNote: (path: string) => void; onCreateNote: (name: string) => void }
+): JSX.Element[] {
+  const out: JSX.Element[] = []
+  let at = 0
+  let key = 0
+  for (const link of parseWikiLinks(body)) {
+    if (link.start > at) out.push(<span key={`t${key++}`}>{body.slice(at, link.start)}</span>)
+    const target = resolveWikiName(link.name, vault.index)
+    out.push(
+      <button
+        key={`l${key++}`}
+        type="button"
+        className={`file-node__wikilink${target === null ? ' file-node__wikilink--unresolved' : ''}`}
+        data-wikilink={link.name}
+        data-wikilink-resolved={target === null ? 'false' : 'true'}
+        title={target === null ? `no note called ${link.name} — click to create it` : target}
+        onMouseDown={(event) => { event.stopPropagation() }}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (target === null) vault.onCreateNote(link.name)
+          else vault.onOpenNote(target)
+        }}
+      >{link.text}{target === null && <span className="file-node__wikilink-verb" aria-hidden="true"> · create</span>}</button>
+    )
+    at = link.end
+  }
+  if (at < body.length) out.push(<span key={`t${key++}`}>{body.slice(at)}</span>)
+  return out
+}
+
 export interface FileNodeProps {
   panel: FilePanel
+  /**
+   * M85. The vault this note belongs to, when it is inside one: its root, the
+   * index (so `[[links]]` resolve and backlinks are known) and the verb that
+   * opens another note. Absent for every file panel outside a vault, which is
+   * most of them — and absent means the links stay literal text, which is the
+   * honest rendering when there is no index to resolve them against.
+   */
+  /**
+   * M85. Whether the vault's folder is KNOWN yet. The setting is read
+   * asynchronously, so for the first render of a restored canvas every note
+   * looks like it is outside a vault; a note that auto-entered its editor in
+   * that window would hide the links the vault exists for. False until the
+   * settings have answered; a caller with no vault at all passes true.
+   */
+  vaultReady?: boolean
+  vault?: {
+    root: string
+    index: VaultIndex
+    /** Open a note by its path relative to the root. */
+    onOpenNote: (path: string) => void
+    /** Offer to create a note a link points at but nothing answers. */
+    onCreateNote: (name: string) => void
+  }
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
   /**
@@ -136,7 +202,7 @@ export interface FileNodeProps {
  */
 function FileNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, restoreFocus, focusedId,
-  readOnly = false, onBeginLink, linkTarget
+  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true
 }: FileNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -316,12 +382,20 @@ function FileNodeImpl({
   useEffect(() => {
     if (autoEditedRef.current) return
     if (panel.source.prose !== true) return
+    // M85. A note INSIDE A VAULT opens to be read: its links are the point,
+    // and an editor over them hides every one. The ✎ control is one click
+    // away; a note outside a vault keeps M27's open-to-write. Until the
+    // vault's folder is known, nothing is decided — see `vaultReady`.
+    if (vaultReady === false) return
+    // Decided ONCE: a vault note that opened to read must not snap into its
+    // editor later when the root is cleared or re-typed (M85's verifier).
+    if (vault !== undefined) { autoEditedRef.current = true; return }
     if (!model.editable || result === undefined || result.kind !== 'text') return
     autoEditedRef.current = true
     seedRef.current = result.content
     setDraft(result.content)
     setBaseMtimeMs(result.mtimeMs)
-  }, [panel.source.prose, model.editable, result])
+  }, [panel.source.prose, model.editable, result, vault, vaultReady])
 
   // Read on mount, close on unmount. This is what makes "the renderer is
   // showing this file" and "main is watching it" one statement: a workspace
@@ -671,7 +745,13 @@ function FileNodeImpl({
              every existing reader that asks "is there content on screen"
              keeps working for a note without knowing notes exist. */
           <div className="file-node__prose" data-file-node-lines>
-            {model.lines.map((line) => line.text).join('\n')}
+            {/* M85. Inside a vault a `[[name]]` is a CONTROL: it opens the
+                note it names, or offers to create it. Outside one it stays
+                the text it is — there is no index to resolve it against, and
+                a control that could not act would be worse than the text. */}
+            {vault === undefined
+              ? model.lines.map((line) => line.text).join('\n')
+              : renderProseWithLinks(model.lines.map((line) => line.text).join('\n'), vault)}
           </div>
         ) : (
           <pre className="file-node__pre" data-file-node-lines>
@@ -689,6 +769,43 @@ function FileNodeImpl({
         {model.truncatedNote !== undefined && (
           <p className="pf__more file-node__more" data-file-node-truncated>{model.truncatedNote}</p>
         )}
+        {/* M85. BACKLINKS: the notes pointing at this one. Three states, and
+            the first is the one that matters — a note outside a vault shows
+            no section at all (there is no index, and an empty "Backlinks"
+            header would claim nothing points here when nothing was ever
+            asked), a note inside one with no incoming links says so, and the
+            rest is the list. */}
+        {vault !== undefined && panel.source.prose === true && (() => {
+          const rel = panel.source.path.startsWith(`${vault.root.replace(/\/+$/, '')}/`)
+            ? panel.source.path.slice(vault.root.replace(/\/+$/, '').length + 1)
+            : null
+          if (rel === null) return null
+          const rows = vault.index.backlinks[rel] ?? []
+          return (
+            <div className="file-node__backlinks" data-file-backlinks={String(rows.length)}>
+              <p className="file-node__backlinks-head">Backlinks</p>
+              {rows.length === 0 ? (
+                <p className="pf__note" data-file-backlinks-arm="none">no note points here yet</p>
+              ) : (
+                <ul className="file-node__backlinks-list">
+                  {rows.map((b) => (
+                    <li key={`${b.path}:${b.line}`} className="file-node__backlink">
+                      <button
+                        type="button"
+                        className="file-node__backlink-verb"
+                        data-file-backlink={b.path}
+                        title={`${b.path} line ${b.line}`}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => { event.stopPropagation(); vault.onOpenNote(b.path) }}
+                      >{b.title}</button>
+                      <span className="file-node__backlink-line">line {b.line}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
     </PanelFrame>

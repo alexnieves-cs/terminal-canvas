@@ -69,7 +69,7 @@ export interface SettingDef {
    * (the palette's row builder, the menu) has to handle the type or the
    * setting silently gets no row.
    */
-  type: 'boolean' | 'number' | 'enum' | 'list'
+  type: 'boolean' | 'number' | 'enum' | 'list' | 'text'
   default: SettingValue
   /** The legal values of an `enum` setting, in the order the palette cycles them. */
   values?: readonly string[]
@@ -261,10 +261,10 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.navigator',
     label: 'Navigator pane',
-    description: 'show your panels or your workspaces in the navigator; the Files pane is its own toggle (⌘B)',
+    description: 'show your panels, your workspaces or your vault in the navigator; the Files pane is its own toggle (⌘B)',
     keywords: ['navigator', 'rail', 'sidebar', 'panels', 'workspaces', 'dock', 'pane', 'shell'],
     type: 'enum',
-    values: ['panels', 'workspaces'],
+    values: ['panels', 'workspaces', 'vault'],
     default: 'panels',
     category: SHELL_CATEGORY
   },
@@ -333,6 +333,20 @@ export const SETTINGS: readonly SettingDef[] = [
     // competing for horizontal width — at 220 + 240 + 260 a 1280px window has
     // 560px of canvas left — so the user opens it when they want it.
     default: false,
+    category: FILES_CATEGORY
+  },
+  {
+    // M85. The vault's folder. A `text` setting rather than a bespoke store:
+    // this schema is the one home for anything a user sets, and a second home
+    // for one path would be a second thing to persist, migrate and forget.
+    // Empty by DEFAULT and empty is a real value — the pane says so and
+    // offers the verb that fixes it, rather than hiding itself.
+    id: 'vault.root',
+    label: 'Vault folder',
+    description: 'the folder of markdown notes the Vault pane lists and links between',
+    keywords: ['vault', 'notes', 'markdown', 'wiki', 'zettel', 'backlinks', 'obsidian'],
+    type: 'text',
+    default: '',
     category: FILES_CATEGORY
   },
   {

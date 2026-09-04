@@ -3429,3 +3429,50 @@ reading `idle`, which `verify:panels watch.1` caught by asserting the two agree.
 because the worst case there is a node that shows the wrong thing. A coerced trigger RUNS A
 REAL COMMAND on a schedule nobody asked for. The timer floor is refused for the same reason,
 and the palette's typed trigger is refused by name rather than guessed.
+
+**A `[[link]]` that resolves to nothing is a LINK, never text (`shared/vault.ts`'s
+`resolveWikiName`, `FileNode.tsx`'s `renderProseWithLinks`).** The obvious rendering paints
+only the links that resolve, and a `[[name]]` that quietly reads as text is a note somebody
+meant to write with nothing anywhere saying so. Null from `resolveWikiName` is a real answer:
+the link is painted dashed and clicking it offers to create the note, named what the link
+said so it resolves next time.
+
+**A note inside the vault opens to READ, and not until the vault's folder is KNOWN
+(`FileNode.tsx`'s `vaultReady`).** M27's note opens ready to write, which hides every link
+under an editor; a vault note's links are the point, so it opens read-only with ✎ one click
+away. The gate matters because the setting is read asynchronously: on a restored canvas every
+note looks like it is outside a vault for one render, and a note that auto-edited in that
+window would be a vault note with its links hidden every launch — found in the shot harness,
+where the fixture's note came up editing.
+
+**The vault's index is built ONCE per read and the rows are frozen on a signature
+(`renderer/canvas/useVault.ts`).** The pane's rows and every note's Backlinks section come
+from the same `buildVaultIndex` call; a walk per surface would disagree the moment a file
+changed between them. The re-read is keyed on a COUNTER bumped by `file:changed`, not on the
+event, so an editor's save that fires several events coalesces into one read.
+
+**A `text` setting is a string at BOTH doors (`layout-store.ts`'s `writePreference`,
+`layout-schema.ts`'s `parsePreferences`).** The first `text` setting (`vault.root`) was
+refused at both, silently, because each compared `typeof value` against the def's type name
+and `'text'` is not what `typeof` answers — the pane read `not set` after the setting was set,
+and only the panels check said so.
+
+**The vault root is expanded and realpath'd in main, NEVER `resolveCwd`'d (`main/index.ts`'s
+`vaultRead`).** `resolveCwd` falls back to `$HOME` for a path that is not there — the right
+answer for a spawn, and exactly wrong here: a typo'd vault folder walked the user's entire
+home directory synchronously on main, listed Documents and Desktop as the vault, and the
+reader's own "there is no vault" arm was unreachable from the app. The resolved root is what
+the answer carries, and it is what every panel path is compared against, because a panel's
+path is absolute and real while the setting is whatever the user typed.
+
+**The vault re-reads on main's OWN watch of the root (`vault:changed`), never on
+`file:changed`.** `file:changed` is per OPEN file panel and basename-filtered: a note an
+agent wrote into the folder never fired it, while an agent's every save to a source file
+elsewhere re-walked the whole vault. Main's recursive watch is debounced, replaced when the
+root changes, and sends only to a window that exists.
+
+**Creating a note from an unresolved `[[link]]` re-prompts by NAME on every refusal
+(`Canvas.tsx`'s `beginCreateVaultNote`).** M27's own shape: `[[../x]]` is refused by
+`file:create`'s inside-root guard, a name that exists is refused, a write can fail — and
+each closed the line silently and left the link dashed. The `.catch` is mandatory for the
+reason FileNode records: an unhandled rejection leaves the line open forever.

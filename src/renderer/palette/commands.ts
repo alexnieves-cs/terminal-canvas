@@ -149,6 +149,10 @@ export interface PaletteActions {
    * compile-time hole a half-finished wiring passes straight through.
    */
   beginEditSetting(id: string, label: string, current: number): void
+  /** M85. A free-text setting (the vault's folder): the palette's text line, then setSetting. */
+  beginEditTextSetting(id: string, label: string, current: string): void
+  /** M85. The vault pane's own door to the same setting. */
+  beginChooseVault(): void
   switchWorkspace(id: string): void
   beginCreateWorkspace(): void
   beginRenameWorkspace(id: string, currentName: string): void
@@ -1336,6 +1340,24 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       })
       continue
     }
+    // M85. A free-text setting (the vault's folder) opens the same text line
+    // every rename uses, with its CURRENT VALUE in the title for the reason
+    // the number row states — a row saying only "Vault folder" would put the
+    // user in a field with no idea what it holds now.
+    if (setting.type === 'text') {
+      const current = typeof setting.value === 'string' ? setting.value : ''
+      out.push({
+        id: `setting.${setting.id}`,
+        title: `${setting.label}: ${current === '' ? 'not set' : current}`,
+        subtitle: setting.description,
+        searchText: setting.keywords.join(' '),
+        group: 'setting',
+        scope: 'settings',
+        hiddenAtRest: true,
+        run: () => actions.beginEditTextSetting(setting.id, setting.label, current)
+      })
+      continue
+    }
     if (setting.type === 'enum') {
       // M45. A CYCLE, not a submenu: the palette has one row shape, and a
       // three-value setting is one press per step. The title names the
@@ -1464,7 +1486,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // still uncustomered) cannot make this door claim a setting the scope
     // does not show.
     const settingCount = ctx.settings.filter(
-      (s) => s.type === 'boolean' || s.type === 'number'
+      (s) => s.type === 'boolean' || s.type === 'number' || s.type === 'text'
     ).length
     out.push({
       id: 'manage.settings',

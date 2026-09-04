@@ -3,7 +3,7 @@ import type { RailAttention } from './rail-sections'
 import type { NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
-import { Bell, Folder, Grid, Layers } from '@renderer/icons'
+import { Bell, Folder, Grid, KindNote, Layers } from '@renderer/icons'
 
 export interface DockProps {
   /** Which pane the navigator shows, when it shows. */
@@ -38,7 +38,9 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
   const entries: Array<{ id: NavigatorPane; label: string; icon: JSX.Element }> = [
     { id: 'panels', label: 'Panels', icon: <Grid /> },
     { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
-    { id: 'files', label: 'Files', icon: <Folder /> }
+    { id: 'files', label: 'Files', icon: <Folder /> },
+    // M85. The fourth pane the dock's own comment said would be cheap.
+    { id: 'vault', label: 'Vault', icon: <KindNote /> }
   ]
   return (
     <nav className="shell__dock" aria-label="Dock">

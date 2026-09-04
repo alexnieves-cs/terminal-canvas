@@ -290,7 +290,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       scheduleWrite()
       return
     }
-    if (typeof value !== (def.type === 'enum' ? 'string' : def.type)) return
+    // M85. `text` and `enum` are both strings on the wire; the difference is
+    // the membership test below, which only an enum has.
+    if (typeof value !== (def.type === 'enum' || def.type === 'text' ? 'string' : def.type)) return
     // The enum's membership, for the reason parsePreferences states: the two
     // doors into the map each guard it, or the guard has a hole.
     if (def.type === 'enum' && typeof value === 'string' && !(def.values ?? []).includes(value)) return

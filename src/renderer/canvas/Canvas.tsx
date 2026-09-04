@@ -32,6 +32,7 @@ import { useCanvasPointer } from './useCanvasPointer'
 import { panelName } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
+import { useVault } from './useVault'
 import { useInspectorDetail } from './useInspectorDetail'
 import {
   DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
@@ -1248,6 +1249,39 @@ export function Canvas({
   useEffect(() => window.canvas.file.onChanged((event) => {
     applyFileResult(event.panelId, event.result)
   }), [])
+
+  /**
+   * M85. THE VAULT: its folder from the settings, its notes from main, and a
+   * bump whenever anything under a watched file changes so an agent writing
+   * a note into the folder appears without a gesture.
+   *
+   * The signal is a COUNTER rather than the event: the vault does not care
+   * WHICH file changed (its own read is a walk), and passing the event would
+   * re-read on every keystroke of an editor's save while a counter coalesces
+   * into one render.
+   */
+  const [vaultRoot, setVaultRoot] = useState('')
+  // False until the settings have answered once — see FileNode's `vaultReady`.
+  const [vaultReady, setVaultReady] = useState(false)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const row = rows.find((r) => r.id === 'vault.root')
+        if (row) setVaultRoot(typeof row.value === 'string' ? row.value : '')
+        setVaultReady(true)
+      }).catch(() => setVaultReady(true))
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [])
+  const vault = useVault(vaultRoot)
+  // Read at CALL time by the note's verbs, which are memoised above where
+  // `vaultRoot` is declared — the same forward-ref shape `noteRootRef` uses.
+  const vaultRootRef = useRef('')
+  vaultRootRef.current = vault.root
 
   // The fifth canvas-wide subscription, for the same reason as the ones
   // above: the store fans out per panel id, so a per-panel subscription here
@@ -3479,6 +3513,56 @@ export function Canvas({
     })
   }, [commitHistory])
 
+  /**
+   * M85. Opening a note by its path INSIDE the vault, and offering to create
+   * one a link points at but nothing answers.
+   *
+   * Both go through M27's own verbs — `openFilePanel(..., { prose: true })`
+   * and `file:create` — because a note is a file panel in prose mode and a
+   * vault is many of them. A second creation path would be a second set of
+   * rules about what a note is.
+   */
+  const openVaultNote = useCallback((relative: string) => {
+    const root = vaultRootRef.current
+    if (root === '') return
+    openFilePanel(`${root.replace(/\/+$/, '')}/${relative}`, worldCentre(), { prose: true })
+  }, [openFilePanel, worldCentre])
+
+  const beginCreateVaultNote = useCallback((name: string) => {
+    const root = vaultRootRef.current
+    if (root === '') return
+    // The name as typed in the link, with `.md` — a link that said
+    // `[[api notes]]` must create `api notes.md` and resolve NEXT time, which
+    // it only does if the file is named what the link said.
+    const file = /\.md$/i.test(name) ? name : `${name}.md`
+    // Every refusal RE-PROMPTS with its reason, M27's own shape: a `[[../x]]`
+    // that main refuses (outside the root), a name that already exists, a
+    // write that failed — each closed the line silently and left the link
+    // dashed with nothing said (M85's verifier). The catch is mandatory for
+    // FileNode's reason: an unhandled rejection leaves the line open forever.
+    const prompt = (initial: string, label: string, feedback?: true): void => {
+      setInputMode({
+        kind: 'text',
+        label,
+        initial,
+        ...(feedback === undefined ? {} : { feedback }),
+        submit: (typed) => {
+          const named = typed.trim()
+          if (named === '') { setInputMode(null); return }
+          void window.canvas.file.create({ root, name: named, seed: `# ${named.replace(/\.md$/i, '').split('/').pop() ?? named}\n\n` })
+            .then((res) => {
+              if (res.kind === 'created') { setInputMode(null); openFilePanel(res.path, worldCentre(), { prose: true }); return }
+              const why = res.kind === 'exists' ? 'there is already a note with that name' : res.detail
+              prompt(named, `Couldn\u2019t create that note \u2014 ${why}`, true)
+            })
+            .catch((error: unknown) => { prompt(named, `Couldn\u2019t create that note \u2014 ${String(error)}`, true) })
+        }
+      })
+      palette.openPalette()
+    }
+    prompt(file, `Create ${file}?`)
+  }, [openFilePanel, palette, worldCentre])
+
   const beginWatcher = useCallback(() => {
     const root = noteRootRef.current
     if (root === null) return
@@ -3738,6 +3822,35 @@ export function Canvas({
     focusedIdRef, noteRootRef
   })
 
+  /**
+   * M85. ONE object each for the pane and for every in-vault note, memoised
+   * on the fields they carry: `Navigator` and `FileNode` are memo'd, and a
+   * fresh literal per render defeated both on every mousemove and drag frame
+   * while a vault was set — the invisible churn the rail's signature freeze
+   * exists to prevent (M85's verifier).
+   */
+  const noteVault = useMemo(() => (
+    vault.root === '' ? null : { root: vault.root.replace(/\/+$/, ''), index: vault.index, onOpenNote: openVaultNote, onCreateNote: beginCreateVaultNote }
+  ), [vault.root, vault.index, openVaultNote, beginCreateVaultNote])
+  const vaultSelectedPath = ((): string | null => {
+    const p = selectedPanel
+    if (!p || !isFilePanel(p) || noteVault === null) return null
+    return p.source.path.startsWith(`${noteVault.root}/`) ? p.source.path.slice(noteVault.root.length + 1) : null
+  })()
+  const vaultPaneProps = useMemo(() => ({
+    onToggle: chrome.toggleNavigator,
+    root: vault.root,
+    notes: vault.notes,
+    pending: vault.pending,
+    ...(vault.reason === undefined ? {} : { reason: vault.reason }),
+    skipped: vault.skipped,
+    selectedPath: vaultSelectedPath,
+    onOpenNote: openVaultNote,
+    onChooseRoot: paletteActions.beginChooseVault,
+    onRefresh: vault.refresh
+  }), [chrome.toggleNavigator, vault.root, vault.notes, vault.pending, vault.reason, vault.skipped, vaultSelectedPath, openVaultNote, paletteActions.beginChooseVault, vault.refresh])
+
+
   // The inspector's async detail sections, lifted into useInspectorDetail.ts.
   // Each is a three-state result — nothing to show / asked but unanswered / a
   // real answer — and must stay one; see the hook's doc comment.
@@ -3832,6 +3945,7 @@ export function Canvas({
         // standing in — disabled by NAME, never hidden, when there is none.
         onOpenMemory={paletteActions.openMemory}
         memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
+        vault={vaultPaneProps}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
@@ -3971,6 +4085,8 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
+                  vaultReady={vaultReady}
+                  {...(noteVault !== null && panel.source.path.startsWith(`${noteVault.root}/`) ? { vault: noteVault } : {})}
                 />
               )
             }

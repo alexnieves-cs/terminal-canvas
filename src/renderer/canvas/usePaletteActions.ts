@@ -601,6 +601,55 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
 
       openEdit(String(current))
     },
+    /**
+     * M85. A free-text setting — the vault's folder, and the only one so far.
+     * The same text line every rename uses, reopened by `openPalette()` for
+     * the reason the number edit above states in full. An empty submit CLEARS
+     * the setting rather than cancelling: "no vault" is a real answer, and the
+     * pane says so.
+     */
+    // The vault pane's `Choose a folder…` — the SAME text line the setting's
+    // palette row opens, so there is one way to answer the question.
+    beginChooseVault: () => {
+      const current = settingRows.find((r) => r.id === 'vault.root')
+      const initial = typeof current?.value === 'string' ? current.value : ''
+      setInputMode({
+        kind: 'text',
+        label: 'Vault folder — a folder; `none` clears it',
+        initial,
+        submit: (value) => {
+          // Blank is CANCEL, as on every other text line in this app; `none`
+          // clears the setting on purpose (M85's verifier: an Enter meant to
+          // dismiss must not lose a vault).
+          const typed = value.trim()
+          if (typed === '') { setInputMode(null); return }
+          void window.canvas.settings.set('vault.root', typed.toLowerCase() === 'none' ? '' : typed).then(() => {
+            setInputMode(null)
+            reloadSettings()
+          })
+        }
+      })
+      palette.openPalette()
+    },
+    beginEditTextSetting: (id, label, current) => {
+      setInputMode({
+        kind: 'text',
+        label: `${label} — a folder; \`none\` clears it`,
+        initial: current,
+        submit: (value) => {
+          // Blank is CANCEL, as on every other text line in this app; `none`
+          // clears the setting on purpose (M85's verifier: an Enter meant to
+          // dismiss must not lose a vault).
+          const typed = value.trim()
+          if (typed === '') { setInputMode(null); return }
+          void window.canvas.settings.set(id, typed.toLowerCase() === 'none' ? '' : typed).then(() => {
+            setInputMode(null)
+            reloadSettings()
+          })
+        }
+      })
+      palette.openPalette()
+    },
     switchWorkspace,
     beginCreateWorkspace: () => {
       setInputMode({
