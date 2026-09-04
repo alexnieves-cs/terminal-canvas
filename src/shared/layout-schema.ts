@@ -7,6 +7,9 @@ import type { ChatSource } from './chat-panel'
 import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from './handoff'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
+import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
+export { TEMPLATES_MAX } from './templates'
+export type { PersistedTemplate, TemplateEdge, TemplateNode } from './templates'
 export { RUNS_MAX } from './runs'
 export type { PersistedRun, RunEntry } from './runs'
 import {
@@ -342,6 +345,8 @@ export interface LayoutSnapshot {
    * here — see main/prompts.ts.
    */
   prompts: Prompt[]
+  /** M80. Saved shapes of work. Optional on disk for every layout written before templates existed. */
+  templates: PersistedTemplate[]
   /**
    * Every setting the user has actually CHANGED, keyed by SettingDef.id.
    * Sparse on purpose: an absent id means "still at the schema default", which
@@ -402,6 +407,7 @@ export function defaultSnapshot(): LayoutSnapshot {
     presets: [],
     defaultPresetId: DEFAULT_PRESET_ID,
     prompts: [],
+    templates: [],
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
     preferences: {},
@@ -1116,6 +1122,60 @@ function parsePrompt(raw: unknown, seen: Set<string>, warnings: string[]): Promp
   return { id, name: isStr(name) ? name : id, body }
 }
 
+/**
+ * M80. Templates. Absent is every pre-M80 file and warns nothing. A template
+ * that is not an object, has no usable id or name, or has no surviving node
+ * is dropped BY NAME; a node with an unusable key or kind is dropped and the
+ * template kept; an edge naming a key that did not survive goes with it, and
+ * the template stays — an edge is a relation between nodes, and a relation
+ * with one end missing is not a smaller template, it is a broken one.
+ */
+export function parseTemplates(raw: unknown, warnings: string[]): PersistedTemplate[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a templates field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const out: PersistedTemplate[] = []
+  raw.forEach((entry, i) => {
+    if (!isRecord(entry) || !isStr(entry.id) || seen.has(entry.id)) { warnings.push(`dropped template ${i}: not an object or an unusable id`); return }
+    if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped template ${entry.id}: name was unusable`); return }
+    const nodes: TemplateNode[] = []
+    if (Array.isArray(entry.nodes)) for (const n of entry.nodes) {
+      if (!isRecord(n) || !isStr(n.key) || n.key.trim() === '' || nodes.some((x) => x.key === n.key)) { warnings.push(`dropped a node with an unusable key from template ${entry.id}`); continue }
+      if (n.kind !== 'terminal' && n.kind !== 'chat') { warnings.push(`dropped node ${n.key} from template ${entry.id}: kind was unusable`); continue }
+      if (!isStr(n.cwd)) { warnings.push(`dropped node ${n.key} from template ${entry.id}: cwd was unusable`); continue }
+      nodes.push({
+        key: n.key, kind: n.kind, cwd: n.cwd,
+        dx: isNum(n.dx) ? n.dx : 0, dy: isNum(n.dy) ? n.dy : 0,
+        ...(isStr(n.presetId) ? { presetId: n.presetId } : {}),
+        ...(isStr(n.command) ? { command: n.command } : {}),
+        ...(Array.isArray(n.args) && n.args.every(isStr) ? { args: n.args as string[] } : {}),
+        ...(isStr(n.title) ? { title: n.title } : {}),
+        ...(isStr(n.message) ? { message: n.message } : {}),
+        ...(isNum(n.w) ? { w: n.w } : {}),
+        ...(isNum(n.h) ? { h: n.h } : {})
+      })
+    }
+    if (nodes.length === 0) { warnings.push(`dropped template ${entry.id}: it had no usable node`); return }
+    const keys = new Set(nodes.map((n) => n.key))
+    const edges: TemplateEdge[] = []
+    if (Array.isArray(entry.edges)) for (const e of entry.edges) {
+      if (!isRecord(e) || !isStr(e.from) || !isStr(e.to)) continue
+      if (!keys.has(e.from) || !keys.has(e.to)) { warnings.push(`dropped an edge naming a missing node from template ${entry.id}`); continue }
+      // A trigger this code does not know is MALFORMED, never defaulted: a
+      // rule that fires on a trigger its author did not write is exactly the
+      // surprise `parseLinkAutomation` refuses one field away.
+      if (!isStr(e.trigger) || !(HANDOFF_TRIGGERS as readonly string[]).includes(e.trigger)) { warnings.push(`dropped an edge with an unusable trigger from template ${entry.id}`); continue }
+      edges.push({ from: e.from, to: e.to, trigger: e.trigger as HandoffTrigger })
+    }
+    seen.add(entry.id)
+    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges })
+  })
+  return out.slice(0, TEMPLATES_MAX)
+}
+
 /** Never throws; drops entries individually, like every other parser here. */
 export function parsePrompts(raw: unknown, warnings: string[]): Prompt[] {
   if (raw === undefined) return []
@@ -1488,6 +1548,7 @@ export function parseLayout(raw: string): {
           ? parsed.defaultPresetId
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
+      templates: parseTemplates(parsed.templates, warnings),
       preferences,
       baselines: parseBaselines(parsed.baselines, warnings),
       sessions: parseSessions(parsed.sessions, warnings),

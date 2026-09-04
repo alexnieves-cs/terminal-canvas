@@ -38,6 +38,7 @@ import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
+import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
@@ -924,7 +925,27 @@ app.whenReady().then(async () => {
       savePrompt: (name, body) => {
         layoutStore.addPrompt({ id: mintPromptId(layoutStore.prompts()), name, body })
       },
-      removePrompt: (id) => layoutStore.deletePrompt(id)
+      removePrompt: (id) => layoutStore.deletePrompt(id),
+      // M80. Built-ins first, then the user's — the preset list's own rule; a
+      // save mints an id when the caller has none; a delete refuses a built-in
+      // by returning false, the same answer a project prompt's id gets.
+      // M80. The resolved template, never a spawn: only main can turn an
+      // absent command into the login shell (M5b), and a template's node
+      // needs that answer before it mints anything.
+      presetTemplate: (id) => {
+        const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
+        return found === undefined ? null : templateOf(found)
+      },
+      listTemplates: () => allTemplates(layoutStore.templates()),
+      saveTemplate: (template) => {
+        const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id)
+          ? template.id
+          : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+        const saved: PersistedTemplate = { ...template, id }
+        layoutStore.saveTemplate(saved)
+        return saved
+      },
+      removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id))
     },
     rebuildMenu,
     reviewEngine,

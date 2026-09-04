@@ -2078,6 +2078,48 @@ const WS = [
     JSON.stringify({ a: a && a.disabledReason, b: b && b.disabledReason, c: c && c.disabledReason }))
 }
 
+// M80 — template.1 / template.2. THE TEMPLATE MODEL. template.1: the holes
+//      across every field in first-seen order, filled with the composer's own
+//      rule (a hole with no value stays as typed), and the nodes placed
+//      around a centre. template.2: the named refusal — a node naming a preset
+//      that is gone, a chat node with no claude — and none when it can run.
+{
+  const template = {
+    id: 't1', name: 'review {{repository}}',
+    nodes: [
+      { key: 'chat', kind: 'chat', cwd: '{{repository}}', message: 'Review {{repository}} for {{what}}', dx: -220, dy: 0 },
+      { key: 'diff', kind: 'terminal', cwd: '{{repository}}', command: 'git diff --stat', title: '{{what}}', dx: 220, dy: 0 }
+    ],
+    edges: [{ from: 'chat', to: 'diff', trigger: 'idle' }]
+  }
+  const holes = P.templateHoles(template)
+  const filled = P.fillTemplate(template, { repository: '/r' })
+  const both = P.fillTemplate(template, { repository: '/r', what: 'bugs' })
+  const placed = P.templatePanels(both, { x: 1000, y: 500 })
+  ok('template.1 the holes are the unique names across every field in first-seen order; a filled template keeps a hole with no value as typed; the nodes are placed around the centre in node order',
+    JSON.stringify(holes) === '["repository","what"]' &&
+      filled.nodes[0].cwd === '/r' && filled.nodes[0].message === 'Review /r for {{what}}' && filled.name === 'review /r' &&
+      both.nodes[1].title === 'bugs' && both.nodes[1].command === 'git diff --stat' &&
+      placed.length === 2 && placed[0].key === 'chat' && placed[0].centre.x === 780 && placed[0].centre.y === 500 && placed[1].centre.x === 1220,
+    JSON.stringify({ holes, filled, placed }))
+
+  const presets = [{ id: 'p1', name: 'shell' }]
+  const okTpl = { id: 'a', name: 'a', nodes: [{ key: 'x', kind: 'terminal', presetId: 'p1', cwd: '~', dx: 0, dy: 0 }], edges: [] }
+  const gone = { id: 'b', name: 'b', nodes: [{ key: 'x', kind: 'terminal', presetId: 'nope', cwd: '~', dx: 0, dy: 0 }], edges: [] }
+  const chat = { id: 'c', name: 'c', nodes: [{ key: 'x', kind: 'chat', cwd: '~', dx: 0, dy: 0 }], edges: [] }
+  const bare = { id: 'd', name: 'd', nodes: [{ key: 'x', kind: 'terminal', cwd: '~', dx: 0, dy: 0 }], edges: [] }
+  const loop = { id: 'e', name: 'e', nodes: [{ key: 'x', kind: 'terminal', command: 'a', cwd: '~', dx: 0, dy: 0 }, { key: 'y', kind: 'terminal', command: 'b', cwd: '~', dx: 0, dy: 0 }], edges: [{ from: 'x', to: 'y', trigger: 'exit' }, { from: 'y', to: 'x', trigger: 'exit' }] }
+  const none = P.buildCommands(ctx()).find((r) => r.id === 'template.none')
+  ok('template.2 templateRefusal names the reason — a preset that is gone, a chat node with no claude, a node naming neither, a loop — and is undefined when the template can run; with no templates saved the palette still offers one disabled row',
+    P.templateRefusal(okTpl, presets, true) === undefined &&
+      typeof P.templateRefusal(gone, presets, true) === 'string' && /preset/.test(P.templateRefusal(gone, presets, true)) &&
+      typeof P.templateRefusal(chat, presets, false) === 'string' && /claude/.test(P.templateRefusal(chat, presets, false)) &&
+      P.templateRefusal(chat, presets, true) === undefined &&
+      /neither/.test(P.templateRefusal(bare, presets, true) ?? '') && /loop/.test(P.templateRefusal(loop, presets, true) ?? '') &&
+      none !== undefined && none.disabledReason === P.REASON_NO_TEMPLATES,
+    JSON.stringify({ ok: P.templateRefusal(okTpl, presets, true), gone: P.templateRefusal(gone, presets, true), chat: P.templateRefusal(chat, presets, false) }))
+}
+
 // M77 — tools.1. `Open review` on a chat gates on `reviewable`, with the chat's
 //     own reason when it cannot — never the terminal's `has not started`.
 {

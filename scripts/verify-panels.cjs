@@ -69,6 +69,8 @@ const {
   resolveCwd,
   expandTilde,
   createApprovalTracker,
+  allTemplates,
+  isBuiltInTemplate,
   resolveSpawnRequest,
   IPC_EVENTS,
   IPC,
@@ -1041,7 +1043,18 @@ app.whenReady().then(async () => {
         PROMPT_DIRS.has(cwd) ? readProjectPrompts(resolveCwd(cwd)) : []
       ),
     savePrompt: () => {},
-    removePrompt: () => false
+    removePrompt: () => false,
+    // M80. The real store, through the same three verbs main wires.
+    // M80. The preset's resolved template — main's own answer, never a spawn.
+    presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
+    listTemplates: () => allTemplates(layoutStore.templates()),
+    saveTemplate: (template) => {
+      const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id) ? template.id : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+      const saved = { ...template, id }
+      layoutStore.saveTemplate(saved)
+      return saved
+    },
+    removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id))
   }, () => {
     // This entry point is its own Electron process with no application menu
     // at all — createMenu()/rebuildMenu() belong to main/index.ts, which this
@@ -14734,6 +14747,117 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(kErr && kErr.message || kErr) + ' | renderer: ' + (cLog2.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onC2)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M80 — template.1. TEMPLATES. The palette's `New from review this
+    //     repository` row opens the spawn sheet on that template; the sheet
+    //     asks for its ONE parameter and its preview counts the shape; Create
+    //     mints both panels with the edge between them, in ONE history entry
+    //     (a single undo takes the whole shape away); the chat's first message
+    //     is in its composer, NOT sent. Then a selection is saved as a
+    //     template and comes back from main's store with its edge.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['template.1 a template row opens the sheet (where and title hidden, the preview naming the shape), its parameter is asked, Create mints both panels and the edge in ONE history entry with the chat\'s message in its composer and unsent, and the palette\'s save verb writes a startable template back']
+      const mLog = []
+      const onM = (_e, level, m) => { if (level >= 2) mLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onM)
+      try {
+        const tDir = mkdtempSync(join(tmpdir(), 'tc panels template-'))
+        layoutStore.addPreset({ id: 'template-claude', name: 'Claude (template)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reT
+        await settle()
+        const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        // The palette row for the built-in template.
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
+        const rowRan = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'new from review this repository'); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 150))
+          const selected = document.querySelector('.palette__row--selected')
+          if (!selected || !/review this repository/.test(selected.textContent)) return selected ? selected.textContent : 'no row'
+          if (selected.className.includes('palette__row--disabled')) return 'disabled: ' + selected.title
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        const sheet = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (!s) return false; const hole = s.querySelector('[data-sheet-hole="repository"]'); return hole ? { preview: s.querySelector('[data-sheet-preview]')?.textContent ?? null, what: s.querySelector('[data-sheet-what]')?.value ?? null, where: s.querySelector('[data-sheet-where]') !== null, title: s.querySelector('[data-sheet-title]') !== null } : false })()`), 5000)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('[data-sheet-hole="repository"]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify('')} + ${JSON.stringify(tDir)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true })()`)
+        // The message arrives on the store's own seeding, a poll after the
+        // panels land — waited for, never read once (the full chain is slower).
+        const made = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const panels = [...document.querySelectorAll('.panel')]
+          const chat = panels.find((p) => p.getAttribute('data-panel-kind') === 'chat')
+          const term = panels.find((p) => p.getAttribute('data-panel-kind') !== 'chat')
+          if (panels.length < ${before} + 2 || !chat || !term) return false
+          const chatId = chat.getAttribute('data-panel-id'); const termId = term.getAttribute('data-panel-id')
+          const line = document.querySelector('[data-link-hit="' + chatId + ':' + termId + '"]')
+          const composer = chat.querySelector('[data-chat-input]')
+          if (!line) return false
+          if (!composer || composer.value === '') return false
+          return { chatId, termId, message: composer.value, sent: chat.getAttribute('data-chat-turns'), label: document.querySelector('[data-link-label="' + chatId + ':' + termId + '"]')?.textContent ?? null } })()`), 15000)
+        // ONE history entry: a single undo removes the whole shape.
+        wc.send('edit:undo')
+        const undone = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before}`), 5000)
+        wc.send('edit:redo')
+        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel').length === ${before} + 2`), 5000)
+        // Save the two panels as a template of the user's own.
+        await settle()
+        const saved = await wc.executeJavaScript(`(async () => {
+          const ids = [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))
+          window.__m4aSelect ? window.__m4aSelect(ids) : null
+          return ids })()`)
+        // The SAVE VERB itself, through the palette: the two panels of the
+        // template just made are selected and saved, and the record comes back
+        // from main's store with a startable node for each.
+        // Select both panels first — the row is disabled without a selection,
+        // and the instantiate's own selection did not survive the undo/redo.
+        await wc.executeJavaScript(`(() => {
+          const chrome = (id) => document.querySelector('.panel[data-panel-id="' + id + '"] .pf__chrome')
+          const a = chrome(${JSON.stringify(made.chatId)}); const b = chrome(${JSON.stringify(made.termId)})
+          if (a) a.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, shiftKey: true }))
+          return !!(a && b) })()`)
+        await settle()
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
+        const saveRan = await wc.executeJavaScript(`(async () => {
+          const input = document.querySelector('.palette__input')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'save selection as template'); input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 200))
+          const row = [...document.querySelectorAll('.palette__row')].find((r) => /Save selection as template/.test(r.textContent))
+          if (!row) return 'no row: ' + [...document.querySelectorAll('.palette__row')].map((r) => r.textContent).slice(0, 4).join(' | ')
+          if (row.className.includes('palette__row--disabled')) return 'disabled: ' + row.title
+          row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 250))
+          const field = document.querySelector('.palette__input')
+          if (!field) return 'no name field'
+          setter.call(field, 'my shape'); field.dispatchEvent(new Event('input', { bubbles: true }))
+          field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          return true })()`)
+        const listed = await waitUntil(() => wc.executeJavaScript(`window.canvas.template.list().then((rows) => rows.some((t) => t.name === 'my shape') ? rows : false)`), 5000)
+        const mine = Array.isArray(listed) ? listed.find((t) => t.name === 'my shape') : undefined
+        const builtInDelete = await wc.executeJavaScript(`window.canvas.template.remove('builtin-review-repo')`)
+        ok(IDS[0],
+          rowRan === true && sheet && /chat \+ terminal/.test(String(sheet.preview)) && /after a turn/.test(String(sheet.preview)) &&
+            sheet.where === false && sheet.title === false &&
+            made && typeof made.chatId === 'string' && /Review the working tree/.test(String(made.message)) && made.sent === '0' &&
+            /after a turn/.test(String(made.label)) && undone === true &&
+            saveRan === true && mine && mine.nodes.length === 2 && mine.edges.length === 1 && mine.edges[0].trigger === 'idle' &&
+            mine.nodes.every((n) => n.kind === 'chat' || n.presetId !== undefined || (n.command ?? '') !== '') &&
+            builtInDelete === false,
+          JSON.stringify({ rowRan, sheet, made, undone, saveRan, mine, builtInDelete, saved: Array.isArray(saved), log: mLog.slice(-3) }))
+        try { rmSync(tDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (mErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(mErr && mErr.message || mErr) + ' | renderer: ' + (mLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onM)
       }
     }
 

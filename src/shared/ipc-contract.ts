@@ -23,6 +23,7 @@ import type {
   SubagentUpdate
 } from './types'
 import type { CanvasState, PersistedPanel } from './layout-schema'
+import type { PersistedTemplate } from './templates'
 import type { SettingDef, SettingValue } from './settings-schema'
 import type { ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
 import type { CredentialMeta } from './credential-schema'
@@ -84,6 +85,14 @@ export const IPC = {
    * absence or guess zsh at it.
    */
   PRESET_SPAWN_BY_ID: 'preset:spawn-by-id',
+  /**
+   * M80. The preset's resolved template WITHOUT spawning — the one thing a
+   * template's node needs and only main can answer (an absent `command` is
+   * the user's login shell, and that resolution is main's alone). Its
+   * absence is why the first cut spawned through `spawn:sheet` and then
+   * guessed which panel had arrived.
+   */
+  PRESET_TEMPLATE: 'preset:template',
   /**
    * Save a preset from a panel the RENDERER picked, rather than from whichever
    * panel is focused.
@@ -153,6 +162,10 @@ export const IPC = {
   /** Always writes the SAVED store. The project half is read-only. */
   PROMPT_SAVE: 'prompt:save',
   PROMPT_DELETE: 'prompt:delete',
+  /** M80. Saved shapes of work: the list (built-ins first), a save, a delete that refuses a built-in by name. */
+  TEMPLATE_LIST: 'template:list',
+  TEMPLATE_SAVE: 'template:save',
+  TEMPLATE_DELETE: 'template:delete',
   /**
    * The settings surface. Renderer -> main and invokes, not events, for the
    * same reason M5b's preset mutations are: main owns the store, because the
@@ -977,6 +990,8 @@ export interface CanvasBridge {
      * spawn the ordinary undo behaviour rather than a second spawn path.
      */
     spawnById(id: string): Promise<void>
+    /** M80. The preset's resolved template, or null when the id names nothing. */
+    template(id: string): Promise<PresetTemplate | null>
     /** Save THIS panel as a preset. See PRESET_SAVE_PANEL. */
     savePanel(captured: CapturedPanel): Promise<void>
     /** M37. See PRESET_SET_WORKTREE. False for a built-in or an unknown id. */
@@ -996,6 +1011,14 @@ export interface CanvasBridge {
     clear(): Promise<void>
     /** M42. Hits across every panel's log, newest-first within a panel, capped. [] for an empty query. */
     search(query: string): Promise<ScrollbackSearchHit[]>
+  }
+  /** M80. Templates: a shape of work saved once and instantiated with its parameters filled. */
+  template: {
+    list(): Promise<PersistedTemplate[]>
+    /** The template as saved, with its minted id. */
+    save(template: Omit<PersistedTemplate, 'id'> & { id?: string }): Promise<PersistedTemplate>
+    /** False for an id the saved store does not hold — every built-in id, for one. */
+    remove(id: string): Promise<boolean>
   }
   prompt: {
     list(cwd: string | null): Promise<PromptBridgeRow[]>

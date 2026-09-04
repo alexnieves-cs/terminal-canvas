@@ -2000,6 +2000,37 @@ const handoffLayout = (panels) => L.parseLayout(file({
     JSON.stringify({ ab, bc, cd, warnings: r.warnings }))
 }
 
+// M80 — template.1. THE TEMPLATE RECORD, top level beside presets and
+//      prompts: absent is every pre-M80 file (no warning); a template that is
+//      not an object, has no usable id or name, or has no surviving node is
+//      dropped by name; a node with an unusable key or kind is dropped and the
+//      template kept; an edge naming a key that did not survive is dropped and
+//      the template kept; the newest TEMPLATES_MAX kept.
+{
+  const node = (over = {}) => ({ key: 'a', kind: 'terminal', cwd: '~', dx: 0, dy: 0, ...over })
+  const tpl = (over = {}) => ({ id: 't1', name: 'review this', nodes: [node(), node({ key: 'b', kind: 'chat' })], edges: [{ from: 'a', to: 'b', trigger: 'exit-ok' }], ...over })
+  const withTemplates = (templates) => L.parseLayout(file(templates === undefined ? {} : { templates }))
+  const absent = withTemplates(undefined)
+  const r = withTemplates([
+    tpl(),
+    tpl({ id: 't2', name: 'dangling', nodes: [node(), node({ key: 'ghost', kind: 'nonsense' })], edges: [{ from: 'a', to: 'ghost', trigger: 'exit' }, { from: 'a', to: 'a', trigger: 'exit' }] }),
+    tpl({ id: 't3', name: '' }),
+    tpl({ id: 't5', name: 'bad trigger', edges: [{ from: 'a', to: 'b', trigger: 'whenever' }] }),
+    tpl({ id: 't4', nodes: [] }),
+    'nonsense'
+  ])
+  const many = withTemplates(Array.from({ length: (L.TEMPLATES_MAX ?? 30) + 4 }, (_, i) => tpl({ id: `m${i}`, name: `m ${i}` })))
+  const kept = r.snapshot.templates ?? []
+  ok('template.1 templates: absent is [] with no warning; a malformed one is dropped by name; a bad node is dropped and the template kept; an edge naming a dropped node goes and the template stays; the cap holds',
+    Array.isArray(absent.snapshot.templates) && absent.snapshot.templates.length === 0 && absent.warnings.length === 0 &&
+      kept.length === 3 && kept[2].id === 't5' && kept[2].edges.length === 0 && r.warnings.some((w) => /t5/.test(w) && /trigger/.test(w)) &&
+      kept[0].id === 't1' && kept[0].nodes.length === 2 && kept[0].edges.length === 1 && kept[0].edges[0].trigger === 'exit-ok' &&
+      kept[1].id === 't2' && kept[1].nodes.length === 1 && kept[1].edges.length === 1 && kept[1].edges[0].to === 'a' &&
+      r.warnings.some((w) => /t3/.test(w)) && r.warnings.some((w) => /t4/.test(w)) && r.warnings.some((w) => /ghost/.test(w)) &&
+      (many.snapshot.templates ?? []).length === (L.TEMPLATES_MAX ?? 30),
+    JSON.stringify({ absent: absent.snapshot.templates, kept, warnings: r.warnings, many: (many.snapshot.templates ?? []).length }))
+}
+
 // M79 — run.1. THE RUN RECORD on the workspace, beside groups and bookmarks:
 //      absent is every pre-M79 file (no warning); a malformed run is dropped
 //      by name; an entry naming a missing panel is dropped and the run kept;

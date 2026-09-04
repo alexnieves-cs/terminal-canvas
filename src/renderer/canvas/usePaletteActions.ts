@@ -12,6 +12,9 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
+import { templateRefusal } from '@renderer/palette/template-model'
+import type { HandoffTrigger } from '@shared/handoff'
+import type { PersistedTemplate } from '@shared/templates'
 import { clearSubagents } from '@renderer/session/subagent-store'
 import { clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
@@ -20,7 +23,7 @@ import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
-  removeLink, setLinkLabel, type Panel
+  linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
 import { expandGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -71,6 +74,8 @@ export interface PaletteActionsDeps {
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions }) => Promise<SpawnResult>
+  /** M80. Instantiate a template: every node and edge in one history entry. */
+  instantiateTemplate: (template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>
   /** M74. The two front-end verbs. */
   openAsChat: (id: string) => void
   openInTerminal: (id: string) => void
@@ -129,7 +134,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    openFilePanel, openToolboxPanel, openJiraPanel, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -1036,7 +1041,61 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // this is the one a future caller cannot forget.
     toggleGroup: (id) => { if (mergedRef.current) return; setGroups((current) => (current.find((g) => g.id === id)?.collapsed ? expandGroup : toggleGroup)(current, id)) },
     removeGroup: (id) => { if (mergedRef.current) return; setGroups((current) => removeGroup(current, id)) },
-    beginSpawnSheet: () => {
+    // M80. The selected panels and the enabled handoff edges among them, saved
+    // as a shape of work. A kind that is neither a terminal nor a chat is
+    // DROPPED with the count said in the sentence — a template makes panels,
+    // and a review node's subject would not exist in the new canvas.
+    beginSaveTemplate: (panelIds) => {
+      // The merged view's rects are lane-space: a template saved there would
+      // record a geometry that exists in one render (M80's verifier).
+      if (mergedRef.current) { setInputMode({ kind: 'text', label: 'the merged view is read-only — switch to a workspace first', initial: '', submit: () => setInputMode(null) }); palette.openPalette(); return }
+      const chosen = panelsRef.current.filter((p) => panelIds.includes(p.rect.id))
+      const usable = chosen.filter((p) => isTerminalPanel(p) || isChatPanel(p))
+      const dropped = chosen.length - usable.length
+      if (usable.length === 0) {
+        // Refused BY NAME, never silently: the row was enabled because
+        // something was selected, and nothing happening reads as broken.
+        setInputMode({ kind: 'text', label: 'a template is made of terminals and chats — none is selected', initial: '', submit: () => setInputMode(null) })
+        palette.openPalette()
+        return
+      }
+      setInputMode({
+        kind: 'text',
+        label: `Name this ${usable.length}-panel template…${dropped === 0 ? '' : ` (${dropped} other panel${dropped === 1 ? '' : 's'} cannot be saved)`}`,
+        initial: '',
+        submit: (value) => {
+          const name = value.trim()
+          setInputMode(null)
+          if (name === '') return
+          const centre = usable.reduce((acc, p) => ({ x: acc.x + (p.rect.x + p.rect.w / 2) / usable.length, y: acc.y + (p.rect.y + p.rect.h / 2) / usable.length }), { x: 0, y: 0 })
+          const keyOf = new Map(usable.map((p, i) => [p.rect.id, `n${i + 1}`]))
+          const nodes = usable.map((p) => {
+            const key = keyOf.get(p.rect.id) as string
+            const dx = Math.round(p.rect.x + p.rect.w / 2 - centre.x)
+            const dy = Math.round(p.rect.y + p.rect.h / 2 - centre.y)
+            if (isChatPanel(p)) return { key, kind: 'chat' as const, cwd: p.chat.cwd, dx, dy, ...(p.title === undefined ? {} : { title: p.title }) }
+            const live = getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd
+            // The spec's own command and arguments, verbatim. A panel with NO
+            // command is the login shell, and only main resolves that — so it
+            // saves as the built-in shell preset rather than as nothing, which
+            // is what made a saved template unstartable (M80's verifier).
+            return {
+              key, kind: 'terminal' as const, cwd: live, dx, dy,
+              ...(p.title === undefined ? {} : { title: p.title }),
+              ...(p.spec.command === undefined
+                ? { presetId: 'shell' }
+                : { command: p.spec.command, args: [...(p.spec.args ?? [])] })
+            }
+          })
+          const edges = usable.flatMap((p) => linksOf(p)
+            .filter((l) => l.automation?.kind === 'handoff' && l.automation.enabled && keyOf.has(l.to))
+            .map((l) => ({ from: keyOf.get(p.rect.id) as string, to: keyOf.get(l.to) as string, trigger: (l.automation as { trigger: HandoffTrigger }).trigger })))
+          void window.canvas.template.save({ name, nodes, edges })
+        }
+      })
+      palette.openPalette()
+    },
+    beginSpawnSheet: (templateId?: string) => {
       // The focused panel's LIVE directory first (M12's poll, falling back to
       // the spawn cwd), then main's recent list, then every panel's directory.
       // The captured id while the palette is open; from the menu (palette
@@ -1051,7 +1110,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const panelDirs = panelsRef.current.filter(isTerminalPanel).map((p) => getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd)
       const presets = presetRows.map((p) => ({ id: p.id, name: p.name, available: p.available, ...(p.agent === undefined ? {} : { agent: p.agent }), ...(p.cwd === undefined ? {} : { cwd: p.cwd }), ...(p.agentOptions === undefined ? {} : { agentOptions: p.agentOptions }) }))
       const defaultPresetId = presetRows.find((p) => p.isDefault)?.id ?? presetRows[0]?.id ?? ''
-      void window.canvas.spawn.recent().then((recents) => {
+      void Promise.all([window.canvas.spawn.recent(), window.canvas.template.list()]).then(([recents, templateList]) => {
+        const claudeOk = claudeAvailable(presetRows)
+        const templates = templateList.map((template) => {
+          const refusal = templateRefusal(template, presetRows, claudeOk)
+          return refusal === undefined ? { template } : { template, refusal }
+        })
         setInputMode({
           kind: 'sheet',
           label: 'New panel',
@@ -1059,7 +1123,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           submit: () => {},
           sheet: {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
-            claudeAvailable: claudeAvailable(presetRows),
+            claudeAvailable: claudeOk,
+            templates,
+            ...(templateId === undefined ? {} : { templateId }),
+            instantiate: instantiateTemplate,
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.

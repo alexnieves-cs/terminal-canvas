@@ -343,6 +343,8 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        worktree:list / worktree:remove / worktree:reveal
                        scrollback:tail / scrollback:clear / scrollback:search
                        prompt:list / prompt:save / prompt:delete
+                       template:list / template:save / template:delete
+                       preset:template
                        settings:list / settings:set
                        canvas:request-reset
                        agent:acknowledge
@@ -831,6 +833,7 @@ price of not killing something.
 | M73 | The chat panel: the sixth `Panel` kind — a conversation with the installed `claude` over M71's runtime, streaming, interruptible, its permission questions answered inline, its transcript a file that survives a relaunch, in the one state vocabulary | ✅ done |
 | M74 | Same agent, two front-ends: a claude terminal opens as a chat with its session's own transcript rendered and continued, a chat opens in a terminal with `claude --resume`; one front-end at a time, refused by name otherwise | ✅ done |
 | M75 | The composer: `@` references completed from the panel's directory, dropped or pasted images as image blocks (never a temp file), dropped files as references, `/` project and saved prompts, and `{{ }}` placeholders filled before insertion for saved prompts on both front-ends | ✅ done |
+| M80 | Templates: a shape of work — panels, their directories, their first messages and the edges between them — saved as a record beside presets with `{{parameters}}`; instantiated from the spawn sheet with one field per parameter, minting every node and edge in one history entry; a built-in `review this repository`; a selection saved as a template of your own | ✅ done |
 | M79 | Runs: one execution of a subgraph recorded as a run — its panels, edges, each entry's start, end and outcome, its cost — kept in the layout beside groups and bookmarks; listed in the Workspaces pane with `Run again` (the terminal roots restarted in order, a new run recorded); a read-only frame with the run's name on the canvas; named on a member's Work tab | ✅ done |
 | M78 | The task graph: a handoff edge carries a condition (`exit`, `exit 0`, `a failing exit`, `after a turn`, `always`) decided by one shared table; a target with several incoming edges is a join that starts once when all have fired, payloads in edge order; a chat is a valid source (its turn's end) and target (a send); an edge is selected by a click, removed by Delete, restored by one undo, and set from the context pane; every ruled edge says what it does on the canvas | ✅ done |
 | M77 | Tool calls as inspectable objects: a chat panel captures a review baseline at create, so the context pane's Changes and a review node answer for it; a review node of a chat counts and lists the tool calls that touched each file; a tool row naming a file opens that file's diff against the baseline in place (unchanged, no baseline, or the hunks) | ✅ done |

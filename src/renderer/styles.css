@@ -742,6 +742,11 @@ body {
 
 /* M79. A run frame is a record, not a group: dashed, and its label says `run ·`. */
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+/* M80. A template's parameter: its name above its field, never truncated into
+   the sheet's fixed label column. */
+.sheet__field--hole { flex-direction: column; align-items: stretch; gap: var(--sp-1); }
+.sheet__field--hole .sheet__label { width: auto; text-align: left; align-self: flex-start; }
+.sheet__field--hole .sheet__input { width: 100%; flex: none; }
 /* M79. A run row in the Workspaces pane: name, facts in mono, the outcome word, Run again. */
 .rail-row--heading { margin-top: var(--sp-3); }
 .rail-run { flex-wrap: wrap; }

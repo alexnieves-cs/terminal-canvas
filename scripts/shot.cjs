@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -112,6 +112,18 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'templates', intent: 'The spawn sheet opened on a template: `what` names `review this repository`, ONE field per parameter is asked (`repository`), and the preview line counts the shape it will make (`2 panels · 1 edge`). A shape of work, started with one thing filled in.',
+    run: async (kit) => {
+      await kit.press('k', { metaKey: true }); await sleep(400)
+      await kit.type('new from review this repository'); await sleep(400)
+      await kit.js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return !!i })()`)
+      await sleep(800)
+      await kit.js(`(() => { const i = document.querySelector('[data-sheet-hole="repository"]'); if (!i) return false; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify('~/work/api')}); i.dispatchEvent(new Event('input', { bubbles: true })); i.focus(); return true })()`)
+      await sleep(500)
+      await kit.shot('templates')
+      await kit.js(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      await sleep(300)
+    } },
   { name: 'runs', intent: 'A run that already happened: the Workspaces pane lists it — name, `3 panels`, its duration and cost, the word `done`, a `Run again` verb — and on the canvas its three panels wear a read-only frame with the run\'s name as its caps label; the context pane\'s Work tab for the target names the run it belongs to. A record of what the graph did, in the same words the graph uses.',
     run: async (kit) => {
       await kit.goTo('claude — api (2)')
@@ -398,6 +410,11 @@ app.whenReady().then(async () => {
       list: () => [{ id: 'shell', name: 'Login shell', available: true, builtIn: true, isDefault: true, subtitle: '~', cwd: '~' }, { id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', cwd: '~', agent: 'claude-code' }],
       rename: () => false, remove: () => false, setDefault: () => {},
       spawn: () => {}, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
+      // M80. Templates: the built-ins plus the store's own.
+      presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
+      listTemplates: () => allTemplates(layoutStore.templates()),
+      saveTemplate: (t) => { const saved = { ...t, id: t.id || `tpl-${Date.now().toString(36)}` }; layoutStore.saveTemplate(saved); return saved },
+      removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),
       spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories()
     },
     () => {},
