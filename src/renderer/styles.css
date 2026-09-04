@@ -740,6 +740,22 @@ body {
   color: var(--iris);
 }
 
+/* M79. A run frame is a record, not a group: dashed, and its label says `run ·`. */
+.canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+/* M79. A run row in the Workspaces pane: name, facts in mono, the outcome word, Run again. */
+.rail-row--heading { margin-top: var(--sp-3); }
+.rail-run { flex-wrap: wrap; }
+.rail-run__main { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1 1 100%; padding: 0 var(--sp-2); }
+.rail-run__name { flex: 1 1 100%; min-width: 0; padding: 0 var(--sp-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-run__facts { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.rail-run__word { flex: none; font-size: var(--t-xs); color: var(--tone); }
+.rail-run .rail-row__verb { flex: none; white-space: nowrap; }
+.inspector__run { display: flex; flex-direction: column; gap: var(--sp-1); }
+.inspector__run-name { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
+.inspector__run-facts { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.inspector__run-facts [data-tone] { color: var(--tone); }
+.inspector__run .inspector__action { align-self: flex-start; }
+.rail-run__note { flex: 1 1 100%; padding: 0 var(--sp-2) var(--sp-1); font-size: var(--t-xs); color: var(--fg-2); }
 /* M76. The row wraps so the question sits UNDER the label and its jump, never beside them. */
 .rail-attention { flex-wrap: wrap; }
 /* M76. A chat's question on its attention row: the argument in mono, the

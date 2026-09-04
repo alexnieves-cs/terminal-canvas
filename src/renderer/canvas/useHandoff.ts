@@ -9,6 +9,7 @@ import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-
 import { railLabel } from '@renderer/shell/rail-rows'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, HANDOFF_QUEUE_MS, handoffFires, type HandoffEvent, type HandoffTrigger } from '@shared/handoff'
 import { incomingHandoffs, joinAdvance } from './handoff-rules'
+import type { RunEvent } from './run-model'
 import { onChatTurnEnd, lastAssistantText } from '@renderer/chat/chat-store'
 
 /**
@@ -44,6 +45,8 @@ export interface HandoffDeps {
   setResult: (key: string, sentence: string) => void
   /** scrollback.persist — a handoff with no recorded output and the log off is a distinct skip. */
   scrollbackEnabled: () => boolean
+  /** M79. The run recorder observes; it never decides. Optional so every older caller keeps its meaning. */
+  onRunEvent?: (event: RunEvent) => void
 }
 
 interface Queued {
@@ -62,8 +65,9 @@ function canReceive(state: AgentState | undefined): boolean {
 }
 
 export function useHandoff(deps: HandoffDeps): void {
-  const { registry, panelsRef, restartWithSpec, wakeTarget, setResult, scrollbackEnabled } = deps
+  const { registry, panelsRef, restartWithSpec, wakeTarget, setResult, scrollbackEnabled, onRunEvent } = deps
   void setResult
+  const record = (event: RunEvent): void => { onRunEvent?.(event) }
   const queueRef = useRef<Map<string, Queued>>(new Map())
   // M78. The join's arrivals per target: in-flight state like the queue,
   // never persisted. A source arriving twice replaces itself.
@@ -92,9 +96,11 @@ export function useHandoff(deps: HandoffDeps): void {
       // an asleep chat itself — so a chat target never queues.
       if (isChatPanel(target)) {
         void window.canvas.agentSession.send(targetId, payload, []).then((answer) => {
-          setResult(key, typeof answer === 'object' && answer !== null && 'refused' in answer ? `skipped — ${answer.refused}`
+          const sentence = typeof answer === 'object' && answer !== null && 'refused' in answer ? `skipped — ${answer.refused}`
             : answer === 'queued' ? `queued — the chat is still answering; ${lines} lines go after its turn`
-              : answer === 'no-session' ? 'skipped — the chat has no session' : `handed off ${lines} lines ${detail}`)
+              : answer === 'no-session' ? 'skipped — the chat has no session' : `handed off ${lines} lines ${detail}`
+          setResult(key, sentence)
+          record(sentence.startsWith('skipped') ? { kind: 'skipped', panelId: targetId, sentence, at: Date.now() } : { kind: 'delivered', panelId: targetId, sentence, at: Date.now() })
         })
         return
       }
@@ -108,6 +114,7 @@ export function useHandoff(deps: HandoffDeps): void {
       if (running && canReceive(getAgentState(targetId))) {
         session!.handle.paste(payload)
         setResult(key, `handed off ${lines} lines ${detail}`)
+        record({ kind: 'delivered', panelId: targetId, sentence: `handed off ${lines} lines ${detail}`, at: Date.now() })
         return
       }
       if (session !== undefined && session.status.kind === 'exited') {
@@ -163,7 +170,9 @@ export function useHandoff(deps: HandoffDeps): void {
         // M78. The ONE table decides; a failed condition is recorded by name.
         if (!handoffFires(rule.trigger, event)) {
           if (event.kind === 'exit' && (rule.trigger === 'exit-ok' || rule.trigger === 'exit-fail')) {
-            setResult(key, `skipped — exit ${event.code ?? 'by signal'} is not ${rule.trigger === 'exit-ok' ? 'exit 0' : 'a failing exit'}`)
+            const sentence = `skipped — exit ${event.code ?? 'by signal'} is not ${rule.trigger === 'exit-ok' ? 'exit 0' : 'a failing exit'}`
+            setResult(key, sentence)
+            record({ kind: 'skipped', panelId: link.to, sentence, at: Date.now() })
           }
           continue
         }
@@ -187,11 +196,15 @@ export function useHandoff(deps: HandoffDeps): void {
         })
       }
     }
-    const offExit = registry.onExit((info) => fire(info.panelId, { kind: 'exit', code: info.exitCode }, `after exit ${info.exitCode}`))
+    // M79. EVERY panel's end is an event for the recorder — a source's fire
+    // and a sink's own end alike (a run seals when its sinks have ended); the
+    // recorder decides whether an end opens a run. Emitted before fire(), so
+    // a source's entry closes before its targets' open.
+    const offExit = registry.onExit((info) => { record({ kind: 'fired', panelId: info.panelId, outcome: `exit ${info.exitCode ?? 'by signal'}`, at: Date.now() }); fire(info.panelId, { kind: 'exit', code: info.exitCode }, `after exit ${info.exitCode}`) })
     // M78. A chat's turn end is its `idle`.
-    const offChatTurn = onChatTurnEnd((id) => fire(id, { kind: 'idle' }, 'after a turn'))
+    const offChatTurn = onChatTurnEnd((id) => { record({ kind: 'fired', panelId: id, outcome: 'a turn', at: Date.now() }); fire(id, { kind: 'idle' }, 'after a turn') })
     const offTransition = onAgentTransition((panelId, state, prev) => {
-      if (prev === 'busy' && state === 'idle') fire(panelId, { kind: 'idle' }, 'after a turn')
+      if (prev === 'busy' && state === 'idle') { record({ kind: 'fired', panelId, outcome: 'a turn', at: Date.now() }); fire(panelId, { kind: 'idle' }, 'after a turn') }
       const queued = queue.get(panelId)
       if (queued && canReceive(state)) {
         const session = registry.get(panelId)
@@ -204,6 +217,7 @@ export function useHandoff(deps: HandoffDeps): void {
               queue.delete(panelId)
               s.handle.paste(queued.payload)
               setResult(`${queued.sourceId}:${panelId}`, `handed off ${queued.lines} lines ${queued.detail}`)
+              record({ kind: 'delivered', panelId, sentence: `handed off ${queued.lines} lines ${queued.detail}`, at: Date.now() })
             }
           }, 150)
         }
@@ -217,5 +231,5 @@ export function useHandoff(deps: HandoffDeps): void {
       queue.clear()
       joins.clear()
     }
-  }, [registry, panelsRef, restartWithSpec, wakeTarget, setResult, scrollbackEnabled])
+  }, [registry, panelsRef, restartWithSpec, wakeTarget, setResult, scrollbackEnabled, onRunEvent])
 }

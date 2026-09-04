@@ -72,7 +72,7 @@ import { applyUsage, clearUsage } from '@renderer/session/usage-store'
 import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
-import type { CanvasState, PersistedBookmark } from '@shared/layout-schema'
+import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   CapturedPanel,
@@ -108,6 +108,9 @@ import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
 import { useApprovals } from '@renderer/chat/chat-store'
+import { useRuns } from './useRuns'
+import { sealAbandoned } from './run-model'
+import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable } from '@renderer/palette/commands'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
@@ -204,6 +207,19 @@ export function Canvas({
   const [groups, setGroups] = useState<CanvasGroup[]>(() => initial.groups ?? [])
   // M56. Bookmarks: places, persisted beside the camera, per workspace.
   const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
+  // M79. Runs: a history kept with the layout, owned by useRuns below.
+  const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
+  const runsRef = useRef(runs)
+  runsRef.current = runs
+  // M79. useRuns is created far below (it needs restartWithSpec); the workspace
+  // verbs above it reach its `forgetOpen` through a ref, the same indirection
+  // every other late-declared verb here uses.
+  const forgetOpenRunsRef = useRef<() => void>(() => {})
+  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current() }, [])
+  // The open run's duration ticks once a second, and only while one is open:
+  // Date.now() read every render would give the rail's rows a new identity at
+  // drag frequency (M79's verifier).
+  const [runTick, setRunTick] = useState(0)
   const bookmarksRef = useRef(bookmarks)
   bookmarksRef.current = bookmarks
   const bookmarkRows = useMemo(() => bookmarks.map((b) => ({ id: b.id, name: b.name })), [bookmarks])
@@ -1494,9 +1510,9 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData
   })
@@ -2034,9 +2050,10 @@ export function Canvas({
       camera: merged && before ? before.camera : viewport,
       selectedId: merged && before ? before.selectedId : selectedId,
       focusedId: merged && before ? before.focusedId : focusedId,
-      bookmarks
+      bookmarks,
+      runs
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -3037,7 +3054,44 @@ export function Canvas({
     })
     registry.wake(id)
   }, [registry])
-  useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled })
+  // M79. The recorder observes the handoff hook; Run again restarts the roots.
+  const runsApi = useRuns({ panelsRef, runsRef, setRuns, restartWithSpec })
+  useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled, onRunEvent: runsApi.onRunEvent })
+  const [runAgainResult, setRunAgainResult] = useState<{ id: string; sentence: string } | null>(null)
+  useEffect(() => { forgetOpenRunsRef.current = runsApi.forgetOpen }, [runsApi])
+  const anyOpen = runs.some((r) => r.endedAt === undefined)
+  useEffect(() => {
+    if (!anyOpen) return
+    const timer = setInterval(() => setRunTick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [anyOpen])
+  const onRunAgain = useCallback((id: string) => { setRunAgainResult({ id, sentence: runsApi.runAgain(id, runsRef.current) }) }, [runsApi])
+  const terminalIdSet = useMemo(() => new Set(panels.filter(isTerminalPanel).map((p) => p.rect.id)), [panels])
+  const runRowsBuilt = useMemo(() => buildRunRows(runs, terminalIdSet, Date.now()), [runs, terminalIdSet, runTick])
+  const runRowsSig = runSignature(runRowsBuilt) + (runAgainResult === null ? '' : `|${runAgainResult.id}:${runAgainResult.sentence}`)
+  const railRuns = useMemo(() => runRowsBuilt.map((r) => (runAgainResult !== null && runAgainResult.id === r.id ? { ...r, note: runAgainResult.sentence } : r)), [runRowsSig])
+  // The run FRAMES: the newest run per set of panels, as read-only group frames,
+  // derived every render and never persisted as groups.
+  const runFrames = useMemo<CanvasGroup[]>(() => {
+    const seen = new Set<string>()
+    const out: CanvasGroup[] = []
+    for (const run of runs) {
+      const key = [...run.panelIds].sort().join(',')
+      if (seen.has(key)) continue
+      seen.add(key)
+      const members = run.panelIds.filter((id) => panels.some((p) => p.rect.id === id))
+      if (members.length === 0) continue
+      out.push({ id: `run:${run.id}`, label: run.name, colour: 'blue', panelIds: members })
+    }
+    return out
+  }, [runs, panels])
+  const panelRun = useMemo(() => {
+    if (selectedId === null) return null
+    const run = runs.find((r) => r.panelIds.includes(selectedId))
+    if (!run) return null
+    const row = runRowsBuilt.find((r) => r.id === run.id)
+    return row === undefined ? null : { id: run.id, name: run.name, facts: row.facts, outcome: row.outcome, tone: row.tone, runAgain: row.runAgain }
+  }, [runs, selectedId, runRowsSig])
 
   const onSetRestartOnExit = useCallback((from: string, to: string, enabled: boolean) => {
     setPanels((current) => {
@@ -3444,6 +3498,8 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
+        runs={railRuns}
+        onRunAgain={onRunAgain}
         navigator={chrome.navigator}
         onToggle={chrome.toggleNavigator}
         merged={merged}
@@ -3510,6 +3566,15 @@ export function Canvas({
           data-detail={cardDetail}
           style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
         >
+          {/* M79. Run frames: derived, read-only, never groups. */}
+          <GroupLayer
+            groups={merged ? [] : runFrames}
+            panels={displayPanels}
+            readOnly={true}
+            onBeginDrag={() => {}}
+            onToggle={() => {}}
+            onRemove={() => {}}
+          />
           <GroupLayer
             groups={merged ? [] : groups}
             panels={displayPanels}
@@ -3849,6 +3914,8 @@ export function Canvas({
         automationResults={automationResult}
         automations={automationRows}
         selectedEdge={selectedEdge}
+        panelRun={panelRun}
+        onRunAgain={onRunAgain}
         review={reviewModel}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}

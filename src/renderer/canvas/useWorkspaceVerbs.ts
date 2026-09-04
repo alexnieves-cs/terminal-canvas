@@ -7,7 +7,8 @@ import type { CanvasGroup } from '@renderer/groups/groups'
 import { createHistory, type History } from '@renderer/panels/history'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import type { PaletteActions } from '@renderer/palette/commands'
-import type { CanvasState, PersistedBookmark } from '@shared/layout-schema'
+import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
+import { sealAbandoned } from './run-model'
 import type { ActivateResult, MergedWorkspace } from '@shared/ipc-contract'
 import { EMPTY_SELECTION, retainSelection } from './canvas-constants'
 import type { LinkDraw } from './useLinkDraw'
@@ -31,6 +32,8 @@ export interface WorkspaceVerbsDeps {
   groupsRef: RefObject<CanvasGroup[]>
   /** M56. Bookmarks travel with the workspace exactly as groups do. */
   bookmarksRef: RefObject<PersistedBookmark[]>
+  /** M79. The runs, saved with the outgoing workspace like its bookmarks. */
+  runsRef: RefObject<PersistedRun[]>
   viewportRef: RefObject<Viewport>
   nextIdRef: RefObject<number>
   toggleMergedImplRef: RefObject<() => void>
@@ -42,6 +45,10 @@ export interface WorkspaceVerbsDeps {
   setPanels: Dispatch<SetStateAction<Panel[]>>
   setGroups: Dispatch<SetStateAction<CanvasGroup[]>>
   setBookmarks: Dispatch<SetStateAction<PersistedBookmark[]>>
+  /** M79. The incoming workspace's runs; without this the outgoing history is written into it. */
+  setRuns: Dispatch<SetStateAction<PersistedRun[]>>
+  /** M79. Forget every open run's component: the incoming workspace's panels are different ones. */
+  forgetOpenRuns: () => void
   setDormantIds: Dispatch<SetStateAction<ReadonlySet<string>>>
   setFocusedId: Dispatch<SetStateAction<string | null>>
   setSelectedIds: Dispatch<SetStateAction<ReadonlySet<string>>>
@@ -93,9 +100,9 @@ export interface WorkspaceVerbs {
  */
 export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
   const {
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData
   } = deps
@@ -208,6 +215,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
           panels: fromPanels(panelsRef.current),
           groups: groupsRef.current,
           bookmarks: bookmarksRef.current,
+          runs: runsRef.current,
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -279,6 +287,8 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         // entries.
         setPanels(next)
         setGroups(result.state.groups ?? [])
+        setRuns(sealAbandoned(result.state.runs ?? [], Date.now()))
+        forgetOpenRuns()
         setBookmarks(result.state.bookmarks ?? [])
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)

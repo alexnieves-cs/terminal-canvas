@@ -6,6 +6,9 @@ import type { ToolboxSource } from './toolbox'
 import type { ChatSource } from './chat-panel'
 import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from './handoff'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
+import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
+export { RUNS_MAX } from './runs'
+export type { PersistedRun, RunEntry } from './runs'
 import {
   AGENT_KINDS,
   CODEX_APPROVAL_POLICIES,
@@ -294,6 +297,8 @@ export interface CanvasState {
   focusedId: string | null
   /** M56. Named cameras. Optional on disk for every layout written before bookmarks existed. */
   bookmarks: PersistedBookmark[]
+  /** M79. Runs — one execution of a subgraph each. Optional on disk for every layout written before runs existed. */
+  runs: PersistedRun[]
 }
 
 /** M56. A place to come back to: three numbers and a name. */
@@ -377,7 +382,8 @@ export function defaultWorkspace(): Workspace {
     camera: { ...DEFAULT_CAMERA },
     selectedId: null,
     focusedId: null,
-    bookmarks: []
+    bookmarks: [],
+    runs: []
   }
 }
 
@@ -1185,6 +1191,47 @@ function parseGroups(raw: unknown, panelIds: ReadonlySet<string>, warnings: stri
   return groups
 }
 
+/**
+ * M79. Runs. Absent is every pre-M79 file and warns nothing; a run that is
+ * not an object, has no usable id or name, or no array of panel ids is
+ * dropped by name; an entry naming a panel the workspace no longer has is
+ * dropped and the run kept; a run with no surviving panel is dropped; the
+ * newest RUNS_MAX are kept.
+ */
+function parseRuns(raw: unknown, panelIds: ReadonlySet<string>, warnings: string[]): PersistedRun[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a runs field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const runs: PersistedRun[] = []
+  const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+  raw.forEach((entry, i) => {
+    if (!isRecord(entry) || !isStr(entry.id) || seen.has(entry.id)) { warnings.push(`dropped run ${i}: not an object or an unusable id`); return }
+    if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped run ${entry.id}: name was unusable`); return }
+    if (!Array.isArray(entry.panelIds) || !entry.panelIds.every(isStr)) { warnings.push(`dropped run ${entry.id}: panel ids were unusable`); return }
+    const startedAt = num(entry.startedAt)
+    if (startedAt === undefined) { warnings.push(`dropped run ${entry.id}: startedAt was unusable`); return }
+    const members = [...new Set(entry.panelIds as string[])].filter((id) => panelIds.has(id))
+    if (members.length === 0) { warnings.push(`dropped run ${entry.id}: it had no surviving panels`); return }
+    const edges: Array<{ from: string; to: string }> = []
+    if (Array.isArray(entry.edges)) for (const e of entry.edges) if (isRecord(e) && isStr(e.from) && isStr(e.to) && panelIds.has(e.from) && panelIds.has(e.to)) edges.push({ from: e.from, to: e.to })
+    const entries: RunEntry[] = []
+    if (Array.isArray(entry.entries)) for (const e of entry.entries) {
+      if (!isRecord(e) || !isStr(e.panelId) || num(e.startedAt) === undefined) continue
+      if (!panelIds.has(e.panelId)) { warnings.push(`dropped entry ${e.panelId} from run ${entry.id}: no such panel`); continue }
+      const endedAt = num(e.endedAt)
+      entries.push({ panelId: e.panelId, startedAt: num(e.startedAt) as number, ...(endedAt === undefined ? {} : { endedAt }), ...(isStr(e.outcome) ? { outcome: e.outcome } : {}) })
+    }
+    seen.add(entry.id)
+    const endedAt = num(entry.endedAt)
+    const costUsd = num(entry.costUsd)
+    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }) })
+  })
+  return runs.sort((a, b) => b.startedAt - a.startedAt).slice(0, RUNS_MAX)
+}
+
 function parseWorkspace(raw: unknown, index: number, warnings: string[]): Workspace | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped workspace ${index}: not an object`)
@@ -1306,7 +1353,8 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     camera: parseCamera(raw.camera, warnings),
     selectedId: pick(raw.selectedId),
     focusedId: pick(raw.focusedId),
-    bookmarks: parseBookmarks(raw.bookmarks, warnings)
+    bookmarks: parseBookmarks(raw.bookmarks, warnings),
+    runs: parseRuns(raw.runs, surviving, warnings)
   }
 }
 

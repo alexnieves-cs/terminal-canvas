@@ -3227,3 +3227,25 @@ computed styles, so every one was green while no link had been visible in the bu
 some time. The `graph` scene (M78) was the first time a picture of a link was looked at. One
 pixel gives the layer a box and the overflow paints. Manual-only: that this holds on the next
 Chromium.
+
+**A run's component is captured at the run's START and held in the recorder's ref, never
+recomputed from the live panels (`useRuns.ts`).** An edge added or removed while a run is open
+would otherwise move what the run is waiting for, and a run could seal early (a sink removed)
+or never (a sink added) with nothing on screen saying why. The join in `useHandoff` recomputes
+its expectations per arrival on purpose — a join is live control flow; a run is a record of
+one execution — and the two rules are different because the two things are.
+`verify:viewport run.1`, `verify:panels run.1`.
+
+**Run frames are derived every render and are not groups (`Canvas.tsx` `runFrames`).** A run's
+panels wear a frame with the run's name through a second, read-only `GroupLayer`; nothing in
+`groups` state carries a `run:` id, so `pruneGroups`, undo, persistence and the group drag
+never see one. Persisting a run as a group would make it draggable and collapsible — a
+collapse cards every member including a focused one — and would survive the run's own
+deletion. `verify:groups` is untouched; the frame is proven by its label in `verify:panels
+run.1`.
+
+**The recorder observes; it never decides (`useHandoff` `onRunEvent`).** Every run event is
+emitted beside the sentence the automation list already shows, at the same site, so the run
+cannot say something the list does not: a `delivered` only where a paste or a send happened,
+a `skipped` only where a condition failed or a send was refused, a `fired` once per source.
+`verify:panels run.1` reads both the store's record and the pane's row from one delivery.
