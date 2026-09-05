@@ -214,7 +214,9 @@ app.whenReady().then(() => {
   // M83 memory:list and memory:add (82). M84 the five watcher:* verbs (87) —
   // create/run/stop/dispose/list, the runtime a watcher node addresses.
   // M85 vault:read (88). M86 git:status and review:across (90).
-  const EXPECTED_CHANNELS = 90
+  // M88 github:list (91).
+  // M89 broker:audit (92).
+  const EXPECTED_CHANNELS = 92
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

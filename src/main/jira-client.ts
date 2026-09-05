@@ -9,6 +9,7 @@ import type { CredentialMeta } from '../shared/credential-schema'
 // types.1 pins the arrangement.
 import type { JiraListResult, JiraTransitionsResult, JiraWriteResult } from '../shared/ipc-contract'
 import type { WorkItem, WorkItemTransition } from '../shared/work-item'
+import { notConnectedReason } from '../shared/credential-schema'
 import type { CredentialStore } from './credential-store'
 
 const TIMEOUT_MS = 15000
@@ -76,7 +77,7 @@ export async function verifyJiraCredential(deps: JiraDeps): Promise<JiraVerifyRe
   let response: { status: number; body: string }
   try { response = await deps.requester({ url: `${c.site}/rest/api/3/myself`, method: 'GET', headers: auth(c), timeoutMs: TIMEOUT_MS }) }
   catch { return { ok: false, reason: 'the request to Jira failed' } }
-  if (response.status === 401 || response.status === 403) return { ok: false, reason: 'Jira rejected the credential' }
+  if (response.status === 401 || response.status === 403) { if (response.status === 401) deps.store.markRejected('jira'); return { ok: false, reason: 'Jira rejected the credential' } }
   if (response.status !== 200) return { ok: false, reason: `Jira answered ${response.status}` }
   try {
     const displayName = (JSON.parse(response.body) as { displayName?: unknown }).displayName
@@ -116,7 +117,7 @@ export function textToAdf(text: string): unknown {
 
 export async function listAssignedWorkItems(deps: JiraDeps): Promise<JiraListResult> {
   const c = credential(deps.store)
-  if (c === 'missing') return { kind: 'no-credential', reason: 'Connect Jira before loading tickets.' }
+  if (c === 'missing') return { kind: 'no-credential', reason: notConnectedReason('jira') }
   if (c === 'invalid') return { kind: 'invalid-credential', reason: 'The stored Jira credential is malformed.' }
   const query = new URLSearchParams({ jql: ASSIGNED_JQL, maxResults: '50', fields: 'summary,description,assignee,status' })
   let response: { status: number; body: string }

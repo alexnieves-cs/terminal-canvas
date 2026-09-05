@@ -172,6 +172,8 @@ export interface PersistedFilePanel extends PersistedPanelBase {
   source: FileSource
 }
 export interface PersistedJiraPanel extends PersistedPanelBase { kind: 'jira' }
+/** M88. The GitHub work panel: no source, no cwd, no args — its subject is the credential. */
+export interface PersistedGithubPanel extends PersistedPanelBase { kind: 'github' }
 
 /**
  * M21's toolbox node. Like a review node and a file panel, it carries NO cwd
@@ -286,6 +288,7 @@ export type PersistedPanel =
   | PersistedReviewPanel
   | PersistedFilePanel
   | PersistedJiraPanel
+  | PersistedGithubPanel
   | PersistedToolboxPanel
   | PersistedChatPanel
   | PersistedWatcherPanel
@@ -757,6 +760,7 @@ function parsePanel(
     return { ...base, kind: 'file', source }
   }
   if (kind === 'jira') return { ...base, kind: 'jira' }
+  if (kind === 'github') return { ...base, kind: 'github' }
   if (kind === 'toolbox') {
     const source = parseToolboxSource(raw.source, id, warnings)
     if (source === null) return null

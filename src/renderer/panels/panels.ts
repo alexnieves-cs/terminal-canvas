@@ -118,6 +118,8 @@ export interface FilePanel extends PanelBase {
 /** Jira's first concrete panel. It deliberately carries no provider machinery:
  * the next provider decides what, if anything, generalises. */
 export interface JiraPanel extends PanelBase { kind: 'jira' }
+/** M88. The GitHub work panel — the ninth kind, the second work panel, sessionless like Jira's. */
+export interface GithubPanel extends PanelBase { kind: 'github' }
 
 /**
  * A toolbox node: what the agent in one DIRECTORY can actually do — skills,
@@ -175,7 +177,7 @@ export interface WatcherPanel extends PanelBase {
   watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false }
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | ToolboxPanel | ChatPanel | WatcherPanel
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -202,6 +204,7 @@ export function isFilePanel(panel: Panel): panel is FilePanel {
   return panel.kind === 'file'
 }
 export function isJiraPanel(panel: Panel): panel is JiraPanel { return panel.kind === 'jira' }
+export function isGithubPanel(panel: Panel): panel is GithubPanel { return panel.kind === 'github' }
 
 export function isMemoryPanel(panel: Panel): panel is MemoryPanel {
   return panel.kind === 'memory'
@@ -238,7 +241,7 @@ export function isWatcherPanel(panel: Panel): panel is WatcherPanel {
  */
 export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
-    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isToolboxPanel(panel) &&
+    !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
     !isChatPanel(panel) && !isWatcherPanel(panel)
   )
@@ -815,6 +818,10 @@ export function makeFilePanel(
 
 export const JIRA_W = 640
 export const JIRA_H = 520
+export function makeGithubPanel(id: string, centre: Point, z: number): GithubPanel {
+  return { kind: 'github', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'GitHub work' }
+}
+
 export function makeJiraPanel(id: string, centre: Point, z: number): JiraPanel {
   return { kind: 'jira', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'Jira tickets' }
 }

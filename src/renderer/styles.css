@@ -744,6 +744,41 @@ body {
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
 /* M83. The memory node: entries newest first, each `kind · text · time`, and
    one line to add another. */
+/* M89. The Integrations page: one section per service, the state sentence in
+   its tone beside the label, one verb, the audit rows in mono beneath. */
+.integrations-pane__list { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); overflow-y: auto; }
+.integration { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+.integration:last-of-type { border-bottom: 0; }
+.integration__head { display: flex; flex-direction: column; gap: var(--sp-1); }
+.integration__label { font-size: var(--t-sm); color: var(--fg); }
+.integration__sentence { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
+.integration__word { color: var(--tone, var(--fg-2)); }
+.integration__code { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.integration__verbs { margin-top: var(--sp-1); }
+.integration__empty { margin: var(--sp-1) 0 0; font-size: var(--t-xs); color: var(--fg-3); }
+.integration__audit { margin: var(--sp-1) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); }
+.integration__row { display: flex; flex-direction: column; }
+/* A path WRAPS rather than truncates: the last segment is what the agent did
+   with the token, and a right-hand cut removes exactly that (M89's critic). */
+.integration__row-call { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow-wrap: anywhere; }
+.integration__row-meta { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); }
+.integration__row--refused .integration__row-meta { color: var(--red); }
+.integration__note { margin: 0; font-size: var(--t-xs); color: var(--fg-4); }
+/* M88. The GitHub work node: one card per item, identity first (owner/repo#N
+   and its state in mono), the title, the body's first line dim, two verbs. */
+.github-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); }
+.github-node__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-2); }
+.github-item { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+.github-item:last-child { border-bottom: 0; }
+.github-item__head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.github-item__id { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.github-item__state { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.github-item__title { margin: var(--sp-1) 0 0; font-size: var(--t-sm); color: var(--fg); }
+.github-item__body { margin: var(--sp-1) 0 0; padding-right: var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.github-node__scope { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.github-item__verbs { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
+.github-item__link { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; text-underline-offset: 2px; }
+.github-node__note { margin: 0; }
 /* M86. A cross-worktree review's sections, and the context pane's branch line
    and repository suffix — the same caps micro-label and mono rows every other
    section in a body uses. */

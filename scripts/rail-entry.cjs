@@ -50,5 +50,7 @@ module.exports = {
   /* M84. The watcher's trigger vocabulary and the palette's parse of it —
      pure, and the parse decides what a real command gets armed against. */
   ...require('../src/shared/watch-trigger'),
-  ...require('../src/renderer/watcher/trigger-input')
+  ...require('../src/renderer/watcher/trigger-input'),
+  /* M89. The Integrations page's pure model: services × credentials × audit → rows. */
+  ...require('../src/renderer/shell/integration-model')
 }

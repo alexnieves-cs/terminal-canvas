@@ -1,4 +1,4 @@
-import { isWatcherPanel, isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 
@@ -57,6 +57,7 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // directory is the inspector's job.
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
   if (isJiraPanel(panel)) return 'Jira tickets'
+  if (isGithubPanel(panel)) return 'GitHub work'
   // A toolbox node names its DIRECTORY by basename, the same split the file
   // branch above makes and for the same reason: a 260px row cannot hold a
   // path, and the full cwd is the inspector's job.

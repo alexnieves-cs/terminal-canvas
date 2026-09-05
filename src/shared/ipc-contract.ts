@@ -372,6 +372,10 @@ export const IPC = {
   CREDENTIAL_VERIFY: 'credential:verify',
   /** Main reads the authenticated user's assigned Jira work. */
   JIRA_LIST: 'jira:list',
+  /** M88. The issues assigned to you and the pull requests waiting on you, through the injected GitHub client. */
+  GITHUB_LIST: 'github:list',
+  /** M89. The broker's audit rows, newest first — the FIRST channel that reads the audit; metadata only. */
+  BROKER_AUDIT: 'broker:audit',
   /**
    * The legal next states for ONE issue. Its own channel rather than a field
    * on jira:list, because transitions are workflow-defined per issue: folding
@@ -947,6 +951,23 @@ export type CredentialSetResult =
   | { ok: true; meta: CredentialMeta }
   | { ok: false; reason: string }
 
+/** M89. One broker audit row on the wire — metadata, never a body or a token. */
+export interface BrokerAuditRowWire {
+  at: number
+  service: string
+  method: string
+  path: string
+  status: number
+  bytes: number
+  panelId?: string
+  reason?: string
+}
+
+/** M88. GitHub's list, to Jira's shape; `note` says which half is missing when the PR search alone failed. */
+export type GithubListResult =
+  | { kind: 'items'; items: WorkItem[]; note?: string }
+  | { kind: 'no-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
+
 export type JiraListResult =
   | { kind: 'items'; items: WorkItem[] }
   | { kind: 'no-credential' | 'invalid-credential' | 'rejected' | 'unavailable' | 'malformed'; reason: string }
@@ -1288,6 +1309,15 @@ export interface CanvasBridge {
     set(req: { service: string; token: string }): Promise<CredentialSetResult>
     remove(service: string): Promise<boolean>
     verify(service: string): Promise<CredentialSetResult>
+  }
+  /** M89. See BROKER_AUDIT. */
+  broker: {
+    audit(limit: number, service?: string): Promise<{ rows: BrokerAuditRowWire[]; skipped: number }>
+  }
+  /** M88. See GITHUB_LIST. */
+  github: {
+    /** `panelId` names the asking panel in the broker's audit rows. */
+    list(panelId?: string): Promise<GithubListResult>
   }
   jira: {
     list(): Promise<JiraListResult>

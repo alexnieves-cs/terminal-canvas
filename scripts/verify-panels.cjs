@@ -93,6 +93,9 @@ const {
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
   readVault,
+  listGithubWorkItems,
+  createBrokerAudit,
+  credentialDir: harnessCredentialDir,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -920,6 +923,9 @@ app.whenReady().then(async () => {
     return proc
   }
   const agentTranscripts = createAgentTranscriptLog({ dir: join(mkdtempSync(join(tmpdir(), 'tc panels chat ')), 'agent-transcripts') })
+  let githubCredentialPresent = false
+  // M89. The harness's own broker audit, appended to by checks and read by the pane.
+  const brokerAuditForChecks = createBrokerAudit({ file: join(mkdtempSync(join(tmpdir(), 'tc panels audit ')), 'broker-audit.jsonl') })
   const memoryDir = mkdtempSync(join(tmpdir(), 'tc panels memory-store '))
   const memoryStore = createMemoryStore({ dir: memoryDir })
   const agentSessions = new AgentSessionManager({
@@ -1129,6 +1135,17 @@ app.whenReady().then(async () => {
     // M80. The preset's resolved template — main's own answer, never a spawn.
     presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
     // M83. The project memory: a real store under the harness's own dir.
+    // M88. The GitHub client over a RECORDED requester, with the credential's
+    // presence a flag the check flips — the same injected shape main wires,
+    // so the node is driven end to end with no network.
+    // M89. The audit's read half, as main wires it.
+    brokerAudit: (limit, service) => brokerAuditForChecks.list(limit, service),
+    githubList: (panelId) => listGithubWorkItems({ panelId, broker: { call: async (q) => {
+      if (!githubCredentialPresent) return { ok: false, code: 'not-connected', reason: 'not connected — add a github token in ⌘K › Credentials' }
+      return { ok: true, status: 200, truncated: false, body: q.path.includes('/search/')
+        ? JSON.stringify({ total_count: 1, items: [{ number: 77, title: 'Split the flush gate', body: 'Please review.', state: 'open', html_url: 'https://github.com/acme/canvas/pull/77', repository_url: 'https://api.github.com/repos/acme/canvas', pull_request: { url: 'x' }, user: { login: 'worker-a' } }] })
+        : JSON.stringify([{ number: 12, title: 'Flaky watchdog', body: 'The watchdog fires under load.', state: 'open', html_url: 'https://github.com/acme/canvas/issues/12', repository: { full_name: 'acme/canvas' }, assignee: { login: 'octocat' } }]) }
+    } } }),
     // M85. The vault's read: the REAL reader over the fixture folder, the
     // reasoning every real export in this harness follows.
     vaultRead: (root) => readVault(root),
@@ -17612,6 +17629,120 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(xErr && xErr.message || xErr) + ' | renderer: ' + (xLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onX)
+      }
+    }
+
+
+    // -------------------------------------------------------------------
+    // M88 — github.1. THE GITHUB WORK PANEL, END TO END, over a recorded
+    //     client injected the way main injects the real one. Three states:
+    //     with no credential the node says so and offers Connect GitHub…;
+    //     with one it lists the recorded items by id and title; a Start
+    //     session on an item spawns a terminal whose title is the item's and
+    //     whose opening context carries the item's body — Jira's own flow
+    //     reached by a second kind through ONE verb. Closing the node sends
+    //     no pty.kill (the sessionless non-vacuity shape).
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['github.1 the GitHub work node names the missing credential and offers Connect GitHub…, lists the recorded items once one exists, Start session spawns a panel titled by the item with its body as opening context, and closing the node sends no pty.kill while a terminal close is recorded']
+      const gLog = []
+      const onG = (_e, _l, m) => { gLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onG)
+      try {
+        githubCredentialPresent = false
+        layoutStore.save({
+          panels: [{ id: 'gh1', kind: 'github', x: 80, y: 80, w: 460, h: 420, z: 1 }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reG
+        await settle()
+        const noCred = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="gh1"]'); if (!n) return false; const note = n.querySelector('.github-node__note'); const connect = n.querySelector('[data-github-connect]'); return note && connect ? { note: note.textContent, connect: connect.textContent } : false })()`), 8000)
+        githubCredentialPresent = true
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="gh1"] [data-github-refresh]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const listed = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="gh1"] [data-github-item]')].map((r) => ({ id: r.getAttribute('data-github-item'), title: r.querySelector('.github-item__title')?.textContent ?? '' })); return rows.length === 2 ? rows : false })()`), 8000)
+        const sessionsBeforeG = (await sessionMap(wc)).size
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="gh1"] [data-github-item="acme/canvas#12"] [data-github-start]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const spawned = await waitUntil(async () => (await sessionMap(wc)).size > sessionsBeforeG, 10000)
+        const spawnedTitle = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-kind="terminal"], .panel:not([data-panel-kind])')].find((x) => /acme\\/canvas#12/.test(x.querySelector('.pf__title')?.textContent ?? '')); return p ? p.querySelector('.pf__title').textContent : false })()`), 8000)
+        const killsBeforeG = killedPanelIds.length
+        await clickPanelClose(wc, 'gh1')
+        await settle()
+        const killsAfterNode = killedPanelIds.length
+        ok(IDS[0],
+          noCred && /not connected/.test(noCred.note) && /Connect GitHub/.test(noCred.connect) &&
+            Array.isArray(listed) && listed.some((r) => r.id === 'acme/canvas#12' && /Flaky watchdog/.test(r.title)) && listed.some((r) => r.id === 'acme/canvas#77') &&
+            spawned === true && typeof spawnedTitle === 'string' && /Flaky watchdog/.test(spawnedTitle) &&
+            killsAfterNode === killsBeforeG,
+          JSON.stringify({ noCred, listed, spawned, spawnedTitle, killsBeforeG, killsAfterNode, log: gLog.slice(-3) }))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reGDone = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reGDone
+        await settle()
+      } catch (gErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(gErr && gErr.message || gErr) + ' | renderer: ' + (gLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onG)
+      }
+    }
+
+
+    // -------------------------------------------------------------------
+    // M89 — integrations.1. THE INTEGRATIONS PANE, END TO END: one section
+    //     per declared service; with nothing stored each reads `not
+    //     connected` with a Connect… verb that opens the palette's
+    //     Credentials scope; a stored, verified github credential reads
+    //     `connected as <label>` with Verify; the audit rows under it come
+    //     from the harness's own broker audit, newest first, and an EMPTY
+    //     audit is a sentence, never nothing.
+    // -------------------------------------------------------------------
+    {
+      // An earlier block removes the credential fixture directory; this one
+      // needs the store to write, so the directory is recreated first.
+      mkdirSync(harnessCredentialDir, { recursive: true })
+      // Earlier blocks leave credentials in the shared store; the bare arm
+      // needs NONE, or the reload flips the verb to Verify under the click.
+      credentialStore.delete('github'); credentialStore.delete('jira')
+      const IDS = ['integrations.1 the Integrations pane lists every declared service — not connected with Connect… opening the Credentials scope when nothing is stored, connected as its label with Verify when one is — and shows the broker audit rows under a service newest first, an empty audit as a sentence']
+      const iLog = []
+      const onI = (_e, _l, m) => { iLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onI)
+      try {
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reI
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="integrations"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        const bare = await waitUntil(() => wc.executeJavaScript(`(() => { const secs = [...document.querySelectorAll('[data-integration]')].map((s) => ({ id: s.getAttribute('data-integration'), state: s.getAttribute('data-integration-state'), sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', empty: s.querySelector('[data-integration-audit-arm="empty"]')?.textContent ?? null })); return secs.length >= 2 ? secs : false })()`), 8000)
+        // Connect… opens the palette in its Credentials scope.
+        const clickedConnect = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-integration="github"] [data-integration-verb]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        // A timeline rather than one read: whether the chip ever appears, and when it leaves.
+        const scope = await wc.executeJavaScript(`new Promise((resolve) => { const seen = []; let n = 0; const t = setInterval(() => { seen.push([document.querySelector('.palette') !== null, document.querySelector('.palette__scope')?.textContent ?? null, document.activeElement?.className ?? null]); if (++n >= 12) { clearInterval(t); resolve({ open: seen[seen.length - 1][0], chip: seen.find((x) => x[1] !== null)?.[1] ?? null, seen }) } }, 150) })`)
+        await wc.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`)
+        // A stored, verified credential and two audit rows.
+        credentialStore.set('github', 'ghp_integrations_token_0000000000000000000000')
+        credentialStore.setLabel('github', 'octocat')
+        brokerAuditForChecks.append({ at: 1000, service: 'github', method: 'GET', path: '/user', status: 200, bytes: 12, panelId: 'n1' })
+        brokerAuditForChecks.append({ at: 2000, service: 'github', method: 'POST', path: '/repos/o/r/issues', status: 0, bytes: 0, panelId: 'n1', reason: 'refused' })
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-integrations-refresh]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const auditSeen = await wc.executeJavaScript(`window.canvas.broker.audit(50).then((a) => ({ n: a.rows.length, first: a.rows[0] })).catch((e) => 'ERR ' + String(e))`)
+        const connected = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-integration="github"]'); if (!s || s.getAttribute('data-integration-state') !== 'connected' || s.querySelectorAll('[data-integration-row]').length < 2) return false; return { sentence: s.querySelector('[data-integration-sentence]')?.textContent ?? '', verb: s.querySelector('[data-integration-verb]')?.textContent ?? '', rows: [...s.querySelectorAll('[data-integration-row]')].map((r) => r.getAttribute('data-integration-row')) } })()`), 8000)
+        credentialStore.delete('github')
+        ok(IDS[0],
+          Array.isArray(bare) && bare.some((s) => s.id === 'github' && s.state === 'not-connected' && /not connected/.test(s.sentence) && /Connect/.test(s.verb) && typeof s.empty === 'string' && /no calls/.test(s.empty)) && bare.some((s) => s.id === 'jira') &&
+            clickedConnect === true && scope && scope.open === true && scope.chip === 'Credentials' &&
+            connected && /connected as octocat/.test(connected.sentence) && /Verify/.test(connected.verb) && connected.rows.length === 2 && /POST/.test(connected.rows[0]) && /GET/.test(connected.rows[1]),
+          JSON.stringify({ bare, scope, connected, auditSeen, log: iLog.slice(-3) }))
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+      } catch (iErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(iErr && iErr.message || iErr) + ' | renderer: ' + (iLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onI)
       }
     }
 

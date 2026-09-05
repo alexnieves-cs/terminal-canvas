@@ -24,6 +24,7 @@ import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
 import { createBroker } from './broker'
+import { listAssignedWorkItems as listGithubWorkItems } from './github-client'
 import { createHttpsBrokerFetcher } from './credential-verify'
 import { createBrokerAudit } from './broker-audit'
 import { readVault } from './vault-read'
@@ -1208,6 +1209,12 @@ app.whenReady().then(async () => {
       // repository keeps its own path as the key rather than failing: the
       // store's named refusals are for an ABSENT root, not for a directory
       // that git does not own.
+      // M89. The audit's read half — rows only, metadata by construction.
+      brokerAudit: (limit, service) => brokerAudit.list(limit, service),
+      // M88. GitHub through the injected requester, over the credential store.
+      // Through the BROKER: the client never reads the store, and the panel's
+      // reads sit in the audit beside the agents' own calls.
+      githubList: (panelId) => listGithubWorkItems({ broker, ...(panelId === undefined ? {} : { panelId }) }),
       // M85. The vault's read, in main for `file-read.ts`'s reason. The root
       // is expanded and realpath'd, NEVER resolveCwd'd: that helper falls back
       // to $HOME for a path that is not there, and a typo'd vault would have

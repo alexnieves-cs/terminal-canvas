@@ -152,4 +152,9 @@ export const KindWatcher = (p: IconProps): JSX.Element => (
   <Svg {...p}><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></Svg>
 )
 
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, chat: KindChat, memory: KindMemory, watcher: KindWatcher } as const
+/** M88. GitHub work: an issue's circle with a mark inside. */
+export const KindGithub = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="8" cy="8" r="1.5" /></Svg>
+)
+
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher } as const

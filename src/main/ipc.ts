@@ -1,5 +1,5 @@
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
-import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent } from '@shared/ipc-contract'
+import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
@@ -89,6 +89,10 @@ export interface PaletteHandlers {
   /** M80. The preset's resolved template, or null. */
   presetTemplate(id: string): PresetTemplate | null
   /** M83. The project memory, for the node and the chat's context. */
+  /** M89. The broker's audit rows, newest first. */
+  brokerAudit(limit: number, service?: string): { rows: unknown[]; skipped: number }
+  /** M88. The GitHub work list. */
+  githubList(panelId?: string): Promise<GithubListResult>
   /** M85. Every `.md` under the vault root. */
   vaultRead(root: string): { root: string; notes: unknown[]; skipped: number; reason?: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -531,6 +535,10 @@ export function registerIpcHandlers(
       ? verifyJiraCredential({ store: credentialStore, requester: createJiraRequester() })
       : verifyCredential({ store: credentialStore, fetcher: createHttpsFetcher() }, service))
 
+  // M88. The same injected shape as Jira's, so the harness drives the node
+  // over a recorded requester through `palette.githubList`.
+  ipcMain.handle(IPC.BROKER_AUDIT, (_event, limit: number, service?: string) => palette.brokerAudit(Number.isInteger(limit) && limit > 0 ? Math.min(limit, 500) : 100, typeof service === 'string' && service !== '' ? service : undefined))
+  ipcMain.handle(IPC.GITHUB_LIST, (_event, panelId?: string) => palette.githubList(typeof panelId === 'string' && panelId !== '' ? panelId : undefined))
   ipcMain.handle(IPC.JIRA_LIST, () =>
     listAssignedWorkItems({ store: credentialStore, requester: createJiraRequester() }))
 

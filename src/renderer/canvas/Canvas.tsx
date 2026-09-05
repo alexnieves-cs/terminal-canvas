@@ -33,6 +33,9 @@ import { panelName } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
 import { useVault } from './useVault'
+import { buildIntegrationRows, INTEGRATION_AUDIT_ROWS } from '@renderer/shell/integration-model'
+import { SERVICES } from '@shared/credential-schema'
+import type { BrokerAuditRowWire } from '@shared/ipc-contract'
 import { useInspectorDetail } from './useInspectorDetail'
 import {
   DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
@@ -84,7 +87,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeWatcherPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -115,6 +118,7 @@ import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
+import { GithubNode } from '@renderer/github/GithubNode'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
@@ -518,11 +522,23 @@ export function Canvas({
   const onContextPasted = useCallback((id: string) => {
     setOpeningContexts((current) => { const next = new Map(current); next.delete(id); return next })
   }, [])
-  const spawnJiraTicket = useCallback((item: WorkItem) => {
+  /**
+   * M88. ONE verb for both work panels: the item's id, title and body become
+   * the new panel's opening context and its title. `source` is the word the
+   * context leads with (`Jira ticket`, `GitHub issue`), because the agent
+   * reading it should know which system the id belongs to.
+   */
+  const spawnWorkItem = useCallback((item: WorkItem, source: string) => {
     const id = `n${nextIdRef.current}`
-    setOpeningContexts((current) => new Map(current).set(id, `Jira ticket ${item.id}: ${item.title}\n\n${item.description}`))
+    setOpeningContexts((current) => new Map(current).set(id, `${source} ${item.id}: ${item.title}\n\n${item.description}`))
     onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
+  const spawnJiraTicket = useCallback((item: WorkItem) => spawnWorkItem(item, 'Jira ticket'), [spawnWorkItem])
+  const spawnGithubItem = useCallback((item: WorkItem) => spawnWorkItem(item, item.state === 'review requested' || item.state === 'pull request' ? 'GitHub pull request' : 'GitHub issue'), [spawnWorkItem])
+  const openGithubPanel = useCallback(() => {
+    const id = `g${nextIdRef.current++}`
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeGithubPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
+  }, [commitHistory])
   const openJiraPanel = useCallback(() => {
     const id = `j${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
@@ -1278,6 +1294,7 @@ export function Canvas({
     return () => { live = false; off() }
   }, [])
   const vault = useVault(vaultRoot)
+
   // Read at CALL time by the note's verbs, which are memoised above where
   // `vaultRoot` is declared — the same forward-ref shape `noteRootRef` uses.
   const vaultRootRef = useRef('')
@@ -3763,7 +3780,7 @@ export function Canvas({
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
@@ -3870,6 +3887,38 @@ export function Canvas({
     registry, selectedPanel, selectedLive, selectedId, settingRows,
     focusedIdRef, noteRootRef
   })
+
+  /**
+   * M89. THE INTEGRATIONS PAGE'S DATA: the credential metas the palette
+   * already reloads, plus the broker's audit rows, folded through the pure
+   * model. Read when the pane is chosen and on its refresh — the audit is a
+   * file, and a page nobody is looking at must not re-read it on every tick.
+   */
+  const [integrationAudit, setIntegrationAudit] = useState<{ rows: BrokerAuditRowWire[]; skipped: number; state: 'pending' | 'failed' | 'ready'; failure?: string }>({ rows: [], skipped: 0, state: 'pending' })
+  const reloadIntegrations = useCallback(() => {
+    reloadCredentials()
+    // One read PER SERVICE, so a busy service cannot push another's rows out
+    // of the window and leave it reading `no calls yet` (M89's verifier).
+    void Promise.all(SERVICES.map((svc) => window.canvas.broker.audit(INTEGRATION_AUDIT_ROWS, svc.id)))
+      .then((answers) => setIntegrationAudit({ rows: answers.flatMap((a) => a.rows), skipped: answers.reduce((n, a) => n + a.skipped, 0), state: 'ready' }))
+      .catch((error: unknown) => setIntegrationAudit({ rows: [], skipped: 0, state: 'failed', failure: String(error) }))
+  }, [reloadCredentials])
+  useEffect(() => { if (chrome.navigator === 'integrations') reloadIntegrations() }, [chrome.navigator, reloadIntegrations])
+  const integrationRows = useMemo(() => buildIntegrationRows(SERVICES, credentialRows, integrationAudit.rows), [credentialRows, integrationAudit.rows])
+  const integrationsPaneProps = useMemo(() => ({
+    onToggle: chrome.toggleNavigator,
+    rows: integrationRows,
+    audit: integrationAudit.state,
+    ...(integrationAudit.failure === undefined ? {} : { auditFailure: integrationAudit.failure }),
+    skipped: integrationAudit.skipped,
+    panelLabel: (panelId: string) => { const p = panelsRef.current.find((q) => q.rect.id === panelId); return p === undefined ? undefined : railLabel(p, isTerminalPanel(p) ? registry.get(panelId)?.status : undefined) },
+    onConnect: (_service: string) => openCredentials(),
+    // The verify's OWN answer, then the reload — never a timer racing a
+    // fifteen-second request (M89's verifier). A failure is the palette's
+    // line, as the credential rows already do it.
+    onVerify: (service: string) => { void window.canvas.credential.verify(service).then((res) => { if (!res.ok) paletteActions.verifyCredential(service); reloadIntegrations() }).catch(() => reloadIntegrations()) },
+    onRefresh: reloadIntegrations
+  }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations])
 
   /**
    * M85. ONE object each for the pane and for every in-vault note, memoised
@@ -3996,6 +4045,7 @@ export function Canvas({
         onOpenMemory={paletteActions.openMemory}
         memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
         vault={vaultPaneProps}
+        integrations={integrationsPaneProps}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
@@ -4222,6 +4272,7 @@ export function Canvas({
                 />
               )
             }
+            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null

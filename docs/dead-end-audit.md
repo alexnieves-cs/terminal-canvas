@@ -92,6 +92,19 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   blocked by name on shared), the armed sentences, outcome lines.
 - **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
   each with a three-state result.
+- **Integrations page (M89).** The navigator's fifth pane: one section per DECLARED service,
+  present whether or not a credential exists, each with one of three closed sentences in its
+  tone (`connected as <label>`, `not connected — add a … token`, `token rejected — add a new
+  … token`) and ONE verb (`Connect…` / `Verify` / `Reconnect…`), the audit rows beneath with
+  a named empty arm (`no calls yet — an agent reaches … with tc api …`), the skipped count
+  said, and a note saying what the audit does not show (Jira's own panel reads). The palette's
+  `Manage integrations…` door is present at rest and enters the Credentials scope.
+- **GitHub work panel (M88).** Three states in the node — reading, the reason (with
+  `Connect GitHub…` when it is `no-credential`, the same sentence the broker and the
+  credential rows use, `REASON_NO_GITHUB`), and the list with its own empty arm and a note
+  when only the pull requests could not be read. The palette's `Open GitHub work` row is
+  PRESENT at rest and disabled with that reason, where the Jira door only exists once a
+  credential does. `Start session` on every item; `open on GitHub` through the link verb.
 - **The broker (M87).** No surface of its own: `tc api` answers a service with no
   credential with the same `not connected — add a <service> token in ⌘K › Credentials`
   sentence the panel rows use, an unknown service or method by name, and a path that could

@@ -24,7 +24,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isWatcherPanel, isMemoryPanel,
+  isWatcherPanel, isGithubPanel, isMemoryPanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -76,6 +76,8 @@ export interface PaletteActionsDeps {
   openJiraPanel: () => void
   /** M83. Open the memory node for the captured panel's repository. */
   openMemoryPanel: () => Promise<void>
+  /** M88. Mint the GitHub work panel. */
+  openGithubPanel: () => void
   /** M86. A review across every worktree of the subject's repository. */
   openReviewAcross: (subjectId: string) => void
   /** M84. The palette's Watch… row: ask for the command, then the trigger. */
@@ -143,7 +145,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -394,6 +396,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // M83. The seventh arm — a memory node carries its root.
               if (isMemoryPanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M88. The ninth arm — a github panel carries nothing but its title.
+              if (isGithubPanel(p)) {
+                return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M84. The eighth arm — a watcher carries its whole record.
               if (isWatcherPanel(p)) {
@@ -1424,6 +1430,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // by MAIN (only it knows what a directory's repository root is), so the
     // node's subject is the same root `tc memory` writes under.
     openMemory: () => { void openMemoryPanel() },
+    openGithub: () => openGithubPanel(),
     reviewAcross: (id) => openReviewAcross(id),
     beginWatcher,
     openJira: () => openJiraPanel(),

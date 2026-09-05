@@ -1987,7 +1987,7 @@ const inventory = (over) => ({
 //     wrong thing of the one kind that owns a process.
 {
   const PROCESS_WORDS = ['not started', 'dormant', 'asleep', 'exited', 'pid ', 'starting', 'running', 'working', 'needs you']
-  const SESSIONLESS = ['review', 'file', 'toolbox', 'jira']
+  const SESSIONLESS = ['review', 'file', 'toolbox', 'jira', 'memory', 'github']
   const tails = {}
   for (const k of SESSIONLESS) tails[k] = R.railTail(undefined, false, k)
   const bad = SESSIONLESS.filter((k) => PROCESS_WORDS.some((w) => tails[k].includes(w)))
@@ -2022,6 +2022,11 @@ const inventory = (over) => ({
     file: R_.buildInspectorModel(mk('file', { source: { path: '/a/b.txt' } }), undefined, undefined, []).kind,
     toolbox: R_.buildInspectorModel(mk('toolbox', { source: { cwd: '/a', label: 'a' } }), undefined, undefined, []).kind,
     jira: R_.buildInspectorModel(mk('jira', { title: 'Jira tickets' }), undefined, undefined, []).kind,
+    // M88. The second work panel joins the same rule.
+    // Guarded: an unknown kind falls through to the terminal arm and THROWS
+    // on its absent spec, which would abort the suite — a red row is the
+    // signal, not a stack.
+    github: (() => { try { return R_.buildInspectorModel(mk('github', { title: 'GitHub work' }), undefined, undefined, []).kind } catch (e) { return `threw: ${String(e && e.message)}` } })(),
     chat: R_.buildInspectorModel(mk('chat', { chat: { cwd: '/a', sessionId: 'u-1' } }), undefined, undefined, []).kind
   }
   const allSelf = Object.entries(got).every(([k, v]) => k === v)
@@ -2510,10 +2515,10 @@ const session = (id, over = {}) => ({
 //     file locally consistent); and railTail, now a wrapper, agrees with
 //     panelState for every fixture the older checks use (state.3).
 {
-  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'jira', 'chat']
+  const KINDS = ['terminal', 'review', 'file', 'note', 'toolbox', 'jira', 'chat', 'memory', 'github']
   const STATUSES = [undefined, { kind: 'idle' }, { kind: 'starting' }, { kind: 'running', pid: 4, command: '/bin/sh' }, { kind: 'exited', code: 0 }, { kind: 'exited', code: 1 }, { kind: 'error', message: 'spawn failed' }]
   const AGENTS = [undefined, 'starting', 'busy', 'idle', 'wants-you', 'exited']
-  const WORDS = new Set(['asleep', 'not started', 'starting', 'running', 'working', 'idle', 'needs you', 'exited', 'review', 'file', 'note', 'toolbox', 'jira'])
+  const WORDS = new Set(['asleep', 'not started', 'starting', 'running', 'working', 'idle', 'needs you', 'exited', 'review', 'file', 'note', 'toolbox', 'jira', 'memory', 'github'])
   const bad = []
   let count = 0
   for (const kind of KINDS) for (const status of STATUSES) for (const dormant of [false, true]) for (const agent of AGENTS) {
@@ -2679,6 +2684,39 @@ console.log('\n' + '='.repeat(60))
       parsed.after.kind === 'panel' && parsed.after.on === 'exit-ok' && parsed.after.sourceId === 'n3' &&
       parsed.afterFails.on === 'exit-fail' && parsed.afterTurn.on === 'idle' && parsed.afterNonsense === null,
     JSON.stringify({ words, parsed }))
+}
+
+// M89 — integrations.1. THE PAGE'S MODEL, pure. One row per DECLARED
+//      service whether or not a credential exists (a service that vanished
+//      from the page would read as unsupported); three closed states, and
+//      the durable rejection mark outranks a verified date — a token that
+//      verified last week and was rejected today is rejected; the audit rows
+//      under a service are its own, newest first, capped, with a refusal
+//      marked rather than dropped.
+{
+  const build = typeof R.buildIntegrationRows === 'function' ? R.buildIntegrationRows : null
+  const services = [{ id: 'github', label: 'GitHub', help: '' }, { id: 'jira', label: 'Jira', help: '' }]
+  const metas = [
+    { service: 'github', label: 'octocat', addedAt: '2026-09-01', verifiedAt: '2026-09-01T10:00:00Z', rejectedAt: '2026-09-04T09:00:00Z' },
+    { service: 'jira', label: 'me@acme.test', addedAt: '2026-09-02', verifiedAt: '2026-09-02T10:00:00Z' }
+  ]
+  const audit = []
+  for (let i = 0; i < 30; i += 1) audit.push({ at: 1000 + i, service: 'github', method: 'GET', path: `/p${i}`, status: i === 29 ? 0 : 200, bytes: 10, panelId: 'n1', ...(i === 29 ? { reason: 'not connected' } : {}) })
+  audit.push({ at: 5000, service: 'jira', method: 'POST', path: '/issue/X/comment', status: 201, bytes: 3 })
+  const rows = build ? build(services, metas, audit.slice().reverse(), 20) : null
+  const gh = rows ? rows.find((r) => r.id === 'github') : undefined
+  const jira = rows ? rows.find((r) => r.id === 'jira') : undefined
+  const none = build ? build(services, [], [], 20) : null
+  // A token added and never verified is its own state, never `connected as`.
+  const stored = build ? build(services, [{ service: 'github', label: 'GitHub', addedAt: '2026-09-04' }], [], 20) : null
+  const gs = stored ? stored.find((r) => r.id === 'github') : undefined
+  ok('integrations.1 one row per declared service; a rejection mark outranks a verified date and offers Reconnect; a verified credential reads connected as its label and offers Verify; no credential reads not connected and offers Connect; the audit rows under a service are its own, newest first, capped, a refusal marked',
+    rows !== null && rows.length === 2 &&
+      gh && gh.state === 'rejected' && /token rejected/.test(gh.sentence) && gh.verb === 'reconnect' && gh.rows.length === 20 && gh.rows[0].at === 1029 && gh.rows[0].status === 0 && gh.rows.every((r) => r.service === 'github') &&
+      jira && jira.state === 'connected' && jira.who === 'me@acme.test' && /connected as me@acme\.test/.test(jira.sentence) && jira.verb === 'verify' && jira.rows.length === 1 &&
+      none && none.length === 2 && none.every((r) => r.state === 'not-connected' && /not connected/.test(r.sentence) && r.verb === 'connect' && r.rows.length === 0) &&
+      gs && gs.state === 'stored' && /not verified/.test(gs.sentence) && gs.verb === 'verify' && !/connected as/.test(gs.sentence),
+    JSON.stringify({ gh: gh && { state: gh.state, sentence: gh.sentence, verb: gh.verb, n: gh.rows.length, first: gh.rows[0] }, jira: jira && { state: jira.state, sentence: jira.sentence, verb: jira.verb }, none: none && none.map((r) => [r.id, r.state, r.verb]) }))
 }
 
 const failed = results.filter((r) => !r.pass)

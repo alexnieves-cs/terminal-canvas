@@ -22,7 +22,7 @@ import { waitingCount } from '@renderer/shell/rail-sections'
 // stays out of this file; the palette only needs the id/label/help triple
 // SERVICES already carries, and the label lookup for a REFUSAL message lives
 // in Canvas.tsx, where the input-mode re-prompt actually happens.
-import { SERVICES, type CredentialMeta, type CredentialService } from '@shared/credential-schema'
+import { SERVICES, notConnectedReason, type CredentialMeta, type CredentialService } from '@shared/credential-schema'
 // Re-exported so verify-palette.cjs's bundle (fuzzy.ts + palette-model.ts +
 // commands.ts) can drive buildCredentialRows directly against the same
 // SERVICES this module builds rows from, rather than bundling
@@ -68,7 +68,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'toolbox' | 'chat' | 'memory' | 'watcher'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -294,6 +294,8 @@ export interface PaletteActions {
   beginSpawnSheet(templateId?: string): void
   /** M83. Open the project memory for the captured panel's repository. */
   openMemory(): void
+  /** M88. Open the GitHub work panel. */
+  openGithub(): void
   /** M86. A review across every worktree of the subject's repository. */
   reviewAcross(id: string): void
   /** M84. Ask for a watcher: the command, then the trigger. */
@@ -527,6 +529,7 @@ export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
 export const REASON_NO_REVIEW_TARGET_ACROSS = 'select a panel inside a repository first'
+export const REASON_NO_GITHUB = notConnectedReason('github')
 export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
@@ -1469,9 +1472,27 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // be driven directly by verify:palette without constructing a whole
   // PaletteContext.
   out.push(...buildCredentialRows(ctx.credentials, SERVICES, actions))
-  if (ctx.credentials.some((credential) => credential.service === 'jira')) {
-    out.push({ id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openJira() })
-  }
+  // M89. Every service on one page: the door is the navigator's pane, and
+  // this row enters the Credentials scope the page's verbs open, so there
+  // is one path from either side.
+  out.push({ id: 'manage.integrations', title: 'Manage integrations…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'integrations services connected github jira credentials tokens', run: () => {} })
+  // M88. PRESENT at rest and disabled with the Connect reason when no
+  // github credential exists — the Jira door below only exists once a
+  // credential does, which is the "row that disappears" rule broken by a
+  // milestone; this door does not repeat it.
+  out.push(
+    withReason(
+      { id: 'github.open', title: 'Open GitHub work', subtitle: 'issues assigned to you and pull requests waiting on you', searchText: 'github issues pull requests review assigned work', group: 'manage', run: () => actions.openGithub() },
+      ctx.credentials.some((credential) => credential.service === 'github') ? undefined : REASON_NO_GITHUB
+    )
+  )
+  // M89. Present at rest and disabled by the one sentence, like GitHub's door.
+  out.push(
+    withReason(
+      { id: 'jira.open', title: 'Open Jira tickets', subtitle: 'Assigned to you', searchText: 'jira tickets assigned work', group: 'manage', run: () => actions.openJira() },
+      ctx.credentials.some((credential) => credential.service === 'jira') ? undefined : notConnectedReason('jira')
+    )
+  )
 
   // --- Manage --------------------------------------------------------------
   //

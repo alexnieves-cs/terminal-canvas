@@ -3522,3 +3522,40 @@ would show a quiet canvas during exactly the behaviour a person needs to see.
 renderer that could call it could spend a credential from a page's context, and one that
 could read the audit could see what an agent asked — M89's page reads the audit through its
 own channel when that surface lands, and not before.
+
+**The GitHub client asks the BROKER and never the credential store (`main/github-client.ts`).**
+`verify:meta readers.1` pins the store's readers as exactly three, and the first draft of this
+client was a fourth — a second copy of "read the token, build the header" that would have
+drifted from the broker's scrubbing, caps and audit on its own. Through the broker the panel's
+reads are audit rows beside the agents' calls, the no-credential sentence is the broker's own,
+and the client has no secret to leak. `verify:github` proves it with a fake broker whose calls
+carry no headers at all.
+
+**A pull request is one item however many lists name it (`listAssignedWorkItems`).** GitHub's
+issues endpoint lists PRs assigned to you as issues with a `pull_request` field; the review
+search lists PRs waiting on you. The same PR can arrive through both, and a list that showed it
+twice — once as `pull request`, once as `review requested` — would read as two pieces of work.
+The review request wins, because "waiting on you" is the fact a person acts on.
+
+**When the review search alone fails, the issues stand and a `note` says what is missing.** A
+whole answer that quietly lacked the PRs would be the confident wrong picture; no answer at all
+would hide the half that worked. Half an answer that says which half is the honest one.
+
+**A rejection is a DURABLE mark the verify writes, and a success clears it by OMISSION
+(`credential-store.ts`'s `markRejected` / `setLabel`).** The Integrations page says what the
+last verify said, not what the user remembers; without the mark a token rejected this
+morning reads `connected as octocat` from last week's verify. The clear drops the key rather
+than writing `rejectedAt: undefined`, because every `'rejectedAt' in meta` site would read the
+latter as present — the absent-stays-absent rule at the one place it would otherwise be broken
+by a spread.
+
+**Every door that names a missing service imports `notConnectedReason`, and a client sorts the
+broker's refusal by its CODE.** Three hand-typed copies of one sentence drifted into three
+files in one milestone; `verify:palette integrations.1` compares the palette's reason to the
+schema's byte for byte, and the GitHub client reads `code === 'not-connected'` rather than the
+text, so the sentence can be reworded in one place without flipping a panel's arm to
+`unavailable` and losing its Connect verb.
+
+**The Integrations page lists every DECLARED service, credential or not.** A page that showed
+only connected services would make "not connected" indistinguishable from "not supported" —
+`verify:palette 31`'s rule for rows, reached by a page.
