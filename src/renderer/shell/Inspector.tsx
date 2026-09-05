@@ -537,7 +537,7 @@ function InspectorPanel({
               <button
                 type="button"
                 className="inspector__link-action"
-                data-inspector-action="revoke-grants"
+                data-inspector-grants-action="revoke"
                 disabled={!revoke.enabled}
                 title={revoke.enabled ? 'Revoke every tool granted for this session — it asks again' : revoke.reason}
                 {...shellControl(() => { if (revoke.enabled) onRevokeGrants?.(model.id) })}
